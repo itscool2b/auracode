@@ -1,0 +1,11 @@
+# Clippy settings for every crate in this repository, the spikes under docs/spikes included.
+# Clippy reads the nearest clippy.toml above a crate's manifest and never merges files, so a crate
+# that adds its own must repeat these settings.
+
+# The `unwrap_used` and `expect_used` lints (the workspace's Cargo.toml and each spike's) keep both
+# out of non-test code. A test that panics with a message is failing correctly, so tests are exempt.
+# Clippy counts `#[test]` functions (`#[tokio::test]` too) and anything inside a `#[cfg(test)]` item
+# as test code. A helper in an integration test (`tests/*.rs`) that is not itself a test is not
+# covered: put it in a `#[cfg(test)]` module or have it return a `Result`.
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true

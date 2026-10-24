@@ -1,0 +1,4 @@
+[toolchain]
+# Latest stable; the minimum supported version is `rust-version` in Cargo.toml (Tauri plugins need 1.90+).
+channel = "stable"
+components = ["rustfmt", "clippy"]

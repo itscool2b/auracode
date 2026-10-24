@@ -289,6 +289,11 @@ consumer-grade polish. MIT/Apache code may be read for reference; never AGPL (To
 - **Worktrees (M4):** created outside the repo (short app-data path, avoids MAX_PATH and file watchers),
   always on a new branch, optional "bring uncommitted changes", per-folder setup (files to copy like
   `.env`, an install command), merge blocked while a Direct chat runs in the target.
+- **Tooling:** rustfmt and clippy for Rust (`-D warnings` in CI; no `unsafe`, no `dbg!`, no `unwrap()` or
+  `expect()` outside tests). Biome alone lints and formats TypeScript, CSS, JSON, and YAML: one fast tool
+  and one config instead of ESLint + Prettier. It does not format Markdown (its formatter re-pads
+  hand-wrapped tables) and leaves `pnpm-lock.yaml` to pnpm. pnpm settings live in `pnpm-workspace.yaml`
+  (pnpm 12 ignores them in `.npmrc`); `engineStrict` holds installs to the Node range in `engines`.
 
 ## Edge cases (each one has a defined behaviour and a test)
 **Agents.** Not installed; installed but broken (`--version` fails: shown as broken with the error); several
@@ -347,9 +352,9 @@ its two nameservers, and give the user the Namecheap steps (Domain List > auraco
 Nameservers > Custom DNS > paste both; turn DNSSEC off first if it's on). No records are needed yet.
 
 **Foundation (the app)**
-- **M0 Scaffold + spikes.** Private repo, pnpm (Homebrew), Cargo + pnpm workspaces, fmt/clippy/ESLint/
-  Prettier, Tauri app with the glass window, typed command + Channel round trip, profile layout + SQLite
-  schema, stable self-signed signing identity (created locally with the user's OK), CI on macOS/Windows/
+- **M0 Scaffold + spikes.** Private repo, pnpm (Homebrew), Cargo + pnpm workspaces, fmt/clippy/Biome,
+  Tauri app with the glass window, typed command + Channel round trip, profile layout + SQLite schema,
+  stable self-signed signing identity (created locally with the user's OK), CI on macOS/Windows/
   Ubuntu (fmt, clippy, tests, typecheck, lint; `tauri build` only on main merges and nightly). Spikes:
   worst-case render (animated aura + orbs + fast stream) on WebKit and WebView2 with idle power; Windows
   spawning (hidden console, git child); Claude control round trip incl. resume after a cwd change; Windows
