@@ -16,33 +16,33 @@ use std::io;
 use aura_protocol::{AuraEvent, EventBatch, MAX_FRAME_BYTES};
 use unicode_segmentation::GraphemeCursor;
 
-/// Buffers one session's events between flushes and packs them into size-limited frames.
+/// Buffers one chat's events between flushes and packs them into size-limited frames.
 #[derive(Debug, Clone)]
 pub struct FrameBatcher {
-    session_id: String,
+    chat_id: String,
     max_bytes: usize,
     next_seq: u32,
     pending: Vec<AuraEvent>,
 }
 
 impl FrameBatcher {
-    /// A batcher for `session_id` whose frames stay below [`MAX_FRAME_BYTES`].
-    pub fn new(session_id: impl Into<String>) -> Self {
-        Self::with_max_bytes(session_id, MAX_FRAME_BYTES)
+    /// A batcher for `chat_id` whose frames stay below [`MAX_FRAME_BYTES`].
+    pub fn new(chat_id: impl Into<String>) -> Self {
+        Self::with_max_bytes(chat_id, MAX_FRAME_BYTES)
     }
 
     /// A batcher whose frames stay below `max_bytes` instead (tests use small limits to exercise
     /// splitting without megabytes of input).
-    pub fn with_max_bytes(session_id: impl Into<String>, max_bytes: usize) -> Self {
+    pub fn with_max_bytes(chat_id: impl Into<String>, max_bytes: usize) -> Self {
         Self {
-            session_id: session_id.into(),
+            chat_id: chat_id.into(),
             max_bytes,
             next_seq: 0,
             pending: Vec::new(),
         }
     }
 
-    /// Continues numbering at `next_seq`, for a session resumed from storage, so the UI's gap
+    /// Continues numbering at `next_seq`, for a chat resumed from storage, so the UI's gap
     /// detection keeps working across app restarts.
     #[must_use]
     pub fn starting_at(mut self, next_seq: u32) -> Self {
@@ -98,7 +98,7 @@ impl FrameBatcher {
         if self.pending.is_empty() {
             return Vec::new();
         }
-        let mut packer = Packer::new(&self.session_id, self.max_bytes, self.next_seq);
+        let mut packer = Packer::new(&self.chat_id, self.max_bytes, self.next_seq);
         for event in self.pending.drain(..) {
             packer.add(event);
         }
@@ -149,7 +149,7 @@ impl DeltaKind {
 /// Builds one flush's frames in order while tracking the open frame's exact JSON length, so packing is
 /// linear in the bytes flushed instead of re-serializing the frame for every event added.
 struct Packer<'a> {
-    session_id: &'a str,
+    chat_id: &'a str,
     /// Largest encoded length a frame may have: frames must stay strictly below `max_bytes`.
     limit: usize,
     /// Encoded length of a frame with no events, minus the digits of its `seq_start`.
@@ -164,16 +164,16 @@ struct Packer<'a> {
 }
 
 impl<'a> Packer<'a> {
-    fn new(session_id: &'a str, max_bytes: usize, next_seq: u32) -> Self {
+    fn new(chat_id: &'a str, max_bytes: usize, next_seq: u32) -> Self {
         let empty = EventBatch {
-            session_id: session_id.to_owned(),
+            chat_id: chat_id.to_owned(),
             seq_start: 0,
             events: Vec::new(),
         };
         // `seq_start: 0` contributes one digit; each frame adds the digits of its real `seq_start`.
         let overhead = empty.encoded_len().saturating_sub(1);
         Self {
-            session_id,
+            chat_id,
             limit: max_bytes.saturating_sub(1),
             overhead,
             next_seq,
@@ -220,7 +220,7 @@ impl<'a> Packer<'a> {
         }
         self.len = self.len.saturating_add(separator).saturating_add(size);
         self.events.push(event);
-        // Wrapping instead of overflowing: four billion events in one session is out of reach, and an
+        // Wrapping instead of overflowing: four billion events in one chat is out of reach, and an
         // overflow panic would take the whole session down with it.
         self.next_seq = self.next_seq.wrapping_add(1);
     }
@@ -231,7 +231,7 @@ impl<'a> Packer<'a> {
         }
         let events = std::mem::take(&mut self.events);
         self.frames.push(EventBatch {
-            session_id: self.session_id.to_owned(),
+            chat_id: self.chat_id.to_owned(),
             seq_start: self.seq_start,
             events,
         });
@@ -694,7 +694,7 @@ mod tests {
         let max_bytes = 512;
         let frame_with = |text: &str| {
             let frame = EventBatch {
-                session_id: "s".into(),
+                chat_id: "s".into(),
                 seq_start: 1,
                 events: vec![delta("m", text)],
             };
@@ -801,7 +801,7 @@ mod tests {
         let family = "👨‍👩‍👧‍👦";
         let max_bytes = 400;
         let empty = EventBatch {
-            session_id: "s".into(),
+            chat_id: "s".into(),
             seq_start: 0,
             events: vec![delta("m", "")],
         };
@@ -842,9 +842,15 @@ mod tests {
             tool_call_id: "tool-1".into(),
             status: Some(ToolStatus::Completed),
             title: None,
-            content: vec![ToolContent::Text {
+            kind: None,
+            locations: None,
+            raw_input: None,
+            tool_name: None,
+            content: Some(vec![ToolContent::Text {
                 text: "x".repeat(2_000),
-            }],
+                truncated: None,
+            }]),
+            truncated: None,
         });
         let mut batcher = FrameBatcher::with_max_bytes("s", 512);
         batcher.push(delta("m", "before"));

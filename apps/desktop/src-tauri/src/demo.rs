@@ -186,7 +186,7 @@ mod tests {
         );
 
         let frames = lock(&frames).clone();
-        assert!(frames.iter().all(|f| f.session_id == id));
+        assert!(frames.iter().all(|f| f.chat_id == id));
         let mut next = 0;
         for frame in &frames {
             assert_eq!(frame.seq_start, next, "sequence numbers are contiguous");

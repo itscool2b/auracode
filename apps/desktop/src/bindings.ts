@@ -113,20 +113,39 @@ export type AppInfo = {
 	fatal: string | null,
 };
 
-/**  One normalized event in a chat turn. */
-export type AuraEvent = ({ type: "turn_started"; turn_id: string }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message?: never; message_id?: never; recoverable?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; usage?: never; windows?: never } | ({ type: "turn_ended"; turn_id: string; stop_reason: StopReason; usage: TokenUsage | null }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message?: never; message_id?: never; recoverable?: never; request_id?: never; text?: never; thought_id?: never; windows?: never } | ({ type: "message_delta"; message_id: string; text: string }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message?: never; recoverable?: never; request_id?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_completed"; message_id: string }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message?: never; recoverable?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_delta"; thought_id: string; text: string }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message?: never; message_id?: never; recoverable?: never; request_id?: never; stop_reason?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_completed"; thought_id: string; duration_ms: number | null }) & { decision?: never; entries?: never; level?: never; message?: never; message_id?: never; recoverable?: never; request_id?: never; stop_reason?: never; text?: never; turn_id?: never; usage?: never; windows?: never } | {
+/**  One normalized event in a chat. */
+export type AuraEvent = 
+/**  The session actor started a turn for the queued prompt `prompt_id`. */
+({ type: "turn_started"; turn_id: string; prompt_id: string | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; usage?: never; windows?: never } | ({ type: "turn_ended"; turn_id: string; stop_reason: StopReason; usage: TokenUsage | null; duration_ms: number | null; 
+/**  Ended by recovery at startup: auracode quit or crashed while the turn ran. */
+recovered: boolean }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; request_id?: never; state?: never; text?: never; thought_id?: never; windows?: never } | 
+/**  The user's prompt text, as sent. The session actor emits it; drivers never do. */
+({ type: "user_message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_completed"; message_id: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_delta"; thought_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_completed"; thought_id: string; duration_ms: number | null }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; turn_id?: never; usage?: never; windows?: never } | {
 	type: "tool_call",
 } & ToolCall | {
 	type: "tool_update",
 } & ToolUpdate | {
 	type: "permission_requested",
-} & PermissionRequest | ({ type: "permission_resolved"; request_id: string; decision: PermissionDecision }) & { duration_ms?: never; entries?: never; level?: never; message?: never; message_id?: never; recoverable?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
+} & PermissionRequest | ({ type: "permission_resolved"; request_id: string; decision: PermissionDecision; by: ResolvedBy }) & { answer?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
 	type: "ui_request",
-} & UiRequest | ({ type: "plan_updated"; entries: PlanEntry[] }) & { decision?: never; duration_ms?: never; level?: never; message?: never; message_id?: never; recoverable?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
+} & UiRequest | 
+/**  The answer to a [`UiRequest`]; `None` when it was dismissed, withdrawn or closed. */
+({ type: "ui_resolved"; request_id: string; answer: UiAnswer | null; by: ResolvedBy }) & { decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "plan_updated"; entries: PlanEntry[] }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
 	type: "usage_updated",
-} & UsageInfo | ({ type: "limits_updated"; windows: LimitWindow[] }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message?: never; message_id?: never; recoverable?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never } | {
+} & UsageInfo | ({ type: "limits_updated"; windows: LimitWindow[] }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never } | 
+/**  Live header state; never stored. */
+{
 	type: "session_updated",
-} & SessionInfo | ({ type: "notice"; level: NoticeLevel; message: string }) & { decision?: never; duration_ms?: never; entries?: never; message_id?: never; recoverable?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "error"; message: string; recoverable: boolean }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message_id?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never };
+} & SessionInfo | 
+/**  What happened to a queued prompt (the composer's queue); never stored. */
+({ type: "prompt_lifecycle"; prompt_id: string; state: PromptState; 
+/**  The prompt's first 256 characters, sent with `Queued`. */
+preview: string | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; recoverable?: never; recovered?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "notice"; level: NoticeLevel; message: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "error"; kind: ErrorKind; message: string; 
+/**  More context, such as the agent's redacted stderr tail. */
+detail: string | null; recoverable: boolean }) & { answer?: never; by?: never; decision?: never; duration_ms?: never; entries?: never; level?: never; message_id?: never; preview?: never; prompt_id?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never };
+
+/**  How much an agent may do without asking. */
+export type Autonomy = "full_auto" | "auto_edit" | "ask";
 
 export type Cost = {
 	amount: number | null,
@@ -162,14 +181,17 @@ export type DeviceIdentity = {
 	created_at: number,
 };
 
+/**  What kind of failure an [`AuraEvent::Error`] reports, which decides the error card's actions. */
+export type ErrorKind = "agent_unavailable" | "folder_missing" | "folder_not_allowed" | "spawn_failed" | "start_timeout" | "protocol_mismatch" | "auth_required" | "agent_error" | "agent_exited" | "protocol_error" | "storage" | "internal" | "other";
+
 /**
- *  A frame of events for one session, sent from the core to the UI over a Tauri channel.
+ *  A frame of events for one chat, sent from the core to the UI over a Tauri channel.
  * 
- *  `seq_start` is the session-wide sequence number of the first event, so the UI can detect gaps and
- *  drop duplicates after a reconnect.
+ *  `seq_start` is the chat-wide sequence number of the first event, so the UI can detect gaps and
+ *  drop duplicates after a reconnect. Stored rows carry the same numbers.
  */
 export type EventBatch = {
-	session_id: string,
+	chat_id: string,
 	seq_start: number,
 	events: AuraEvent[],
 };
@@ -193,7 +215,7 @@ export type LimitWindow = {
 	resets_at: number | null,
 };
 
-export type NoticeLevel = "info" | "warning";
+export type NoticeLevel = "info" | "warning" | "error";
 
 /**  What [`Store::open`] had to do. Paths are strings so the UI can show them as they are. */
 export type OpenOutcome = 
@@ -219,14 +241,25 @@ export type PermissionOption = {
 	label: string,
 };
 
-export type PermissionOptionKind = "allow_once" | "allow_always" | "reject_once" | "reject_always";
+export type PermissionOptionKind = "allow_once" | "allow_always" | "reject_once" | "reject_always" | 
+/**  Shown, never auto-selected. */
+"other";
 
-/**  The agent asks the user before running a tool (only outside Full auto). */
+/**  The agent asks before running a tool, or asks the user a question through a permission request. */
 export type PermissionRequest = {
 	request_id: string,
+	/**  Set only when it names a tool block already shown. */
 	tool_call_id: string | null,
 	title: string,
+	/**  What the permission policy decides on; `None` is never auto-answered. */
+	kind: ToolKind | null,
+	/**  Some agents' permission requests never become tool blocks, so the card shows the input. */
+	raw_input: Value | null,
+	content: ToolContent[],
+	locations: ToolLocation[],
 	options: PermissionOption[],
+	/**  As on [`ToolCall`]. */
+	truncated: Truncation | null,
 };
 
 export type PlanEntry = {
@@ -254,6 +287,20 @@ export type ProfileMeta = {
 	created_at: number,
 };
 
+/**  What happened to a queued prompt. */
+export type PromptState = "queued" | "started" | "completed" | "cancelled" | "failed";
+
+/**  Who answered a permission request or a question. */
+export type ResolvedBy = "user" | 
+/**  The permission policy, under the chat's autonomy. */
+"auto" | 
+/**  The agent withdrew it. */
+"agent" | 
+/**  Its turn ended or was cancelled. */
+"turn" | 
+/**  Recovery, or the agent's process ended. */
+"system" | "other";
+
 /**  How much of a damaged database made it into the database that replaced it. */
 export type Salvage = 
 /**
@@ -273,21 +320,43 @@ export type Salvage =
 /**  Nothing could be read, so the new database started out empty. */
 { type: "nothing" };
 
-/**  What the agent currently reports about the session. */
+/**  Live header state of a chat. Never stored; coalesced to at most one per frame. */
 export type SessionInfo = {
+	status: SessionStatus,
+	/**  What is happening now: "Starting Hermes", "Stopping the turn; press Esc again to force stop". */
+	detail: string | null,
 	native_session_id: string | null,
+	agent_name: string | null,
+	agent_version: string | null,
 	title: string | null,
+	/**  Display labels of the current Model, Effort and Mode choices. */
 	model: string | null,
 	effort: string | null,
 	mode: string | null,
-	commands: SlashCommand[],
+	autonomy: Autonomy,
+	/**  Some queued prompts are held ("Send queued" shows). */
+	queue_held: boolean,
+	/**
+	 *  Increments when capabilities, options, slash commands or the autonomy state change: the UI
+	 *  refetches `chat_lists`.
+	 */
+	revision: number,
 };
 
-export type SlashCommand = {
-	name: string,
-	description: string,
-	input_hint: string | null,
-};
+/**  Where a chat's agent is in its life. */
+export type SessionStatus = 
+/**  No process. */
+"stopped" | "starting" | 
+/**  The process is up and no turn runs. */
+"ready" | 
+/**  Exactly one turn is in flight. */
+"running" | 
+/**  The agent was asked to cancel; waiting for its reply. */
+"cancelling" | "stopping" | 
+/**  Could not start; no process. */
+"failed" | 
+/**  The agent needs its own sign-in; never a live process. */
+"auth_required";
 
 /**  What the UI's smoke run measured. */
 export type SmokeReport = {
@@ -308,7 +377,13 @@ export type SmokeReport = {
 };
 
 /**  Why a turn ended. */
-export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled" | "error";
+export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | 
+/**  The agent confirmed a cancel. */
+"cancelled" | 
+/**  auracode ended the turn without the agent: a force stop, a crash, a quit. */
+"interrupted" | "error" | 
+/**  A reason auracode does not know (an agent's, or a newer build's). */
+"other";
 
 /**
  *  Settings for the stress view: `orbs` live orbs, a stream at `rate` tokens per second, the aura
@@ -325,8 +400,16 @@ export type StressConfig = {
 export type TokenUsage = {
 	input_tokens: number,
 	output_tokens: number,
-	cached_input_tokens: number | null,
+	/**  Tokens read from the prompt cache (ACP `cachedReadTokens`, Claude `cache_read_input_tokens`). */
+	cache_read_tokens: number | null,
+	/**
+	 *  Tokens written to the prompt cache (ACP `cachedWriteTokens`, Claude
+	 *  `cache_creation_input_tokens`).
+	 */
+	cache_write_tokens: number | null,
+	/**  ACP `thoughtTokens`. */
 	reasoning_tokens: number | null,
+	scope: UsageScope,
 };
 
 /**  A tool invocation started by the agent. */
@@ -338,14 +421,18 @@ export type ToolCall = {
 	locations: ToolLocation[],
 	/**  The tool's raw input as the agent sent it, for the expanded view. */
 	raw_input: Value | null,
+	/**  The tool's own name (ACP `ToolCall.name`). */
+	tool_name: string | null,
+	/**  ACP tool calls carry content from the start. */
+	content: ToolContent[],
+	/**  More than entry text was cut to fit the event budget; `blob` holds the original event's JSON. */
+	truncated: Truncation | null,
 };
 
-/**  Rich content attached to a tool update. */
-export type ToolContent = { type: "text"; text: string } | { type: "diff"; path: string; 
+/**  Rich content attached to a tool call or update. */
+export type ToolContent = { type: "text"; text: string; truncated: Truncation | null } | { type: "diff"; path: string; 
 /**  `None` when the file is new. */
-old_text: string | null; new_text: string } | { type: "terminal"; output: string; exit_code: number | null; 
-/**  Set when `output` was cut for the UI; the full output lives on disk. */
-truncated: boolean };
+old_text: string | null; new_text: string; truncated: Truncation | null } | { type: "terminal"; output: string; exit_code: number | null; truncated: Truncation | null };
 
 export type ToolKind = "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "switch_mode" | "other";
 
@@ -356,19 +443,38 @@ export type ToolLocation = {
 
 export type ToolStatus = "pending" | "in_progress" | "completed" | "failed";
 
-/**  Progress or result for a previously announced [`ToolCall`]. */
+/**
+ *  Progress or result for a previously announced [`ToolCall`]. Mirrors ACP's update: `None` keeps a
+ *  field; `content: Some(v)` replaces the content, and `Some([])` clears it.
+ */
 export type ToolUpdate = {
 	tool_call_id: string,
 	status: ToolStatus | null,
 	title: string | null,
-	content: ToolContent[],
+	kind: ToolKind | null,
+	locations: ToolLocation[] | null,
+	raw_input: Value | null,
+	/**  ACP `ToolCallUpdateFields.name`. */
+	tool_name: string | null,
+	content: ToolContent[] | null,
+	/**  As on [`ToolCall`]. */
+	truncated: Truncation | null,
 };
+
+/**  Inline content was cut; `blob` is the sha256 of the full content in the profile's attachments. */
+export type Truncation = {
+	total_bytes: number,
+	blob: string | null,
+};
+
+/**  The answer to a [`UiRequest`], matching its [`UiPrompt`] (`Notify` takes none). */
+export type UiAnswer = { type: "confirm"; yes: boolean } | { type: "select"; index: number } | { type: "input"; text: string };
 
 export type UiPrompt = { type: "confirm"; message: string } | { type: "select"; message: string; options: string[] } | { type: "input"; message: string; placeholder: string | null } | { type: "notify"; message: string };
 
 /**
  *  An agent asks the UI for input that isn't a tool permission (Pi extension UI, Cursor questions,
- *  ACP elicitation).
+ *  ACP elicitation). Never auto-answered.
  */
 export type UiRequest = {
 	request_id: string,
@@ -379,8 +485,16 @@ export type UiRequest = {
 export type UsageInfo = {
 	context_used: number | null,
 	context_size: number | null,
+	/**  The session's cumulative cost. */
 	cost: Cost | null,
 };
+
+/**  What a [`TokenUsage`] counts. */
+export type UsageScope = 
+/**  This turn alone. */
+"turn" | 
+/**  The whole native session so far ("this session" in the UI). */
+"session";
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };
 

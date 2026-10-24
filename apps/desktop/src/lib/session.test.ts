@@ -40,16 +40,18 @@ class FakeShell implements StreamTransport {
   }
 
   emit(index: number, seqStart: number, events: AuraEvent[]): void {
-    this.sinks[index]?.({ session_id: this.sessions[index] ?? "", seq_start: seqStart, events });
+    this.sinks[index]?.({ chat_id: this.sessions[index] ?? "", seq_start: seqStart, events });
   }
 }
 
-const started: AuraEvent = { type: "turn_started", turn_id: "turn-1" };
+const started: AuraEvent = { type: "turn_started", turn_id: "turn-1", prompt_id: null };
 const ended = (reason: "end_turn" | "cancelled"): AuraEvent => ({
   type: "turn_ended",
   turn_id: "turn-1",
   stop_reason: reason,
   usage: null,
+  duration_ms: null,
+  recovered: false,
 });
 const delta = (text: string): AuraEvent => ({ type: "message_delta", message_id: "m", text });
 

@@ -32,11 +32,25 @@ function demoEvents(): AuraEvent[] {
       status: "in_progress",
       locations: [],
       raw_input: null,
+      tool_name: null,
+      content: [],
+      truncated: null,
     },
-    { type: "tool_update", tool_call_id: id, status: "completed", title: null, content: [] },
+    {
+      type: "tool_update",
+      tool_call_id: id,
+      status: "completed",
+      title: null,
+      kind: null,
+      locations: null,
+      raw_input: null,
+      tool_name: null,
+      content: null,
+      truncated: null,
+    },
   ];
   return [
-    { type: "turn_started", turn_id: "turn-1" },
+    { type: "turn_started", turn_id: "turn-1", prompt_id: null },
     { type: "thought_delta", thought_id: "t", text: "Hmm." },
     { type: "thought_completed", thought_id: "t", duration_ms: 100 },
     ...tool("read", "read"),
@@ -52,7 +66,14 @@ function demoEvents(): AuraEvent[] {
     { type: "message_delta", message_id: "m", text: "## Done\n\nHello, world!" },
     { type: "message_completed", message_id: "m" },
     { type: "usage_updated", context_used: 1, context_size: 2, cost: null },
-    { type: "turn_ended", turn_id: "turn-1", stop_reason: "end_turn", usage: null },
+    {
+      type: "turn_ended",
+      turn_id: "turn-1",
+      stop_reason: "end_turn",
+      usage: null,
+      duration_ms: null,
+      recovered: false,
+    },
   ];
 }
 
@@ -68,24 +89,26 @@ class ScriptedShell implements StreamTransport {
     let seq = 0;
     const send = (events: AuraEvent[]): void => {
       if (this.gapAt !== null && seq === this.gapAt) seq += 1;
-      onBatch({ session_id: id, seq_start: seq, events });
+      onBatch({ chat_id: id, seq_start: seq, events });
       seq += events.length;
     };
     this.#open.set(id, send);
     const script =
       kind.type === "demo" && rate < 100
         ? // A slow turn that only ends when cancelled.
-          [{ type: "turn_started", turn_id: "turn-1" } as AuraEvent]
+          [{ type: "turn_started", turn_id: "turn-1", prompt_id: null } as AuraEvent]
         : kind.type === "demo"
           ? demoEvents()
           : [
-              { type: "turn_started", turn_id: "turn-1" } as AuraEvent,
+              { type: "turn_started", turn_id: "turn-1", prompt_id: null } as AuraEvent,
               { type: "message_delta", message_id: "m", text: "x ".repeat(300) } as AuraEvent,
               {
                 type: "turn_ended",
                 turn_id: "turn-1",
                 stop_reason: "end_turn",
                 usage: null,
+                duration_ms: null,
+                recovered: false,
               } as AuraEvent,
             ];
     setTimeout(() => {
@@ -99,7 +122,16 @@ class ScriptedShell implements StreamTransport {
     this.#open.delete(sessionId);
     setTimeout(
       () =>
-        send?.([{ type: "turn_ended", turn_id: "turn-1", stop_reason: "cancelled", usage: null }]),
+        send?.([
+          {
+            type: "turn_ended",
+            turn_id: "turn-1",
+            stop_reason: "cancelled",
+            usage: null,
+            duration_ms: null,
+            recovered: false,
+          },
+        ]),
       0,
     );
     return Promise.resolve();
@@ -166,7 +198,7 @@ describe("runSmoke", () => {
 describe("demoProblems", () => {
   it("accepts a complete demo turn", () => {
     const stream = applyBatch(initialStreamState(), {
-      session_id: "s",
+      chat_id: "s",
       seq_start: 0,
       events: demoEvents(),
     });
@@ -186,11 +218,18 @@ describe("demoProblems", () => {
 
   it("lists everything a truncated turn is missing", () => {
     const stream = applyBatch(initialStreamState(), {
-      session_id: "s",
+      chat_id: "s",
       seq_start: 0,
       events: [
-        { type: "turn_started", turn_id: "turn-1" },
-        { type: "turn_ended", turn_id: "turn-1", stop_reason: "cancelled", usage: null },
+        { type: "turn_started", turn_id: "turn-1", prompt_id: null },
+        {
+          type: "turn_ended",
+          turn_id: "turn-1",
+          stop_reason: "cancelled",
+          usage: null,
+          duration_ms: null,
+          recovered: false,
+        },
       ],
     });
     const problems = demoProblems({
