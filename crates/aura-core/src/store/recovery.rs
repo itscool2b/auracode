@@ -7,17 +7,22 @@
 //! - `backups/<db>.corrupt-<millis>.json`, next to the moved file: a repair happened. Every open
 //!   reports it as [`OpenOutcome::RecoveredFromCorruption`] until
 //!   [`Store::acknowledge_recovery`](super::Store::acknowledge_recovery) removes it. It is written
-//!   before the damaged file is moved, so the file is never moved without it.
+//!   before the damaged file is moved, so the file is never moved without it. One this build can't
+//!   read (torn, or written by a newer build) still reports the repair, without saying how much
+//!   of the database it kept.
 //!
 //! A repair copies what can be read into `<db>.salvage-<millis>.partial` (the damaged file is only
-//! read), writes the record, moves the damaged file and its sidecars into `backups/`, and renames the
-//! copy into place. Until the move, a failure changes nothing. After it, a failure leaves the record
-//! and the copy in place, and the next open installs the copy and reports the repair.
+//! read), writes the record, gives the damaged file's `-wal` and `-journal` their names in
+//! `backups/`, moves the damaged file there, and renames the copy into place. Until the move, a
+//! failure changes nothing. From the move on, the moved file has its `-wal` whatever happens, and
+//! a failure leaves the record and the copy in place: the next open installs the copy and reports
+//! the repair.
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use rusqlite_migration::M;
 use serde::{Deserialize, Serialize};
 
 use super::{OpenOutcome, Salvage, db_file_name, is_non_empty_file, remove_with_sidecars, salvage};
@@ -64,6 +69,11 @@ struct RecoveryRecord {
     recovered_at: i64,
 }
 
+/// How much a repair kept when its record doesn't say: some records were lost, it isn't known which.
+fn unknown_salvage() -> Salvage {
+    Salvage::Partial { tables: Vec::new() }
+}
+
 /// `<db>.damaged`
 pub(super) fn damage_marker(db_path: &Path) -> PathBuf {
     fsutil::with_suffix(db_path, DAMAGE_SUFFIX)
@@ -78,6 +88,16 @@ pub(super) fn salvage_path(db_path: &Path, quarantined: &Path) -> PathBuf {
         .rsplit_once(QUARANTINE_INFIX)
         .map_or(name.as_str(), |(_, key)| key);
     fsutil::with_suffix(db_path, &format!("{SALVAGE_INFIX}{key}{PARTIAL_SUFFIX}"))
+}
+
+/// The quarantined file of the repair that built `copy` ([`salvage_path`] the other way round).
+fn quarantined_for(copy: &Path, db_path: &Path, backups_dir: &Path) -> Option<PathBuf> {
+    let db_name = db_file_name(db_path);
+    let name = fsutil::file_name_lossy(copy);
+    let key = name
+        .strip_prefix(&format!("{db_name}{SALVAGE_INFIX}"))?
+        .strip_suffix(PARTIAL_SUFFIX)?;
+    Some(backups_dir.join(format!("{db_name}{QUARANTINE_INFIX}{key}")))
 }
 
 /// Every salvage copy of this database, with sidecars folded into the file they belong to.
@@ -102,16 +122,6 @@ fn salvage_copies(db_path: &Path) -> Vec<PathBuf> {
     copies.sort();
     copies.dedup();
     copies
-}
-
-/// Deletes salvage copies an interrupted repair left, except `keep`.
-fn remove_salvage_copies(db_path: &Path, keep: Option<&Path>) {
-    for copy in salvage_copies(db_path) {
-        if Some(copy.as_path()) != keep {
-            tracing::info!(copy = %copy.display(), "removing what an interrupted repair left");
-            remove_with_sidecars(&copy);
-        }
-    }
 }
 
 /// Records damage found while the database was in use, for the next exclusive open to repair. The
@@ -191,13 +201,16 @@ fn record_files(db_path: &Path, backups_dir: &Path) -> Vec<RecordFile> {
     files
 }
 
-fn read_record(file: &RecordFile) -> Option<RecoveryRecord> {
-    match fsutil::read_json::<RecoveryRecord>(&file.path) {
-        JsonFile::Valid(record) => Some(record),
+/// What the record at `path` says the repair kept: `None` when there is no record (any more), and
+/// [`unknown_salvage`] when there is one this build can't read (torn, written by a newer build with
+/// a salvage this one doesn't know, or unreadable just now), since it still proves the repair.
+fn recorded_salvage(path: &Path) -> Option<Salvage> {
+    match fsutil::read_json::<RecoveryRecord>(path) {
+        JsonFile::Valid(record) => Some(record.salvage),
         JsonFile::Missing => None,
         JsonFile::Unusable(error) | JsonFile::Unreadable(error) => {
-            tracing::warn!(%error, "skipping an unreadable repair record");
-            None
+            tracing::warn!(%error, "a repair record can't be read; reporting the repair without its details");
+            Some(unknown_salvage())
         }
     }
 }
@@ -212,60 +225,76 @@ pub(super) fn newest_pending(db_path: &Path, backups_dir: &Path) -> Option<Recov
         .into_iter()
         .filter(|file| exists(&file.quarantined))
         .find_map(|file| {
-            read_record(&file).map(|record| Recovery {
+            recorded_salvage(&file.path).map(|salvage| Recovery {
                 quarantined: file.quarantined,
-                salvage: record.salvage,
+                salvage,
             })
         })
 }
 
 /// Finishes a repair an earlier open couldn't complete (the damaged file was moved, but its copy
-/// never went in), drops records whose damaged copy is gone, and deletes salvage copies that
-/// interrupted repairs left. Returns the repair it finished. Only called while holding the open
+/// never went in), drops records whose damaged copy is gone, and deletes what repairs that never
+/// moved the database left. Returns the repair it finished. Only called while holding the open
 /// lock exclusively.
 ///
-/// A copy is only waiting while the database is missing, and a repair only starts on a database
-/// that exists, so at most one copy can be waiting. It is found by name rather than by taking the
-/// newest record, which a clock set back between two repairs would get wrong.
+/// A copy is waiting when the database is missing and the file its repair moved is in `backups/`.
+/// A repair only starts on a database that exists, so at most one copy can be waiting. It is
+/// matched to its repair by name, which a clock set back between two repairs can't confuse, and
+/// installed whatever its record says, or even without one: the copy is what the repair salvaged.
+/// A copy whose moved file is still there is never deleted.
 pub(super) fn resume(db_path: &Path, backups_dir: &Path) -> Result<Option<Recovery>> {
-    let mut waiting = None;
-    let database_missing = !is_non_empty_file(db_path);
     for file in record_files(db_path, backups_dir) {
         if !exists(&file.quarantined) {
             // The repair stopped between writing the record and moving the file (which is still in
-            // place), or the user deleted the damaged copy: nothing left to report.
+            // place), or the user deleted the damaged copy: nothing left to report. The sidecar
+            // names a stopped repair made next to it go too; they only ever pointed at the live
+            // database's.
+            remove_sidecars(&file.quarantined);
             if let Err(error) = fs::remove_file(&file.path) {
                 tracing::warn!(record = %file.path.display(), %error, "could not remove a stale repair record");
             }
-            continue;
         }
-        let copy = salvage_path(db_path, &file.quarantined);
-        if waiting.is_none() && database_missing && exists(&copy) {
-            match read_record(&file) {
-                Some(record) if record.salvage != Salvage::Nothing => {
-                    waiting = Some((copy, file.quarantined, record.salvage));
+    }
+    let database_missing = !is_non_empty_file(db_path);
+    let mut waiting = None;
+    for copy in salvage_copies(db_path) {
+        match quarantined_for(&copy, db_path, backups_dir) {
+            Some(quarantined) if exists(&quarantined) => {
+                if database_missing && waiting.is_none() {
+                    waiting = Some((copy, quarantined));
+                } else {
+                    tracing::warn!(copy = %copy.display(), "keeping a salvaged copy whose damaged database is still kept");
                 }
-                _ => {}
+            }
+            // A repair that never moved the database (or the scratch copy of one).
+            _ => {
+                tracing::info!(copy = %copy.display(), "removing what an interrupted repair left");
+                remove_with_sidecars(&copy);
             }
         }
     }
-    let Some((copy, quarantined, salvage)) = waiting else {
-        remove_salvage_copies(db_path, None);
+    let Some((copy, quarantined)) = waiting else {
         return Ok(None);
     };
-    remove_salvage_copies(db_path, Some(&copy));
-    install(&copy, db_path).map_err(|error| incomplete(db_path, &quarantined, error))?;
-    clear_recorded_damage(db_path);
-    tracing::info!(quarantined = %quarantined.display(), "finished an interrupted repair");
-    Ok(Some(Recovery {
-        quarantined,
-        salvage,
-    }))
+    let salvage = match recorded_salvage(&fsutil::with_suffix(&quarantined, RECORD_SUFFIX)) {
+        // No record, or one saying nothing was salvaged although a copy is waiting: how much the
+        // copy holds is unknown.
+        Some(Salvage::Nothing) | None => unknown_salvage(),
+        Some(salvage) => salvage,
+    };
+    tracing::info!(quarantined = %quarantined.display(), "finishing an interrupted repair");
+    finish(db_path, Some(&copy), quarantined, salvage).map(Some)
 }
 
-/// Repairs the damaged database at `db_path` (the steps are in the module docs). Only called while
-/// holding the open lock exclusively, so no other auracode process has the file open.
-pub(super) fn recover(db_path: &Path, backups_dir: &Path, problem: &str) -> Result<Recovery> {
+/// Repairs the damaged database at `db_path` (the steps are in the module docs). `migrations` are
+/// the store's, for the salvage. Only called while holding the open lock exclusively, so no other
+/// auracode process has the file open.
+pub(super) fn recover(
+    db_path: &Path,
+    backups_dir: &Path,
+    problem: &str,
+    migrations: &[M<'_>],
+) -> Result<Recovery> {
     let failed = |source: CoreError| CoreError::RepairFailed {
         path: db_path.to_path_buf(),
         source: Box::new(source),
@@ -281,61 +310,135 @@ pub(super) fn recover(db_path: &Path, backups_dir: &Path, problem: &str) -> Resu
     let copy = salvage_path(db_path, &target);
 
     tracing::warn!(%problem, db = %db_path.display(), "the database is damaged; copying out what can be read");
-    let salvage = salvage::salvage(db_path, &copy).map_err(failed)?;
+    let salvage = salvage::salvage(db_path, &copy, migrations).map_err(failed)?;
     let record = RecoveryRecord {
         problem: problem.to_string(),
         salvage: salvage.clone(),
         recovered_at: now_millis(),
     };
-    if let Err(error) = fsutil::write_json_atomic(&record_path, &record) {
-        remove_with_sidecars(&copy);
-        return Err(failed(error));
-    }
-    // Nothing has changed until this rename succeeds.
-    if let Err(source) = fs::rename(db_path, &target) {
-        if let Err(error) = fs::remove_file(&record_path) {
-            tracing::warn!(record = %record_path.display(), %error, "could not remove the record of a repair that didn't happen");
+    // Nothing has changed until the move succeeds, so a failure before it only removes what the
+    // repair made.
+    let undo = |error: CoreError| {
+        match fs::remove_file(&record_path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                tracing::warn!(record = %record_path.display(), %error, "could not remove the record of a repair that didn't happen")
+            }
         }
         remove_with_sidecars(&copy);
-        return Err(failed(CoreError::Io {
+        failed(error)
+    };
+    fsutil::write_json_atomic(&record_path, &record).map_err(undo)?;
+    quarantine(db_path, &target).map_err(undo)?;
+    tracing::warn!(quarantined = %target.display(), ?salvage, "moved the damaged database aside");
+    let copy = (salvage != Salvage::Nothing).then_some(copy.as_path());
+    finish(db_path, copy, target, salvage)
+}
+
+/// Moves the damaged database to `target`. Its `-wal` and `-journal` get their names there first,
+/// keeping their suffixes so SQLite can still open the set (a hard link, or a synced copy where the
+/// filesystem has no hard links): the moved file is never without its `-wal`, which holds the
+/// transactions not yet written to the main file (usual after the crash that caused the damage),
+/// even if the repair stops right after the move. The names at the database path, and the `-shm`,
+/// go in [`finish`]. On failure nothing changed.
+pub(super) fn quarantine(db_path: &Path, target: &Path) -> Result<()> {
+    if let Err(error) = link_sidecars(db_path, target) {
+        remove_sidecars(target);
+        return Err(error);
+    }
+    fsutil::sync_dir(fsutil::parent_dir(target));
+    if let Err(source) = fs::rename(db_path, target) {
+        remove_sidecars(target);
+        return Err(CoreError::Io {
             path: db_path.to_path_buf(),
             source,
-        }));
+        });
     }
-    fsutil::sync_dir(backups_dir);
+    fsutil::sync_dir(fsutil::parent_dir(target));
     fsutil::sync_dir(fsutil::parent_dir(db_path));
-    tracing::warn!(quarantined = %target.display(), ?salvage, "moved the damaged database aside");
+    Ok(())
+}
 
-    let incomplete = |error| incomplete(db_path, &target, error);
-    move_sidecars(db_path, &target).map_err(incomplete)?;
-    if salvage != Salvage::Nothing {
-        install(&copy, db_path).map_err(incomplete)?;
+/// The first half of [`quarantine`]'s sidecar handling. Never the `-shm`: it is only an index SQLite
+/// rebuilds, and it is shared memory, matched to whoever opens it by its file. Two names for it
+/// would let the new database and the moved one share an index if both were opened.
+fn link_sidecars(db_path: &Path, target: &Path) -> Result<()> {
+    for suffix in SQLITE_SIDECARS
+        .into_iter()
+        .filter(|suffix| *suffix != "-shm")
+    {
+        let sidecar = fsutil::with_suffix(db_path, suffix);
+        if !exists(&sidecar) {
+            continue;
+        }
+        let kept = fsutil::with_suffix(target, suffix);
+        fs::hard_link(&sidecar, &kept)
+            .or_else(|error| {
+                tracing::debug!(%error, sidecar = %sidecar.display(), "could not hard-link a sidecar of the damaged database; copying it");
+                fs::copy(&sidecar, &kept).and_then(|_| fsutil::sync_file(&kept))
+            })
+            .map_err(CoreError::io(&sidecar))?;
     }
+    Ok(())
+}
+
+/// Removes the sidecar names next to `path`, not `path` itself.
+fn remove_sidecars(path: &Path) {
+    for suffix in SQLITE_SIDECARS {
+        let sidecar = fsutil::with_suffix(path, suffix);
+        match fs::remove_file(&sidecar) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                tracing::warn!(sidecar = %sidecar.display(), %error, "could not remove a sidecar left by a repair")
+            }
+        }
+    }
+}
+
+/// What follows the move of the damaged database to `quarantined`, in a repair and when the next
+/// open finishes one: forget the damage it was moved for, clear the database path of its sidecars,
+/// and put the salvaged copy (if any) in its place.
+fn finish(
+    db_path: &Path,
+    copy: Option<&Path>,
+    quarantined: PathBuf,
+    salvage: Salvage,
+) -> Result<Recovery> {
+    // The marker describes the file that just moved. Were it removed only after the install, a
+    // crash in between would leave it next to the healthy copy, which the next open would then
+    // repair all over again.
     clear_recorded_damage(db_path);
+    let incomplete = |error| incomplete(db_path, &quarantined, error);
+    settle_sidecars(db_path, &quarantined).map_err(incomplete)?;
+    if let Some(copy) = copy {
+        install(copy, db_path).map_err(incomplete)?;
+    }
     Ok(Recovery {
-        quarantined: target,
+        quarantined,
         salvage,
     })
 }
 
-/// Moves the damaged database's `-wal`, `-shm`, and `-journal` next to it, keeping their suffixes
-/// so SQLite can still open the set. One that can't be renamed is copied, then removed (the `-shm`,
-/// an index SQLite rebuilds, is just removed): left behind, it would be replayed into the new
-/// database.
-fn move_sidecars(db_path: &Path, target: &Path) -> Result<()> {
+/// Clears the database path of the moved database's sidecars: left there, SQLite would replay an
+/// old `-wal` into the new file. One the moved file already has next to it ([`quarantine`]) is
+/// removed; one it lacks (the `-shm`, or any sidecar of a repair stopped before it linked them) is
+/// moved there. Only called after the move, or with a copy waiting, which proves the files at the
+/// database path are the moved database's.
+fn settle_sidecars(db_path: &Path, quarantined: &Path) -> Result<()> {
     for suffix in SQLITE_SIDECARS {
         let sidecar = fsutil::with_suffix(db_path, suffix);
         if !exists(&sidecar) {
             continue;
         }
-        let moved = fsutil::with_suffix(target, suffix);
-        if let Err(error) = fs::rename(&sidecar, &moved) {
-            tracing::warn!(%error, sidecar = %sidecar.display(), "could not move a sidecar of the damaged database; copying it instead");
-            if suffix != "-shm" {
-                fs::copy(&sidecar, &moved).map_err(CoreError::io(&sidecar))?;
-            }
-            fs::remove_file(&sidecar).map_err(CoreError::io(&sidecar))?;
-        }
+        let kept = fsutil::with_suffix(quarantined, suffix);
+        let settled = if exists(&kept) {
+            fs::remove_file(&sidecar)
+        } else {
+            fs::rename(&sidecar, &kept)
+        };
+        settled.map_err(CoreError::io(&sidecar))?;
     }
     Ok(())
 }
@@ -404,6 +507,8 @@ pub(super) fn acknowledge(db_path: &Path, backups_dir: &Path, quarantined: &str)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::config::DbConfig;
+    use rusqlite::{Connection, OpenFlags};
 
     struct Paths {
         _dir: tempfile::TempDir,
@@ -435,6 +540,35 @@ mod tests {
         )
         .expect("record");
         quarantined
+    }
+
+    /// A WAL database at `path` whose last row is only in its `-wal`, as after a crash; returns
+    /// the `-wal`'s bytes.
+    fn with_a_row_only_in_the_wal(path: &Path) -> Vec<u8> {
+        let conn = Connection::open(path).expect("open");
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL; CREATE TABLE t (x); INSERT INTO t VALUES ('checkpointed'); \
+             PRAGMA wal_checkpoint(TRUNCATE); INSERT INTO t VALUES ('only in the wal');",
+        )
+        .expect("rows");
+        conn.set_db_config(DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, true)
+            .expect("keep the wal");
+        drop(conn);
+        let wal = fs::read(fsutil::with_suffix(path, "-wal")).expect("wal");
+        assert!(!wal.is_empty());
+        wal
+    }
+
+    fn rows_of(path: &Path) -> Vec<String> {
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("read-only open");
+        let mut stmt = conn
+            .prepare("SELECT x FROM t ORDER BY rowid")
+            .expect("select");
+        stmt.query_map([], |row| row.get(0))
+            .expect("rows")
+            .map(|row| row.expect("row"))
+            .collect()
     }
 
     #[test]
@@ -510,12 +644,44 @@ mod tests {
         assert!(!gone.exists());
     }
 
+    /// Finding: a record that couldn't be parsed was skipped, so its repair stopped being reported.
+    #[test]
+    fn a_record_this_build_cant_read_is_still_reported() {
+        for body in [
+            &b"{ torn"[..],
+            br#"{"problem": "x", "salvage": {"type": "from_a_newer_build"}, "recovered_at": 1}"#,
+        ] {
+            let p = paths();
+            let quarantined = p.backups.join("aura.db.corrupt-100");
+            fs::write(&quarantined, b"damaged bytes").expect("quarantined file");
+            fs::write(fsutil::with_suffix(&quarantined, RECORD_SUFFIX), body).expect("record");
+            assert_eq!(
+                newest_pending(&p.db, &p.backups),
+                Some(Recovery {
+                    quarantined: quarantined.clone(),
+                    salvage: unknown_salvage(),
+                })
+            );
+            assert!(
+                acknowledge(&p.db, &p.backups, &quarantined.display().to_string()).expect("ack")
+            );
+            assert_eq!(newest_pending(&p.db, &p.backups), None);
+        }
+    }
+
     #[test]
     fn salvage_copies_are_named_after_their_repair() {
         let p = paths();
+        let quarantined = p.backups.join("aura.db.corrupt-1730000000000.2");
+        let copy = salvage_path(&p.db, &quarantined);
         assert_eq!(
-            salvage_path(&p.db, &p.backups.join("aura.db.corrupt-1730000000000.2")),
+            copy,
             p.db.with_file_name("aura.db.salvage-1730000000000.2.partial")
+        );
+        assert_eq!(quarantined_for(&copy, &p.db, &p.backups), Some(quarantined));
+        assert_eq!(
+            quarantined_for(&p.db.with_file_name("notes.partial"), &p.db, &p.backups),
+            None
         );
     }
 
@@ -529,14 +695,28 @@ mod tests {
         fs::write(fsutil::with_suffix(&copy, "-journal"), b"journal").expect("stale journal");
         let orphan = salvage_path(&p.db, &p.backups.join("aura.db.corrupt-9"));
         fs::write(&orphan, b"from a repair interrupted mid-copy").expect("orphan");
+        let scratch = p.db.with_file_name("aura.db.salvage-9.schema.partial");
+        fs::write(
+            &scratch,
+            b"the schema copy of a repair interrupted mid-copy",
+        )
+        .expect("scratch");
+        // Sidecar names a repair gave the file before it stopped short of moving it.
+        fs::write(
+            fsutil::with_suffix(&stale, "-wal"),
+            b"a link to the live -wal",
+        )
+        .expect("link");
         let unrelated = p.db.with_file_name("notes.salvage-1.partial");
         fs::write(&unrelated, b"not ours").expect("unrelated");
 
         assert_eq!(resume(&p.db, &p.backups).expect("resume"), None);
         assert!(!fsutil::with_suffix(&stale, RECORD_SUFFIX).exists());
+        assert!(!fsutil::with_suffix(&stale, "-wal").exists());
         assert!(!copy.exists());
         assert!(!fsutil::with_suffix(&copy, "-journal").exists());
         assert!(!orphan.exists());
+        assert!(!scratch.exists());
         assert!(unrelated.exists());
         assert_eq!(fs::read(&p.db).expect("db"), b"the database is in place");
     }
@@ -548,7 +728,7 @@ mod tests {
         fs::write(&quarantined, b"damaged").expect("quarantined");
         let copy = salvage_path(&p.db, &quarantined);
         fs::write(&copy, b"salvaged database").expect("copy");
-        fs::write(fsutil::with_suffix(&p.db, "-wal"), b"stale wal").expect("stale wal");
+        fs::write(fsutil::with_suffix(&p.db, "-shm"), b"stale shm").expect("stale shm");
         mark_damaged(&p.db, "found earlier").expect("mark");
 
         let finished = resume(&p.db, &p.backups)
@@ -559,8 +739,8 @@ mod tests {
         assert_eq!(fs::read(&p.db).expect("installed"), b"salvaged database");
         assert!(!copy.exists());
         assert!(
-            !fsutil::with_suffix(&p.db, "-wal").exists(),
-            "a stale -wal must never meet the new file"
+            !fsutil::with_suffix(&p.db, "-shm").exists(),
+            "a stale sidecar must never meet the new file"
         );
         assert_eq!(recorded_damage(&p.db), None);
         // Still reported until acknowledged.
@@ -585,6 +765,55 @@ mod tests {
         assert_eq!(fs::read(&p.db).expect("installed"), b"the waiting copy");
     }
 
+    /// Finding: a waiting copy was installed only when its record could be read; a torn record, or
+    /// one from a newer build with a salvage this one doesn't know, got the copy deleted and the
+    /// open reported a plain Created over an empty database.
+    #[test]
+    fn a_waiting_copy_is_installed_even_when_its_record_cant_be_read() {
+        for body in [
+            Some(&b"{ torn"[..]),
+            Some(br#"{"problem": "x", "salvage": {"type": "from_a_newer_build"}, "recovered_at": 1}"#),
+            None,
+        ] {
+            let p = paths();
+            let quarantined = p.backups.join("aura.db.corrupt-1000");
+            fs::write(&quarantined, b"damaged").expect("quarantined");
+            if let Some(body) = body {
+                fs::write(fsutil::with_suffix(&quarantined, RECORD_SUFFIX), body).expect("record");
+            }
+            let copy = salvage_path(&p.db, &quarantined);
+            fs::write(&copy, b"salvaged database").expect("copy");
+
+            let finished = resume(&p.db, &p.backups)
+                .expect("resume")
+                .expect("finished the repair");
+            assert_eq!(
+                finished,
+                Recovery {
+                    quarantined: quarantined.clone(),
+                    salvage: unknown_salvage(),
+                },
+                "{body:?}"
+            );
+            assert_eq!(fs::read(&p.db).expect("installed"), b"salvaged database");
+            assert!(!copy.exists());
+        }
+    }
+
+    #[test]
+    fn a_salvaged_copy_is_never_deleted_while_its_damaged_database_is_kept() {
+        let p = paths();
+        let quarantined = write_record(&p, "aura.db.corrupt-7", Salvage::Complete);
+        fs::write(&quarantined, b"damaged").expect("quarantined");
+        let copy = salvage_path(&p.db, &quarantined);
+        fs::write(&copy, b"salvaged database").expect("copy");
+        // Something put a database back in place by hand meanwhile.
+        fs::write(&p.db, b"a database put back by hand").expect("db");
+        assert_eq!(resume(&p.db, &p.backups).expect("resume"), None);
+        assert_eq!(fs::read(&copy).expect("kept"), b"salvaged database");
+        assert_eq!(fs::read(&p.db).expect("db"), b"a database put back by hand");
+    }
+
     #[test]
     fn a_repair_that_salvaged_nothing_leaves_no_copy_to_install() {
         let p = paths();
@@ -607,6 +836,121 @@ mod tests {
         assert_eq!(resume(&p.db, &p.backups).expect("resume"), None);
         assert!(!p.db.exists());
         assert!(newest_pending(&p.db, &p.backups).is_some());
+    }
+
+    /// Finding: the move took the damaged file first and its `-wal` afterwards, so a repair that
+    /// stopped in between left the `-wal` at the database path, where finishing the repair deleted
+    /// it to install the copy: every transaction not yet in the main file was gone.
+    #[test]
+    fn finishing_a_repair_keeps_the_wal_the_move_left_behind() {
+        let p = paths();
+        let wal = with_a_row_only_in_the_wal(&p.db);
+        // As a repair left it when it stopped right after moving the main file: record written,
+        // copy waiting, the -wal (and -shm) still at the database path.
+        let quarantined = write_record(&p, "aura.db.corrupt-1000", Salvage::Complete);
+        fs::rename(&p.db, &quarantined).expect("move the main file");
+        fs::write(salvage_path(&p.db, &quarantined), b"salvaged database").expect("copy");
+
+        resume(&p.db, &p.backups)
+            .expect("resume")
+            .expect("finished the repair");
+        assert_eq!(
+            fs::read(fsutil::with_suffix(&quarantined, "-wal")).expect("the -wal moved along"),
+            wal
+        );
+        assert!(!fsutil::with_suffix(&p.db, "-wal").exists());
+        assert_eq!(
+            rows_of(&quarantined),
+            ["checkpointed", "only in the wal"],
+            "the moved file still has the row that was only in its -wal"
+        );
+        assert_eq!(fs::read(&p.db).expect("installed"), b"salvaged database");
+    }
+
+    /// The move gives each sidecar its name next to the moved file before the file itself moves,
+    /// so stopping right after it loses nothing.
+    #[test]
+    fn quarantine_gives_the_sidecars_their_names_before_the_move() {
+        let p = paths();
+        let wal = with_a_row_only_in_the_wal(&p.db);
+        let target = p.backups.join("aura.db.corrupt-1000");
+        quarantine(&p.db, &target).expect("move");
+        assert!(!p.db.exists());
+        assert_eq!(
+            fs::read(fsutil::with_suffix(&target, "-wal")).expect("kept"),
+            wal
+        );
+        assert!(
+            fsutil::with_suffix(&p.db, "-wal").exists(),
+            "the old name goes only once the move is done"
+        );
+        assert!(
+            !fsutil::with_suffix(&target, "-shm").exists(),
+            "shared memory never gets a second name"
+        );
+        assert_eq!(rows_of(&target), ["checkpointed", "only in the wal"]);
+    }
+
+    #[test]
+    fn a_move_that_fails_changes_nothing() {
+        let p = paths();
+        let wal = with_a_row_only_in_the_wal(&p.db);
+        let before = fs::read(&p.db).expect("db");
+        // A folder with something in it where the database should go.
+        let target = p.backups.join("aura.db.corrupt-1000");
+        fs::create_dir_all(target.join("in the way")).expect("mkdir");
+        assert!(matches!(
+            quarantine(&p.db, &target),
+            Err(CoreError::Io { .. })
+        ));
+        assert_eq!(fs::read(&p.db).expect("db"), before);
+        assert_eq!(
+            fs::read(fsutil::with_suffix(&p.db, "-wal")).expect("wal"),
+            wal
+        );
+        for suffix in SQLITE_SIDECARS {
+            assert!(
+                !fsutil::with_suffix(&target, suffix).exists(),
+                "{suffix} left next to the target"
+            );
+        }
+    }
+
+    /// Finding: the damage marker went only after the copy was installed, so a crash in between
+    /// left it next to the healthy copy, and the next open repaired that copy again (another
+    /// quarantined copy, and a second notice in place of the first repair's).
+    #[test]
+    fn the_damage_marker_goes_before_the_copy_is_installed() {
+        let p = paths();
+        let events_lost = Salvage::Partial {
+            tables: vec!["events".into()],
+        };
+        let quarantined = write_record(&p, "aura.db.corrupt-7", events_lost.clone());
+        fs::write(&quarantined, b"damaged").expect("quarantined");
+        let copy = salvage_path(&p.db, &quarantined);
+        fs::write(&copy, b"salvaged database").expect("copy");
+        mark_damaged(&p.db, "found by a check").expect("mark");
+        // Something in the way of the install: a folder where the database goes.
+        fs::create_dir_all(p.db.join("in the way")).expect("mkdir");
+
+        let error = resume(&p.db, &p.backups).expect_err("the install fails");
+        assert!(
+            matches!(error, CoreError::RecoveryIncomplete { .. }),
+            "{error:?}"
+        );
+        assert_eq!(
+            recorded_damage(&p.db),
+            None,
+            "cleared before the install was tried"
+        );
+        assert!(copy.exists(), "the copy still waits");
+
+        fs::remove_dir_all(&p.db).expect("clear the way");
+        let finished = resume(&p.db, &p.backups)
+            .expect("resume")
+            .expect("finished");
+        assert_eq!(finished.salvage, events_lost);
+        assert_eq!(fs::read(&p.db).expect("installed"), b"salvaged database");
     }
 
     #[test]

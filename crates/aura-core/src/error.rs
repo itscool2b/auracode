@@ -87,6 +87,16 @@ pub enum CoreError {
     #[error("{path} is in use by another auracode process (another window or the CLI), {reason}")]
     DatabaseInUse { path: PathBuf, reason: InUseReason },
 
+    /// A folder auracode keeps data in is a link (to a folder on another disk, say) that doesn't
+    /// lead to a folder. It is left as it is: a new folder in its place would start the data over
+    /// on this disk and leave the history behind the link for when the disk is back.
+    #[error("{link} is a link to {target}, {problem}")]
+    BrokenLink {
+        link: PathBuf,
+        target: PathBuf,
+        problem: LinkProblem,
+    },
+
     #[error("\"{0}\" is not a valid profile id")]
     InvalidProfileId(String),
 
@@ -125,6 +135,29 @@ impl std::fmt::Display for InUseReason {
             }
             InUseReason::Upgrade => {
                 "so it could not be upgraded for this version of auracode. Close the other auracode windows and the CLI, then try again."
+            }
+        })
+    }
+}
+
+/// What is wrong with where a [`CoreError::BrokenLink`] leads. Each reads as the end of that error's
+/// sentence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkProblem {
+    /// Nothing is there, most often because the disk it is on isn't connected.
+    Missing,
+    /// Something other than a folder is there.
+    NotAFolder,
+}
+
+impl std::fmt::Display for LinkProblem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            LinkProblem::Missing => {
+                "which can't be found, perhaps because it is on a disk that isn't connected. Reconnect the disk and try again, or remove the link to have auracode start over with an empty folder there."
+            }
+            LinkProblem::NotAFolder => {
+                "which is not a folder. Point the link at a folder, or remove it to have auracode start over with an empty folder there."
             }
         })
     }
@@ -206,6 +239,21 @@ mod tests {
                 .to_string()
                 .starts_with("auracode found damage in /p/aura.db but could not repair it, so the file was left where it is: ")
         );
+
+        for problem in [LinkProblem::Missing, LinkProblem::NotAFolder] {
+            let text = CoreError::BrokenLink {
+                link: PathBuf::from("/data/profiles"),
+                target: PathBuf::from("/Volumes/Backup/profiles"),
+                problem,
+            }
+            .to_string();
+            assert!(
+                text.starts_with("/data/profiles is a link to /Volumes/Backup/profiles, which "),
+                "{text}"
+            );
+            assert!(text.contains("remove"), "says how to start over: {text}");
+            assert!(text.ends_with('.'), "{text}");
+        }
 
         for reason in [
             InUseReason::Opening,

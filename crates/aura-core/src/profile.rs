@@ -16,7 +16,9 @@
 //! `<data root>/state.json` records the active profile. Whatever state the files are in, opening the
 //! active profile yields a usable profile: a missing, corrupt, or dangling `state.json` falls back to
 //! Local (recreating it if needed) with a warning, and a stray file where a profile folder belongs is
-//! moved aside, never an error that blocks startup.
+//! moved aside, never an error that blocks startup. A link where a folder belongs is the exception:
+//! one that leads nowhere (the folder is on a disk that isn't connected) is an error, because a new
+//! profile in its place would leave the real one behind.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -164,14 +166,23 @@ impl Profiles {
     /// rewrites `state.json`, and logs a warning. A `state.json` that can't be read also falls back
     /// to Local, but is left alone, so a passing fault doesn't forget the user's choice. A file where
     /// a profile folder or one of its subfolders belongs is moved aside. Only real I/O failures (disk
-    /// full, no permission to the data root) are errors.
+    /// full, no permission to the data root) are errors, and a link to one of these folders that
+    /// leads nowhere ([`CoreError::BrokenLink`]): falling back to a new Local profile there would
+    /// leave the real one behind for when its disk is back.
     pub fn open_active(&self) -> Result<Profile> {
         self.root.ensure()?;
         let state_path = self.root.state_file();
         let mut extra = Map::new();
         match fsutil::read_json::<AppState>(&state_path) {
             JsonFile::Valid(state) => {
-                match self.read_profile_or_invalid(&state.active_profile) {
+                let read = match self.read_profile(&state.active_profile) {
+                    Ok(read) => read,
+                    // Its folder is on a disk that isn't connected. Falling back would make Local
+                    // the active profile for good, as if the user had switched.
+                    Err(error @ CoreError::BrokenLink { .. }) => return Err(error),
+                    Err(error) => ProfileRead::Invalid(error),
+                };
+                match read {
                     ProfileRead::Valid(profile) => {
                         profile.ensure_layout()?;
                         return Ok(profile);
@@ -364,9 +375,11 @@ impl Profiles {
     }
 
     /// Reads `profiles/<id>/profile.json`. An invalid id is an `Err`, so callers handling user input
-    /// get `InvalidProfileId` before any path is built.
+    /// get `InvalidProfileId` before any path is built. So is a profile folder linked to one that
+    /// can't be found (`BrokenLink`), which is unavailable, not missing.
     fn read_profile(&self, id: &str) -> Result<ProfileRead> {
         let dir = self.root.profile_dir(id)?;
+        fsutil::check_folder_link(&dir)?;
         let meta_path = dir.join(PROFILE_FILE);
         Ok(match fsutil::read_json::<ProfileMeta>(&meta_path) {
             JsonFile::Missing => ProfileRead::Missing,
@@ -413,6 +426,8 @@ fn id_mismatch(meta_path: &Path, found: &str, folder: &str) -> CoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use crate::error::LinkProblem;
     use crate::paths::validate_profile_id;
 
     fn setup() -> (tempfile::TempDir, Profiles) {
@@ -625,6 +640,120 @@ mod tests {
             fs::read(local.db_path()).expect("db untouched"),
             b"the database"
         );
+    }
+
+    #[cfg(unix)]
+    fn is_link(path: &Path) -> bool {
+        fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink())
+    }
+
+    /// Finding: with `profiles/` linked to a folder on a disk that wasn't connected, the link was
+    /// moved aside and a new, empty Local profile created in its place, which the app kept using
+    /// once the disk was back, with the history stranded behind `profiles.corrupt-<ms>`.
+    #[cfg(unix)]
+    #[test]
+    fn an_unplugged_profiles_link_is_an_error_and_starts_no_new_profile() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let disk = dir.path().join("external disk");
+        let elsewhere = disk.join("aura profiles");
+        fs::create_dir_all(&elsewhere).expect("mkdir");
+        let root = DataRoot::at(dir.path().join("aura"));
+        fs::create_dir_all(root.root()).expect("mkdir");
+        std::os::unix::fs::symlink(&elsewhere, root.profiles_dir()).expect("symlink");
+        let profiles = Profiles::new(root.clone());
+        let local = profiles.open_active().expect("open through the link");
+        fs::write(local.db_path(), b"the history").expect("data on the other disk");
+
+        let unplugged = dir.path().join("unplugged");
+        fs::rename(&disk, &unplugged).expect("unplug the disk");
+        let error = profiles
+            .open_active()
+            .expect_err("the profiles are unavailable");
+        assert!(
+            matches!(
+                &error,
+                CoreError::BrokenLink { link, target, problem: LinkProblem::Missing }
+                    if *link == root.profiles_dir() && *target == elsewhere
+            ),
+            "{error:?}"
+        );
+        assert!(is_link(&root.profiles_dir()), "the link is left in place");
+        assert!(!disk.exists(), "nothing was created where the disk was");
+        assert!(corrupt_copies(root.root(), "profiles.corrupt-").is_empty());
+        assert!(matches!(
+            profiles.create(ProfileKind::Local, ""),
+            Err(CoreError::BrokenLink { .. })
+        ));
+
+        fs::rename(&unplugged, &disk).expect("plug it back in");
+        let again = profiles.open_active().expect("open");
+        assert_eq!(again, local);
+        assert_eq!(fs::read(again.db_path()).expect("db"), b"the history");
+    }
+
+    /// The active profile's own folder on that disk: an error too, and `state.json` keeps naming
+    /// it, where falling back to Local would have made Local the active profile for good.
+    #[cfg(unix)]
+    #[test]
+    fn an_unplugged_profile_folder_link_is_an_error_and_stays_the_active_profile() {
+        let (dir, profiles) = setup();
+        profiles.open_active().expect("bootstrap");
+        let account = profiles
+            .create(ProfileKind::Account, "work")
+            .expect("create");
+        let disk = dir.path().join("external disk");
+        fs::create_dir_all(&disk).expect("mkdir");
+        let moved = disk.join(&account.meta.id);
+        fs::rename(&account.dir, &moved).expect("move the profile to the other disk");
+        std::os::unix::fs::symlink(&moved, &account.dir).expect("symlink");
+        assert_eq!(
+            profiles.set_active(&account.meta.id).expect("activate"),
+            account
+        );
+        let state = fs::read(profiles.root().state_file()).expect("state.json");
+
+        let unplugged = dir.path().join("unplugged");
+        fs::rename(&disk, &unplugged).expect("unplug the disk");
+        assert!(matches!(
+            profiles.open_active(),
+            Err(CoreError::BrokenLink { ref link, .. }) if *link == account.dir
+        ));
+        assert!(matches!(
+            profiles.get(&account.meta.id),
+            Err(CoreError::BrokenLink { .. })
+        ));
+        assert_eq!(
+            fs::read(profiles.root().state_file()).expect("state.json"),
+            state,
+            "still the active profile"
+        );
+        assert!(is_link(&account.dir));
+
+        fs::rename(&unplugged, &disk).expect("plug it back in");
+        assert_eq!(profiles.open_active().expect("open"), account);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unplugged_subfolder_link_is_an_error_and_nothing_takes_its_place() {
+        let (dir, profiles) = setup();
+        let local = profiles.open_active().expect("bootstrap");
+        let disk = dir.path().join("external disk");
+        let elsewhere = disk.join("checkpoints");
+        fs::create_dir_all(&elsewhere).expect("mkdir");
+        fs::remove_dir(local.checkpoints_dir()).expect("rmdir");
+        std::os::unix::fs::symlink(&elsewhere, local.checkpoints_dir()).expect("symlink");
+        assert_eq!(profiles.open_active().expect("open"), local);
+
+        let unplugged = dir.path().join("unplugged");
+        fs::rename(&disk, &unplugged).expect("unplug the disk");
+        assert!(matches!(
+            profiles.open_active(),
+            Err(CoreError::BrokenLink { ref link, .. }) if *link == local.checkpoints_dir()
+        ));
+        assert!(is_link(&local.checkpoints_dir()));
+        assert!(corrupt_copies(&local.dir, "checkpoints.corrupt-").is_empty());
+        assert!(!disk.exists());
     }
 
     #[test]

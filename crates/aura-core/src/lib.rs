@@ -23,8 +23,8 @@
 //! moved aside (never deleted) and replaced, a damaged database is moved aside and replaced by a
 //! copy of everything still readable in it, and the outcome is reported so the UI can tell the
 //! user. Errors are reserved for what can't be repaired (no permission, a file that can't be read,
-//! disk full, data from a newer auracode, a database another auracode process is using), and their
-//! messages are written to be shown as they are.
+//! disk full, data from a newer auracode, a database another auracode process is using, a linked
+//! data folder whose disk isn't connected), and their messages are written to be shown as they are.
 
 pub mod device;
 pub mod error;
@@ -36,7 +36,7 @@ pub mod time;
 
 mod fsutil;
 
-pub use error::{CoreError, InUseReason, Result};
+pub use error::{CoreError, InUseReason, LinkProblem, Result};
 
 #[cfg(test)]
 mod tests {

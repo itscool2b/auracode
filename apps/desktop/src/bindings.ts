@@ -242,8 +242,11 @@ export type Salvage =
 { type: "complete" } | 
 /**
  *  Some rows could not be read, or were dropped because the row they belong to was lost (a
- *  chat's events, when the chat's page was unreadable). `tables` names the tables that lost
- *  rows, in schema order.
+ *  chat's events, when the chat's page was unreadable), or lost a reference to such a row (a
+ *  chat whose folder was lost stays in its project, outside any folder). `tables` names those
+ *  tables, in schema order. It is empty when which ones isn't known: part of the schema itself
+ *  was unreadable (and may have listed tables auracode doesn't know of), or the record of the
+ *  repair could not be read.
  */
 { type: "partial"; tables: string[] } | 
 /**  Nothing could be read, so the new database started out empty. */

@@ -17,13 +17,14 @@
 //! 3. Damage, whether the probe found it, [`check_integrity`] did, or a query failed with
 //!    SQLITE_CORRUPT or SQLITE_NOTADB ([`Store::note_query_error`]), is repaired at the next open
 //!    that holds the lock exclusively, instead of the whole history disappearing: everything that
-//!    can still be read is copied into a new database (`VACUUM INTO`, or table by table and row by
-//!    row when that fails), the damaged file and its `-wal`, `-shm`, and `-journal` are moved to
-//!    `backups/aura.db.corrupt-<millis>`, and the copy takes its place. A record next to the moved
-//!    file reports the repair as [`OpenOutcome::RecoveredFromCorruption`] on every open until
-//!    [`Store::acknowledge_recovery`], so the notice can't be lost, and a repair interrupted after
-//!    the move is finished by the next open. Only "not a database" and "corrupt" count as damage:
-//!    a locked or unreadable file is an error and stays where it is.
+//!    can still be read is copied into a new database (`VACUUM INTO`, or, when that fails, table by
+//!    table and row by row into the schema the migrations give that version), the damaged file and
+//!    its `-wal`, `-shm`, and `-journal` are moved to `backups/aura.db.corrupt-<millis>`, and the
+//!    copy takes its place. A record next to the moved file reports the repair as
+//!    [`OpenOutcome::RecoveredFromCorruption`] on every open until [`Store::acknowledge_recovery`],
+//!    so the notice can't be lost, and a repair interrupted after the move is finished by the next
+//!    open. Only "not a database" and "corrupt" count as damage: a locked or unreadable file is an
+//!    error and stays where it is.
 //! 4. A database from a newer auracode (`user_version` above [`SCHEMA_VERSION`]) is refused with
 //!    [`CoreError::SchemaTooNew`] before anything is written or repaired. The version is read before
 //!    anything else on purpose: a newer build may use schema syntax this SQLite can't parse, which
@@ -119,8 +120,11 @@ pub enum Salvage {
     /// row lives in (unused pages, a broken index), which the copy rebuilt.
     Complete,
     /// Some rows could not be read, or were dropped because the row they belong to was lost (a
-    /// chat's events, when the chat's page was unreadable). `tables` names the tables that lost
-    /// rows, in schema order.
+    /// chat's events, when the chat's page was unreadable), or lost a reference to such a row (a
+    /// chat whose folder was lost stays in its project, outside any folder). `tables` names those
+    /// tables, in schema order. It is empty when which ones isn't known: part of the schema itself
+    /// was unreadable (and may have listed tables auracode doesn't know of), or the record of the
+    /// repair could not be read.
     Partial { tables: Vec<String> },
     /// Nothing could be read, so the new database started out empty.
     Nothing,
@@ -388,7 +392,12 @@ fn open_locked(ctx: &Ctx<'_, '_>) -> Result<(Connection, StoreInfo)> {
         };
         match (failure, &repair) {
             (Failure::Damage(problem), None) if ctx.may_change => {
-                repair = Some(recovery::recover(ctx.db_path, ctx.backups_dir, &problem)?);
+                repair = Some(recovery::recover(
+                    ctx.db_path,
+                    ctx.backups_dir,
+                    &problem,
+                    ctx.migrations,
+                )?);
             }
             (Failure::Damage(problem), repaired) => {
                 // Recorded either way: for the open that may repair it, or for another try after a
@@ -1507,6 +1516,326 @@ mod tests {
         assert_eq!(info.schema_version, 1);
         drop(store);
         assert_eq!(check_integrity(&p.db).expect("check"), Integrity::Ok);
+    }
+
+    /// Finding: losing the one page of `project_folders` cost the chats in that folder and, through
+    /// them, their events (1 of 4 chats and 100 of 400 events were left), although the project and
+    /// every chat and event page were intact.
+    #[test]
+    fn a_lost_folder_page_keeps_every_chat_and_event() {
+        let p = paths();
+        {
+            let (store, _) = open(&p);
+            let conn = store.conn();
+            insert_project(conn, "p1", "Alpha");
+            conn.execute(
+                "INSERT INTO project_folders (id, project_id, display_name, kind, created_at, updated_at, device_id) \
+                 VALUES ('f1', 'p1', 'repo', 'git', 1, 1, 'dev')",
+                [],
+            )
+            .expect("folder");
+            for chat in ["c1", "c2", "c3", "c4"] {
+                insert_chat(conn, chat, "p1");
+                insert_events(conn, chat, 100);
+            }
+            conn.execute(
+                "UPDATE chats SET folder_id = 'f1' WHERE id IN ('c1', 'c2', 'c3')",
+                [],
+            )
+            .expect("three chats into the folder");
+        }
+        let folders: i64 = Connection::open(&p.db)
+            .expect("raw")
+            .query_row(
+                "SELECT rootpage FROM sqlite_schema WHERE name = 'project_folders'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("rootpage");
+        smash(&p.db, folders);
+        // Found by the background check, which records it for the next open.
+        assert!(matches!(
+            check_integrity(&p.db).expect("check"),
+            Integrity::Damaged { .. }
+        ));
+
+        let (store, info) = open(&p);
+        let OpenOutcome::RecoveredFromCorruption {
+            salvage: Salvage::Partial { tables },
+            ..
+        } = &info.outcome
+        else {
+            panic!("expected a partial repair, got {:?}", info.outcome);
+        };
+        assert_eq!(tables.as_slice(), ["project_folders", "chats"]);
+        let conn = store.conn();
+        assert_eq!(project_names(conn), vec!["Alpha"]);
+        assert_eq!(count(conn, "chats"), 4);
+        assert_eq!(count(conn, "events"), 400);
+    }
+
+    /// Page numbers of `sqlite_schema`'s leaves, in key order.
+    fn schema_leaves(path: &Path) -> Vec<i64> {
+        let conn = Connection::open(path).expect("raw");
+        let mut stmt = conn
+            .prepare(
+                "SELECT pageno FROM dbstat WHERE name = 'sqlite_schema' AND pagetype = 'leaf' ORDER BY path",
+            )
+            .expect("dbstat");
+        stmt.query_map([], |row| row.get(0))
+            .expect("pages")
+            .map(|row| row.expect("page"))
+            .collect()
+    }
+
+    /// The names in `sqlite_schema` a lookup by rowid can still read, after the damage.
+    fn readable_schema_names(path: &Path) -> BTreeSet<String> {
+        let conn =
+            Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).expect("open");
+        conn.pragma_update(None, "writable_schema", true)
+            .expect("writable_schema");
+        // Loads what it can of the schema; the next statements run against that.
+        let _ = conn.prepare("SELECT 1 FROM sqlite_schema LIMIT 0");
+        (1..=200)
+            .filter_map(|rowid| {
+                conn.query_row(
+                    "SELECT name FROM sqlite_schema WHERE rowid = ?1",
+                    [rowid],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+            })
+            .collect()
+    }
+
+    /// Rows in projects, chats, events, message_fts, and agent_cache.
+    fn seeded(p: &Paths) {
+        let (store, _) = open(p);
+        let conn = store.conn();
+        insert_project(conn, "p1", "Alpha");
+        insert_chat(conn, "c1", "p1");
+        insert_events(conn, "c1", 200);
+        conn.execute_batch(
+            "INSERT INTO message_fts (chat_id, message_id, text) VALUES ('c1', 'm1', 'crème brûlée'); \
+             INSERT INTO agent_cache (agent_id, detection, checked_at) VALUES ('claude', '{}', 1);",
+        )
+        .expect("search entry and cached agent");
+    }
+
+    /// Finding: with one leaf of `sqlite_schema` damaged, the repair reported "Nothing was lost"
+    /// while the new database had no table for any entry on that leaf ("no such table: events" on
+    /// every later query, and user_version 1, so no migration would ever create them); with the
+    /// other leaf damaged it started over empty although every data page was intact.
+    #[test]
+    fn a_damaged_schema_leaf_is_repaired_with_every_table_in_place() {
+        let leaves = {
+            let p = paths();
+            seeded(&p);
+            schema_leaves(&p.db)
+        };
+        assert!(leaves.len() >= 2, "{leaves:?}");
+        for (index, leaf) in leaves.into_iter().enumerate() {
+            let p = paths();
+            seeded(&p);
+            smash(&p.db, leaf);
+            let readable = readable_schema_names(&p.db);
+
+            let (store, info) = open(&p);
+            let OpenOutcome::RecoveredFromCorruption {
+                salvage: Salvage::Partial { tables },
+                ..
+            } = &info.outcome
+            else {
+                panic!(
+                    "leaf {index}: expected a partial repair, got {:?}",
+                    info.outcome
+                );
+            };
+            assert_eq!(info.schema_version, 1);
+            let conn = store.conn();
+            for table in TABLES.iter().chain(["message_fts"].iter()) {
+                // Fails with "no such table" if the repaired database lacks it.
+                let rows = count(conn, table);
+                if !readable.contains(*table) {
+                    assert!(
+                        tables.iter().any(|lost| lost == table),
+                        "leaf {index}: {table} was unreadable but isn't reported: {tables:?}"
+                    );
+                    assert_eq!(rows, 0, "leaf {index}: {table}");
+                }
+            }
+            if readable.contains("projects") {
+                assert_eq!(project_names(conn), vec!["Alpha"], "leaf {index}");
+            }
+            if readable.contains("agent_cache") {
+                assert_eq!(count(conn, "agent_cache"), 1, "leaf {index}");
+            }
+            // Every table takes new rows.
+            insert_project(conn, "p2", "Beta");
+            insert_chat(conn, "c2", "p2");
+            insert_events(conn, "c2", 3);
+            conn.execute_batch(
+                "INSERT INTO agent_cache (agent_id) VALUES ('codex'); \
+                 INSERT INTO message_fts (chat_id, message_id, text) VALUES ('c2', 'm2', 'fresh');",
+            )
+            .expect("new rows");
+            drop(store);
+            assert_eq!(check_integrity(&p.db).expect("check"), Integrity::Ok);
+            let leftovers: Vec<String> = files_in(p.db.parent().expect("profile"))
+                .into_iter()
+                .filter(|name| name.contains("salvage"))
+                .collect();
+            assert!(leftovers.is_empty(), "leaf {index}: {leftovers:?}");
+        }
+    }
+
+    /// A WAL database whose last row is only in its `-wal`, as after a crash.
+    fn with_a_row_only_in_the_wal(path: &Path) {
+        fs::create_dir_all(fsutil::parent_dir(path)).expect("mkdir");
+        let conn = Connection::open(path).expect("open");
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL; CREATE TABLE t (x); INSERT INTO t VALUES ('checkpointed'); \
+             PRAGMA wal_checkpoint(TRUNCATE); INSERT INTO t VALUES ('only in the wal');",
+        )
+        .expect("rows");
+        conn.set_db_config(DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, true)
+            .expect("keep the wal");
+    }
+
+    fn rows_of_t(path: &Path) -> Vec<String> {
+        let conn =
+            Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).expect("open");
+        names(&conn, "SELECT x FROM t").into_iter().collect()
+    }
+
+    fn write_record(quarantined: &Path, salvage: &Salvage) {
+        let record = serde_json::json!({"problem": "test", "salvage": salvage, "recovered_at": 1});
+        fs::write(
+            fsutil::with_suffix(quarantined, ".json"),
+            record.to_string(),
+        )
+        .expect("record");
+    }
+
+    /// Finding: a repair that stopped right after moving the damaged file left its `-wal` at the
+    /// database path, and the next open deleted it (finishing the repair, or SQLite creating the
+    /// new file when nothing was salvaged), with every transaction not yet in the main file.
+    #[test]
+    fn a_repair_stopped_right_after_the_move_keeps_the_wal_with_the_moved_file() {
+        for salvaged in [true, false] {
+            let p = paths();
+            with_a_row_only_in_the_wal(&p.db);
+            fs::create_dir_all(&p.backups).expect("mkdir");
+            let target = p.backups.join("aura.db.corrupt-1000");
+            // What a repair has done by the time it moves the file: its copy (when it salvaged
+            // anything) and its record.
+            if salvaged {
+                let mut copy =
+                    Connection::open(recovery::salvage_path(&p.db, &target)).expect("copy");
+                Migrations::from_slice(migrations())
+                    .to_latest(&mut copy)
+                    .expect("schema");
+                insert_project(&copy, "p1", "Salvaged");
+                write_record(&target, &Salvage::Complete);
+            } else {
+                write_record(&target, &Salvage::Nothing);
+            }
+            recovery::quarantine(&p.db, &target).expect("move");
+            // ...and stops there.
+
+            let (store, info) = open(&p);
+            assert_eq!(quarantined_path(&info.outcome), target);
+            assert_eq!(
+                rows_of_t(&target),
+                ["checkpointed", "only in the wal"],
+                "salvaged {salvaged}: the moved file kept the row that was only in its -wal"
+            );
+            let tables = names(
+                store.conn(),
+                "SELECT name FROM sqlite_schema WHERE type = 'table'",
+            );
+            assert!(
+                !tables.contains("t"),
+                "the old -wal was not replayed into the new database"
+            );
+            let expected: Vec<&str> = if salvaged { vec!["Salvaged"] } else { vec![] };
+            assert_eq!(project_names(store.conn()), expected);
+        }
+    }
+
+    /// Finding: an interrupted repair whose record this build couldn't read (torn, or written by a
+    /// newer build) lost its salvaged copy, and the open reported a plain Created over an empty
+    /// database, with no repair notice.
+    #[test]
+    fn an_interrupted_repair_with_an_unreadable_record_installs_its_copy_and_is_reported() {
+        let p = paths();
+        {
+            let (store, _) = open(&p);
+            insert_project(store.conn(), "p1", "Alpha");
+        }
+        fs::create_dir_all(&p.backups).expect("mkdir");
+        let target = p.backups.join("aura.db.corrupt-1000");
+        // The repair moved the damaged file and stopped with its copy waiting.
+        fs::rename(&p.db, recovery::salvage_path(&p.db, &target)).expect("the copy");
+        fs::write(&target, noise(8192)).expect("the moved file");
+        fs::write(
+            fsutil::with_suffix(&target, ".json"),
+            br#"{"problem": "x", "salvage": {"type": "from_a_newer_build"}, "recovered_at": 1}"#,
+        )
+        .expect("record");
+
+        let (store, info) = open(&p);
+        assert_eq!(
+            info.outcome,
+            OpenOutcome::RecoveredFromCorruption {
+                quarantined: target.display().to_string(),
+                salvage: Salvage::Partial { tables: Vec::new() },
+            }
+        );
+        assert_eq!(project_names(store.conn()), vec!["Alpha"]);
+        drop(store);
+        assert_eq!(
+            open(&p).1.outcome,
+            info.outcome,
+            "reported until acknowledged"
+        );
+    }
+
+    /// Finding: the damage marker went only after the copy was installed, so a repair that stopped
+    /// in between left it next to the healthy copy, and the next open repaired that copy again
+    /// (another quarantined copy, and a "Nothing was lost" notice in place of the first repair's).
+    /// The marker now goes as soon as the file it describes has moved (`recovery`'s tests check
+    /// that order), so stopping after the install leaves the copy and the record: the next open
+    /// reports the first repair and repairs nothing.
+    #[test]
+    fn a_repair_stopped_after_installing_its_copy_is_not_repeated() {
+        let p = paths();
+        {
+            let (store, _) = open(&p);
+            insert_project(store.conn(), "p1", "Alpha");
+        }
+        fs::create_dir_all(&p.backups).expect("mkdir");
+        let target = p.backups.join("aura.db.corrupt-1000");
+        fs::write(&target, noise(8192)).expect("the moved file");
+        let events_lost = Salvage::Partial {
+            tables: vec!["events".into()],
+        };
+        write_record(&target, &events_lost);
+
+        let (store, info) = open(&p);
+        assert_eq!(
+            info.outcome,
+            OpenOutcome::RecoveredFromCorruption {
+                quarantined: target.display().to_string(),
+                salvage: events_lost,
+            }
+        );
+        assert_eq!(project_names(store.conn()), vec!["Alpha"]);
+        let quarantined: Vec<String> = files_in(&p.backups)
+            .into_iter()
+            .filter(|name| name.starts_with("aura.db.corrupt-") && !name.ends_with(".json"))
+            .collect();
+        assert_eq!(quarantined, ["aura.db.corrupt-1000"], "nothing else moved");
     }
 
     #[test]

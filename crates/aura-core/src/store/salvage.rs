@@ -2,34 +2,47 @@
 //!
 //! First `VACUUM INTO`: it rebuilds every table and index from what their b-trees hold, so unused
 //! ("leaked") pages and broken free lists disappear, and it keeps `user_version`. It gives up at the
-//! first page it can't read, though, so when it fails the tables are copied one by one, row by row,
-//! and a read error skips ahead to the next readable rowid instead of abandoning the table. Rows
-//! whose parent row was lost are dropped at the end, so the copy passes the foreign key check every
-//! later migration runs.
+//! first page it can't read, though. Then the new database gets auracode's own schema for the
+//! damaged file's `user_version`, from the migrations, so every table of that version exists even
+//! when its entry in the damaged schema is lost, and the tables are copied into it one by one, row
+//! by row: a read error skips ahead to the next readable rowid instead of abandoning the table.
+//! `sqlite_schema` is read the same way, and the tables whose entries come after an unreadable part
+//! of it are read through a copy of the file whose schema leaves that part out
+//! ([`rebuild_schema`]). References left dangling by a lost parent row are settled at the end
+//! ([`settle_orphans`]), so the copy passes the foreign key check every later migration runs.
 //!
 //! The damaged file is only ever read (read-only connection, no checkpoint on close), so it can be
 //! quarantined byte for byte afterwards.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::fs::OpenOptions;
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
 
 use rusqlite::config::DbConfig;
 use rusqlite::types::{ToSqlOutput, ValueRef};
 use rusqlite::{Connection, ErrorCode, OpenFlags, Statement};
+use rusqlite_migration::{M, Migrations};
 
-use super::{BUSY_TIMEOUT, Salvage, close_without_checkpoint, remove_with_sidecars};
+use super::{
+    BUSY_TIMEOUT, Salvage, close_without_checkpoint, describe_migration_error, remove_with_sidecars,
+};
 use crate::error::{CoreError, Result};
-use crate::fsutil;
+use crate::fsutil::{self, PARTIAL_SUFFIX};
 
-/// Passes of the orphan cleanup. Each pass drops the rows whose parent the previous pass dropped,
+/// Passes of the orphan cleanup. Each pass settles the rows whose parent the previous pass dropped,
 /// so this bounds the depth of foreign key chains it untangles (the schema's deepest is 4).
 const MAX_ORPHAN_PASSES: usize = 16;
 
 /// Copies everything readable from the database at `damaged` into a new database at `out` and says
-/// how much made it. Errors only mean `out` could not be written (disk full, no permission): the
-/// caller then leaves everything as it was. Nothing is left at `out` when nothing could be read.
-pub(super) fn salvage(damaged: &Path, out: &Path) -> Result<Salvage> {
+/// how much made it. `migrations` are the store's: when the damaged file can't be copied whole, the
+/// copy's schema comes from them. Errors only mean `out` could not be written (disk full, no
+/// permission): the caller then leaves everything as it was. Nothing is left at `out` when nothing
+/// could be read.
+pub(super) fn salvage(damaged: &Path, out: &Path, migrations: &[M<'_>]) -> Result<Salvage> {
+    let scratch = scratch_path(out);
     remove_with_sidecars(out);
+    remove_with_sidecars(&scratch);
     let source = open_source(damaged)?;
     let copied = match vacuum_into(&source, out) {
         Ok(()) => Ok(Salvage::Complete),
@@ -37,10 +50,11 @@ pub(super) fn salvage(damaged: &Path, out: &Path) -> Result<Salvage> {
             tracing::info!(%error, "VACUUM INTO could not copy the damaged database; copying it table by table");
             // A failed VACUUM INTO leaves an empty or partial file behind.
             remove_with_sidecars(out);
-            copy_tables(&source, out)
+            copy_tables(&source, out, &scratch, migrations)
         }
     };
     close_without_checkpoint(source);
+    remove_with_sidecars(&scratch);
     let salvage = match copied {
         Ok(salvage) => salvage,
         Err(error) => {
@@ -59,6 +73,16 @@ pub(super) fn salvage(damaged: &Path, out: &Path) -> Result<Salvage> {
         });
     }
     Ok(salvage)
+}
+
+/// Where [`rebuild_schema`] puts its copy of the damaged file: next to `out` and named after it
+/// (`<db>.salvage-<millis>.schema.partial`), so the next open removes it if a repair stops midway.
+fn scratch_path(out: &Path) -> PathBuf {
+    let name = fsutil::file_name_lossy(out);
+    match name.strip_suffix(PARTIAL_SUFFIX) {
+        Some(stem) => out.with_file_name(format!("{stem}.schema{PARTIAL_SUFFIX}")),
+        None => fsutil::with_suffix(out, ".schema"),
+    }
 }
 
 /// Read-only, so salvaging never writes to the damaged file, and no checkpoint on close, so its
@@ -103,11 +127,28 @@ fn is_write_failure(error: &rusqlite::Error) -> bool {
     )
 }
 
-/// One row of `sqlite_schema` that carries SQL.
+/// One row of `sqlite_schema`.
 struct SchemaEntry {
+    rowid: i64,
     kind: String,
     name: String,
-    sql: String,
+    tbl_name: String,
+    rootpage: Option<i64>,
+    /// `None` for the indexes behind PRIMARY KEY and UNIQUE constraints.
+    sql: Option<String>,
+}
+
+/// What could be read of `sqlite_schema`.
+struct Schema {
+    /// In rowid order, which is the order things were created in.
+    entries: Vec<SchemaEntry>,
+    /// Part of it could not be read, so it may have listed tables nothing else knows of (the
+    /// migrations only know auracode's own).
+    damaged: bool,
+    /// Entries were read past an unreadable part. SQLite loads the schema in rowid order and stops
+    /// at the first page it can't read, so it knows none of them: their tables can only be read
+    /// through [`rebuild_schema`].
+    hidden: bool,
 }
 
 /// What `PRAGMA table_list` says about a table.
@@ -123,26 +164,197 @@ struct TableCopy {
     complete: bool,
 }
 
-fn copy_tables(source: &Connection, out: &Path) -> Result<Salvage> {
-    // With writable_schema on, SQLite skips schema entries it can't parse instead of failing every
-    // statement, so one malformed CREATE doesn't hide the other tables.
-    if let Err(error) = source.pragma_update(None, "writable_schema", true) {
-        tracing::debug!(%error, "could not relax schema parsing for the salvage");
-    }
+fn copy_tables(
+    source: &Connection,
+    out: &Path,
+    scratch: &Path,
+    migrations: &[M<'_>],
+) -> Result<Salvage> {
+    relax_schema_parsing(source);
     let Ok(version) = source.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
     else {
         // The header itself is unreadable, and with it everything else.
         return Ok(Salvage::Nothing);
     };
     let schema = read_schema(source);
-    let kinds = table_kinds(source);
+    let rebuilt = if schema.hidden {
+        rebuild_schema(source, scratch, &schema.entries)
+    } else {
+        None
+    };
+    let copied = copy_into(
+        rebuilt.as_ref().unwrap_or(source),
+        &schema,
+        out,
+        version,
+        migrations,
+    );
+    if let Some(conn) = rebuilt {
+        close_without_checkpoint(conn);
+    }
+    copied
+}
+
+/// With writable_schema on, SQLite skips schema entries it can't parse instead of failing every
+/// statement, so one malformed CREATE doesn't hide the other tables. The statement that loads the
+/// schema still fails when something in it is bad (the ones after it run against what did load),
+/// so one is prepared here and its error set aside.
+fn relax_schema_parsing(conn: &Connection) {
+    if let Err(error) = conn.pragma_update(None, "writable_schema", true) {
+        tracing::debug!(%error, "could not relax schema parsing for the salvage");
+    }
+    if let Err(error) = conn.prepare("SELECT 1 FROM sqlite_schema LIMIT 0") {
+        tracing::debug!(%error, "the damaged database's schema did not load cleanly");
+    }
+}
+
+/// Reads `sqlite_schema` as it would any rowid table ([`scan_by_rowid`]), so an unreadable page
+/// costs only the entries on it.
+fn read_schema(source: &Connection) -> Schema {
+    let mut entries = Vec::new();
+    let mut malformed = false;
+    let scanned = scan_by_rowid(
+        source,
+        "sqlite_schema",
+        "type, name, tbl_name, rootpage, sql",
+        &mut |row| {
+            match schema_entry(row) {
+                Ok(entry) => entries.push(entry),
+                // Values of the wrong type: as good as unreadable.
+                Err(_) => malformed = true,
+            }
+            Ok(())
+        },
+    );
+    // Only the closure above could fail the scan, and it never does.
+    let gap = scanned.unwrap_or(Some(i64::MIN));
+    let hidden = gap.is_some_and(|at| entries.iter().any(|entry| entry.rowid >= at));
+    let damaged = gap.is_some() || malformed;
+    if damaged {
+        tracing::warn!(
+            readable = entries.len(),
+            hidden,
+            "part of the damaged database's schema could not be read"
+        );
+    }
+    Schema {
+        entries,
+        damaged,
+        hidden,
+    }
+}
+
+fn schema_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<SchemaEntry> {
+    Ok(SchemaEntry {
+        rowid: row.get(0)?,
+        kind: row.get(1)?,
+        name: row.get(2)?,
+        tbl_name: row.get(3)?,
+        rootpage: row.get(4)?,
+        sql: row.get(5)?,
+    })
+}
+
+/// A copy of the damaged file whose schema holds just `entries`, opened for reading, so SQLite
+/// knows the tables listed after an unreadable part of the schema again ([`Schema::hidden`]). The
+/// copy is page for page the same (the backup API copies pages without parsing them, taking the
+/// newest from the `-wal`), except that page 1, where the schema starts, is made an empty leaf and
+/// filled with `entries` again: every table still points at its own pages. `None` when the copy
+/// can't be made (no room for it, say); the tables listed after the damage are then lost.
+fn rebuild_schema(
+    source: &Connection,
+    scratch: &Path,
+    entries: &[SchemaEntry],
+) -> Option<Connection> {
+    let rebuilt =
+        write_rebuilt_schema(source, scratch, entries).and_then(|()| open_source(scratch));
+    match rebuilt {
+        Ok(conn) => {
+            relax_schema_parsing(&conn);
+            Some(conn)
+        }
+        Err(error) => {
+            tracing::warn!(%error, "could not rebuild the damaged database's schema; the tables listed after the damage are lost");
+            remove_with_sidecars(scratch);
+            None
+        }
+    }
+}
+
+fn write_rebuilt_schema(
+    source: &Connection,
+    scratch: &Path,
+    entries: &[SchemaEntry],
+) -> Result<()> {
+    source.backup(rusqlite::MAIN_DB, scratch, None)?;
+    reset_schema_root(scratch).map_err(CoreError::io(scratch))?;
+    let mut conn = Connection::open(scratch)?;
+    conn.pragma_update(None, "writable_schema", true)?;
+    // A scratch file, removed once the salvage is done.
+    conn.pragma_update(None, "synchronous", "OFF")?;
+    let tx = conn.transaction()?;
+    {
+        let mut insert = tx.prepare(
+            "INSERT INTO sqlite_schema (type, name, tbl_name, rootpage, sql) VALUES (?1, ?2, ?3, ?4, ?5)",
+        )?;
+        for entry in entries {
+            insert.execute(rusqlite::params![
+                entry.kind,
+                entry.name,
+                entry.tbl_name,
+                entry.rootpage,
+                entry.sql
+            ])?;
+        }
+    }
+    tx.commit()?;
+    conn.close().map_err(|(_, error)| error)?;
+    Ok(())
+}
+
+/// Makes page 1 of the copy at `path` an empty table leaf: a schema with no entries. The free list
+/// is emptied too, since its pages may be damaged, so filling the schema in again only ever appends
+/// pages; and the copy is marked as using a rollback journal, so it never needs a `-wal`. The file
+/// header and the page header after it are laid out in <https://www.sqlite.org/fileformat2.html>.
+fn reset_schema_root(path: &Path) -> io::Result<()> {
+    let mut file = OpenOptions::new().read(true).write(true).open(path)?;
+    let mut head = [0u8; 108];
+    file.read_exact(&mut head)?;
+    let page_size = match u16::from_be_bytes([head[16], head[17]]) {
+        1 => 65_536,
+        size => u32::from(size),
+    };
+    // Byte 20 is the space reserved at the end of every page.
+    let usable = page_size.saturating_sub(u32::from(head[20]));
+    // Bytes 18 and 19: the file format versions, 1 for a rollback journal.
+    head[18] = 1;
+    head[19] = 1;
+    // Bytes 32 to 39: the first free-list trunk page and the number of free pages.
+    head[32..40].fill(0);
+    // The page header that follows on page 1: a table leaf (13) with no free blocks, no cells,
+    // and its cell content area starting at the end of the usable space (0 stands for 65536).
+    head[100] = 13;
+    head[101..105].fill(0);
+    head[105..107].copy_from_slice(&u16::try_from(usable).unwrap_or(0).to_be_bytes());
+    head[107] = 0;
+    file.seek(SeekFrom::Start(0))?;
+    file.write_all(&head)
+}
+
+/// Builds the new database at `out` from what `src` can read: auracode's schema for `version`, then
+/// every table's rows, then whatever else the damaged schema had.
+fn copy_into(
+    src: &Connection,
+    schema: &Schema,
+    out: &Path,
+    version: i64,
+    migrations: &[M<'_>],
+) -> Result<Salvage> {
+    let kinds = table_kinds(src);
     let tables: Vec<&SchemaEntry> = schema
+        .entries
         .iter()
-        .filter(|entry| {
-            entry.kind == "table"
-                && !entry.name.starts_with("sqlite_")
-                && !is_shadow(&entry.name, &kinds, &schema)
-        })
+        .filter(|entry| is_data_table(entry, &kinds, &schema.entries))
         .collect();
     if tables.is_empty() {
         return Ok(Salvage::Nothing);
@@ -150,15 +362,57 @@ fn copy_tables(source: &Connection, out: &Path) -> Result<Salvage> {
 
     let mut conn = Connection::open(out)?;
     // The bundled SQLite turns foreign keys on by default; off, rows can arrive in any order and
-    // orphans are dealt with at the end.
+    // dangling references are settled at the end.
     conn.pragma_update(None, "foreign_keys", false)?;
     // A scratch file until it is complete; `salvage` syncs it once at the end.
     conn.pragma_update(None, "synchronous", "OFF")?;
+    let migrated = create_own_schema(&mut conn, migrations, version)?;
+    let own = if migrated {
+        own_tables(&conn)?
+    } else {
+        Vec::new()
+    };
     let tx = conn.transaction()?;
+    let triggers = take_triggers(&tx)?;
     let mut rows = 0u64;
+    // Every table of the new database in schema order, and the ones that came out incomplete.
+    let mut order: Vec<&str> = Vec::new();
     let mut lost: Vec<&str> = Vec::new();
-    for table in &tables {
-        if let Err(error) = tx.execute_batch(&table.sql) {
+    for name in &own {
+        order.push(name);
+        let Some(table) = tables
+            .iter()
+            .find(|table| table.name.eq_ignore_ascii_case(name))
+        else {
+            // Its entry was on an unreadable part of the schema (or the table was missing from
+            // the damaged file altogether): it starts out empty.
+            tracing::warn!(table = %name, "a table of the damaged database could not be found");
+            lost.push(name);
+            continue;
+        };
+        // Rows a migration seeded (a default setting, say) give way to the damaged file's, which
+        // may have changed or deleted them since.
+        tx.execute_batch(&format!("DELETE FROM {}", quote(name)))?;
+        let copy = copy_rows(src, &tx, table, &kinds)?;
+        rows += copy.rows;
+        if !copy.complete {
+            lost.push(name);
+        }
+    }
+    for table in tables.iter().filter(|table| {
+        !own.iter()
+            .any(|name| name.eq_ignore_ascii_case(&table.name))
+    }) {
+        if is_shadow_in(&tx, &table.name)? {
+            // The storage of one of auracode's virtual tables, taken for a table of its own
+            // because the virtual table's entry was lost: the migrations made it again, and it
+            // fills through the virtual table.
+            continue;
+        }
+        // Not one of auracode's tables (a user's own, or any table of a version the migrations
+        // don't know): created as the damaged file had it.
+        order.push(&table.name);
+        if let Err(error) = tx.execute_batch(table.sql.as_deref().unwrap_or_default()) {
             if is_write_failure(&error) {
                 return Err(error.into());
             }
@@ -166,16 +420,125 @@ fn copy_tables(source: &Connection, out: &Path) -> Result<Salvage> {
             lost.push(&table.name);
             continue;
         }
-        let copy = copy_rows(source, &tx, table, &kinds)?;
+        let copy = copy_rows(src, &tx, table, &kinds)?;
         rows += copy.rows;
         if !copy.complete {
             lost.push(&table.name);
         }
     }
-    // Indexes after the rows (one pass each is faster) and triggers last, so none fire on copied rows.
+    let settled = settle_orphans(&tx)?;
+    for sql in &triggers {
+        tx.execute_batch(sql)?;
+    }
+    replay_other_objects(&tx, &schema.entries)?;
+    copy_sequences(src, &tx)?;
+    if !migrated {
+        tx.pragma_update(None, "user_version", version)?;
+    }
+    tx.commit()?;
+    conn.close().map_err(|(_, error)| error)?;
+
+    if rows == 0 && !lost.is_empty() {
+        return Ok(Salvage::Nothing);
+    }
+    let incomplete: Vec<String> = order
+        .into_iter()
+        .filter(|name| lost.contains(name) || settled.iter().any(|table| table.as_str() == *name))
+        .map(str::to_owned)
+        .collect();
+    Ok(if !incomplete.is_empty() {
+        Salvage::Partial { tables: incomplete }
+    } else if schema.damaged {
+        // Whatever the unreadable part of the schema listed is unknown, so the copy can't be
+        // called complete.
+        Salvage::Partial { tables: Vec::new() }
+    } else {
+        Salvage::Complete
+    })
+}
+
+/// A table whose rows are copied: not SQLite's own, and not a virtual table's storage.
+fn is_data_table(
+    entry: &SchemaEntry,
+    kinds: &HashMap<String, TableKind>,
+    entries: &[SchemaEntry],
+) -> bool {
+    entry.kind == "table"
+        && entry.sql.is_some()
+        && !entry.name.starts_with("sqlite_")
+        && !is_shadow(&entry.name, kinds, entries)
+}
+
+/// Gives the new database auracode's schema at `version`, from the migrations, so every table,
+/// index, and virtual table of that version exists even when the damaged schema lost its entry.
+/// False for a version the migrations don't take a database to (0, or one above them, which the
+/// open never lets through): the damaged file's own schema is replayed instead, as it is for any
+/// table that isn't auracode's.
+fn create_own_schema(out: &mut Connection, migrations: &[M<'_>], version: i64) -> Result<bool> {
+    let Ok(version) = usize::try_from(version) else {
+        return Ok(false);
+    };
+    if version == 0 || version > migrations.len() {
+        return Ok(false);
+    }
+    match Migrations::from_slice(migrations).to_version(out, version) {
+        Ok(()) => Ok(true),
+        Err(rusqlite_migration::Error::RusqliteError { err, .. }) => Err(err.into()),
+        Err(error) => Err(CoreError::Migration(format!(
+            "rebuilding version {version} for the repaired copy: {}",
+            describe_migration_error(&error)
+        ))),
+    }
+}
+
+/// The tables the migrations created, in creation order, without SQLite's own and the shadow
+/// tables a virtual table keeps its data in (it fills those itself).
+fn own_tables(out: &Connection) -> Result<Vec<String>> {
+    let mut stmt = out.prepare(
+        "SELECT s.name FROM sqlite_schema AS s \
+         JOIN pragma_table_list AS t ON t.schema = 'main' AND t.name = s.name \
+         WHERE s.type = 'table' AND t.type IN ('table', 'virtual') ORDER BY s.rowid",
+    )?;
+    let names = stmt
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<String>>>()?;
+    Ok(names
+        .into_iter()
+        .filter(|name| !name.starts_with("sqlite_"))
+        .collect())
+}
+
+/// Drops the triggers the migrations created and returns their SQL, to run again once the rows
+/// are in: none may fire on a copied row (a trigger that indexed messages for search would index
+/// every copied message a second time).
+fn take_triggers(out: &Connection) -> Result<Vec<String>> {
+    let triggers: Vec<(String, String)> = {
+        let mut stmt = out.prepare(
+            "SELECT name, sql FROM sqlite_schema WHERE type = 'trigger' AND sql IS NOT NULL ORDER BY rowid",
+        )?;
+        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    for (name, _) in &triggers {
+        out.execute_batch(&format!("DROP TRIGGER {}", quote(name)))?;
+    }
+    Ok(triggers.into_iter().map(|(_, sql)| sql).collect())
+}
+
+/// The damaged file's indexes, views, and triggers that the new database doesn't have (a user's
+/// own, or all of them for a version the migrations don't know), created after the rows so an
+/// index is built in one pass and no trigger fires on a copied row. One the new database rejects
+/// (its table was lost, say) is skipped.
+fn replay_other_objects(out: &Connection, entries: &[SchemaEntry]) -> Result<()> {
     for kind in ["index", "view", "trigger"] {
-        for entry in schema.iter().filter(|entry| entry.kind == kind) {
-            if let Err(error) = tx.execute_batch(&entry.sql) {
+        for entry in entries.iter().filter(|entry| entry.kind == kind) {
+            let Some(sql) = entry.sql.as_deref() else {
+                continue;
+            };
+            if exists_in(out, &entry.name)? {
+                continue;
+            }
+            if let Err(error) = out.execute_batch(sql) {
                 if is_write_failure(&error) {
                     return Err(error.into());
                 }
@@ -183,46 +546,29 @@ fn copy_tables(source: &Connection, out: &Path) -> Result<Salvage> {
             }
         }
     }
-    copy_sequences(source, &tx)?;
-    let orphaned = drop_orphans(&tx)?;
-    tx.pragma_update(None, "user_version", version)?;
-    tx.commit()?;
-    conn.close().map_err(|(_, error)| error)?;
-
-    if rows == 0 && !lost.is_empty() {
-        return Ok(Salvage::Nothing);
-    }
-    let incomplete: Vec<String> = tables
-        .iter()
-        .map(|table| table.name.as_str())
-        .filter(|name| lost.contains(name) || orphaned.iter().any(|dropped| dropped == name))
-        .map(str::to_owned)
-        .collect();
-    Ok(if incomplete.is_empty() {
-        Salvage::Complete
-    } else {
-        Salvage::Partial { tables: incomplete }
-    })
+    Ok(())
 }
 
-/// The schema entries that carry SQL, in creation order. Whatever was read before an unreadable
-/// schema page is kept.
-fn read_schema(source: &Connection) -> Vec<SchemaEntry> {
-    let mut entries = Vec::new();
-    let Ok(mut stmt) =
-        source.prepare("SELECT type, name, sql FROM sqlite_schema WHERE sql IS NOT NULL")
-    else {
-        return entries;
-    };
-    let Ok(mut rows) = stmt.query([]) else {
-        return entries;
-    };
-    while let Ok(Some(row)) = rows.next() {
-        if let (Ok(kind), Ok(name), Ok(sql)) = (row.get(0), row.get(1), row.get(2)) {
-            entries.push(SchemaEntry { kind, name, sql });
-        }
-    }
-    entries
+/// Whether the new database already has a schema object called `name` (names are compared the
+/// way SQLite does, ignoring ASCII case).
+fn exists_in(out: &Connection, name: &str) -> Result<bool> {
+    let found: i64 = out.query_row(
+        "SELECT count(*) FROM sqlite_schema WHERE name = ?1 COLLATE NOCASE",
+        [name],
+        |row| row.get(0),
+    )?;
+    Ok(found > 0)
+}
+
+/// Whether `name` is the storage of a virtual table in the new database.
+fn is_shadow_in(out: &Connection, name: &str) -> Result<bool> {
+    let found: i64 = out.query_row(
+        "SELECT count(*) FROM pragma_table_list \
+         WHERE schema = 'main' AND type = 'shadow' AND name = ?1 COLLATE NOCASE",
+        [name],
+        |row| row.get(0),
+    )?;
+    Ok(found > 0)
 }
 
 /// `PRAGMA table_list` for the main schema; empty if it can't be read.
@@ -255,11 +601,11 @@ fn table_kinds(source: &Connection) -> HashMap<String, TableKind> {
 }
 
 /// Shadow tables hold a virtual table's data and are recreated (and filled) through it.
-fn is_shadow(name: &str, kinds: &HashMap<String, TableKind>, schema: &[SchemaEntry]) -> bool {
+fn is_shadow(name: &str, kinds: &HashMap<String, TableKind>, entries: &[SchemaEntry]) -> bool {
     match kinds.get(name) {
         Some(kind) => kind.kind == "shadow",
         // table_list leaves out what it can't parse. SQLite names shadow tables `<vtab>_<suffix>`.
-        None => schema.iter().any(|entry| {
+        None => entries.iter().any(|entry| {
             entry.kind == "table"
                 && is_virtual(entry, kinds)
                 && name
@@ -272,11 +618,11 @@ fn is_shadow(name: &str, kinds: &HashMap<String, TableKind>, schema: &[SchemaEnt
 fn is_virtual(entry: &SchemaEntry, kinds: &HashMap<String, TableKind>) -> bool {
     match kinds.get(&entry.name) {
         Some(kind) => kind.kind == "virtual",
-        None => entry
-            .sql
-            .trim_start()
-            .get(.."CREATE VIRTUAL TABLE".len())
-            .is_some_and(|start| start.eq_ignore_ascii_case("CREATE VIRTUAL TABLE")),
+        None => entry.sql.as_deref().is_some_and(|sql| {
+            sql.trim_start()
+                .get(.."CREATE VIRTUAL TABLE".len())
+                .is_some_and(|start| start.eq_ignore_ascii_case("CREATE VIRTUAL TABLE"))
+        }),
     }
 }
 
@@ -416,9 +762,7 @@ enum Scan {
     },
 }
 
-/// Copies a rowid table in rowid order. When a page can't be read, the rows on it are lost, but
-/// the copy seeks past it and carries on, so one bad page costs one page of rows, not the rest of
-/// the table.
+/// Copies a rowid table in rowid order ([`scan_by_rowid`]).
 fn copy_by_rowid(
     source: &Connection,
     quoted: &str,
@@ -427,17 +771,40 @@ fn copy_by_rowid(
     insert: &mut Statement<'_>,
     copy: &mut TableCopy,
 ) -> Result<()> {
+    let gap = scan_by_rowid(source, quoted, list, &mut |row| {
+        insert_row(insert, row, 1, count, copy)
+    })?;
+    if gap.is_some() {
+        copy.complete = false;
+    }
+    Ok(())
+}
+
+/// Reads a rowid table in rowid order, handing each row to `each` (the rowid first, then the
+/// columns in `list`). When a page can't be read, the rows on it are lost, but the scan seeks past
+/// it and carries on, so one bad page costs one page of rows, not the rest of the table. Returns
+/// where the first unreadable stretch began (see [`Scan::Unreadable`]), if there was one. Only an
+/// error from `each` stops it.
+fn scan_by_rowid(
+    source: &Connection,
+    quoted: &str,
+    list: &str,
+    each: &mut dyn FnMut(&rusqlite::Row<'_>) -> Result<()>,
+) -> Result<Option<i64>> {
     let select = format!("SELECT rowid, {list} FROM {quoted} WHERE rowid >= ?1 ORDER BY rowid");
     let seek = format!("SELECT rowid FROM {quoted} WHERE rowid >= ?1 ORDER BY rowid LIMIT 1");
     let mut next = i64::MIN;
+    let mut first_gap = None;
     loop {
-        match scan_from(source, &select, next, count, insert, copy)? {
-            Scan::Finished => return Ok(()),
+        match scan_from(source, &select, next, each)? {
+            Scan::Finished => return Ok(first_gap),
             Scan::Unreadable { at } => {
-                copy.complete = false;
+                if first_gap.is_none() {
+                    first_gap = Some(at);
+                }
                 match next_readable(source, &seek, at) {
                     Some(resume) => next = resume,
-                    None => return Ok(()),
+                    None => return Ok(first_gap),
                 }
             }
         }
@@ -448,9 +815,7 @@ fn scan_from(
     source: &Connection,
     select: &str,
     next: i64,
-    count: usize,
-    insert: &mut Statement<'_>,
-    copy: &mut TableCopy,
+    each: &mut dyn FnMut(&rusqlite::Row<'_>) -> Result<()>,
 ) -> Result<Scan> {
     let Ok(mut stmt) = source.prepare(select) else {
         return Ok(Scan::Unreadable { at: next });
@@ -465,7 +830,7 @@ fn scan_from(
                 let Ok(rowid) = row.get::<_, i64>(0) else {
                     return Ok(Scan::Unreadable { at });
                 };
-                insert_row(insert, row, 1, count, copy)?;
+                each(row)?;
                 match rowid.checked_add(1) {
                     Some(following) => at = following,
                     None => return Ok(Scan::Finished),
@@ -585,59 +950,124 @@ fn copy_sequences(source: &Connection, out: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Drops rows whose parent row didn't survive (a chat whose project was on a lost page, then that
-/// chat's events), pass after pass, until `foreign_key_check` is clean. They can't be reached from
-/// the UI, and leaving them would make every later migration's foreign key check fail. They are
-/// still in the quarantined file. Returns the tables that lost rows this way.
-fn drop_orphans(out: &Connection) -> Result<Vec<String>> {
-    let mut dropped: Vec<String> = Vec::new();
+/// Settles the rows whose parent row didn't survive, pass after pass, until `foreign_key_check` is
+/// clean, since every later migration runs that check. A dangling reference in a column that may
+/// be NULL is cleared: the row is intact and still has a place in the UI (a chat whose folder was
+/// lost is still in its project). A row whose required reference dangles is dropped (a chat whose
+/// project was lost, then that chat's events), since nothing in the UI leads to it; it is still in
+/// the quarantined file. Returns the tables that lost rows or references this way.
+fn settle_orphans(out: &Connection) -> Result<Vec<String>> {
+    let mut settled: Vec<String> = Vec::new();
     for _ in 0..MAX_ORPHAN_PASSES {
-        let tables: rusqlite::Result<Vec<String>> = out
-            .prepare("SELECT DISTINCT \"table\" FROM pragma_foreign_key_check")
-            .and_then(|mut stmt| stmt.query_map([], |row| row.get(0))?.collect());
-        let tables = match tables {
-            Ok(tables) => tables,
+        let dangling: rusqlite::Result<Vec<(String, i64)>> = out
+            .prepare("SELECT DISTINCT \"table\", fkid FROM pragma_foreign_key_check")
+            .and_then(|mut stmt| {
+                stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                    .collect()
+            });
+        let dangling = match dangling {
+            Ok(dangling) => dangling,
             Err(error) if is_write_failure(&error) => return Err(error.into()),
             Err(error) => {
                 tracing::warn!(%error, "could not check the salvaged rows' references");
                 break;
             }
         };
-        if tables.is_empty() {
+        if dangling.is_empty() {
             break;
         }
-        let mut deleted = 0;
-        for table in tables {
-            let sql = format!(
-                "DELETE FROM {} WHERE rowid IN (SELECT rowid FROM pragma_foreign_key_check(?1))",
-                quote(&table)
-            );
-            match out.execute(&sql, [&table]) {
-                Ok(count) => {
-                    deleted += count;
-                    if count > 0 && !dropped.contains(&table) {
-                        dropped.push(table);
-                    }
-                }
-                Err(error) if is_write_failure(&error) => return Err(error.into()),
-                // A table without rowids can't be targeted this way; its orphans stay.
-                Err(error) => {
-                    tracing::warn!(%error, %table, "could not drop rows with broken references")
-                }
+        let mut changed = 0;
+        for (table, fkid) in dangling {
+            let count = settle_reference(out, &table, fkid)?;
+            changed += count;
+            if count > 0 && !settled.contains(&table) {
+                settled.push(table);
             }
         }
-        if deleted == 0 {
+        if changed == 0 {
             break;
         }
     }
-    Ok(dropped)
+    Ok(settled)
+}
+
+/// Clears foreign key `fkid` of `table` where it dangles, or drops those rows when it can't be
+/// cleared; returns how many rows changed.
+fn settle_reference(out: &Connection, table: &str, fkid: i64) -> Result<usize> {
+    let quoted = quote(table);
+    let dangling = "SELECT rowid FROM pragma_foreign_key_check(?1) WHERE fkid = ?2";
+    if let Some(columns) = nullable_reference(out, table, fkid) {
+        let cleared = columns
+            .iter()
+            .map(|column| format!("{} = NULL", quote(column)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!("UPDATE {quoted} SET {cleared} WHERE rowid IN ({dangling})");
+        match out.execute(&sql, rusqlite::params![table, fkid]) {
+            Ok(count) => return Ok(count),
+            Err(error) if is_write_failure(&error) => return Err(error.into()),
+            // A CHECK constraint can refuse the NULL; the rows are dropped instead.
+            Err(error) => {
+                tracing::debug!(%error, %table, "could not clear a dangling reference; dropping the rows instead")
+            }
+        }
+    }
+    let sql = format!("DELETE FROM {quoted} WHERE rowid IN ({dangling})");
+    match out.execute(&sql, rusqlite::params![table, fkid]) {
+        Ok(count) => Ok(count),
+        Err(error) if is_write_failure(&error) => Err(error.into()),
+        // A table without rowids can't be targeted this way; its orphans stay.
+        Err(error) => {
+            tracing::warn!(%error, %table, "could not drop rows with broken references");
+            Ok(0)
+        }
+    }
+}
+
+/// The columns of foreign key `fkid` of `table` when every one of them may be NULL (declared
+/// without NOT NULL and not part of the primary key); `None` when the reference is required, or
+/// its columns can't be read.
+fn nullable_reference(out: &Connection, table: &str, fkid: i64) -> Option<Vec<String>> {
+    let mut stmt = out
+        .prepare(
+            "SELECT fk.\"from\", info.\"notnull\" = 0 AND info.pk = 0 \
+             FROM pragma_foreign_key_list(?1) AS fk \
+             LEFT JOIN pragma_table_info(?1) AS info ON info.name = fk.\"from\" \
+             WHERE fk.id = ?2 ORDER BY fk.seq",
+        )
+        .ok()?;
+    let columns = stmt
+        .query_map(rusqlite::params![table, fkid], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<bool>>(1)?))
+        })
+        .ok()?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .ok()?;
+    let nullable =
+        !columns.is_empty() && columns.iter().all(|(_, nullable)| *nullable == Some(true));
+    nullable.then(|| columns.into_iter().map(|(column, _)| column).collect())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
     use std::fs;
-    use std::path::PathBuf;
+
+    /// Every table of the v1 schema the copy must have, whatever was damaged.
+    const TABLES: [&str; 11] = [
+        "settings",
+        "projects",
+        "project_folders",
+        "folder_locations",
+        "chats",
+        "agent_sessions",
+        "turns",
+        "events",
+        "attachments",
+        "agent_cache",
+        "message_fts",
+    ];
 
     struct Fixture {
         _dir: tempfile::TempDir,
@@ -652,12 +1082,19 @@ mod tests {
         Fixture { _dir: dir, db, out }
     }
 
-    /// A v1 database (the real schema) with two projects, three chats, and `events` events spread
-    /// over the chats, closed so every page is in the main file.
+    fn migrations() -> &'static [M<'static>] {
+        super::super::migrations()
+    }
+
+    fn backups(f: &Fixture) -> PathBuf {
+        f.db.parent().expect("parent").join("backups")
+    }
+
+    /// A v1 database (the real schema) with two projects, three chats, `events` events spread over
+    /// the chats, a search entry, an attachment, and a cached agent, closed so every page is in the
+    /// main file.
     fn populated(f: &Fixture, events: i64) {
-        let (store, _) =
-            super::super::Store::open_at(&f.db, &f.db.parent().expect("parent").join("backups"))
-                .expect("create");
+        let (store, _) = super::super::Store::open_at(&f.db, &backups(f)).expect("create");
         let conn = store.conn();
         let tx = conn.unchecked_transaction().expect("tx");
         for (project, name) in [("p1", "Alpha"), ("p2", "Beta")] {
@@ -674,9 +1111,20 @@ mod tests {
             )
             .expect("chat");
         }
+        insert_events(&tx, &["c1", "c2", "c3"], events);
+        tx.execute_batch(
+            "INSERT INTO message_fts (chat_id, message_id, text) VALUES ('c1', 'm1', 'crème brûlée recipe'); \
+             INSERT INTO attachments (sha256, mime, size, created_at) VALUES ('ab12', 'image/png', 3, 1); \
+             INSERT INTO agent_cache (agent_id, detection, checked_at) VALUES ('claude', '{}', 1);",
+        )
+        .expect("search entry, attachment, cached agent");
+        tx.commit().expect("commit");
+    }
+
+    fn insert_events(conn: &Connection, chats: &[&str], events: i64) {
         for seq in 0..events {
-            let chat = ["c1", "c2", "c3"][usize::try_from(seq % 3).expect("small")];
-            tx.execute(
+            let chat = chats[usize::try_from(seq).expect("small") % chats.len()];
+            conn.execute(
                 "INSERT INTO events (id, chat_id, seq, kind, payload, created_at, device_id) \
                  VALUES (?1, ?2, ?3, 'message_delta', ?4, 1, 'd')",
                 rusqlite::params![
@@ -688,12 +1136,6 @@ mod tests {
             )
             .expect("event");
         }
-        tx.execute(
-            "INSERT INTO message_fts (chat_id, message_id, text) VALUES ('c1', 'm1', 'crème brûlée recipe')",
-            [],
-        )
-        .expect("fts");
-        tx.commit().expect("commit");
     }
 
     fn raw(path: &Path) -> Connection {
@@ -707,9 +1149,41 @@ mod tests {
         .expect("count")
     }
 
+    fn count_where(conn: &Connection, sql: &str) -> i64 {
+        conn.query_row(sql, [], |row| row.get(0)).expect("count")
+    }
+
     fn quick_check(conn: &Connection) -> String {
         conn.query_row("PRAGMA quick_check", [], |row| row.get(0))
             .expect("quick_check")
+    }
+
+    fn user_version(conn: &Connection) -> i64 {
+        conn.query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version")
+    }
+
+    fn fk_violations(conn: &Connection) -> i64 {
+        count_where(conn, "SELECT count(*) FROM pragma_foreign_key_check")
+    }
+
+    fn fts_matches(conn: &Connection, query: &str) -> i64 {
+        conn.query_row(
+            "SELECT count(*) FROM message_fts WHERE message_fts MATCH ?1",
+            [query],
+            |row| row.get(0),
+        )
+        .expect("fts")
+    }
+
+    fn rootpage(path: &Path, name: &str) -> i64 {
+        raw(path)
+            .query_row(
+                "SELECT rootpage FROM sqlite_schema WHERE name = ?1",
+                [name],
+                |row| row.get(0),
+            )
+            .expect("rootpage")
     }
 
     /// Page numbers of a table's pages of one kind in key order (`dbstat`'s path), filtered by a
@@ -742,6 +1216,26 @@ mod tests {
         fs::write(path, bytes).expect("write");
     }
 
+    /// The names in `sqlite_schema` a lookup by rowid can still read, after the damage.
+    fn readable_entries(path: &Path) -> BTreeSet<String> {
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .expect("read-only open");
+        conn.pragma_update(None, "writable_schema", true)
+            .expect("writable_schema");
+        // Loads what it can of the schema; the next statements run against that.
+        let _ = conn.prepare("SELECT 1 FROM sqlite_schema LIMIT 0");
+        (1..=200)
+            .filter_map(|rowid| {
+                conn.query_row(
+                    "SELECT name FROM sqlite_schema WHERE rowid = ?1",
+                    [rowid],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+            })
+            .collect()
+    }
+
     /// A read-only connection to a WAL database creates an empty `-wal` (and `-shm`) when none
     /// exists, and can't delete them; nothing may be written into the WAL, though.
     fn nothing_written_to_the_wal(path: &Path) -> bool {
@@ -765,7 +1259,10 @@ mod tests {
         assert!(check.contains("never used"), "{check}");
         let before = fs::read(&f.db).expect("read");
 
-        assert_eq!(salvage(&f.db, &f.out).expect("salvage"), Salvage::Complete);
+        assert_eq!(
+            salvage(&f.db, &f.out, migrations()).expect("salvage"),
+            Salvage::Complete
+        );
         assert_eq!(
             fs::read(&f.db).expect("read"),
             before,
@@ -776,10 +1273,7 @@ mod tests {
         assert_eq!(quick_check(&copy), "ok");
         assert_eq!(count(&copy, "projects"), 2);
         assert_eq!(count(&copy, "events"), 50);
-        let version: i64 = copy
-            .query_row("PRAGMA user_version", [], |row| row.get(0))
-            .expect("version");
-        assert_eq!(version, 1, "user_version is kept");
+        assert_eq!(user_version(&copy), 1, "user_version is kept");
     }
 
     #[test]
@@ -791,7 +1285,7 @@ mod tests {
         smash(&f.db, leaves[leaves.len() / 2]);
         let before = fs::read(&f.db).expect("read");
 
-        let salvage = salvage(&f.db, &f.out).expect("salvage");
+        let salvage = salvage(&f.db, &f.out, migrations()).expect("salvage");
         assert_eq!(
             salvage,
             Salvage::Partial {
@@ -806,32 +1300,20 @@ mod tests {
         let events = count(&copy, "events");
         // One leaf holds a few dozen of these rows; everything before and after it survives.
         assert!((2800..3000).contains(&events), "{events} events kept");
-        let first_and_last: i64 = copy
-            .query_row(
-                "SELECT count(*) FROM events WHERE id IN ('e00000', 'e02999')",
-                [],
-                |row| row.get(0),
-            )
-            .expect("ends");
+        let first_and_last = count_where(
+            &copy,
+            "SELECT count(*) FROM events WHERE id IN ('e00000', 'e02999')",
+        );
         assert_eq!(
             first_and_last, 2,
             "rows past the bad page were reached by seeking past it"
         );
-        let fts: i64 = copy
-            .query_row(
-                "SELECT count(*) FROM message_fts WHERE message_fts MATCH 'creme'",
-                [],
-                |row| row.get(0),
-            )
-            .expect("fts");
         assert_eq!(
-            fts, 1,
+            fts_matches(&copy, "creme"),
+            1,
             "the full-text index was rebuilt through its virtual table"
         );
-        let version: i64 = copy
-            .query_row("PRAGMA user_version", [], |row| row.get(0))
-            .expect("version");
-        assert_eq!(version, 1);
+        assert_eq!(user_version(&copy), 1);
     }
 
     #[test]
@@ -841,7 +1323,7 @@ mod tests {
         // In key order, so this is the leaf holding the smallest rowids, where every scan starts.
         let leaves = pages(&f.db, "events", "leaf");
         smash(&f.db, leaves[0]);
-        let salvage = salvage(&f.db, &f.out).expect("salvage");
+        let salvage = salvage(&f.db, &f.out, migrations()).expect("salvage");
         assert!(matches!(salvage, Salvage::Partial { .. }), "{salvage:?}");
         let events = count(&raw(&f.out), "events");
         assert!((2800..3000).contains(&events), "{events} events kept");
@@ -867,7 +1349,7 @@ mod tests {
         let overflow = pages_like(&f.db, "events", "overflow", "%+000000");
         assert!(overflow.len() >= 5, "{overflow:?}");
         smash(&f.db, overflow[overflow.len() / 2]);
-        let salvage = salvage(&f.db, &f.out).expect("salvage");
+        let salvage = salvage(&f.db, &f.out, migrations()).expect("salvage");
         assert_eq!(
             salvage,
             Salvage::Partial {
@@ -879,18 +1361,11 @@ mod tests {
     }
 
     #[test]
-    fn rows_whose_parent_was_lost_are_dropped() {
+    fn rows_whose_required_parent_was_lost_are_dropped() {
         let f = fixture();
         populated(&f, 30);
-        let chats_root: i64 = raw(&f.db)
-            .query_row(
-                "SELECT rootpage FROM sqlite_schema WHERE name = 'chats'",
-                [],
-                |row| row.get(0),
-            )
-            .expect("rootpage");
-        smash(&f.db, chats_root);
-        let salvage = salvage(&f.db, &f.out).expect("salvage");
+        smash(&f.db, rootpage(&f.db, "chats"));
+        let salvage = salvage(&f.db, &f.out, migrations()).expect("salvage");
         assert_eq!(
             salvage,
             Salvage::Partial {
@@ -909,12 +1384,443 @@ mod tests {
             0,
             "their events had nowhere to belong"
         );
-        let violations: i64 = copy
-            .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
-                row.get(0)
-            })
-            .expect("fk check");
-        assert_eq!(violations, 0);
+        assert_eq!(fk_violations(&copy), 0);
+    }
+
+    /// One project with one folder (and its location on this device), three chats in the folder
+    /// and one outside it, and `events` events over the four chats.
+    fn with_a_folder(f: &Fixture, events: i64) {
+        let (store, _) = super::super::Store::open_at(&f.db, &backups(f)).expect("create");
+        let tx = store.conn().unchecked_transaction().expect("tx");
+        tx.execute_batch(
+            "INSERT INTO projects (id, name, created_at, updated_at, device_id) VALUES ('p1', 'Alpha', 1, 1, 'd'); \
+             INSERT INTO project_folders (id, project_id, display_name, kind, created_at, updated_at, device_id) \
+                 VALUES ('f1', 'p1', 'repo', 'git', 1, 1, 'd'); \
+             INSERT INTO folder_locations (folder_id, device_id, path) VALUES ('f1', 'd', '/src/repo'); \
+             INSERT INTO chats (id, project_id, folder_id, created_at, updated_at, device_id) VALUES \
+                 ('c1', 'p1', 'f1', 1, 1, 'd'), ('c2', 'p1', 'f1', 1, 1, 'd'), ('c3', 'p1', 'f1', 1, 1, 'd'), \
+                 ('c4', 'p1', NULL, 1, 1, 'd');",
+        )
+        .expect("project, folder, chats");
+        insert_events(&tx, &["c1", "c2", "c3", "c4"], events);
+        tx.commit().expect("commit");
+    }
+
+    /// Finding: every row the foreign key check flagged was deleted, so losing the one page of
+    /// `project_folders` also deleted the chats in that folder (whose folder_id may be NULL) and,
+    /// in the next pass, all their events, although the project and every chat and event page
+    /// were intact.
+    #[test]
+    fn a_lost_folder_clears_the_chats_reference_instead_of_dropping_them() {
+        let f = fixture();
+        with_a_folder(&f, 400);
+        smash(&f.db, rootpage(&f.db, "project_folders"));
+        let salvage = salvage(&f.db, &f.out, migrations()).expect("salvage");
+        assert_eq!(
+            salvage,
+            Salvage::Partial {
+                tables: vec![
+                    "project_folders".into(),
+                    "folder_locations".into(),
+                    "chats".into()
+                ]
+            },
+            "chats are reported: their folder references were cleared"
+        );
+        let copy = raw(&f.out);
+        assert_eq!(
+            count(&copy, "chats"),
+            4,
+            "every chat is still in its project"
+        );
+        assert_eq!(count(&copy, "events"), 400);
+        assert_eq!(
+            count_where(
+                &copy,
+                "SELECT count(*) FROM chats WHERE folder_id IS NOT NULL"
+            ),
+            0
+        );
+        assert_eq!(
+            count(&copy, "folder_locations"),
+            0,
+            "a location can't exist without its folder"
+        );
+        assert_eq!(fk_violations(&copy), 0);
+        assert_eq!(quick_check(&copy), "ok");
+    }
+
+    /// The same for the optional link from a turn to its agent session: a damaged
+    /// `agent_sessions` page used to take the turns and every event of those turns with it.
+    #[test]
+    fn a_lost_agent_session_clears_the_turns_reference_and_keeps_their_events() {
+        let f = fixture();
+        populated(&f, 0);
+        {
+            let conn = raw(&f.db);
+            conn.execute(
+                "INSERT INTO agent_sessions (id, chat_id, agent_id, cwd, created_at, updated_at, device_id) \
+                 VALUES ('s1', 'c1', 'claude', '/src', 1, 1, 'd')",
+                [],
+            )
+            .expect("session");
+            for turn in 0..3i64 {
+                conn.execute(
+                    "INSERT INTO turns (id, chat_id, agent_session_id, seq, status, started_at, device_id) \
+                     VALUES (?1, 'c1', 's1', ?2, 'completed', 1, 'd')",
+                    rusqlite::params![format!("t{turn}"), turn],
+                )
+                .expect("turn");
+                for n in 0..5i64 {
+                    conn.execute(
+                        "INSERT INTO events (id, chat_id, turn_id, seq, kind, payload, created_at, device_id) \
+                         VALUES (?1, 'c1', ?2, ?3, 'message_delta', '{}', 1, 'd')",
+                        rusqlite::params![format!("t{turn}e{n}"), format!("t{turn}"), turn * 5 + n],
+                    )
+                    .expect("event");
+                }
+            }
+        }
+        smash(&f.db, rootpage(&f.db, "agent_sessions"));
+        let salvage = salvage(&f.db, &f.out, migrations()).expect("salvage");
+        assert_eq!(
+            salvage,
+            Salvage::Partial {
+                tables: vec!["agent_sessions".into(), "turns".into()]
+            }
+        );
+        let copy = raw(&f.out);
+        assert_eq!(count(&copy, "turns"), 3);
+        assert_eq!(
+            count_where(
+                &copy,
+                "SELECT count(*) FROM turns WHERE agent_session_id IS NOT NULL"
+            ),
+            0
+        );
+        assert_eq!(count(&copy, "events"), 15);
+        assert_eq!(
+            count_where(&copy, "SELECT count(*) FROM events WHERE turn_id IS NULL"),
+            0,
+            "the turns survived, so their events keep pointing at them"
+        );
+        assert_eq!(fk_violations(&copy), 0);
+    }
+
+    /// Finding: the schema was read only up to its first unreadable page and the copy was built
+    /// from what that read found, stamped with the damaged file's `user_version`. A damaged second
+    /// leaf dropped every table listed on it while reporting Complete, and no migration would ever
+    /// create them again; a damaged first leaf salvaged nothing although every data page, and the
+    /// entries on the other leaf, were fine.
+    #[test]
+    fn a_damaged_schema_leaf_keeps_every_table_and_what_its_entries_still_reach() {
+        let leaves = {
+            let f = fixture();
+            populated(&f, 300);
+            pages(&f.db, "sqlite_schema", "leaf")
+        };
+        assert!(
+            leaves.len() >= 2,
+            "the v1 schema spans several leaves: {leaves:?}"
+        );
+        for (index, leaf) in leaves.iter().enumerate() {
+            let f = fixture();
+            populated(&f, 300);
+            smash(&f.db, *leaf);
+            let readable = readable_entries(&f.db);
+            let before = fs::read(&f.db).expect("read");
+
+            let salvage = salvage(&f.db, &f.out, migrations()).expect("salvage");
+            let Salvage::Partial { tables } = &salvage else {
+                panic!("leaf {index}: a damaged schema is never complete, got {salvage:?}");
+            };
+            assert_eq!(fs::read(&f.db).expect("read"), before, "only read");
+            assert!(!scratch_path(&f.out).exists(), "the rebuilt copy is gone");
+            let copy = raw(&f.out);
+            assert_eq!(quick_check(&copy), "ok");
+            assert_eq!(user_version(&copy), 1);
+            assert_eq!(fk_violations(&copy), 0);
+            for table in TABLES {
+                // Fails with "no such table" if the copy lacks it.
+                let rows = count(&copy, table);
+                if !readable.contains(table) {
+                    assert!(
+                        tables.iter().any(|lost| lost == table),
+                        "leaf {index}: {table} was unreadable but isn't reported: {tables:?}"
+                    );
+                    assert_eq!(rows, 0, "leaf {index}: {table}");
+                }
+            }
+            // Tables that need no parent row keep every row wherever their entry is readable.
+            for (table, rows) in [("projects", 2), ("attachments", 1), ("agent_cache", 1)] {
+                if readable.contains(table) {
+                    assert_eq!(count(&copy, table), rows, "leaf {index}: {table}");
+                }
+            }
+            if readable.contains("message_fts_content") {
+                assert_eq!(fts_matches(&copy, "creme"), 1, "leaf {index}");
+            }
+            if index == 0 {
+                // The first leaf holds the first tables made; the ones listed after it are read
+                // through the rebuilt schema.
+                assert!(!readable.contains("projects"), "{readable:?}");
+                assert!(readable.contains("agent_cache"), "{readable:?}");
+                assert!(tables.iter().any(|lost| lost == "projects"), "{tables:?}");
+                assert_eq!(count(&copy, "agent_cache"), 1);
+                // Readable, but their chats went with the first leaf, and an event can't exist
+                // without its chat.
+                assert_eq!(count(&copy, "events"), 0);
+                assert!(tables.iter().any(|lost| lost == "events"), "{tables:?}");
+            }
+            if index == leaves.len() - 1 {
+                assert!(readable.contains("projects"), "{readable:?}");
+                assert!(
+                    tables.iter().any(|lost| lost == "message_fts"),
+                    "{tables:?}"
+                );
+            }
+        }
+    }
+
+    /// Damage often comes with an unclean shutdown, so the newest rows may be only in the damaged
+    /// file's `-wal`. The rebuilt schema's copy is made through SQLite, so they come along.
+    #[test]
+    fn rows_only_in_the_wal_come_through_a_rebuilt_schema() {
+        let f = fixture();
+        populated(&f, 30);
+        let first_leaf = pages(&f.db, "sqlite_schema", "leaf")[0];
+        let page_size: i64 = raw(&f.db)
+            .query_row("PRAGMA page_size", [], |row| row.get(0))
+            .expect("page_size");
+        {
+            let conn = raw(&f.db);
+            conn.execute(
+                "INSERT INTO agent_cache (agent_id, detection, checked_at) VALUES ('codex', '{}', 2)",
+                [],
+            )
+            .expect("a row only in the -wal");
+            conn.set_db_config(DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, true)
+                .expect("keep the wal");
+        }
+        let wal = fsutil::with_suffix(&f.db, "-wal");
+        assert!(fs::metadata(&wal).expect("wal").len() > 0);
+        // Not `smash`: opening the database to read its page size would checkpoint the -wal.
+        let mut bytes = fs::read(&f.db).expect("read");
+        let start = usize::try_from((first_leaf - 1) * page_size).expect("offset");
+        bytes[start..start + 16].fill(0xA5);
+        fs::write(&f.db, bytes).expect("damage the first schema leaf");
+        let wal_before = fs::read(&wal).expect("wal");
+
+        let salvage = salvage(&f.db, &f.out, migrations()).expect("salvage");
+        assert!(matches!(salvage, Salvage::Partial { .. }), "{salvage:?}");
+        assert_eq!(fs::read(&wal).expect("wal"), wal_before, "only read");
+        assert_eq!(
+            count(&raw(&f.out), "agent_cache"),
+            2,
+            "the row only in the -wal came along"
+        );
+    }
+
+    /// A damaged schema page that listed only indexes costs no auracode table, but whatever else
+    /// it listed is unknown, so the salvage still isn't called complete.
+    #[test]
+    fn a_damaged_schema_page_is_never_complete_even_when_every_table_survives() {
+        let f = fixture();
+        populated(&f, 10);
+        {
+            // Enough indexes, with long enough names, that the schema's last leaf lists only them.
+            let conn = raw(&f.db);
+            for n in 0..60 {
+                conn.execute_batch(&format!(
+                    "CREATE INDEX extra_{n:02}_{} ON events (kind, created_at);",
+                    "x".repeat(150)
+                ))
+                .expect("index");
+            }
+        }
+        let leaves = pages(&f.db, "sqlite_schema", "leaf");
+        smash(&f.db, leaves[leaves.len() - 1]);
+        let readable = readable_entries(&f.db);
+        assert!(
+            TABLES.iter().all(|table| readable.contains(*table)),
+            "the last leaf lists only indexes: {readable:?}"
+        );
+
+        assert_eq!(
+            salvage(&f.db, &f.out, migrations()).expect("salvage"),
+            Salvage::Partial { tables: Vec::new() }
+        );
+        let copy = raw(&f.out);
+        assert_eq!(count(&copy, "events"), 10);
+        assert_eq!(count(&copy, "projects"), 2);
+        assert_eq!(
+            count_where(
+                &copy,
+                "SELECT count(*) FROM sqlite_schema WHERE name = 'events_turn_id'"
+            ),
+            1,
+            "auracode's own indexes come from the migrations"
+        );
+    }
+
+    /// Without the rebuilt schema (no room for the copy it needs), the tables listed after the
+    /// damage can't be read, and the salvage says what it could do instead of failing the repair.
+    #[test]
+    fn without_a_rebuilt_schema_the_salvage_still_finishes() {
+        let f = fixture();
+        populated(&f, 30);
+        smash(&f.db, pages(&f.db, "sqlite_schema", "leaf")[0]);
+        let scratch = scratch_path(&f.out);
+        fs::create_dir(&scratch).expect("something in the way of the copy");
+        assert_eq!(
+            salvage(&f.db, &f.out, migrations()).expect("salvage"),
+            Salvage::Nothing,
+            "nothing SQLite still knows of could be read"
+        );
+        assert!(!f.out.exists());
+        assert!(scratch.is_dir(), "what was in the way is left alone");
+    }
+
+    #[test]
+    fn a_table_missing_from_an_intact_schema_is_created_empty_and_reported() {
+        let f = fixture();
+        populated(&f, 3000);
+        raw(&f.db)
+            .execute_batch("DROP TABLE agent_cache;")
+            .expect("drop");
+        let leaves = pages(&f.db, "events", "leaf");
+        smash(&f.db, leaves[leaves.len() / 2]);
+        assert_eq!(
+            salvage(&f.db, &f.out, migrations()).expect("salvage"),
+            Salvage::Partial {
+                tables: vec!["events".into(), "agent_cache".into()]
+            }
+        );
+        assert_eq!(count(&raw(&f.out), "agent_cache"), 0);
+    }
+
+    /// The storage of a virtual table whose own entry was lost is not a table of its own: it isn't
+    /// reported (the virtual table is), and the copy's comes from the migrations.
+    #[test]
+    fn a_virtual_tables_storage_without_its_entry_is_not_reported_as_a_table() {
+        let f = fixture();
+        populated(&f, 3000);
+        raw(&f.db)
+            .execute_batch(
+                "PRAGMA writable_schema = ON; DELETE FROM sqlite_schema WHERE name = 'message_fts';",
+            )
+            .expect("lose the virtual table's entry");
+        let leaves = pages(&f.db, "events", "leaf");
+        smash(&f.db, leaves[leaves.len() / 2]);
+        assert_eq!(
+            salvage(&f.db, &f.out, migrations()).expect("salvage"),
+            Salvage::Partial {
+                tables: vec!["events".into(), "message_fts".into()]
+            }
+        );
+        let copy = raw(&f.out);
+        assert_eq!(count(&copy, "message_fts"), 0);
+        assert_eq!(quick_check(&copy), "ok");
+    }
+
+    /// A migration's trigger must not fire on copied rows (here it would count every copied event
+    /// into its chat a second time), and is back once they are in. Rows a migration seeds give way
+    /// to the damaged file's.
+    #[test]
+    fn triggers_dont_fire_on_copied_rows_and_seeded_rows_give_way() {
+        let f = fixture();
+        let mut v2 = migrations().to_vec();
+        v2.push(M::up(
+            "CREATE TABLE event_count (n INTEGER NOT NULL); INSERT INTO event_count VALUES (0); \
+             CREATE TRIGGER events_counted AFTER INSERT ON events BEGIN \
+                 UPDATE event_count SET n = n + 1; \
+                 UPDATE chats SET updated_at = updated_at + 1 WHERE id = new.chat_id; \
+             END; \
+             INSERT INTO settings (key, value, updated_at) VALUES ('theme', 'light', 0);",
+        ));
+        {
+            let (store, _) = super::super::open_with(&f.db, &backups(&f), &v2).expect("v2");
+            let tx = store.conn().unchecked_transaction().expect("tx");
+            tx.execute_batch(
+                "INSERT INTO projects (id, name, created_at, updated_at, device_id) VALUES ('p1', 'Alpha', 1, 1, 'd'); \
+                 INSERT INTO chats (id, project_id, created_at, updated_at, device_id) VALUES ('c1', 'p1', 1, 1, 'd'); \
+                 UPDATE settings SET value = 'dark', updated_at = 5 WHERE key = 'theme';",
+            )
+            .expect("project, chat, setting");
+            insert_events(&tx, &["c1"], 3000);
+            tx.commit().expect("commit");
+        }
+        let leaves = pages(&f.db, "events", "leaf");
+        smash(&f.db, leaves[leaves.len() / 2]);
+        let salvage = salvage(&f.db, &f.out, &v2).expect("salvage");
+        assert_eq!(
+            salvage,
+            Salvage::Partial {
+                tables: vec!["events".into()]
+            }
+        );
+        let copy = raw(&f.out);
+        assert_eq!(user_version(&copy), 2);
+        // `chats` is copied before `events`, so a trigger firing on copied events would show.
+        assert_eq!(
+            count_where(&copy, "SELECT updated_at FROM chats WHERE id = 'c1'"),
+            3001,
+            "the chat as it was, not touched again by the copy"
+        );
+        assert_eq!(count(&copy, "event_count"), 1, "the seeded row gave way");
+        assert_eq!(
+            count_where(&copy, "SELECT n FROM event_count"),
+            3000,
+            "the count copied over"
+        );
+        let theme: String = copy
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'theme'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("theme");
+        assert_eq!(theme, "dark", "the user's setting, not the seeded default");
+        copy.execute(
+            "INSERT INTO events (id, chat_id, seq, kind, payload, created_at, device_id) \
+             VALUES ('new', 'c1', 99999, 'message_delta', '{}', 1, 'd')",
+            [],
+        )
+        .expect("a new event");
+        assert_eq!(
+            count_where(&copy, "SELECT n FROM event_count"),
+            3001,
+            "the trigger is back"
+        );
+        assert_eq!(
+            count_where(&copy, "SELECT updated_at FROM chats WHERE id = 'c1'"),
+            3002
+        );
+    }
+
+    /// Only reachable by calling `salvage` directly (the open refuses a newer database first).
+    #[test]
+    fn a_version_the_migrations_dont_know_keeps_the_damaged_files_own_schema() {
+        let f = fixture();
+        populated(&f, 3000);
+        raw(&f.db)
+            .execute_batch(
+                "CREATE TABLE later (x); INSERT INTO later VALUES ('from a later version'); PRAGMA user_version = 7;",
+            )
+            .expect("v7");
+        let leaves = pages(&f.db, "events", "leaf");
+        smash(&f.db, leaves[leaves.len() / 2]);
+        assert_eq!(
+            salvage(&f.db, &f.out, migrations()).expect("salvage"),
+            Salvage::Partial {
+                tables: vec!["events".into()]
+            }
+        );
+        let copy = raw(&f.out);
+        assert_eq!(user_version(&copy), 7);
+        assert_eq!(count(&copy, "later"), 1);
+        assert_eq!(count(&copy, "projects"), 2);
+        assert_eq!(fts_matches(&copy, "creme"), 1);
     }
 
     #[test]
@@ -937,7 +1843,7 @@ mod tests {
             "every statement fails on a malformed schema"
         );
 
-        let salvage = salvage(&f.db, &f.out).expect("salvage");
+        let salvage = salvage(&f.db, &f.out, migrations()).expect("salvage");
         assert_eq!(
             salvage,
             Salvage::Partial {
@@ -965,7 +1871,7 @@ mod tests {
         let leaves = pages(&f.db, "events", "leaf");
         smash(&f.db, leaves[leaves.len() / 2]);
         assert!(matches!(
-            salvage(&f.db, &f.out).expect("salvage"),
+            salvage(&f.db, &f.out, migrations()).expect("salvage"),
             Salvage::Partial { .. }
         ));
         let copy = raw(&f.out);
@@ -976,7 +1882,10 @@ mod tests {
     fn random_bytes_salvage_nothing_and_leave_nothing_behind() {
         let f = fixture();
         fs::write(&f.db, vec![0x5a; 16 * 1024]).expect("garbage");
-        assert_eq!(salvage(&f.db, &f.out).expect("salvage"), Salvage::Nothing);
+        assert_eq!(
+            salvage(&f.db, &f.out, migrations()).expect("salvage"),
+            Salvage::Nothing
+        );
         assert!(!f.out.exists());
         assert!(!fsutil::with_suffix(&f.out, "-journal").exists());
     }
@@ -990,7 +1899,7 @@ mod tests {
         let out =
             f.db.with_file_name("no such folder")
                 .join("aura.db.salvage-1.partial");
-        let result = salvage(&f.db, &out);
+        let result = salvage(&f.db, &out, migrations());
         assert!(result.is_err(), "{result:?}");
         assert_eq!(fs::read(&f.db).expect("read"), before);
         assert!(!out.exists());
@@ -1001,7 +1910,10 @@ mod tests {
         let f = fixture();
         populated(&f, 5);
         fs::write(&f.out, b"left over from an interrupted repair").expect("stale");
-        assert_eq!(salvage(&f.db, &f.out).expect("salvage"), Salvage::Complete);
+        assert_eq!(
+            salvage(&f.db, &f.out, migrations()).expect("salvage"),
+            Salvage::Complete
+        );
         assert_eq!(count(&raw(&f.out), "events"), 5);
     }
 
@@ -1022,7 +1934,10 @@ mod tests {
         let wal = fsutil::with_suffix(&f.db, "-wal");
         let wal_before = fs::read(&wal).expect("wal");
         let db_before = fs::read(&f.db).expect("db");
-        assert_eq!(salvage(&f.db, &f.out).expect("salvage"), Salvage::Complete);
+        assert_eq!(
+            salvage(&f.db, &f.out, migrations()).expect("salvage"),
+            Salvage::Complete
+        );
         assert_eq!(fs::read(&wal).expect("wal"), wal_before);
         assert_eq!(fs::read(&f.db).expect("db"), db_before);
         assert_eq!(
@@ -1074,5 +1989,17 @@ mod tests {
     fn identifiers_are_quoted() {
         assert_eq!(quote("events"), "\"events\"");
         assert_eq!(quote("odd\"name"), "\"odd\"\"name\"");
+    }
+
+    #[test]
+    fn the_rebuilt_schema_copy_is_named_after_the_salvage_copy() {
+        assert_eq!(
+            scratch_path(Path::new("/p/aura.db.salvage-17.partial")),
+            PathBuf::from("/p/aura.db.salvage-17.schema.partial")
+        );
+        assert_eq!(
+            scratch_path(Path::new("/p/copy.db")),
+            PathBuf::from("/p/copy.db.schema")
+        );
     }
 }

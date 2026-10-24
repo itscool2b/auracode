@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-use crate::error::{CoreError, Result};
+use crate::error::{CoreError, LinkProblem, Result};
 use crate::ids::new_id;
 use crate::time::now_millis;
 
@@ -44,15 +44,22 @@ pub(crate) fn create_private_dir_all(path: &Path) -> Result<()> {
     builder.create(path).map_err(CoreError::io(path))
 }
 
-/// Makes `path` a directory auracode can use: moves aside whatever else sits there (a file, a
-/// dangling symlink) with [`quarantine_file`], then creates it with [`create_private_dir_all`]. A
-/// stray file where a folder belongs must not make startup fail on every launch. A symlink to a
-/// directory is kept, since the user may have put that folder on another disk on purpose. Returns
-/// where the obstacle went, if there was one.
+/// Makes `path` a directory auracode can use: moves aside a file (or anything else that is neither
+/// a folder nor a link) sitting there with [`quarantine_file`], then creates it with
+/// [`create_private_dir_all`]. A stray file where a folder belongs must not make startup fail on
+/// every launch. A link is never moved, since someone put the folder elsewhere on purpose (on
+/// another disk, say): one that leads to a folder is used, and one that doesn't is a
+/// [`CoreError::BrokenLink`]. Replacing a link whose disk is unplugged would start the data over on
+/// this disk, and the history would stay behind the link once the disk is back. Returns where the
+/// obstacle went, if there was one.
 pub(crate) fn ensure_private_dir(path: &Path) -> Result<Option<PathBuf>> {
     let moved = match fs::symlink_metadata(path) {
-        // `is_dir` follows symlinks, so a link to a directory counts as one.
-        Ok(_) if path.is_dir() => None,
+        // A link's own metadata is never a directory, on Windows (junctions too) as on unix.
+        Ok(meta) if meta.is_dir() => None,
+        Ok(meta) if meta.file_type().is_symlink() => {
+            check_link_to_dir(path)?;
+            None
+        }
         Ok(_) => {
             let moved = quarantine_file(path)?;
             tracing::warn!(
@@ -72,6 +79,43 @@ pub(crate) fn ensure_private_dir(path: &Path) -> Result<Option<PathBuf>> {
     };
     create_private_dir_all(path)?;
     Ok(moved)
+}
+
+/// A [`CoreError::BrokenLink`] when `path` is a link that doesn't lead to a folder, for callers that
+/// would otherwise take such a folder for missing; anything else at `path` is left to them.
+pub(crate) fn check_folder_link(path: &Path) -> Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => check_link_to_dir(path),
+        _ => Ok(()),
+    }
+}
+
+/// Checks that the link at `link` leads to a folder; see [`ensure_private_dir`].
+fn check_link_to_dir(link: &Path) -> Result<()> {
+    let problem = match fs::metadata(link) {
+        Ok(meta) if meta.is_dir() => return Ok(()),
+        Ok(_) => LinkProblem::NotAFolder,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => LinkProblem::Missing,
+        // A loop, or no permission to look: an error about the link, which stays as it is.
+        Err(source) => {
+            return Err(CoreError::Io {
+                path: link.to_path_buf(),
+                source,
+            });
+        }
+    };
+    let target = fs::read_link(link).map_err(CoreError::io(link))?;
+    tracing::error!(
+        link = %link.display(),
+        target = %target.display(),
+        ?problem,
+        "a link to a data folder doesn't lead to a folder; leaving it as it is"
+    );
+    Err(CoreError::BrokenLink {
+        link: link.to_path_buf(),
+        target,
+        problem,
+    })
 }
 
 /// Best effort: removes group and other permissions from a directory that already existed (created
@@ -737,33 +781,91 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn is_link_to(path: &Path, target: &Path) -> bool {
+        fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink())
+            && fs::read_link(path).is_ok_and(|read| read == target)
+    }
+
+    #[cfg(unix)]
     #[test]
-    fn ensure_private_dir_keeps_a_symlinked_directory_but_moves_a_dangling_link() {
+    fn ensure_private_dir_uses_a_symlinked_directory() {
         let dir = tempfile::tempdir().expect("tempdir");
         let elsewhere = dir.path().join("on another disk");
         fs::create_dir(&elsewhere).expect("mkdir");
         let linked = dir.path().join("checkpoints");
         std::os::unix::fs::symlink(&elsewhere, &linked).expect("symlink");
         assert_eq!(ensure_private_dir(&linked).expect("ensure"), None);
+        assert!(is_link_to(&linked, &elsewhere));
+    }
+
+    /// Finding: a link whose target was missing (its disk unplugged) was moved aside and replaced
+    /// by an empty folder, so the data forked onto this disk and the history stayed behind the
+    /// link once the disk was back.
+    #[cfg(unix)]
+    #[test]
+    fn ensure_private_dir_reports_a_dangling_link_and_leaves_it_in_place() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let gone = dir.path().join("unplugged disk").join("attachments");
+        let dangling = dir.path().join("attachments");
+        std::os::unix::fs::symlink(&gone, &dangling).expect("symlink");
+        let error = ensure_private_dir(&dangling).expect_err("a dangling link is an error");
         assert!(
-            fs::symlink_metadata(&linked)
-                .expect("link")
-                .file_type()
-                .is_symlink()
+            matches!(
+                &error,
+                CoreError::BrokenLink { link, target, problem: LinkProblem::Missing }
+                    if *link == dangling && *target == gone
+            ),
+            "{error:?}"
+        );
+        assert!(is_link_to(&dangling, &gone), "the link is left as it was");
+        assert!(!gone.exists(), "nothing is created where the link leads");
+        let names: Vec<OsString> = fs::read_dir(dir.path())
+            .expect("read_dir")
+            .map(|entry| entry.expect("entry").file_name())
+            .collect();
+        assert_eq!(
+            names,
+            vec![OsString::from("attachments")],
+            "nothing moved aside"
         );
 
-        let dangling = dir.path().join("attachments");
-        std::os::unix::fs::symlink(dir.path().join("gone"), &dangling).expect("symlink");
-        let moved = ensure_private_dir(&dangling)
-            .expect("ensure")
-            .expect("the link was moved");
-        assert!(dangling.is_dir());
-        assert!(
-            fs::symlink_metadata(&moved)
-                .expect("moved link")
-                .file_type()
-                .is_symlink()
-        );
+        // Plugged back in: used as it is.
+        fs::create_dir_all(&gone).expect("the disk is back");
+        assert_eq!(ensure_private_dir(&dangling).expect("ensure"), None);
+        assert!(is_link_to(&dangling, &gone));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_private_dir_reports_a_link_to_a_file_and_leaves_it_in_place() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file = dir.path().join("notes.txt");
+        fs::write(&file, b"not a folder").expect("write");
+        let linked = dir.path().join("logs");
+        std::os::unix::fs::symlink(&file, &linked).expect("symlink");
+        assert!(matches!(
+            ensure_private_dir(&linked),
+            Err(CoreError::BrokenLink {
+                problem: LinkProblem::NotAFolder,
+                ..
+            })
+        ));
+        assert!(is_link_to(&linked, &file));
+        assert_eq!(fs::read(&file).expect("read"), b"not a folder");
+    }
+
+    /// A link that loops can't be followed; that is an error about the link, which stays.
+    #[cfg(unix)]
+    #[test]
+    fn ensure_private_dir_reports_a_link_loop_without_touching_it() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let looped = dir.path().join("backups");
+        std::os::unix::fs::symlink(&looped, &looped).expect("symlink");
+        assert!(matches!(
+            ensure_private_dir(&looped),
+            Err(CoreError::Io { ref path, .. }) if *path == looped
+        ));
+        assert!(is_link_to(&looped, &looped));
     }
 
     #[test]

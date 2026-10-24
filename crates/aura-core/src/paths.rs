@@ -111,9 +111,11 @@ impl DataRoot {
     /// Creates the root and `profiles/`. `profiles/` is made private to the current user even when it
     /// already exists (mode 0700 on unix; on Windows a protected ACL for the user, SYSTEM, and
     /// Administrators), since everything under it is auracode's and `AURACODE_DATA_DIR` may put it
-    /// somewhere other accounts can read, like `C:\aura`. Something other than a folder where
-    /// `profiles/` should be is moved aside, so a stray file can't block startup. The root is left as
-    /// is when it already exists, because with `AURACODE_DATA_DIR` it may be a folder the user chose.
+    /// somewhere other accounts can read, like `C:\aura`. A file where `profiles/` should be is
+    /// moved aside, so a stray file can't block startup. A link there is used, never moved: one that
+    /// leads nowhere (a folder on a disk that isn't connected) is a [`CoreError::BrokenLink`]. The
+    /// root is left as is when it already exists, because with `AURACODE_DATA_DIR` it may be a
+    /// folder the user chose.
     pub fn ensure(&self) -> Result<()> {
         fsutil::create_private_dir_all(&self.root)?;
         let profiles = self.profiles_dir();
