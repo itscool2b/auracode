@@ -349,12 +349,27 @@ Test-Case 'the DevTools page for auracode is picked out of the target list' {
     Assert-Equal $null (Select-PageTarget -Targets $attached -UrlPattern 'tauri.localhost') 'a page another client already holds'
 }
 
+Test-Case 'a null value removes a variable instead of leaving it set to empty' {
+    $name = 'AURACODE_RENDER_POWER_TEST_VARIABLE'
+    try {
+        Set-ProcessVariable -Name $name -Value 'x'
+        Assert-Equal 'x' ([Environment]::GetEnvironmentVariable($name, 'Process')) 'set'
+        Set-ProcessVariable -Name $name -Value $null
+        Assert-Equal $false (Test-Path -LiteralPath "Env:$name") 'gone from Env:'
+        Assert-Equal $null ([Environment]::GetEnvironmentVariable($name, 'Process')) 'gone from the process'
+        Set-ProcessVariable -Name $name -Value $null
+        Assert-Equal $false (Test-Path -LiteralPath "Env:$name") 'removing it again is harmless'
+    } finally {
+        if (Test-Path -LiteralPath "Env:$name") { Remove-Item -LiteralPath "Env:$name" }
+    }
+}
+
 Test-Case 'a scenario sets every launch variable, and restoring puts the shell back' {
     $saved = Save-LaunchEnvironment
     try {
-        [Environment]::SetEnvironmentVariable('AURACODE_STRESS', 'from-the-shell', 'Process')
-        [Environment]::SetEnvironmentVariable('AURACODE_NO_GLASS', $null, 'Process')
-        [Environment]::SetEnvironmentVariable('AURACODE_SMOKE', '1', 'Process')
+        Set-ProcessVariable -Name 'AURACODE_STRESS' -Value 'from-the-shell'
+        Set-ProcessVariable -Name 'AURACODE_NO_GLASS' -Value $null
+        Set-ProcessVariable -Name 'AURACODE_SMOKE' -Value '1'
         $shell = Save-LaunchEnvironment
         $table = Get-ScenarioTable
         Set-LaunchEnvironment -Values (Get-ScenarioEnvironment -Scenario $table['s24-noglass'] -DataDir 'scratch-data' -DebugPort 9444)
