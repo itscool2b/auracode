@@ -16,8 +16,8 @@ runs is in [render-power/](render-power/).
 | macOS app, window not visible (debug and release) | the hidden cost, and whether streaming continues while hidden | done | [section A](#a-the-real-app-window-not-visible-locked-screen) |
 | macOS page in WebKit, nothing hidden (Playwright) | frame rate and cost trends by orb count | done | [section B](#b-the-page-in-webkit-with-nothing-hidden-playwright-webkit-production-bundle) |
 | macOS app, window visible (debug and release) | glass versus opaque idle cost, the real window's frame rate, a true hide | pending | blocked on 2026-10-24: the screen stayed locked all day and the CPU was saturated (see [Conditions](#conditions-read-these-before-the-numbers)); steps in [Finishing the macOS half](#finishing-the-macos-half) |
-| Windows suite's unit tests, on Windows PowerShell 5.1 and 7 | that the suite runs at all before anyone spends 12 minutes on it | pending | `test-render-power.ps1` has only been checked statically: running PowerShell on the Mac was not allowed in that session |
-| Windows app (WebView2), all scenarios | WebView2's cost, Mica versus opaque, what minimizing stops, frame rate | pending | needs a CI-built Windows binary, which does not exist yet, and the user's PC; steps in [Windows](#windows-webview2-half-still-to-run) |
+| Windows suite's unit tests, on Windows PowerShell 5.1 and 7 | that the suite runs at all before anyone spends 12 minutes on it | done | 31 of 31 pass under both on windows-2025 ([run 40126387785](https://github.com/itscool2b/auracode/actions/runs/40126387785)). The first run ([run 40123051214](https://github.com/itscool2b/auracode/actions/runs/40123051214)) failed one test under PowerShell 7 only: variables meant to be removed stayed set to empty strings, fixed in aea274e |
+| Windows app (WebView2), all scenarios | WebView2's cost, Mica versus opaque, what minimizing stops, frame rate | pending | needs a Windows build from the Build workflow and a Windows PC; steps in [Windows](#windows-webview2-half-still-to-run) |
 
 When a part is done, set its result, fill in its results section, and revisit the
 [Bottom line](#bottom-line) and [Conclusions](#conclusions); the status becomes "decided" only
@@ -404,8 +404,7 @@ runs every scenario unattended.
    missing; the suite finds the installed `auracode.exe` by itself. A bare `auracode.exe` from
    `tauri build --no-bundle` works too: pass it with `-Exe`, after `Unblock-File` if it came from
    a download (the suite refuses a file SmartScreen would stop).
-   No Windows build exists yet: GitHub Actions is blocked for the account by a billing problem,
-   so no workflow has run. Once it runs, Build makes the Windows installer for every push to
+   No Windows installer has been built yet. Build makes one for every push to
    main, nightly when main's newest commit has none, by hand
    (`gh workflow run build.yml --ref <branch>`, offered only once the workflow file is on the
    default branch), and for a push to a milestone branch such as `m0-scaffold` whose newest

@@ -43,12 +43,11 @@ Pending, each waiting on the repository owner:
   and macOS asks for `~/Desktop` access again after every rebuild.
 - **The macOS visible-window render and power run.** It needs an unlocked Mac left idle for about 20
   minutes ([steps](docs/spikes/render-power.md#finishing-the-macos-half)).
-- **Every Windows run.** GitHub Actions is blocked for the account by a billing problem: the first CI run
-  on `m0-scaffold` failed with "recent account payments have failed or your spending limit needs to be
-  increased" and ran no job, so no Windows or Linux build, test, or smoke result exists yet.
-  The manual checklists for [spawning](docs/spikes/windows-spawn.md#manual-checklist-the-users-windows-pc),
+- **The Windows manual checklists.** CI runs on Linux and Windows (the spawning spike's tests, the
+  smoke run on WebKitGTK and WebView2, the render-power suite's unit tests), but the manual checklists
+  for [spawning](docs/spikes/windows-spawn.md#manual-checklist-the-users-windows-pc),
   [the titlebar](docs/spikes/windows-titlebar.md#verification), and
-  [render and power](docs/spikes/render-power.md#windows-webview2-half-still-to-run) also need a Windows
+  [render and power](docs/spikes/render-power.md#windows-webview2-half-still-to-run) need a Windows
   PC.
 - **An app screenshot.** It needs an unlocked screen: a locked Mac hides every window.
 
@@ -150,7 +149,7 @@ pnpm --filter @auracode/desktop tauri build --debug --no-bundle
 bash .github/scripts/run-smoke.sh target/debug/auracode
 ```
 
-Once Actions runs, `.github/workflows/ci.yml` runs all of these (the doc check in the lint job, the
+`.github/workflows/ci.yml` runs all of these (the doc check in the lint job, the
 frontend build inside the smoke build), plus the render-power suite's tests, on Windows under both
 Windows PowerShell 5.1 and PowerShell 7. Pull requests and pushes to milestone branches (`m0-scaffold`,
 ...) run on Linux and Windows. A branch's pushes skip while its open pull request is one GitHub can

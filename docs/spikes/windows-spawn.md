@@ -5,10 +5,11 @@ Code: `docs/spikes/windows-spawn/`, a standalone Cargo project with its own lock
 workspace excludes `docs/spikes`). A tool call that runs git must never pop a window, and stopping
 an agent must stop everything it started.
 
-**Status:** pending Windows verification. The design below was drawn on 2026-10-24 from sources
-and from runs on macOS; its Windows code paths compile but have never run on Windows. The
-windows-2025 results in [What the tests prove](#what-the-tests-prove) and the
-[manual checklist](#manual-checklist-the-users-windows-pc) are what turn it into a decision.
+**Status:** pending only the [manual checklist](#manual-checklist-the-users-windows-pc) on a real
+Windows desktop. Every test in [What the tests prove](#what-the-tests-prove) passed in CI on
+windows-2025 and ubuntu-24.04 ([run 40123051214](https://github.com/itscool2b/auracode/actions/runs/40123051214),
+2026-10-24, commit 1d77a29), including the hidden-console tests and the job object killing the
+tree when its owner dies, so the decision below stands.
 
 ## Decision
 
@@ -197,37 +198,33 @@ ci.yml's rust job runs it on windows-2025 and ubuntu-24.04 in steps: it builds t
 the unit tests, stages the integration tests beside their helpers
 (`.github/scripts/stage-spawn-spike.sh`) and runs them from that folder, which also proves the
 folder works on its own, and on Windows uploads the folder as the `windows-spawn-spike-<sha>`
-artifact for the [manual checklist](#manual-checklist-the-users-windows-pc). None of that has run:
-the workflows are pushed, but GitHub Actions is blocked for the account by a billing problem, so
-the first CI run on `m0-scaffold` ran no job. Until one gets through, the evidence is macOS only.
-The suite passes there (25 consecutive runs with no leftover processes when it was written, and
-one more run while this doc was revised), and the Windows paths type-check and lint clean
-(`cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings`), which proves that
-they compile, not that they work.
-
-When a CI run finishes, replace each pending cell with pass or fail and link the run here.
+artifact for the [manual checklist](#manual-checklist-the-users-windows-pc). The first CI run
+that got through, [run 40123051214](https://github.com/itscool2b/auracode/actions/runs/40123051214) on commit 1d77a29, passed every test on both
+runners: 18 on windows-2025 and 14 on ubuntu-24.04 (the Windows-only and Unix-only tests are
+marked n/a). The macOS column is from local runs (25 consecutive runs with no leftover processes
+when the suite was written).
 
 | Test | Proves | macOS result | ubuntu-24.04 result | windows-2025 result |
 |---|---|---|---|---|
-| `captures_git_version_from_stdout` | a hidden spawn runs real git and captures its stdout | pass | pending | pending |
-| `kill_tree_kills_the_grandchild` | a 60 s grandchild of a shell (`sh -c 'sleep 60 & echo $!; wait'`; `cmd /d /c ping -n 60 127.0.0.1`, found by parent pid) is gone within 5 s of `kill_tree` | pass | pending | pending |
-| `kill_tree_reaches_grandchildren_that_outlive_their_shell` | the same after the shell already exited (`&` without `wait`; `start /b`) | pass | pending | pending |
-| `dropping_the_handle_kills_the_tree` | dropping the handle without `kill_tree` kills the tree | pass | pending | pending |
-| `a_full_stderr_pipe_never_blocks_a_stdout_reader` | 1 MiB on stderr before any stdout: a stdout-only reader still gets its 1 MiB | pass | pending | pending |
-| `huge_output_is_capped_in_memory_but_read_to_the_end` | 9 MiB of output: memory capped at 4 MiB, every byte read | pass | pending | pending |
-| `stdin_is_piped_and_dropping_it_sends_end_of_file` | stdin is writable and closing it ends the child's input | pass | pending | pending |
-| `a_missing_program_is_an_error_not_a_panic` | `SpawnError::ProgramNotFound` | pass | pending | pending |
-| `a_missing_working_directory_is_an_error` | `SpawnError::InvalidCwd` | pass | pending | pending |
-| `spawning_outside_a_tokio_runtime_is_an_error` | `SpawnError::NoRuntime`, no panic | pass | pending | pending |
-| `the_child_runs_in_the_requested_directory` | `cwd` is honoured | pass | pending | pending |
-| `env_overrides_set_and_remove_variables_in_order` | set, remove an inherited variable (`PATH`), last entry wins | pass | pending | pending |
-| `kill_tree_after_the_child_exited_is_not_an_error` | reaped and unreaped exits, including the macOS `EPERM` case | pass | pending | pending |
-| `the_job_kills_the_tree_when_its_owner_dies_without_cleanup` | an owner that exits without running destructors takes its tree with it | n/a (Windows only) | n/a (Windows only) | pending |
-| `unix_has_no_kernel_cleanup_when_the_owner_crashes` | the gap: the tree survives its owner | pass | pending | n/a (Unix only) |
-| `windows_console::hidden_child_and_grandchild_share_a_windowless_console` | the hidden child has a console but no visible window, and its plain-spawned grandchild shares that console | n/a (Windows only) | n/a (Windows only) | pending |
-| `windows_console::gui_parent_hidden_spawn_shows_no_console_window` | the same from a GUI-subsystem parent, like the Tauri app | n/a (Windows only) | n/a (Windows only) | pending |
-| `windows_console::control_gui_parent_plain_spawn_gets_a_console_window` | control: without the flag, the child gets a console window | n/a (Windows only) | n/a (Windows only) | pending |
-| `windows_console::control_detached_process_pushes_the_window_down_to_the_grandchild` | control: with `DETACHED_PROCESS` the child has no console and its grandchild gets a window | n/a (Windows only) | n/a (Windows only) | pending |
+| `captures_git_version_from_stdout` | a hidden spawn runs real git and captures its stdout | pass | pass | pass |
+| `kill_tree_kills_the_grandchild` | a 60 s grandchild of a shell (`sh -c 'sleep 60 & echo $!; wait'`; `cmd /d /c ping -n 60 127.0.0.1`, found by parent pid) is gone within 5 s of `kill_tree` | pass | pass | pass |
+| `kill_tree_reaches_grandchildren_that_outlive_their_shell` | the same after the shell already exited (`&` without `wait`; `start /b`) | pass | pass | pass |
+| `dropping_the_handle_kills_the_tree` | dropping the handle without `kill_tree` kills the tree | pass | pass | pass |
+| `a_full_stderr_pipe_never_blocks_a_stdout_reader` | 1 MiB on stderr before any stdout: a stdout-only reader still gets its 1 MiB | pass | pass | pass |
+| `huge_output_is_capped_in_memory_but_read_to_the_end` | 9 MiB of output: memory capped at 4 MiB, every byte read | pass | pass | pass |
+| `stdin_is_piped_and_dropping_it_sends_end_of_file` | stdin is writable and closing it ends the child's input | pass | pass | pass |
+| `a_missing_program_is_an_error_not_a_panic` | `SpawnError::ProgramNotFound` | pass | pass | pass |
+| `a_missing_working_directory_is_an_error` | `SpawnError::InvalidCwd` | pass | pass | pass |
+| `spawning_outside_a_tokio_runtime_is_an_error` | `SpawnError::NoRuntime`, no panic | pass | pass | pass |
+| `the_child_runs_in_the_requested_directory` | `cwd` is honoured | pass | pass | pass |
+| `env_overrides_set_and_remove_variables_in_order` | set, remove an inherited variable (`PATH`), last entry wins | pass | pass | pass |
+| `kill_tree_after_the_child_exited_is_not_an_error` | reaped and unreaped exits, including the macOS `EPERM` case | pass | pass | pass |
+| `the_job_kills_the_tree_when_its_owner_dies_without_cleanup` | an owner that exits without running destructors takes its tree with it | n/a (Windows only) | n/a (Windows only) | pass |
+| `unix_has_no_kernel_cleanup_when_the_owner_crashes` | the gap: the tree survives its owner | pass | pass | n/a (Unix only) |
+| `windows_console::hidden_child_and_grandchild_share_a_windowless_console` | the hidden child has a console but no visible window, and its plain-spawned grandchild shares that console | n/a (Windows only) | n/a (Windows only) | pass |
+| `windows_console::gui_parent_hidden_spawn_shows_no_console_window` | the same from a GUI-subsystem parent, like the Tauri app | n/a (Windows only) | n/a (Windows only) | pass |
+| `windows_console::control_gui_parent_plain_spawn_gets_a_console_window` | control: without the flag, the child gets a console window | n/a (Windows only) | n/a (Windows only) | pass |
+| `windows_console::control_detached_process_pushes_the_window_down_to_the_grandchild` | control: with `DETACHED_PROCESS` the child has no console and its grandchild gets a window | n/a (Windows only) | n/a (Windows only) | pass |
 
 "No console window" is checked from inside each process: `GetConsoleProcessList` is above zero (it
 has a console), `GetConsoleWindow` returns no window or a hidden one, and the grandchild's console
@@ -246,8 +243,8 @@ its PATH, since the tests and `gui-host.exe` run real git.
 
 - **Without Rust, from CI's artifact.** Every Windows run of ci.yml's rust job uploads the artifact
   `windows-spawn-spike-<sha>` (`<sha>` is the full commit hash; uploaded even when the tests fail,
-  kept for 7 days). None exists yet, since GitHub Actions is blocked for the account by a billing
-  problem. Once one does, download it from the run's page or with
+  kept for 7 days). The first came from [run 40123051214](https://github.com/itscool2b/auracode/actions/runs/40123051214). Download one from
+  the run's page or with
   `gh run download <run id> --name windows-spawn-spike-<sha>`, and keep its three executables
   (`windows-spawn-tests.exe`, `spawn-probe.exe`, `gui-host.exe`) together in any folder; they need
   no Visual C++ Redistributable, and the README.txt beside them repeats step 1. Step 1 then runs
