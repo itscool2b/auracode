@@ -35,21 +35,28 @@ uri_encode() {
   jq -rn --arg value "$1" '$value | @uri'
 }
 
+# The pause between two tries at asking GitHub something: CI_GH_RETRY_DELAY seconds (default 5)
+# times the number of tries so far, so 5 s, then 10 s. Returns 1 without waiting once that number
+# reaches CI_GH_ATTEMPTS (default 3), since no try follows. The tests set the delay to 0. Shared by
+# gh_api and by scripts that ask again while GitHub works an answer out in the background, so the
+# same two settings tune both.
+retry_wait() { # <tries so far>
+  [ "$1" -lt "${CI_GH_ATTEMPTS:-3}" ] || return 1
+  sleep $(($1 * ${CI_GH_RETRY_DELAY:-5}))
+}
+
 # `gh api <path>` with retries. The API fails transiently now and then, and a run that gives up on
-# the first error decides nothing. Waits CI_GH_RETRY_DELAY seconds times the attempt number between
-# CI_GH_ATTEMPTS tries (the tests set the delay to 0). gh prints its own errors on stderr.
+# the first error decides nothing. Tries as often, and waits as long, as retry_wait says. gh prints
+# its own errors on stderr.
 gh_api() {
-  local attempts=${CI_GH_ATTEMPTS:-3} delay=${CI_GH_RETRY_DELAY:-5} attempt=1 body
+  local tries=0 body
   while :; do
     if body="$(gh api "$1")"; then
       printf '%s\n' "$body"
       return 0
     fi
-    if [ "$attempt" -ge "$attempts" ]; then
-      return 1
-    fi
-    sleep $((attempt * delay))
-    attempt=$((attempt + 1))
+    tries=$((tries + 1))
+    retry_wait "$tries" || return 1
   done
 }
 

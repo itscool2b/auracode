@@ -1,20 +1,40 @@
 # Continuous integration: lint, typecheck and tests for the TypeScript packages; fmt, clippy and
-# tests for the Rust workspace; the generated-bindings check; the M0 spikes; and a smoke run of the
-# real app in WebKitGTK and WebView2.
+# tests for the Rust workspace; the generated-bindings check; the M0 spikes and the check of their
+# docs; and a smoke run of the real app in WebKitGTK and WebView2.
 #
-# What runs when. The repo is private, so hosted-runner minutes are billed with multipliers (Linux
-# 1x, Windows 2x, macOS 10x).
+# What runs when. The repo is private, so runner minutes come out of the Free plan's 2,000 included
+# minutes a month, billed with multipliers (Linux 1x, Windows 2x, macOS 10x).
 # - Pull requests: Linux and Windows.
 # - Pushes to milestone branches (m0-scaffold, m1a-core-acp, ...): Linux and Windows. This is how a
 #   branch gets its Windows and Linux results before its pull request exists, since a PR is opened
 #   only once the work is finished and tested, and Windows cannot be tested locally. Once the branch
-#   has an open pull request its pushes skip (the `plan` job checks): the PR's run covers them.
+#   has an open pull request, its pushes skip (the `plan` job checks) as long as GitHub can merge
+#   the PR: the PR's run covers them. GitHub runs no `pull_request` workflow while a PR has a
+#   merge conflict, so until that is resolved the pushes run here, or they would get no results.
 # - Pushes to main and manual runs: Linux, Windows and macOS.
-# - Schedule, for breakage that arrives without a commit (a new Rust stable with new clippy lints, a
-#   runner image update): Linux every day but Monday, all three on Mondays. These runs do not
-#   compare commits, because drift needs no commit and every commit on main already had its push run.
-# macOS never runs per PR or per branch push: the developer verifies macOS locally before opening
-# each PR, so those runs would mostly repeat that check at ten times the price.
+# - Mondays, for breakage that arrives without a commit (a new Rust stable with new clippy lints, a
+#   WebKitGTK or runner image update): the rust job on Linux, and only clippy on Windows, the check
+#   such breakage hits first; the rest of the Windows job would more than double the run's price.
+#   The lint and powershell jobs skip it: their checks rarely break without a commit, and the next
+#   push runs them anyway.
+# macOS never runs per PR, per branch push or on the schedule: the developer verifies macOS locally
+# before opening each PR, so those runs would mostly repeat that check at ten times the price.
+#
+# Cost in included minutes. Each job is rounded up to whole minutes, then multiplied. Warm means a
+# usable Rust cache; cold means none: after a new Rust stable or lockfile change, after a week with
+# no run, and for pull requests until main has saved one (they can read only main's). The ceiling
+# is every job running to its timeout. Per job: plan 1, lint 4-6, powershell 2-4, rust on Linux
+# 10-30, on Windows 40-100 (clippy alone 10-25), on macOS 40-110. Per event, warm to cold:
+# - milestone-branch push: 60-140 (ceiling 265)
+# - pull request, when opened and on each push to it: 55-140 (ceiling 260)
+# - main push or manual run: 100-250 (ceiling 660)
+# - weekly run: 20-55 (ceiling 225). An idle month is four or five of these plus Build's nightly
+#   plan job (about 30): about 120-270 in all, the top only if every weekly run starts cold.
+#
+# Runner labels name their OS version (ubuntu-24.04, windows-2025, macos-26); lint-workflows.sh
+# rejects the -latest labels. GitHub moves a -latest label to a new OS over weeks, during which the
+# same commit can land on either image, and the Rust cache key does not name the image, so each
+# image would restore the other's build. Move a label on purpose, when GitHub deprecates its image.
 #
 # Manual runs (Actions > CI > Run workflow, or `gh workflow run ci.yml --ref <branch>`) work only once
 # this file is on the default branch: GitHub ignores workflow_dispatch for a workflow that exists
@@ -30,11 +50,9 @@ on:
       - "m[0-9]*"
   workflow_dispatch:
   schedule:
-    # Minute 17 avoids the top of the hour, when GitHub's scheduler is busiest and delays or drops
-    # runs. Jobs below compare `github.event.schedule` with these exact strings, and
-    # .github/scripts/lint-workflows.sh fails if a comparison names a cron missing here.
-    - cron: "17 6 * * 0,2-6" # daily drift check: Linux
-    - cron: "17 6 * * 1" # weekly drift check: Linux, Windows, macOS
+    # The weekly run; see the top of this file. Minute 17 avoids the top of the hour, when GitHub's
+    # scheduler is busiest and delays or drops runs. Jobs tell it apart by `github.event_name`.
+    - cron: "17 6 * * 1"
 
 permissions:
   contents: read
@@ -61,19 +79,20 @@ defaults:
     shell: bash
 
 jobs:
-  # Pushes to milestone branches only: skip the whole run while the branch has an open pull
-  # request (.github/scripts/check-open-pr.sh). On every other event this job is skipped, and the
-  # jobs that need it still run because their conditions start with `!cancelled()`.
+  # Pushes to milestone branches only: skip the whole run when an open pull request from the branch
+  # gets a run of its own for this commit, as it does unless the pull request has a merge conflict
+  # (.github/scripts/check-open-pr.sh). On every other event this job is skipped, and the jobs that
+  # need it still run because their conditions start with `!cancelled()`.
   plan:
     name: plan
     if: github.event_name == 'push' && github.ref != 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read # check out the script
-      pull-requests: read # list the branch's open pull requests
+      pull-requests: read # find the branch's open pull request and whether GitHub can merge it
     outputs:
-      pr_open: ${{ steps.pr.outputs.open }}
+      covered_by_pr: ${{ steps.pr.outputs.covered }}
     steps:
       - name: Check out the CI scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,7 +100,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: .github/scripts
 
-      - name: Look for an open pull request from this branch
+      - name: Look for an open pull request whose run covers this push
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
@@ -91,8 +110,9 @@ jobs:
   lint:
     name: lint
     needs: plan
-    if: ${{ !cancelled() && needs.plan.result != 'failure' && needs.plan.outputs.pr_open != 'true' }}
-    runs-on: ubuntu-latest
+    # Not on the weekly run; see the top of this file.
+    if: ${{ !cancelled() && github.event_name != 'schedule' && needs.plan.result != 'failure' && needs.plan.outputs.covered_by_pr != 'true' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Setup steps stop the job on failure. The checks after them carry `!cancelled()` so a failing
     # check does not hide the others (one run reports every problem), and they wait for
@@ -145,7 +165,14 @@ jobs:
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: cargo fmt --all --check
 
-      # Every action pinned to a commit, and every schedule comparison naming a scheduled cron.
+      # The spike docs against the code, lockfiles and generated bindings they cite
+      # (docs/spikes/doc-check). It only reads the checkout, so nothing has to be built first.
+      - name: Check the spike docs
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: cargo test --manifest-path docs/spikes/doc-check/Cargo.toml --locked
+
+      # Every action pinned to a commit, every runner label naming an OS version, and every
+      # schedule comparison naming a scheduled cron.
       - name: Check the workflows
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bash .github/scripts/lint-workflows.sh
@@ -158,17 +185,50 @@ jobs:
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bash .github/scripts/test.sh
 
+  # The render-power spike's Windows suite (docs/spikes/render-power) is plain PowerShell that has
+  # to run under both Windows PowerShell 5.1, which every Windows PC has, and PowerShell 7. Its unit
+  # tests need no build, so they get a job of their own: no Rust failure, setup step or timeout can
+  # skip them, and they report within minutes.
+  powershell:
+    name: powershell (windows-2025)
+    needs: plan
+    # Not on the weekly run; see the top of this file.
+    if: ${{ !cancelled() && github.event_name != 'schedule' && needs.plan.result != 'failure' && needs.plan.outputs.covered_by_pr != 'true' }}
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      # The scripts reach the PC as raw downloads from GitHub, with the repository's LF line
+      # endings, so test those bytes rather than Git for Windows' CRLF conversion of them.
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
+
+      - name: Check out
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: docs/spikes/render-power
+
+      # `-File`, so the script's own exit code (1 when a test fails) fails the step.
+      - name: Test the render-power suite (Windows PowerShell 5.1)
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File docs/spikes/render-power/test-render-power.ps1
+
+      - name: Test the render-power suite (PowerShell 7)
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: pwsh -NoProfile -File docs/spikes/render-power/test-render-power.ps1
+
   rust:
     name: rust (${{ matrix.os }})
     needs: plan
-    if: ${{ !cancelled() && needs.plan.result != 'failure' && needs.plan.outputs.pr_open != 'true' }}
+    if: ${{ !cancelled() && needs.plan.result != 'failure' && needs.plan.outputs.covered_by_pr != 'true' }}
     strategy:
       # Let Linux finish when Windows fails (and the reverse): the developer cannot reproduce
       # Windows locally, so every result from a run is worth having.
       fail-fast: false
       matrix:
-        # Linux alone on the daily drift check; see the top of this file.
-        os: ${{ fromJSON(github.event.schedule == '17 6 * * 0,2-6' && '["ubuntu-latest"]' || '["ubuntu-latest","windows-latest"]') }}
+        os:
+          - ubuntu-24.04
+          - windows-2025
     runs-on: ${{ matrix.os }}
     # A cold Windows run (two vCPUs for private repos) compiles the workspace for clippy, for the
     # tests and for the smoke build; 75 minutes leaves room for that.
@@ -208,11 +268,14 @@ jobs:
           toolchain: stable
           components: clippy, rustfmt
 
-      # Pushes (main and milestone branches) write the cache; before a branch's first merge, main
-      # has none to offer it. Pull requests restore main's entries but never save their own, so PR
-      # runs cannot evict main's from the repository's 10 GB quota. Saving after a failure keeps
-      # the dependency cache current when a new toolchain breaks the nightly. The last setup step,
-      # so the checks below wait for it.
+      # Pushes (main and milestone branches) and main's weekly and manual runs write the cache;
+      # before a branch's first merge, main has none to offer it. Pull requests restore main's
+      # entries but never save their own, so PR runs cannot evict main's from the repository's
+      # 10 GB quota. The weekly run's Windows leg only reads: it runs clippy alone, and rust-cache
+      # never rewrites an entry it restored exactly, so a clippy-only save would leave every later
+      # Windows run with the same key rebuilding the tests, the spike and the smoke build. Saving
+      # after a failure keeps the dependency cache current when a new toolchain breaks the build.
+      # The last setup step, so the checks below wait for it.
       - name: Cache Rust build
         id: ready
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -221,7 +284,7 @@ jobs:
             . -> target
             docs/spikes/windows-spawn -> target
             docs/spikes/claude-control -> target
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'push' }}
+          save-if: ${{ (github.ref == 'refs/heads/main' || github.event_name == 'push') && (github.event_name != 'schedule' || runner.os != 'Windows') }}
           cache-on-failure: true
 
       # `--locked` fails the run when Cargo.lock is stale instead of silently re-resolving it.
@@ -231,17 +294,25 @@ jobs:
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
+      # The weekly run's Windows leg ends here, after clippy; see the top of this file. Every check
+      # below waits for this step rather than for `steps.ready`, so that leg skips them all, while
+      # on every other run a failed clippy still hides nothing.
+      - name: Continue after clippy (not on the weekly Windows run)
+        id: full
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' && (github.event_name != 'schedule' || runner.os != 'Windows') }}
+        run: echo "Running the remaining checks on $RUNNER_OS."
+
       # `--no-fail-fast`: cargo otherwise stops at the first failing test binary, hiding failures in
       # the remaining crates (the expensive kind to discover one push at a time on Windows).
       - name: Test
-        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.full.outcome == 'success' }}
         run: cargo test --workspace --locked --no-fail-fast
 
       # Regenerates apps/desktop/src/bindings.ts and fails if the committed file differs. Running
       # on every OS also catches commands that only exist behind a `#[cfg]`, which would make the
       # shared TypeScript file depend on the platform that generated it.
       - name: Check generated TypeScript bindings
-        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.full.outcome == 'success' }}
         run: |
           log="$(mktemp)"
           cargo test --locked -p auracode-desktop export_bindings -- --color never | tee "$log"
@@ -267,7 +338,7 @@ jobs:
       # Redistributable on that PC.
       - name: Build the Windows spawning spike
         id: spawn-build
-        if: ${{ !cancelled() && steps.ready.outcome == 'success' && runner.os != 'macOS' }}
+        if: ${{ !cancelled() && steps.full.outcome == 'success' && runner.os != 'macOS' }}
         timeout-minutes: 20
         env: &spawn_env
           RUSTFLAGS: ${{ runner.os == 'Windows' && '-C target-feature=+crt-static' || '' }}
@@ -315,8 +386,16 @@ jobs:
       # Compile only, never run: running it would drive a real Claude Code session, which needs
       # the CLI, an account and quota, none of which belong in CI.
       - name: Build the Claude control spike (compile only)
-        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.full.outcome == 'success' }}
         run: cargo build --manifest-path docs/spikes/claude-control/Cargo.toml --locked
+
+      # Its unit tests do run: the test harness, never the spike's `main`. They feed the framing,
+      # protocol and redaction code canned input and stand /bin/sh in for claude, so they need
+      # neither the CLI nor the network. Linux only: the logic is the same everywhere, and the
+      # process tests are Unix-only.
+      - name: Test the Claude control spike (unit tests)
+        if: ${{ !cancelled() && steps.full.outcome == 'success' && runner.os == 'Linux' }}
+        run: cargo test --manifest-path docs/spikes/claude-control/Cargo.toml --locked
 
       # The smoke run, on Windows and Linux: the app with its frontend embedded streams through the
       # typed command + Channel path into a real webview (WebView2; WebKitGTK under Xvfb) and
@@ -324,7 +403,7 @@ jobs:
       # TypeScript error (the lint job reports those) cannot skip the Rust checks above.
       - name: Set up pnpm (smoke)
         id: pnpm
-        if: ${{ !cancelled() && steps.ready.outcome == 'success' && runner.os != 'macOS' }}
+        if: ${{ !cancelled() && steps.full.outcome == 'success' && runner.os != 'macOS' }}
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node.js (smoke)
@@ -364,11 +443,22 @@ jobs:
             bash .github/scripts/run-smoke.sh target/debug/auracode.exe
           fi
 
+      # A cancelled job (superseded by a newer push, or out of time) stops half-built. rust-cache's
+      # post step saves when the job succeeded or when CACHE_ON_FAILURE, which it exports from
+      # `cache-on-failure`, is true, so it would save that half-built target. Later runs with the
+      # same key would restore it, rebuild the rest and never save the whole, since rust-cache does
+      # not rewrite an entry it matched exactly. Turning the variable off skips that save.
+      - name: Keep a cancelled build out of the cache
+        if: cancelled()
+        run: echo "CACHE_ON_FAILURE=false" >> "$GITHUB_ENV"
+
   rust-macos:
-    name: rust (macos-latest)
-    # Main, manual runs and the weekly schedule only: see the top of this file. Never skipped as a
-    # duplicate, since the `plan` job only runs for milestone-branch pushes, which this job ignores.
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' || github.event.schedule == '17 6 * * 1'
-    runs-on: macos-latest
-    timeout-minutes: 60
+    name: rust (macos-26)
+    # Main pushes and manual runs only: see the top of this file. Never skipped as a duplicate,
+    # since the `plan` job only runs for milestone-branch pushes, which this job ignores.
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    # A cold run (clippy, then the tests' full build) takes about 15 minutes on the macOS runner
+    # (3 cores). 40 leaves room for a slow one and caps a hung run at 400 included minutes.
+    timeout-minutes: 40
     steps: *rust_steps

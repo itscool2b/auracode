@@ -20,6 +20,17 @@
 # - Manual runs (Actions > Build > Run workflow, or `gh workflow run build.yml --ref <branch>`) build
 #   all three, but only once this file is on the default branch: GitHub ignores workflow_dispatch
 #   for a workflow that exists only on other branches.
+#
+# In included minutes (each job rounded up to whole minutes, then multiplied; warm means main's Rust
+# cache is usable, cold means it is not, as after a new Rust stable; the ceiling is every job
+# running to its timeout), a bundle costs 70-180 on macOS, 30-100 on Windows and 10-30 on Linux.
+# Per event, warm to cold:
+# - main push or manual run: 110-310 (ceiling 720)
+# - nightly: 1 (ceiling 5) when main's head has its bundles or a nightly already tried it, as on
+#   every idle night; otherwise, at most once per commit, 1 plus a main push's worth
+# - milestone-branch push with [bundle]: 40-130 (ceiling 270); without it, nothing
+# - pull requests and CI's weekly run: nothing, since neither starts this workflow
+# Runner labels name their OS version, as in ci.yml (its header says why).
 name: Build
 
 on:
@@ -30,9 +41,9 @@ on:
       - "m[0-9]*"
   workflow_dispatch:
   schedule:
-    # Nightly, after CI's run. Off the top of the hour (GitHub's scheduler delays or drops runs
-    # there), and outside the 14:00 to 24:00 UTC brownout windows GitHub has announced for
-    # ubuntu-22.04 in March and April 2027.
+    # Nightly. Off the top of the hour (GitHub's scheduler delays or drops runs there), and outside
+    # the 14:00 to 24:00 UTC brownout windows GitHub has announced for ubuntu-22.04 in March and
+    # April 2027.
     - cron: "43 6 * * *"
 
 permissions:
@@ -53,7 +64,7 @@ jobs:
   plan:
     name: plan
     if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read # check out the script
@@ -96,14 +107,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Milestone branches skip macOS; see the top of this file. ubuntu-22.04 rather than
-        # ubuntu-latest: binaries linked against an older glibc run on more distributions, which
-        # matters most for the AppImage. GitHub deprecated this image on 2026-09-17 and retires it
-        # on 2027-04-17; move the Linux build (for example into a Debian 12 or Ubuntu 22.04
-        # container) before then.
-        os: ${{ fromJSON((github.event_name == 'push' && github.ref != 'refs/heads/main') && '["windows-latest","ubuntu-22.04"]' || '["macos-latest","windows-latest","ubuntu-22.04"]') }}
+        # Milestone branches skip macOS; see the top of this file. Linux builds on ubuntu-22.04, not
+        # on ubuntu-24.04 like CI: a binary needs at least the glibc it was linked against, which
+        # matters most for the AppImage, and Tauri's AppImage guide says to build on the oldest
+        # system you support (its example is Ubuntu 22.04). GitHub deprecated this image on
+        # 2026-09-17 and retires it on 2027-04-17; move the Linux build (for example into a Debian
+        # 12 or Ubuntu 22.04 container) before then.
+        os: ${{ fromJSON((github.event_name == 'push' && github.ref != 'refs/heads/main') && '["windows-2025","ubuntu-22.04"]' || '["macos-26","windows-2025","ubuntu-22.04"]') }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    # Release builds: a cold one takes about 20 minutes on the macOS runner (3 cores) and two to
+    # three times that on Windows (2 vCPUs). macOS gets the shorter limit, which caps a hung build
+    # at 450 included minutes.
+    timeout-minutes: ${{ startsWith(matrix.os, 'macos') && 45 || 90 }}
     steps:
       # Same reason as in CI: keep the bytes that go into the bundle identical to the repository.
       - name: Keep LF line endings (Windows)
@@ -162,16 +177,20 @@ jobs:
       - name: Build the frontend
         run: pnpm --filter @auracode/desktop build
 
-      # Ad-hoc ("-") is not a real signature: no identity, no notarization, and Gatekeeper still
-      # treats the app as unsigned. Apple Silicon refuses to launch a downloaded bundle with no
-      # signature at all ("is damaged"), though, and this environment variable also overrides any
-      # local signing identity set in tauri.conf.json, which does not exist on CI runners.
+      # tauri.conf.json names no signing identity: `pnpm bundle` (apps/desktop/scripts/bundle.mjs)
+      # chooses one for each build and hands it to `tauri build` as APPLE_SIGNING_IDENTITY. A runner
+      # has no identity, so the job chooses ad hoc ("-") itself, which bundle.mjs passes on as it
+      # is instead of searching the keychain and warning. Ad hoc is not a real signature (no
+      # identity, no notarization, and Gatekeeper still treats the app as unsigned), but Apple
+      # Silicon refuses to launch a downloaded bundle with no signature at all ("is damaged").
       - name: Use an ad-hoc signature (macOS)
         if: runner.os == 'macOS'
         run: echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
 
+      # Through `pnpm bundle`, the entry point local release builds use, so CI builds the same way
+      # and exercises bundle.mjs on every OS. On Windows and Linux it is plain `tauri build`.
       - name: Build unsigned bundles
-        run: pnpm --filter @auracode/desktop tauri build
+        run: pnpm --filter @auracode/desktop bundle
 
       - name: Name the artifact
         id: artifact
@@ -201,3 +220,10 @@ jobs:
           compression-level: 0
           # A re-run of the job uploads again under the same name.
           overwrite: true
+
+      # A build cancelled by a newer one for the same branch and OS (see `concurrency` above), or by
+      # its timeout, stops half-built, and rust-cache would save it anyway because of
+      # `cache-on-failure`. Same guard and reasons as at the end of ci.yml's rust job.
+      - name: Keep a cancelled build out of the cache
+        if: cancelled()
+        run: echo "CACHE_ON_FAILURE=false" >> "$GITHUB_ENV"

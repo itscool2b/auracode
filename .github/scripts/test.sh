@@ -6,6 +6,8 @@
 # set one up gets a `gh` that fails), apps and cargo builds are small fakes, and every test runs in
 # a subshell inside its own temporary folder.
 set -uo pipefail
+# The retry settings (lib.sh) come from the tests alone, never from the caller's environment.
+unset CI_GH_ATTEMPTS CI_GH_RETRY_DELAY
 
 scripts="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REAL_JQ="$(command -v jq)" || {
@@ -32,13 +34,14 @@ fail() {
 }
 
 # run <script> [args...]: runs a script from this directory with the test's fakes first on PATH.
-# Sets $status; stdout and stderr go to $tmp/out, step outputs to $tmp/github_output.
+# Sets $status; stdout and stderr go to $tmp/out, step outputs to $tmp/github_output. Retries do
+# not pause unless the test sets CI_GH_RETRY_DELAY (and fakes sleep, so nothing really waits).
 run() {
   local script=$1
   shift
   : >"$tmp/github_output"
-  PATH="$tmp/bin:$PATH" GITHUB_OUTPUT="$tmp/github_output" CI_GH_RETRY_DELAY=0 \
-    bash "$scripts/$script" "$@" >"$tmp/out" 2>&1
+  PATH="$tmp/bin:$PATH" GITHUB_OUTPUT="$tmp/github_output" \
+    CI_GH_RETRY_DELAY="${CI_GH_RETRY_DELAY:-0}" bash "$scripts/$script" "$@" >"$tmp/out" 2>&1
   status=$?
 }
 
@@ -80,8 +83,9 @@ listing() {
 # --- Fakes. ------------------------------------------------------------------------------------
 
 # A `gh` that answers `gh api <path>` from $tmp/routes, one "glob<TAB>body file<TAB>exit code" per
-# line (first match wins; exit code "once:N" fails with N on the first call, then answers). Every
-# call is logged to $tmp/gh.log.
+# line (first match wins). Exit code "once:N" fails with N on the first call, then answers; "once"
+# answers the first call only and leaves later calls to the next matching route, so several routes
+# for one path answer one call each, in order. Every call is logged to $tmp/gh.log.
 fake_gh() {
   : >"$tmp/routes"
   : >"$tmp/gh.log"
@@ -97,6 +101,13 @@ while IFS=$'\t' read -r pattern body code; do
   case $2 in
   $pattern)
     case $code in
+    once)
+      if [ -e "$body.used" ]; then
+        continue
+      fi
+      : >"$body.used"
+      code=0
+      ;;
     once:*)
       if [ ! -e "$body.failed" ]; then
         : >"$body.failed"
@@ -131,6 +142,21 @@ route() { # <glob> <body> [exit code]
 
 gh_calls() {
   grep -c '' "$tmp/gh.log" || true
+}
+
+# A `sleep` that returns at once and logs how long it was asked to wait to $tmp/sleep.log.
+fake_sleep() {
+  : >"$tmp/sleep.log"
+  cat >"$tmp/bin/sleep" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$FAKE_SLEEP_LOG"
+EOF
+  chmod +x "$tmp/bin/sleep"
+  export FAKE_SLEEP_LOG="$tmp/sleep.log"
+}
+
+waits() { # the waits fake_sleep logged, space-separated
+  tr '\n' ' ' <"$tmp/sleep.log" | sed 's/ $//'
 }
 
 # Git Bash's cygpath, mapping C:\fake\... to and from $FAKE_ROOT/....
@@ -249,17 +275,66 @@ test_lint_reads_crlf_files() {
 test_lint_checks_schedule_comparisons_against_the_crons() {
   workflow s.yml "on:
   schedule:
-    - cron: \"17 6 * * 0,2-6\"
-    - cron: '17 6 * * 1' # weekly
+    - cron: \"17 6 * * 1\"
+    - cron: '43 6 * * *' # nightly
 jobs:
   a:
-    if: github.event.schedule == '17 6 * * 1'
-    runs-on: \${{ github.event.schedule != '17 6 * * 0,2-6' && 'x' || 'y' }}
+    if: github.event.schedule == '43 6 * * *'
+    runs-on: \${{ github.event.schedule != '17 6 * * 1' && 'x' || 'y' }}
   b:
     if: github.event.schedule == '17 7 * * 1'"
   run lint-workflows.sh "$tmp/s.yml"
   assert_status 1
   assert_out "line=10::github.event.schedule is compared with '17 7 * * 1', but this file schedules no such cron"
+  assert_out "1 problem(s)"
+}
+
+test_lint_rejects_floating_runner_labels() {
+  workflow labels.yml "# Comments may say ubuntu-latest: they explain the choice.
+jobs:
+  a:
+    runs-on: ubuntu-latest
+  b:
+    runs-on: [self-hosted, windows-latest]
+  c:
+    strategy:
+      matrix:
+        os: \${{ fromJSON(github.event_name == 'push' && '[\"macos-latest\",\"ubuntu-slim\"]' || '[]') }}
+  d:
+    runs-on: macos-latest-xlarge # bigger, and still floating
+  e:
+    runs-on: ubuntu-24.04 # rather than ubuntu-latest
+    steps:
+      - run: echo \"\${#PATH}\" windows-latest
+      - uses: owner/ubuntu-latest-tools@$SHA # v1.0.0
+  f:
+    runs-on: [\"windows-2025\", macos-26, ubuntu-22.04-arm, my.ubuntu-latest, xubuntu-latest]
+  g:
+    runs-on: Ubuntu-Latest"
+  run lint-workflows.sh "$tmp/labels.yml"
+  assert_status 1
+  assert_out "::error file=$tmp/labels.yml,line=4::ubuntu-latest is a runner label GitHub moves to new OS versions on its own schedule: name the version instead"
+  assert_out "line=6::windows-latest is a runner label"
+  assert_out "line=10::macos-latest is a runner label"
+  assert_out "line=10::ubuntu-slim is a runner label"
+  assert_out "line=12::macos-latest-xlarge is a runner label"
+  # A # that does not start a comment (\${#PATH}) does not end the scan.
+  assert_out "line=16::windows-latest is a runner label"
+  # GitHub matches labels without regard to case.
+  assert_out "line=21::Ubuntu-Latest is a runner label"
+  refute_out "line=1::"
+  refute_out "line=14::"
+  refute_out "line=17::"
+  refute_out "line=19::"
+  assert_out "7 problem(s) in 1 workflow file(s)."
+}
+
+test_lint_finds_floating_labels_in_crlf_files() {
+  printf 'jobs:\r\n  a:\r\n    runs-on: windows-latest\r\n    # was macos-latest\r\n' >"$tmp/crlf.yml"
+  run lint-workflows.sh "$tmp/crlf.yml"
+  assert_status 1
+  assert_out "line=3::windows-latest is a runner label"
+  refute_out "line=4::"
   assert_out "1 problem(s)"
 }
 
@@ -283,27 +358,144 @@ test_lint_fails_on_a_missing_file() {
 test_lint_passes_this_repositorys_workflows() {
   run lint-workflows.sh
   assert_status 0
-  assert_out "every action is pinned"
+  assert_out "every action is pinned, no runner label floats"
+}
+
+# The cost estimate at the top of ci.yml counts one scheduled run a week. The daily schedule it
+# replaced cost several hundred included minutes a month without a single push.
+test_ci_runs_on_schedule_once_a_week() {
+  local crons
+  crons="$(sed -n -E "s/^[[:space:]]*-[[:space:]]*cron:[[:space:]]*[\"']([^\"']*)[\"'].*/\\1/p" \
+    "$scripts/../workflows/ci.yml" | tr -d '\r')"
+  assert_eq 1 "$(printf '%s\n' "$crons" | grep -c .)" "the number of crons in ci.yml"
+  # minute, hour, day of month, month, day of week: one day of the week, every week.
+  if ! printf '%s\n' "$crons" | grep -Eq '^[0-9]+ [0-9]+ \* \* [0-6]$'; then
+    fail "ci.yml's schedule \"$crons\" does not run on one day a week"
+  fi
 }
 
 # --- check-open-pr.sh ----------------------------------------------------------------------------
 
 open_pr_env() {
-  export GITHUB_REPOSITORY=itscool2b/auracode GITHUB_REPOSITORY_OWNER=itscool2b BRANCH=m0-scaffold
+  export GITHUB_REPOSITORY=itscool2b/auracode GITHUB_REPOSITORY_OWNER=itscool2b BRANCH=m0-scaffold \
+    GITHUB_SHA="$SHA"
   fake_gh
 }
 
-# The route is the exact request, so these tests also pin the query: open PRs whose head is
-# owner:branch, URL-encoded.
+# The routes are the exact requests, so these tests also pin them: the open PRs whose head is
+# owner:branch, URL-encoded, and then the one pull request.
 PULLS='repos/itscool2b/auracode/pulls?state=open&head=itscool2b%3Am0-scaffold&per_page=1'
+PULL_7='repos/itscool2b/auracode/pulls/7'
+LISTED_7='[{"number":7,"html_url":"https://github.com/itscool2b/auracode/pull/7"}]'
+PR_7='#7 (https://github.com/itscool2b/auracode/pull/7)'
+EARLIER=fedcba9876543210fedcba9876543210fedcba98 # the branch's commit before the push ($SHA)
 
-test_open_pr_found_means_the_push_skips() {
+a_pull() { # <state> <head commit> <mergeable as JSON>
+  printf '{"number":7,"state":"%s","head":{"ref":"m0-scaffold","sha":"%s"},"mergeable":%s,"html_url":"https://github.com/itscool2b/auracode/pull/7"}' \
+    "$1" "$2" "$3"
+}
+
+test_open_pr_that_github_can_merge_covers_the_push() {
   open_pr_env
-  route "$PULLS" '[{"number":7,"html_url":"https://github.com/itscool2b/auracode/pull/7"}]'
+  route "$PULLS" "$LISTED_7"
+  route "$PULL_7" "$(a_pull open "$SHA" true)"
   run check-open-pr.sh
   assert_status 0
-  assert_step_output open true
-  assert_out "m0-scaffold has open pull request #7 (https://github.com/itscool2b/auracode/pull/7)"
+  assert_step_output covered true
+  assert_out "::notice::m0-scaffold has open pull request $PR_7, which GitHub can merge: its run covers this commit, so this push skips CI."
+  assert_eq 2 "$(gh_calls)" "the number of API calls"
+}
+
+# GitHub runs no pull_request workflow while a pull request has a merge conflict, so skipping the
+# push too would leave it with no results at all.
+test_open_pr_with_a_merge_conflict_leaves_the_push_to_run() {
+  open_pr_env
+  route "$PULLS" "$LISTED_7"
+  route "$PULL_7" "$(a_pull open "$SHA" false)"
+  run check-open-pr.sh
+  assert_status 0
+  assert_step_output covered false
+  assert_out "::notice::m0-scaffold has open pull request $PR_7, but it has a merge conflict with its base branch: GitHub runs no pull request workflow until that is resolved, so this push runs CI."
+  assert_eq 2 "$(gh_calls)" "the number of API calls"
+}
+
+# Right after a push, GitHub reports mergeability as null while it works it out.
+test_open_pr_asks_again_while_github_works_out_mergeability() {
+  open_pr_env
+  route "$PULLS" "$LISTED_7"
+  route "$PULL_7" "$(a_pull open "$SHA" null)" once
+  route "$PULL_7" "$(a_pull open "$SHA" true)"
+  run check-open-pr.sh
+  assert_status 0
+  assert_step_output covered true
+  assert_eq 3 "$(gh_calls)" "the number of API calls"
+}
+
+# Asking again at once would find GitHub still busy, so the pauses grow as gh_api's do.
+test_open_pr_pauses_longer_each_time_it_asks_again() {
+  open_pr_env
+  fake_sleep
+  export CI_GH_RETRY_DELAY=5
+  route "$PULLS" "$LISTED_7"
+  route "$PULL_7" "$(a_pull open "$SHA" null)" once
+  route "$PULL_7" "$(a_pull open "$SHA" null)" once
+  route "$PULL_7" "$(a_pull open "$SHA" false)"
+  run check-open-pr.sh
+  assert_status 0
+  assert_step_output covered false
+  assert_out "but it has a merge conflict"
+  assert_eq "5 10" "$(waits)" "the pauses between tries, in seconds"
+}
+
+test_open_pr_fails_open_when_mergeability_stays_unknown() {
+  open_pr_env
+  fake_sleep
+  route "$PULLS" "$LISTED_7"
+  route "$PULL_7" "$(a_pull open "$SHA" null)"
+  run check-open-pr.sh
+  assert_status 0
+  assert_step_output covered false
+  assert_out "::warning::GitHub had still not worked out whether pull request $PR_7 can be merged after 3 tries; running CI anyway."
+  assert_eq 4 "$(gh_calls)" "the number of API calls"
+  # None after the last try, where it would only hold the result up.
+  assert_eq "0 0" "$(waits)" "the pauses between tries"
+}
+
+# Mergeability worked out for the branch's previous commit says nothing about the pushed one, which
+# may be the commit that brings the conflict.
+test_open_pr_waits_for_the_pull_request_to_reach_the_push() {
+  open_pr_env
+  route "$PULLS" "$LISTED_7"
+  route "$PULL_7" "$(a_pull open "$EARLIER" true)" once
+  route "$PULL_7" "$(a_pull open "$SHA" false)"
+  run check-open-pr.sh
+  assert_status 0
+  assert_step_output covered false
+  assert_out "but it has a merge conflict"
+  assert_eq 3 "$(gh_calls)" "the number of API calls"
+}
+
+# Also what a re-run of an older push finds once the branch has moved on.
+test_open_pr_fails_open_when_the_pull_request_never_reaches_the_push() {
+  open_pr_env
+  route "$PULLS" "$LISTED_7"
+  route "$PULL_7" "$(a_pull open "$EARLIER" true)"
+  run check-open-pr.sh
+  assert_status 0
+  assert_step_output covered false
+  assert_out "::warning::Pull request $PR_7 was still not at this push's commit ${SHA:0:7} after 3 tries (GitHub has not caught up with the push, or the branch has moved on since); running CI anyway."
+  assert_eq 4 "$(gh_calls)" "the number of API calls"
+}
+
+test_open_pr_closed_meanwhile_leaves_the_push_to_run() {
+  open_pr_env
+  route "$PULLS" "$LISTED_7"
+  route "$PULL_7" "$(a_pull closed "$SHA" true)"
+  run check-open-pr.sh
+  assert_status 0
+  assert_step_output covered false
+  assert_out "::notice::Pull request $PR_7 is no longer open, so this push runs CI."
+  assert_eq 2 "$(gh_calls)" "the number of API calls"
 }
 
 test_open_pr_none_means_the_push_runs() {
@@ -311,27 +503,43 @@ test_open_pr_none_means_the_push_runs() {
   route "$PULLS" '[]'
   run check-open-pr.sh
   assert_status 0
-  assert_step_output open false
-  assert_out "m0-scaffold has no open pull request"
+  assert_step_output covered false
+  assert_out "::notice::m0-scaffold has no open pull request, so this push runs CI."
+  assert_eq 1 "$(gh_calls)" "the number of API calls"
 }
 
 test_open_pr_fails_open_when_github_cannot_be_asked() {
   open_pr_env
+  fake_sleep
+  export CI_GH_RETRY_DELAY=5
   route 'repos/*' '' 1
   run check-open-pr.sh
   assert_status 0
-  assert_step_output open false
+  assert_step_output covered false
   assert_out "::warning::Could not ask GitHub whether m0-scaffold has an open pull request; running CI anyway."
   assert_eq 3 "$(gh_calls)" "the number of attempts"
+  assert_eq "5 10" "$(waits)" "gh_api's pauses between attempts, in seconds"
+}
+
+test_open_pr_fails_open_when_the_pull_request_cannot_be_read() {
+  open_pr_env
+  route "$PULLS" "$LISTED_7"
+  route "$PULL_7" '' 1
+  run check-open-pr.sh
+  assert_status 0
+  assert_step_output covered false
+  assert_out "::warning::Could not ask GitHub whether pull request $PR_7 can be merged; running CI anyway."
+  assert_eq 4 "$(gh_calls)" "the number of API calls (the list, then three attempts)"
 }
 
 test_open_pr_retries_a_transient_failure() {
   open_pr_env
-  route "$PULLS" '[{"number":7,"html_url":"https://github.com/itscool2b/auracode/pull/7"}]' once:1
+  route "$PULLS" "$LISTED_7" once:1
+  route "$PULL_7" "$(a_pull open "$SHA" true)" once:1
   run check-open-pr.sh
   assert_status 0
-  assert_step_output open true
-  assert_eq 2 "$(gh_calls)" "the number of attempts"
+  assert_step_output covered true
+  assert_eq 4 "$(gh_calls)" "the number of attempts"
 }
 
 test_open_pr_fails_open_on_an_unexpected_answer() {
@@ -339,8 +547,36 @@ test_open_pr_fails_open_on_an_unexpected_answer() {
   route "$PULLS" '{"message":"Bad credentials"}'
   run check-open-pr.sh
   assert_status 0
-  assert_step_output open false
+  assert_step_output covered false
   assert_out "was not a list; running CI anyway"
+}
+
+test_open_pr_fails_open_on_a_listed_pull_request_without_a_number() {
+  open_pr_env
+  route "$PULLS" '[{"html_url":"https://github.com/itscool2b/auracode/pull/7"}]'
+  run check-open-pr.sh
+  assert_status 0
+  assert_step_output covered false
+  assert_out "::warning::GitHub listed an open pull request for m0-scaffold without its number; running CI anyway."
+  assert_eq 1 "$(gh_calls)" "the number of API calls"
+}
+
+# Asking again would not change an answer of the wrong shape, so the first one decides.
+test_open_pr_fails_open_on_an_unexpected_pull_request() {
+  local body
+  for body in '{"message":"Not Found"}' '[]' 'not JSON' \
+    "{\"state\":\"open\",\"head\":{\"sha\":\"$SHA\"}}" \
+    "{\"state\":\"open\",\"head\":\"$SHA\",\"mergeable\":true}" \
+    "$(a_pull open "$SHA" '"yes"')"; do
+    open_pr_env
+    route "$PULLS" "$LISTED_7"
+    route "$PULL_7" "$body"
+    run check-open-pr.sh
+    assert_status 0
+    assert_step_output covered false
+    assert_out "::warning::GitHub's answer about pull request $PR_7 was not a pull request; running CI anyway."
+    assert_eq 2 "$(gh_calls)" "the number of API calls for the answer $body"
+  done
 }
 
 test_open_pr_encodes_the_branch() {
@@ -349,7 +585,7 @@ test_open_pr_encodes_the_branch() {
   route 'repos/itscool2b/auracode/pulls?state=open&head=itscool2b%3Am1a%2Fcore%2Bacp&per_page=1' '[]'
   run check-open-pr.sh
   assert_status 0
-  assert_step_output open false
+  assert_step_output covered false
 }
 
 test_open_pr_needs_the_branch() {
@@ -359,6 +595,29 @@ test_open_pr_needs_the_branch() {
   assert_status 1
   assert_out "BRANCH is not set"
   assert_eq 0 "$(gh_calls)" "the number of API calls"
+}
+
+test_open_pr_needs_the_pushed_commit() {
+  open_pr_env
+  unset GITHUB_SHA
+  run check-open-pr.sh
+  assert_status 1
+  assert_out "GITHUB_SHA is not set"
+  assert_eq 0 "$(gh_calls)" "the number of API calls"
+}
+
+# ci.yml's plan job hands the decision on under the name this script writes it. Under any other
+# name the jobs would read an empty output and every push would run CI.
+test_open_pr_writes_the_output_ci_yml_reads() {
+  local written consumed
+  open_pr_env
+  route "$PULLS" "$LISTED_7"
+  route "$PULL_7" "$(a_pull open "$SHA" true)"
+  run check-open-pr.sh
+  written="$(cut -d= -f1 "$tmp/github_output")"
+  consumed="$(sed -n -E 's/.*\$\{\{ *steps\.pr\.outputs\.([A-Za-z0-9_-]+) *\}\}.*/\1/p' \
+    "$scripts/../workflows/ci.yml" | tr -d '\r')"
+  assert_eq "$written" "$consumed" "the step output ci.yml reads from check-open-pr.sh"
 }
 
 # --- plan-nightly-bundle.sh ----------------------------------------------------------------------
@@ -381,7 +640,7 @@ a_run() { # <id> <event> <status> <conclusion as JSON>
 
 jobs_route() { # <run id> <bundle conclusions as JSON: macOS, Windows, Linux>
   route "repos/itscool2b/auracode/actions/runs/$1/jobs?filter=latest&per_page=100" \
-    "{\"total_count\":4,\"jobs\":[{\"name\":\"plan\",\"conclusion\":\"success\"},{\"name\":\"bundle (macos-latest)\",\"conclusion\":$2},{\"name\":\"bundle (windows-latest)\",\"conclusion\":$3},{\"name\":\"bundle (ubuntu-22.04)\",\"conclusion\":$4}]}"
+    "{\"total_count\":4,\"jobs\":[{\"name\":\"plan\",\"conclusion\":\"success\"},{\"name\":\"bundle (macos-26)\",\"conclusion\":$2},{\"name\":\"bundle (windows-2025)\",\"conclusion\":$3},{\"name\":\"bundle (ubuntu-22.04)\",\"conclusion\":$4}]}"
 }
 
 SELF="$(a_run 900 schedule in_progress null)"
