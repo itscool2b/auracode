@@ -8,10 +8,13 @@ export function Home({
   info,
   store,
   onOpenStress,
+  onRecoveryDismissed,
 }: {
   readonly info: AppInfo;
   readonly store: StreamStore;
   readonly onOpenStress: () => void;
+  /** The shell acknowledged the database repair, so its notice goes for good. */
+  readonly onRecoveryDismissed: () => void;
 }) {
   return (
     <div className="mx-auto flex h-full max-w-[1180px] flex-col gap-8">
@@ -29,7 +32,7 @@ export function Home({
         <div className="flex h-full min-h-[420px] flex-col">
           <DemoPanel store={store} onOpenStress={onOpenStress} />
         </div>
-        <InfoCard info={info} />
+        <InfoCard info={info} onRecoveryDismissed={onRecoveryDismissed} />
       </div>
     </div>
   );

@@ -5,7 +5,14 @@
 //! spike, and `AURACODE_NO_GLASS` turns the native window material off so its cost can be measured.
 //! The frontend learns the outcome through `app_info` (`LaunchMode`), never by reading the
 //! environment itself.
+//!
+//! `AURACODE_DATA_DIR` is aura-core's: it moves the data folder. This module only notes whether it
+//! does, because a launch with its own data folder is its own instance
+//! ([`LaunchOptions::single_instance`]).
 
+use std::ffi::{OsStr, OsString};
+
+use aura_core::paths::DATA_DIR_ENV;
 use serde::{Deserialize, Serialize};
 
 /// `1` runs the smoke check: a demo turn, a cancelled turn, and a short stress burst.
@@ -70,7 +77,8 @@ pub enum StressConfigError {
 /// Parses `AURACODE_STRESS`: comma-separated `key=value` pairs (`orbs`, `rate`, `aura`, `seconds`)
 /// in any order, with defaults for missing keys. A bare `1`/`true`/`yes`/`on` means all defaults.
 /// Keys are case-insensitive and whitespace around entries is ignored. The frontend's
-/// `parseStressConfig` implements the same rules for the `?stress=` URL parameter.
+/// `parseStressConfig` (lib/stress.ts) applies the same rules to the stress view's settings line,
+/// and both test the same cases.
 pub fn parse_stress_config(input: &str) -> Result<StressConfig, StressConfigError> {
     let trimmed = input.trim();
     let mut config = StressConfig::default();
@@ -155,6 +163,17 @@ pub fn env_flag(value: Option<&str>) -> bool {
     value.is_some_and(|v| is_truthy(v.trim()))
 }
 
+/// Whether an `AURACODE_DATA_DIR` value moves the data folder, by the rule aura-core's
+/// `DataRoot::resolve` applies: a value that is empty or only whitespace is ignored, and one that
+/// is not valid Unicode counts unless it is empty. aura-core keeps the rule private, so
+/// `own_data_dir_agrees_with_where_aura_core_puts_the_data` holds the two together.
+fn moves_data_root(value: &OsStr) -> bool {
+    match value.to_str() {
+        Some(text) => !text.trim().is_empty(),
+        None => !value.is_empty(),
+    }
+}
+
 /// What the UI should open into. Smoke mode wins over the stress view, since it is the one that
 /// exits by itself and a CI job is waiting on it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
@@ -171,6 +190,9 @@ pub struct LaunchOptions {
     pub smoke: bool,
     pub smoke_exit: bool,
     pub no_glass: bool,
+    /// `AURACODE_DATA_DIR` gives this launch its own data folder: a second dev instance, a portable
+    /// install.
+    pub own_data_dir: bool,
     /// `None` when `AURACODE_STRESS` is unset, blank (like `AURACODE_DATA_DIR`, an exported but
     /// empty variable must not change behaviour), or an explicit off (`0`, `false`, `no`, `off`).
     pub stress: Option<Result<StressConfig, StressConfigError>>,
@@ -178,21 +200,37 @@ pub struct LaunchOptions {
 
 impl LaunchOptions {
     pub fn from_env() -> LaunchOptions {
-        LaunchOptions::from_lookup(|name| std::env::var(name).ok())
+        LaunchOptions::from_lookup(|name| std::env::var_os(name))
     }
 
     /// [`LaunchOptions::from_env`] with the variables passed in, so tests never touch the process
-    /// environment (shared by every test thread).
-    pub fn from_lookup(lookup: impl Fn(&str) -> Option<String>) -> LaunchOptions {
-        let smoke = env_flag(lookup(SMOKE_ENV).as_deref());
+    /// environment (shared by every test thread). Values come as the OS gave them: aura-core
+    /// honours an `AURACODE_DATA_DIR` that is not valid Unicode, so this must see it too. The
+    /// other switches treat such a value as unset.
+    pub fn from_lookup(lookup: impl Fn(&str) -> Option<OsString>) -> LaunchOptions {
+        let text = |name: &str| lookup(name).and_then(|value| value.into_string().ok());
+        let smoke = env_flag(text(SMOKE_ENV).as_deref());
         LaunchOptions {
             smoke,
-            smoke_exit: smoke && env_flag(lookup(SMOKE_EXIT_ENV).as_deref()),
-            no_glass: env_flag(lookup(NO_GLASS_ENV).as_deref()),
-            stress: lookup(STRESS_ENV)
+            smoke_exit: smoke && env_flag(text(SMOKE_EXIT_ENV).as_deref()),
+            no_glass: env_flag(text(NO_GLASS_ENV).as_deref()),
+            own_data_dir: lookup(DATA_DIR_ENV).is_some_and(|value| moves_data_root(&value)),
+            stress: text(STRESS_ENV)
                 .filter(|value| !value.trim().is_empty() && !is_falsy(value.trim()))
                 .map(|value| parse_stress_config(&value)),
         }
+    }
+
+    /// Whether this launch registers the single-instance plugin, which makes a later launch focus
+    /// this one's window and exit. The plugin recognizes the running instance by the bundle
+    /// identifier alone, so every launch on the machine counts as the same app. Two kinds of
+    /// launch run on their own instead: a smoke run, which has to run even while someone has
+    /// auracode open, and a launch with its own data folder, which would otherwise exit without
+    /// ever opening it. Such a launch never hands over to a running instance, and later launches
+    /// never hand over to it. Sharing data with a running instance is safe: aura-core coordinates
+    /// processes that open the same database.
+    pub fn single_instance(&self) -> bool {
+        !self.smoke && !self.own_data_dir
     }
 
     pub fn mode(&self) -> LaunchMode {
@@ -332,7 +370,7 @@ mod tests {
     #[test]
     fn errors_read_as_sentences_in_the_notice() {
         let options =
-            LaunchOptions::from_lookup(|name| (name == STRESS_ENV).then(|| "orbs=99".to_string()));
+            LaunchOptions::from_lookup(|name| (name == STRESS_ENV).then(|| "orbs=99".into()));
         assert_eq!(options.mode(), LaunchMode::Normal);
         assert_eq!(
             options.notices(),
@@ -344,9 +382,9 @@ mod tests {
     }
 
     fn options(vars: &[(&str, &str)]) -> LaunchOptions {
-        let map: HashMap<String, String> = vars
+        let map: HashMap<String, OsString> = vars
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .map(|(k, v)| (k.to_string(), OsString::from(v)))
             .collect();
         LaunchOptions::from_lookup(|name| map.get(name).cloned())
     }
@@ -395,6 +433,130 @@ mod tests {
             assert_eq!(off.stress, None, "{value:?}");
             assert_eq!(off.mode(), LaunchMode::Normal);
             assert!(off.notices().is_empty());
+        }
+    }
+
+    /// Every launch registered the single-instance plugin, so a second one with its own data folder
+    /// focused the running window and exited before opening that folder.
+    #[test]
+    fn a_launch_with_its_own_data_folder_is_its_own_instance() {
+        let plain = options(&[]);
+        assert!(!plain.own_data_dir);
+        assert!(
+            plain.single_instance(),
+            "a plain launch hands over to a running one"
+        );
+
+        // "0" is not a flag here: aura-core reads it as a folder named 0.
+        for value in [
+            "/tmp/second instance",
+            " relative ",
+            r"D:\portable\data",
+            "0",
+        ] {
+            let own = options(&[(DATA_DIR_ENV, value)]);
+            assert!(own.own_data_dir, "{value:?}");
+            assert!(!own.single_instance(), "{value:?}");
+            assert!(own.notices().is_empty(), "nothing to report: {value:?}");
+        }
+        // aura-core ignores these, so the launch opens the default folder like any other.
+        for value in ["", "   ", "\t\n"] {
+            let blank = options(&[(DATA_DIR_ENV, value)]);
+            assert!(!blank.own_data_dir, "{value:?}");
+            assert!(blank.single_instance(), "{value:?}");
+        }
+
+        assert!(
+            !options(&[(SMOKE_ENV, "1")]).single_instance(),
+            "a smoke run"
+        );
+        let both = options(&[(SMOKE_ENV, "1"), (DATA_DIR_ENV, "/tmp/smoke data")]);
+        assert!(!both.single_instance());
+    }
+
+    /// `prefix` followed by a folder name that is not valid Unicode, which the OS allows in a
+    /// variable: invalid UTF-8 on Unix, a lone surrogate on Windows.
+    #[cfg(unix)]
+    fn not_unicode(prefix: &OsStr) -> OsString {
+        use std::os::unix::ffi::OsStrExt;
+        let mut value = prefix.to_os_string();
+        value.push(OsStr::from_bytes(b"/caf\xe9"));
+        value
+    }
+
+    #[cfg(windows)]
+    fn not_unicode(prefix: &OsStr) -> OsString {
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+        let mut wide: Vec<u16> = prefix.encode_wide().collect();
+        wide.extend(r"\caf".encode_utf16());
+        wide.push(0xD800);
+        OsString::from_wide(&wide)
+    }
+
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn a_data_folder_that_is_not_unicode_still_counts() {
+        let folder = not_unicode(OsStr::new("data"));
+        assert_eq!(folder.to_str(), None);
+        let own = LaunchOptions::from_lookup(|name| (name == DATA_DIR_ENV).then(|| folder.clone()));
+        assert!(own.own_data_dir, "aura-core moves the data there");
+        assert!(!own.single_instance());
+
+        // The other switches read such a value as unset, as they always have.
+        let garbled = LaunchOptions::from_lookup(|name| {
+            (name != DATA_DIR_ENV).then(|| not_unicode(OsStr::new("1")))
+        });
+        assert!(!garbled.smoke && !garbled.no_glass && !garbled.own_data_dir);
+        assert_eq!(garbled.stress, None);
+    }
+
+    /// Marks a re-executed copy of the test binary (see the next test).
+    const CHILD_CHECKS_DATA_DIR: &str = "AURACODE_DESKTOP_TEST_CHECK_DATA_DIR";
+
+    /// aura-core keeps its rule for `AURACODE_DATA_DIR` private and `moves_data_root` restates it.
+    /// If the two drifted apart, a launch on the default folder would skip the single-instance
+    /// plugin, or one with its own folder would hand over and exit. So for each value a child
+    /// process (this process's environment must not change) checks that `own_data_dir` holds
+    /// exactly when aura-core resolves a folder other than its default, the only one named
+    /// `si.auracode.desktop`. Resolving only computes the path; nothing is created.
+    #[test]
+    fn own_data_dir_agrees_with_where_aura_core_puts_the_data() {
+        if std::env::var_os(CHILD_CHECKS_DATA_DIR).is_some() {
+            let root = aura_core::paths::DataRoot::resolve().expect("resolve the data folder");
+            let default = root.root().ends_with(aura_core::paths::APP_IDENTIFIER);
+            assert_eq!(
+                LaunchOptions::from_env().own_data_dir,
+                !default,
+                "{}",
+                root.root().display()
+            );
+            return;
+        }
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let folder = dir.path().join("own data").into_os_string();
+        let mut padded = OsString::from("  ");
+        padded.push(&folder);
+        padded.push(" \t");
+        let mut values = vec![
+            OsString::new(),
+            OsString::from("   "),
+            OsString::from("\t\n"),
+            OsString::from("0"),
+            folder,
+            padded,
+        ];
+        #[cfg(any(unix, windows))]
+        values.push(not_unicode(dir.path().as_os_str()));
+        for value in values {
+            crate::test_support::run_child(
+                "launch::tests::own_data_dir_agrees_with_where_aura_core_puts_the_data",
+                |child| {
+                    child
+                        .env(CHILD_CHECKS_DATA_DIR, "1")
+                        .env(DATA_DIR_ENV, &value);
+                },
+            );
         }
     }
 

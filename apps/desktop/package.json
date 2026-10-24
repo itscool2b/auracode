@@ -17,7 +17,6 @@
   "dependencies": {
     "@auracode/ui": "workspace:*",
     "@tauri-apps/api": "2.12.4",
-    "@tauri-apps/plugin-opener": "2.7.2",
     "motion": "14.6.0",
     "react": "19.3.1",
     "react-dom": "19.3.1"

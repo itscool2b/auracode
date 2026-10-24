@@ -34,6 +34,13 @@ export const commands = {
 	 */
 	revealDataDir: () => typedError<null, AppError>(__TAURI_INVOKE("reveal_data_dir")),
 	/**
+	 *  Dismisses the database repair notice (`recovery_notice` in `app_info`) for good: later launches
+	 *  no longer show it. Takes no path: the shell acknowledges exactly the repair startup reported,
+	 *  never one the page names. Calling it again, or with no notice, does nothing; when it fails the
+	 *  notice stays.
+	 */
+	acknowledgeRecovery: () => typedError<null, AppError>(__TAURI_INVOKE("acknowledge_recovery")),
+	/**
 	 *  Smoke mode only: prints `AURACODE_SMOKE_RESULT <json>` on stdout and, with
 	 *  `AURACODE_SMOKE_EXIT=1`, exits with 0 when the run passed and 1 otherwise. Only the first report
 	 *  counts.
@@ -61,7 +68,12 @@ export type AppErrorCode =
 /**  Startup could not determine a data folder at all, so there is nothing to show. */
 "data_dir_unknown" | 
 /**  The system file manager could not show the data folder. */
-"reveal_failed";
+"reveal_failed" | 
+/**
+ *  The database repair notice could not be dismissed: the database is closed, or the record of
+ *  the repair could not be removed. The notice stays, and shows again on the next launch.
+ */
+"acknowledge_failed";
 
 /**  Everything the UI needs to know about this launch, from `app_info`. */
 export type AppInfo = {
@@ -86,8 +98,17 @@ export type AppInfo = {
 	glass: GlassEffect,
 	/**  What to open into: the normal screen, the smoke run, or the stress view. */
 	launch: LaunchMode,
-	/**  Sentences to show: repairs startup made, launch settings that were ignored. */
+	/**
+	 *  Sentences to show: repairs startup made, launch settings that were ignored. None of them
+	 *  can be dismissed.
+	 */
 	notices: string[],
+	/**
+	 *  The notice that the database was damaged and repaired, shown on every launch until the user
+	 *  dismisses it (`acknowledge_recovery`): whatever the repair could not save is only in the
+	 *  damaged copy it names. `null` when there is none, and once it has been dismissed.
+	 */
+	recovery_notice: string | null,
 	/**  Why startup could not complete, as a sentence to show on the error screen. */
 	fatal: string | null,
 };

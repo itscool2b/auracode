@@ -4,14 +4,25 @@
 //! identity, a quarantined database, a migration) become notices; the first step that cannot
 //! complete becomes the fatal error the UI shows on its error screen, with the data path, instead
 //! of the app crashing before a window exists.
+//!
+//! The data root is aura-core's [`DataRoot::resolve`] and nothing else ([`startup`]): the folder in
+//! `AURACODE_DATA_DIR`, or `si.auracode.desktop` in the local app data folder. The CLI resolves the
+//! same one, so both always open the same profile. Tauri's path API is not consulted: its
+//! `app_data_dir()` is Roaming AppData on Windows, which managed machines copy between PCs, and
+//! `device.json` and the databases must never travel. Its `app_local_data_dir()` is the same folder
+//! as the default root, because tauri.conf.json's identifier is aura-core's `APP_IDENTIFIER`
+//! (`config_checks.rs` holds them together), so the WebView data Tauri keeps there on Windows and
+//! Linux sits beside ours.
 
 use std::path::PathBuf;
 
 use aura_core::device::{DeviceIdentity, DeviceLoad};
-use aura_core::paths::{DATA_DIR_ENV, DataRoot};
+use aura_core::paths::DataRoot;
 use aura_core::profile::{ProfileMeta, Profiles};
 use aura_core::store::{OpenOutcome, Salvage, Store};
 use serde::Serialize;
+
+use crate::integrity;
 
 /// The profile database as the info card shows it.
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
@@ -20,6 +31,17 @@ pub struct DbInfo {
     pub schema_version: u32,
     /// What opening the database had to do (create, migrate, recover).
     pub outcome: OpenOutcome,
+}
+
+/// A database repair whose notice the user has not dismissed yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recovery {
+    /// Where aura-core moved the damaged database, exactly as
+    /// [`OpenOutcome::RecoveredFromCorruption`] reported it: the only path the shell ever hands
+    /// back to [`Store::acknowledge_recovery`]. The page cannot name one.
+    pub quarantined: String,
+    /// The sentence the UI shows ([`recovery_notice`]).
+    pub notice: String,
 }
 
 /// Everything startup produced, complete or not.
@@ -33,26 +55,18 @@ pub struct Booted {
     pub db: Option<DbInfo>,
     /// Sentences the UI lists: repairs that happened, data that was moved aside.
     pub notices: Vec<String>,
+    /// The database repair to report on every launch until the user dismisses it. Not in
+    /// `notices`, which cannot be dismissed.
+    pub recovery: Option<Recovery>,
+    /// The database to check in the background once the window is up ([`crate::integrity`]).
+    pub integrity_check: Option<PathBuf>,
     /// The error that stopped startup, as a sentence the UI shows as is.
     pub fatal: Option<String>,
 }
 
-/// Whether `AURACODE_DATA_DIR` is set to something non-blank.
-pub fn data_dir_overridden() -> bool {
-    std::env::var_os(DATA_DIR_ENV).is_some_and(|value| !value.to_string_lossy().trim().is_empty())
-}
-
-/// The data root: `app_data_dir` from Tauri, unless `AURACODE_DATA_DIR` overrides it, in which case
-/// aura-core resolves it exactly as the CLI does (so both always open the same profile). Without
-/// either, aura-core's own resolution is the last resort.
-pub fn choose_root(
-    env_override: bool,
-    app_data_dir: Option<PathBuf>,
-) -> aura_core::Result<DataRoot> {
-    match app_data_dir {
-        Some(dir) if !env_override => Ok(DataRoot::at(dir)),
-        _ => DataRoot::resolve(),
-    }
+/// Runs the startup sequence on the data root aura-core resolves: the one the app uses.
+pub fn startup() -> Booted {
+    boot(DataRoot::resolve())
 }
 
 /// Runs the startup sequence on `root`.
@@ -64,6 +78,8 @@ pub fn boot(root: aura_core::Result<DataRoot>) -> Booted {
         store: None,
         db: None,
         notices: Vec::new(),
+        recovery: None,
+        integrity_check: None,
         fatal: None,
     };
     let root = match root {
@@ -111,9 +127,13 @@ pub fn boot(root: aura_core::Result<DataRoot>) -> Booted {
                     quarantined,
                     salvage,
                 } => {
-                    booted.notices.push(recovery_notice(quarantined, salvage));
+                    booted.recovery = Some(Recovery {
+                        quarantined: quarantined.clone(),
+                        notice: recovery_notice(quarantined, salvage),
+                    });
                 }
             }
+            booted.integrity_check = integrity::target(store.path(), info.unclean_shutdown);
             booted.db = Some(DbInfo {
                 path: info.path.display().to_string(),
                 schema_version: info.schema_version,
@@ -160,11 +180,36 @@ impl Booted {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::Path;
+
+    use aura_core::paths::DATA_DIR_ENV;
+
+    use crate::test_support::run_child;
 
     fn fresh() -> (tempfile::TempDir, DataRoot) {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = DataRoot::at(dir.path().join("data"));
         (dir, root)
+    }
+
+    /// `<db>-wal` and the like.
+    fn sidecar(db: &Path, suffix: &str) -> PathBuf {
+        PathBuf::from(format!("{}{suffix}", db.display()))
+    }
+
+    /// Ends the session the way a crash does: the database file as it was, and a write-ahead log
+    /// that still holds the session's writes. Both are copied while the store is open and put back
+    /// after it closed, since a clean close folds the log into the file and deletes it.
+    fn crash(store: Store) {
+        let db = store.path().to_path_buf();
+        let wal = sidecar(&db, "-wal");
+        let file = fs::read(&db).expect("read the database");
+        let log = fs::read(&wal).expect("read the log");
+        assert!(!log.is_empty(), "the session wrote to its log");
+        drop(store);
+        assert!(!wal.exists(), "a clean close folds the log back");
+        fs::write(&db, file).expect("put the database back");
+        fs::write(&wal, log).expect("put the log back");
     }
 
     #[test]
@@ -173,6 +218,8 @@ mod tests {
         let booted = boot(Ok(root.clone()));
         assert_eq!(booted.fatal, None);
         assert!(booted.notices.is_empty(), "{:?}", booted.notices);
+        assert_eq!(booted.recovery, None);
+        assert_eq!(booted.integrity_check, None, "nothing to check yet");
         assert_eq!(booted.data_dir.as_deref(), Some(root.root()));
         assert!(booted.device.is_some());
         assert_eq!(
@@ -195,6 +242,30 @@ mod tests {
         assert_eq!(second.fatal, None);
         assert_eq!(second.device.expect("device").device_id, device_id);
         assert_eq!(second.db.expect("db").outcome, OpenOutcome::Opened);
+        assert_eq!(
+            second.integrity_check, None,
+            "the first launch closed the database cleanly"
+        );
+    }
+
+    #[test]
+    fn a_launch_after_a_crash_asks_for_an_integrity_check() {
+        let (_dir, root) = fresh();
+        let first = boot(Ok(root.clone()));
+        let db = first.store.as_ref().expect("store").path().to_path_buf();
+        crash(first.store.expect("store"));
+
+        let second = boot(Ok(root.clone()));
+        assert_eq!(second.fatal, None);
+        assert_eq!(second.db.as_ref().expect("db").outcome, OpenOutcome::Opened);
+        assert_eq!(second.integrity_check, Some(db), "the store's own file");
+        drop(second);
+
+        let third = boot(Ok(root));
+        assert_eq!(
+            third.integrity_check, None,
+            "the launch after the crash closed the database cleanly"
+        );
     }
 
     #[test]
@@ -210,14 +281,14 @@ mod tests {
     }
 
     #[test]
-    fn a_damaged_database_is_recovered_and_reported() {
+    fn a_damaged_database_is_recovered_and_reported_until_dismissed() {
         let (_dir, root) = fresh();
         let first = boot(Ok(root.clone()));
         let db_path = PathBuf::from(first.db.expect("db").path);
         drop(first.store);
         fs::write(&db_path, vec![0x5a; 8192]).expect("corrupt the database");
 
-        let booted = boot(Ok(root));
+        let booted = boot(Ok(root.clone()));
         assert_eq!(booted.fatal, None);
         let db = booted.db.expect("db");
         let OpenOutcome::RecoveredFromCorruption {
@@ -229,11 +300,32 @@ mod tests {
         };
         assert!(PathBuf::from(quarantined).exists());
         assert_eq!(
-            booted.notices,
-            vec![recovery_notice(quarantined, salvage)],
-            "one notice, naming where the damaged copy is"
+            booted.recovery,
+            Some(Recovery {
+                quarantined: quarantined.clone(),
+                notice: recovery_notice(quarantined, salvage),
+            }),
+            "one dismissible notice, naming where the damaged copy is"
         );
-        assert!(booted.notices[0].contains(quarantined.as_str()));
+        assert!(
+            booted.notices.is_empty(),
+            "not among the notices that cannot be dismissed: {:?}",
+            booted.notices
+        );
+        assert!(
+            booted
+                .recovery
+                .as_ref()
+                .is_some_and(|recovery| recovery.notice.contains(quarantined.as_str()))
+        );
+        drop(booted.store);
+
+        let again = boot(Ok(root));
+        assert_eq!(
+            again.recovery.as_ref().map(|r| r.quarantined.as_str()),
+            Some(quarantined.as_str()),
+            "the next launch reports the same repair: nobody dismissed it"
+        );
     }
 
     #[test]
@@ -278,6 +370,10 @@ mod tests {
         let fatal = booted.fatal.expect("fatal error");
         assert!(fatal.contains("newer version of auracode"), "{fatal}");
         assert!(booted.store.is_none());
+        assert_eq!(
+            booted.integrity_check, None,
+            "no database, nothing to check"
+        );
         assert!(booted.device.is_some(), "steps before the failure are kept");
         assert!(booted.data_dir.is_some());
         assert_eq!(
@@ -306,12 +402,93 @@ mod tests {
         let fatal = booted.fatal.expect("fatal error");
         assert!(fatal.contains("AURACODE_DATA_DIR"), "{fatal}");
         assert_eq!(booted.data_dir, None);
+        assert_eq!(booted.recovery, None);
+        assert_eq!(booted.integrity_check, None);
     }
 
+    /// Whether `root` holds what a first launch creates.
+    fn started_in(root: &Path) -> bool {
+        root.join("device.json").is_file()
+            && root
+                .join("profiles")
+                .join(aura_core::profile::LOCAL_PROFILE_ID)
+                .join("aura.db")
+                .is_file()
+    }
+
+    /// Marks a re-executed copy of the test binary; holds the root that child should start in.
+    const CHILD_EXPECTS: &str = "AURACODE_DESKTOP_TEST_EXPECTED_ROOT";
+
+    /// The app starts exactly where aura-core (and so the CLI) resolves, `AURACODE_DATA_DIR`
+    /// included, which is what lets a smoke run start in a throwaway folder.
     #[test]
-    fn tauri_app_data_dir_is_used_unless_overridden() {
+    fn startup_uses_the_data_root_aura_core_resolves() {
+        if let Some(expected) = std::env::var_os(CHILD_EXPECTS) {
+            let booted = startup();
+            assert_eq!(booted.fatal, None);
+            assert_eq!(booted.data_dir.as_deref(), Some(Path::new(&expected)));
+            let root = DataRoot::resolve().expect("resolve in child");
+            assert_eq!(root.root(), Path::new(&expected));
+            return;
+        }
+
         let dir = tempfile::tempdir().expect("tempdir");
-        let root = choose_root(false, Some(dir.path().to_path_buf())).expect("root");
-        assert_eq!(root.root(), dir.path());
+        let expected = dir.path().join("throwaway data");
+        run_child(
+            "boot::tests::startup_uses_the_data_root_aura_core_resolves",
+            |child| {
+                child
+                    .env(CHILD_EXPECTS, &expected)
+                    .env(DATA_DIR_ENV, &expected);
+            },
+        );
+        assert!(started_in(&expected));
+    }
+
+    /// Marks the child of the next test; holds its throwaway home folder.
+    #[cfg(not(windows))]
+    const CHILD_HOME: &str = "AURACODE_DESKTOP_TEST_THROWAWAY_HOME";
+
+    /// Without `AURACODE_DATA_DIR` the app starts in `si.auracode.desktop` in the local app data
+    /// folder, which is also the folder Tauri's `app_local_data_dir()` names. The child gets a
+    /// throwaway home folder, which is what the local app data folder is built from on macOS and
+    /// Linux, so it boots there instead of in the user's real data. Windows looks its known
+    /// folders up without the environment, so this cannot run there without touching real data;
+    /// aura-core's tests pin the local (never roaming) folder there.
+    #[cfg(not(windows))]
+    #[test]
+    fn startup_without_an_override_uses_the_local_app_data_folder() {
+        fn local_app_data(home: &Path) -> PathBuf {
+            if cfg!(target_os = "macos") {
+                home.join("Library").join("Application Support")
+            } else {
+                home.join(".local").join("share")
+            }
+        }
+
+        if let Some(home) = std::env::var_os(CHILD_HOME) {
+            let booted = startup();
+            assert_eq!(booted.fatal, None);
+            assert_eq!(
+                booted.data_dir,
+                Some(local_app_data(Path::new(&home)).join(aura_core::paths::APP_IDENTIFIER))
+            );
+            return;
+        }
+
+        let home = tempfile::tempdir().expect("tempdir");
+        run_child(
+            "boot::tests::startup_without_an_override_uses_the_local_app_data_folder",
+            |child| {
+                child
+                    .env(CHILD_HOME, home.path())
+                    .env("HOME", home.path())
+                    .env_remove("XDG_DATA_HOME")
+                    .env_remove(DATA_DIR_ENV);
+            },
+        );
+        assert!(started_in(
+            &local_app_data(home.path()).join(aura_core::paths::APP_IDENTIFIER)
+        ));
     }
 }

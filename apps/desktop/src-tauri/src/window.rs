@@ -152,6 +152,10 @@ pub fn focus_main(app: &AppHandle) {
     }
 }
 
+/// Shows and focuses the main window. Every path that shows it comes through here (the page's
+/// `window_ready`, the fallback timer, a second launch), so this is also where the work that waits
+/// for the window to be on screen starts: the integrity check after a session that did not close
+/// the database ([`crate::integrity`]), which starts only once.
 pub fn show_and_focus(app: &AppHandle) -> Result<(), AppError> {
     let window = app.get_webview_window(MAIN_WINDOW).ok_or_else(|| {
         AppError::new(
@@ -162,6 +166,10 @@ pub fn show_and_focus(app: &AppHandle) -> Result<(), AppError> {
     let unavailable =
         |error: tauri::Error| AppError::new(AppErrorCode::WindowUnavailable, error.to_string());
     window.show().map_err(unavailable)?;
+    // On screen now, even if focusing fails below.
+    if let Some(state) = app.try_state::<AppState>() {
+        state.integrity.window_shown();
+    }
     window.set_focus().map_err(unavailable)?;
     Ok(())
 }

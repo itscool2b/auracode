@@ -29,6 +29,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::cancel_demo_stream,
             commands::window_ready,
             commands::reveal_data_dir,
+            commands::acknowledge_recovery,
             commands::smoke_report,
         ])
         // aura-protocol's timestamps (`Millis`) are i64 Unix milliseconds, sent by serde_json as
@@ -63,37 +64,73 @@ impl BindingsError {
     }
 }
 
-/// The bindings as text. tauri-specta only exports to a file, so this goes through a scratch file
-/// in the temp directory.
-pub fn render(builder: &tauri_specta::Builder<tauri::Wry>) -> Result<String, BindingsError> {
-    static SCRATCH: AtomicU64 = AtomicU64::new(0);
-    let scratch = std::env::temp_dir().join(format!(
-        "auracode-bindings-{}-{}.ts",
+/// `<pid>-<n>`, different for every call in every process: names temporary files that writers
+/// running at the same time must not share.
+fn unique_suffix() -> String {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    format!(
+        "{}-{}",
         std::process::id(),
-        SCRATCH.fetch_add(1, Ordering::Relaxed)
-    ));
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+/// Removes a temporary file this module made, if it is still there.
+fn discard(path: &Path) {
+    if let Err(error) = std::fs::remove_file(path)
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::debug!(%error, path = %path.display(), "could not remove a temporary bindings file");
+    }
+}
+
+/// Where [`render`] has tauri-specta write the bindings before reading them back: a name unique to
+/// the call, in this crate's build script output folder (`OUT_DIR`, under `target/`). Not the
+/// system temp folder: on Linux that is `/tmp`, where every local user can create entries, and
+/// tauri-specta writes with `std::fs::write`, which follows a symlink planted at a predictable name
+/// and truncates whatever file it points to. Debug builds run from the build that compiled them,
+/// so the folder is there, as the checkout behind [`BINDINGS_PATH`] is.
+fn scratch_path() -> PathBuf {
+    Path::new(env!("OUT_DIR")).join(format!("bindings-{}.ts", unique_suffix()))
+}
+
+/// The bindings as text. tauri-specta only exports to a file, so this goes through a scratch file
+/// ([`scratch_path`]).
+pub fn render(builder: &tauri_specta::Builder<tauri::Wry>) -> Result<String, BindingsError> {
+    let scratch = scratch_path();
     let result = builder
         .export(Typescript::default().header(HEADER), &scratch)
         .map_err(BindingsError::from)
         .and_then(|()| std::fs::read_to_string(&scratch).map_err(BindingsError::io(&scratch)));
-    if let Err(error) = std::fs::remove_file(&scratch)
-        && error.kind() != std::io::ErrorKind::NotFound
-    {
-        tracing::debug!(%error, path = %scratch.display(), "could not remove the scratch bindings");
-    }
+    discard(&scratch);
     result
 }
 
+/// The sibling [`write_if_changed`] writes before renaming it over `path`:
+/// `<name>.<pid>-<n>.partial`, in the same folder so the rename never crosses filesystems.
+fn partial_path(path: &Path) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".{}.partial", unique_suffix()));
+    path.with_file_name(name)
+}
+
 /// Writes `contents` to `path` unless it already holds exactly that. Returns whether it wrote.
-/// Writes a sibling file and renames it over the target, so a watcher never sees half a file.
+/// Writes a sibling file and renames it over the target, so a watcher never sees half a file. The
+/// sibling's name is unique to the call, because two writers can run at once (a debug app
+/// regenerating at startup while `cargo test` does the same): with one shared name the second
+/// rename finds the file already moved. A failed write removes its sibling again.
 pub fn write_if_changed(path: &Path, contents: &str) -> Result<bool, BindingsError> {
     if std::fs::read_to_string(path).is_ok_and(|existing| existing == contents) {
         return Ok(false);
     }
-    let partial = path.with_extension("ts.partial");
-    std::fs::write(&partial, contents).map_err(BindingsError::io(&partial))?;
-    std::fs::rename(&partial, path).map_err(BindingsError::io(path))?;
-    Ok(true)
+    let partial = partial_path(path);
+    let written = std::fs::write(&partial, contents)
+        .map_err(BindingsError::io(&partial))
+        .and_then(|()| std::fs::rename(&partial, path).map_err(BindingsError::io(path)));
+    if written.is_err() {
+        discard(&partial);
+    }
+    written.map(|()| true)
 }
 
 /// Regenerates [`BINDINGS_PATH`]. Returns whether the file changed.
@@ -126,6 +163,7 @@ mod tests {
             "cancelDemoStream",
             "windowReady",
             "revealDataDir",
+            "acknowledgeRecovery",
             "smokeReport",
         ] {
             assert!(
@@ -137,6 +175,15 @@ mod tests {
         assert!(
             first.contains("\trevealDataDir: () =>"),
             "revealDataDir must take no arguments"
+        );
+        // Nor a repair to acknowledge: the shell passes on only the one startup reported.
+        assert!(
+            first.contains("\tacknowledgeRecovery: () =>"),
+            "acknowledgeRecovery must take no arguments"
+        );
+        assert!(
+            first.contains("\trecovery_notice: string | null,"),
+            "the UI can tell the dismissible notice from the others"
         );
         for name in [
             "AppInfo",
@@ -158,6 +205,40 @@ mod tests {
         assert!(!first.contains('\r'), "LF line endings on every OS");
     }
 
+    /// Every file in `dir` other than `keep`.
+    fn others(dir: &Path, keep: &str) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .expect("read_dir")
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .filter(|name| name != keep)
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// The scratch file was `auracode-bindings-<pid>-0.ts` in the temp folder at every debug
+    /// launch, a name any local user could claim with a symlink in Linux's shared `/tmp`.
+    #[test]
+    fn the_scratch_file_is_in_the_build_folder_not_the_shared_temp_folder() {
+        let out_dir = Path::new(env!("OUT_DIR"));
+        let temp = std::env::temp_dir();
+        let scratch = scratch_path();
+        assert_eq!(scratch.parent(), Some(out_dir), "{}", scratch.display());
+        assert_ne!(scratch.parent(), Some(temp.as_path()));
+        // A build folder the developer put under the temp folder (CARGO_TARGET_DIR=/tmp/...) is
+        // still theirs alone; anywhere else the file must not be under it at all.
+        if !out_dir.starts_with(&temp) {
+            assert!(!scratch.starts_with(&temp), "{}", scratch.display());
+        }
+        assert_ne!(scratch, scratch_path(), "every render gets its own name");
+    }
+
     #[test]
     fn unchanged_bindings_are_not_rewritten() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -166,6 +247,93 @@ mod tests {
         assert!(!write_if_changed(&path, "a").expect("same contents"));
         assert!(write_if_changed(&path, "b").expect("changed contents"));
         assert_eq!(std::fs::read_to_string(&path).expect("read"), "b");
-        assert!(!path.with_extension("ts.partial").exists());
+        assert_eq!(others(dir.path(), "bindings.ts"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn every_write_gets_its_own_partial_file_beside_the_target() {
+        let path = Path::new("/repo/apps/desktop/src/bindings.ts");
+        let names: Vec<PathBuf> = std::thread::scope(|scope| {
+            let threads: Vec<_> = (0..8)
+                .map(|_| scope.spawn(|| (0..64).map(|_| partial_path(path)).collect::<Vec<_>>()))
+                .collect();
+            threads
+                .into_iter()
+                .flat_map(|thread| thread.join().expect("join"))
+                .collect()
+        });
+        let unique: std::collections::HashSet<&PathBuf> = names.iter().collect();
+        assert_eq!(unique.len(), names.len(), "no two writes share a name");
+        let prefix = format!("bindings.ts.{}-", std::process::id());
+        for name in &names {
+            assert_eq!(name.parent(), path.parent(), "same folder as the target");
+            let file = name.file_name().expect("name").to_string_lossy();
+            assert!(
+                file.starts_with(&prefix) && file.ends_with(".partial"),
+                "{file}"
+            );
+        }
+    }
+
+    /// Two writers at once (a debug app regenerating at startup while `cargo test` runs) must
+    /// both succeed. With one shared partial name, one rename found the file already moved
+    /// (`NotFound`).
+    #[test]
+    fn concurrent_writers_all_succeed_and_leave_a_whole_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("bindings.ts");
+        let writers = 8;
+        let barrier = std::sync::Barrier::new(writers);
+        let texts: Vec<String> = std::thread::scope(|scope| {
+            let threads: Vec<_> = (0..writers)
+                .map(|writer| {
+                    let (barrier, path) = (&barrier, &path);
+                    scope.spawn(move || {
+                        // Half write identical text, as two builds of the same code do.
+                        let text = if writer % 2 == 0 {
+                            "export const same = 1;\n".repeat(200)
+                        } else {
+                            format!("export const writer = {writer};\n").repeat(200)
+                        };
+                        barrier.wait();
+                        for _ in 0..25 {
+                            write_if_changed(path, &text).expect("every write succeeds");
+                        }
+                        text
+                    })
+                })
+                .collect();
+            threads
+                .into_iter()
+                .map(|thread| thread.join().expect("a writer failed"))
+                .collect()
+        });
+        let last = std::fs::read_to_string(&path).expect("read");
+        assert!(texts.contains(&last), "one writer's complete text");
+        assert_eq!(others(dir.path(), "bindings.ts"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_failed_rename_removes_its_partial_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        // A non-empty folder where the file should be: no OS renames a file over it.
+        let path = dir.path().join("bindings.ts");
+        std::fs::create_dir(&path).expect("mkdir");
+        std::fs::write(path.join("keep"), b"x").expect("write");
+        let error = write_if_changed(&path, "text").expect_err("the rename fails");
+        assert!(
+            matches!(&error, BindingsError::Io { path: failed, .. } if failed == &path),
+            "{error}"
+        );
+        assert_eq!(others(dir.path(), "bindings.ts"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_failed_write_leaves_nothing_behind() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("missing").join("bindings.ts");
+        let error = write_if_changed(&path, "text").expect_err("the folder does not exist");
+        assert!(matches!(error, BindingsError::Io { .. }), "{error}");
+        assert_eq!(others(dir.path(), ""), Vec::<String>::new());
     }
 }

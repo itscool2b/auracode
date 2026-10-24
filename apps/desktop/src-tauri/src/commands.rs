@@ -84,6 +84,16 @@ pub async fn reveal_data_dir(state: State<'_, AppState>) -> Result<(), AppError>
     Ok(())
 }
 
+/// Dismisses the database repair notice (`recovery_notice` in `app_info`) for good: later launches
+/// no longer show it. Takes no path: the shell acknowledges exactly the repair startup reported,
+/// never one the page names. Calling it again, or with no notice, does nothing; when it fails the
+/// notice stays.
+#[tauri::command]
+#[specta::specta]
+pub fn acknowledge_recovery(state: State<'_, AppState>) -> Result<(), AppError> {
+    state.acknowledge_recovery()
+}
+
 /// Smoke mode only: prints `AURACODE_SMOKE_RESULT <json>` on stdout and, with
 /// `AURACODE_SMOKE_EXIT=1`, exits with 0 when the run passed and 1 otherwise. Only the first report
 /// counts.

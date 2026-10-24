@@ -21,6 +21,9 @@ pub enum AppErrorCode {
     DataDirUnknown,
     /// The system file manager could not show the data folder.
     RevealFailed,
+    /// The database repair notice could not be dismissed: the database is closed, or the record of
+    /// the repair could not be removed. The notice stays, and shows again on the next launch.
+    AcknowledgeFailed,
 }
 
 /// A command failure, serialized as `{ code, message }`.
@@ -56,5 +59,9 @@ mod tests {
             serde_json::json!({ "code": "too_many_streams", "message": "Too many." })
         );
         assert_eq!(error.to_string(), "Too many.");
+        assert_eq!(
+            serde_json::to_value(AppErrorCode::AcknowledgeFailed).expect("serialize"),
+            "acknowledge_failed"
+        );
     }
 }

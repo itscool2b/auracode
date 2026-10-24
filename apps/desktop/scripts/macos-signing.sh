@@ -182,7 +182,7 @@ create() {
   case $found in
   0)
     print_identity "$existing"
-    die "the identity already exists; builds use it. To replace it, see 'Rotating' in apps/desktop/README.md."
+    die "the identity already exists; builds use it. To replace it, see 'Rotate it' in apps/desktop/README.md."
     ;;
   1) ;;
   *) exit 2 ;;

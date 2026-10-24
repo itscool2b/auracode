@@ -131,3 +131,12 @@ export async function sendSmokeReport(report: SmokeReport): Promise<void> {
 export async function revealDataDir(): Promise<void> {
   await settle(commands.revealDataDir());
 }
+
+/**
+ * Dismisses the database repair notice (`recovery_notice`) for good. The shell decides which
+ * repair: the one startup reported, never a path the page names. Rejects with a
+ * `CommandError` (`acknowledge_failed`) when the shell could not, and the notice then stays.
+ */
+export async function acknowledgeRecovery(): Promise<void> {
+  await settle(commands.acknowledgeRecovery());
+}

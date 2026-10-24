@@ -187,7 +187,12 @@ function inlineNode(node: Inline): ReactNode {
         </em>
       );
     case "link":
-      // External pages open in the browser: the opener plugin handles target=_blank clicks.
+      // Opens in the browser, never in this window. The Rust opener plugin injects a script into
+      // every page that catches left clicks on a target=_blank link (unless Cmd/Meta or Alt is
+      // held), cancels the navigation and calls the plugin's open_url command, which the
+      // capability's opener:allow-open-url grant allows for http and https only (safeHref makes
+      // every link one of those). No JS package is involved. Other clicks are left to the
+      // webview, which opens no new windows (none is allowed without an on_new_window handler).
       return (
         <a href={node.href} target="_blank" rel="noreferrer noopener">
           <InlineNodes nodes={node.children} />

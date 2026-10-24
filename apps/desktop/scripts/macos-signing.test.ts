@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
  */
 
 const SCRIPT = fileURLToPath(new URL("./macos-signing.sh", import.meta.url));
+const README = fileURLToPath(new URL("../README.md", import.meta.url));
 /** The shell to run it with: `sh` is bash on macOS and dash on Ubuntu; set this to try another. */
 const SHELL = process.env.SIGNING_TEST_SHELL ?? "sh";
 const HASH = "E0BAFFD34BF15181B26CA3608C909DB87E2B9D94";
@@ -86,6 +87,20 @@ function program(name: string, code = 0): string {
   chmodSync(path, 0o755);
   return path;
 }
+
+describe("macos-signing.sh's pointers into the README", () => {
+  // `pnpm signing create` once sent people to a 'Rotating' section; the heading is "Rotate it".
+  it("names only sections that exist", () => {
+    const headings = readFileSync(README, "utf8")
+      .split("\n")
+      .flatMap((line) => /^#+\s+(.+?)\s*$/.exec(line)?.[1] ?? []);
+    const named = [
+      ...readFileSync(SCRIPT, "utf8").matchAll(/'([^']+)' in apps\/desktop\/README\.md/g),
+    ].flatMap((match) => match[1] ?? []);
+    expect(named.length).toBeGreaterThan(0);
+    for (const section of named) expect(headings).toContain(section);
+  });
+});
 
 describe.skipIf(process.platform === "win32")("macos-signing.sh", () => {
   beforeEach(() => {
@@ -259,6 +274,7 @@ describe.skipIf(process.platform === "win32")("macos-signing.sh", () => {
       const result = runScript(["create"]);
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("already exists");
+      expect(result.stderr).toContain("see 'Rotate it' in apps/desktop/README.md");
       expect(calls().filter((call) => /^(openssl req|security import)/.test(call))).toEqual([]);
     });
 

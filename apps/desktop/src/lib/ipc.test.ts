@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SmokeReport } from "../bindings";
 import { errorMessage } from "./errors";
 import {
+  acknowledgeRecovery,
   CommandError,
   cancelDemoStream,
   getAppInfo,
@@ -83,6 +84,7 @@ describe("command wrappers through the generated bindings", () => {
       () => getAppInfo(),
       () => cancelDemoStream("s1"),
       () => revealDataDir(),
+      () => acknowledgeRecovery(),
       () => startDemoStream({ type: "demo" }, 120, () => {}),
     ]) {
       const error: unknown = await call().then(
@@ -104,6 +106,12 @@ describe("command wrappers through the generated bindings", () => {
     });
     rejectEverything({ code: "reveal_failed", message: "Could not show /data." });
     await expect(revealDataDir()).rejects.toMatchObject({ code: "reveal_failed" });
+    rejectEverything({ code: "acknowledge_failed", message: "The database is closed." });
+    await expect(acknowledgeRecovery()).rejects.toMatchObject({
+      name: "CommandError",
+      code: "acknowledge_failed",
+      message: "The database is closed.",
+    });
   });
 
   it("resolves with the command's value", async () => {
@@ -126,7 +134,14 @@ describe("command wrappers through the generated bindings", () => {
     await expect(windowReady()).resolves.toBeUndefined();
     await expect(sendSmokeReport(report)).resolves.toBeUndefined();
     await expect(revealDataDir()).resolves.toBeUndefined();
-    expect(calls).toEqual(["start_demo_stream", "window_ready", "smoke_report", "reveal_data_dir"]);
+    await expect(acknowledgeRecovery()).resolves.toBeUndefined();
+    expect(calls).toEqual([
+      "start_demo_stream",
+      "window_ready",
+      "smoke_report",
+      "reveal_data_dir",
+      "acknowledge_recovery",
+    ]);
   });
 
   it("asks the shell to reveal its own data folder without naming a path", async () => {

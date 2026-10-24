@@ -17,7 +17,7 @@ export const STRESS_LIMITS = {
   seconds: { min: 0, max: 86_400 },
 } as const;
 
-/** Mirrors `MAX_STRESS_TOKENS` in src-tauri/src/demo.rs. */
+/** The most one turn may hold. Mirrors `MAX_STRESS_TOKENS` in src-tauri/src/demo.rs. */
 export const MAX_STRESS_TOKENS = 500_000;
 
 /** With `seconds=0` the view streams in turns of this length, back to back, until stopped. */
@@ -92,11 +92,41 @@ export function formatStressConfig(config: StressConfig): string {
   return `orbs=${config.orbs},rate=${config.rate},aura=${config.aura ? 1 : 0},seconds=${config.seconds}`;
 }
 
+/** Tokens for `seconds` of streaming at `rate`, but no more than one turn may hold. */
+function turnTokens(rate: number, seconds: number): number {
+  return Math.min(MAX_STRESS_TOKENS, Math.round(rate * seconds));
+}
+
 /**
- * Tokens for one stress turn: `rate * seconds` for a timed run, or one rolling turn for an
- * open-ended one. Capped at what the shell accepts.
+ * Tokens for the first turn of a stress run (see `StressRun`): all of a timed run when it fits in
+ * one turn, else as much as one turn holds; one rolling turn for an open-ended run. The smoke
+ * run's burst is exactly this turn.
  */
 export function stressTurnTokens(config: StressConfig): number {
   const seconds = config.seconds > 0 ? config.seconds : ROLLING_TURN_SECONDS;
-  return Math.max(1, Math.min(MAX_STRESS_TOKENS, Math.round(config.rate * seconds)));
+  return Math.max(1, turnTokens(config.rate, seconds));
+}
+
+/**
+ * The turns of one stress run, played back to back. An open-ended run (`seconds` = 0) streams
+ * rolling turns until stopped. A timed run streams for `seconds` in all: in one turn when
+ * `rate * seconds` tokens fit in MAX_STRESS_TOKENS, otherwise in full turns and then one with the
+ * rest. Capping its only turn instead ended a long run early without a word (`rate=200,
+ * seconds=3600` stopped after 2,500 s), and the settings drive a power measurement. Each turn is
+ * sized from the settings current when it starts, so a rate changed mid-run applies from the next
+ * turn and the run still ends on time.
+ */
+export class StressRun {
+  /** Seconds of streaming in the turns started so far. */
+  #streamed = 0;
+
+  /** Tokens for the next turn, or null once a timed run has streamed for its `seconds`. */
+  next(config: StressConfig): number | null {
+    const left = config.seconds > 0 ? config.seconds - this.#streamed : ROLLING_TURN_SECONDS;
+    const tokens = turnTokens(config.rate, left);
+    // Not even half a token's time left (or no rate to stream at): the run is over.
+    if (tokens < 1) return null;
+    this.#streamed += tokens / config.rate;
+    return tokens;
+  }
 }

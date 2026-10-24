@@ -1,13 +1,23 @@
 import { GlassPanel } from "@auracode/ui";
-import { Fragment, useState } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 import type { AppInfo } from "../bindings";
 import { errorMessage } from "../lib/errors";
 import { fileManagerName, glassLabel, osName, outcomeLabel } from "../lib/format";
 import { revealDataDir } from "../lib/ipc";
 import { WarningIcon } from "./icons";
+import { RecoveryNotice } from "./RecoveryNotice";
 
-/** What this launch is running on: versions, device, profile, database, glass, data folder. */
-export function InfoCard({ info }: { readonly info: AppInfo }) {
+/**
+ * What this launch is running on: versions, device, profile, database, glass, data folder, and
+ * the notices. `onRecoveryDismissed` runs once the shell has acknowledged the database repair.
+ */
+export function InfoCard({
+  info,
+  onRecoveryDismissed,
+}: {
+  readonly info: AppInfo;
+  readonly onRecoveryDismissed: () => void;
+}) {
   return (
     <GlassPanel elevation={1} squircle className="flex flex-col gap-4 p-5">
       <h2 className="panel-title m-0">This launch</h2>
@@ -54,7 +64,13 @@ export function InfoCard({ info }: { readonly info: AppInfo }) {
           )}
         </dd>
       </dl>
-      {info.notices.length > 0 ? <Notices notices={info.notices} /> : null}
+      {info.notices.length > 0 || info.recovery_notice !== null ? (
+        <Notices notices={info.notices}>
+          {info.recovery_notice !== null ? (
+            <RecoveryNotice message={info.recovery_notice} onDismissed={onRecoveryDismissed} />
+          ) : null}
+        </Notices>
+      ) : null}
     </GlassPanel>
   );
 }
@@ -109,9 +125,17 @@ export function DataPath({
   );
 }
 
-export function Notices({ notices }: { readonly notices: readonly string[] }) {
+/** The notices list. `children` go first: notices with controls of their own (`RecoveryNotice`). */
+export function Notices({
+  notices,
+  children,
+}: {
+  readonly notices: readonly string[];
+  readonly children?: ReactNode;
+}) {
   return (
     <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Notices">
+      {children}
       {notices.map((notice) => (
         <li key={notice} className="notice">
           <WarningIcon />

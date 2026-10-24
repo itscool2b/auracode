@@ -6,19 +6,15 @@ import { FpsMeter, FrameLog, trackFrames } from "../lib/fps";
 import { useStickToBottom, useStream } from "../lib/hooks";
 import { isRunning, type StreamStore } from "../lib/session";
 import { lastMessage } from "../lib/stream";
-import {
-  formatStressConfig,
-  parseStressConfig,
-  STRESS_LIMITS,
-  stressTurnTokens,
-} from "../lib/stress";
+import { formatStressConfig, parseStressConfig, STRESS_LIMITS, StressRun } from "../lib/stress";
 import { ArrowLeftIcon } from "./icons";
 import { Answer } from "./Markdown";
 
 /**
  * The worst case the UI must stay smooth under: up to 24 live orbs, the aura field, and a fast
- * markdown stream, with the frame rate on screen. `seconds` > 0 streams one turn that long;
- * 0 streams turn after turn until stopped (what the power spike measures).
+ * markdown stream, with the frame rate on screen. `seconds` > 0 streams for that long, in one turn
+ * or, past what a turn holds, several back to back; 0 streams turn after turn until stopped (what
+ * the power spike measures). `StressRun` sizes the turns.
  */
 export function StressView({
   store,
@@ -44,15 +40,29 @@ export function StressView({
     configRef.current = config;
   }, [config]);
 
+  // The run in progress, which knows how long its turns have streamed so far.
+  const run = useRef<StressRun | null>(null);
+
   const startTurn = (): void => {
-    setProblem(null);
     const current = configRef.current;
-    store
-      .start({ type: "stress", total_tokens: stressTurnTokens(current) }, current.rate)
-      .catch((error: unknown) => {
-        setActive(false);
-        setProblem(errorMessage(error));
-      });
+    run.current ??= new StressRun();
+    const tokens = run.current.next(current);
+    if (tokens === null) {
+      // A timed run has streamed for its `seconds`.
+      setActive(false);
+      return;
+    }
+    setProblem(null);
+    store.start({ type: "stress", total_tokens: tokens }, current.rate).catch((error: unknown) => {
+      setActive(false);
+      setProblem(errorMessage(error));
+    });
+  };
+
+  const startRun = (): void => {
+    run.current = new StressRun();
+    setActive(true);
+    startTurn();
   };
 
   // Auto start once, on mount.
@@ -61,17 +71,15 @@ export function StressView({
   useEffect(() => {
     if (autoStart && !autoStarted.current) {
       autoStarted.current = true;
-      startTurn();
+      startRun();
     }
   }, []);
 
-  // Open-ended runs (seconds = 0) chain turns; a timed run ends with its one turn.
+  // A turn that ends starts the run's next one, until the run is stopped or a timed run is over.
   const phase = snapshot.phase;
   // biome-ignore lint/correctness/useExhaustiveDependencies: reacts to the turn ending only.
   useEffect(() => {
-    if (phase !== "ended" || !active) return;
-    if (configRef.current.seconds === 0) startTurn();
-    else setActive(false);
+    if (phase === "ended" && active) startTurn();
   }, [phase]);
 
   const answer = lastMessage(snapshot.stream);
@@ -116,15 +124,7 @@ export function StressView({
             Aura field
           </label>
           <div className="ml-auto flex gap-2">
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={running}
-              onClick={() => {
-                setActive(true);
-                startTurn();
-              }}
-            >
+            <button type="button" className="btn btn-primary" disabled={running} onClick={startRun}>
               Start
             </button>
             <button

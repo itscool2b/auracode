@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { StressConfig } from "../bindings";
 import {
   DEFAULT_STRESS,
   formatStressConfig,
   MAX_STRESS_TOKENS,
   parseStressConfig,
+  ROLLING_TURN_SECONDS,
+  StressRun,
   stressTurnTokens,
 } from "./stress";
 
@@ -102,5 +105,85 @@ describe("formatting and turn size", () => {
     expect(stressTurnTokens({ orbs: 1, rate: 5000, aura: true, seconds: 86_400 })).toBe(
       MAX_STRESS_TOKENS,
     );
+  });
+});
+
+describe("StressRun", () => {
+  const settings = (rate: number, seconds: number): StressConfig => ({
+    orbs: 6,
+    rate,
+    aura: true,
+    seconds,
+  });
+
+  /** Every turn of a run with fixed settings, in order. */
+  function turns(config: StressConfig): number[] {
+    const run = new StressRun();
+    const sizes: number[] = [];
+    for (let tokens = run.next(config); tokens !== null; tokens = run.next(config)) {
+      sizes.push(tokens);
+      if (sizes.length > 10_000) throw new Error("the run never ends");
+    }
+    return sizes;
+  }
+
+  const sum = (sizes: readonly number[]): number => sizes.reduce((total, size) => total + size, 0);
+
+  it("streams a timed run that fits in one turn as that one turn, as before", () => {
+    expect(turns(settings(200, 3))).toEqual([600]);
+    expect(turns(settings(1, 86_400))).toEqual([86_400]);
+    expect(turns(settings(5000, 100))).toEqual([MAX_STRESS_TOKENS]);
+  });
+
+  it("keeps a timed run longer than one turn going until all its seconds have streamed", () => {
+    // Both ended after their first turn, at 2,500 s and 100 s: it was capped at MAX_STRESS_TOKENS.
+    expect(turns(settings(200, 3600))).toEqual([MAX_STRESS_TOKENS, 220_000]);
+    expect(turns(settings(5000, 600))).toEqual(Array(6).fill(MAX_STRESS_TOKENS));
+    expect(turns(settings(5000, 101))).toEqual([MAX_STRESS_TOKENS, 5000]);
+  });
+
+  it("streams exactly rate x seconds tokens in turns the shell accepts, for any settings", () => {
+    for (const rate of [1, 3, 7, 200, 999, 4999, 5000]) {
+      for (const seconds of [1, 59, 101, 3600, 86_400]) {
+        const sizes = turns(settings(rate, seconds));
+        expect(sum(sizes), `rate=${rate},seconds=${seconds}`).toBe(rate * seconds);
+        for (const size of sizes) {
+          expect(Number.isInteger(size) && size >= 1 && size <= MAX_STRESS_TOKENS).toBe(true);
+        }
+        // Every turn but the last is full: as few turns (and turn boundaries) as possible.
+        expect(sizes.slice(0, -1).every((size) => size === MAX_STRESS_TOKENS)).toBe(true);
+      }
+    }
+  });
+
+  it("streams open-ended runs in rolling turns until stopped", () => {
+    const run = new StressRun();
+    for (let turn = 0; turn < 1000; turn += 1) {
+      expect(run.next(settings(200, 0))).toBe(200 * ROLLING_TURN_SECONDS);
+    }
+    expect(new StressRun().next(settings(5000, 0))).toBe(5000 * ROLLING_TURN_SECONDS);
+  });
+
+  it("sizes each turn from the settings current when it starts, and still ends on time", () => {
+    const run = new StressRun();
+    expect(run.next(settings(5000, 300))).toBe(MAX_STRESS_TOKENS); // 100 s
+    // The rate slider moved mid-run: the 200 s left stream at the new rate.
+    expect(run.next(settings(1000, 300))).toBe(200_000);
+    expect(run.next(settings(1000, 300))).toBeNull();
+
+    // Switched from open-ended to timed after one 30 s turn: the run is already over.
+    const rolling = new StressRun();
+    expect(rolling.next(settings(200, 0))).toBe(6000);
+    expect(rolling.next(settings(200, 10))).toBeNull();
+    // Or not yet: 30 s of a 45 s run have streamed.
+    const longer = new StressRun();
+    longer.next(settings(200, 0));
+    expect(longer.next(settings(200, 45))).toBe(3000);
+    expect(longer.next(settings(200, 45))).toBeNull();
+  });
+
+  it("starts nothing without a rate, rather than dividing by zero", () => {
+    expect(new StressRun().next(settings(0, 60))).toBeNull();
+    expect(new StressRun().next(settings(0, 0))).toBeNull();
   });
 });

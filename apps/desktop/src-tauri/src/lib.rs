@@ -3,10 +3,13 @@
 //! that exposes it to the React UI in `apps/desktop/src`.
 //!
 //! Startup ([`run`]): logging, launch switches from the environment, the plugins (single-instance
-//! first), then `setup` runs aura-core's startup sequence (failures become an error screen, never a
-//! crash), picks the window glass for this OS, creates the main window hidden, and arms the
-//! fallback that shows it if the page never reports its first paint. If no window can be created
-//! at all, `setup` logs why and the app exits with [`STARTUP_FAILED`].
+//! first, unless the launch runs on its own: [`LaunchOptions::single_instance`]), then `setup` runs
+//! aura-core's startup sequence on the data root aura-core resolves (failures become an error
+//! screen, never a crash), picks the window glass for this OS, creates the main window hidden, and
+//! arms the fallback that shows it if the page never reports its first paint. If no window can be
+//! created at all, `setup` logs why and the app exits with [`STARTUP_FAILED`]. Once the window is
+//! on screen, a session that did not close the database is followed by a background integrity
+//! check ([`integrity`]). At exit the check is closed, then the store.
 
 pub mod bindings;
 pub mod boot;
@@ -14,6 +17,7 @@ pub mod commands;
 pub mod demo;
 pub mod error;
 pub mod glass;
+pub mod integrity;
 pub mod launch;
 pub mod os;
 pub mod reveal;
@@ -24,6 +28,8 @@ pub mod window;
 
 #[cfg(test)]
 mod config_checks;
+#[cfg(test)]
+mod test_support;
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -60,8 +66,8 @@ pub fn run() {
     let commands = bindings::builder();
     let mut builder = tauri::Builder::default();
     // First, so a second launch hands over to the running instance before anything else starts.
-    // Smoke runs skip it: an automated check has to run even while someone has auracode open.
-    if !launch.smoke {
+    // Smoke runs and launches with their own data folder skip it (see `single_instance`).
+    if launch.single_instance() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             window::focus_main(app);
         }));
@@ -97,8 +103,7 @@ pub fn run() {
 /// screen (`boot`), and a window that cannot be created at all is logged and ends the app with
 /// [`STARTUP_FAILED`].
 fn setup(app: &mut tauri::App, launch: LaunchOptions) {
-    let root = boot::choose_root(boot::data_dir_overridden(), app.path().app_data_dir().ok());
-    let booted = boot::boot(root);
+    let booted = boot::startup();
 
     let os = os::OsInfo::detect();
     let plan = glass::plan(os.os, os.version, launch.no_glass);
@@ -183,6 +188,11 @@ fn on_event(app: &tauri::AppHandle, event: RunEvent) {
     if matches!(event, RunEvent::Exit)
         && let Some(state) = app.try_state::<AppState>()
     {
+        // Before the store closes, so a check that has not begun never starts after it. A running
+        // one is not waited for: it reads through its own connection and ends with the process.
+        if state.integrity.close() {
+            tracing::info!("the integrity check is still running; it ends with the process");
+        }
         state.demos.cancel_all();
         state.close_store();
     }

@@ -152,6 +152,17 @@ export function App({ store }: { readonly store: StreamStore }) {
     );
   }
 
+  // The shell has acknowledged the repair, so `app_info` no longer reports it; mirror that here.
+  // Not in the notice's own state: the home screen, notice included, unmounts while the stress
+  // view is open and would come back showing the repair again.
+  const onRecoveryDismissed = (): void => {
+    setBoot((current) =>
+      current.status === "ready"
+        ? { status: "ready", info: { ...current.info, recovery_notice: null } }
+        : current,
+    );
+  };
+
   const brand = AGENT_BRANDS[brandId];
   const running = isRunning(snapshot);
   const activity = snapshot.phase === "idle" ? "idle" : activityOf(snapshot.stream);
@@ -178,6 +189,7 @@ export function App({ store }: { readonly store: StreamStore }) {
                   setStressAutoStart(false);
                   setView("stress");
                 }}
+                onRecoveryDismissed={onRecoveryDismissed}
               />
             ) : (
               <StressView

@@ -18,6 +18,7 @@ const INFO: AppInfo = {
   glass: "liquid_glass",
   launch: { type: "smoke" },
   notices: [],
+  recovery_notice: null,
   fatal: null,
 };
 

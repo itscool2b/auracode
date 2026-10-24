@@ -39,6 +39,14 @@ SHA-1 and expiry date. It never replaces an identity that already exists. Nothin
 the private key exists outside the keychain only in a private temporary folder that is deleted
 right after the import.
 
+The trade-off: `codesign` uses the key without asking, and any program running under your account
+can run `codesign`. So code on your account could sign itself as this identity and inherit the folder
+access you granted to local auracode builds, which a per-build ad-hoc signature never allows. That is
+the usual price of a local signing identity. Keep it in mind before granting a local build broad
+access such as Full Disk Access, and rotate the identity (below) if you suspect misuse. Released
+builds never use it (CI signs them ad hoc until auracode has an Apple Developer ID), so it cannot
+impersonate them.
+
 `security find-identity -v -p codesigning` keeps reporting `0 valid identities`. "Valid" there
 means vouched for by a certificate authority, which a self-signed certificate never is, and
 `codesign` does not need it. `pnpm signing status`, or the same command without `-v`, shows the
