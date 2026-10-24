@@ -260,6 +260,7 @@ dependencies = [
  "aura-core",
  "aura-drivers",
  "aura-protocol",
+ "embed-resource",
  "serde",
  "serde_json",
  "specta",
