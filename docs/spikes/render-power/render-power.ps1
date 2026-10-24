@@ -401,15 +401,28 @@ function Save-LaunchEnvironment {
     $saved
 }
 
+function Set-ProcessVariable {
+    # Sets one variable of this process; $null removes it. SetEnvironmentVariable cannot remove: a
+    # $null argument reaches its string parameter as '' (PowerShell's conversion), which Windows
+    # PowerShell 5.1's .NET Framework treats as a removal but PowerShell 7's .NET stores as an
+    # empty value. Removing through the Env: drive works the same in both.
+    param([string]$Name, $Value)
+    if ($null -ne $Value) {
+        [Environment]::SetEnvironmentVariable($Name, [string]$Value, 'Process')
+    } elseif (Test-Path -LiteralPath "Env:$Name") {
+        Remove-Item -LiteralPath "Env:$Name"
+    }
+}
+
 function Set-LaunchEnvironment {
     # $null removes a variable. Start-Process passes this process's environment to auracode.
     param([System.Collections.IDictionary]$Values)
-    foreach ($name in @($Values.Keys)) { [Environment]::SetEnvironmentVariable([string]$name, $Values[$name], 'Process') }
+    foreach ($name in @($Values.Keys)) { Set-ProcessVariable -Name ([string]$name) -Value $Values[$name] }
 }
 
 function Restore-LaunchEnvironment {
     param([hashtable]$Saved)
-    foreach ($name in @($Saved.Keys)) { [Environment]::SetEnvironmentVariable([string]$name, $Saved[$name], 'Process') }
+    foreach ($name in @($Saved.Keys)) { Set-ProcessVariable -Name ([string]$name) -Value $Saved[$name] }
 }
 
 function ConvertFrom-FrameLogJson {
