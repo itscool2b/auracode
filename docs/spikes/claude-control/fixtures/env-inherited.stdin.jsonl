@@ -1,0 +1,2 @@
+{"after_stdout_line":0,"message":{"request":{"hooks":null,"subtype":"initialize"},"request_id":"req_1_spike","type":"control_request"},"t_ms":0}
+{"after_stdout_line":9,"message":{"message":{"content":"/usage","role":"user"},"parent_tool_use_id":null,"session_id":"default","type":"user","uuid":"01a16d1b-45c1-7799-9af7-4a56ad650f59"},"t_ms":1351}

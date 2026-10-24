@@ -1,0 +1,5 @@
+{"after_stdout_line":0,"message":{"request":{"hooks":null,"subtype":"initialize"},"request_id":"req_1_spike","type":"control_request"},"t_ms":0}
+{"after_stdout_line":9,"message":{"request":{"detail":"summary","subtype":"get_context_usage"},"request_id":"req_2_spike","type":"control_request"},"t_ms":845}
+{"after_stdout_line":10,"message":{"message":{"content":"Count from 1 to 300, one number per line. Output only the numbers.","role":"user"},"parent_tool_use_id":null,"session_id":"default","type":"user","uuid":"01a16d18-77e6-7753-9ae9-b208ac4d809c"},"t_ms":968}
+{"after_stdout_line":25,"message":{"request":{"subtype":"interrupt"},"request_id":"req_3_spike","type":"control_request"},"t_ms":2429}
+{"after_stdout_line":41,"message":{"message":{"content":"What was the last number you wrote before you were stopped? Reply with only that number.","role":"user"},"parent_tool_use_id":null,"session_id":"default","type":"user","uuid":"01a16d18-857c-77d8-aab4-488d616331d6"},"t_ms":4447}
