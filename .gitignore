@@ -1,0 +1,44 @@
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Rust
+/target/
+**/target/
+
+# Node
+node_modules/
+.pnpm-store/
+dist/
+dist-ssr/
+*.tsbuildinfo
+coverage/
+
+# Tauri generated schemas (regenerated on build)
+apps/desktop/src-tauri/gen/schemas/
+
+# Cloudflare / Wrangler
+.wrangler/
+.dev.vars*
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# Logs and test output
+*.log
+npm-debug.log*
+pnpm-debug.log*
+playwright-report/
+test-results/
