@@ -418,6 +418,10 @@ to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The z
   window is minimized, so Chromium may keep rendering orbs and streams nobody sees, and `document.hidden`
   may never turn true (section D of the [render and power spike](spikes/render-power.md)); once the
   Windows measurement confirms it, the shell hides the webview on minimize and shows it on restore.
+  Carried over from M0 because they need the owner's time or hardware, and their results are used
+  here: the macOS visible-window render and power run (an unlocked Mac left idle for about 20
+  minutes), the manual Windows checklists (spawning, titlebar, render and power; needs a Windows PC),
+  and creating the local signing identity (`pnpm signing create`, run by the owner).
 - **M2c Composer + palette.** Attachments, @mentions, slash commands, queue/steer, agent/model/effort/
   autonomy pickers, command palette, shortcuts, settings.
 - **M3 Boot, onboarding, agents.** Boot cinematic, full onboarding (account step behind a flag until M6),
