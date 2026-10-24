@@ -1,0 +1,19 @@
+# Keeps the action pins in .github/workflows current. Every action is pinned to a full commit SHA
+# with its version as a trailing comment (.github/scripts/lint-workflows.sh enforces that), and
+# Dependabot moves both forward.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      # Each merge to main runs CI on macOS and builds every bundle, so one grouped pull request a
+      # month rather than one per action release.
+      interval: monthly
+    # A release is proposed only once it is a week old: a hijacked release (tj-actions/changed-files,
+    # 2025) is usually caught and pulled within days.
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns:
+          - "*"
