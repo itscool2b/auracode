@@ -1,7 +1,10 @@
 import { defineConfig } from "vitest/config";
 
 // Node environment on purpose: everything under test here is pure logic or React rendered to a
-// string. WebGL and layout behaviour is verified in a real engine (Playwright), not a DOM shim.
+// string, and a DOM shim would only pretend to run WebGL and layout. What runs them in real engines
+// is the desktop app's smoke run (AURACODE_SMOKE, .github/scripts/run-smoke.sh), whose stress burst
+// draws live orbs: WebKit when run locally on a Mac, WebKitGTK and WebView2 in CI once GitHub
+// Actions runs. It does not fail without WebGL2, though: the orbs fall back to their CSS posters.
 export default defineConfig({
   test: {
     environment: "node",

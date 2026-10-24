@@ -16,6 +16,42 @@ projects, switch agents and models mid-chat, run several at once.
 
 Early development. The full plan, decisions, and milestones live in [docs/plan.md](docs/plan.md).
 
+### M0: scaffold and spikes
+
+Built and pushed on the `m0-scaffold` branch, not merged yet.
+
+Done:
+
+- **Domain.** The auracode.si zone has been active on Cloudflare since 2026-10-24.
+- **Scaffold.** The Cargo and pnpm workspaces with rustfmt, clippy, and Biome; the event model
+  (`aura-protocol`); the data folder, device identity, profiles, and per-profile database (`aura-core`);
+  frame batching and the scripted mock agent (`aura-drivers`); the design system and WebGL orb renderer
+  (`packages/ui`); the desktop shell with its glass window, typed commands and channels, and a demo stream;
+  the CI and bundle workflows (written, but they have not run yet: see below).
+- **Spikes.** [Claude Code's control protocol](docs/spikes/claude-control.md) is decided.
+  [Windows spawning](docs/spikes/windows-spawn.md) and
+  [the Windows titlebar](docs/spikes/windows-titlebar.md) are designed and implemented, and wait for
+  their first Windows run.
+  [Render and power](docs/spikes/render-power.md) has measured the hidden window and the page in WebKit;
+  the visible window and Windows remain.
+
+Pending, each waiting on the repository owner:
+
+- **The local signing identity.** `pnpm signing create` adds a self-signed certificate and its private key
+  to the login keychain, so it waits for the owner's OK (see
+  [apps/desktop/README.md](apps/desktop/README.md#signing-on-macos)). Until then builds are signed ad hoc,
+  and macOS asks for `~/Desktop` access again after every rebuild.
+- **The macOS visible-window render and power run.** It needs an unlocked Mac left idle for about 20
+  minutes ([steps](docs/spikes/render-power.md#finishing-the-macos-half)).
+- **Every Windows run.** GitHub Actions is blocked for the account by a billing problem: the first CI run
+  on `m0-scaffold` failed with "recent account payments have failed or your spending limit needs to be
+  increased" and ran no job, so no Windows or Linux build, test, or smoke result exists yet.
+  The manual checklists for [spawning](docs/spikes/windows-spawn.md#manual-checklist-the-users-windows-pc),
+  [the titlebar](docs/spikes/windows-titlebar.md#verification), and
+  [render and power](docs/spikes/render-power.md#windows-webview2-half-still-to-run) also need a Windows
+  PC.
+- **An app screenshot.** It needs an unlocked screen: a locked Mac hides every window.
+
 ## Layout
 
 ```
@@ -24,8 +60,10 @@ crates/aura-core/       device identity, data folder, profiles, the per-profile 
 crates/aura-drivers/    frame batching for the UI and the scripted mock agent; agent drivers arrive in M1
 apps/desktop/           Tauri v2 app: Rust shell in src-tauri/, React UI in src/
 packages/ui/            Aura design system: tokens, fonts, glass, motion, Orb, AuraField
-docs/                   plan and spike write-ups; spike code sits next to its write-up in docs/spikes/
+docs/                   plan and spike write-ups; spike code sits next to its write-up in docs/spikes/,
+                        and docs/spikes/doc-check/ tests the write-ups against the code they cite
 .github/workflows/      CI checks and unsigned desktop bundles
+.github/scripts/        the scripts those workflows run (smoke run, spike staging, checks) and their tests
 ```
 
 Planned, not created yet:
@@ -46,7 +84,9 @@ infra/                  M5, M6      release scripts, Wrangler configs, Neon migr
 ### Prerequisites
 
 - **Rust** stable with rustfmt and clippy. `rust-toolchain.toml` selects it, so rustup installs it on the
-  first cargo command. The minimum supported version is `rust-version` in `Cargo.toml` (1.90).
+  first cargo command. The minimum supported version is `rust-version` in `Cargo.toml` (1.95, set by
+  the rusqlite_migration dependency). rustup never updates an installed stable on its own, so if
+  `rustc --version` is older, run `rustup update stable`.
 - **Node.js** 22.12 or a later 22.x, 24.x, or 26 and newer: the range Vite 8 and Vitest 5 support, set
   by `engines` in `package.json`. `pnpm install` refuses any other version. CI uses 24.
 - **pnpm** 12, the version pinned by `packageManager` in `package.json`: `brew install pnpm`, or see
@@ -72,32 +112,65 @@ pnpm dev
 ```
 
 `pnpm dev` runs `tauri dev`: Vite serves the UI on `localhost:1420` with hot reload, and the Rust shell
-rebuilds and relaunches when its code changes. App data lives in `si.auracode.desktop` inside the OS data
-folder (`~/Library/Application Support` on macOS, `%APPDATA%` on Windows, `~/.local/share` on Linux).
+rebuilds and relaunches when its code changes. Release bundles (`pnpm bundle`) and the macOS signing
+identity (`pnpm signing`) are described in [apps/desktop/README.md](apps/desktop/README.md).
+
+App data lives in a folder named `si.auracode.desktop` inside the local (never roaming) app data folder:
+
+| OS | Folder |
+|---|---|
+| macOS | `~/Library/Application Support/si.auracode.desktop` |
+| Windows | `%LOCALAPPDATA%\si.auracode.desktop` |
+| Linux | `$XDG_DATA_HOME/si.auracode.desktop`, or `~/.local/share/si.auracode.desktop` when `XDG_DATA_HOME` is unset |
+
+`AURACODE_DATA_DIR` moves it anywhere else (see [Environment switches](#environment-switches)).
 
 ### Checks
 
-CI runs these on every pull request and push to `main`, plus nightly:
+GitHub Actions cannot run for this account yet (see [M0](#m0-scaffold-and-spikes)), so for now these
+checks run locally on a Mac, and nothing runs them on Linux or Windows. From the repository root:
 
 ```sh
-# Linux
 pnpm check                      # pnpm lint, pnpm typecheck, pnpm test (Vitest)
-cargo fmt --all --check
-
-# Linux and Windows; macOS too on main, nightly, and manual runs
 pnpm build                      # the production frontend build
+cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
-cargo test --manifest-path docs/spikes/windows-spawn/Cargo.toml     # not on macOS
-cargo build --manifest-path docs/spikes/claude-control/Cargo.toml   # compile only
+cargo test --manifest-path docs/spikes/windows-spawn/Cargo.toml
+cargo build --manifest-path docs/spikes/claude-control/Cargo.toml   # compile only, never run
+cargo test --manifest-path docs/spikes/claude-control/Cargo.toml    # unit tests only, never the binary
+cargo test --manifest-path docs/spikes/doc-check/Cargo.toml         # spike docs against the code
+bash .github/scripts/lint-workflows.sh                              # action pins, runner labels, schedule names
+shellcheck -x .github/scripts/*.sh
+bash .github/scripts/test.sh                                        # the CI scripts' own tests
+
+# The smoke run: the app, with its frontend embedded, streams a demo turn, a cancelled turn, and a
+# stress burst through the real UI, then prints its result and exits.
+pnpm --filter @auracode/desktop tauri build --debug --no-bundle
+bash .github/scripts/run-smoke.sh target/debug/auracode
 ```
+
+Once Actions runs, `.github/workflows/ci.yml` runs all of these (the doc check in the lint job, the
+frontend build inside the smoke build), plus the render-power suite's tests, on Windows under both
+Windows PowerShell 5.1 and PowerShell 7. Pull requests and pushes to milestone branches (`m0-scaffold`,
+...) run on Linux and Windows. A branch's pushes skip while its open pull request is one GitHub can
+merge, since the pull request's runs cover them; during a merge conflict GitHub runs no pull request
+workflow, so the pushes run CI themselves. Pushes to `main` and manual runs add macOS. A weekly run on Mondays repeats the rust
+job on Linux and clippy on Windows; macOS never runs on a schedule. Biome, the typecheck, Vitest,
+`cargo fmt`, the doc check, the CI script checks, and the claude-control unit tests run on Linux only,
+and the spawning spike and the smoke run skip macOS.
+`.github/workflows/build.yml` builds unsigned installers for pushes to `main`, nightly when nothing
+has built `main`'s newest commit yet (one nightly try per commit), on demand, and for milestone-branch
+pushes whose newest commit message contains `[bundle]` (Windows and Linux only).
 
 - Biome is the only linter and formatter outside Rust (there is no ESLint or Prettier): `pnpm lint`
   checks, `pnpm format` rewrites. It covers TypeScript, CSS, JSON, and YAML. It does not format Markdown
   (hand-wrapped prose and tables) and never touches `pnpm-lock.yaml` (written by pnpm). Rust is formatted
   with `cargo fmt --all`.
 - Clippy rejects `unwrap()` and `expect()` outside tests (`Cargo.toml` and `clippy.toml`).
-- The claude-control spike only compiles in CI: running it drives a real Claude Code session.
+- The claude-control binary is never run, in CI too, because running it drives a real Claude Code
+  session, which spends quota. Only its unit tests run: they feed the code canned input, and a shell
+  stands in for `claude` where they need a process.
 
 ### Generated TypeScript bindings
 

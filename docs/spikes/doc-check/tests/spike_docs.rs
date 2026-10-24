@@ -1,6 +1,6 @@
-//! Runs every rule against the real spike docs (docs/spikes/*.md), the repository's lockfiles, the
-//! generated TypeScript bindings and the code they quote. A failure names the doc and line, and
-//! says what to change.
+//! Runs every rule against the real spike docs (docs/spikes/*.md), the repository's lockfiles,
+//! workflows and generated TypeScript bindings, and the code they quote; the runner rule also
+//! reads the spikes' own code. A failure names the file and line, and says what to change.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -8,8 +8,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use spike_doc_check::{
-    Finding, check_links, check_quoted_literals, check_status, check_union_listings,
-    check_versions, locked_packages, union_values,
+    Finding, check_links, check_quoted_literals, check_runner_labels, check_runner_labels_in_code,
+    check_status, check_union_listings, check_versions, locked_packages, union_values,
+    workflow_runner_labels,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -137,11 +138,93 @@ fn code_corpus() -> Result<String, Box<dyn Error>> {
     Ok(corpus)
 }
 
-/// Runs `rule` over every doc and fails with all findings at once.
-fn assert_no_findings(rule: &str, check: impl Fn(&str) -> Vec<Finding>) -> TestResult {
+/// Every runner label the workflows in .github/workflows name.
+fn ci_runner_labels() -> Result<BTreeSet<String>, Box<dyn Error>> {
+    let mut labels = BTreeSet::new();
+    for entry in fs::read_dir(repo_root().join(".github").join("workflows"))? {
+        let path = entry?.path();
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "yml" || extension == "yaml")
+        {
+            labels.extend(workflow_runner_labels(&fs::read_to_string(&path)?));
+        }
+    }
+    if labels.is_empty() {
+        return Err("the workflows in .github/workflows name no runner labels".into());
+    }
+    Ok(labels)
+}
+
+/// The spikes' own code: sources, manifests and scripts. Captured fixtures (`.jsonl`) and
+/// lockfiles are data, not claims.
+const SPIKE_CODE_EXTENSIONS: [&str; 8] = ["rs", "toml", "ps1", "py", "swift", "c", "h", "sh"];
+
+/// Appends every spike code file under `dir` to `out`, skipping build output and `this_crate`
+/// (canonical path), whose tests quote the very labels the runner rule rejects.
+fn collect_spike_code(
+    dir: &Path,
+    this_crate: &Path,
+    out: &mut Vec<(PathBuf, String)>,
+) -> Result<(), Box<dyn Error>> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let kind = entry.file_type()?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if kind.is_dir() {
+            if !SKIPPED_DIRS.contains(&name.as_str()) && fs::canonicalize(&path)? != this_crate {
+                collect_spike_code(&path, this_crate, out)?;
+            }
+        } else if kind.is_file()
+            && path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| SPIKE_CODE_EXTENSIONS.contains(&extension))
+        {
+            out.push((
+                path.clone(),
+                String::from_utf8_lossy(&fs::read(&path)?).into_owned(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Every spike code file and its text, by path relative to docs/spikes.
+fn spike_code() -> Result<Vec<(String, String)>, Box<dyn Error>> {
+    let spikes = spikes_dir();
+    let this_crate = fs::canonicalize(env!("CARGO_MANIFEST_DIR"))?;
+    let mut files = Vec::new();
+    collect_spike_code(&spikes, &this_crate, &mut files)?;
+    let spawn_tests = Path::new("windows-spawn").join("tests").join("spawn.rs");
+    if !files.iter().any(|(path, _)| path.ends_with(&spawn_tests)) {
+        return Err(format!(
+            "the spikes' code is incomplete: no {}",
+            spawn_tests.display()
+        )
+        .into());
+    }
+    let mut named: Vec<(String, String)> = files
+        .into_iter()
+        .map(|(path, text)| {
+            let relative = path.strip_prefix(&spikes).unwrap_or(path.as_path());
+            (relative.display().to_string(), text)
+        })
+        .collect();
+    named.sort();
+    Ok(named)
+}
+
+/// Runs `check` over every (name, text) and fails with all findings at once.
+fn assert_none_in(
+    rule: &str,
+    files: &[(String, String)],
+    check: impl Fn(&str) -> Vec<Finding>,
+) -> TestResult {
     let mut report = Vec::new();
-    for (name, text) in spike_docs()? {
-        for finding in check(&text) {
+    for (name, text) in files {
+        for finding in check(text) {
             report.push(format!("{name}: {finding}"));
         }
     }
@@ -150,6 +233,11 @@ fn assert_no_findings(rule: &str, check: impl Fn(&str) -> Vec<Finding>) -> TestR
     } else {
         Err(format!("{rule}:\n{}", report.join("\n")).into())
     }
+}
+
+/// Runs `rule` over every doc and fails with all findings at once.
+fn assert_no_findings(rule: &str, check: impl Fn(&str) -> Vec<Finding>) -> TestResult {
+    assert_none_in(rule, &spike_docs()?, check)
 }
 
 #[test]
@@ -195,4 +283,22 @@ fn every_link_and_anchor_resolves() -> TestResult {
     assert_no_findings("a spike doc has a broken link", |text| {
         check_links(text, &dir)
     })
+}
+
+#[test]
+fn every_runner_a_doc_names_is_one_ci_runs_on() -> TestResult {
+    let labels = ci_runner_labels()?;
+    assert_no_findings("a spike doc names a runner no workflow runs on", |text| {
+        check_runner_labels(text, &labels)
+    })
+}
+
+#[test]
+fn every_runner_the_spikes_code_names_is_one_ci_runs_on() -> TestResult {
+    let labels = ci_runner_labels()?;
+    assert_none_in(
+        "a spike's code names a runner no workflow runs on",
+        &spike_code()?,
+        |text| check_runner_labels_in_code(text, &labels),
+    )
 }

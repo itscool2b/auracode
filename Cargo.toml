@@ -7,7 +7,11 @@ exclude = ["docs/spikes"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.90"
+# The floor of the locked dependency graph: rusqlite_migration 2.6.0 declares 1.95, the highest
+# in Cargo.lock (Tauri declares 1.90). Cargo refuses to build a package that declares more than the
+# running rustc, and resolver 3 prefers dependency versions that build on this one, so keep it at
+# the true floor: raise it in the same change as the dependency update or the code that needs more.
+rust-version = "1.95"
 authors = ["itscool2b"]
 license = "LicenseRef-Proprietary"
 repository = "https://github.com/itscool2b/auracode"

@@ -267,9 +267,12 @@ run to confirm or refute:
   window message when the top window is minimized or restored, that apps should set `IsVisible`
   to `FALSE` on `SIZE_MINIMIZED` and back on `SIZE_RESTORED`, and that hiding the page is what
   lets Chromium throttle its animations and tasks. So where macOS stopped every animation frame,
-  WebView2 likely keeps drawing the orbs and the stream while minimized. If so, the
-  `idle-minimized` and `s24-minimized` frame logs show frames with `hidden` false, and their CPU
-  matches the visible runs.
+  WebView2 likely keeps drawing the orbs and the stream while minimized. If so, `s24-minimized`'s
+  frame log shows frames counted with `hidden` false, and auracode's own processes (the app and
+  WebView2's, not `dwm.exe`) cost about as much CPU and GPU in `idle-minimized` and
+  `s24-minimized` as in `idle` and `s24`. `idle-minimized` has no frame log, since only the stress
+  view writes one and the suite reads it only in stress scenarios, so that comparison with `idle`
+  is its only evidence.
 - **The glass cost lands in dwm.exe.** DWM draws Mica behind the window and composites
   WebView2's output, so the glass-versus-opaque difference shows as `dwm.exe` CPU and GPU against
   the baseline runs, as WindowServer's does on macOS. With transparency effects off (or Energy
@@ -401,10 +404,13 @@ runs every scenario unattended.
    missing; the suite finds the installed `auracode.exe` by itself. A bare `auracode.exe` from
    `tauri build --no-bundle` works too: pass it with `-Exe`, after `Unblock-File` if it came from
    a download (the suite refuses a file SmartScreen would stop).
-   No Windows build exists yet. Build runs on pushes to main, nightly and by hand, and GitHub
-   offers the manual run (`gh workflow run build.yml --ref <branch>`) only once the workflow file
-   is on the default branch, so the first installer arrives when the M0 workflows reach main, or
-   earlier if CI gains a Windows build for pull requests.
+   No Windows build exists yet: GitHub Actions is blocked for the account by a billing problem,
+   so no workflow has run. Once it runs, Build makes the Windows installer for every push to
+   main, nightly when main's newest commit has none, by hand
+   (`gh workflow run build.yml --ref <branch>`, offered only once the workflow file is on the
+   default branch), and for a push to a milestone branch such as `m0-scaffold` whose newest
+   commit message contains `[bundle]`, for example
+   `git commit --allow-empty -m "Build installers [bundle]"`.
 2. **Get the scripts.** Download `render-power.ps1` and `test-render-power.ps1` from
    `docs/spikes/render-power/` into one folder (on GitHub: open each file, then Download raw file).
 3. **Run the tests first.** They take seconds and catch a script problem before the long run:
@@ -442,12 +448,13 @@ settings as the macOS harness. It records:
   (`Win32_Process` CPU times, which cover `dwm.exe` without elevation) and 3D GPU engine
   utilization (`\GPU Engine(*engtype_3D)\Utilization Percentage`), summed per role (app, WebView2
   browser, renderer, GPU, utility, dwm);
-- the frame rate over exactly the measured window, for stress scenarios. auracode starts with
-  WebView2's DevTools port open on loopback (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`, which
-  WebView2 appends to the app's own arguments), and after the window the suite reads the stress
-  view's frame log through it; nothing attaches while the window is measured. Release builds turn
-  WebView2's DevTools window off, and whether that also closes the port is not documented. If it
-  does, the run records the error, and the frame rate has to come from the on-screen readout;
+- the frame rate over exactly the measured window, for stress scenarios only (the main screen
+  keeps no frame log, so the idle runs have none). auracode starts with WebView2's DevTools port
+  open on loopback (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`, which WebView2 appends to the app's
+  own arguments), and after the window the suite reads the stress view's frame log through it;
+  nothing attaches while the window is measured. Release builds turn WebView2's DevTools window
+  off, and whether that also closes the port is not documented. If it does, the run records the
+  error, and the frame rate has to come from the on-screen readout;
 - whether the window was minimized, visible and in front at the start and end of the window, with
   a warning when a visible run lost the foreground;
 - battery state at both ends of the window, and in `machine.json` the Windows build, the GPUs and

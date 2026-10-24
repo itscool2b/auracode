@@ -1,4 +1,6 @@
 [toolchain]
-# Latest stable; the minimum supported version is `rust-version` in Cargo.toml (Tauri plugins need 1.90+).
+# The stable channel: whichever stable rustup has installed, which rustup never updates on its own
+# (`rustup update stable` does). It must be at least `rust-version` in Cargo.toml: 1.95, set by
+# rusqlite_migration 2.6.0.
 channel = "stable"
 components = ["rustfmt", "clippy"]

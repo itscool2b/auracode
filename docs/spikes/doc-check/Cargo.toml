@@ -1,6 +1,6 @@
 [package]
 name = "spike-doc-check"
-description = "Checks the M0 spike docs against the code, lockfiles and generated bindings they cite"
+description = "Checks the M0 spike docs against the code, lockfiles, workflows and generated bindings they cite"
 version = "0.0.0"
 edition = "2024"
 rust-version = "1.90"

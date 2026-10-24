@@ -7,7 +7,7 @@ an agent must stop everything it started.
 
 **Status:** pending Windows verification. The design below was drawn on 2026-10-24 from sources
 and from runs on macOS; its Windows code paths compile but have never run on Windows. The
-windows-latest results in [What the tests prove](#what-the-tests-prove) and the
+windows-2025 results in [What the tests prove](#what-the-tests-prove) and the
 [manual checklist](#manual-checklist-the-users-windows-pc) are what turn it into a decision.
 
 ## Decision
@@ -82,7 +82,8 @@ Agents start shells and shells start git with no flags, so descendants land in c
 `CREATE_NO_WINDOW` the agent owns a windowless console, every descendant hits case 1 and shares it,
 and nothing in the tree can flash. Under `DETACHED_PROCESS` the agent has no console, so every
 console program it starts hits case 2: the flash moves one level down instead of going away. The
-CI control tests show both outcomes from a GUI-subsystem parent.
+`control_` tests check both outcomes from a GUI-subsystem parent; like every Windows test here, they
+have not run on Windows yet.
 
 Limit: a descendant that passes its own `DETACHED_PROCESS` or `CREATE_NEW_CONSOLE` re-creates the
 problem for its own children (Node's `spawn` with `detached: true` uses `DETACHED_PROCESS`); no flag
@@ -191,18 +192,22 @@ impl HiddenChild { // Drop kills the tree
 
 ## What the tests prove
 
-`cargo test --manifest-path docs/spikes/windows-spawn/Cargo.toml` is the "Test the Windows spawning
-spike" step of ci.yml's rust job on windows-latest and ubuntu-latest. That job has never run: the
-workflows have not been pushed yet, so the M0 pull request's CI will be the first run of the
-Windows code paths on Windows. Until then the evidence is macOS only. The suite passes there (25
-consecutive runs with no leftover processes when it was written, and one more run while this doc
-was revised), and the Windows paths type-check and lint clean for `x86_64-pc-windows-gnu`
+`cargo test --manifest-path docs/spikes/windows-spawn/Cargo.toml` runs the whole suite locally.
+ci.yml's rust job runs it on windows-2025 and ubuntu-24.04 in steps: it builds the spike, runs
+the unit tests, stages the integration tests beside their helpers
+(`.github/scripts/stage-spawn-spike.sh`) and runs them from that folder, which also proves the
+folder works on its own, and on Windows uploads the folder as the `windows-spawn-spike-<sha>`
+artifact for the [manual checklist](#manual-checklist-the-users-windows-pc). None of that has run:
+the workflows are pushed, but GitHub Actions is blocked for the account by a billing problem, so
+the first CI run on `m0-scaffold` ran no job. Until one gets through, the evidence is macOS only.
+The suite passes there (25 consecutive runs with no leftover processes when it was written, and
+one more run while this doc was revised), and the Windows paths type-check and lint clean
 (`cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings`), which proves that
 they compile, not that they work.
 
 When a CI run finishes, replace each pending cell with pass or fail and link the run here.
 
-| Test | Proves | macOS result | ubuntu-latest result | windows-latest result |
+| Test | Proves | macOS result | ubuntu-24.04 result | windows-2025 result |
 |---|---|---|---|---|
 | `captures_git_version_from_stdout` | a hidden spawn runs real git and captures its stdout | pass | pending | pending |
 | `kill_tree_kills_the_grandchild` | a 60 s grandchild of a shell (`sh -c 'sleep 60 & echo $!; wait'`; `cmd /d /c ping -n 60 127.0.0.1`, found by parent pid) is gone within 5 s of `kill_tree` | pass | pending | pending |
@@ -236,16 +241,27 @@ stacks (node, Git Bash) come with the real agents in M1a and M1e.
 
 ## Manual checklist (the user's Windows PC)
 
-For now this needs Rust on the PC (rustup, with the MSVC build tools it offers to install), run
-from the repo root: ci.yml does not upload the test binaries yet. Once the windows-latest job
-uploads its test executable together with `spawn-probe.exe` and `gui-host.exe`, the checklist runs
-from that artifact without Rust; the tests already look for both helpers next to the test
-executable for this. Write pass or fail into each row, with the Windows build number.
+It runs two ways, with the same steps and pass criteria. Either way the PC needs Git for Windows on
+its PATH, since the tests and `gui-host.exe` run real git.
+
+- **Without Rust, from CI's artifact.** Every Windows run of ci.yml's rust job uploads the artifact
+  `windows-spawn-spike-<sha>` (`<sha>` is the full commit hash; uploaded even when the tests fail,
+  kept for 7 days). None exists yet, since GitHub Actions is blocked for the account by a billing
+  problem. Once one does, download it from the run's page or with
+  `gh run download <run id> --name windows-spawn-spike-<sha>`, and keep its three executables
+  (`windows-spawn-tests.exe`, `spawn-probe.exe`, `gui-host.exe`) together in any folder; they need
+  no Visual C++ Redistributable, and the README.txt beside them repeats step 1. Step 1 then runs
+  from a terminal in that folder as `.\windows-spawn-tests.exe --skip control_`, and steps 2 and 3
+  use the folder's `gui-host.exe`.
+- **With Rust** (rustup, with the MSVC build tools it offers to install): run the commands in the
+  table from the repo root.
+
+Write pass or fail into each row, with the Windows build number.
 
 | # | Step | Pass when | Result |
 |---|---|---|---|
-| 1 | `cargo test --manifest-path docs/spikes/windows-spawn/Cargo.toml -- --skip control_` | every test passes and no console window appears (the two `control_` tests flash windows on purpose, so they are skipped here) | pending |
-| 2 | Double-click `docs\spikes\windows-spawn\target\debug\gui-host.exe` | for about 4 seconds nothing appears while cmd runs git three times, then a message box lists three `git version` lines and "ping ... exited within 5 s: yes"; any console window flashing is a fail | pending |
+| 1 | `cargo test --manifest-path docs/spikes/windows-spawn/Cargo.toml -- --skip control_` (from the artifact: `.\windows-spawn-tests.exe --skip control_`) | every test passes and no console window appears (the two `control_` tests flash windows on purpose, so they are skipped here) | pending |
+| 2 | Double-click `gui-host.exe`: the artifact's, or with Rust `docs\spikes\windows-spawn\target\debug\gui-host.exe` (step 1 builds it) | for about 4 seconds nothing appears while cmd runs git three times, then a message box lists three `git version` lines and "ping ... exited within 5 s: yes"; any console window flashing is a fail | pending |
 | 3 | Run `gui-host.exe --compare` | a console window does appear for a few seconds: the flash the hidden spawn prevents (a control, so seeing the window is the pass) | pending |
 | 4 | After step 2, open Task Manager's Details tab | no `PING.EXE` is left | pending |
 | 5 | If Windows Terminal is installed, make it the default terminal app (Settings > System > For developers > Terminal) and repeat step 2 | still nothing appears | pending |

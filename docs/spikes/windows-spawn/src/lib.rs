@@ -61,7 +61,10 @@ const READ_CHUNK: usize = 64 * 1024;
 pub enum EnvOverride {
     /// Set or replace a variable.
     Set(OsString, OsString),
-    /// Remove an inherited variable, for the env scrub (`CLAUDECODE`, `CODEX_*`, `NODE_OPTIONS`).
+    /// Remove an inherited variable. The env scrub (its rule is in `docs/plan.md`) removes the
+    /// names on its denylist, such as `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID` and `CODEX_SANDBOX`,
+    /// and keeps the rest of `CLAUDE_CODE_*` and `CODEX_*`, which carry user configuration
+    /// (`CLAUDE_CODE_USE_BEDROCK`, `CODEX_HOME`).
     Remove(OsString),
 }
 

@@ -42,8 +42,9 @@ All fixtures are redacted (email, organization, account/org UUIDs, user id, home
    with `--allow-dangerously-skip-permissions` (or `--dangerously-skip-permissions`); with the former it succeeds
    later. Launch with it whenever the user's policy allows, so Full auto can be switched on mid-chat.
 9. **Leaving the parent-session variables in changed nothing observable** in 2.1.310 print mode (no refusal, own
-   session id, own messaging socket, identical payloads). Scrub anyway, but see the plan issue below: the plan's
-   blanket `CLAUDE_CODE_*` / `CODEX_*` scrub also deletes legitimate user configuration.
+   session id, own messaging socket, identical payloads). Scrub them anyway, by name: the plan's original blanket
+   `CLAUDE_CODE_*` / `CODEX_*` scrub also deleted legitimate user configuration, so the plan now uses an explicit
+   denylist instead (see the issues below).
 10. **Frames are big.** The initialize answer is about 66 KB, every `system/commands_changed` about 60 KB (re-sent
     in full as MCP servers connect, 150 to 166 commands), `get_context_usage` 48 KB (summary) to 163 KB (full).
     The driver must reduce these in Rust; none of them can go to the UI raw (8 KiB frame budget).
@@ -100,7 +101,7 @@ claude -p
   `CLAUDECODE`, `CLAUDE_PID`, `CLAUDE_EFFORT`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_SESSION_ID`,
   `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ATTENDED`, `CLAUDE_CODE_MESSAGING_SOCKET`,
   `CLAUDE_CODE_MESSAGING_TOKEN` (a secret: never log it), `CLAUDE_CODE_EXECPATH`, `CLAUDE_CODE_BRIDGE_SESSION_ID`.
-  `CLAUDE_PID` is **not** in the plan's list and should be added.
+  `CLAUDE_PID` was not in the plan's original list; the plan's denylist now has it.
 - Then set `CLAUDE_CODE_SDK_READS_SESSION_STATE=1`, as both official SDKs do on every spawn. It turns on
   `system/session_state_changed` frames (`sdk_host_only: true`) whose `idle` is the authoritative end of a run
   (background agents included); `requires_action` marks a pending permission.
@@ -432,16 +433,19 @@ Local command (`/usage`) turn: `system/init`, `system/commands_changed`, an `ass
   scrubbed env plus `CLAUDE_CODE_SDK_READS_SESSION_STATE=1`, own process group.
 - Resume/fork per the table; never two live processes on one session id.
 
-## Issues for the plan and the protocol (not changed here)
+## Issues for the plan and the protocol
+
+All four are now in [the plan](../plan.md): the env scrub as its engineering rule, the three protocol
+items as M1a follow-ups that the M1b driver maps.
 
 - **Env scrub is too broad (plan).** `CLAUDE_CODE_*` and `CODEX_*` also match documented user configuration that
   people export in their shell profile, which the resolved login-shell env will carry: `CLAUDE_CODE_USE_BEDROCK`,
   `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_MAX_OUTPUT_TOKENS`,
   `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, `CLAUDE_CODE_GIT_BASH_PATH` (Windows), `CODEX_HOME`, and more.
-  Scrubbing them breaks Bedrock/Vertex users and points Codex at the wrong home. Suggest an explicit denylist of
-  session markers (the names listed under Environment, plus `CLAUDE_CODE_SESSION_*`, `CLAUDE_CODE_MESSAGING_*`,
-  `CLAUDE_CODE_BRIDGE_*`) and add `CLAUDE_PID`. The spike itself applies the plan's list verbatim (plus
-  `CLAUDE_PID`) as instructed.
+  Scrubbing them breaks Bedrock/Vertex users and points Codex at the wrong home. Suggested instead, and adopted
+  by the plan: an explicit denylist of session markers (the names listed under Environment, plus
+  `CLAUDE_CODE_SESSION_*`, `CLAUDE_CODE_MESSAGING_*`, `CLAUDE_CODE_BRIDGE_*`), with `CLAUDE_PID` added. The
+  spike's harness still applies the plan's original list (plus `CLAUDE_PID`), as it was instructed to.
 - **Frame size (protocol).** `SessionInfo.commands` for this user is 150 to 166 entries; one `SessionUpdated`
   carrying them exceeds `MAX_FRAME_BYTES` (8 KiB) and a single event can't be split across frames. Needs either a
   request/response command for the command list or a chunked/diffed event.

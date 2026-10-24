@@ -20,8 +20,13 @@
 //!   type (`GlassEffect`) and lists values must list exactly the type's values.
 //! - **Links resolve.** Relative links point at files that exist, and anchors at headings that
 //!   exist.
+//! - **Named runners are ones CI runs on.** A GitHub-hosted runner label (`windows-2025`,
+//!   `ubuntu-24.04`) in a doc, or anywhere in a spike's own code, must be one that a workflow in
+//!   `.github/workflows` names outside its comments. The spawning doc and its tests kept naming
+//!   windows-latest and ubuntu-latest after CI moved to pinned labels, so whoever filled in the
+//!   doc's results from a CI run would have looked for jobs that do not exist.
 //!
-//! Fenced code blocks are skipped throughout: they hold commands and examples, not claims.
+//! Fenced code blocks in docs are skipped throughout: they hold commands and examples, not claims.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -849,6 +854,117 @@ pub fn check_links(doc: &str, doc_dir: &Path) -> Vec<Finding> {
     findings
 }
 
+/// The operating systems GitHub names its hosted runners after. A label continues with a
+/// version (`24.04`, `2025`, `26`) or `latest`, then optionally an architecture or a size
+/// (`-arm`, `-intel`, `-xlarge`); `ubuntu-slim` is the one other form.
+const RUNNER_SYSTEMS: [&str; 3] = ["ubuntu-", "windows-", "macos-"];
+
+/// Whether `word`, a whole word in lower case, is a GitHub-hosted runner label.
+fn is_runner_label(word: &str) -> bool {
+    let Some(rest) = RUNNER_SYSTEMS
+        .iter()
+        .find_map(|system| word.strip_prefix(system))
+    else {
+        return false;
+    };
+    let first = rest.split('-').next().unwrap_or_default();
+    let version = first.starts_with(|c: char| c.is_ascii_digit())
+        && first.chars().all(|c| c.is_ascii_digit() || c == '.');
+    version || first == "latest" || (word.starts_with("ubuntu-") && first == "slim")
+}
+
+/// Every GitHub-hosted runner label on one line, in lower case because GitHub ignores case. A
+/// label is a whole word, as in lint-workflows.sh: the `windows` in `windows-spawn` or
+/// `x86_64-pc-windows-gnu` is no label, and neither is `xubuntu-latest` or `my.ubuntu-latest`.
+pub fn runner_labels(line: &str) -> Vec<String> {
+    line.to_ascii_lowercase()
+        .split(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_')))
+        // A sentence can end right after a label: "on ubuntu-24.04."
+        .map(|word| word.trim_end_matches(['.', '-', '_']))
+        .filter(|word| is_runner_label(word))
+        .map(str::to_string)
+        .collect()
+}
+
+/// The line up to its YAML comment, which starts at a `#` that begins the line or follows
+/// whitespace (`${#PATH}` is no comment).
+fn without_yaml_comment(line: &str) -> &str {
+    let mut after_space = true;
+    for (index, c) in line.char_indices() {
+        if c == '#' && after_space {
+            return &line[..index];
+        }
+        after_space = c.is_whitespace();
+    }
+    line
+}
+
+/// The runner labels a workflow names: in `runs-on`, matrix entries and expressions alike, but
+/// not in comments, which may explain why a label is not used, nor on `uses:` lines, where an
+/// action's name (`owner/ubuntu-latest-tools`) is no runner.
+pub fn workflow_runner_labels(workflow: &str) -> BTreeSet<String> {
+    let mut labels = BTreeSet::new();
+    for line in workflow.lines() {
+        let code = without_yaml_comment(line);
+        let item = code.trim_start();
+        if item
+            .strip_prefix('-')
+            .map_or(item, str::trim_start)
+            .starts_with("uses:")
+        {
+            continue;
+        }
+        labels.extend(runner_labels(code));
+    }
+    labels
+}
+
+/// Every runner label the doc's prose names must be one of `ci_labels`, the labels the
+/// workflows name, so a reader who goes looking for that job finds it.
+pub fn check_runner_labels(doc: &str, ci_labels: &BTreeSet<String>) -> Vec<Finding> {
+    unknown_runner_labels(
+        prose_lines(doc)
+            .into_iter()
+            .map(|line| (line.number, line.text)),
+        ci_labels,
+    )
+}
+
+/// The same rule for a spike's code, where every line counts: its comments and messages make
+/// the same claims a doc does, and code has no fenced examples to skip.
+pub fn check_runner_labels_in_code(code: &str, ci_labels: &BTreeSet<String>) -> Vec<Finding> {
+    unknown_runner_labels(
+        code.lines()
+            .enumerate()
+            .map(|(index, text)| (index + 1, text)),
+        ci_labels,
+    )
+}
+
+fn unknown_runner_labels<'a>(
+    lines: impl Iterator<Item = (usize, &'a str)>,
+    ci_labels: &BTreeSet<String>,
+) -> Vec<Finding> {
+    let known: Vec<&str> = ci_labels.iter().map(String::as_str).collect();
+    let mut findings = Vec::new();
+    for (line, text) in lines {
+        for label in runner_labels(text) {
+            if !ci_labels.contains(&label) {
+                findings.push(Finding::new(
+                    line,
+                    format!(
+                        "names the runner {label}, but no workflow runs on it (the workflows \
+                         name {}): name the runner CI really uses (or reword it, if this is not \
+                         a runner label)",
+                        known.join(", ")
+                    ),
+                ));
+            }
+        }
+    }
+    findings
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1247,5 +1363,132 @@ PC.
         assert!(text.contains("missing.md, which does not exist"), "{text}");
         assert!(text.contains("other.md#nope"), "{text}");
         Ok(())
+    }
+
+    /// The runners of ci.yml and build.yml once both had moved to pinned labels, with the
+    /// distractions real workflows hold: comments naming floating labels, an action whose name
+    /// contains one, and labels inside an expression's JSON.
+    const PINNED_WORKFLOWS: &str = "\
+# Runner labels name their OS version; lint-workflows.sh rejects windows-latest and the like.
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+  rust:
+    name: rust (${{ matrix.os }})
+    strategy:
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2025 # rather than windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: owner/ubuntu-latest-tools@0123456789abcdef0123456789abcdef01234567 # v1.0.0
+  bundle:
+    strategy:
+      matrix:
+        os: ${{ fromJSON(github.event_name == 'push' && '[\"windows-2025\",\"ubuntu-22.04\"]' || '[\"macos-26\"]') }}
+";
+
+    /// The Windows spawning doc's CI lines as they stood after that move.
+    const OLD_SPAWN_RUNNERS: &str = "\
+**Status:** pending Windows verification. The
+windows-latest results in [What the tests prove](#what-the-tests-prove) decide it.
+
+ci.yml's rust job runs it on windows-latest and ubuntu-latest in steps.
+
+| Test | Proves | macOS result | ubuntu-latest result | windows-latest result |
+|---|---|---|---|---|
+";
+
+    /// The spawning tests' header at the same time.
+    const OLD_SPAWN_TESTS: &str = "\
+//! spawn_hidden and kill_tree against the real OS. Runs on macOS and Linux locally and on
+//! windows-latest and ubuntu-latest in CI; OS-specific cases are cfg-gated.
+";
+
+    fn pinned(text: &str) -> String {
+        text.replace("windows-latest", "windows-2025")
+            .replace("ubuntu-latest", "ubuntu-24.04")
+    }
+
+    #[test]
+    fn the_old_spawn_doc_and_tests_name_runners_ci_no_longer_uses() {
+        let labels = workflow_runner_labels(PINNED_WORKFLOWS);
+        let doc = check_runner_labels(OLD_SPAWN_RUNNERS, &labels);
+        let found: Vec<(usize, &str)> = doc
+            .iter()
+            .map(|f| (f.line, f.message.split(", but").next().unwrap_or("")))
+            .collect();
+        assert_eq!(
+            found,
+            vec![
+                (2, "names the runner windows-latest"),
+                (4, "names the runner windows-latest"),
+                (4, "names the runner ubuntu-latest"),
+                (6, "names the runner ubuntu-latest"),
+                (6, "names the runner windows-latest"),
+            ]
+        );
+        assert!(
+            doc[0].message.contains(
+                "(the workflows name macos-26, ubuntu-22.04, ubuntu-24.04, windows-2025)"
+            ),
+            "{}",
+            messages(&doc)
+        );
+        let tests = check_runner_labels_in_code(OLD_SPAWN_TESTS, &labels);
+        let lines: Vec<usize> = tests.iter().map(|f| f.line).collect();
+        assert_eq!(lines, vec![2, 2], "{}", messages(&tests));
+
+        assert!(check_runner_labels(&pinned(OLD_SPAWN_RUNNERS), &labels).is_empty());
+        assert!(check_runner_labels_in_code(&pinned(OLD_SPAWN_TESTS), &labels).is_empty());
+    }
+
+    #[test]
+    fn workflow_labels_come_from_code_not_comments_or_action_names() {
+        let labels: Vec<String> = workflow_runner_labels(PINNED_WORKFLOWS)
+            .into_iter()
+            .collect();
+        assert_eq!(
+            labels,
+            vec!["macos-26", "ubuntu-22.04", "ubuntu-24.04", "windows-2025"]
+        );
+        // A `#` that follows no whitespace starts no comment, as in YAML.
+        let more = "      - run: echo \"${#PATH}\" ubuntu-22.04-arm\n    runs-on: [self-hosted, Windows-11-ARM] # not macos-15\n";
+        let labels: Vec<String> = workflow_runner_labels(more).into_iter().collect();
+        assert_eq!(labels, vec!["ubuntu-22.04-arm", "windows-11-arm"]);
+    }
+
+    #[test]
+    fn runner_labels_are_whole_words_in_any_case() {
+        let named = "On Ubuntu-Latest, `windows-2025` and macos-26's image, then ubuntu-24.04. \
+                     Also ubuntu-24.04-arm, macos-latest-xlarge, ubuntu-slim and windows-11-arm.";
+        assert_eq!(
+            runner_labels(named),
+            vec![
+                "ubuntu-latest",
+                "windows-2025",
+                "macos-26",
+                "ubuntu-24.04",
+                "ubuntu-24.04-arm",
+                "macos-latest-xlarge",
+                "ubuntu-slim",
+                "windows-11-arm"
+            ]
+        );
+        let not_named = "windows-spawn, x86_64-pc-windows-gnu, xubuntu-latest, my.ubuntu-latest, \
+                         windows-spawn-spike-<sha>, macOS 26, Windows 11, windows-, windows-slim, \
+                         macOS-only, windows-10x, ubuntu";
+        assert_eq!(runner_labels(not_named), Vec::<String>::new());
+    }
+
+    #[test]
+    fn docs_skip_fenced_examples_but_code_checks_every_line() {
+        let labels = workflow_runner_labels(PINNED_WORKFLOWS);
+        let text = "Runs on windows-2025.\n```yaml\nruns-on: windows-latest\n```\n";
+        assert!(check_runner_labels(text, &labels).is_empty());
+        let code = check_runner_labels_in_code(text, &labels);
+        assert_eq!(code.len(), 1, "{}", messages(&code));
+        assert_eq!(code[0].line, 3);
     }
 }

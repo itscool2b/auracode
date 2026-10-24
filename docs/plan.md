@@ -24,26 +24,29 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
   delete), legal pages. Same accounts as the app.
 - **Accounts:** passwordless email code, on the site and in the app; seamless account switching in the app.
 - **Sync scope:** projects + chats + config; config only for Claude Code, Codex, Pi.
-- **Domain:** stays registered at Namecheap; nameservers move to Cloudflare. The user's existing Cloudflare
-  zones all use `asa.ns.cloudflare.com` + `rohin.ns.cloudflare.com`; the auracode.si pair is confirmed
-  the moment the zone is created (first execution step).
+- **Domain:** stays registered at Namecheap; nameservers moved to Cloudflare on Day 1. The auracode.si
+  zone uses `asa.ns.cloudflare.com` + `rohin.ns.cloudflare.com` (the pair all the user's Cloudflare zones
+  share) and has been active since 2026-10-24 09:03 UTC.
 - **(My recommendation, user may veto) End-to-end encrypted sync.** Chats contain code and secrets. Cost:
   a new machine is approved from a signed-in one or uses a recovery key.
 - **Trust:** never read, store, or proxy agent credentials; auracode never injects hidden prompts.
 
 ## Machine facts (verified 2026-10-24)
 - macOS 26.6.2 arm64, rustc/cargo 1.99, Node 26.0.0, npm 11.12, git 2.54, gh 2.92 logged in as itscool2b
-  (ssh, repo scope), Homebrew 6. No pnpm/bun. Global git user.name is NOT set (email is).
+  (ssh, repo scope), Homebrew 6, pnpm 12.15 (Homebrew, installed for M0). No bun. Global git user.name
+  is NOT set (email is).
 - Installed agents: Claude Code 2.1.310, Codex 0.164.0, Hermes 0.22.5 (`hermes-acp`), Antigravity CLI `agy`
   1.4.7. Not installed: pi, omp, opencode, gemini, cursor `agent`, grok (leftover config dirs prove nothing).
 - Claude runs a `claude daemon` with helpers in separate process groups (one orphaned to launchd); Codex has
   a shared app-server daemon with its own updater; the ChatGPT app bundles its own codex.
-- This dev environment exports `CLAUDECODE`, `CLAUDE_CODE_*`, `CLAUDE_EFFORT`: children must not inherit them.
+- This dev environment exports Claude Code's parent-session markers (`CLAUDECODE`, `CLAUDE_PID`,
+  `CLAUDE_EFFORT`, `CLAUDE_CODE_SESSION_ID`, ...): children must not inherit them (see the env scrub rule).
 - The user's code lives under `~/Desktop` (macOS privacy-protected).
 - Claude Code syncs account-level skills/plugins itself (`~/.claude/{skills,plugins}/synced/`): never touch.
   Shared cross-agent skills live in `~/.agents/skills`.
-- Cloudflare: account `megagrb16@gmail.com`, three active free zones (arjunbajpai.com, mijonion.com,
-  wpsservice.com), no auracode.si zone yet. Resend and Neon MCPs connected.
+- Cloudflare: account `megagrb16@gmail.com`. The auracode.si zone is active (since 2026-10-24 09:03 UTC,
+  on `asa.ns.cloudflare.com` + `rohin.ns.cloudflare.com`, delegation served by public resolvers), next to
+  three unrelated free zones on the same account. Resend and Neon MCPs connected.
 
 ## Product principles
 1. Simple first: zero setup, no login needed, everything auto-detected, one composer box, smart defaults.
@@ -86,7 +89,9 @@ interrupts, a second Esc force-stops.
 otherwise auracode auto-answers permission requests; Pi/oh-my-pi never ask anyway. A "Full auto" badge sits
 on the composer and orb rim; switching into an agent that can't ask (Pi) shows a notice.
 
-**Thinking orbs.** One WebGL2 canvas draws every visible orb through scissor viewports. Shader in the
+**Thinking orbs.** One shared WebGL2 context draws every visible orb; each orb keeps its own canvas
+(frames handed over as ImageBitmaps where the browser can, copied otherwise) so orbs stack like any
+element (a single full-window canvas would sit above or below the whole UI). Shader in the
 style of the MIT ElevenLabs orb / Paper Shaders (soft ovals, flow warp, ring noise, colour ramp) with
 per-agent palette and motion signature, morphing into the agent's logo via a committed SDF atlas (msdfgen)
 and `mix(orbSDF + noise, logoSDF, t)` plus curl-noise warp. Polished first for Claude (terracotta spark),
@@ -146,7 +151,13 @@ Same Aura design language and `packages/ui` components (the orb is the hero), fa
   chat (sending only what happened since its last turn), else starts one in the same cwd; either way the
   first prompt carries a visible, token-budgeted handoff block (earlier user messages, other agents' final
   answers, files changed + `git diff --stat`). Agents that can't resume (restart, cwd change) take the same
-  handoff path. Model/effort switches stay inside the native session where supported.
+  handoff path. Claude Code resumes after a cwd change, so a Claude chat moving between Direct and
+  Isolated folders keeps its native session without the handoff block: `--resume=<id>` from the new folder
+  (the transcript keeps appending under the original folder's project dir), or, when the original chat
+  goes on too, `--resume=<id> --fork-session --session-id=<new>`, whose transcript lives under the new
+  folder (two live processes never share a session id). Claude still takes the handoff path when its
+  transcript is gone (purged, cleaned up, another machine). Model/effort switches stay inside the native
+  session where supported.
 - **Checkpoints (M2):** before every turn, a snapshot into a shadow git repo per folder
   (`<profile>/checkpoints/<folder-id>.git`, temp `GIT_INDEX_FILE`, refs under `refs/aura/*`). Never touches
   the user's index, branches, or stash, and works in non-git folders. One-click revert of any turn.
@@ -214,8 +225,8 @@ auracode/                        Cargo workspace + pnpm workspace
   `respond(request_id, decision)`, an event stream, `close`. The UI reads `capabilities`, never agent names.
 - **AuraEvent** (ACP vocabulary): turn.started/ended, message.delta/completed, thought.delta/completed,
   tool.call, tool.update (text | diff | terminal), permission.requested/resolved, ui.request, plan.updated,
-  usage.updated, limits.updated, session.updated (native id, title, model, effort, mode, commands), notice,
-  error.
+  usage.updated, limits.updated, session.updated (native id, title, model, effort, mode; the slash
+  commands move out of it in M1a), a command lifecycle event (M1a), notice, error.
 - **Profiles from day one.** All local data under `<app data>/profiles/<profile_id>/` (database,
   attachments, checkpoints, logs). M0 ships one "Local" profile; M6/M7 add one per account.
 - **Storage.** UUIDv7 ids, `device_id`, tombstones (no hard deletes), portable folder identity from M0; the
@@ -225,7 +236,7 @@ auracode/                        Cargo workspace + pnpm workspace
 ## Agent integration (researched 2026-10-24)
 | Agent | Path | Notes |
 |---|---|---|
-| Claude Code | Native: own Rust control loop over stream-json; user's `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio` | Own lenient serde types; `claude-codes` crate and the official Python Agent SDK are references, diffed each release. Control: `initialize`, `interrupt`, `set_model`, `set_permission_mode`, `apply_flag_settings` (effort), `get_usage`, `get_context_usage`, `list_models`, `rewind_files`; we answer `can_use_tool`; fork via `--fork-session`/resume-at. `rate_limit_event` feeds the limits meter. Unknown messages logged, never fatal; capabilities from `system/init`; compatibility smoke per new version. Day-one fallback (M1a): ACP via `claude-agent-acp`. |
+| Claude Code | Native: own Rust control loop over stream-json; user's `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio`, always with `--permission-mode`, with `--session-id=<uuid>` (new session) or `--resume=<id>`, and with `--allow-dangerously-skip-permissions` where the user's settings allow bypass | Contract and fixtures in the [M0 spike](spikes/claude-control.md) (2.1.310). Own lenient serde types; `claude-codes` crate and the official Python Agent SDK are references, diffed each release. Control: `initialize`, `interrupt`, `set_model`, `set_permission_mode`, `apply_flag_settings` (effort), `get_usage`, `get_context_usage`, `list_models`, `rewind_files`; we answer `can_use_tool`; fork via `--fork-session` (with our `--session-id`) or resume-at. `--permission-mode` is never left out: without it every spawn, resumes included, takes `permissions.defaultMode` from the user's settings, which can be `auto`. `--session-id` gives a new session's native id before its first turn. `bypassPermissions` can be switched on mid-chat only in a process launched with `--allow-dangerously-skip-permissions`. Resume works after a cwd change (the transcript keeps appending under the original folder's project dir), and `--fork-session` with `--session-id` writes the fork under the new folder's. The user's own hooks run inside these sessions (`SessionStart` context, `PermissionRequest` hooks that can answer or delay a prompt), so a tool call may never reach us as `can_use_tool`; principle 3 still holds, since auracode itself adds nothing. `rate_limit_event` feeds the limits meter. Unknown messages logged, never fatal; capabilities from `system/init`; compatibility smoke per new version. Day-one fallback (M1a): ACP via `claude-agent-acp`. |
 | Codex | Native: `codex app-server --listen stdio://`, own process | Own serde subset with `#[serde(other)]`, tested against the JSON Schema from `codex app-server generate-json-schema` per supported version. `thread/start/resume/fork/list`, `turn/start` (model, effort, cwd, approvalPolicy, sandboxPolicy, images, mentions), `turn/steer`, `turn/interrupt`, `turn/diff/updated`, approvals, `model/list`, `account/rateLimits/read`, plugin/skill/config APIs (reused by Library + Sync). Never the shared daemon (opt-in later). Day-one fallback: `codex-acp`. |
 | Pi | Native RPC `pi --mode rpc` | `prompt`/`steer`/`follow_up`/`abort`, `set_model`, `get_available_models`, `set_thinking_level`, `fork`, `get_session_stats`, `extension_ui_request` (rendered as confirm/select/input). Turn ends on `agent_settled`; split on LF only. |
 | Antigravity | ACP via Google's `agy_acp_server` (registry `antigravity-acp`) | Fallback `agy -p --input-format stream-json --output-format stream-json` (text only, no approvals, interrupt = kill). |
@@ -274,8 +285,24 @@ consumer-grade polish. MIT/Apache code may be read for reference; never AGPL (To
   = protocol interrupt, close stdin, wait, SIGTERM, walk descendants by parent pid, SIGKILL last; record pid
   + start time and kill only our own leftovers at startup; never kill vendor daemons; treat agent state dirs
   as shared with vendor apps.
-- **Env scrub:** children get the resolved login-shell env minus `CLAUDECODE`, `CLAUDE_CODE_*`,
-  `CLAUDE_EFFORT`, `CODEX_*`, `NODE_OPTIONS`, `ELECTRON_RUN_AS_NODE`.
+- **Env scrub:** children inherit the resolved login-shell env minus an explicit denylist. Everything
+  else passes through, including documented user configuration (`CLAUDE_CODE_USE_BEDROCK`,
+  `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, `CLAUDE_CODE_GIT_BASH_PATH`, `CODEX_HOME`, and
+  more), `SSH_AUTH_SOCK`, display and D-Bus session variables, proxies and CA bundles. Prefix families
+  such as `CLAUDE_CODE_*` and `CODEX_*` would strip that configuration (Bedrock and Vertex users break,
+  Codex reads the wrong home), while the M0 Claude control spike saw no observable effect from inherited
+  markers, so over-stripping is the bigger risk. The denylist lives in one place in code with a test per
+  entry (a marker found later joins it the same way), and values are never logged
+  (`CLAUDE_CODE_MESSAGING_TOKEN` is a secret). It holds:
+  - Claude Code's parent-session markers, as the spike saw them: `CLAUDECODE`, `CLAUDE_PID`,
+    `CLAUDE_EFFORT`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_EXECPATH`, and the
+    families `CLAUDE_CODE_SESSION_*`, `CLAUDE_CODE_MESSAGING_*` and `CLAUDE_CODE_BRIDGE_*` (seen:
+    `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_SESSION_ATTENDED`, `CLAUDE_CODE_MESSAGING_SOCKET`,
+    `CLAUDE_CODE_MESSAGING_TOKEN`, `CLAUDE_CODE_BRIDGE_SESSION_ID`).
+  - Codex's sandbox markers `CODEX_SANDBOX` and `CODEX_SANDBOX_NETWORK_DISABLED`.
+  - `ELECTRON_RUN_AS_NODE`, `VSCODE_INSPECTOR_OPTIONS`, and `NODE_OPTIONS` only when it carries a debugger
+    hook (`--inspect`, `--inspect-brk`, `--inspect-wait`, or a `--require` of a debugger bootloader such as
+    the one VS Code's auto attach injects), which would attach to or pause every Node-based agent.
 - **Long runs:** keep the machine awake while turns run; closing the window keeps auracode in the menu bar /
   tray with a badge; quitting with live turns asks; app updates wait for idle.
 - **Diagnostics:** rotating raw protocol log per session + "Copy debug bundle" (tokens redacted; also feeds
@@ -289,11 +316,14 @@ consumer-grade polish. MIT/Apache code may be read for reference; never AGPL (To
 - **Worktrees (M4):** created outside the repo (short app-data path, avoids MAX_PATH and file watchers),
   always on a new branch, optional "bring uncommitted changes", per-folder setup (files to copy like
   `.env`, an install command), merge blocked while a Direct chat runs in the target.
-- **Tooling:** rustfmt and clippy for Rust (`-D warnings` in CI; no `unsafe`, no `dbg!`, no `unwrap()` or
-  `expect()` outside tests). Biome alone lints and formats TypeScript, CSS, JSON, and YAML: one fast tool
-  and one config instead of ESLint + Prettier. It does not format Markdown (its formatter re-pads
-  hand-wrapped tables) and leaves `pnpm-lock.yaml` to pnpm. pnpm settings live in `pnpm-workspace.yaml`
-  (pnpm 12 ignores them in `.npmrc`); `engineStrict` holds installs to the Node range in `engines`.
+- **Tooling:** rustfmt and clippy for Rust (`-D warnings` in CI; no `dbg!`, no `unwrap()` or `expect()`
+  outside tests). No `unsafe` except SAFETY-commented calls into Windows APIs that std does not wrap, each
+  item opting out of the denied `unsafe_code` lint on its own; in the app that is only aura-core's
+  `fsutil::win_acl`, which makes the profiles folder private to the user. Biome alone lints and formats
+  TypeScript, CSS, JSON, and YAML: one fast tool and one config instead of ESLint + Prettier. It does not
+  format Markdown (its formatter re-pads hand-wrapped tables) and leaves `pnpm-lock.yaml` to pnpm. pnpm
+  settings live in `pnpm-workspace.yaml` (pnpm 12 ignores them in `.npmrc`); `engineStrict` holds installs
+  to the Node range in `engines`.
 
 ## Edge cases (each one has a defined behaviour and a test)
 **Agents.** Not installed; installed but broken (`--version` fails: shown as broken with the error); several
@@ -347,23 +377,34 @@ reconcile); everything skipped (lands in a usable app); quit halfway (resumes wh
 or reduced motion (static, still beautiful); tiny windows and multiple monitors (responsive, minimum size).
 
 ## Milestones (each its own branch and PR, opened only when finished and tested)
-**Day 1 (first execution step):** create the `auracode.si` zone in Cloudflare (with confirmation), report
-its two nameservers, and give the user the Namecheap steps (Domain List > auracode.si > Manage >
-Nameservers > Custom DNS > paste both; turn DNSSEC off first if it's on). No records are needed yet.
+**Day 1 (done 2026-10-24):** the `auracode.si` zone was created in Cloudflare and Namecheap now delegates
+to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The zone has been active since
+09:03 UTC, and public resolvers serve the delegation. No records are needed until M5
+(`download.auracode.si`) and M6 (the site and mail).
 
 **Foundation (the app)**
 - **M0 Scaffold + spikes.** Private repo, pnpm (Homebrew), Cargo + pnpm workspaces, fmt/clippy/Biome,
   Tauri app with the glass window, typed command + Channel round trip, profile layout + SQLite schema,
   stable self-signed signing identity (created locally with the user's OK), CI on macOS/Windows/
-  Ubuntu (fmt, clippy, tests, typecheck, lint; `tauri build` only on main merges and nightly). Spikes:
+  Ubuntu (fmt, clippy, tests, typecheck, lint, and a smoke run of the real app; installer builds only on
+  main pushes, nightly, on demand, and milestone-branch pushes that ask for them). Spikes:
   worst-case render (animated aura + orbs + fast stream) on WebKit and WebView2 with idle power; Windows
   spawning (hidden console, git child); Claude control round trip incl. resume after a cwd change; Windows
   titlebar.
 - **M1a Core + ACP + bare UI.** Session manager, process lifecycle + env scrub, mock driver + replay
   harness, protocol logs, ACP client, minimal unstyled chat UI. Verified with Hermes and the Claude/Codex
   ACP adapters. In parallel, Design Lab: 2-3 visual directions rendered from recorded streams; the user picks
-  one.
-- **M1b Claude native driver.** **M1c Codex native driver.**
+  one. Protocol follow-ups from the Claude control spike, early in M1a so no driver is built on today's
+  shapes: `SessionUpdated` cannot carry 150+ slash commands (about 60 KB) under `MAX_FRAME_BYTES`, and one
+  event cannot span frames, so slash commands move to a request/response command (or a chunked event);
+  `TokenUsage` splits cache reads from cache writes; a command lifecycle event (queued, started,
+  completed, cancelled) feeds the composer queue.
+- **M1b Claude native driver** to the contract in the
+  [Claude control spike](spikes/claude-control.md#recommended-driver-contract-m1b), including its side of
+  the M1a follow-ups: `command_lifecycle` drives the lifecycle event, `cache_read_input_tokens` and
+  `cache_creation_input_tokens` fill `TokenUsage` separately, and the command list (from `initialize`,
+  then debounced `commands_changed`) is reduced in Rust and reaches the UI by M1a's new route. **M1c
+  Codex native driver.**
 - **M1d Pi + the rest.** With the user's OK, install pi, oh-my-pi, OpenCode, Cursor CLI, Grok Build via their
   official installers (Cursor/Grok need the user's sign-in), then Pi native driver and the ACP dialects
   (Antigravity, Cursor, Grok, oh-my-pi, OpenCode) + agy/grok fallbacks.
@@ -373,7 +414,10 @@ Nameservers > Custom DNS > paste both; turn DNSSEC off first if it's on). No rec
   transcript components, against fixtures.
 - **M2b App shell with real agents.** Sidebar, projects, chats, persistence, titles, edit/retry/fork,
   checkpoints + Changes panel + revert, agent switching with handoff, busy-folder warning, notifications,
-  keep-awake, tray, quit guard.
+  keep-awake, tray, quit guard. Open decision (Windows): wry never marks WebView2 invisible when the
+  window is minimized, so Chromium may keep rendering orbs and streams nobody sees, and `document.hidden`
+  may never turn true (section D of the [render and power spike](spikes/render-power.md)); once the
+  Windows measurement confirms it, the shell hides the webview on minimize and shows it on restore.
 - **M2c Composer + palette.** Attachments, @mentions, slash commands, queue/steer, agent/model/effort/
   autonomy pickers, command palette, shortcuts, settings.
 - **M3 Boot, onboarding, agents.** Boot cinematic, full onboarding (account step behind a flag until M6),
@@ -382,8 +426,10 @@ Nameservers > Custom DNS > paste both; turn DNSSEC off first if it's on). No rec
   multi-folder handling, open in editor/terminal, general terminal panel.
 - **M5 Packaging + releases.** DMG (universal) / NSIS (x64, arm64) / AppImage + deb; `tauri-plugin-updater`
   (Tauri signing key generated and backed up; losing it ends updates); CI on tag builds every platform,
-  uploads installers + `latest.json` + checksums to R2 (`download.auracode.si`, needs the zone active);
-  app updates wait for idle. Windows/Linux artifacts come from CI every milestone so the user can test.
+  uploads installers + `latest.json` + checksums to R2 (`download.auracode.si`, on the zone active since
+  Day 1); app updates wait for idle. Distributed binaries are built with `--remap-path-prefix` (a local
+  release build embeds about 500 build-machine paths, from panic locations in dependencies). Windows/Linux
+  artifacts come from CI every milestone so the user can test.
 
 **Then (order is the user's call)**
 - **M6 Website + accounts.** Resend domain, Neon project (region chosen with the user) + Neon Auth, R2

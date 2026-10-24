@@ -1,5 +1,5 @@
 //! spawn_hidden and kill_tree against the real OS. Runs on macOS and Linux locally and on
-//! windows-latest and ubuntu-latest in CI; OS-specific cases are cfg-gated.
+//! windows-2025 and ubuntu-24.04 in CI; OS-specific cases are cfg-gated.
 //!
 //! The `control_` tests deliberately open console windows on Windows, to prove what the hidden
 //! spawn prevents. Skip them (`--skip control_`) when watching for flashes by hand.
