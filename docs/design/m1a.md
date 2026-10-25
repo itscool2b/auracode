@@ -1789,10 +1789,11 @@ The harness and its tests exist only with the `replay` feature: every `--workspa
 other `tests/**` file uses `aura_drivers::testing`, which only workspace runs and `replay` enable.
 
 Curation (`aura-cli fixture`): the log's redaction re-run, then literal `<HOME>`, `<USER>`, `<HOST>`, `<CWD>` (and
-Claude's project-dir spelling, as the spike's `Redactor::add_path`), native session ids to `<SESSION_n>`, ISO
-timestamps to `<TIME>`, `t` made relative; then `scan_clean` must return nothing. A log holding a capped record
-(3.8) cannot become a fixture: `curate` refuses it with the line and the bytes cut, and `Fixture::parse` refuses one
-found in a fixture. Fixtures live in `crates/aura-drivers/tests/fixtures/acp/<agent>/<scenario>.jsonl` with
+Claude's project-dir spelling, as the spike's `Redactor::add_path`), an npm adapter's install folder (the spawn note's
+`cwd` when it is not the chat folder, under whatever data root the run used) to `<ADAPTER>`, native session ids to
+`<SESSION_n>`, ISO timestamps to `<TIME>`, `t` made relative; then `scan_clean` must return nothing. A log holding a
+capped record (3.8) cannot become a fixture: `curate` refuses it with the line and the bytes cut, and `Fixture::parse`
+refuses one found in a fixture. Fixtures live in `crates/aura-drivers/tests/fixtures/acp/<agent>/<scenario>.jsonl` with
 `<scenario>.events.json` beside them, and a test scans every committed fixture for `@` email shapes, token prefixes,
 `/Users/`, `/home/`, `C:\Users\`.
 

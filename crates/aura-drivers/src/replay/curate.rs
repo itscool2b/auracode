@@ -3,8 +3,10 @@
 //! in a committed fixture.
 //!
 //! Placeholders: `<CWD>` and `<HOME>` (and Claude Code's project-directory spelling of each,
-//! `<CWD_ENC>` and `<HOME_ENC>`), `<USER>`, `<HOST>`, native session ids as `<SESSION_n>` in order of
-//! first appearance, ISO timestamps as `<TIME>`; `t` becomes milliseconds since the first record.
+//! `<CWD_ENC>` and `<HOME_ENC>`), an npm adapter's install folder (the spawn note's `cwd` when it is
+//! not the chat folder) as `<ADAPTER>`, `<USER>`, `<HOST>`, native session ids as `<SESSION_n>` in
+//! order of first appearance, ISO timestamps as `<TIME>`; `t` becomes milliseconds since the first
+//! record.
 
 use std::sync::LazyLock;
 
@@ -97,6 +99,14 @@ pub fn curate(
     };
     add(cwd, "<CWD>");
     add(&encode_project_dir(cwd), "<CWD_ENC>");
+    // An npm adapter runs in its install folder (spec 4), under the run's data root.
+    for record in &records {
+        if let Some(folder) = record.pointer("/note/spawn/cwd").and_then(Value::as_str)
+            && folder != cwd
+        {
+            add(folder, "<ADAPTER>");
+        }
+    }
     add(home, "<HOME>");
     add(&encode_project_dir(home), "<HOME_ENC>");
     add(user, "<USER>");
@@ -323,6 +333,36 @@ mod tests {
         );
         assert_eq!(lines[5]["line"], "INFO started at <TIME>");
         assert!(scan_clean(&curated).is_empty());
+    }
+
+    /// An npm adapter runs in its install folder (spec 4), which the spawn note names as its `cwd`,
+    /// under whatever data root the run used: a fixture names it `<ADAPTER>`, as it names the chat
+    /// folder `<CWD>`.
+    #[test]
+    fn an_adapters_install_folder_is_a_placeholder() {
+        let adapter =
+            "/private/tmp/runs/session-1/data-root/adapters/agentclientprotocol-codex-acp-2.2.2";
+        let text = log(&[
+            json!({"t": 1, "d": "note", "note": {"spawn": {"label": "codex-acp",
+                "program": "/opt/homebrew/bin/node",
+                "args": [format!("{adapter}/node_modules/@agentclientprotocol/codex-acp/dist/index.js")],
+                "cwd": adapter, "pid": 5001}}}),
+            json!({"t": 2, "d": "out", "msg": {"jsonrpc": "2.0", "id": 2, "method": "session/new",
+                "params": {"cwd": CWD, "mcpServers": []}}}),
+            json!({"t": 3, "d": "err", "line": format!("loaded {adapter}/node_modules/x.js")}),
+        ]);
+        let curated = curate(&text, HOME, CWD, "someone", "host-name").expect("clean");
+        let lines: Vec<Value> = curated
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("json"))
+            .collect();
+        assert_eq!(lines[0]["note"]["spawn"]["cwd"], "<ADAPTER>");
+        assert_eq!(
+            lines[0]["note"]["spawn"]["args"],
+            json!(["<ADAPTER>/node_modules/@agentclientprotocol/codex-acp/dist/index.js"])
+        );
+        assert_eq!(lines[1]["msg"]["params"]["cwd"], "<CWD>");
+        assert_eq!(lines[2]["line"], "loaded <ADAPTER>/node_modules/x.js");
     }
 
     #[test]

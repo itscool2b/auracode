@@ -2,8 +2,9 @@
 //! fixture (spec 5.8).
 //!
 //! The log (with its rotated parts) goes through package B's `curate`: the log's redaction again,
-//! `<HOME>`, `<CWD>` (the chat folder the agent got), `<USER>` and `<HOST>`, native session ids as
-//! `<SESSION_n>`, timestamps as `<TIME>`, times relative; then the scan, which must find nothing.
+//! `<HOME>`, `<CWD>` (the chat folder the agent got), `<ADAPTER>` (an npm adapter's install folder),
+//! `<USER>` and `<HOST>`, native session ids as `<SESSION_n>`, timestamps as `<TIME>`, times
+//! relative; then the scan, which must find nothing.
 //! A log that capped a record or dropped records cannot replay, so it is refused, as is one whose
 //! beginning (the start note) was rotated away. The fixture gets a first note naming the
 //! scenario, is written, is replayed at once, and a checklist for the review follows.
@@ -244,9 +245,10 @@ fn checklist(out: &Path, text: &str, records: &[Value]) -> String {
         let _ = writeln!(list, "  [ ] {line}");
     };
     item(format!(
-        "Placeholders: <HOME> x{}, <CWD> x{}, <USER> x{}, <HOST> x{}, <TIME> x{}, {sessions} native session id(s) as <SESSION_n>.",
+        "Placeholders: <HOME> x{}, <CWD> x{}, <ADAPTER> x{}, <USER> x{}, <HOST> x{}, <TIME> x{}, {sessions} native session id(s) as <SESSION_n>.",
         count("<HOME>") + count("<HOME_ENC>"),
         count("<CWD>") + count("<CWD_ENC>"),
+        count("<ADAPTER>"),
         count("<USER>"),
         count("<HOST>"),
         count("<TIME>"),
