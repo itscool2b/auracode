@@ -2562,6 +2562,35 @@ impl ChatActor {
 
     fn start_failed_exit(&mut self, generation: u64, error: DriverError) {
         self.kill_generation(generation);
+        if let Some(turn) = self.turn.take() {
+            // A driver that reports a failed start mid-turn broke its contract; end the turn anyway.
+            let tag = Some(Arc::clone(&turn.tag));
+            for event in self
+                .normalizer
+                .close_turn(&turn.id, ResolvedBy::System, now_millis())
+            {
+                self.push_normalized(event, tag.clone());
+            }
+            self.push_normalized(
+                AuraEvent::TurnEnded {
+                    turn_id: turn.id.clone(),
+                    stop_reason: StopReason::Error,
+                    usage: None,
+                    duration_ms: Some(elapsed_ms(turn.started)),
+                    recovered: false,
+                },
+                tag.clone(),
+            );
+            self.push_normalized(
+                AuraEvent::PromptLifecycle {
+                    prompt_id: turn.prompt_id,
+                    state: PromptState::Failed,
+                    preview: None,
+                },
+                tag,
+            );
+            self.hold_queue();
+        }
         let mut message = self.redact(&error.message);
         let detail = error.detail.as_deref().map(|detail| self.redact(detail));
         let adapter = self

@@ -508,10 +508,7 @@ impl Shared {
             permits,
         });
         drop(queue);
-        if self.is_paused() {
-            self.status
-                .send_if_modified(|status| replace(&mut status.unsaved_bytes, unsaved));
-        }
+        self.show_unsaved(unsaved);
         self.wake.notify_one();
     }
 
@@ -553,10 +550,15 @@ impl Shared {
         }
         let unsaved = queue.pending.bytes;
         drop(queue);
-        if self.is_paused() {
-            self.status
-                .send_if_modified(|status| replace(&mut status.unsaved_bytes, unsaved));
-        }
+        self.show_unsaved(unsaved);
+    }
+
+    /// While paused, the banner shows how much is unsaved.
+    fn show_unsaved(&self, unsaved: u64) {
+        self.status.send_if_modified(|status| {
+            matches!(status.state, StorageState::Paused { .. })
+                && replace(&mut status.unsaved_bytes, unsaved)
+        });
     }
 }
 
