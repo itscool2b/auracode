@@ -16,6 +16,20 @@
 //!   gets `fake reply`. In the `default` mode a file is written only after the client allows it.
 //!   Usage is the session's running total, as Hermes reports it.
 //! - `session/cancel` ends a running prompt `cancelled`; stdin's end ends the process.
+//!
+//! Variables turn on what real agents did in the probes (spec 10.2), so the CLI's handling of it
+//! is tested here:
+//!
+//! - `AURA_FAKE_SET_DELAY_MS`: settings changes answer this late (a real agent takes tens of
+//!   milliseconds, long enough for a later change to arrive meanwhile).
+//! - `AURA_FAKE_HERMES_MODELS`: Hermes 0.22.5's models. The configured model is `auto:large`, and
+//!   a model id names its provider only when the provider is one Hermes knows (`fake`), so a
+//!   switch to `fake:mini` and back to `auto:large` leaves `fake:auto:large`, and `auto:large` is
+//!   offered only while the session's provider is `auto`.
+//! - `AURA_FAKE_FORGET_UNPROMPTED`: a session exists only from its first prompt, as claude-acp's
+//!   and codex-acp's do: resuming or loading one never prompted answers -32002.
+//! - `AURA_FAKE_SLOW_CHILD_MS` (Unix): `initialize` starts a child in the agent's process group
+//!   that exits this long after a SIGTERM, as claude-agent-acp's `claude auth status` does.
 
 use std::collections::BTreeMap;
 use std::io::{BufRead, Write};
@@ -31,8 +45,18 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 /// Pacing of the counting prompt: one number per tick.
 const TICK: Duration = Duration::from_millis(15);
 
+/// Starts the arguments of the slow child (`AURA_FAKE_SLOW_CHILD_MS`).
+const LINGER: &str = "--linger";
+
+/// How long the slow child lives when nothing signals it, so a failed test leaves nothing behind
+/// for long.
+const LINGER_LIFETIME: Duration = Duration::from_secs(60);
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some(LINGER) {
+        return linger(args.get(2).and_then(|ms| ms.parse().ok()).unwrap_or(0));
+    }
     if args.iter().any(|arg| arg == "--version") {
         println!("Hermes Agent v0.22.5 (aura-cli fake)");
         return ExitCode::SUCCESS;
@@ -94,11 +118,38 @@ struct Session {
     last_number: u64,
     input_tokens: u64,
     output_tokens: u64,
+    /// Prompts the session ran.
+    #[serde(default)]
+    prompts: u64,
+}
+
+/// What real agents did in the probes, each turned on by a variable (see the module docs).
+#[derive(Debug, Default)]
+struct Quirks {
+    set_delay: Duration,
+    hermes_models: bool,
+    forget_unprompted: bool,
+    slow_child: Option<u64>,
+}
+
+impl Quirks {
+    fn from_env() -> Quirks {
+        let millis = |name: &str| -> Option<u64> { std::env::var(name).ok()?.parse().ok() };
+        let on = |name: &str| std::env::var_os(name).is_some_and(|value| !value.is_empty());
+        Quirks {
+            set_delay: millis("AURA_FAKE_SET_DELAY_MS")
+                .map_or(Duration::ZERO, Duration::from_millis),
+            hermes_models: on("AURA_FAKE_HERMES_MODELS"),
+            forget_unprompted: on("AURA_FAKE_FORGET_UNPROMPTED"),
+            slow_child: millis("AURA_FAKE_SLOW_CHILD_MS"),
+        }
+    }
 }
 
 struct Agent {
     state: PathBuf,
     open_delay: Duration,
+    quirks: Quirks,
     sessions: BTreeMap<String, Session>,
     next_request: u64,
 }
@@ -116,6 +167,7 @@ impl Agent {
         Ok(Agent {
             state,
             open_delay,
+            quirks: Quirks::from_env(),
             sessions: BTreeMap::new(),
             next_request: 1,
         })
@@ -138,35 +190,44 @@ impl Agent {
 
     fn request(&mut self, method: &str, id: &Value, params: &Value) -> Result<()> {
         match method {
-            "initialize" => reply(
-                id,
-                json!({
-                    "protocolVersion": 1,
-                    "agentCapabilities": {
-                        "loadSession": true,
-                        "promptCapabilities": {"image": false},
-                        "sessionCapabilities": {"resume": {}}
-                    },
-                    "authMethods": [{
-                        "id": "hermes-setup",
-                        "name": "Configure the fake",
-                        "type": "terminal",
-                        "args": ["--setup"]
-                    }],
-                    "agentInfo": {"name": "fake-hermes", "version": "0.22.5"}
-                }),
-            ),
+            "initialize" => {
+                if let Some(millis) = self.quirks.slow_child {
+                    slow_child(millis)?;
+                }
+                reply(
+                    id,
+                    json!({
+                        "protocolVersion": 1,
+                        "agentCapabilities": {
+                            "loadSession": true,
+                            "promptCapabilities": {"image": false},
+                            "sessionCapabilities": {"resume": {}}
+                        },
+                        "authMethods": [{
+                            "id": "hermes-setup",
+                            "name": "Configure the fake",
+                            "type": "terminal",
+                            "args": ["--setup"]
+                        }],
+                        "agentInfo": {"name": "fake-hermes", "version": "0.22.5"}
+                    }),
+                )
+            }
             "session/new" => {
                 std::thread::sleep(self.open_delay);
                 let session = Session {
                     id: format!("fake-{}-{}", std::process::id(), self.sessions.len() + 1),
                     cwd: PathBuf::from(text(params, "cwd")),
                     mode: "default".into(),
-                    model: "fake:large".into(),
+                    model: if self.quirks.hermes_models {
+                        "auto:large".into()
+                    } else {
+                        "fake:large".into()
+                    },
                     ..Session::default()
                 };
                 self.save(&session)?;
-                let mut result = offers(&session);
+                let mut result = self.offers(&session);
                 result["sessionId"] = json!(session.id);
                 reply(id, result)?;
                 commands(&session.id)?;
@@ -176,27 +237,83 @@ impl Agent {
             "session/load" | "session/resume" => {
                 std::thread::sleep(self.open_delay);
                 let session_id = text(params, "sessionId");
-                let Some(mut session) = self.load(&session_id) else {
-                    return fail(id, -32002, &format!("session {session_id} not found"));
+                let found = self
+                    .load(&session_id)
+                    .filter(|session| !self.quirks.forget_unprompted || session.prompts > 0);
+                let Some(mut session) = found else {
+                    return fail(id, -32002, &format!("Resource not found: {session_id}"));
                 };
                 session.cwd = PathBuf::from(text(params, "cwd"));
                 self.save(&session)?;
-                reply(id, offers(&session))?;
+                reply(id, self.offers(&session))?;
                 commands(&session.id)?;
                 self.sessions.insert(session.id.clone(), session);
                 Ok(())
             }
-            "session/set_mode" => self.change(id, params, |session, params| {
-                session.mode = text(params, "modeId");
-                json!({})
-            }),
-            "session/set_model" => self.change(id, params, |session, params| {
-                session.model = text(params, "modelId");
-                json!({})
-            }),
-            "session/set_config_option" => reply(id, json!({"configOptions": []})),
+            "session/set_mode" => {
+                std::thread::sleep(self.quirks.set_delay);
+                self.change(id, params, |session, params| {
+                    session.mode = text(params, "modeId");
+                    json!({})
+                })
+            }
+            "session/set_model" => {
+                std::thread::sleep(self.quirks.set_delay);
+                let hermes_models = self.quirks.hermes_models;
+                self.change(id, params, |session, params| {
+                    let picked = text(params, "modelId");
+                    session.model = if hermes_models {
+                        hermes_model_switch(&session.model, &picked)
+                    } else {
+                        picked
+                    };
+                    json!({})
+                })
+            }
+            "session/set_config_option" => {
+                std::thread::sleep(self.quirks.set_delay);
+                reply(id, json!({"configOptions": []}))
+            }
             other => fail(id, -32601, &format!("method not found: {other}")),
         }
+    }
+
+    /// The legacy `models` and `modes` an open answers with.
+    fn offers(&self, session: &Session) -> Value {
+        let models = if self.quirks.hermes_models {
+            // The configured model, offered while the session runs on its provider, then every
+            // model of the providers Hermes knows, the current one kept in any case.
+            let mut ids: Vec<&str> = Vec::new();
+            if session.model.starts_with("auto:") {
+                ids.push(&session.model);
+            }
+            ids.push("fake:mini");
+            if !ids.contains(&session.model.as_str()) {
+                ids.push(&session.model);
+            }
+            ids.iter()
+                .map(|id| json!({"modelId": id, "name": id.replace(':', " · ")}))
+                .collect::<Vec<_>>()
+        } else {
+            vec![
+                json!({"modelId": "fake:large", "name": "fake/large"}),
+                json!({"modelId": "fake:mini", "name": "fake/mini"}),
+            ]
+        };
+        json!({
+            "models": {
+                "availableModels": models,
+                "currentModelId": session.model
+            },
+            "modes": {
+                "currentModeId": session.mode,
+                "availableModes": [
+                    {"id": "default", "name": "Default"},
+                    {"id": "accept_edits", "name": "Accept Edits"},
+                    {"id": "dont_ask", "name": "Don't Ask"}
+                ]
+            }
+        })
     }
 
     /// A settings change of the session `params` names.
@@ -238,6 +355,7 @@ impl Agent {
             })
             .unwrap_or_default();
         session.input_tokens += 10;
+        session.prompts += 1;
         let mut stop = "end_turn";
         let mut said = String::new();
         if prompt.contains("Reply with exactly: ok") {
@@ -432,25 +550,63 @@ enum Written {
     Ended,
 }
 
-/// The legacy `models` and `modes` an open answers with.
-fn offers(session: &Session) -> Value {
-    json!({
-        "models": {
-            "availableModels": [
-                {"modelId": "fake:large", "name": "fake/large"},
-                {"modelId": "fake:mini", "name": "fake/mini"}
-            ],
-            "currentModelId": session.model
-        },
-        "modes": {
-            "currentModeId": session.mode,
-            "availableModes": [
-                {"id": "default", "name": "Default"},
-                {"id": "accept_edits", "name": "Accept Edits"},
-                {"id": "dont_ask", "name": "Don't Ask"}
-            ]
+/// Hermes 0.22.5's `session/set_model`: the part before the first colon names the provider only
+/// when it is one Hermes knows; otherwise the whole id is a model of the current provider.
+fn hermes_model_switch(current: &str, picked: &str) -> String {
+    match picked.split_once(':') {
+        Some(("fake", _)) => picked.to_owned(),
+        _ => {
+            let provider = current
+                .split_once(':')
+                .map_or("auto", |(provider, _)| provider);
+            format!("{provider}:{picked}")
         }
-    })
+    }
+}
+
+/// Starts the slow child (`AURA_FAKE_SLOW_CHILD_MS`) in this process's group, with no pipes of
+/// ours, so it outlives this process until the group is signalled.
+#[cfg(unix)]
+fn slow_child(millis: u64) -> Result<()> {
+    std::process::Command::new(std::env::current_exe()?)
+        .args([LINGER, &millis.to_string()])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn slow_child(_millis: u64) -> Result<()> {
+    Ok(())
+}
+
+/// The slow child: exits `millis` after a SIGTERM, or after [`LINGER_LIFETIME`].
+#[cfg(unix)]
+fn linger(millis: u64) -> ExitCode {
+    use tokio::signal::unix::{SignalKind, signal};
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    else {
+        return ExitCode::FAILURE;
+    };
+    runtime.block_on(async move {
+        let Ok(mut terminate) = signal(SignalKind::terminate()) else {
+            return;
+        };
+        tokio::select! {
+            _ = terminate.recv() => tokio::time::sleep(Duration::from_millis(millis)).await,
+            () = tokio::time::sleep(LINGER_LIFETIME) => {}
+        }
+    });
+    ExitCode::SUCCESS
+}
+
+#[cfg(not(unix))]
+fn linger(_millis: u64) -> ExitCode {
+    ExitCode::SUCCESS
 }
 
 fn commands(session_id: &str) -> Result<()> {
