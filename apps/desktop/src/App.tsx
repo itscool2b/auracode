@@ -19,6 +19,7 @@ import type { Transport } from "./lib/chat/transport";
 import { errorMessage } from "./lib/errors";
 import { useStream } from "./lib/hooks";
 import { getAppInfo, inTauri, sendSmokeReport, windowReady } from "./lib/ipc";
+import { LATE_NOTICE_CHECKS_MS, withLateNotices } from "./lib/notices";
 import { afterPaint, whenPainted } from "./lib/ready";
 import { isRunning, type StreamStore } from "./lib/session";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
@@ -80,8 +81,24 @@ export function App({
         if (live) setBoot({ status: "failed", message: errorMessage(error) });
       },
     );
+    const timers = LATE_NOTICE_CHECKS_MS.map((delay) =>
+      setTimeout(() => {
+        getAppInfo().then(
+          (later) => {
+            if (!live) return;
+            setBoot((current) =>
+              current.status === "ready"
+                ? { status: "ready", info: withLateNotices(current.info, later) }
+                : current,
+            );
+          },
+          () => undefined,
+        );
+      }, delay),
+    );
     return () => {
       live = false;
+      for (const timer of timers) clearTimeout(timer);
     };
   }, []);
 
