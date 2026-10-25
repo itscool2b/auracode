@@ -10,23 +10,26 @@ import { useId } from "react";
 import { FolderIcon, PlusIcon, SparkIcon } from "./icons";
 
 const NAV = [
-  { label: "New chat", icon: PlusIcon },
   { label: "Projects", icon: FolderIcon },
   { label: "Agents", icon: SparkIcon },
 ] as const;
 
 /**
- * The slim sidebar: wordmark, navigation (placeholders until M2), and the demo agent's live orb.
- * Its top strip is a window drag region, with room for the macOS traffic lights.
+ * The slim sidebar of Diagnostics: wordmark, the way back to the chats, navigation (placeholders
+ * until M2), and the demo agent's live orb. Its top strip is a window drag region, with room for
+ * the macOS traffic lights.
  */
 export function Sidebar({
   brandId,
   onBrandChange,
   orbState,
+  onChats,
 }: {
   readonly brandId: AgentBrandId;
   readonly onBrandChange: (brand: AgentBrandId) => void;
   readonly orbState: OrbState;
+  /** Back to the chats. */
+  readonly onChats: () => void;
 }) {
   const brand = AGENT_BRANDS[brandId];
   const selectId = useId();
@@ -38,6 +41,12 @@ export function Sidebar({
       </div>
       <nav aria-label="Main">
         <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+          <li>
+            <button type="button" className="nav-item" onClick={onChats}>
+              <PlusIcon />
+              Chats
+            </button>
+          </li>
           {NAV.map(({ label, icon: Icon }) => (
             <li key={label}>
               <button

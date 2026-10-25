@@ -1,0 +1,328 @@
+[
+  {
+    "key": "outside:1",
+    "turnId": null,
+    "partial": false,
+    "plan": null,
+    "usage": null,
+    "end": null,
+    "items": [
+      {
+        "kind": "notice",
+        "key": "notice:1",
+        "level": "info",
+        "message": "The demo agent is scripted; no AI is involved."
+      }
+    ]
+  },
+  {
+    "key": "turn:t1",
+    "turnId": "t1",
+    "partial": false,
+    "plan": [
+      {
+        "content": "Read the failing test",
+        "status": "completed",
+        "priority": null
+      },
+      {
+        "content": "Fix the typo",
+        "status": "completed",
+        "priority": null
+      }
+    ],
+    "usage": {
+      "context_used": 12000,
+      "context_size": 200000,
+      "cost": {
+        "amount": 0.0123,
+        "currency": "USD"
+      }
+    },
+    "end": {
+      "stopReason": "end_turn",
+      "usage": {
+        "input_tokens": 1200,
+        "output_tokens": 300,
+        "cache_read_tokens": 800,
+        "cache_write_tokens": null,
+        "reasoning_tokens": null,
+        "scope": "turn"
+      },
+      "durationMs": 8200,
+      "recovered": false
+    },
+    "items": [
+      {
+        "kind": "user",
+        "key": "user:t1.u",
+        "text": "Fix the failing test"
+      },
+      {
+        "kind": "thought",
+        "key": "thought:t1.th1",
+        "text": "Looking at the test output.",
+        "completed": true,
+        "durationMs": 1200
+      },
+      {
+        "kind": "tool",
+        "key": "tool:t1.t1",
+        "id": "t1.t1",
+        "toolKind": "read",
+        "title": "Read src/lib.rs again",
+        "status": "completed",
+        "locations": [
+          {
+            "path": "src/lib.rs",
+            "line": null
+          }
+        ],
+        "rawInput": null,
+        "toolName": null,
+        "content": [],
+        "truncated": null,
+        "display": "completed"
+      },
+      {
+        "kind": "tool",
+        "key": "tool:t1.t2",
+        "id": "t1.t2",
+        "toolKind": "edit",
+        "title": "Edit src/lib.rs",
+        "status": "completed",
+        "locations": [
+          {
+            "path": "src/lib.rs",
+            "line": 1
+          }
+        ],
+        "rawInput": null,
+        "toolName": null,
+        "content": [
+          {
+            "type": "diff",
+            "path": "src/lib.rs",
+            "old_text": "fn mian() {}\n",
+            "new_text": "fn main() {}\n",
+            "truncated": null
+          }
+        ],
+        "truncated": null,
+        "display": "completed"
+      },
+      {
+        "kind": "permission",
+        "key": "permission:t1.p1",
+        "request": {
+          "request_id": "t1.p1",
+          "tool_call_id": "t1.t2",
+          "title": "Edit src/lib.rs",
+          "kind": "edit",
+          "raw_input": null,
+          "content": [],
+          "locations": [],
+          "options": [
+            {
+              "option_id": "allow",
+              "kind": "allow_once",
+              "label": "Allow once"
+            },
+            {
+              "option_id": "reject",
+              "kind": "reject_once",
+              "label": "Reject"
+            }
+          ],
+          "truncated": null
+        },
+        "resolution": {
+          "decision": {
+            "type": "selected",
+            "option_id": "allow"
+          },
+          "by": "user"
+        }
+      },
+      {
+        "kind": "tool",
+        "key": "tool:t1.t3",
+        "id": "t1.t3",
+        "toolKind": "execute",
+        "title": "Run cargo test",
+        "status": "completed",
+        "locations": [],
+        "rawInput": null,
+        "toolName": null,
+        "content": [
+          {
+            "type": "terminal",
+            "output": "running 3 tests\ntest result: ok",
+            "exit_code": 0,
+            "truncated": null
+          }
+        ],
+        "truncated": null,
+        "display": "completed"
+      },
+      {
+        "kind": "message",
+        "key": "message:t1.m1",
+        "text": "The test failed because of a typo. **Fixed.** (one more thing, sent late)",
+        "completed": true
+      }
+    ]
+  },
+  {
+    "key": "outside:28",
+    "turnId": null,
+    "partial": false,
+    "plan": null,
+    "usage": null,
+    "end": null,
+    "items": [
+      {
+        "kind": "notice",
+        "key": "notice:28",
+        "level": "info",
+        "message": "The background test run finished."
+      }
+    ]
+  },
+  {
+    "key": "turn:t2",
+    "turnId": "t2",
+    "partial": false,
+    "plan": null,
+    "usage": {
+      "context_used": 12000,
+      "context_size": 200000,
+      "cost": {
+        "amount": 0.0201,
+        "currency": "USD"
+      }
+    },
+    "end": {
+      "stopReason": "cancelled",
+      "usage": null,
+      "durationMs": 2100,
+      "recovered": false
+    },
+    "items": [
+      {
+        "kind": "user",
+        "key": "user:t2.u",
+        "text": "/ask"
+      },
+      {
+        "kind": "question",
+        "key": "question:t2.q1",
+        "request": {
+          "request_id": "t2.q1",
+          "prompt": {
+            "type": "select",
+            "message": "Which color?",
+            "options": ["Red", "Green", "Blue"]
+          }
+        },
+        "resolution": {
+          "answer": {
+            "type": "select",
+            "index": 1
+          },
+          "by": "user"
+        }
+      },
+      {
+        "kind": "message",
+        "key": "message:t2.m1",
+        "text": "You picked Green.",
+        "completed": false
+      },
+      {
+        "kind": "tool",
+        "key": "tool:t2.t1",
+        "id": "t2.t1",
+        "toolKind": "search",
+        "title": "Search for TODO",
+        "status": "in_progress",
+        "locations": [],
+        "rawInput": null,
+        "toolName": null,
+        "content": [],
+        "truncated": null,
+        "display": "stopped"
+      },
+      {
+        "kind": "permission",
+        "key": "permission:bg.p1",
+        "request": {
+          "request_id": "bg.p1",
+          "tool_call_id": null,
+          "title": "Run the nightly job",
+          "kind": "execute",
+          "raw_input": {
+            "command": "make nightly"
+          },
+          "content": [],
+          "locations": [],
+          "options": [
+            {
+              "option_id": "ok",
+              "kind": "allow_once",
+              "label": "Allow once"
+            }
+          ],
+          "truncated": null
+        },
+        "resolution": null
+      }
+    ]
+  },
+  {
+    "key": "turn:t3",
+    "turnId": "t3",
+    "partial": false,
+    "plan": null,
+    "usage": null,
+    "end": {
+      "stopReason": "error",
+      "usage": null,
+      "durationMs": 40,
+      "recovered": false
+    },
+    "items": [
+      {
+        "kind": "user",
+        "key": "user:t3.u",
+        "text": "/fail"
+      },
+      {
+        "kind": "error",
+        "key": "error:44",
+        "errorKind": "agent_error",
+        "message": "The demo agent failed this turn on purpose.",
+        "detail": null,
+        "recoverable": false
+      }
+    ]
+  },
+  {
+    "key": "outside:46",
+    "turnId": null,
+    "partial": false,
+    "plan": null,
+    "usage": null,
+    "end": null,
+    "items": [
+      {
+        "kind": "error",
+        "key": "error:46",
+        "errorKind": "agent_exited",
+        "message": "The agent stopped unexpectedly (exit code 1).",
+        "detail": "panicked at src/main.rs:3",
+        "recoverable": false
+      }
+    ]
+  }
+]

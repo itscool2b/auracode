@@ -1,0 +1,99 @@
+/*
+ * Semantic tokens for the chat screens: every colour, size, font, spacing step and radius the chat
+ * components use is one of these names. Components never hold a literal, so the visual language
+ * that lands later (docs/design/visual-language.md, with its tokens in packages/ui) restyles every
+ * chat screen by remapping these names here. Until then they map onto the Aura tokens.
+ */
+
+:root {
+  /* Surfaces, back to front */
+  --ui-surface-sidebar: var(--aura-fill-1);
+  --ui-surface-panel: var(--aura-fill-2);
+  --ui-surface-raised: var(--aura-fill-3);
+  --ui-surface-input: rgb(0 0 0 / 0.22);
+  --ui-surface-code: rgb(0 0 0 / 0.28);
+  --ui-surface-hover: var(--aura-fill-hover);
+  --ui-surface-pressed: var(--aura-fill-pressed);
+  --ui-surface-selected: var(--aura-fill-selected);
+  --ui-surface-user: var(--aura-accent-soft);
+  --ui-surface-scrim: var(--aura-overlay-scrim);
+
+  /* Text, strongest to faintest */
+  --ui-text-primary: var(--aura-text-1);
+  --ui-text-secondary: var(--aura-text-2);
+  --ui-text-muted: var(--aura-text-3);
+  --ui-text-faint: var(--aura-text-4);
+  --ui-text-on-accent: var(--aura-text-on-accent);
+  --ui-text-link: color-mix(in oklab, var(--aura-accent) 80%, white);
+  --ui-text-link-underline: color-mix(in oklab, var(--aura-accent) 40%, transparent);
+
+  /* Borders */
+  --ui-border-width: var(--aura-hairline);
+  --ui-border-subtle: var(--aura-border-1);
+  --ui-border-default: var(--aura-border-2);
+  --ui-border-strong: var(--aura-border-3);
+  --ui-focus-ring: var(--aura-focus-ring);
+  --ui-focus-width: 2px;
+
+  /* Accent: the active agent's colour */
+  --ui-accent: var(--aura-accent);
+  --ui-accent-soft: var(--aura-accent-soft);
+
+  /* Status */
+  --ui-status-info: var(--aura-info);
+  --ui-status-success: var(--aura-success);
+  --ui-status-warning: var(--aura-warning);
+  --ui-status-danger: var(--aura-danger);
+  --ui-status-info-soft: color-mix(in oklab, var(--aura-info) 14%, transparent);
+  --ui-status-warning-soft: color-mix(in oklab, var(--aura-warning) 14%, transparent);
+  --ui-status-danger-soft: color-mix(in oklab, var(--aura-danger) 14%, transparent);
+  --ui-diff-added: color-mix(in oklab, var(--aura-success) 18%, transparent);
+  --ui-diff-removed: color-mix(in oklab, var(--aura-danger) 18%, transparent);
+
+  /* Type */
+  --ui-font-body: var(--font-sans);
+  --ui-font-mono: var(--font-mono);
+  --ui-size-xs: 11px;
+  --ui-size-sm: 12.5px;
+  --ui-size-md: 14px;
+  --ui-size-lg: 16px;
+  --ui-size-xl: 20px;
+  --ui-leading-tight: 1.3;
+  --ui-leading-body: 1.55;
+  --ui-leading-prose: 1.65;
+  --ui-weight-regular: 400;
+  --ui-weight-medium: 500;
+  --ui-weight-strong: 600;
+  --ui-tracking-caps: 0.06em;
+
+  /* Spacing steps */
+  --ui-space-1: 2px;
+  --ui-space-2: 4px;
+  --ui-space-3: 8px;
+  --ui-space-4: 12px;
+  --ui-space-5: 16px;
+  --ui-space-6: 24px;
+  --ui-space-7: 32px;
+  --ui-space-8: 48px;
+
+  /* Radii */
+  --ui-radius-sm: var(--aura-radius-xs);
+  --ui-radius-md: var(--aura-radius-sm);
+  --ui-radius-lg: var(--aura-radius-md);
+  --ui-radius-pill: var(--aura-radius-pill);
+
+  /* Layout */
+  --ui-sidebar-width: 272px;
+  --ui-transcript-width: 760px;
+  --ui-titlebar-height: 52px;
+  --ui-control-height: 30px;
+  --ui-dot-size: 8px;
+  --ui-composer-rows-min: 56px;
+  --ui-composer-rows-max: 240px;
+  --ui-pre-max-height: 360px;
+  --ui-menu-max-height: 260px;
+
+  /* Motion */
+  --ui-duration-fast: var(--aura-duration-fast);
+  --ui-ease: var(--aura-ease-standard);
+}

@@ -1,16 +1,44 @@
+import { Channel } from "@tauri-apps/api/core";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SmokeReport } from "../bindings";
 import { errorMessage } from "./errors";
 import {
   acknowledgeRecovery,
+  agentsList,
+  agentsRefresh,
   CommandError,
   cancelDemoStream,
+  chatAttach,
+  chatBlob,
+  chatCancelQueued,
+  chatCreate,
+  chatDetach,
+  chatForceStop,
+  chatHistory,
+  chatInterrupt,
+  chatLists,
+  chatRespondPermission,
+  chatRespondUi,
+  chatResumeQueue,
+  chatRevealLog,
+  chatSend,
+  chatSetAutonomy,
+  chatSetOption,
+  chatStart,
+  chatStop,
+  chatsList,
+  endingChannel,
+  envRefresh,
+  envStatus,
   getAppInfo,
   IPC_REJECTED,
+  pickFolder,
   revealDataDir,
   sendSmokeReport,
   startDemoStream,
+  statusSubscribe,
+  storageStatus,
   toCommandError,
   windowReady,
 } from "./ipc";
@@ -153,5 +181,185 @@ describe("command wrappers through the generated bindings", () => {
     await revealDataDir();
     expect(payloads).toHaveLength(1);
     expect(payloads[0] ?? {}).toEqual({});
+  });
+});
+
+describe("the chat command wrappers", () => {
+  beforeEach(() => {
+    vi.stubGlobal("window", globalThis);
+  });
+
+  afterEach(() => {
+    clearMocks();
+    Reflect.deleteProperty(globalThis, "__TAURI_INTERNALS__");
+    Reflect.deleteProperty(globalThis, "__TAURI_EVENT_PLUGIN_INTERNALS__");
+    vi.unstubAllGlobals();
+  });
+
+  /** Runs a channel's callback as the shell's `eval` would: a message, or the end. */
+  function deliver(channel: Channel<unknown>, raw: unknown): void {
+    const internals = (
+      window as unknown as {
+        __TAURI_INTERNALS__: { runCallback: (id: number, data: unknown) => void };
+      }
+    ).__TAURI_INTERNALS__;
+    internals.runCallback(channel.id, raw);
+  }
+
+  it("names every argument as the shell's commands expect", async () => {
+    const calls: { cmd: string; payload: unknown }[] = [];
+    mockIPC((cmd, payload) => {
+      calls.push({ cmd, payload });
+      return null;
+    });
+    await chatsList();
+    await chatCreate("mock", "/code/app");
+    await chatDetach("sub-1");
+    await chatHistory("c1", 40);
+    await chatLists("c1");
+    await chatSend("c1", "  hi  ");
+    await chatCancelQueued("c1", "p1");
+    await chatResumeQueue("c1");
+    await chatInterrupt("c1");
+    await chatForceStop("c1");
+    await chatStart("c1", true);
+    await chatStop("c1");
+    await chatRespondPermission("c1", "r1", null);
+    await chatRespondUi("c1", "q1", { type: "select", index: 2 });
+    await chatSetOption("c1", "model", { type: "choice", value: "fast" });
+    await chatSetAutonomy("c1", "ask");
+    await chatBlob("c1", "a".repeat(64), 262_144, 262_144);
+    await chatRevealLog("c1");
+    await pickFolder();
+    await agentsList();
+    await agentsRefresh();
+    await envStatus();
+    await envRefresh();
+    await storageStatus();
+    // A command without arguments sends an empty object.
+    expect(calls.map(({ cmd, payload }) => ({ cmd, payload: payload ?? {} }))).toEqual([
+      { cmd: "chats_list", payload: {} },
+      { cmd: "chat_create", payload: { agentId: "mock", folder: "/code/app" } },
+      { cmd: "chat_detach", payload: { subscriptionId: "sub-1" } },
+      { cmd: "chat_history", payload: { chatId: "c1", beforeSeq: 40, maxBytes: null } },
+      { cmd: "chat_lists", payload: { chatId: "c1" } },
+      { cmd: "chat_send", payload: { chatId: "c1", text: "  hi  " } },
+      { cmd: "chat_cancel_queued", payload: { chatId: "c1", promptId: "p1" } },
+      { cmd: "chat_resume_queue", payload: { chatId: "c1" } },
+      { cmd: "chat_interrupt", payload: { chatId: "c1" } },
+      { cmd: "chat_force_stop", payload: { chatId: "c1" } },
+      { cmd: "chat_start", payload: { chatId: "c1", fresh: true } },
+      { cmd: "chat_stop", payload: { chatId: "c1" } },
+      {
+        cmd: "chat_respond_permission",
+        payload: { chatId: "c1", requestId: "r1", optionId: null },
+      },
+      {
+        cmd: "chat_respond_ui",
+        payload: { chatId: "c1", requestId: "q1", answer: { type: "select", index: 2 } },
+      },
+      {
+        cmd: "chat_set_option",
+        payload: { chatId: "c1", optionId: "model", value: { type: "choice", value: "fast" } },
+      },
+      { cmd: "chat_set_autonomy", payload: { chatId: "c1", autonomy: "ask" } },
+      {
+        cmd: "chat_blob",
+        payload: { chatId: "c1", sha256: "a".repeat(64), offset: 262_144, len: 262_144 },
+      },
+      { cmd: "chat_reveal_log", payload: { chatId: "c1" } },
+      { cmd: "pick_folder", payload: {} },
+      { cmd: "agents_list", payload: {} },
+      { cmd: "agents_refresh", payload: {} },
+      { cmd: "env_status", payload: {} },
+      { cmd: "env_refresh", payload: {} },
+      { cmd: "storage_status", payload: {} },
+    ]);
+  });
+
+  it("throws the shell's codes for the chat commands", async () => {
+    mockIPC(() =>
+      Promise.reject({
+        code: "request_not_pending",
+        message: "This request is no longer waiting for an answer.",
+      }),
+    );
+    await expect(chatRespondPermission("c1", "r1", "allow")).rejects.toMatchObject({
+      name: "CommandError",
+      code: "request_not_pending",
+    });
+    mockIPC(() =>
+      Promise.reject({ code: "dialog_failed", message: "The folder picker could not be shown." }),
+    );
+    await expect(pickFolder()).rejects.toMatchObject({ code: "dialog_failed" });
+  });
+
+  it("delivers a view's frames, before and after the attach answers, then says when the channel ends", async () => {
+    let channel: Channel<unknown> | null = null;
+    mockIPC((cmd, payload) => {
+      if (cmd !== "chat_attach") return null;
+      const args = payload as { chatId: string; channel: Channel<unknown> };
+      channel = args.channel;
+      // A frame before the answer, as the join protocol allows.
+      deliver(args.channel, { message: { chat_id: "c1", seq_start: 3, events: [] }, index: 0 });
+      return { subscription_id: "sub-1", next_seq: 3 };
+    });
+    const frames: unknown[] = [];
+    let ends = 0;
+    const attached = await chatAttach(
+      "c1",
+      (frame) => frames.push(frame),
+      () => {
+        ends += 1;
+      },
+    );
+    expect(attached).toMatchObject({ subscription_id: "sub-1" });
+    expect(frames).toEqual([{ chat_id: "c1", seq_start: 3, events: [] }]);
+    if (channel === null) throw new Error("no channel was passed");
+    // Out of order: the end waits for the message sent before it.
+    deliver(channel, { end: true, index: 2 });
+    expect(ends).toBe(0);
+    deliver(channel, { message: { chat_id: "c1", seq_start: 3, events: [] }, index: 1 });
+    expect(frames).toHaveLength(2);
+    expect(ends).toBe(1);
+  });
+
+  it("subscribes to status updates and says when that channel ends", async () => {
+    let channel: Channel<unknown> | null = null;
+    mockIPC((cmd, payload) => {
+      if (cmd === "status_subscribe") channel = (payload as { channel: Channel<unknown> }).channel;
+      return "status-1";
+    });
+    const updates: unknown[] = [];
+    let ended = false;
+    await expect(
+      statusSubscribe(
+        (update) => updates.push(update),
+        () => {
+          ended = true;
+        },
+      ),
+    ).resolves.toBe("status-1");
+    if (channel === null) throw new Error("no channel was passed");
+    deliver(channel, { message: { chat_id: "c1", status: "ready" }, index: 0 });
+    deliver(channel, { end: true, index: 1 });
+    expect(updates).toEqual([{ chat_id: "c1", status: "ready" }]);
+    expect(ended).toBe(true);
+  });
+
+  it("endingChannel wraps only its own channel", () => {
+    mockIPC(() => null);
+    let ends = 0;
+    const one = endingChannel<number>(
+      () => {},
+      () => {
+        ends += 1;
+      },
+    );
+    const other = new Channel<number>();
+    deliver(other as Channel<unknown>, { end: true, index: 0 });
+    expect(ends).toBe(0);
+    deliver(one as Channel<unknown>, { end: true, index: 0 });
+    expect(ends).toBe(1);
   });
 });

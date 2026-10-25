@@ -1,12 +1,25 @@
 import { Channel } from "@tauri-apps/api/core";
 import {
+  type AgentEntry,
   type AppError,
   type AppErrorCode,
   type AppInfo,
+  type Autonomy,
+  type BlobText,
+  type ChatAttach,
+  type ChatStatusUpdate,
+  type ChatSummary,
+  type ConfigValue,
   commands,
   type DemoKind,
+  type EnvStatus,
   type EventBatch,
+  type HistoryPage,
+  type PromptAck,
+  type SessionLists,
   type SmokeReport,
+  type StorageStatus,
+  type UiAnswer,
 } from "../bindings";
 
 /**
@@ -139,4 +152,173 @@ export async function revealDataDir(): Promise<void> {
  */
 export async function acknowledgeRecovery(): Promise<void> {
   await settle(commands.acknowledgeRecovery());
+}
+
+/**
+ * A channel that also says when the shell ended it. Tauri ends a channel when the Rust side drops
+ * its last handle (a chat view's subscription was removed, or its session stopped), but its
+ * JavaScript `Channel` only unregisters the callback, silently. `cleanupCallback` runs exactly then,
+ * after every message sent before the end was delivered, so this wraps it per instance. It is a
+ * private method of @tauri-apps/api 2.12.4 (pinned exactly); `ipc.test.ts` fails if it changes.
+ */
+export function endingChannel<T>(onMessage: (message: T) => void, onEnd: () => void): Channel<T> {
+  const channel = new Channel<T>(onMessage);
+  const internals = channel as unknown as { cleanupCallback: () => void };
+  const cleanup = internals.cleanupCallback.bind(channel);
+  internals.cleanupCallback = () => {
+    cleanup();
+    onEnd();
+  };
+  return channel;
+}
+
+/** Every agent auracode knows, from the detector's cache; never waits. */
+export function agentsList(): Promise<AgentEntry[]> {
+  return infallible(commands.agentsList());
+}
+
+/** Resolves the environment again and probes every agent (15 s at most). */
+export function agentsRefresh(): Promise<AgentEntry[]> {
+  return infallible(commands.agentsRefresh());
+}
+
+export function envStatus(): Promise<EnvStatus> {
+  return infallible(commands.envStatus());
+}
+
+/** Starts resolving the environment again; returns the status at once. */
+export function envRefresh(): Promise<EnvStatus> {
+  return infallible(commands.envRefresh());
+}
+
+/** The system folder picker: the chosen folder, or `null` when the user cancelled. */
+export function pickFolder(): Promise<string | null> {
+  return settle(commands.pickFolder());
+}
+
+export function chatsList(): Promise<ChatSummary[]> {
+  return settle(commands.chatsList());
+}
+
+export function chatCreate(agentId: string, folder: string): Promise<ChatSummary> {
+  return settle(commands.chatCreate(agentId, folder));
+}
+
+/**
+ * Opens a view of a chat. `onFrame` receives every frame of the view's channel, from before the
+ * call resolves on (the join protocol buffers them); `onEnd` runs when the shell ends the channel.
+ */
+export async function chatAttach(
+  chatId: string,
+  onFrame: (frame: EventBatch) => void,
+  onEnd: () => void,
+): Promise<ChatAttach> {
+  // Inside the async function, so a missing IPC bridge rejects instead of throwing synchronously.
+  const channel = endingChannel<EventBatch>(onFrame, onEnd);
+  return settle(commands.chatAttach(chatId, channel));
+}
+
+export function chatDetach(subscriptionId: string): Promise<void> {
+  return infallible(commands.chatDetach(subscriptionId));
+}
+
+export function chatHistory(
+  chatId: string,
+  beforeSeq: number,
+  maxBytes: number | null = null,
+): Promise<HistoryPage> {
+  return settle(commands.chatHistory(chatId, beforeSeq, maxBytes));
+}
+
+export function chatLists(chatId: string): Promise<SessionLists> {
+  return settle(commands.chatLists(chatId));
+}
+
+export function chatSend(chatId: string, text: string): Promise<PromptAck> {
+  return settle(commands.chatSend(chatId, text));
+}
+
+export async function chatCancelQueued(chatId: string, promptId: string): Promise<void> {
+  await settle(commands.chatCancelQueued(chatId, promptId));
+}
+
+export async function chatResumeQueue(chatId: string): Promise<void> {
+  await settle(commands.chatResumeQueue(chatId));
+}
+
+export async function chatInterrupt(chatId: string): Promise<void> {
+  await settle(commands.chatInterrupt(chatId));
+}
+
+export async function chatForceStop(chatId: string): Promise<void> {
+  await settle(commands.chatForceStop(chatId));
+}
+
+export async function chatStart(chatId: string, fresh: boolean): Promise<void> {
+  await settle(commands.chatStart(chatId, fresh));
+}
+
+export async function chatStop(chatId: string): Promise<void> {
+  await settle(commands.chatStop(chatId));
+}
+
+/** Answers a permission card with one of its options; `null` cancels it. */
+export async function chatRespondPermission(
+  chatId: string,
+  requestId: string,
+  optionId: string | null,
+): Promise<void> {
+  await settle(commands.chatRespondPermission(chatId, requestId, optionId));
+}
+
+/** Answers a question card; `null` dismisses it. */
+export async function chatRespondUi(
+  chatId: string,
+  requestId: string,
+  answer: UiAnswer | null,
+): Promise<void> {
+  await settle(commands.chatRespondUi(chatId, requestId, answer));
+}
+
+export function chatSetOption(
+  chatId: string,
+  optionId: string,
+  value: ConfigValue,
+): Promise<SessionLists> {
+  return settle(commands.chatSetOption(chatId, optionId, value));
+}
+
+export function chatSetAutonomy(chatId: string, autonomy: Autonomy): Promise<SessionLists> {
+  return settle(commands.chatSetAutonomy(chatId, autonomy));
+}
+
+/** One page of a full output, ending on a character boundary; continue from `next_offset`. */
+export function chatBlob(
+  chatId: string,
+  sha256: string,
+  offset: number,
+  len: number,
+): Promise<BlobText> {
+  return settle(commands.chatBlob(chatId, sha256, offset, len));
+}
+
+/** Shows the chat's newest protocol log; the shell chooses the file. */
+export async function chatRevealLog(chatId: string): Promise<void> {
+  await settle(commands.chatRevealLog(chatId));
+}
+
+/**
+ * Subscribes this webview to chat-list updates, replacing its earlier subscription. `onEnd` runs
+ * when the shell ends the channel.
+ */
+export async function statusSubscribe(
+  onUpdate: (update: ChatStatusUpdate) => void,
+  onEnd: () => void,
+): Promise<string> {
+  const channel = endingChannel<ChatStatusUpdate>(onUpdate, onEnd);
+  return settle(commands.statusSubscribe(channel));
+}
+
+export function storageStatus(): Promise<StorageStatus> {
+  return infallible(commands.storageStatus());
 }

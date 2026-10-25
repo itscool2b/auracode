@@ -269,6 +269,194 @@ mod tests {
             assert!(definition.contains("\"other\""), "{definition}");
             assert!(!definition.contains("string"), "{definition}");
         }
+        // The other lenient enums fall back to one of their own values: closed unions too.
+        for (name, values) in [
+            (
+                "ToolStatus",
+                &["pending", "in_progress", "completed", "failed"][..],
+            ),
+            (
+                "PermissionOptionKind",
+                &[
+                    "allow_once",
+                    "allow_always",
+                    "reject_once",
+                    "reject_always",
+                    "other",
+                ][..],
+            ),
+            ("PlanStatus", &["pending", "in_progress", "completed"][..]),
+            ("PlanPriority", &["high", "medium", "low"][..]),
+            ("NoticeLevel", &["info", "warning", "error"][..]),
+            ("UsageScope", &["turn", "session"][..]),
+        ] {
+            let definition = definition(&first, name);
+            assert!(!definition.contains("string"), "{definition}");
+            for value in values {
+                assert!(definition.contains(&format!("\"{value}\"")), "{definition}");
+            }
+        }
+        // Every chat command as the UI calls it: names, arguments and results are frozen for M1a,
+        // so a Rust change that moved one fails here before it breaks the UI.
+        for (accessor, signature) in CHAT_COMMANDS {
+            let line = format!("\t{accessor}: {signature}");
+            assert!(first.contains(&line), "{line} is missing");
+        }
+        // The protocol types the UI's reducers read, in the shapes they expect.
+        for (name, fields) in [
+            (
+                "EventBatch",
+                &[
+                    "chat_id: string",
+                    "seq_start: number",
+                    "events: AuraEvent[]",
+                ][..],
+            ),
+            (
+                "HistoryItem",
+                &[
+                    "seq: number",
+                    "turn_id: string | null",
+                    "at: number",
+                    "event: AuraEvent",
+                ][..],
+            ),
+            (
+                "HistoryPage",
+                &[
+                    "items: HistoryItem[]",
+                    "has_more: boolean",
+                    "before_seq: number | null",
+                    "cut_turn_id: string | null",
+                    "unsaved_from: number | null",
+                    "skipped: number",
+                ][..],
+            ),
+            (
+                "ChatAttach",
+                &[
+                    "subscription_id: string",
+                    "next_seq: number",
+                    "snapshot: ChatSnapshot",
+                    "history: HistoryPage",
+                ][..],
+            ),
+            (
+                "ChatSnapshot",
+                &[
+                    "session: SessionInfo",
+                    "queue: QueuedPrompt[]",
+                    "auth: AuthPrompt | null",
+                    "storage: StorageStatus",
+                ][..],
+            ),
+            (
+                "ToolUpdate",
+                &["content: ToolContent[] | null", "status: ToolStatus | null"][..],
+            ),
+            (
+                "ToolCall",
+                &["content: ToolContent[]", "status: ToolStatus"][..],
+            ),
+            (
+                "TokenUsage",
+                &[
+                    "input_tokens: number",
+                    "cache_read_tokens: number | null",
+                    "scope: UsageScope",
+                ][..],
+            ),
+            (
+                "BlobText",
+                &[
+                    "offset: number",
+                    "next_offset: number",
+                    "total: number",
+                    "eof: boolean",
+                ][..],
+            ),
+            (
+                "Availability",
+                &[
+                    "{ state: \"checking\" }",
+                    "{ state: \"ready\"; version: string | null; path: string }",
+                    "{ state: \"missing\"; reason: string }",
+                    "{ state: \"broken\"; reason: string }",
+                ][..],
+            ),
+            (
+                "SessionInfo",
+                &[
+                    "status: SessionStatus",
+                    "queue_held: boolean",
+                    "revision: number",
+                ][..],
+            ),
+            (
+                "UiAnswer",
+                &[
+                    "{ type: \"confirm\"; yes: boolean }",
+                    "{ type: \"select\"; index: number }",
+                    "{ type: \"input\"; text: string }",
+                ][..],
+            ),
+            (
+                "ConfigValue",
+                &[
+                    "{ type: \"choice\"; value: string }",
+                    "{ type: \"toggle\"; value: boolean }",
+                ][..],
+            ),
+        ] {
+            let definition = definition(&first, name);
+            for field in fields {
+                assert!(
+                    definition.contains(field),
+                    "{name} lacks {field}: {definition}"
+                );
+            }
+        }
+        let statuses = definition(&first, "SessionStatus");
+        for status in [
+            "stopped",
+            "starting",
+            "ready",
+            "running",
+            "cancelling",
+            "stopping",
+            "failed",
+            "auth_required",
+        ] {
+            assert!(statuses.contains(&format!("\"{status}\"")), "{statuses}");
+        }
+        let events = definition(&first, "AuraEvent");
+        for tag in [
+            "turn_started",
+            "turn_ended",
+            "user_message_delta",
+            "message_delta",
+            "message_completed",
+            "thought_delta",
+            "thought_completed",
+            "tool_call",
+            "tool_update",
+            "permission_requested",
+            "permission_resolved",
+            "ui_request",
+            "ui_resolved",
+            "plan_updated",
+            "usage_updated",
+            "limits_updated",
+            "session_updated",
+            "prompt_lifecycle",
+            "notice",
+            "error",
+        ] {
+            assert!(
+                events.contains(&format!("type: \"{tag}\"")),
+                "AuraEvent lacks {tag}"
+            );
+        }
         for name in [
             "AppInfo",
             "AppError",
@@ -306,6 +494,127 @@ mod tests {
         }
         assert!(!first.contains("bigint"), "every integer is a number");
         assert!(!first.contains('\r'), "LF line endings on every OS");
+    }
+
+    /// The chat commands of M1a (spec 7.1) exactly as the generated bindings declare them.
+    const CHAT_COMMANDS: [(&str, &str); 26] = [
+        (
+            "agentsList",
+            "() => __TAURI_INVOKE<AgentEntry[]>(\"agents_list\")",
+        ),
+        (
+            "agentsRefresh",
+            "() => __TAURI_INVOKE<AgentEntry[]>(\"agents_refresh\")",
+        ),
+        (
+            "envStatus",
+            "() => __TAURI_INVOKE<EnvStatus>(\"env_status\")",
+        ),
+        (
+            "envRefresh",
+            "() => __TAURI_INVOKE<EnvStatus>(\"env_refresh\")",
+        ),
+        (
+            "pickFolder",
+            "() => typedError<string | null, AppError>(__TAURI_INVOKE(\"pick_folder\"))",
+        ),
+        (
+            "chatsList",
+            "() => typedError<ChatSummary[], AppError>(__TAURI_INVOKE(\"chats_list\"))",
+        ),
+        (
+            "chatCreate",
+            "(agentId: string, folder: string) => typedError<ChatSummary, AppError>(__TAURI_INVOKE(\"chat_create\", { agentId, folder }))",
+        ),
+        (
+            "chatAttach",
+            "(chatId: string, channel: Channel<EventBatch>) => typedError<ChatAttach, AppError>(__TAURI_INVOKE(\"chat_attach\", { chatId, channel }))",
+        ),
+        (
+            "chatDetach",
+            "(subscriptionId: string) => __TAURI_INVOKE<void>(\"chat_detach\", { subscriptionId })",
+        ),
+        (
+            "chatHistory",
+            "(chatId: string, beforeSeq: number, maxBytes: number | null) => typedError<HistoryPage, AppError>(__TAURI_INVOKE(\"chat_history\", { chatId, beforeSeq, maxBytes }))",
+        ),
+        (
+            "chatLists",
+            "(chatId: string) => typedError<SessionLists, AppError>(__TAURI_INVOKE(\"chat_lists\", { chatId }))",
+        ),
+        (
+            "chatSend",
+            "(chatId: string, text: string) => typedError<PromptAck, AppError>(__TAURI_INVOKE(\"chat_send\", { chatId, text }))",
+        ),
+        (
+            "chatCancelQueued",
+            "(chatId: string, promptId: string) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_cancel_queued\", { chatId, promptId }))",
+        ),
+        (
+            "chatResumeQueue",
+            "(chatId: string) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_resume_queue\", { chatId }))",
+        ),
+        (
+            "chatInterrupt",
+            "(chatId: string) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_interrupt\", { chatId }))",
+        ),
+        (
+            "chatForceStop",
+            "(chatId: string) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_force_stop\", { chatId }))",
+        ),
+        (
+            "chatStart",
+            "(chatId: string, fresh: boolean) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_start\", { chatId, fresh }))",
+        ),
+        (
+            "chatStop",
+            "(chatId: string) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_stop\", { chatId }))",
+        ),
+        (
+            "chatRespondPermission",
+            "(chatId: string, requestId: string, optionId: string | null) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_respond_permission\", { chatId, requestId, optionId }))",
+        ),
+        (
+            "chatRespondUi",
+            "(chatId: string, requestId: string, answer: UiAnswer | null) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_respond_ui\", { chatId, requestId, answer }))",
+        ),
+        (
+            "chatSetOption",
+            "(chatId: string, optionId: string, value: ConfigValue) => typedError<SessionLists, AppError>(__TAURI_INVOKE(\"chat_set_option\", { chatId, optionId, value }))",
+        ),
+        (
+            "chatSetAutonomy",
+            "(chatId: string, autonomy: Autonomy) => typedError<SessionLists, AppError>(__TAURI_INVOKE(\"chat_set_autonomy\", { chatId, autonomy }))",
+        ),
+        (
+            "chatBlob",
+            "(chatId: string, sha256: string, offset: number, len: number) => typedError<BlobText, AppError>(__TAURI_INVOKE(\"chat_blob\", { chatId, sha256, offset, len }))",
+        ),
+        (
+            "chatRevealLog",
+            "(chatId: string) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_reveal_log\", { chatId }))",
+        ),
+        (
+            "statusSubscribe",
+            "(channel: Channel<ChatStatusUpdate>) => typedError<string, AppError>(__TAURI_INVOKE(\"status_subscribe\", { channel }))",
+        ),
+        (
+            "storageStatus",
+            "() => __TAURI_INVOKE<StorageStatus>(\"storage_status\")",
+        ),
+    ];
+
+    /// The definition of the exported type `name`: from its `export type` line to the blank line
+    /// that ends it.
+    fn definition<'a>(text: &'a str, name: &str) -> &'a str {
+        let head = format!("export type {name} =");
+        let start = text
+            .find(&head)
+            .unwrap_or_else(|| panic!("{name} is missing"));
+        let end = text[start..]
+            .find("\n\n")
+            .map_or(text.len(), |end| start + end);
+        &text[start..end]
     }
 
     /// Every file in `dir` other than `keep`.

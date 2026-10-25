@@ -4,12 +4,15 @@
 //! The TypeScript side (`apps/desktop/src/bindings.ts`) is generated from these signatures; see
 //! [`crate::bindings`].
 //!
-//! The chat commands are wrappers over aura-core's `SessionManager`. Their signatures are final;
-//! until the shell holds a session manager, every fallible one answers `internal` and the others
-//! answer empty values.
+//! The chat commands wrap aura-core's `SessionManager` ([`AppState::sessions`]); every
+//! `SessionError` reaches the UI as one `AppErrorCode` with the error's own sentence. Commands that
+//! belong to a webview (a chat view, the status channel) take the injected `Webview`, whose label
+//! owns the subscription: a reloaded page drops every subscription of its webview.
 
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use aura_core::session::SessionError;
 use aura_protocol::session::{
@@ -18,11 +21,12 @@ use aura_protocol::session::{
 };
 use aura_protocol::{Autonomy, EventBatch, UiAnswer};
 use tauri::ipc::Channel;
-use tauri::{AppHandle, State, Webview};
+use tauri::{AppHandle, Manager, State, Webview};
 
 use crate::demo::DemoKind;
 use crate::error::{AppError, AppErrorCode};
 use crate::reveal;
+use crate::sessions::{self, ChannelSink, StatusChannelSink};
 use crate::smoke::{self, SmokeReport};
 use crate::state::{AppInfo, AppState};
 use crate::window;
@@ -99,8 +103,8 @@ pub async fn reveal_data_dir(state: State<'_, AppState>) -> Result<(), AppError>
 /// notice stays.
 #[tauri::command]
 #[specta::specta]
-pub fn acknowledge_recovery(state: State<'_, AppState>) -> Result<(), AppError> {
-    state.acknowledge_recovery()
+pub async fn acknowledge_recovery(state: State<'_, AppState>) -> Result<(), AppError> {
+    state.acknowledge_recovery().await
 }
 
 /// Smoke mode only: prints `AURACODE_SMOKE_RESULT <json>` on stdout and, with
@@ -133,10 +137,8 @@ pub fn smoke_report(
 /// The most `chat_blob` returns per call.
 pub const MAX_BLOB_PAGE: u32 = 256 * 1024;
 
-/// What the chat commands answer until the shell holds a session manager.
-fn not_built() -> AppError {
-    SessionError::Internal("chat sessions are not implemented in this build".into()).into()
-}
+/// How long `agents_refresh` waits for the env and the probes before it answers with what is known.
+pub const AGENTS_REFRESH_BOUND: Duration = Duration::from_secs(15);
 
 /// A blob is named by the 64 lowercase hex digits of its sha256, and read at most
 /// [`MAX_BLOB_PAGE`] bytes at a time.
@@ -162,54 +164,105 @@ fn check_blob_request(sha256: &str, len: u32) -> Result<(), AppError> {
 /// background, and an agent still being checked reads `checking`.
 #[tauri::command]
 #[specta::specta]
-pub fn agents_list() -> Vec<AgentEntry> {
-    Vec::new()
+pub async fn agents_list(app: AppHandle) -> Vec<AgentEntry> {
+    let Some(state) = app.try_state::<AppState>() else {
+        return Vec::new();
+    };
+    match state.sessions() {
+        Ok(manager) => manager.agents(false).await,
+        Err(_) => Vec::new(),
+    }
 }
 
-/// Resolves the environment again and probes every agent, in parallel, within 15 s.
+/// Resolves the environment again and probes every agent, in parallel, within 15 s; agents whose
+/// probe has not ended by then keep their last known availability.
 #[tauri::command]
 #[specta::specta]
-pub async fn agents_refresh() -> Vec<AgentEntry> {
-    Vec::new()
+pub async fn agents_refresh(app: AppHandle) -> Vec<AgentEntry> {
+    let Some(state) = app.try_state::<AppState>() else {
+        return Vec::new();
+    };
+    let Ok(manager) = state.sessions() else {
+        return Vec::new();
+    };
+    match tokio::time::timeout(AGENTS_REFRESH_BOUND, manager.agents(true)).await {
+        Ok(agents) => agents,
+        Err(_) => {
+            tracing::warn!("refreshing the agents took longer than 15 s; answering what is known");
+            manager.agents(false).await
+        }
+    }
 }
 
 /// The environment agents start with: resolving, resolved (and how), or a fallback, with the
 /// names of the variables no agent inherits. Never waits.
 #[tauri::command]
 #[specta::specta]
-pub fn env_status() -> EnvStatus {
-    EnvStatus::default()
+pub fn env_status(state: State<'_, AppState>) -> EnvStatus {
+    state
+        .sessions()
+        .map(|manager| manager.env_status())
+        .unwrap_or_default()
 }
 
 /// Starts resolving the environment again and returns the status at once.
 #[tauri::command]
 #[specta::specta]
-pub fn env_refresh() -> EnvStatus {
-    EnvStatus::default()
+pub fn env_refresh(state: State<'_, AppState>) -> EnvStatus {
+    state
+        .sessions()
+        .map(|manager| manager.env_refresh())
+        .unwrap_or_default()
 }
 
 /// Shows the system folder picker and returns the chosen folder, or `null` when the user cancelled.
 /// Resolves when the dialog closes.
 #[tauri::command]
 #[specta::specta]
-pub async fn pick_folder() -> Result<Option<String>, AppError> {
-    Err(not_built())
+pub async fn pick_folder(app: AppHandle) -> Result<Option<String>, AppError> {
+    use tauri_plugin_dialog::DialogExt as _;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut dialog = app
+        .dialog()
+        .file()
+        .set_title("Choose the chat's folder")
+        .set_can_create_directories(true);
+    if let Some(window) = app.get_webview_window(window::MAIN_WINDOW) {
+        dialog = dialog.set_parent(&window);
+    }
+    dialog.pick_folder(move |picked| {
+        // The command stopped waiting only if its page went away.
+        let _ = tx.send(picked);
+    });
+    let picked = rx.await.map_err(|_| {
+        AppError::new(
+            AppErrorCode::DialogFailed,
+            "The folder picker could not be shown.",
+        )
+    })?;
+    sessions::picked_folder(picked)
 }
 
 /// Every chat, newest activity first.
 #[tauri::command]
 #[specta::specta]
-pub async fn chats_list() -> Result<Vec<ChatSummary>, AppError> {
-    Err(not_built())
+pub async fn chats_list(state: State<'_, AppState>) -> Result<Vec<ChatSummary>, AppError> {
+    Ok(state.sessions()?.chats().await?)
 }
 
 /// Creates a chat with `agent_id` in `folder` (an absolute path) and starts its agent. Creating a
 /// chat whose agent `needs_download` is the consent to download its adapter.
 #[tauri::command]
 #[specta::specta]
-pub async fn chat_create(agent_id: String, folder: String) -> Result<ChatSummary, AppError> {
-    let _ = (agent_id, folder);
-    Err(not_built())
+pub async fn chat_create(
+    state: State<'_, AppState>,
+    agent_id: String,
+    folder: String,
+) -> Result<ChatSummary, AppError> {
+    Ok(state
+        .sessions()?
+        .create_chat(&agent_id, Path::new(&folder))
+        .await?)
 }
 
 /// Opens a view of a chat: the snapshot and the newest history page, consistent with the frames
@@ -219,18 +272,24 @@ pub async fn chat_create(agent_id: String, folder: String) -> Result<ChatSummary
 #[specta::specta]
 pub async fn chat_attach(
     webview: Webview,
+    state: State<'_, AppState>,
     chat_id: String,
     channel: Channel<EventBatch>,
 ) -> Result<ChatAttach, AppError> {
-    let _ = (webview, chat_id, channel);
-    Err(not_built())
+    let manager = state.sessions()?;
+    let owner = webview.label().to_owned();
+    let page = state.pages.for_view(&owner);
+    let sink = Arc::new(ChannelSink::new(channel, owner, page));
+    Ok(manager.attach(&chat_id, sink).await?)
 }
 
 /// Closes a view: its channel ends. Unknown ids are ignored.
 #[tauri::command]
 #[specta::specta]
-pub fn chat_detach(subscription_id: String) {
-    let _ = subscription_id;
+pub fn chat_detach(state: State<'_, AppState>, subscription_id: String) {
+    if let Ok(manager) = state.sessions() {
+        manager.detach(&subscription_id);
+    }
 }
 
 /// The history page before `before_seq` (the page's own `before_seq` from the last call), at most
@@ -238,114 +297,139 @@ pub fn chat_detach(subscription_id: String) {
 #[tauri::command]
 #[specta::specta]
 pub async fn chat_history(
+    state: State<'_, AppState>,
     chat_id: String,
     before_seq: u32,
     max_bytes: Option<u32>,
 ) -> Result<HistoryPage, AppError> {
-    let _ = (chat_id, before_seq, max_bytes);
-    Err(not_built())
+    Ok(state
+        .sessions()?
+        .history(&chat_id, before_seq, max_bytes)
+        .await?)
 }
 
 /// The chat's options, slash commands, capabilities and autonomy state. Fetch again whenever the
 /// session's `revision` changes.
 #[tauri::command]
 #[specta::specta]
-pub async fn chat_lists(chat_id: String) -> Result<SessionLists, AppError> {
-    let _ = chat_id;
-    Err(not_built())
+pub async fn chat_lists(
+    state: State<'_, AppState>,
+    chat_id: String,
+) -> Result<SessionLists, AppError> {
+    Ok(state.sessions()?.lists(&chat_id).await?)
 }
 
 /// Sends `text` as typed, or queues it behind the running turn (or the start). A stopped chat starts
 /// its agent.
 #[tauri::command]
 #[specta::specta]
-pub async fn chat_send(chat_id: String, text: String) -> Result<PromptAck, AppError> {
-    let _ = (chat_id, text);
-    Err(not_built())
+pub async fn chat_send(
+    state: State<'_, AppState>,
+    chat_id: String,
+    text: String,
+) -> Result<PromptAck, AppError> {
+    Ok(state.sessions()?.send(&chat_id, text).await?)
 }
 
 /// Removes a queued prompt.
 #[tauri::command]
 #[specta::specta]
-pub async fn chat_cancel_queued(chat_id: String, prompt_id: String) -> Result<(), AppError> {
-    let _ = (chat_id, prompt_id);
-    Err(not_built())
+pub async fn chat_cancel_queued(
+    state: State<'_, AppState>,
+    chat_id: String,
+    prompt_id: String,
+) -> Result<(), AppError> {
+    Ok(state
+        .sessions()?
+        .cancel_queued(&chat_id, &prompt_id)
+        .await?)
 }
 
 /// Releases the held prompts ("Send queued"), starting the agent when it is stopped.
 #[tauri::command]
 #[specta::specta]
-pub async fn chat_resume_queue(chat_id: String) -> Result<(), AppError> {
-    let _ = chat_id;
-    Err(not_built())
+pub async fn chat_resume_queue(
+    state: State<'_, AppState>,
+    chat_id: String,
+) -> Result<(), AppError> {
+    Ok(state.sessions()?.resume_queue(&chat_id).await?)
 }
 
 /// Asks the agent to stop the running turn (Esc). While it is already cancelling, this force-stops.
 #[tauri::command]
 #[specta::specta]
-pub async fn chat_interrupt(chat_id: String) -> Result<(), AppError> {
-    let _ = chat_id;
-    Err(not_built())
+pub async fn chat_interrupt(state: State<'_, AppState>, chat_id: String) -> Result<(), AppError> {
+    Ok(state.sessions()?.interrupt(&chat_id).await?)
 }
 
 /// Ends the agent's processes at once (the second Esc).
 #[tauri::command]
 #[specta::specta]
-pub async fn chat_force_stop(chat_id: String) -> Result<(), AppError> {
-    let _ = chat_id;
-    Err(not_built())
+pub async fn chat_force_stop(state: State<'_, AppState>, chat_id: String) -> Result<(), AppError> {
+    Ok(state.sessions()?.force_stop(&chat_id).await?)
 }
 
 /// Starts the chat's agent, continuing its native session unless `fresh`. Failures arrive as cards.
 #[tauri::command]
 #[specta::specta]
-pub async fn chat_start(chat_id: String, fresh: bool) -> Result<(), AppError> {
-    let _ = (chat_id, fresh);
-    Err(not_built())
+pub async fn chat_start(
+    state: State<'_, AppState>,
+    chat_id: String,
+    fresh: bool,
+) -> Result<(), AppError> {
+    Ok(state.sessions()?.start(&chat_id, fresh).await?)
 }
 
 /// Stops the chat's agent gracefully.
 #[tauri::command]
 #[specta::specta]
-pub async fn chat_stop(chat_id: String) -> Result<(), AppError> {
-    let _ = chat_id;
-    Err(not_built())
+pub async fn chat_stop(state: State<'_, AppState>, chat_id: String) -> Result<(), AppError> {
+    Ok(state.sessions()?.stop(&chat_id).await?)
 }
 
 /// Answers a permission card with one of its options; `null` cancels it.
 #[tauri::command]
 #[specta::specta]
 pub async fn chat_respond_permission(
+    state: State<'_, AppState>,
     chat_id: String,
     request_id: String,
     option_id: Option<String>,
 ) -> Result<(), AppError> {
-    let _ = (chat_id, request_id, option_id);
-    Err(not_built())
+    Ok(state
+        .sessions()?
+        .respond_permission(&chat_id, &request_id, option_id)
+        .await?)
 }
 
 /// Answers a question card; `null` dismisses it.
 #[tauri::command]
 #[specta::specta]
 pub async fn chat_respond_ui(
+    state: State<'_, AppState>,
     chat_id: String,
     request_id: String,
     answer: Option<UiAnswer>,
 ) -> Result<(), AppError> {
-    let _ = (chat_id, request_id, answer);
-    Err(not_built())
+    Ok(state
+        .sessions()?
+        .respond_ui(&chat_id, &request_id, answer)
+        .await?)
 }
 
 /// Changes one of the agent's options and returns the lists after the change (35 s at most).
 #[tauri::command]
 #[specta::specta]
 pub async fn chat_set_option(
+    state: State<'_, AppState>,
     chat_id: String,
     option_id: String,
     value: ConfigValue,
 ) -> Result<SessionLists, AppError> {
-    let _ = (chat_id, option_id, value);
-    Err(not_built())
+    Ok(state
+        .sessions()?
+        .set_option(&chat_id, &option_id, value)
+        .await?)
 }
 
 /// Changes the chat's autonomy and returns the lists after the change (35 s at most). Works while
@@ -353,11 +437,11 @@ pub async fn chat_set_option(
 #[tauri::command]
 #[specta::specta]
 pub async fn chat_set_autonomy(
+    state: State<'_, AppState>,
     chat_id: String,
     autonomy: Autonomy,
 ) -> Result<SessionLists, AppError> {
-    let _ = (chat_id, autonomy);
-    Err(not_built())
+    Ok(state.sessions()?.set_autonomy(&chat_id, autonomy).await?)
 }
 
 /// One page of a full output: at most `len` bytes (up to 256 KiB) from `offset`, ending on a
@@ -366,23 +450,53 @@ pub async fn chat_set_autonomy(
 #[tauri::command]
 #[specta::specta]
 pub async fn chat_blob(
+    state: State<'_, AppState>,
     chat_id: String,
     sha256: String,
     offset: u64,
     len: u32,
 ) -> Result<BlobText, AppError> {
     check_blob_request(&sha256, len)?;
-    let _ = (chat_id, offset);
-    Err(not_built())
+    Ok(state
+        .sessions()?
+        .blob(&chat_id, &sha256, offset, len)
+        .await?)
 }
 
 /// Shows the chat's newest protocol log in the system file manager. Takes no path: the shell
 /// chooses the file.
 #[tauri::command]
 #[specta::specta]
-pub async fn chat_reveal_log(chat_id: String) -> Result<(), AppError> {
-    let _ = chat_id;
-    Err(not_built())
+pub async fn chat_reveal_log(state: State<'_, AppState>, chat_id: String) -> Result<(), AppError> {
+    let manager = state.sessions()?;
+    // The id joins a path below, so only a chat this profile has gets that far.
+    let known = sessions::is_plain_id(&chat_id)
+        && manager
+            .chats()
+            .await
+            .map_err(|error| {
+                AppError::new(
+                    AppErrorCode::RevealFailed,
+                    format!("Could not show the chat's log: {error}"),
+                )
+            })?
+            .iter()
+            .any(|chat| chat.id == chat_id);
+    if !known {
+        return Err(SessionError::ChatNotFound(chat_id).into());
+    }
+    let dir = manager.protocol_log_dir(&chat_id);
+    tauri::async_runtime::spawn_blocking(move || {
+        sessions::reveal_newest_log(&dir, |path| tauri_plugin_opener::reveal_item_in_dir(path))
+    })
+    .await
+    .map_err(|error| {
+        AppError::new(
+            AppErrorCode::RevealFailed,
+            format!("Could not show the chat's log: {error}"),
+        )
+    })??;
+    Ok(())
 }
 
 /// Subscribes the calling webview to chat-list updates (status, attention, title) over `channel`,
@@ -391,17 +505,23 @@ pub async fn chat_reveal_log(chat_id: String) -> Result<(), AppError> {
 #[specta::specta]
 pub fn status_subscribe(
     webview: Webview,
+    state: State<'_, AppState>,
     channel: Channel<ChatStatusUpdate>,
 ) -> Result<String, AppError> {
-    let _ = (webview, channel);
-    Err(not_built())
+    let manager = state.sessions()?;
+    let owner = webview.label().to_owned();
+    let page = state.pages.for_status(&owner);
+    Ok(manager.status_subscribe(Arc::new(StatusChannelSink::new(channel, owner, page))))
 }
 
 /// Whether the profile database is saving, paused (with how much is unsaved), or failed.
 #[tauri::command]
 #[specta::specta]
-pub fn storage_status() -> StorageStatus {
-    StorageStatus::default()
+pub fn storage_status(state: State<'_, AppState>) -> StorageStatus {
+    state
+        .sessions()
+        .map(|manager| manager.storage_status())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -424,18 +544,5 @@ mod tests {
             let error = check_blob_request(&name, len).expect_err("refused");
             assert_eq!(error.code, AppErrorCode::InvalidArgument, "{name} {len}");
         }
-    }
-
-    #[test]
-    fn chat_commands_answer_internal_until_sessions_are_built() {
-        let error = not_built();
-        assert_eq!(error.code, AppErrorCode::Internal);
-        assert!(
-            error
-                .message
-                .starts_with("Something went wrong inside auracode: "),
-            "{}",
-            error.message
-        );
     }
 }
