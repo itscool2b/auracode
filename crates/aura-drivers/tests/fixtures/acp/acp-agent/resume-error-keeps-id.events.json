@@ -1,0 +1,29 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    }
+  ],
+  "replies": [],
+  "exit": {
+    "type": "start_failed",
+    "data": {
+      "kind": "agent_error",
+      "message": "Internal error: session store is locked",
+      "detail": "ERROR session store is locked by another process\n"
+    }
+  }
+}

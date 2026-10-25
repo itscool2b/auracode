@@ -1,0 +1,232 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    },
+    {
+      "type": "status",
+      "data": "configuring"
+    },
+    {
+      "type": "options",
+      "data": []
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": null,
+        "auto_answer": {
+          "type": "all"
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "<SESSION_1>",
+        "agent_name": "ACP Agent",
+        "agent_version": "1.0.0",
+        "capabilities": {
+          "images": true,
+          "steer": false,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": false,
+          "set_effort": false,
+          "permissions": true,
+          "plans": true,
+          "usage": true,
+          "limits": false,
+          "slash_commands": true,
+          "add_dirs": false,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "new"
+        },
+        "spawn_id": "019a0000-0000-7000-8000-0000000000a1",
+        "replay": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "prompting"
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "tool_call",
+          "tool_call_id": "019a0000-0001-7000-8000-000000000001.bg_server",
+          "kind": "execute",
+          "title": "pnpm dev",
+          "status": "in_progress",
+          "locations": [],
+          "raw_input": null,
+          "tool_name": null,
+          "content": [],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "message_delta",
+          "message_id": "019a0000-0001-7000-8000-000000000001.m1",
+          "text": "The server is starting."
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "message_completed",
+          "message_id": "019a0000-0001-7000-8000-000000000001.m1"
+        }
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "019a0000-0001-7000-8000-000000000001",
+        "stop_reason": "end_turn",
+        "usage": null,
+        "error": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "019a0000-0001-7000-8000-000000000001.bg_server",
+          "status": "completed",
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": null,
+          "tool_name": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "ready on http://localhost:5173",
+              "truncated": null
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "message_delta",
+          "message_id": "019a0000-0000-7000-8000-0000000000a1.m1",
+          "text": "Server ready."
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "usage_updated",
+          "context_used": 1000,
+          "context_size": 200000,
+          "cost": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "message_completed",
+          "message_id": "019a0000-0000-7000-8000-0000000000a1.m1"
+        }
+      }
+    },
+    {
+      "type": "status",
+      "data": "prompting"
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000002",
+        "event": {
+          "type": "message_delta",
+          "message_id": "019a0000-0001-7000-8000-000000000002.m1",
+          "text": "You're welcome."
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000002",
+        "event": {
+          "type": "message_completed",
+          "message_id": "019a0000-0001-7000-8000-000000000002.m1"
+        }
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "019a0000-0001-7000-8000-000000000002",
+        "stop_reason": "end_turn",
+        "usage": null,
+        "error": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    }
+  ],
+  "replies": [],
+  "exit": {
+    "type": "closed"
+  }
+}

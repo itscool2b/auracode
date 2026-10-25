@@ -1,0 +1,57 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    },
+    {
+      "type": "auth_required",
+      "data": {
+        "message": "Claude Code needs you to sign in. Run the command below in a terminal, then press Retry.",
+        "commands": [
+          {
+            "label": "Claude Subscription",
+            "argv": [
+              "/opt/agents/bin/claude",
+              "auth",
+              "login",
+              "--claudeai"
+            ],
+            "env": []
+          },
+          {
+            "label": "Anthropic Console",
+            "argv": [
+              "/opt/agents/bin/claude",
+              "auth",
+              "login",
+              "--console"
+            ],
+            "env": []
+          }
+        ]
+      }
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    }
+  ],
+  "replies": [],
+  "exit": {
+    "type": "start_failed",
+    "data": {
+      "kind": "auth_required",
+      "message": "Claude Code needs you to sign in.",
+      "detail": null
+    }
+  }
+}
