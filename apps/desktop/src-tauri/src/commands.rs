@@ -108,8 +108,8 @@ pub async fn acknowledge_recovery(state: State<'_, AppState>) -> Result<(), AppE
 }
 
 /// Smoke mode only: prints `AURACODE_SMOKE_RESULT <json>` on stdout and, with
-/// `AURACODE_SMOKE_EXIT=1`, exits with 0 when the run passed and 1 otherwise. Only the first report
-/// counts.
+/// `AURACODE_SMOKE_EXIT=1`, exits with 0 when the run passed and 1 otherwise, through the quit
+/// flow like any other exit. Only the first report counts.
 #[tauri::command]
 #[specta::specta]
 pub fn smoke_report(
@@ -117,16 +117,16 @@ pub fn smoke_report(
     state: State<'_, AppState>,
     report: SmokeReport,
 ) -> Result<(), AppError> {
-    if !state.launch.smoke {
+    let Some(plan) = state.launch.smoke_plan() else {
         return Err(AppError::new(
             AppErrorCode::NotInSmokeMode,
-            "Smoke reports are only accepted when AURACODE_SMOKE=1.",
+            "Smoke reports are only accepted while AURACODE_SMOKE runs a smoke check.",
         ));
-    }
+    };
     if state.smoke_reported.swap(true, Ordering::AcqRel) {
         return Ok(());
     }
-    let report = smoke::finalize(report);
+    let report = smoke::finalize(report, plan.scenario);
     smoke::print(&report);
     if state.launch.smoke_exit {
         app.exit(smoke::exit_code(&report));
@@ -216,11 +216,21 @@ pub fn env_refresh(state: State<'_, AppState>) -> EnvStatus {
 }
 
 /// Shows the system folder picker and returns the chosen folder, or `null` when the user cancelled.
-/// Resolves when the dialog closes.
+/// Resolves when the dialog closes. A chat smoke run's picker answers its folder
+/// (`AURACODE_SMOKE_FOLDER`) at once: automation cannot click through a system dialog.
 #[tauri::command]
 #[specta::specta]
 pub async fn pick_folder(app: AppHandle) -> Result<Option<String>, AppError> {
     use tauri_plugin_dialog::DialogExt as _;
+    if let Some(state) = app.try_state::<AppState>()
+        && let Some(folder) = state.launch.smoke_folder()
+    {
+        tracing::info!(
+            folder,
+            "the smoke run's folder picker answers its chat folder"
+        );
+        return Ok(Some(folder.to_owned()));
+    }
     let (tx, rx) = tokio::sync::oneshot::channel();
     let mut dialog = app
         .dialog()

@@ -66,6 +66,7 @@ export function Composer({
       <textarea
         id={fieldId}
         className="ui-textarea"
+        data-testid="composer-input"
         value={text}
         placeholder="Message the agent. Enter sends, Shift+Enter adds a line, / lists commands."
         aria-controls={menuOpen ? menuId : undefined}
@@ -108,6 +109,7 @@ export function Composer({
           type="button"
           className="ui-button"
           data-kind="primary"
+          data-testid="composer-send"
           disabled={sending || text.trim() === ""}
           onClick={() => void send()}
         >
@@ -115,7 +117,7 @@ export function Composer({
         </button>
         <StopButton status={status} onStop={onStop} onForceStop={onForceStop} />
         {error !== null ? (
-          <span role="alert" className="ui-error">
+          <span role="alert" className="ui-error" data-testid="composer-error">
             {error}
           </span>
         ) : null}
@@ -136,14 +138,20 @@ export function StopButton({
 }) {
   if (status === "cancelling") {
     return (
-      <button type="button" className="ui-button" data-kind="danger" onClick={onForceStop}>
+      <button
+        type="button"
+        className="ui-button"
+        data-kind="danger"
+        data-testid="composer-force-stop"
+        onClick={onForceStop}
+      >
         Force stop
       </button>
     );
   }
   if (status === "running" || status === "starting") {
     return (
-      <button type="button" className="ui-button" onClick={onStop}>
+      <button type="button" className="ui-button" data-testid="composer-stop" onClick={onStop}>
         Stop
       </button>
     );

@@ -27,7 +27,14 @@ export function ToolBlock({
   onLoadBlob,
 }: { readonly tool: ToolItem; readonly display: ToolDisplayStatus } & BlobProps) {
   return (
-    <div className="chat-block" data-kind="tool">
+    <div
+      className="chat-block"
+      data-kind="tool"
+      data-testid="item"
+      data-test-kind="tool"
+      data-test-tool-kind={tool.toolKind}
+      data-test-status={display}
+    >
       <div className="chat-block-head">
         <span className="chat-block-title">{tool.title || tool.toolName || "Tool"}</span>
         <span className="chat-block-tag">{tool.toolKind.replace("_", " ")}</span>
@@ -37,7 +44,7 @@ export function ToolBlock({
       </div>
       <Locations locations={tool.locations} />
       {tool.content.length > 0 ? (
-        <details>
+        <details data-testid="tool-output">
           <summary className="ui-muted">Output</summary>
           <div className="chat-segment">
             {tool.content.map((content, index) => (
@@ -62,7 +69,7 @@ export function ToolBlock({
 export function Locations({ locations }: { readonly locations: readonly ToolLocation[] }) {
   if (locations.length === 0) return null;
   return (
-    <ul className="chat-locations">
+    <ul className="chat-locations" data-testid="tool-locations">
       {locations.map((location, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: locations are positional.
         <li key={index}>
@@ -127,8 +134,15 @@ export function ToolContentView({
     case "text": {
       const unkept = unkeptBytes(content.truncated, blob);
       return (
-        <div className="chat-command">
-          <pre className="ui-pre">{blob?.text || content.text}</pre>
+        <div
+          className="chat-command"
+          data-testid="tool-content"
+          data-test-type="text"
+          data-test-truncated={String(content.truncated !== null)}
+        >
+          <pre className="ui-pre" data-testid="tool-text">
+            {blob?.text || content.text}
+          </pre>
           {unkept > 0 ? (
             <p className="chat-marker">
               The remaining {formatCount(unkept)} bytes weren't kept: an output keeps its first 64
@@ -142,7 +156,12 @@ export function ToolContentView({
     case "terminal": {
       const { head, between, tail } = terminalParts(content.output, content.truncated, blob);
       return (
-        <div className="chat-command">
+        <div
+          className="chat-command"
+          data-testid="tool-content"
+          data-test-type="terminal"
+          data-test-truncated={String(content.truncated !== null)}
+        >
           {head === null || between === 0 ? (
             <pre className="ui-pre">{(head ?? "") + tail}</pre>
           ) : (
@@ -165,7 +184,12 @@ export function ToolContentView({
     }
     case "diff":
       return (
-        <div className="chat-command">
+        <div
+          className="chat-command"
+          data-testid="tool-content"
+          data-test-type="diff"
+          data-test-truncated={String(content.truncated !== null)}
+        >
           <DiffView
             path={content.path}
             oldText={content.old_text}
@@ -210,7 +234,7 @@ function DiffView({
       {"\n"}
       {diff.lines.map((line, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: diff lines are positional.
-        <span key={index} className="chat-diff-line" data-op={line.op}>
+        <span key={index} className="chat-diff-line" data-op={line.op} data-test-op={line.op}>
           {line.op === "add" ? "+ " : line.op === "remove" ? "- " : "  "}
           {line.text}
           {"\n"}
@@ -255,6 +279,7 @@ export function FullOutput({
         type="button"
         className="ui-button"
         data-kind="quiet"
+        data-testid="load-full-output"
         disabled={blob?.loading === true}
         onClick={() => onLoadBlob(sha)}
       >
@@ -293,6 +318,7 @@ export function EventDetails({
         type="button"
         className="ui-button"
         data-kind="quiet"
+        data-testid="show-full-details"
         disabled={blob?.loading === true}
         onClick={() => onLoadBlob(sha)}
       >

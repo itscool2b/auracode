@@ -77,13 +77,23 @@ export function ChatView({
 
   if (state.chat === null) {
     return (
-      <div className="chat-view">
+      <div
+        className="chat-view"
+        data-testid="chat-view"
+        data-test-chat-id={chatId}
+        data-test-phase={state.phase}
+      >
         {state.phase === "failed" ? (
           <div className="chat-centered">
-            <p role="alert" className="ui-error">
+            <p role="alert" className="ui-error" data-testid="chat-attach-error">
               {state.attachError}
             </p>
-            <button type="button" className="ui-button" onClick={() => void store.reattach()}>
+            <button
+              type="button"
+              className="ui-button"
+              data-testid="chat-reattach"
+              onClick={() => void store.reattach()}
+            >
               Retry
             </button>
           </div>
@@ -98,7 +108,12 @@ export function ChatView({
   // The session's own word, not the marks: which prompts are held is exact only per snapshot.
   const held = state.session?.queue_held === true;
   return (
-    <div className="chat-view">
+    <div
+      className="chat-view"
+      data-testid="chat-view"
+      data-test-chat-id={chatId}
+      data-test-phase={state.phase}
+    >
       <Header
         state={state}
         listed={listed}
@@ -120,8 +135,15 @@ export function ChatView({
       />
       {state.phase === "failed" ? (
         <div className="chat-banner" data-level="error">
-          <span role="alert">{state.attachError}</span>
-          <button type="button" className="ui-button" onClick={() => void store.reattach()}>
+          <span role="alert" data-testid="chat-attach-error">
+            {state.attachError}
+          </span>
+          <button
+            type="button"
+            className="ui-button"
+            data-testid="chat-reattach"
+            onClick={() => void store.reattach()}
+          >
             Retry
           </button>
         </div>
@@ -170,7 +192,7 @@ export function StillWorking({
   readonly onStop: () => void;
 }) {
   return (
-    <div className="chat-still" role="status">
+    <div className="chat-still" role="status" data-testid="still-working">
       <span>Still working (no output for {minutesLabel(minutes)})</span>
       <button type="button" className="ui-button" onClick={onStop}>
         Stop

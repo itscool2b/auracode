@@ -164,8 +164,10 @@ bash .github/scripts/lint-workflows.sh                              # action pin
 shellcheck -x .github/scripts/*.sh
 bash .github/scripts/test.sh                                        # the CI scripts' own tests
 
-# The smoke run: the app, with its frontend embedded, streams a demo turn, a cancelled turn, and a
-# stress burst through the real UI, then prints its result and exits.
+# The smoke runs: the app, with its frontend embedded, streams a demo turn, a cancelled turn, and a
+# stress burst through the real UI; then it drives the chat screens against the demo agent in two
+# launches on one data folder, quitting through the quit flow between them, and prints every
+# check. A second argument, stream or chat, runs one of the two.
 pnpm --filter @auracode/desktop tauri build --debug --no-bundle
 bash .github/scripts/run-smoke.sh target/debug/auracode
 ```
@@ -178,7 +180,7 @@ merge, since the pull request's runs cover them; during a merge conflict GitHub 
 workflow, so the pushes run CI themselves. Pushes to `main` and manual runs add macOS. A weekly run on Mondays repeats the rust
 job on Linux and clippy on Windows; macOS never runs on a schedule. Biome, the typecheck, Vitest,
 `cargo fmt`, the doc check, the CI script checks, and the claude-control unit tests run on Linux only,
-and the spawning spike and the smoke run skip macOS.
+and the spawning spike and the smoke runs skip macOS.
 `.github/workflows/build.yml` builds unsigned installers for pushes to `main`, nightly when nothing
 has built `main`'s newest commit yet (one nightly try per commit), on demand, and for milestone-branch
 pushes whose newest commit message contains `[bundle]` (Windows and Linux only).
@@ -210,8 +212,10 @@ For development and automation; the app reads them once at startup. On/off switc
 | `AURACODE_DATA_DIR` | Keeps all app data in this folder instead of the OS default, for example a throwaway folder to test a first launch. Blank values are ignored; a relative path is resolved against the current folder. |
 | `AURACODE_NO_GLASS` | Opaque window without the native glass (Liquid Glass, vibrancy, Mica): the baseline of the power spike. |
 | `AURACODE_STRESS` | Opens straight into the stress view. Comma-separated `orbs` (1 to 24), `rate` (1 to 5000 tokens/s), `aura` (1 or 0), and `seconds` (0 to 86400, 0 streams until the window closes); missing keys default to `orbs=6,rate=200,aura=1,seconds=0`, and `1` alone means all defaults. An invalid value is ignored and the app shows a notice. See [docs/spikes/render-power.md](docs/spikes/render-power.md). |
-| `AURACODE_SMOKE` | Runs the scripted smoke check through the real UI (a demo turn, a cancelled turn, a short stress burst) and prints `AURACODE_SMOKE_RESULT <json>` on stdout, or a failing result if the UI has not reported within 120 seconds. Takes precedence over `AURACODE_STRESS`. |
-| `AURACODE_SMOKE_EXIT` | With `AURACODE_SMOKE`, exits after the result: code 0 if the check passed, 1 otherwise. |
+| `AURACODE_SMOKE` | Runs a scripted smoke check through the real UI and prints `AURACODE_SMOKE_RESULT <json>` on stdout, or a failing result if the UI has not reported in time (120 seconds; 300 for `chat`, 900 with `AURACODE_SMOKE_AGENT`). `1` (or `stream`): a demo turn, a cancelled turn, a short stress burst. `chat`: the chat screens against the demo agent, every block, card and queue path, ending with the quit flow while a turn runs; `chat-reopen`: the same data folder started again, checking the stored history, the interrupted turn and Resume. Each chat check is in the result. `0`, `false`, `no` and `off` are off; any other value that names no check prints a failing result. Takes precedence over `AURACODE_STRESS`. Smoke runs keep running while the window is hidden or the screen is locked (macOS 14 and later). |
+| `AURACODE_SMOKE_EXIT` | With `AURACODE_SMOKE`, exits after the result, through the quit flow: code 0 if the check passed, 1 otherwise. |
+| `AURACODE_SMOKE_FOLDER` | With `AURACODE_SMOKE=chat` or `chat-reopen`, the chat's folder (an absolute path), which the folder picker answers without a dialog. Required for those. |
+| `AURACODE_SMOKE_AGENT` | With `AURACODE_SMOKE=chat`, one minimal chat with this agent (`hermes`, `claude-acp`, `codex-acp`) instead of the demo agent's run: under Ask it sends "Reply with exactly: ok" and passes when the reply is ok (`mock`, the demo agent, gets `/echo ok`). `run-smoke.sh` passes it on and then runs that one launch. A real agent spends your quota, so this is for local runs only: the app and `run-smoke.sh` refuse it while `CI` or `GITHUB_ACTIONS` is set. A first start may download the agent's adapter, hence the longer watchdog. |
 | `RUST_LOG` | Log filter for the Rust side, which logs to stderr. Default `info`. |
 
 For example `AURACODE_STRESS=orbs=24,rate=200 pnpm dev`. In PowerShell, run

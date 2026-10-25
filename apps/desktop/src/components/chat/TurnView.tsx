@@ -39,20 +39,41 @@ export const TurnView = memo(function TurnView({
       className="chat-segment"
       data-kind={segment.turnId === null ? "outside" : "turn"}
       aria-label={segment.turnId === null ? "Between turns" : "Turn"}
+      data-testid="segment"
+      data-test-kind={segment.turnId === null ? "outside" : "turn"}
+      data-test-turn-id={segment.turnId ?? ""}
+      data-test-stop-reason={segment.end?.stopReason ?? ""}
+      data-test-recovered={String(segment.end?.recovered ?? false)}
     >
       {segment.items.map((item) => {
         switch (item.kind) {
           case "user":
             return (
-              <div key={item.key} className="chat-user">
+              <div key={item.key} className="chat-user" data-testid="item" data-test-kind="user">
                 {item.text}
               </div>
             );
           case "message":
-            return <Answer key={item.key} text={item.text} />;
+            return (
+              <div
+                key={item.key}
+                data-testid="item"
+                data-test-kind="message"
+                data-test-completed={String(item.completed)}
+              >
+                <Answer text={item.text} />
+              </div>
+            );
           case "thought":
             return (
-              <details key={item.key} className="chat-thought">
+              <details
+                key={item.key}
+                className="chat-thought"
+                data-testid="item"
+                data-test-kind="thought"
+                data-test-completed={String(item.completed)}
+                data-test-duration-ms={item.durationMs ?? ""}
+              >
                 <summary>
                   {item.completed
                     ? item.durationMs === null
@@ -97,7 +118,14 @@ export const TurnView = memo(function TurnView({
             );
           case "notice":
             return (
-              <p key={item.key} className="chat-notice" data-level={item.level}>
+              <p
+                key={item.key}
+                className="chat-notice"
+                data-level={item.level}
+                data-testid="item"
+                data-test-kind="notice"
+                data-test-level={item.level}
+              >
                 {item.message}
               </p>
             );
@@ -114,7 +142,7 @@ export const TurnView = memo(function TurnView({
             );
           case "gap":
             return (
-              <p key={item.key} className="chat-marker">
+              <p key={item.key} className="chat-marker" data-testid="item" data-test-kind="gap">
                 Recent output isn't saved yet; it appears here when saving resumes.
               </p>
             );
@@ -132,11 +160,16 @@ export const TurnView = memo(function TurnView({
 
 function Plan({ entries }: { readonly entries: readonly PlanEntry[] }) {
   return (
-    <section aria-label="Plan">
+    <section aria-label="Plan" data-testid="plan">
       <ul className="chat-plan">
         {entries.map((entry, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: a plan update replaces the whole list.
-          <li key={index} data-status={entry.status}>
+          <li
+            // biome-ignore lint/suspicious/noArrayIndexKey: a plan update replaces the whole list.
+            key={index}
+            data-status={entry.status}
+            data-testid="plan-entry"
+            data-test-status={entry.status}
+          >
             <input
               type="checkbox"
               checked={entry.status === "completed"}
@@ -169,7 +202,7 @@ function Footer({
   const cost = costLabel(segment.usage);
   if (cost !== null) parts.push(cost);
   return (
-    <p className="chat-footer">
+    <p className="chat-footer" data-testid="turn-footer">
       {parts.map((part) => (
         <span key={part}>{part}</span>
       ))}
@@ -178,6 +211,7 @@ function Footer({
           type="button"
           className="ui-button"
           data-kind="quiet"
+          data-testid="turn-resume"
           onClick={() => onStart(false)}
         >
           Resume session

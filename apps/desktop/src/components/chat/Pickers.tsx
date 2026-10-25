@@ -50,6 +50,10 @@ export function Pickers({
         <select
           id={autonomyId}
           className="ui-select"
+          data-testid="picker-autonomy"
+          data-test-requested={lists?.autonomy.requested ?? ""}
+          data-test-native-mode={lists?.autonomy.native_mode ?? ""}
+          data-test-saving={String(autonomySaving !== null)}
           value={chosen}
           onChange={(event) => onSetAutonomy(event.currentTarget.value as Autonomy)}
         >
@@ -74,7 +78,7 @@ export function Pickers({
         {lists?.autonomy.note ? <div>{lists.autonomy.note}</div> : null}
         {lists?.autonomy.native_mode ? <div>Agent mode: {lists.autonomy.native_mode}</div> : null}
         {error !== null ? (
-          <div role="alert" className="ui-error">
+          <div role="alert" className="ui-error" data-testid="picker-error">
             {error}
           </div>
         ) : null}
@@ -114,6 +118,9 @@ function OptionPicker({
           <input
             id={id}
             type="checkbox"
+            data-testid="picker-option"
+            data-test-option-id={option.id}
+            data-test-saving={String(saving !== null)}
             checked={saving?.type === "toggle" ? saving.value : option.kind.current}
             disabled={!enabled}
             onChange={(event) =>
@@ -143,6 +150,9 @@ function OptionPicker({
       <select
         id={id}
         className="ui-select"
+        data-testid="picker-option"
+        data-test-option-id={option.id}
+        data-test-saving={String(saving !== null)}
         value={saving?.type === "choice" ? saving.value : current}
         disabled={!enabled}
         onChange={(event) => onSet(option.id, { type: "choice", value: event.currentTarget.value })}

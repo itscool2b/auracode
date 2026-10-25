@@ -50,21 +50,27 @@ const MarkdownBlock = memo(function MarkdownBlock({ source }: { readonly source:
   );
 });
 
+/**
+ * One markdown block. Its root carries `data-test-block` with the block's kind, so automation (the
+ * chat smoke run) can tell a heading, a list or a code block apart whatever elements and styles
+ * render them.
+ */
 function BlockView({ block }: { readonly block: Block }) {
+  const mark = { "data-test-block": block.kind };
   switch (block.kind) {
     case "heading": {
       const content = <InlineText text={block.text} />;
-      return block.level <= 2 ? <h3>{content}</h3> : <h4>{content}</h4>;
+      return block.level <= 2 ? <h3 {...mark}>{content}</h3> : <h4 {...mark}>{content}</h4>;
     }
     case "paragraph":
       return (
-        <p>
+        <p {...mark}>
           <InlineText text={block.text} />
         </p>
       );
     case "code":
       return (
-        <pre aria-busy={!block.closed}>
+        <pre {...mark} aria-busy={!block.closed}>
           {block.lang !== "" ? <span className="code-lang">{block.lang}</span> : null}
           <code>{block.code}</code>
         </pre>
@@ -81,17 +87,23 @@ function BlockView({ block }: { readonly block: Block }) {
           <InlineText text={item.text} />
         </li>
       ));
-      return block.ordered ? <ol start={block.start}>{items}</ol> : <ul>{items}</ul>;
+      return block.ordered ? (
+        <ol {...mark} start={block.start}>
+          {items}
+        </ol>
+      ) : (
+        <ul {...mark}>{items}</ul>
+      );
     }
     case "quote":
       return (
-        <blockquote>
+        <blockquote {...mark}>
           <InlineText text={block.text} />
         </blockquote>
       );
     case "table":
       return (
-        <table>
+        <table {...mark}>
           <thead>
             <tr>
               {block.header.map((cell, index) => (
@@ -118,7 +130,7 @@ function BlockView({ block }: { readonly block: Block }) {
         </table>
       );
     case "rule":
-      return <hr />;
+      return <hr {...mark} />;
   }
 }
 

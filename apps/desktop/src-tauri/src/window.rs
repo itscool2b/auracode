@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::webview::{PageLoadEvent, WebviewWindowBuilder};
 use tauri::window::Color;
 use tauri::{AppHandle, Manager, Url, WebviewWindow};
@@ -56,9 +57,16 @@ impl ShowOnce {
 }
 
 /// Builds the main window from its config entry with `plan`'s glass, hidden.
+///
+/// `keep_running_hidden` (smoke runs) keeps the page running at full speed while the window is
+/// hidden, covered, or behind a locked screen. WebKit otherwise slows a hidden page's timers to one
+/// a second and suspends the page after about five minutes, and a smoke run reads the DOM, not the
+/// pixels, so it has no reason to wait for the screen. Only macOS 14 and later have the switch;
+/// WebKitGTK and WebView2 offer none, and their smoke runs show the window.
 pub fn create_main(
     app: &tauri::App,
     plan: &GlassPlan,
+    keep_running_hidden: bool,
 ) -> Result<WebviewWindow, Box<dyn std::error::Error>> {
     let config = app
         .config()
@@ -110,6 +118,10 @@ pub fn create_main(
         }
     } else {
         builder = builder.background_color(BASE_COLOR);
+    }
+
+    if keep_running_hidden {
+        builder = builder.background_throttling(BackgroundThrottlingPolicy::Disabled);
     }
 
     // Avoids the white flash a transparent window shows on Windows before its first paint.
