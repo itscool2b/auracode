@@ -452,8 +452,10 @@ impl SessionManager {
             .detector
             .spec(&record.agent_id)
             .map_or_else(|| record.agent_id.clone(), |spec| spec.name.to_owned());
+        // The list never reads a folder (that is what a macOS privacy prompt guards), so a refusal
+        // is the one the last start met; whether the folder exists is current.
         let folder_state = match (found, state.as_ref().map(|state| state.folder_state)) {
-            (FolderState::Ok, Some(remembered)) => remembered,
+            (FolderState::Ok, Some(FolderState::NotAllowed)) => FolderState::NotAllowed,
             (found, _) => found,
         };
         ChatSummary {

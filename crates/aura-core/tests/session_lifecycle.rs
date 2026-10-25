@@ -184,7 +184,7 @@ async fn an_install_failure_fails_the_start() {
 }
 
 /// P36: a folder deleted after the chat was created fails the start with `FolderMissing`, and
-/// the list says so.
+/// the list says so until the folder is back (a drive plugged in again).
 #[tokio::test(start_paused = true)]
 async fn start_fails_when_folder_missing() {
     let (driver, _) = ScriptedDriver::new(vec![ready_step("n1")]);
@@ -203,6 +203,9 @@ async fn start_fails_when_folder_missing() {
     assert_eq!(errors[0].0, ErrorKind::FolderMissing);
     let listed = h.manager.chats().await.expect("chats");
     assert_eq!(listed[0].folder_state, FolderState::Missing);
+    std::fs::create_dir_all(&folder).expect("the folder is back");
+    let listed = h.manager.chats().await.expect("chats");
+    assert_eq!(listed[0].folder_state, FolderState::Ok);
 }
 
 /// P37: `create_chat` refuses a relative, missing, non-folder or non-Unicode folder, and an
