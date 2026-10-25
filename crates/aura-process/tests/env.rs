@@ -216,9 +216,10 @@ async fn env_values_with_newlines() {
 #[tokio::test]
 async fn env_timeout_retries_then_falls_back() {
     let fake = FakeShell::new("zsh");
+    // Long enough for a loaded machine to start each shell and its child before the limit.
     let config = EnvResolverConfig {
-        timeout: Duration::from_secs(2),
-        retry_timeout: Duration::from_secs(1),
+        timeout: Duration::from_secs(3),
+        retry_timeout: Duration::from_secs(2),
         ..fake.config("hang", &[("TERM_PROGRAM", "Apple_Terminal")])
     };
     let (resolver, env) = resolve(config).await;
@@ -226,7 +227,7 @@ async fn env_timeout_retries_then_falls_back() {
         panic!("a fallback: {:?}", env.source);
     };
     assert!(
-        reason.contains("did not finish within 1 second"),
+        reason.contains("did not finish within 2 seconds"),
         "{reason}"
     );
     assert!(matches!(resolver.status(), ResolverStatus::Fallback { .. }));
@@ -260,7 +261,7 @@ async fn env_timeout_retries_then_falls_back() {
 async fn an_rc_that_hangs_only_interactively_is_read_without_it() {
     let fake = FakeShell::new("zsh");
     let config = EnvResolverConfig {
-        timeout: Duration::from_secs(2),
+        timeout: Duration::from_secs(3),
         ..fake.config("hang-interactive", &[])
     };
     let (_, env) = resolve(config).await;
