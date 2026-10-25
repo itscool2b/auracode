@@ -1815,6 +1815,71 @@ mod tests {
         assert_eq!((queued, turns, events), (1, 0, 0));
     }
 
+    /// S40, the other half: a `BeginTurn` that commits through the writer removes the queued prompt
+    /// it started, so a started prompt is never queued as well (a restart would bring it back held,
+    /// and Send queued would send it twice); the other queued prompts stay.
+    #[tokio::test]
+    async fn begin_turn_removes_its_queued_prompt() {
+        let fixture = start(WriterConfig::STANDARD);
+        let store = &fixture.store;
+        let chat = new_chat(store).await;
+        for (id, created_at) in [("p1", 1), ("p2", 2)] {
+            send(
+                store,
+                Op::QueuePut(QueuedRow {
+                    id: id.into(),
+                    chat_id: chat.id.clone(),
+                    text: format!("prompt {id}"),
+                    held: false,
+                    created_at,
+                }),
+            )
+            .await;
+        }
+        send(
+            store,
+            Op::BeginTurn {
+                turn: TurnRow {
+                    id: "t1".into(),
+                    chat_id: chat.id.clone(),
+                    agent_session_id: None,
+                    ordinal: 1,
+                    prompt_id: "p1".into(),
+                    first_event_seq: 0,
+                    started_at: 3,
+                },
+                rows: vec![event_row(
+                    0,
+                    Some("t1"),
+                    &AuraEvent::TurnStarted {
+                        turn_id: "t1".into(),
+                        prompt_id: Some("p1".into()),
+                    },
+                )],
+            },
+        )
+        .await;
+        assert!(store.barrier().await);
+        let (stored, read) = std::sync::mpsc::channel();
+        let chat_id = chat.id.clone();
+        store.with_store(move |store| {
+            let queued: Vec<String> = rows::queued(store.conn(), &chat_id)
+                .expect("queued")
+                .into_iter()
+                .map(|row| row.id)
+                .collect();
+            let turns: i64 = store
+                .conn()
+                .query_row("SELECT count(*) FROM turns", [], |row| row.get(0))
+                .expect("turns");
+            let _ = stored.send((queued, turns));
+        });
+        assert_eq!(
+            read.recv_timeout(Duration::from_secs(10)),
+            Ok((vec!["p2".to_owned()], 1))
+        );
+    }
+
     /// S2: a crash in the middle of compaction rolls back, and the next start compacts the turn.
     #[test]
     fn compaction_is_idempotent() {

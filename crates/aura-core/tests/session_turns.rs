@@ -34,12 +34,16 @@ fn prompt_text(command: &LoggedCommand) -> String {
     }
 }
 
+/// A turn streams to its views and is stored; once it ended it is compacted (A42, 6.5.7): its two
+/// deltas, flushed apart, come back as one row.
 #[tokio::test(start_paused = true)]
 async fn a_turn_streams_to_views_and_is_stored() {
     let (driver, _handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
         in_turn(message("m1", "Hello ")),
+        // Past the flush interval, so the two deltas land in separate frames and rows.
+        Step::Wait(Duration::from_millis(200)),
         in_turn(message("m1", "world")),
         end_turn(StopReason::EndTurn),
     ]);
@@ -75,12 +79,32 @@ async fn a_turn_streams_to_views_and_is_stored() {
         ]
     );
     assert_eq!(stored[2], message("m1", "Hello world"));
-    let live: Vec<u32> = sink.events().iter().map(|(seq, _)| *seq).collect();
-    assert!(
-        live.windows(2).all(|pair| pair[1] == pair[0] + 1),
-        "frames never skip a seq: {live:?}"
+    let live: Vec<(u32, AuraEvent)> = sink.events();
+    let deltas: Vec<&AuraEvent> = live
+        .iter()
+        .map(|(_, event)| event)
+        .filter(|event| matches!(event, AuraEvent::MessageDelta { .. }))
+        .collect();
+    assert_eq!(
+        deltas,
+        [&message("m1", "Hello "), &message("m1", "world")],
+        "live, the deltas arrive apart"
     );
-    assert!(live.first().is_some_and(|first| *first >= attach.next_seq));
+    let seqs: Vec<u32> = live.iter().map(|(seq, _)| *seq).collect();
+    assert!(
+        seqs.windows(2).all(|pair| pair[1] == pair[0] + 1),
+        "frames never skip a seq: {seqs:?}"
+    );
+    assert!(seqs.first().is_some_and(|first| *first >= attach.next_seq));
+    let conn = rusqlite::Connection::open(h.profile.db_path()).expect("raw");
+    let compacted: bool = conn
+        .query_row(
+            "SELECT compacted_at IS NOT NULL FROM turns WHERE chat_id = ?1",
+            [&chat.id],
+            |row| row.get(0),
+        )
+        .expect("the turn");
+    assert!(compacted, "the ended turn was compacted");
 }
 
 /// S15: prompts typed during a turn queue up and run in order after a normal end.
@@ -128,6 +152,14 @@ async fn queue_runs_prompts_in_order_after_a_normal_end() {
     assert_eq!(texts, ["first", "second", "third"]);
     h.status(&chat.id, SessionStatus::Ready).await;
     assert!(h.queue(&chat.id).await.is_empty());
+    // S40: each started prompt left the stored queue too (its `BeginTurn` removed the row); the
+    // history read runs behind every write the actor queued.
+    h.history(&chat.id).await;
+    let conn = rusqlite::Connection::open(h.profile.db_path()).expect("raw");
+    let stored: i64 = conn
+        .query_row("SELECT count(*) FROM queued_prompts", [], |row| row.get(0))
+        .expect("count");
+    assert_eq!(stored, 0);
 }
 
 /// S15 and A12: an interrupt holds the rows queued before it, even when the agent's `end_turn`
@@ -1405,8 +1437,8 @@ async fn late_events_are_untagged() {
         .expect("answer");
 }
 
-/// A42: an update to an earlier turn's tool applies live, stays an update after compaction, and
-/// the tool reads the same before and after.
+/// A42: updates to an earlier turn's tool apply live; once their turn ends it is compacted, and
+/// they stay one update there (the fields last set), so the tool reads the same before and after.
 #[tokio::test(start_paused = true)]
 async fn cross_turn_tool_update_compaction() {
     let call = ToolCall {
@@ -1418,6 +1450,17 @@ async fn cross_turn_tool_update_compaction() {
         raw_input: None,
         tool_name: None,
         content: Vec::new(),
+        truncated: None,
+    };
+    let progress = ToolUpdate {
+        tool_call_id: "tool-1".into(),
+        status: None,
+        title: Some("Long build (90%)".into()),
+        kind: Some(ToolKind::Execute),
+        locations: None,
+        raw_input: None,
+        tool_name: None,
+        content: None,
         truncated: None,
     };
     let done = ToolUpdate {
@@ -1437,6 +1480,9 @@ async fn cross_turn_tool_update_compaction() {
         in_turn(AuraEvent::ToolCall(call.clone())),
         end_turn(StopReason::EndTurn),
         Step::Expect(CommandMatch::Prompt),
+        in_turn(AuraEvent::ToolUpdate(progress.clone())),
+        // Past the flush interval, so the two updates are stored as two rows until compaction.
+        Step::Wait(Duration::from_millis(200)),
         in_turn(AuraEvent::ToolUpdate(done.clone())),
         end_turn(StopReason::EndTurn),
     ]);
@@ -1481,15 +1527,37 @@ async fn cross_turn_tool_update_compaction() {
         }
         tool
     };
-    let live = fold(sink.events().into_iter().map(|(_, event)| event).collect());
+    let live_events: Vec<AuraEvent> = sink.events().into_iter().map(|(_, event)| event).collect();
+    assert_eq!(
+        live_events
+            .iter()
+            .filter(|event| matches!(event, AuraEvent::ToolUpdate(_)))
+            .count(),
+        2,
+        "live, both updates arrive"
+    );
+    let live = fold(live_events);
     let history = h.history(&chat.id).await;
-    let stored_update = history
+    let stored_updates: Vec<_> = history
         .iter()
-        .find(|item| matches!(item.event, AuraEvent::ToolUpdate(_)))
-        .expect("compaction keeps it as an update");
+        .filter(|item| matches!(item.event, AuraEvent::ToolUpdate(_)))
+        .collect();
+    assert_eq!(
+        stored_updates.len(),
+        1,
+        "compaction merged the turn's updates"
+    );
     assert!(
-        stored_update.turn_id.is_some(),
+        stored_updates[0].turn_id.is_some(),
         "tagged with the second turn"
+    );
+    assert_eq!(
+        stored_updates[0].event,
+        AuraEvent::ToolUpdate(ToolUpdate {
+            kind: Some(ToolKind::Execute),
+            ..done.clone()
+        }),
+        "the fields last set, from both updates"
     );
     let compacted = fold(history.into_iter().map(|item| item.event).collect());
     assert_eq!(compacted, live);
