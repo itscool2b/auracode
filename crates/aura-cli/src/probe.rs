@@ -73,6 +73,10 @@ impl ProbeTimings {
 /// spec appendix A) with a margin.
 const MODE_CHANGE_LIMIT: Duration = Duration::from_secs(35);
 
+/// How long the process table check waits for what a stop is still ending: the FORCE chain's
+/// SIGTERM grace and kill confirmation (2 s each, spec appendix A), with a margin.
+const LEFTOVER_GRACE: Duration = Duration::from_secs(6);
+
 /// Words cheaper models carry in their ids or names, cheapest first.
 const CHEAP_MARKERS: [&str; 8] = [
     "haiku",
@@ -346,7 +350,8 @@ impl Probe<'_> {
                 adapter.display().to_string(),
                 "--omit=optional --ignore-scripts".into(),
             ],
-        );
+        )
+        .await;
     }
 
     async fn install_step(
@@ -1137,7 +1142,7 @@ impl Probe<'_> {
             .log_records(&log, |records| logs::note(records, "shutdown").is_some())
             .await;
         self.report_exit(step, &records);
-        self.leftovers(step, &[]);
+        self.leftovers(step, &[]).await;
         true
     }
 
@@ -1190,8 +1195,10 @@ impl Probe<'_> {
     }
 
     /// The `ps` diff: nothing of any agent the probe started is left; declared daemons are listed.
-    fn leftovers(&mut self, step: &str, extra: &[String]) {
-        let (Some(before), Some(after)) = (self.before.as_deref(), ps::snapshot()) else {
+    /// What a stop is still ending gets [`LEFTOVER_GRACE`] to go: a force stop reads `Stopped` at
+    /// once while its FORCE chain runs, and an interrupted install's npm dies with its tree.
+    async fn leftovers(&mut self, step: &str, extra: &[String]) {
+        let Some(before) = self.before.clone() else {
             self.report
                 .skip(step, "no process table here; the job object ends the tree");
             return;
@@ -1206,14 +1213,26 @@ impl Probe<'_> {
         if let Some(adapter) = adapter_folder(self.headless, &self.spec) {
             needles.push(adapter.display().to_string());
         }
-        let found = ps::leftovers(
-            before,
-            &after,
-            &self.pids,
-            &needles,
-            &self.spec.daemons,
-            std::process::id(),
-        );
+        let deadline = Instant::now() + LEFTOVER_GRACE;
+        let found = loop {
+            let Some(after) = ps::snapshot() else {
+                self.report
+                    .skip(step, "the process table could not be read");
+                return;
+            };
+            let found = ps::leftovers(
+                &before,
+                &after,
+                &self.pids,
+                &needles,
+                &self.spec.daemons,
+                std::process::id(),
+            );
+            if found.is_clean() || Instant::now() >= deadline {
+                break found;
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        };
         for spared in &found.spared {
             self.report.info(
                 step,
@@ -1453,7 +1472,7 @@ impl Probe<'_> {
         }
         self.name_new_logs(chat, &logs_before, "probe-interrupted-start");
         if !self.demo() {
-            self.leftovers(step, &[]);
+            self.leftovers(step, &[]).await;
         }
         let logs_before = chat.logs();
         let mark = chat.mark();
@@ -1502,7 +1521,7 @@ impl Probe<'_> {
             for log in chat.logs() {
                 self.note_pid(&log);
             }
-            self.leftovers("end", &[]);
+            self.leftovers("end", &[]).await;
         }
         if self.named_logs.is_empty() {
             if self.demo() {
