@@ -391,7 +391,8 @@ fn fake_shell(args: &[String]) -> Result<ExitCode> {
             .create(true)
             .append(true)
             .open(record)?;
-        writeln!(file, "{}", serde_json::to_string(args)?)?;
+        // One write per line, so concurrent runs never interleave.
+        file.write_all(format!("{}\n", serde_json::to_string(args)?).as_bytes())?;
     }
     let mode = std::env::var("AURA_TESTBIN_SHELL").unwrap_or_else(|_| "ok".into());
     let interactive = args.iter().any(|arg| arg == "-i");
@@ -403,7 +404,7 @@ fn fake_shell(args: &[String]) -> Result<ExitCode> {
                 .create(true)
                 .append(true)
                 .open(pidfile)?;
-            writeln!(file, "{} {child}", std::process::id())?;
+            file.write_all(format!("{} {child}\n", std::process::id()).as_bytes())?;
         }
         std::thread::sleep(LIFETIME);
         return Ok(ExitCode::SUCCESS);
