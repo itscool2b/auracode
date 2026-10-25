@@ -12,7 +12,9 @@ use std::ffi::OsString;
 #[cfg(any(unix, test))]
 use std::hash::{BuildHasher, Hasher};
 #[cfg(any(unix, test))]
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
 
 use super::{EnvKey, EnvMap};
 
@@ -83,7 +85,7 @@ pub(crate) fn markers() -> (String, String) {
 }
 
 /// The platform's default shell.
-#[cfg(any(unix, test))]
+#[cfg(unix)]
 pub(crate) fn platform_default() -> PathBuf {
     if cfg!(target_os = "macos") {
         PathBuf::from("/bin/zsh")
@@ -94,7 +96,7 @@ pub(crate) fn platform_default() -> PathBuf {
 
 /// `$SHELL` when absolute and executable, else the passwd entry's shell when it is, else the
 /// platform default.
-#[cfg(any(unix, test))]
+#[cfg(unix)]
 pub(crate) fn pick_shell(
     env_shell: Option<&OsStr>,
     passwd_shell: impl FnOnce() -> Option<PathBuf>,
@@ -400,6 +402,8 @@ mod tests {
         assert_eq!(words(ShellFamily::Csh, false), ["-c", "CMD"]);
     }
 
+    /// Unix paths: on Windows `/bin/bash` is not absolute (and no login shell is read there).
+    #[cfg(unix)]
     #[test]
     fn shell_choice_fallbacks() {
         let runs = |path: &Path| path != Path::new("/bin/not-executable");
