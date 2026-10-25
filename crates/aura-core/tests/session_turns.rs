@@ -848,6 +848,93 @@ async fn stderr_tail_redacted_before_persist() {
     );
 }
 
+/// P7, P10 and S30: an error card keeps the end of a long stderr tail, which explains the failure,
+/// within the card's 2 KiB of JSON, and `last_error` holds the same text: for a failed start (a
+/// 16 KiB tail) and for a crash (short lines, which JSON escaping lengthens).
+#[tokio::test(start_paused = true)]
+async fn error_cards_keep_the_end_of_a_long_stderr_tail() {
+    let noise: String = (0..1000).map(|i| format!("noise line {i:04}\n")).collect();
+    let start_tail = format!("{noise}FINAL: Error: the adapter could not start");
+    let crash_tail = format!("{}FINAL: panicked at the very end", "ab\n".repeat(2000));
+    let (first, _) = ScriptedDriver::new(vec![Step::Exit(DriverExit::StartFailed(DriverError {
+        kind: ErrorKind::AgentExited,
+        message: "The agent stopped before it answered.".into(),
+        detail: Some(start_tail.clone()),
+    }))]);
+    let (second, _) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Exit(DriverExit::Crashed {
+            exit: Some(ExitInfo {
+                code: Some(1),
+                signal: None,
+                at_ms: 0,
+            }),
+            stderr_tail: crash_tail.clone(),
+        }),
+    ]);
+    let h = Harness::new(vec![first, second]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Failed).await;
+    let escaped = |text: &str| serde_json::to_string(text).expect("json").len() - 2;
+    let last_detail = |events: &[AuraEvent]| {
+        events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                AuraEvent::Error { detail, .. } => detail.clone(),
+                _ => None,
+            })
+            .expect("an error card with a detail")
+    };
+    let shown = last_detail(&h.stored(&chat.id).await);
+    assert!(
+        shown.ends_with("FINAL: Error: the adapter could not start"),
+        "{shown}"
+    );
+    assert!(
+        escaped(&shown) <= 2048 && escaped(&shown) > 1900,
+        "{}",
+        escaped(&shown)
+    );
+    assert!(start_tail.ends_with(&shown));
+    let attach = h
+        .manager
+        .attach(&chat.id, Sink::new("probe"))
+        .await
+        .expect("attach");
+    h.manager.detach(&attach.subscription_id);
+    assert_eq!(
+        attach.snapshot.last_error.and_then(|error| error.detail),
+        Some(shown)
+    );
+
+    h.manager.start(&chat.id, false).await.expect("retry");
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.send(&chat.id, "go".into()).await.expect("send");
+    h.status(&chat.id, SessionStatus::Stopped).await;
+    let shown = last_detail(&h.stored(&chat.id).await);
+    assert!(
+        shown.ends_with("FINAL: panicked at the very end"),
+        "{shown}"
+    );
+    assert!(
+        escaped(&shown) <= 2048 && escaped(&shown) > 1900,
+        "{}",
+        escaped(&shown)
+    );
+    assert!(crash_tail.ends_with(&shown));
+    let attach = h
+        .manager
+        .attach(&chat.id, Sink::new("probe"))
+        .await
+        .expect("attach");
+    assert_eq!(
+        attach.snapshot.last_error.and_then(|error| error.detail),
+        Some(shown)
+    );
+}
+
 /// A18: a sign-in error mid-turn ends the turn with an error, puts the prompt back in the queue
 /// held, stops the process and shows the auth card; Retry starts exactly one process and resends
 /// the prompt.

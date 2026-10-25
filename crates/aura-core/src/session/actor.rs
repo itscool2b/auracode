@@ -42,7 +42,9 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::task::{AbortHandle, JoinError, JoinHandle};
 use tokio::time::Instant;
 
-use super::normalize::{Normalizer, OpenCard, cap_chars};
+use super::normalize::{
+    MESSAGE_BYTES, Normalizer, OpenCard, cap_chars, cap_escaped, suffix_escaped,
+};
 use super::policy::{Decision, decide};
 use super::spawner::{ProcessBook, SessionSpawner};
 use super::{ChatState, FrameSink, SessionError, Shared, SinkGone};
@@ -2166,8 +2168,11 @@ impl ChatActor {
             .as_ref()
             .is_some_and(|error| error.kind == ErrorKind::AuthRequired);
         if let Some(error) = &error {
-            let message = self.redact(&error.message);
-            let detail = error.detail.as_deref().map(|detail| self.redact(detail));
+            let message = self.error_text(&error.message, false);
+            let detail = error
+                .detail
+                .as_deref()
+                .map(|detail| self.error_text(detail, false));
             self.last_error = Some(ErrorInfo {
                 kind: error.kind,
                 message: message.clone(),
@@ -2515,9 +2520,8 @@ impl ChatActor {
         self.kill_generation(generation);
         self.shared.live.release(&self.chat_id);
         let detail = stderr_tail
-            .map(|tail| self.redact(&tail))
-            .filter(|tail| !tail.trim().is_empty())
-            .map(|tail| tail_of(&tail, STDERR_TAIL_SHOWN_BYTES).to_owned());
+            .map(|tail| self.error_text(&tail, true))
+            .filter(|tail| !tail.trim().is_empty());
         let now = now_millis();
         let error = AuraEvent::Error {
             kind: ErrorKind::AgentExited,
@@ -2602,7 +2606,11 @@ impl ChatActor {
             self.hold_queue();
         }
         let mut message = self.redact(&error.message);
-        let detail = error.detail.as_deref().map(|detail| self.redact(detail));
+        // A failed start's detail is usually the agent's stderr tail (5.3.2).
+        let detail = error
+            .detail
+            .as_deref()
+            .map(|detail| self.error_text(detail, true));
         let adapter = self
             .spec
             .as_ref()
@@ -2639,7 +2647,8 @@ impl ChatActor {
         }
     }
 
-    /// A start that failed: `Failed` (or `AuthRequired`), the card stored outside any turn.
+    /// A start that failed: `Failed` (or `AuthRequired`), the card stored outside any turn. `detail`
+    /// comes redacted and fitted ([`error_text`](Self::error_text)).
     fn start_failed(
         &mut self,
         kind: ErrorKind,
@@ -2648,8 +2657,7 @@ impl ChatActor {
         auth: bool,
     ) {
         self.shared.live.release(&self.chat_id);
-        let message = self.redact(&message);
-        let detail = detail.map(|detail| self.redact(&detail));
+        let message = self.error_text(&message, false);
         self.last_error = Some(ErrorInfo {
             kind,
             message: message.clone(),
@@ -2972,6 +2980,18 @@ impl ChatActor {
         self.shared.deps.redactor.redact_text(text).into_owned()
     }
 
+    /// A driver's error text as its card shows it and `last_error` keeps it: redacted (5.1), then
+    /// cut to the card's 2 KiB of JSON. A stderr tail keeps its end, which explains the failure;
+    /// any other text keeps its start, as the normalizer would.
+    fn error_text(&self, text: &str, stderr: bool) -> String {
+        let redacted = self.redact(text);
+        if stderr {
+            suffix_escaped(&redacted, STDERR_TAIL_SHOWN_BYTES).to_owned()
+        } else {
+            cap_escaped(redacted, MESSAGE_BYTES)
+        }
+    }
+
     fn summary(&self) -> ChatSummary {
         ChatSummary {
             id: self.chat_id.clone(),
@@ -3126,15 +3146,6 @@ fn first_line(text: &str) -> String {
         .find(|line| !line.is_empty())
         .unwrap_or_default();
     cap_chars(line.to_owned(), TITLE_CHARS)
-}
-
-/// The last `bytes` of `text`, starting on a character boundary.
-fn tail_of(text: &str, bytes: usize) -> &str {
-    let mut start = text.len().saturating_sub(bytes);
-    while !text.is_char_boundary(start) {
-        start += 1;
-    }
-    &text[start..]
 }
 
 fn crash_message(exit: Option<&ExitInfo>) -> String {

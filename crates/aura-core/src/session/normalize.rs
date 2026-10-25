@@ -47,7 +47,7 @@ const OPTION_NAME_CHARS: usize = 64;
 const OPTION_NAME_SHORT_CHARS: usize = 24;
 const LOCATION_PATH_BYTES: usize = 512;
 /// Notice and error messages, error detail, question messages, typed answers.
-const MESSAGE_BYTES: usize = 2 * 1024;
+pub(crate) const MESSAGE_BYTES: usize = 2 * 1024;
 const RAW_PREVIEW_BYTES: usize = 512;
 const LOCATIONS_BYTES: usize = 1024;
 /// A cut text or terminal output keeps at least this much.
@@ -425,7 +425,7 @@ fn prefix_escaped(text: &str, bytes: usize) -> &str {
 }
 
 /// The longest suffix of `text` whose JSON-escaped form takes at most `bytes`.
-fn suffix_escaped(text: &str, bytes: usize) -> &str {
+pub(crate) fn suffix_escaped(text: &str, bytes: usize) -> &str {
     let mut used = 0usize;
     for (index, c) in text.char_indices().rev() {
         used = used.saturating_add(escaped_len(c));
