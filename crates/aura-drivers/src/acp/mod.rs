@@ -2162,6 +2162,7 @@ impl Session {
                 .options
                 .as_ref()
                 .map_or_else(|| mode.to_owned(), |options| options.mode_name(mode));
+            let name = mode_phrase(&name);
             let state = AutonomyState {
                 requested: applied.requested,
                 native_mode: Some(mode.to_owned()),
@@ -2327,6 +2328,22 @@ fn failure_detail(failure: &Failure) -> Option<String> {
     match failure {
         Failure::Rpc(error) => error.data.as_ref().map(Value::to_string),
         Failure::Timeout | Failure::Dropped(_) => None,
+    }
+}
+
+/// A mode's name for "the <name> mode": claude-acp calls one "Plan Mode", which would read
+/// "the Plan Mode mode".
+fn mode_phrase(name: &str) -> &str {
+    let trimmed = name.trim_end();
+    match trimmed.len().checked_sub(" mode".len()) {
+        Some(cut)
+            if trimmed.is_char_boundary(cut)
+                && trimmed[cut..].eq_ignore_ascii_case(" mode")
+                && cut > 0 =>
+        {
+            &trimmed[..cut]
+        }
+        _ => trimmed,
     }
 }
 

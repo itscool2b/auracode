@@ -2277,6 +2277,103 @@ mod tests {
         assert_eq!(exit, DriverExit::Closed);
     }
 
+    /// Contract rules 1, 2 and 8 over everything the demo agent emitted for `prompts`.
+    fn contract_violations(events: &[DriverEvent], prompts: &[&str]) -> Vec<String> {
+        let mut violations = Vec::new();
+        let ready_at = events
+            .iter()
+            .position(|event| matches!(event, DriverEvent::Ready(_)));
+        for event in &events[..ready_at.unwrap_or(events.len())] {
+            let allowed = matches!(
+                event,
+                DriverEvent::Status(_)
+                    | DriverEvent::Options(_)
+                    | DriverEvent::Commands(_)
+                    | DriverEvent::Title(_)
+                    | DriverEvent::Autonomy(_)
+                    | DriverEvent::AuthRequired(_)
+                    | DriverEvent::Event {
+                        turn: None,
+                        event: AuraEvent::Notice { .. } | AuraEvent::UsageUpdated(_)
+                    }
+            );
+            if !allowed {
+                violations.push(format!("before Ready: {event:?}"));
+            }
+        }
+        let mut ended = Vec::new();
+        for event in events {
+            match event {
+                DriverEvent::TurnEnded { turn_id, .. } => {
+                    if ended.contains(turn_id) {
+                        violations.push(format!("a second TurnEnded for {turn_id}"));
+                    }
+                    ended.push(turn_id.clone());
+                }
+                DriverEvent::Event {
+                    turn: Some(turn),
+                    event: inner,
+                } => {
+                    if ended.contains(turn) || !prompts.contains(&turn.as_str()) {
+                        violations.push(format!("{event:?} tagged {turn}"));
+                    }
+                    if matches!(
+                        inner,
+                        AuraEvent::TurnStarted { .. }
+                            | AuraEvent::TurnEnded { .. }
+                            | AuraEvent::SessionUpdated(_)
+                    ) {
+                        violations.push(format!("a driver never emits {inner:?}"));
+                    }
+                }
+                DriverEvent::Permission {
+                    turn: Some(turn), ..
+                }
+                | DriverEvent::UiRequest {
+                    turn: Some(turn), ..
+                } if ended.contains(turn) => {
+                    violations.push(format!("{event:?} after its turn ended"));
+                }
+                _ => {}
+            }
+        }
+        for prompt in prompts {
+            if !ended.iter().any(|turn| turn == prompt) {
+                violations.push(format!("no TurnEnded for {prompt}"));
+            }
+        }
+        violations
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn the_demo_agent_keeps_the_driver_contract() {
+        let (mut demo, mut events) = Demo::ready().await;
+        let prompts = ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8"];
+        for (turn, text) in prompts.iter().zip([
+            "/echo one",
+            "Tell me about this repo",
+            "/fail",
+            "/auth",
+            "/big",
+            "/stress 300",
+            "/withdraw",
+            "/background",
+        ]) {
+            events.extend(demo.turn(turn, text).await);
+        }
+        // The background turn's late output arrives untagged after its end.
+        events.extend(
+            demo.until(|event| matches!(event, DriverEvent::Permission { turn: None, .. }))
+                .await,
+        );
+        demo.shutdown(Duration::from_secs(3));
+        let (rest, exit) = demo.finish().await;
+        events.extend(rest);
+        assert_eq!(exit, DriverExit::Closed);
+        let violations = contract_violations(&events, &prompts);
+        assert!(violations.is_empty(), "{violations:#?}");
+    }
+
     #[tokio::test(start_paused = true)]
     async fn waiting_deltas_merge_and_nothing_is_lost() {
         let (mut demo, _) = Demo::ready().await;

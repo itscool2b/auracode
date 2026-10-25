@@ -999,6 +999,39 @@ mod tests {
     }
 
     #[test]
+    fn non_text_content() {
+        let mut mapper = in_turn();
+        let block =
+            |content: Value| json!({"sessionUpdate": "agent_message_chunk", "content": content});
+        let texts: Vec<String> = [
+            json!({"type": "image", "mimeType": "image/png", "data": "A".repeat(2048)}),
+            json!({"type": "audio", "mimeType": "audio/wav", "data": "AAAA"}),
+            json!({"type": "resource_link", "name": "spec.md", "uri": "file:///w/spec.md"}),
+            json!({"type": "resource", "resource": {"uri": "file:///w/a.txt", "text": "embedded text"}}),
+            json!({"type": "resource", "resource": {"uri": "file:///w/b.bin", "blob": "AAAA"}}),
+            json!({"type": "video", "uri": "x"}),
+        ]
+        .into_iter()
+        .flat_map(|content| events(&mut mapper, block(content)))
+        .filter_map(|event| match event {
+            DriverEvent::Event { event: AuraEvent::MessageDelta { text, .. }, .. } => Some(text),
+            _ => None,
+        })
+        .collect();
+        assert_eq!(
+            texts,
+            [
+                "[image: image/png, 2 KB]",
+                "[audio: audio/wav, 1 KB]",
+                "[spec.md](file:///w/spec.md)",
+                "embedded text",
+                "[resource file:///w/b.bin]",
+                "[video]",
+            ]
+        );
+    }
+
+    #[test]
     fn a_permissions_own_tool_call_never_becomes_a_block() {
         let mut mapper = in_turn();
         assert_eq!(mapper.permission_tool("perm-check-1"), None);

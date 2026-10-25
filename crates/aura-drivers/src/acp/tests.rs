@@ -2299,3 +2299,97 @@ async fn unknown_updates_are_skipped_and_the_stream_continues() {
     };
     assert_eq!(entries.len(), 1);
 }
+
+#[test]
+fn mode_names_read_once_in_the_hand_picked_note() {
+    assert_eq!(mode_phrase("Plan Mode"), "Plan");
+    assert_eq!(mode_phrase("plan mode "), "plan");
+    assert_eq!(mode_phrase("Accept Edits"), "Accept Edits");
+    assert_eq!(mode_phrase(" Mode"), " Mode");
+    assert_eq!(mode_phrase("Mode"), "Mode");
+    assert_eq!(mode_phrase("Modé mode"), "Modé");
+}
+
+/// Holds every spawn for a while before it starts (a macOS privacy prompt answered slowly).
+struct SlowSpawner {
+    inner: Arc<DirectSpawner>,
+    delay: Duration,
+}
+
+impl crate::driver::AgentSpawner for SlowSpawner {
+    fn spawn(
+        &self,
+        spec: aura_process::SpawnSpec,
+    ) -> futures::future::BoxFuture<'static, Result<aura_process::SpawnedProcess, SpawnError>> {
+        let spawning = self.inner.spawn(spec);
+        let delay = self.delay;
+        Box::pin(async move {
+            tokio::time::sleep(delay).await;
+            spawning.await
+        })
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_start_timeout_covers_only_the_launch() {
+    let (spawner, mut ends) = FakeSpawner::new();
+    let logs = LogFactory::new(
+        PathBuf::from("/logs"),
+        Arc::new(Redactor::standard()),
+        tokio::runtime::Handle::current(),
+    );
+    let (_commands, receiver) = mpsc::unbounded_channel();
+    let (sender, mut events) = event_channel();
+    let slow = SlowSpawner {
+        inner: DirectSpawner::new(spawner, logs),
+        delay: Duration::from_secs(120),
+    };
+    let run = tokio::spawn(Box::new(AcpDriver::new()).run(DriverContext {
+        commands: receiver,
+        events: sender,
+        spawner: Arc::new(slow),
+        setup: setup("generic"),
+    }));
+    let mut end = timeout(Duration::from_secs(300), ends.recv())
+        .await
+        .expect("spawned")
+        .expect("an end");
+    let line = end.from_client.recv().await.expect("initialize");
+    let id = serde_json::from_str::<Value>(&line).expect("json")["id"].clone();
+    // 120 s went into the spawn; the agent answers 59 s after it started.
+    tokio::time::sleep(Duration::from_secs(59)).await;
+    end.to_client
+        .send(FakeLine::Line(
+            json!({"jsonrpc": "2.0", "id": id, "result": init_result()}).to_string(),
+        ))
+        .expect("stdout");
+    let line = end.from_client.recv().await.expect("session/new");
+    assert!(line.contains("session/new"), "{line}");
+    assert!(!run.is_finished());
+    assert_eq!(
+        events.recv().await,
+        Some(DriverEvent::Status(DriverStatus::Spawning))
+    );
+}
+
+#[test]
+fn slow_consumer_blocks_agent_not_memory() {
+    // The driver reads stdout only while its outbox has room: 64 events or 8 MiB.
+    let (sender, _receiver) = event_channel();
+    let mut outbox = Outbox::new(sender);
+    let small = DriverEvent::Title(Some("x".into()));
+    for _ in 0..OUTBOX_EVENTS - 1 {
+        outbox.push(small.clone());
+    }
+    assert!(!outbox.is_full());
+    outbox.push(small);
+    assert!(outbox.is_full(), "64 events");
+    let (sender, _receiver) = event_channel();
+    let mut outbox = Outbox::new(sender);
+    outbox.push(DriverEvent::Title(Some("x".repeat(OUTBOX_BYTES))));
+    assert!(outbox.is_full(), "8 MiB");
+    // Once the session stops reading for good, nothing is kept.
+    outbox.discard();
+    outbox.push(DriverEvent::Title(None));
+    assert!(!outbox.has_head() && !outbox.is_full());
+}
