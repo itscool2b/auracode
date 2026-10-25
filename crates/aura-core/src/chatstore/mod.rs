@@ -386,7 +386,10 @@ pub enum StoreError {
     Closed,
     #[error("auracode's database is damaged: {0}")]
     Damaged(String),
-    /// A blob that is not saved (or no longer kept); the sentence says which.
+    /// A blob that is not available, and the sentence that says why: "The full output is no longer
+    /// available." for a file that is gone, "The full output isn't saved yet because the disk is
+    /// full." for one still waiting in the failed batch or the FIFO. The session manager passes the
+    /// sentence on as `SessionError::BlobMissing`.
     #[error("{0}")]
     BlobMissing(String),
     #[error("{0}")]

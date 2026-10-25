@@ -203,7 +203,10 @@ export type AppErrorCode =
 "too_many_subscriptions" | 
 /**  The profile database can't be reached right now. */
 "storage_unavailable" | 
-/**  The full output is no longer available. */
+/**
+ *  The full output is not available: no longer kept, or not saved yet while the disk is full.
+ *  The message says which.
+ */
 "blob_missing" | 
 /**  auracode is quitting. */
 "shutting_down" | 

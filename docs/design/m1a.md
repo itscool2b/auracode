@@ -1884,6 +1884,9 @@ pub enum StoreError {
     #[error("The database is busy.")] Busy,
     #[error("auracode's database is closed.")] Closed,
     #[error("auracode's database is damaged: {0}")] Damaged(String),
+    /// "The full output is no longer available." (the file is gone), or "The full output isn't saved yet because the
+    /// disk is full." (it waits in the failed batch or the FIFO); the manager passes it on as SessionError::BlobMissing.
+    #[error("{0}")] BlobMissing(String),
     #[error("{0}")] Other(String),
 }
 pub struct StoreClosed;
@@ -2126,7 +2129,7 @@ pub enum SessionError {
     #[error("{0} agents are already running. Stop one, then try again.")]                 TooManyAgents(usize),
     #[error("Too many views are open for this chat.")]                                    TooManySubscriptions,
     #[error("auracode's database is not available: {0}")]                                 StorageUnavailable(String),
-    #[error("The full output is no longer available.")]                                   BlobMissing,
+    #[error("{0}")]                                                                       BlobMissing(String),  // the store's sentence
     #[error("auracode is shutting down.")]                                                ShuttingDown,
     #[error("Something went wrong inside auracode: {0}")]                                 Internal(String),
 }

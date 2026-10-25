@@ -429,8 +429,10 @@ pub enum SessionError {
     TooManySubscriptions,
     #[error("auracode's database is not available: {0}")]
     StorageUnavailable(String),
-    #[error("The full output is no longer available.")]
-    BlobMissing,
+    /// The chat store's sentence ([`StoreError::BlobMissing`](crate::chatstore::StoreError::BlobMissing)),
+    /// passed on as is: the output is no longer kept, or not saved yet while the disk is full.
+    #[error("{0}")]
+    BlobMissing(String),
     #[error("auracode is shutting down.")]
     ShuttingDown,
     #[error("Something went wrong inside auracode: {0}")]
@@ -554,6 +556,13 @@ mod tests {
             }
             .to_string(),
             "The message is too long (2000000 bytes; the limit is 1048576)."
+        );
+        assert_eq!(
+            SessionError::BlobMissing(
+                "The full output isn't saved yet because the disk is full.".into()
+            )
+            .to_string(),
+            "The full output isn't saved yet because the disk is full."
         );
     }
 }

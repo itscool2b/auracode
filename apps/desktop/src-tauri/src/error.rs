@@ -52,7 +52,8 @@ pub enum AppErrorCode {
     TooManySubscriptions,
     /// The profile database can't be reached right now.
     StorageUnavailable,
-    /// The full output is no longer available.
+    /// The full output is not available: no longer kept, or not saved yet while the disk is full.
+    /// The message says which.
     BlobMissing,
     /// auracode is quitting.
     ShuttingDown,
@@ -99,7 +100,7 @@ impl From<SessionError> for AppError {
             SessionError::TooManyAgents(_) => AppErrorCode::TooManyAgents,
             SessionError::TooManySubscriptions => AppErrorCode::TooManySubscriptions,
             SessionError::StorageUnavailable(_) => AppErrorCode::StorageUnavailable,
-            SessionError::BlobMissing => AppErrorCode::BlobMissing,
+            SessionError::BlobMissing(_) => AppErrorCode::BlobMissing,
             SessionError::ShuttingDown => AppErrorCode::ShuttingDown,
             SessionError::Internal(_) => AppErrorCode::Internal,
         };
@@ -159,7 +160,10 @@ mod tests {
                 SessionError::StorageUnavailable("busy".into()),
                 "storage_unavailable",
             ),
-            (SessionError::BlobMissing, "blob_missing"),
+            (
+                SessionError::BlobMissing("The full output is no longer available.".into()),
+                "blob_missing",
+            ),
             (SessionError::ShuttingDown, "shutting_down"),
             (SessionError::Internal("boom".into()), "internal"),
         ];
