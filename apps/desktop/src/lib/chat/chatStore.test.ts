@@ -366,6 +366,84 @@ describe("the session's live state", () => {
   });
 });
 
+describe("the pickers", () => {
+  it("set an option or the autonomy and show the lists the shell answers, or why not", async () => {
+    const fake = new FakeTransport({
+      setOption: (_chat, optionId) =>
+        optionId === "bad"
+          ? Promise.reject(new CommandError("option_invalid", "The agent refused that value."))
+          : Promise.resolve(lists(7)),
+      setAutonomy: () =>
+        Promise.resolve(
+          lists(8, {
+            autonomy: {
+              requested: "ask",
+              native_mode: "default",
+              auto_answer: { type: "never" },
+              note: "Applies when the agent starts.",
+            },
+          }),
+        ),
+    });
+    const store = await opened(fake);
+    await store.setOption("model", { type: "choice", value: "smart" });
+    expect(store.getSnapshot().lists?.revision).toBe(7);
+    await store.setOption("bad", { type: "toggle", value: true });
+    expect(store.getSnapshot().listsError).toBe("The agent refused that value.");
+    expect(store.getSnapshot().lists?.revision).toBe(7);
+    await store.setAutonomy("ask");
+    expect(store.getSnapshot().lists?.autonomy.note).toBe("Applies when the agent starts.");
+    expect(store.getSnapshot().listsError).toBeNull();
+    expect(fake.calls.slice(2).map((call) => [call.method, ...call.args])).toEqual([
+      ["setOption", CHAT, "model", { type: "choice", value: "smart" }],
+      ["setOption", CHAT, "bad", { type: "toggle", value: true }],
+      ["setAutonomy", CHAT, "ask"],
+    ]);
+  });
+
+  it("keep the newest lists when an older refetch answers late", async () => {
+    let answer: (value: ReturnType<typeof lists>) => void = () => {};
+    let calls = 0;
+    const fake = new FakeTransport({
+      lists: () => {
+        calls += 1;
+        if (calls === 1) return new Promise((resolve) => (answer = resolve));
+        return Promise.resolve(lists(1));
+      },
+      setOption: () => Promise.resolve(lists(9)),
+    });
+    const store = await opened(fake);
+    await store.setOption("model", { type: "choice", value: "fast" });
+    answer(lists(2));
+    await settled();
+    expect(store.getSnapshot().lists?.revision).toBe(9);
+  });
+});
+
+describe("history errors", () => {
+  it("shows why an older page could not load, and Load earlier tries again", async () => {
+    let fail = true;
+    const fake = new FakeTransport({
+      history: () =>
+        fail
+          ? Promise.reject(
+              new CommandError("storage_unavailable", "auracode's database is not available: busy"),
+            )
+          : Promise.resolve(historyPage(CHAT, [], { has_more: false })),
+    });
+    const store = await opened(fake, historyPage(CHAT, [], { has_more: true, before_seq: 10 }), 20);
+    await store.loadEarlier();
+    expect(store.getSnapshot()).toMatchObject({
+      loadingEarlier: false,
+      earlierError: "auracode's database is not available: busy",
+      hasMore: true,
+    });
+    fail = false;
+    await store.loadEarlier();
+    expect(store.getSnapshot()).toMatchObject({ earlierError: null, hasMore: false });
+  });
+});
+
 describe("prompts and the session", () => {
   it("sends text as typed, refuses blank text, and keeps a failure for the composer", async () => {
     const fake = new FakeTransport({

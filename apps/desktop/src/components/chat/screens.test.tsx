@@ -234,6 +234,23 @@ describe("the header", () => {
     expect(html).toContain("Working");
     expect(html).toContain("Applying your settings");
     expect(html).toContain("0.22.5");
+    // With detection's answer, the binary that runs is what the header names.
+    const detected = renderToStaticMarkup(
+      <Header
+        state={running}
+        agent={agent("mock", {
+          state: "ready",
+          version: "Claude Code 2.1.310 via claude-agent-acp 0.95.0",
+          path: "/bin/claude",
+        })}
+        resumable={true}
+        onStart={noop}
+        onStop={noop}
+        onShowLog={noop}
+      />,
+    );
+    expect(detected).toContain("Claude Code 2.1.310 via claude-agent-acp 0.95.0");
+    expect(detected).toContain('title="/bin/claude"');
     expect(html).toContain("Context 12k of 200k · $0.0200");
     expect(html).toContain("/Users/me/code/app");
   });

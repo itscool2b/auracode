@@ -29,15 +29,17 @@ export function Header({
   const status = session?.status ?? chat?.status ?? "stopped";
   const live = hasProcess(status);
   const name = session?.agent_name ?? chat?.agent_name ?? agent?.name ?? "Agent";
-  const readyVersion = agent?.availability.state === "ready" ? agent.availability.version : null;
-  const version = session?.agent_version ?? readyVersion;
+  // Detection names the binary that actually runs (the user's own CLI behind an adapter); the
+  // agent's own report is the fallback.
+  const ready = agent?.availability.state === "ready" ? agent.availability : null;
+  const version = ready?.version ?? session?.agent_version ?? null;
   const folderState = chat ? folderStateLabel(chat.folder_state) : null;
   const context = contextLabel(state.usage);
   const cost = costLabel(state.usage);
   return (
     <header className="chat-header">
       <div className="chat-header-who">
-        <span className="chat-header-agent">
+        <span className="chat-header-agent" title={ready?.path}>
           {name}
           {version ? <span className="ui-muted"> · {version}</span> : null}
         </span>
