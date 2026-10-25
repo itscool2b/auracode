@@ -6,6 +6,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use aura_core::device::DeviceIdentity;
+use aura_core::owner::ProfileOwner;
 use aura_core::profile::ProfileMeta;
 use aura_core::store::Store;
 use serde::Serialize;
@@ -63,6 +64,8 @@ pub struct AppState {
     data_dir: Option<PathBuf>,
     /// The profile database. `rusqlite::Connection` is `Send` but not `Sync`, hence the mutex.
     store: Mutex<Option<Store>>,
+    /// The profile's owner lock, held for the app's life: one process runs a profile's sessions.
+    _owner: Option<ProfileOwner>,
     /// The repair whose notice is still shown, until `acknowledge_recovery` succeeds. Locked
     /// before `store` whenever both are held.
     recovery: Mutex<Option<Recovery>>,
@@ -111,6 +114,7 @@ impl AppState {
             info,
             data_dir: booted.data_dir,
             store: Mutex::new(booted.store),
+            _owner: booted.owner,
             recovery: Mutex::new(booted.recovery),
             integrity: IntegrityCheck::new(booted.integrity_check),
             demos: DemoSessions::default(),

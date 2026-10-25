@@ -31,10 +31,36 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::reveal_data_dir,
             commands::acknowledge_recovery,
             commands::smoke_report,
+            commands::agents_list,
+            commands::agents_refresh,
+            commands::env_status,
+            commands::env_refresh,
+            commands::pick_folder,
+            commands::chats_list,
+            commands::chat_create,
+            commands::chat_attach,
+            commands::chat_detach,
+            commands::chat_history,
+            commands::chat_lists,
+            commands::chat_send,
+            commands::chat_cancel_queued,
+            commands::chat_resume_queue,
+            commands::chat_interrupt,
+            commands::chat_force_stop,
+            commands::chat_start,
+            commands::chat_stop,
+            commands::chat_respond_permission,
+            commands::chat_respond_ui,
+            commands::chat_set_option,
+            commands::chat_set_autonomy,
+            commands::chat_blob,
+            commands::chat_reveal_log,
+            commands::status_subscribe,
+            commands::storage_status,
         ])
-        // aura-protocol's timestamps (`Millis`) are i64 Unix milliseconds, sent by serde_json as
-        // plain JSON numbers and exact in a JS number until 2^53 ms. Typing them as `bigint` would
-        // not match what arrives; every other integer crossing IPC is u32.
+        // aura-protocol's timestamps (`Millis`) are i64 Unix milliseconds and its token counts,
+        // byte counts and offsets are u64, all sent by serde_json as plain JSON numbers and exact
+        // in a JS number until 2^53. Typing them as `bigint` would not match what arrives.
         .dangerously_cast_bigints_to_number()
         // One TypeScript type per Rust type. With serde phases on, tauri-specta treats a `Channel`
         // argument as input and types the frames with the deserialize shape (`EventBatch_Deserialize`,
@@ -165,6 +191,32 @@ mod tests {
             "revealDataDir",
             "acknowledgeRecovery",
             "smokeReport",
+            "agentsList",
+            "agentsRefresh",
+            "envStatus",
+            "envRefresh",
+            "pickFolder",
+            "chatsList",
+            "chatCreate",
+            "chatAttach",
+            "chatDetach",
+            "chatHistory",
+            "chatLists",
+            "chatSend",
+            "chatCancelQueued",
+            "chatResumeQueue",
+            "chatInterrupt",
+            "chatForceStop",
+            "chatStart",
+            "chatStop",
+            "chatRespondPermission",
+            "chatRespondUi",
+            "chatSetOption",
+            "chatSetAutonomy",
+            "chatBlob",
+            "chatRevealLog",
+            "statusSubscribe",
+            "storageStatus",
         ] {
             assert!(
                 first.contains(&format!("\t{accessor}: (")),
@@ -185,9 +237,42 @@ mod tests {
             first.contains("\trecovery_notice: string | null,"),
             "the UI can tell the dismissible notice from the others"
         );
+        // The chat log is revealed by chat id: the page names no path.
+        assert!(
+            first.contains("\tchatRevealLog: (chatId: string) =>"),
+            "chatRevealLog must take only the chat id"
+        );
+        // The webview a view or a status subscription belongs to is injected, never passed.
+        assert!(
+            first.contains("\tchatAttach: (chatId: string, channel: Channel<EventBatch>) =>"),
+            "chatAttach takes the chat and its channel only"
+        );
+        assert!(
+            first.contains("\tstatusSubscribe: (channel: Channel<ChatStatusUpdate>) =>"),
+            "statusSubscribe takes its channel only"
+        );
+        // Lenient enums stay closed unions with their fallback: the UI's switches are exhaustive.
+        for union in [
+            "export type StopReason = ",
+            "export type ToolKind = ",
+            "export type ErrorKind = ",
+            "export type ResolvedBy = ",
+            "export type ConfigCategory = ",
+        ] {
+            let start = first
+                .find(union)
+                .unwrap_or_else(|| panic!("{union} is missing"));
+            let end = first[start..]
+                .find(';')
+                .map_or(first.len(), |end| start + end);
+            let definition = &first[start..end];
+            assert!(definition.contains("\"other\""), "{definition}");
+            assert!(!definition.contains("string"), "{definition}");
+        }
         for name in [
             "AppInfo",
             "AppError",
+            "AppErrorCode",
             "AuraEvent",
             "DemoKind",
             "EventBatch",
@@ -195,6 +280,24 @@ mod tests {
             "LaunchMode",
             "SmokeReport",
             "StressConfig",
+            "AgentEntry",
+            "Availability",
+            "BlobText",
+            "ChatAttach",
+            "ChatSnapshot",
+            "ChatStatusUpdate",
+            "ChatSummary",
+            "ConfigOption",
+            "ConfigValue",
+            "EnvStatus",
+            "HistoryPage",
+            "PromptAck",
+            "SessionLists",
+            "StorageStatus",
+            "UiAnswer",
+            "PromptState",
+            "Truncation",
+            "TokenUsage",
         ] {
             assert!(
                 first.contains(&format!("export type {name} =")),

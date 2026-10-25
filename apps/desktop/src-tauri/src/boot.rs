@@ -1,4 +1,5 @@
-//! The startup sequence: data root, device identity, active profile, profile database.
+//! The startup sequence: data root, device identity, active profile, the profile's owner lock,
+//! profile database.
 //!
 //! [`boot`] never fails and never panics. Repairs aura-core made on the way (a recreated device
 //! identity, a quarantined database, a migration) become notices; the first step that cannot
@@ -13,10 +14,15 @@
 //! as the default root, because tauri.conf.json's identifier is aura-core's `APP_IDENTIFIER`
 //! (`config_checks.rs` holds them together), so the WebView data Tauri keeps there on Windows and
 //! Linux sits beside ours.
+//!
+//! One process runs a profile's sessions, so startup takes the profile's owner lock
+//! ([`ProfileOwner`]) between opening the profile and opening its database. A second launch with the
+//! same data folder gets the error screen, saying another auracode runs with that profile.
 
 use std::path::PathBuf;
 
 use aura_core::device::{DeviceIdentity, DeviceLoad};
+use aura_core::owner::ProfileOwner;
 use aura_core::paths::DataRoot;
 use aura_core::profile::{ProfileMeta, Profiles};
 use aura_core::store::{OpenOutcome, Salvage, Store};
@@ -51,6 +57,11 @@ pub struct Booted {
     pub data_dir: Option<PathBuf>,
     pub device: Option<DeviceIdentity>,
     pub profile: Option<ProfileMeta>,
+    /// The active profile's folder (`ProfileMeta` and this make an `aura_core::profile::Profile`).
+    pub profile_dir: Option<PathBuf>,
+    /// This process owns the profile's sessions while this lives. Taken before the store opened;
+    /// it moves into the chat store with it.
+    pub owner: Option<ProfileOwner>,
     pub store: Option<Store>,
     pub db: Option<DbInfo>,
     /// Sentences the UI lists: repairs that happened, data that was moved aside.
@@ -75,6 +86,8 @@ pub fn boot(root: aura_core::Result<DataRoot>) -> Booted {
         data_dir: None,
         device: None,
         profile: None,
+        profile_dir: None,
+        owner: None,
         store: None,
         db: None,
         notices: Vec::new(),
@@ -110,6 +123,12 @@ pub fn boot(root: aura_core::Result<DataRoot>) -> Booted {
         Err(error) => return booted.fail("open your profile", &error),
     };
     booted.profile = Some(profile.meta.clone());
+    booted.profile_dir = Some(profile.dir.clone());
+
+    match ProfileOwner::acquire(&profile) {
+        Ok(owner) => booted.owner = Some(owner),
+        Err(error) => return booted.fail("take ownership of your profile", &error),
+    }
 
     match Store::open(&profile) {
         Ok((store, info)) => {
@@ -238,6 +257,7 @@ mod tests {
         let first = boot(Ok(root.clone()));
         let device_id = first.device.expect("device").device_id;
         drop(first.store);
+        drop(first.owner);
         let second = boot(Ok(root));
         assert_eq!(second.fatal, None);
         assert_eq!(second.device.expect("device").device_id, device_id);
@@ -254,6 +274,7 @@ mod tests {
         let first = boot(Ok(root.clone()));
         let db = first.store.as_ref().expect("store").path().to_path_buf();
         crash(first.store.expect("store"));
+        drop(first.owner);
 
         let second = boot(Ok(root.clone()));
         assert_eq!(second.fatal, None);
@@ -286,6 +307,7 @@ mod tests {
         let first = boot(Ok(root.clone()));
         let db_path = PathBuf::from(first.db.expect("db").path);
         drop(first.store);
+        drop(first.owner);
         fs::write(&db_path, vec![0x5a; 8192]).expect("corrupt the database");
 
         let booted = boot(Ok(root.clone()));
@@ -319,6 +341,7 @@ mod tests {
                 .is_some_and(|recovery| recovery.notice.contains(quarantined.as_str()))
         );
         drop(booted.store);
+        drop(booted.owner);
 
         let again = boot(Ok(root));
         assert_eq!(
@@ -364,6 +387,7 @@ mod tests {
             .expect("bump user_version");
         let db_path = store.path().to_path_buf();
         drop(store);
+        drop(first.owner);
         let before = fs::read(&db_path).expect("read");
 
         let booted = boot(Ok(root));
@@ -381,6 +405,37 @@ mod tests {
             before,
             "nothing was written"
         );
+    }
+
+    /// A second launch with the same data folder while the first still runs: the profile is the
+    /// first one's, so the second stops before touching the database, and says why.
+    #[test]
+    fn boot_reports_profile_in_use() {
+        let (_dir, root) = fresh();
+        let first = boot(Ok(root.clone()));
+        assert_eq!(first.fatal, None);
+        assert!(first.owner.is_some(), "the first launch owns the profile");
+        assert!(first.profile_dir.is_some());
+
+        let second = boot(Ok(root.clone()));
+        let fatal = second.fatal.clone().expect("refused");
+        assert!(
+            fatal.starts_with("auracode is already running with the profile in "),
+            "{fatal}"
+        );
+        assert!(fatal.contains("AURACODE_DATA_DIR"), "{fatal}");
+        assert!(second.store.is_none(), "the database was not opened");
+        assert!(second.owner.is_none());
+        assert!(
+            second.profile.is_some(),
+            "steps before the refusal are kept"
+        );
+        drop(second);
+
+        drop(first);
+        let third = boot(Ok(root));
+        assert_eq!(third.fatal, None, "free once the first launch ended");
+        assert!(third.owner.is_some());
     }
 
     #[test]
