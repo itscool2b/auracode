@@ -13,7 +13,8 @@
 //! - **Page loads.** A reloaded page has new channel callbacks, so frames for the old ones would be
 //!   lost without an error. [`page_load`] drops every subscription of the webview through the
 //!   manager, and each sink also carries the [`PageToken`] of the page that asked for it, so a sink
-//!   registered while the reload was starting fails its first send instead of lingering.
+//!   registered while the reload was starting fails its first send instead of lingering (see
+//!   [`Pages`] for an attach whose handler starts only after the reload began).
 //! - **Startup** ([`start_chats`]): the chat store takes the opened store and the owner lock, then
 //!   the leftover registry, the sweep and log retention (in the background), one redactor shared by
 //!   the env resolver, the protocol logs and the manager, the detector, and the manager itself.
@@ -58,29 +59,66 @@ use crate::sync::lock;
 
 /// Each webview's current page. A page that starts loading gets a new generation, and every
 /// [`PageToken`] taken for the page before goes stale.
+///
+/// A command does not say which page sent it, and its handler can start after the next page began
+/// loading: an attach the old page sent just before a reload would then get the new page's token
+/// for a channel nobody reads (sending to it still succeeds), keeping that chat's frames flowing
+/// into the webview and holding one of its subscriptions. So while a page loads, until the new
+/// page subscribes to chat-list updates (the app store's first call) or finishes loading, a chat
+/// view's token is stale from the start: its sink goes at its first frame, and a view of the new
+/// page that met this joins again when its channel ends.
 #[derive(Debug, Default)]
 pub struct Pages {
-    generations: Mutex<HashMap<String, Arc<AtomicU64>>>,
+    pages: Mutex<HashMap<String, Page>>,
+}
+
+#[derive(Debug, Default)]
+struct Page {
+    generation: Arc<AtomicU64>,
+    /// A page started loading and has not shown itself yet.
+    loading: bool,
 }
 
 impl Pages {
-    fn counter(&self, label: &str) -> Arc<AtomicU64> {
-        Arc::clone(lock(&self.generations).entry(label.to_owned()).or_default())
+    fn token(&self, label: &str, settles: bool) -> PageToken {
+        let mut pages = lock(&self.pages);
+        let page = pages.entry(label.to_owned()).or_default();
+        if settles {
+            page.loading = false;
+        }
+        let generation = page.generation.load(Ordering::Acquire);
+        PageToken {
+            counter: Arc::clone(&page.generation),
+            generation: (!page.loading).then_some(generation),
+        }
     }
 
-    /// The page `label` shows now, for a sink made now.
-    pub fn current(&self, label: &str) -> PageToken {
-        let counter = self.counter(label);
-        let generation = counter.load(Ordering::Acquire);
-        PageToken {
-            counter,
-            generation,
-        }
+    /// The page a chat view's sink is made for now: stale from the start while a page loads,
+    /// since the call may come from the page before it.
+    pub fn for_view(&self, label: &str) -> PageToken {
+        self.token(label, false)
+    }
+
+    /// The page a status channel's sink is made for now. The app store subscribes before anything
+    /// else, so this is the new page's first call after a load: the page is settled from here on.
+    pub fn for_status(&self, label: &str) -> PageToken {
+        self.token(label, true)
     }
 
     /// A new page started loading in `label`.
     pub fn page_started(&self, label: &str) {
-        self.counter(label).fetch_add(1, Ordering::AcqRel);
+        let mut pages = lock(&self.pages);
+        let page = pages.entry(label.to_owned()).or_default();
+        page.generation.fetch_add(1, Ordering::AcqRel);
+        page.loading = true;
+    }
+
+    /// The page in `label` finished loading: whatever the page before it sent was handled long
+    /// before.
+    pub fn page_finished(&self, label: &str) {
+        if let Some(page) = lock(&self.pages).get_mut(label) {
+            page.loading = false;
+        }
     }
 }
 
@@ -88,19 +126,20 @@ impl Pages {
 #[derive(Debug, Clone)]
 pub struct PageToken {
     counter: Arc<AtomicU64>,
-    generation: u64,
+    /// `None`: made while a page loaded, so stale from the start.
+    generation: Option<u64>,
 }
 
 impl PageToken {
     /// Whether that page is still the one its webview shows.
     pub fn is_current(&self) -> bool {
-        self.counter.load(Ordering::Acquire) == self.generation
+        self.generation == Some(self.counter.load(Ordering::Acquire))
     }
 }
 
 /// What a page load does: one that starts has new channel callbacks, so the webview's old
-/// subscriptions are dropped (`drop_owner`, the manager's) and their sinks fail from now on. A
-/// finished load changes nothing. Returns whether the subscriptions were dropped.
+/// subscriptions are dropped (`drop_owner`, the manager's) and their sinks fail from now on; a
+/// finished one settles the page. Returns whether the subscriptions were dropped.
 pub fn page_load(
     pages: &Pages,
     label: &str,
@@ -113,7 +152,10 @@ pub fn page_load(
             drop_owner(label);
             true
         }
-        PageLoadEvent::Finished => false,
+        PageLoadEvent::Finished => {
+            pages.page_finished(label);
+            false
+        }
     }
 }
 
@@ -1021,7 +1063,7 @@ mod tests {
         let pages = Pages::default();
         let seen = Arc::new(Mutex::new(Vec::new()));
         let fail = Arc::new(AtomicBool::new(false));
-        let sink = ChannelSink::new(recording(&seen, &fail), "main", pages.current("main"));
+        let sink = ChannelSink::new(recording(&seen, &fail), "main", pages.for_view("main"));
         assert_eq!(sink.owner(), "main");
         sink.send(&frame("c1", 7)).expect("sent");
         let sent = lock(&seen).clone();
@@ -1038,11 +1080,12 @@ mod tests {
         let pages = Pages::default();
         let seen = Arc::new(Mutex::new(Vec::new()));
         let fail = Arc::new(AtomicBool::new(false));
-        let sink = ChannelSink::new(recording(&seen, &fail), "main", pages.current("main"));
+        let sink = ChannelSink::new(recording(&seen, &fail), "main", pages.for_view("main"));
         fail.store(true, Ordering::Release);
         assert_eq!(sink.send(&frame("c1", 0)), Err(SinkGone));
 
-        let status = StatusChannelSink::new(recording(&seen, &fail), "main", pages.current("main"));
+        let status =
+            StatusChannelSink::new(recording(&seen, &fail), "main", pages.for_status("main"));
         let update = ChatStatusUpdate {
             chat_id: "c1".into(),
             status: aura_protocol::SessionStatus::Ready,
@@ -1056,25 +1099,34 @@ mod tests {
         assert!(lock(&seen)[0].contains("\"status\":\"ready\""));
     }
 
+    /// Counts its drops: a channel holding one shows when its last clone went, which for a
+    /// channel the page made is when Tauri ends it on the JavaScript side.
+    struct Counted(Arc<AtomicUsize>);
+
+    impl Drop for Counted {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::AcqRel);
+        }
+    }
+
+    /// A channel that accepts everything and counts its drop in `dropped`.
+    fn counted<T>(dropped: &Arc<AtomicUsize>) -> Channel<T> {
+        let guard = Counted(Arc::clone(dropped));
+        Channel::new(move |_| {
+            let _keep = &guard;
+            Ok(())
+        })
+    }
+
     /// Detaching drops the manager's clone of the sink, the last one: Tauri then ends the
     /// JavaScript channel.
     #[test]
     fn dropping_the_sink_drops_its_channel() {
-        struct Counted(Arc<AtomicUsize>);
-        impl Drop for Counted {
-            fn drop(&mut self) {
-                self.0.fetch_add(1, Ordering::AcqRel);
-            }
-        }
         let dropped = Arc::new(AtomicUsize::new(0));
-        let guard = Counted(Arc::clone(&dropped));
-        let channel = Channel::<EventBatch>::new(move |_| {
-            let _keep = &guard;
-            Ok(())
-        });
+        let channel = counted::<EventBatch>(&dropped);
         let pages = Pages::default();
         let sink: Arc<dyn FrameSink> =
-            Arc::new(ChannelSink::new(channel, "main", pages.current("main")));
+            Arc::new(ChannelSink::new(channel, "main", pages.for_view("main")));
         let manager_clone = Arc::clone(&sink);
         drop(sink);
         assert_eq!(
@@ -1091,11 +1143,19 @@ mod tests {
         let pages = Pages::default();
         let seen = Arc::new(Mutex::new(Vec::new()));
         let fail = Arc::new(AtomicBool::new(false));
-        let old_view = ChannelSink::new(recording(&seen, &fail), "main", pages.current("main"));
+        let view =
+            |label: &str| ChannelSink::new(recording(&seen, &fail), label, pages.for_view(label));
+        let update = ChatStatusUpdate {
+            chat_id: "c1".into(),
+            status: aura_protocol::SessionStatus::Stopped,
+            needs_attention: false,
+            title: None,
+            updated_at: 0,
+        };
+        let old_view = view("main");
         let old_status =
-            StatusChannelSink::new(recording(&seen, &fail), "main", pages.current("main"));
-        let other_window =
-            ChannelSink::new(recording(&seen, &fail), "other", pages.current("other"));
+            StatusChannelSink::new(recording(&seen, &fail), "main", pages.for_status("main"));
+        let other_window = view("other");
         old_view.send(&frame("c1", 0)).expect("the page is current");
 
         let mut dropped = Vec::new();
@@ -1105,7 +1165,7 @@ mod tests {
             PageLoadEvent::Finished,
             |owner| { dropped.push(owner.to_owned()) }
         ));
-        assert!(dropped.is_empty(), "a finished load changes nothing");
+        assert!(dropped.is_empty(), "a finished load drops nothing");
         old_view.send(&frame("c1", 1)).expect("still current");
 
         assert!(page_load(&pages, "main", PageLoadEvent::Started, |owner| {
@@ -1119,22 +1179,117 @@ mod tests {
         // Every sink of the old page fails from now on, so one the manager registered while the
         // reload started is removed at its first frame instead of lingering.
         assert_eq!(old_view.send(&frame("c1", 2)), Err(SinkGone));
-        let update = ChatStatusUpdate {
-            chat_id: "c1".into(),
-            status: aura_protocol::SessionStatus::Stopped,
-            needs_attention: false,
-            title: None,
-            updated_at: 0,
-        };
         assert_eq!(old_status.send(&update), Err(SinkGone));
         other_window
             .send(&frame("c2", 0))
             .expect("another webview keeps its subscriptions");
-        let new_view = ChannelSink::new(recording(&seen, &fail), "main", pages.current("main"));
-        new_view
-            .send(&frame("c1", 3))
+        // An attach the old page sent just before the reload, whose handler starts only now,
+        // cannot tell the pages apart: its sink is stale from the start.
+        assert_eq!(view("main").send(&frame("c1", 3)), Err(SinkGone));
+
+        // The new page subscribes to chat-list updates before anything else; from then on its
+        // views work.
+        let new_status =
+            StatusChannelSink::new(recording(&seen, &fail), "main", pages.for_status("main"));
+        new_status
+            .send(&update)
+            .expect("the new page's status channel works");
+        view("main")
+            .send(&frame("c1", 4))
             .expect("the new page's views work");
-        assert_eq!(lock(&seen).len(), 4);
+
+        // A page that never subscribes is settled once it has loaded.
+        page_load(&pages, "main", PageLoadEvent::Started, |_| {});
+        assert_eq!(view("main").send(&frame("c1", 5)), Err(SinkGone));
+        page_load(&pages, "main", PageLoadEvent::Finished, |_| {});
+        view("main")
+            .send(&frame("c1", 6))
+            .expect("settled once loaded");
+        assert_eq!(lock(&seen).len(), 6);
+    }
+
+    /// The same through the session manager the app wires `page_load` to: a page that starts
+    /// loading ends its webview's chat view and status channel, and leaves another webview's. The
+    /// manager in this branch is P0's skeleton, whose chat calls answer that sessions are not
+    /// built; the test stops there until package C's manager is merged.
+    #[tokio::test]
+    async fn page_load_ends_the_webviews_channels_in_the_manager() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut booted = boot(Ok(DataRoot::at(dir.path().join("data"))));
+        let chats = testing::start(&mut booted).expect("chats");
+        let folder = dir.path().join("project");
+        std::fs::create_dir(&folder).expect("a chat folder");
+        let chat = match chats.manager.create_chat("mock", &folder).await {
+            Ok(chat) => chat,
+            Err(aura_core::session::SessionError::Internal(message))
+                if message.contains("not implemented in this build") =>
+            {
+                assert!(chats.store.shutdown(QUIT_STORE_DEADLINE).await);
+                return;
+            }
+            Err(error) => panic!("could not create a chat: {error}"),
+        };
+        let pages = Pages::default();
+        let ended = [(); 3].map(|()| Arc::new(AtomicUsize::new(0)));
+        let [view, status, other] = &ended;
+        chats
+            .manager
+            .attach(
+                &chat.id,
+                Arc::new(ChannelSink::new(
+                    counted(view),
+                    "main",
+                    pages.for_view("main"),
+                )),
+            )
+            .await
+            .expect("attach");
+        chats
+            .manager
+            .status_subscribe(Arc::new(StatusChannelSink::new(
+                counted(status),
+                "main",
+                pages.for_status("main"),
+            )));
+        chats
+            .manager
+            .attach(
+                &chat.id,
+                Arc::new(ChannelSink::new(
+                    counted(other),
+                    "other",
+                    pages.for_view("other"),
+                )),
+            )
+            .await
+            .expect("attach from another webview");
+
+        assert!(page_load(&pages, "main", PageLoadEvent::Started, |owner| {
+            chats.manager.drop_owner(owner);
+        }));
+        for _ in 0..500 {
+            if view.load(Ordering::Acquire) == 1 && status.load(Ordering::Acquire) == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            view.load(Ordering::Acquire),
+            1,
+            "the chat view's channel ended"
+        );
+        assert_eq!(
+            status.load(Ordering::Acquire),
+            1,
+            "the status channel ended"
+        );
+        assert_eq!(
+            other.load(Ordering::Acquire),
+            0,
+            "another webview keeps its view"
+        );
+        chats.manager.shutdown_all(QUIT_SESSIONS_DEADLINE).await;
+        assert!(chats.store.shutdown(QUIT_STORE_DEADLINE).await);
     }
 
     #[test]

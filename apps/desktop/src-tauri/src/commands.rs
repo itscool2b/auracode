@@ -278,7 +278,7 @@ pub async fn chat_attach(
 ) -> Result<ChatAttach, AppError> {
     let manager = state.sessions()?;
     let owner = webview.label().to_owned();
-    let page = state.pages.current(&owner);
+    let page = state.pages.for_view(&owner);
     let sink = Arc::new(ChannelSink::new(channel, owner, page));
     Ok(manager.attach(&chat_id, sink).await?)
 }
@@ -510,7 +510,7 @@ pub fn status_subscribe(
 ) -> Result<String, AppError> {
     let manager = state.sessions()?;
     let owner = webview.label().to_owned();
-    let page = state.pages.current(&owner);
+    let page = state.pages.for_status(&owner);
     Ok(manager.status_subscribe(Arc::new(StatusChannelSink::new(channel, owner, page))))
 }
 
