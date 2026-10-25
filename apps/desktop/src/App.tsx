@@ -23,6 +23,7 @@ import { LATE_NOTICE_CHECKS_MS, withLateNotices } from "./lib/notices";
 import { afterPaint, whenPainted } from "./lib/ready";
 import { isRunning, type StreamStore } from "./lib/session";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
+import { runChatSmoke } from "./lib/smokeChat";
 import { activityOf } from "./lib/stream";
 import { DEFAULT_STRESS } from "./lib/stress";
 
@@ -123,6 +124,7 @@ export function App({
         console.error("auracode: window_ready failed", error);
       }
       if (boot.status === "ready" && boot.info.launch.type === "smoke") {
+        const { plan } = boot.info.launch;
         const hooks: SmokeHooks = {
           store,
           showHome: async () => {
@@ -141,7 +143,15 @@ export function App({
           },
           settle: () => afterPaint(500),
         };
-        const report = await runSmoke(boot.info, hooks);
+        const report =
+          plan.scenario === "stream"
+            ? await runSmoke(boot.info, hooks)
+            : await runChatSmoke(boot.info, plan, {
+                showChats: async () => {
+                  setView("chats");
+                  await afterPaint(500);
+                },
+              });
         try {
           await sendSmokeReport(report);
         } catch (error) {
