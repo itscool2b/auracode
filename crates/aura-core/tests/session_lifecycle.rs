@@ -290,7 +290,11 @@ async fn folder_permission_denied_is_not_missing() {
     assert_eq!(listed[0].folder_state, FolderState::NotAllowed);
 }
 
-/// P38: refreshing the agents (a re-probe) while one runs leaves the running process alone.
+/// P38, as far as fixed agents reach: refreshing the agents (a re-probe) while one runs sends the
+/// running agent nothing and leaves its process alone. Nothing in the manager reacts to detection,
+/// and a fixed agent cannot change its answer mid-test, so this cannot fail today: the case itself,
+/// an agent updated or removed while running, stays open for phase 2 with real detection
+/// (`agents_refresh` while a session runs, its binary removed or upgraded).
 #[tokio::test(start_paused = true)]
 async fn refresh_keeps_live_sessions() {
     let options = Options {
