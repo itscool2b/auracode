@@ -11,6 +11,8 @@
 //! 4. Every queued prompt is held: auracode never sends a message on its own after a restart.
 //!
 //! The partial answer survives; no tool update is invented. Each chat recovers in one transaction.
+//! Requests are found with SQLite's JSON functions, so no payload is deserialized, and startup
+//! recovery reads only the request rows stored outside turns.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -78,7 +80,12 @@ fn is_fatal(error: &rusqlite::Error) -> bool {
     )
 }
 
-/// Chats with a running turn, an unanswered request, or an ended turn not compacted yet.
+/// Chats with a running turn, an ended turn not compacted yet, or an unanswered request outside any
+/// turn.
+///
+/// Only untagged request rows are read: the actor resolves a turn's open requests before its
+/// `TurnEnded`, in the same op, so a turn that ended keeps none open, and a running turn is found
+/// through `turns`. Per-chat recovery reads all of a chat's request rows.
 fn chats_needing_recovery(conn: &Connection) -> rusqlite::Result<Vec<String>> {
     let mut chats = BTreeSet::new();
     let mut running =
@@ -92,17 +99,9 @@ fn chats_needing_recovery(conn: &Connection) -> rusqlite::Result<Vec<String>> {
     for chat in uncompacted.query_map([], |row| row.get::<_, String>(0))? {
         chats.insert(chat?);
     }
-    let mut requests = conn.prepare(
-        "SELECT chat_id, payload FROM events \
-         WHERE kind IN ('permission_requested', 'permission_resolved', 'ui_request', 'ui_resolved') \
-         ORDER BY chat_id, seq",
-    )?;
-    let mut open: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for row in requests.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })? {
-        let (chat_id, payload) = row?;
-        track_request(open.entry(chat_id).or_default(), &payload);
+    let mut open: BTreeMap<String, Vec<OpenRequest>> = BTreeMap::new();
+    for row in request_rows(conn, None)? {
+        track(open.entry(row.chat_id.clone()).or_default(), row);
     }
     chats.extend(
         open.into_iter()
@@ -112,26 +111,69 @@ fn chats_needing_recovery(conn: &Connection) -> rusqlite::Result<Vec<String>> {
     Ok(chats.into_iter().collect())
 }
 
-/// Adds a request id on its request and removes it on its resolution.
-fn track_request(open: &mut BTreeSet<String>, payload: &str) {
-    match serde_json::from_str::<AuraEvent>(payload) {
-        Ok(AuraEvent::PermissionRequested(request)) => {
-            open.insert(request.request_id);
-        }
-        Ok(AuraEvent::UiRequest(request)) => {
-            // A notification is never open: nothing answers it.
-            if !matches!(request.prompt, aura_protocol::UiPrompt::Notify { .. }) {
-                open.insert(request.request_id);
-            }
-        }
-        Ok(
-            AuraEvent::PermissionResolved { request_id, .. }
-            | AuraEvent::UiResolved { request_id, .. },
-        ) => {
-            open.remove(&request_id);
-        }
-        _ => {}
+/// The kinds of request and resolution rows, as SQL.
+const REQUEST_KINDS: &str =
+    "'permission_requested', 'permission_resolved', 'ui_request', 'ui_resolved'";
+
+/// A request or resolution row, as SQLite's JSON functions read it: its payload is never
+/// deserialized.
+struct RequestRow {
+    chat_id: String,
+    kind: String,
+    turn_id: Option<String>,
+    request_id: String,
+}
+
+/// The request and resolution rows of one chat, or the untagged ones of every chat (`None`), in seq
+/// order per chat. A row that is not JSON or has no text `request_id` is skipped, as is a
+/// notification: nothing answers it, so it is never open.
+fn request_rows(conn: &Connection, chat_id: Option<&str>) -> rusqlite::Result<Vec<RequestRow>> {
+    let scope = if chat_id.is_some() {
+        "chat_id = ?1"
+    } else {
+        "turn_id IS NULL"
+    };
+    // `doc` is NULL for any other row and for one that is not JSON, whatever order SQLite checks
+    // the terms in (a CASE decides in order), so the JSON functions parse request payloads only.
+    let sql = format!(
+        "SELECT chat_id, kind, turn_id, json_extract(doc, '$.request_id') FROM ( \
+             SELECT chat_id, seq, kind, turn_id, \
+                 CASE WHEN kind IN ({REQUEST_KINDS}) \
+                     THEN CASE WHEN json_valid(payload) THEN payload END END AS doc \
+             FROM events WHERE kind IN ({REQUEST_KINDS}) AND {scope}) \
+         WHERE json_type(doc, '$.request_id') = 'text' \
+           AND (kind <> 'ui_request' OR json_extract(doc, '$.prompt.type') <> 'notify') \
+         ORDER BY chat_id, seq"
+    );
+    let mut stmt = conn.prepare_cached(&sql)?;
+    let read = |row: &rusqlite::Row<'_>| {
+        Ok(RequestRow {
+            chat_id: row.get(0)?,
+            kind: row.get(1)?,
+            turn_id: row.get(2)?,
+            request_id: row.get(3)?,
+        })
+    };
+    match chat_id {
+        Some(chat_id) => stmt.query_map(params![chat_id], read)?.collect(),
+        None => stmt.query_map([], read)?.collect(),
     }
+}
+
+/// Follows one chat's request rows in seq order: a request opens its id (in its own turn), a
+/// resolution closes it.
+fn track(open: &mut Vec<OpenRequest>, row: RequestRow) {
+    open.retain(|request| request.id != row.request_id);
+    let question = match row.kind.as_str() {
+        "permission_requested" => false,
+        "ui_request" => true,
+        _ => return,
+    };
+    open.push(OpenRequest {
+        id: row.request_id,
+        question,
+        turn_id: row.turn_id,
+    });
 }
 
 /// The rows recovery adds, numbered from the chat's next seq.
@@ -284,40 +326,12 @@ fn saved_end(conn: &Connection, chat_id: &str, turn_id: &str) -> rusqlite::Resul
     }))
 }
 
-/// The chat's requests that never got a resolution, in seq order.
+/// The chat's requests that never got a resolution, in the order they were asked (a request asked
+/// again counts once, in its last turn).
 fn open_requests(conn: &Connection, chat_id: &str) -> rusqlite::Result<Vec<OpenRequest>> {
-    let mut stmt = conn.prepare_cached(
-        "SELECT turn_id, payload FROM events WHERE chat_id = ?1 \
-         AND kind IN ('permission_requested', 'permission_resolved', 'ui_request', 'ui_resolved') ORDER BY seq",
-    )?;
-    let mut open: Vec<OpenRequest> = Vec::new();
-    for row in stmt.query_map(params![chat_id], |row| {
-        Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?))
-    })? {
-        let (turn_id, payload) = row?;
-        match serde_json::from_str::<AuraEvent>(&payload) {
-            Ok(AuraEvent::PermissionRequested(request)) => open.push(OpenRequest {
-                id: request.request_id,
-                question: false,
-                turn_id,
-            }),
-            Ok(AuraEvent::UiRequest(request)) => {
-                if !matches!(request.prompt, aura_protocol::UiPrompt::Notify { .. }) {
-                    open.push(OpenRequest {
-                        id: request.request_id,
-                        question: true,
-                        turn_id,
-                    });
-                }
-            }
-            Ok(
-                AuraEvent::PermissionResolved { request_id, .. }
-                | AuraEvent::UiResolved { request_id, .. },
-            ) => {
-                open.retain(|request| request.id != request_id);
-            }
-            _ => {}
-        }
+    let mut open = Vec::new();
+    for row in request_rows(conn, Some(chat_id))? {
+        track(&mut open, row);
     }
     Ok(open)
 }
@@ -695,6 +709,141 @@ mod tests {
             ]
         );
         assert!(rows::queued(db.conn(), &chat).expect("queue")[0].held);
+    }
+
+    /// Startup recovery finds unanswered requests with SQLite's JSON functions and reads only
+    /// untagged rows: a request asked twice is resolved once, a row that is not JSON and a
+    /// notification are skipped, and a chat with nothing open is left alone. A request a turn left
+    /// open breaks the actor's invariant; per-chat recovery, which reads every row, still resolves it.
+    #[test]
+    fn recovery_finds_open_requests_without_deserializing() {
+        let mut db = TestDb::new();
+        let lone = db.chat("/lone");
+        let mut garbage = event_row(2, None, &permission("x"));
+        garbage.payload = "not json".into();
+        db.append(
+            &lone,
+            &[
+                event_row(0, None, &permission("a1")),
+                event_row(1, None, &permission("a1")),
+                garbage,
+                event_row(
+                    3,
+                    None,
+                    &AuraEvent::UiRequest(UiRequest {
+                        request_id: "a2".into(),
+                        prompt: UiPrompt::Notify {
+                            message: "fyi".into(),
+                        },
+                    }),
+                ),
+                event_row(4, None, &question("a3")),
+                event_row(
+                    5,
+                    None,
+                    &AuraEvent::UiResolved {
+                        request_id: "a3".into(),
+                        answer: None,
+                        by: ResolvedBy::User,
+                    },
+                ),
+            ],
+        );
+        let quiet = db.chat("/quiet");
+        let odd = db.chat("/odd");
+        for (chat, turn) in [(&quiet, "tq"), (&odd, "to")] {
+            db.turn(chat, turn, 1, 0);
+            db.conn()
+                .execute(
+                    "UPDATE turns SET status = 'completed', compacted_at = 1 WHERE id = ?1",
+                    params![turn],
+                )
+                .expect("ended and compacted");
+        }
+        let resolved = |id: &str| AuraEvent::PermissionResolved {
+            request_id: id.into(),
+            decision: PermissionDecision::Cancelled,
+            by: ResolvedBy::User,
+        };
+        db.append(
+            &quiet,
+            &[
+                event_row(0, Some("tq"), &permission("q1")),
+                event_row(1, Some("tq"), &resolved("q1")),
+                event_row(2, None, &permission("q2")),
+                event_row(3, None, &resolved("q2")),
+            ],
+        );
+        db.append(&odd, &[event_row(0, Some("to"), &permission("o1"))]);
+
+        let report = recover(
+            db.store.conn_mut(),
+            Scope::All,
+            "dev",
+            &CompactLimits::STANDARD,
+            9,
+        )
+        .expect("recover");
+        assert_eq!(
+            report,
+            RecoveryReport {
+                interrupted_turns: 0,
+                resolved_requests: 1,
+                compacted_turns: 0
+            }
+        );
+        let added: String = db
+            .conn()
+            .query_row(
+                "SELECT payload FROM events WHERE chat_id = ?1 AND seq = 6",
+                params![lone],
+                |row| row.get(0),
+            )
+            .expect("one resolution");
+        assert_eq!(
+            serde_json::from_str::<AuraEvent>(&added).expect("parse"),
+            AuraEvent::PermissionResolved {
+                request_id: "a1".into(),
+                decision: PermissionDecision::Cancelled,
+                by: ResolvedBy::System
+            }
+        );
+        let count = |chat: &str| -> i64 {
+            db.conn()
+                .query_row(
+                    "SELECT count(*) FROM events WHERE chat_id = ?1",
+                    params![chat],
+                    |row| row.get(0),
+                )
+                .expect("count")
+        };
+        assert_eq!(
+            (count(&lone), count(&quiet), count(&odd)),
+            (7, 4, 1),
+            "only the lone chat changed"
+        );
+
+        let odd_report = recover(
+            db.store.conn_mut(),
+            Scope::Chat(&odd),
+            "dev",
+            &CompactLimits::STANDARD,
+            10,
+        )
+        .expect("per chat");
+        assert_eq!(odd_report.resolved_requests, 1);
+        assert_eq!(
+            db.events(&odd)[1],
+            (
+                1,
+                None,
+                AuraEvent::PermissionResolved {
+                    request_id: "o1".into(),
+                    decision: PermissionDecision::Cancelled,
+                    by: ResolvedBy::System
+                }
+            )
+        );
     }
 
     #[test]
