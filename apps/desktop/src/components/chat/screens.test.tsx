@@ -15,7 +15,7 @@ import {
   sessionInfo,
 } from "../../lib/chat/testing";
 import { applyEntries, emptyTranscript, renderTranscript } from "../../lib/chat/transcript";
-import { Banners, envBanner, storageBanner } from "./Banners";
+import { Banners, envBanner, RecoveryBannerView, storageBanner } from "./Banners";
 import { ChatList, projectName, projectsOf } from "./ChatList";
 import { StillWorking } from "./ChatView";
 import { StopButton } from "./Composer";
@@ -455,6 +455,40 @@ describe("turns and the transcript", () => {
 });
 
 describe("the banners", () => {
+  it("show the database repair notice until the shell confirms its dismissal", () => {
+    const message = "Your database was damaged, so auracode rebuilt it.";
+    const shown = renderToStaticMarkup(
+      <RecoveryBannerView
+        message={message}
+        state={{ status: "shown", problem: null }}
+        onDismiss={noop}
+      />,
+    );
+    expect(shown).toContain(message);
+    expect(buttons(shown)).toEqual([{ label: "Dismiss", disabled: false }]);
+    const busy = renderToStaticMarkup(
+      <RecoveryBannerView message={message} state={{ status: "dismissing" }} onDismiss={noop} />,
+    );
+    expect(buttons(busy)).toEqual([{ label: "Dismissing…", disabled: true }]);
+    const failed = renderToStaticMarkup(
+      <RecoveryBannerView
+        message={message}
+        state={{
+          status: "shown",
+          problem: "Could not dismiss the notice: the database is closed.",
+        }}
+        onDismiss={noop}
+      />,
+    );
+    expect(failed).toContain('role="alert"');
+    expect(failed).toContain("the database is closed.");
+    expect(
+      renderToStaticMarkup(
+        <RecoveryBannerView message={message} state={{ status: "dismissed" }} onDismiss={noop} />,
+      ),
+    ).toBe("");
+  });
+
   it("show paused or failed saving, the env fallback with Retry, and notices", () => {
     expect(storageBanner(null)).toBeNull();
     expect(storageBanner({ state: { state: "ok" }, unsaved_bytes: 0 })).toBeNull();

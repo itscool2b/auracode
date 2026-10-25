@@ -24,6 +24,8 @@
   --ui-text-muted: var(--aura-text-3);
   --ui-text-faint: var(--aura-text-4);
   --ui-text-on-accent: var(--aura-text-on-accent);
+  --ui-text-link: color-mix(in oklab, var(--aura-accent) 80%, white);
+  --ui-text-link-underline: color-mix(in oklab, var(--aura-accent) 40%, transparent);
 
   /* Borders */
   --ui-border-width: var(--aura-hairline);
@@ -58,6 +60,7 @@
   --ui-size-xl: 20px;
   --ui-leading-tight: 1.3;
   --ui-leading-body: 1.55;
+  --ui-leading-prose: 1.65;
   --ui-weight-regular: 400;
   --ui-weight-medium: 500;
   --ui-weight-strong: 600;

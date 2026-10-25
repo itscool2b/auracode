@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { EnvStatus, StorageStatus } from "../../bindings";
-import { RecoveryNotice } from "../RecoveryNotice";
+import { type DismissState, SHOWN } from "../../lib/dismiss";
+import { dismissRecovery } from "../RecoveryNotice";
 
 /** The sentence a storage problem shows, or `null` while saving runs. */
 export function storageBanner(storage: StorageStatus | null): string | null {
@@ -68,7 +69,7 @@ export function Banners({
         </li>
       ) : null}
       {recoveryNotice !== null ? (
-        <RecoveryNotice message={recoveryNotice} onDismissed={onRecoveryDismissed} />
+        <RecoveryBanner message={recoveryNotice} onDismissed={onRecoveryDismissed} />
       ) : null}
       {shown.map((notice) => (
         <li key={notice} className="chat-banner">
@@ -84,5 +85,63 @@ export function Banners({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * The database repair notice: it shows on every launch until dismissed here, because whatever the
+ * repair could not save is only in the damaged copy it names. The shell must confirm first.
+ */
+export function RecoveryBanner({
+  message,
+  onDismissed,
+}: {
+  readonly message: string;
+  readonly onDismissed: () => void;
+}) {
+  const [state, setState] = useState<DismissState>(SHOWN);
+  return (
+    <RecoveryBannerView
+      message={message}
+      state={state}
+      onDismiss={() => {
+        void dismissRecovery(setState, onDismissed);
+      }}
+    />
+  );
+}
+
+/** What `RecoveryBanner` shows in `state`. */
+export function RecoveryBannerView({
+  message,
+  state,
+  onDismiss,
+}: {
+  readonly message: string;
+  readonly state: DismissState;
+  readonly onDismiss: () => void;
+}) {
+  if (state.status === "dismissed") return null;
+  return (
+    <li className="chat-banner" data-level="warning">
+      <span>
+        {message}
+        {state.status === "shown" && state.problem !== null ? (
+          <span role="alert" className="ui-error">
+            {" "}
+            {state.problem}
+          </span>
+        ) : null}
+      </span>
+      <button
+        type="button"
+        className="ui-button"
+        data-kind="quiet"
+        disabled={state.status === "dismissing"}
+        onClick={onDismiss}
+      >
+        {state.status === "dismissing" ? "Dismissing…" : "Dismiss"}
+      </button>
+    </li>
   );
 }

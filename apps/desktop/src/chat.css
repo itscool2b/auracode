@@ -689,6 +689,107 @@
     white-space: nowrap;
   }
 
+  /* The agent's markdown (M0's Answer) inside the chat screens, through the same tokens. */
+  .chat-app .answer {
+    font-size: var(--ui-size-md);
+    line-height: var(--ui-leading-prose);
+    color: var(--ui-text-primary);
+    user-select: text;
+  }
+
+  .chat-app .md-block + .md-block {
+    margin-top: var(--ui-space-4);
+  }
+
+  .chat-app .answer h1,
+  .chat-app .answer h2,
+  .chat-app .answer h3,
+  .chat-app .answer h4 {
+    margin: var(--ui-space-2) 0 0;
+    font-size: var(--ui-size-lg);
+    font-weight: var(--ui-weight-strong);
+    line-height: var(--ui-leading-tight);
+  }
+
+  .chat-app .answer h1 {
+    font-size: var(--ui-size-xl);
+  }
+
+  .chat-app .answer p + p {
+    margin-top: var(--ui-space-3);
+  }
+
+  .chat-app .answer ul,
+  .chat-app .answer ol {
+    padding-left: var(--ui-space-6);
+  }
+
+  .chat-app .answer li {
+    margin: var(--ui-space-1) 0;
+  }
+
+  .chat-app .answer li::marker {
+    color: var(--ui-text-muted);
+  }
+
+  .chat-app .answer :not(pre) > code {
+    padding: var(--ui-space-1) var(--ui-space-2);
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-surface-raised);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-size-sm);
+  }
+
+  .chat-app .answer pre {
+    padding: var(--ui-space-4) var(--ui-space-5);
+    border: var(--ui-border-width) solid var(--ui-border-subtle);
+    border-radius: var(--ui-radius-lg);
+    background: var(--ui-surface-code);
+    font-family: var(--ui-font-mono);
+    font-size: var(--ui-size-sm);
+    line-height: var(--ui-leading-prose);
+  }
+
+  .chat-app .code-lang {
+    margin-bottom: var(--ui-space-2);
+    font-family: var(--ui-font-body);
+    font-size: var(--ui-size-xs);
+    letter-spacing: var(--ui-tracking-caps);
+    color: var(--ui-text-faint);
+  }
+
+  .chat-app .answer blockquote {
+    padding-left: var(--ui-space-4);
+    border-left: var(--ui-focus-width) solid var(--ui-border-strong);
+    color: var(--ui-text-secondary);
+  }
+
+  .chat-app .answer hr {
+    height: var(--ui-border-width);
+    margin: var(--ui-space-3) 0;
+    background: var(--ui-border-default);
+  }
+
+  .chat-app .answer table {
+    font-size: var(--ui-size-sm);
+  }
+
+  .chat-app .answer th,
+  .chat-app .answer td {
+    padding: var(--ui-space-2) var(--ui-space-4);
+    border-bottom: var(--ui-border-width) solid var(--ui-border-subtle);
+  }
+
+  .chat-app .answer th {
+    font-weight: var(--ui-weight-strong);
+    color: var(--ui-text-secondary);
+  }
+
+  .chat-app .answer a {
+    color: var(--ui-text-link);
+    text-decoration-color: var(--ui-text-link-underline);
+  }
+
   .chat-centered {
     margin: auto;
     padding: var(--ui-space-6);
