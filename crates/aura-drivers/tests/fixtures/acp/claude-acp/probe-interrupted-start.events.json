@@ -1,0 +1,25 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    }
+  ],
+  "replies": [],
+  "exit": {
+    "type": "start_failed",
+    "data": {
+      "kind": "agent_exited",
+      "message": "The agent exited before it finished starting (exit code 0).",
+      "detail": "[session/create] sessionId=<SESSION_1> phase=validate-cwd durationMs=1 totalMs=1\n[session/models] sessionId=<SESSION_1> phase=read-transcript durationMs=1 totalMs=1 messages=0 model=unknown\n[session/create] sessionId=<SESSION_1> phase=resume-transcript durationMs=3 totalMs=3\n[session/create] sessionId=<SESSION_1> phase=settings durationMs=16 totalMs=19\n[session/query] sessionId=<SESSION_1> resume=<SESSION_1> apiType=native baseUrl=native\n[session/create] sessionId=<SESSION_1> phase=prepare-query durationMs=9 totalMs=28\n"
+    }
+  }
+}

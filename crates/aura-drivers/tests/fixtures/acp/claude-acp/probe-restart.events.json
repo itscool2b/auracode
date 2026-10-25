@@ -1,0 +1,1560 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "notice",
+          "level": "info",
+          "message": "Could not continue the earlier session (Resource not found: <SESSION_1>); started a new one. The conversation above stays here, but the agent does not remember it."
+        }
+      }
+    },
+    {
+      "type": "status",
+      "data": "configuring"
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "mode",
+          "name": "Mode",
+          "description": "Session permission mode",
+          "category": "mode",
+          "kind": {
+            "type": "select",
+            "current": "auto",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Manual",
+                "description": "Always ask before making changes",
+                "group": null
+              },
+              {
+                "value": "acceptEdits",
+                "name": "Accept edits",
+                "description": "Automatically accept all file edits",
+                "group": null
+              },
+              {
+                "value": "plan",
+                "name": "Plan",
+                "description": "Create a plan before making changes",
+                "group": null
+              },
+              {
+                "value": "auto",
+                "name": "Auto",
+                "description": "Claude handles permission decisions",
+                "group": null
+              },
+              {
+                "value": "bypassPermissions",
+                "name": "Bypass permissions",
+                "description": "Accepts all permissions",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "model",
+          "name": "Model",
+          "description": "AI model to use",
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "opus",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default (recommended)",
+                "description": "Opus 5.5",
+                "group": null
+              },
+              {
+                "value": "opus",
+                "name": "Opus 5.5",
+                "description": "For complex work and everyday tasks",
+                "group": null
+              },
+              {
+                "value": "fable",
+                "name": "Fable 5.1",
+                "description": "For your toughest challenges",
+                "group": null
+              },
+              {
+                "value": "sonnet",
+                "name": "Sonnet 5.5",
+                "description": "Most efficient for simpler tasks",
+                "group": null
+              },
+              {
+                "value": "haiku",
+                "name": "Haiku 5.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-haiku-4-5-20251001",
+                "name": "Haiku 4.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-5",
+                "name": "Sonnet 5",
+                "description": "Efficient for routine tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-5",
+                "name": "Opus 5",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-fable-5",
+                "name": "Fable 5",
+                "description": "Most capable for your hardest and longest-running tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-8",
+                "name": "Opus 4.8",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-7",
+                "name": "Opus 4.7",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-6",
+                "name": "Opus 4.6",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-4-6",
+                "name": "Sonnet 4.6",
+                "description": "Efficient for routine tasks",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": "Available effort levels for this model",
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "xhigh",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "low",
+                "name": "Low",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "Medium",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "High",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "xhigh",
+                "name": "Xhigh",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "max",
+                "name": "Max",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "fast",
+          "name": "Fast mode",
+          "description": "Faster responses on supported models",
+          "category": "model_config",
+          "kind": {
+            "type": "toggle",
+            "current": false
+          },
+          "pending": null
+        },
+        {
+          "id": "agent",
+          "name": "Agent",
+          "description": "Main-thread agent persona",
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "default",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": "Standard Claude Code agent",
+                "group": null
+              },
+              {
+                "value": "code-simplifier:code-simplifier",
+                "name": "code-simplifier:code-simplifier",
+                "description": "Simplifies and refines code for clarity, consistency, and maintainability while preserving all functionality. Focuses on recently modified code unless instructed otherwise.",
+                "group": null
+              },
+              {
+                "value": "vercel:ai-architect",
+                "name": "vercel:ai-architect",
+                "description": "Specializes in architecting AI-powered applications on Vercel — choosing between AI SDK patterns, configuring providers, building agents, setting up durable workflows, and integrating MCP servers. Use when designing AI features, building chatbots, or creating agentic applications.",
+                "group": null
+              },
+              {
+                "value": "vercel:deployment-expert",
+                "name": "vercel:deployment-expert",
+                "description": "Specializes in Vercel deployment strategies, CI/CD pipelines, preview URLs, production promotions, rollbacks, environment variables, and domain configuration. Use when troubleshooting deployments, setting up CI/CD, or optimizing the deploy pipeline.",
+                "group": null
+              },
+              {
+                "value": "vercel:performance-optimizer",
+                "name": "vercel:performance-optimizer",
+                "description": "Specializes in optimizing Vercel application performance — Core Web Vitals, rendering strategies, caching, image optimization, font loading, edge computing, and bundle size. Use when investigating slow pages, improving Lighthouse scores, or optimizing loading performance.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "mode",
+          "name": "Mode",
+          "description": "Session permission mode",
+          "category": "mode",
+          "kind": {
+            "type": "select",
+            "current": "bypassPermissions",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Manual",
+                "description": "Always ask before making changes",
+                "group": null
+              },
+              {
+                "value": "acceptEdits",
+                "name": "Accept edits",
+                "description": "Automatically accept all file edits",
+                "group": null
+              },
+              {
+                "value": "plan",
+                "name": "Plan",
+                "description": "Create a plan before making changes",
+                "group": null
+              },
+              {
+                "value": "auto",
+                "name": "Auto",
+                "description": "Claude handles permission decisions",
+                "group": null
+              },
+              {
+                "value": "bypassPermissions",
+                "name": "Bypass permissions",
+                "description": "Accepts all permissions",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "model",
+          "name": "Model",
+          "description": "AI model to use",
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "opus",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default (recommended)",
+                "description": "Opus 5.5",
+                "group": null
+              },
+              {
+                "value": "opus",
+                "name": "Opus 5.5",
+                "description": "For complex work and everyday tasks",
+                "group": null
+              },
+              {
+                "value": "fable",
+                "name": "Fable 5.1",
+                "description": "For your toughest challenges",
+                "group": null
+              },
+              {
+                "value": "sonnet",
+                "name": "Sonnet 5.5",
+                "description": "Most efficient for simpler tasks",
+                "group": null
+              },
+              {
+                "value": "haiku",
+                "name": "Haiku 5.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-haiku-4-5-20251001",
+                "name": "Haiku 4.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-5",
+                "name": "Sonnet 5",
+                "description": "Efficient for routine tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-5",
+                "name": "Opus 5",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-fable-5",
+                "name": "Fable 5",
+                "description": "Most capable for your hardest and longest-running tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-8",
+                "name": "Opus 4.8",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-7",
+                "name": "Opus 4.7",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-6",
+                "name": "Opus 4.6",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-4-6",
+                "name": "Sonnet 4.6",
+                "description": "Efficient for routine tasks",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": "Available effort levels for this model",
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "xhigh",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "low",
+                "name": "Low",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "Medium",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "High",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "xhigh",
+                "name": "Xhigh",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "max",
+                "name": "Max",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "fast",
+          "name": "Fast mode",
+          "description": "Faster responses on supported models",
+          "category": "model_config",
+          "kind": {
+            "type": "toggle",
+            "current": false
+          },
+          "pending": null
+        },
+        {
+          "id": "agent",
+          "name": "Agent",
+          "description": "Main-thread agent persona",
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "default",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": "Standard Claude Code agent",
+                "group": null
+              },
+              {
+                "value": "code-simplifier:code-simplifier",
+                "name": "code-simplifier:code-simplifier",
+                "description": "Simplifies and refines code for clarity, consistency, and maintainability while preserving all functionality. Focuses on recently modified code unless instructed otherwise.",
+                "group": null
+              },
+              {
+                "value": "vercel:ai-architect",
+                "name": "vercel:ai-architect",
+                "description": "Specializes in architecting AI-powered applications on Vercel — choosing between AI SDK patterns, configuring providers, building agents, setting up durable workflows, and integrating MCP servers. Use when designing AI features, building chatbots, or creating agentic applications.",
+                "group": null
+              },
+              {
+                "value": "vercel:deployment-expert",
+                "name": "vercel:deployment-expert",
+                "description": "Specializes in Vercel deployment strategies, CI/CD pipelines, preview URLs, production promotions, rollbacks, environment variables, and domain configuration. Use when troubleshooting deployments, setting up CI/CD, or optimizing the deploy pipeline.",
+                "group": null
+              },
+              {
+                "value": "vercel:performance-optimizer",
+                "name": "vercel:performance-optimizer",
+                "description": "Specializes in optimizing Vercel application performance — Core Web Vitals, rendering strategies, caching, image optimization, font loading, edge computing, and bundle size. Use when investigating slow pages, improving Lighthouse scores, or optimizing loading performance.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "mode",
+          "name": "Mode",
+          "description": "Session permission mode",
+          "category": "mode",
+          "kind": {
+            "type": "select",
+            "current": "bypassPermissions",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Manual",
+                "description": "Always ask before making changes",
+                "group": null
+              },
+              {
+                "value": "acceptEdits",
+                "name": "Accept edits",
+                "description": "Automatically accept all file edits",
+                "group": null
+              },
+              {
+                "value": "plan",
+                "name": "Plan",
+                "description": "Create a plan before making changes",
+                "group": null
+              },
+              {
+                "value": "auto",
+                "name": "Auto",
+                "description": "Claude handles permission decisions",
+                "group": null
+              },
+              {
+                "value": "bypassPermissions",
+                "name": "Bypass permissions",
+                "description": "Accepts all permissions",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "model",
+          "name": "Model",
+          "description": "AI model to use",
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "opus",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default (recommended)",
+                "description": "Opus 5.5",
+                "group": null
+              },
+              {
+                "value": "opus",
+                "name": "Opus 5.5",
+                "description": "For complex work and everyday tasks",
+                "group": null
+              },
+              {
+                "value": "fable",
+                "name": "Fable 5.1",
+                "description": "For your toughest challenges",
+                "group": null
+              },
+              {
+                "value": "sonnet",
+                "name": "Sonnet 5.5",
+                "description": "Most efficient for simpler tasks",
+                "group": null
+              },
+              {
+                "value": "haiku",
+                "name": "Haiku 5.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-haiku-4-5-20251001",
+                "name": "Haiku 4.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-5",
+                "name": "Sonnet 5",
+                "description": "Efficient for routine tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-5",
+                "name": "Opus 5",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-fable-5",
+                "name": "Fable 5",
+                "description": "Most capable for your hardest and longest-running tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-8",
+                "name": "Opus 4.8",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-7",
+                "name": "Opus 4.7",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-6",
+                "name": "Opus 4.6",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-4-6",
+                "name": "Sonnet 4.6",
+                "description": "Efficient for routine tasks",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": "Available effort levels for this model",
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "xhigh",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "low",
+                "name": "Low",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "Medium",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "High",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "xhigh",
+                "name": "Xhigh",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "max",
+                "name": "Max",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "fast",
+          "name": "Fast mode",
+          "description": "Faster responses on supported models",
+          "category": "model_config",
+          "kind": {
+            "type": "toggle",
+            "current": false
+          },
+          "pending": null
+        },
+        {
+          "id": "agent",
+          "name": "Agent",
+          "description": "Main-thread agent persona",
+          "category": "other",
+          "kind": {
+            "type": "select",
+            "current": "default",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": "Standard Claude Code agent",
+                "group": null
+              },
+              {
+                "value": "code-simplifier:code-simplifier",
+                "name": "code-simplifier:code-simplifier",
+                "description": "Simplifies and refines code for clarity, consistency, and maintainability while preserving all functionality. Focuses on recently modified code unless instructed otherwise.",
+                "group": null
+              },
+              {
+                "value": "vercel:ai-architect",
+                "name": "vercel:ai-architect",
+                "description": "Specializes in architecting AI-powered applications on Vercel — choosing between AI SDK patterns, configuring providers, building agents, setting up durable workflows, and integrating MCP servers. Use when designing AI features, building chatbots, or creating agentic applications.",
+                "group": null
+              },
+              {
+                "value": "vercel:deployment-expert",
+                "name": "vercel:deployment-expert",
+                "description": "Specializes in Vercel deployment strategies, CI/CD pipelines, preview URLs, production promotions, rollbacks, environment variables, and domain configuration. Use when troubleshooting deployments, setting up CI/CD, or optimizing the deploy pipeline.",
+                "group": null
+              },
+              {
+                "value": "vercel:performance-optimizer",
+                "name": "vercel:performance-optimizer",
+                "description": "Specializes in optimizing Vercel application performance — Core Web Vitals, rendering strategies, caching, image optimization, font loading, edge computing, and bundle size. Use when investigating slow pages, improving Lighthouse scores, or optimizing loading performance.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": "bypassPermissions",
+        "auto_answer": {
+          "type": "never"
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "<SESSION_2>",
+        "agent_name": "Claude Agent",
+        "agent_version": "0.95.0",
+        "capabilities": {
+          "images": true,
+          "steer": false,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": true,
+          "set_effort": true,
+          "permissions": true,
+          "plans": true,
+          "usage": true,
+          "limits": false,
+          "slash_commands": true,
+          "add_dirs": true,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "fresh",
+          "reason": "Resource not found: <SESSION_1>"
+        },
+        "spawn_id": "01a17269-00ec-718b-820a-f1e3c46edbc5",
+        "replay": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    },
+    {
+      "type": "commands",
+      "data": [
+        {
+          "name": "find-skills",
+          "description": "Helps users discover and install agent skills when they ask questions like \"how do I do X\", \"find a skill for X\", \"is there a skill that can...\", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable ski",
+          "input_hint": null
+        },
+        {
+          "name": "higgsfield-generate",
+          "description": "Generate images/videos via Higgsfield AI. Default: GPT Image 2 for images/design/text, Seedance 2.0 for video, Nano Banana 2/Pro for character/reference image work, Marketing Studio for ads with avatars/products/hooks, settings, plus Soul V2/Cinema/Cast/Location and Kling 3.0. Use when: \"generate an",
+          "input_hint": "[prompt-or-analysis-request] [--model <name>] [--image|--video <path-or-id>]"
+        },
+        {
+          "name": "higgsfield-marketplace-cards",
+          "description": "Generate marketplace product image cards through Higgsfield: compliant main image, secondary product images, and A+ style content modules. Use when the user asks for marketplace listing images, product detail cards, secondary product images, product infographics, lifestyle listing shots, A+ style co",
+          "input_hint": "[--scope main|product-images|aplus|full-set] [prompt]"
+        },
+        {
+          "name": "higgsfield-product-photoshoot",
+          "description": "Generate brand-quality product images through Higgsfield product-photoshoot prompt enhancement on GPT Image 2 / gpt_image_2. Entry point for professional brand/product visuals. Use when: \"product photo\", \"studio shot\", \"lifestyle image\", \"Pinterest pin\", \"hero/banner\", \"carousel\", \"ad creative\", \"Me",
+          "input_hint": "[--mode <mode>] [--count N] [prompt]"
+        },
+        {
+          "name": "higgsfield-soul-id",
+          "description": "Train a Soul Character — a personalized model on a person's face that Higgsfield uses for identity-faithful image and video generation. Use when: \"create my Soul\", \"train my face\", \"make my digital twin\", \"build me an avatar\", \"learn my appearance\", \"create a character of me\", \"set up identity for v",
+          "input_hint": "[name] [photo paths...]"
+        },
+        {
+          "name": "deep-research",
+          "description": "Deep research harness — fan-out web searches, fetch sources, adversarially verify claims, synthesize a cited report. (dynamic workflow)",
+          "input_hint": null
+        },
+        {
+          "name": "claude-md-management:revise-claude-md",
+          "description": "(claude-md-management) Update CLAUDE.md with learnings from this session",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:bootstrap",
+          "description": "(vercel) Bootstrap a repository with Vercel-linked resources by running preflight checks, provisioning integrations, verifying env keys, and then executing db/dev startup commands safely.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:deploy",
+          "description": "(vercel) Deploy the current project to Vercel. Pass \"prod\" or \"production\" as argument to deploy to production. Default is preview deployment.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:env",
+          "description": "(vercel) Manage Vercel environment variables. Commands include list, pull, add, remove, and diff. Use to sync environment variables between Vercel and your local development environment.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:status",
+          "description": "(vercel) Show the status of the current Vercel project — recent deployments, linked project info, and environment overview.",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:migrate",
+          "description": "(Runpod) Migrate this codebase from the Runpod GraphQL API or REST v1 to REST v2 — inventory, rewrite, verify.",
+          "input_hint": "[scope: all | rest | graphql] [path]"
+        },
+        {
+          "name": "ralph-loop:cancel-ralph",
+          "description": "(ralph-loop) Cancel active Ralph Loop",
+          "input_hint": null
+        },
+        {
+          "name": "ralph-loop:help",
+          "description": "(ralph-loop) Explain Ralph Loop plugin and available commands",
+          "input_hint": null
+        },
+        {
+          "name": "ralph-loop:ralph-loop",
+          "description": "(ralph-loop) Start Ralph Loop in current session",
+          "input_hint": "PROMPT [--max-iterations N] [--completion-promise TEXT]"
+        },
+        {
+          "name": "claude-md-management:claude-md-improver",
+          "description": "(claude-md-management) Audit and improve CLAUDE.md files in repositories. Use when user asks to check, audit, update, improve, or fix CLAUDE.md files. Scans for all CLAUDE.md files, evaluates quality against templates, outputs quality report, then makes targeted updates. Also use when the user menti",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:access-protected-vercel-deployment",
+          "description": "(vercel) Access and test Vercel deployments protected by Vercel Authentication, SSO, or Deployment Protection. Use when curl, agent-browser, Playwright, or another automated request reaches a Vercel login or protection page; when a protected preview or production URL returns 401 or 403; when TRUSTED",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:ai-gateway",
+          "description": "(vercel) Vercel AI Gateway guidance for setup, model discovery, authentication, routing, fallbacks, BYOK, budgets, spend reporting, observability, compatible APIs, and coding-agent configuration. Use when adding AI Gateway to an app, migrating provider calls, choosing models or providers, debugging ",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:ai-sdk",
+          "description": "(vercel) Vercel AI SDK expert guidance. Use when building AI-powered features — chat interfaces, text generation, structured output, tool calling, agents, MCP integration, streaming, embeddings, reranking, image generation, or working with any LLM provider.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:auth",
+          "description": "(vercel) Authentication integration guidance — Clerk (native Vercel Marketplace), Descope, and Auth0 setup for Next.js applications, plus Sign in with Vercel, Vercel Passport, and Vercel KMS. Covers proxy.ts auth patterns, sign-in/sign-up flows, and Marketplace provisioning. Use when implementing us",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:build-agents",
+          "description": "(vercel) Default guidance for building AI agents. Use for generic requests to build, create, scaffold, design, architect, or implement an AI agent, agent app, tool-calling agent, durable agent, multi-agent system, or scheduled agent.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:cdn-caching",
+          "description": "(vercel) Debug Vercel CDN caching — cache hit rate, stale content, revalidation behavior, ISR + PPR, per-request cache reasons (cacheReason) and PPR state (ppr_state), and costs.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:chat-sdk",
+          "description": "(vercel) Vercel Chat SDK expert guidance. Use when building multi-platform chat bots — Slack, Telegram, Microsoft Teams, Discord, Google Chat, GitHub, Linear — with a single codebase. Covers the Chat class, adapters, threads, messages, cards, modals, streaming, state management, and webhook setup.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:create-a-backend",
+          "description": "(vercel) Backend architecture guidance. Use when planning, building, or migrating an API or backend; choosing between Functions, Services, containers, Workflow, Queues, and Marketplace databases; or selecting a supported backend framework or runtime.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:custom-metrics",
+          "description": "(vercel) Emit and query Vercel Custom Metrics. Use when instrumenting application or business measurements in Vercel Functions, using metric() from @vercel/functions, choosing metric names and attributes, or querying emitted values with vc metrics.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:deployments-cicd",
+          "description": "(vercel) Vercel deployment and CI/CD expert guidance. Use when deploying, promoting, rolling back, inspecting deployments, building with --prebuilt, or configuring CI workflow files for Vercel.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:env-vars",
+          "description": "(vercel) Vercel environment variable expert guidance. Use when working with .env files, vercel env commands, OIDC tokens, or managing environment-specific configuration.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:eve",
+          "description": "(vercel) eve framework guidance for durable AI agents and agent-powered applications. Use when creating, editing, or debugging an eve project, when the user explicitly asks for eve, or when the build-agents skill has selected eve as the default framework. Covers eve's filesystem-first runtime, durab",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:flags-sdk",
+          "description": "(vercel) Set up and use feature flags and A/B tests with the Flags SDK (`flags` npm package) and Vercel Flags. Use when installing or configuring the SDK, adding a new or existing flag, wiring `vercelAdapter` (OIDC or SDK keys), declaring flags with `flag()`, using the `vercel flags` CLI (create, in",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:knowledge-update",
+          "description": "(vercel) Corrects outdated LLM knowledge about the Vercel platform and introduces new products. Injected at session start.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:marketplace",
+          "description": "(vercel) Vercel Marketplace expert guidance — discovering, installing, and managing third-party integrations via the `vercel integration` CLI. Use when building any app that needs an external capability without a dedicated skill — commerce (stores, storefronts, selling products), payments (checkout,",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:microfrontends",
+          "description": "(vercel) Guide for building, configuring, and deploying microfrontends on Vercel. Use this skill when the user mentions microfrontends, multi-zones, splitting an app across teams, independent deployments, cross-app routing, incremental migration, composing multiple frontends under one domain, microf",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:next-cache-components",
+          "description": "(vercel) Next.js 16 Cache Components guidance — PPR, use cache directive, cacheLife, cacheTag, updateTag, and migration from unstable_cache. Use when implementing partial prerendering, caching strategies, or migrating from older Next.js cache patterns.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:next-forge",
+          "description": "(vercel) next-forge expert guidance — production-grade Turborepo monorepo SaaS starter by Vercel. Use when working in a next-forge project, scaffolding with `npx next-forge init`, or editing @repo/* workspace packages.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:next-upgrade",
+          "description": "(vercel) Upgrade Next.js to the latest version following official migration guides and codemods. Use when upgrading Next.js versions, running codemods, or migrating between major releases.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:nextjs",
+          "description": "(vercel) Next.js App Router expert guidance. Use when building, debugging, or architecting Next.js applications — routing, Server Components, Server Actions, Cache Components, layouts, middleware/proxy, data fetching, rendering strategies, and deployment on Vercel.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:queues",
+          "description": "(vercel) Vercel Queues guidance — durable topics with at-least-once delivery, independent consumer groups, retries, delays, and idempotency keys via @vercel/queue (JS) or vercel-queue (Python). Use when deferring background work, buffering traffic, fanning out events, or choosing between Queues and ",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:react-best-practices",
+          "description": "(vercel) React best-practices reviewer for TSX files. Triggers after editing multiple TSX components to run a condensed quality checklist covering component structure, hooks usage, accessibility, performance, and TypeScript patterns.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:routing-middleware",
+          "description": "(vercel) Vercel Routing Middleware guidance — request interception before cache, rewrites, redirects, personalization. Works with any framework. Supports Edge, Node.js, and Bun runtimes. Use when intercepting requests at the platform level.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:runtime-cache",
+          "description": "(vercel) Vercel Runtime Cache API guidance — ephemeral per-region key-value cache with tag-based invalidation. Shared across Functions, Routing Middleware, and Builds. Use when implementing caching strategies beyond framework-level caching.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:shadcn",
+          "description": "(vercel) shadcn/ui expert guidance — CLI, component installation, composition patterns, custom registries, theming, Tailwind CSS integration, and high-quality interface design. Use when initializing shadcn, adding components, composing product UI, building custom registries, configuring themes, or t",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:turbopack",
+          "description": "(vercel) Turbopack expert guidance. Use when configuring the Next.js bundler, optimizing HMR, debugging build issues, or understanding the Turbopack vs Webpack differences.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:vercel-agent",
+          "description": "(vercel) Vercel Agent guidance — dashboard and Slack chat, code review, production investigation, approved actions, and product installation. Use when configuring or working with Vercel's AI assistant.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:vercel-cli",
+          "description": "(vercel) Vercel CLI expert guidance. Use when deploying, managing environment variables, linking projects, viewing logs, querying metrics, managing domains, managing feature flags with vercel flags, or interacting with the Vercel platform from the command line.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:vercel-connect",
+          "description": "(vercel) Vercel Connect expert guidance — securely obtain scoped OAuth tokens for third-party services (Slack, GitHub, MCP servers, OAuth, Snowflake) on behalf of apps or users via Vercel OIDC. Use when wiring up third-party API access, connecting to MCP servers, sending Slack messages, accessing Gi",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:vercel-firewall",
+          "description": "(vercel) Vercel Firewall expert guidance — automatic DDoS mitigation, the Vercel WAF (custom rules, IP blocking, managed rulesets, rate limiting), Attack Mode, system bypass, bot management, and the `vercel firewall` CLI. Use when configuring platform-level security, responding to attacks, or stagin",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:vercel-functions",
+          "description": "(vercel) Vercel Functions expert guidance — Node.js/Bun/Python runtimes, Fluid Compute, long-duration (30 min) functions, large functions (5 GB bundles), Docker/OCI container images, plan limits, streaming, WebSockets, and Cron Jobs. Use when configuring, debugging, or optimizing server-side code ru",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:vercel-sandbox",
+          "description": "(vercel) Vercel Sandbox guidance — ephemeral Firecracker microVMs for running untrusted code safely. Supports AI agents, code generation, and experimentation. Use when executing user-generated or AI-generated code in isolation.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:vercel-services",
+          "description": "(vercel) Configure and troubleshoot Vercel Services for multiple frontends and backends in one project. Use when composing a polyglot or multi-service application on one Vercel deployment; defining the `services` key, service-targeted rewrites, or service bindings in `vercel.json`; or running all se",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:vercel-storage",
+          "description": "(vercel) Vercel storage expert guidance — Blob, Global Config (formerly Edge Config), and Marketplace storage (Neon Postgres, Upstash Redis). Use when choosing, configuring, or using data storage with Vercel applications.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:verification",
+          "description": "(vercel) Full-story verification — infers what the user is building, then verifies the complete flow end-to-end: browser → API → data → response. Triggers on dev server start and 'why isn't this working' signals.",
+          "input_hint": null
+        },
+        {
+          "name": "vercel:workflow",
+          "description": "(vercel) Vercel Workflow SDK expert guidance. Use when building durable workflows, long-running tasks, API routes or agents that need pause/resume, retries, step-based execution, or crash-safe orchestration with Vercel Workflow.",
+          "input_hint": null
+        },
+        {
+          "name": "supabase:supabase",
+          "description": "(supabase) Use when doing ANY task involving Supabase. Triggers: Supabase products (Database, Auth, Edge Functions, Realtime, Storage, Vectors, Cron, Queues); client libraries and SSR integrations (supabase-js, @supabase/ssr) in Next.js, React, SvelteKit, Astro, Remix; auth issues (login, logout, se",
+          "input_hint": null
+        },
+        {
+          "name": "supabase:supabase-postgres-best-practices",
+          "description": "(supabase) Postgres best practices maintained by Supabase, for Postgres running anywhere. Load this skill BEFORE writing or changing anything that lives in a Postgres database: creating or altering tables and columns (including choosing column types), schema design, migrations and declarative schema",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:agents-sdk",
+          "description": "(cloudflare) Build, debug, or review Cloudflare Agents SDK applications using the agents package.",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:cloudflare",
+          "description": "(cloudflare) Discover and choose Cloudflare products for apps, APIs, AI agents, storage, networking, and security. Use for architecture and product selection, including when the user describes a need without naming a Cloudflare product; then find the relevant skill or documentation.",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:cloudflare-email-service",
+          "description": "(cloudflare) Implement or troubleshoot Cloudflare Email Sending and Email Routing integrations and their delivery configuration.",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:cloudflare-one",
+          "description": "(cloudflare) Design, configure, troubleshoot, or review Cloudflare One Zero Trust and SASE deployments. Use cloudflare-one-migrations for migration planning from other vendors.",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:cloudflare-one-migrations",
+          "description": "(cloudflare) Assess and plan migrations from existing VPN, SWG, or SASE platforms to Cloudflare One, including policy mapping, parity gaps, and rollout.",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:durable-objects",
+          "description": "(cloudflare) Build, debug, or review Cloudflare Durable Objects code for persistent state and coordination.",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:nextjs-on-cloudflare",
+          "description": "(cloudflare) Build, migrate, and deploy Next.js apps on Cloudflare Workers with vinext. Use when starting a Next.js project on Cloudflare, moving an existing app to Workers, choosing between vinext and OpenNext, or setting up vinext for Workers. For setup, migration, or deployment, install vinext's ",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:sandbox-migrate-to-next",
+          "description": "(cloudflare) Migrate Cloudflare Sandbox apps from stable @cloudflare/sandbox to @cloudflare/sandbox@next (SDK 1.0 preview). Use sandbox-next for apps already on the preview.",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:sandbox-next",
+          "description": "(cloudflare) Build or maintain Cloudflare Sandbox apps on @cloudflare/sandbox@next (SDK 1.0 preview). Use sandbox-migrate-to-next when porting a stable app.",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:sandbox-stable",
+          "description": "(cloudflare) Build or maintain Cloudflare Sandbox apps on the stable @cloudflare/sandbox package. Use sandbox-next for preview apps and sandbox-migrate-to-next for stable-to-preview migrations.",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:turnstile-spin",
+          "description": "(cloudflare) Set up, repair, or migrate to Cloudflare Turnstile bot verification in an existing frontend and backend, including server-side Siteverify.",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:web-perf",
+          "description": "(cloudflare) Audit, diagnose, or optimize website loading and interaction performance, Core Web Vitals, and Lighthouse performance scores.",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:workers-best-practices",
+          "description": "(cloudflare) Cloudflare Workers best practices for production applications. Use when writing, reviewing, or configuring Workers.",
+          "input_hint": null
+        },
+        {
+          "name": "cloudflare:wrangler",
+          "description": "(cloudflare) Run or troubleshoot Wrangler CLI commands and configure Worker projects for local development, deployment, and Cloudflare resource management.",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:companion-clis",
+          "description": "(Runpod) Companion CLIs for Runpod workflows — HuggingFace, GitHub, Docker, and AWS. Use runpod-build-template for complete template project authoring, and the ComfyUI model-repair guide in runpod-templates for imported workflows lacking model download metadata.",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:cost-audit",
+          "description": "(Runpod) Read-only Runpod spend audit: find idle spend, explain serverless billing when nothing seems to run, break spend down by resource type and by resource, and give a whole-account snapshot. Every figure comes from the MCP billing and list reads; it recommends actions and never stops or changes",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:discovery",
+          "description": "(Runpod) Answer what is available, what fits and the price against Runpod's catalogs: GPU and CPU types with price, live stock per data center and per product, the CUDA versions that have capacity, the Hub worker marketplace, the public template catalog, and the pay-per-use Public Endpoints. Read-on",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:endpoint-ops",
+          "description": "(Runpod) Operate a Serverless endpoint that already exists: diagnose queued jobs and dying workers, tune scaling, idle timeout and FlashBoot safely, pin the GPU selection, and manage the queue (cancel a job, purge). Read-only by default; changes only the exact setting the user authorized, with a rea",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:flash",
+          "description": "(Runpod) Write and deploy code-first Runpod Serverless with runpod-flash: @Endpoint/@remote, flash dev, resource configuration, and debugging. Use runpod-build-template for explicit Dockerfile/template project authoring, and runpodctl/runpod-mcp for infrastructure management.",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:lifecycle-crud",
+          "description": "(Runpod) Create, verify by read-back, and manage the lifecycle of Runpod's reusable plumbing (templates, network volumes, container registry credentials, account secrets, the account's SSH public keys, and Instant Clusters), plus staging large model files on a volume and diagnosing a private-image p",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:pod-deploy",
+          "description": "(Runpod) Provision a Runpod Pod for interactive, development or training use and tell the user exactly how to connect to it. Reads stock before creating, picks the image and GPU class from the catalog reads, exposes only the ports the workload needs, hands back the working proxy URL or SSH address, ",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:pod-doctor",
+          "description": "(Runpod) Diagnose a Runpod Pod that is unreachable, GPU-blind or stuck, and perform a recovery action only when the user authorizes one. Use when an existing Pod misbehaves, through the Runpod MCP tools: its proxy URL answers 502, CUDA is not available inside the container, a restarted Pod has no GP",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:runpod",
+          "description": "(Runpod) Start here for any Runpod task — running GPU/CPU pods, deploying serverless endpoints, templates, network volumes, building images, or understanding how Runpod works. Routes to the right skill (runpod-mcp, runpodctl, flash, companion-clis, runpod-usage, runpod-templates, runpod-build-templa",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:runpod-build-template",
+          "description": "(Runpod) Create or improve a complete Runpod template project from an application request, local code, or GitHub repository, with a documented Dockerfile and app-specific files for Pods or queue/load-balanced Serverless. Use runpod-templates for finding or operating existing official templates, runp",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:runpod-mcp",
+          "description": "(Runpod) Manage Runpod infrastructure through the connected Runpod MCP server's tool calls (pods, serverless endpoints and jobs, templates, network volumes, registry credentials, secrets, clusters, the GPU/CPU catalog, and billing), and connect the server when it is missing (hosted or local npx). Lo",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:runpod-migrate",
+          "description": "(Runpod) Migrate a codebase from the Runpod GraphQL API or REST v1 to REST v2 — inventory which parts use which API version, rewrite the call sites, flag breaking changes, and verify. Use when someone asks to move to v2, asks what v2 would change, or asks which Runpod API their code is on. For manag",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:runpod-templates",
+          "description": "(Runpod) Find, use, and troubleshoot official Runpod Pod templates, including ComfyUI workflow model metadata repair. For creating or optimizing Dockerfiles and application template projects use runpod-build-template; deploy through runpod-mcp or runpodctl.",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:runpod-usage",
+          "description": "(Runpod) Explain Runpod architecture and design choices: Pods versus Serverless, GPU/VRAM, image construction, storage, networking, and workload development. For creating or improving a complete template project use runpod-build-template; execute infrastructure with runpodctl/runpod-mcp and code-fir",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:runpodctl",
+          "description": "(Runpod) Runpod CLI for managing GPU/CPU workloads from the terminal — pods, serverless endpoints, templates, network volumes, Hub deploys, models, SSH, and file transfer (send/receive). Use for terminal/CI/scripting, SSH setup, `doctor`, or when the Runpod MCP tools are not connected; prefer runpod",
+          "input_hint": null
+        },
+        {
+          "name": "runpod:serverless-deploy",
+          "description": "(Runpod) Bring any source (a HuggingFace repo, a ComfyUI workflow, a Hub release, a custom container image, a GGUF repo, a Civitai asset, or a community template) to a proven Runpod Serverless endpoint: pick the engine for the modality and model format, size the GPU from the model's real metadata, p",
+          "input_hint": null
+        },
+        {
+          "name": "design",
+          "description": "Grant or revoke Claude agent access to your Design projects",
+          "input_hint": "consent | revoke"
+        },
+        {
+          "name": "design-sync",
+          "description": "Push a React design system to claude.ai/design. This runs a converter that bundles the real component code (from Storybook or a bare package) and uploads it. Use when the user runs /design-sync or says \"sync my design system to Claude Design\".",
+          "input_hint": "[<project hint, e.g. \"Acme DS\">]"
+        },
+        {
+          "name": "dataviz",
+          "description": "Use this skill whenever you are about to create ANY chart, graph, plot, dashboard, or data visualization, in ANY output medium — an HTML or React artifact, inline SVG, plotting code in any library (matplotlib, plotly, d3, Recharts, …), an image/PNG you will render and upload, or a chart shared into ",
+          "input_hint": null
+        },
+        {
+          "name": "update-config",
+          "description": "Use this skill to configure the Claude Code harness via settings.json. Automated behaviors (\"from now on when X\", \"each time X\", \"whenever X\", \"before/after X\") require hooks configured in settings.json - the harness executes these, not Claude, so memory/preferences cannot fulfill them. Also use for",
+          "input_hint": null
+        },
+        {
+          "name": "verify",
+          "description": "Verify that a code change actually does what it's supposed to by exercising it end-to-end and observing behavior — drive the affected flow, not just tests or typecheck. Run before committing nontrivial changes; bootstraps this repo's project verify skill if none exists yet. Don't invoke it on a diff",
+          "input_hint": null
+        },
+        {
+          "name": "debug",
+          "description": "Enable debug logging for this session and help diagnose issues",
+          "input_hint": "[issue description]"
+        },
+        {
+          "name": "code-review",
+          "description": "Review the current diff, or a PR number/branch/path target, for correctness bugs (plus reuse/simplification/efficiency cleanups where the model's review recipe covers them) at the given effort level (low|medium|high|xhigh|max: from few high-confidence findings up to many, some of them uncertain; ult",
+          "input_hint": "[low|medium|high|xhigh|max|ultra] [--fix] [--comment] [<pr#>|<branch>|<path>] [--max-findings <n>|all]"
+        },
+        {
+          "name": "simplify",
+          "description": "Review the changed code for reuse, simplification, efficiency, and altitude cleanups, then apply the fixes. Quality only — it does not hunt for bugs; use /code-review for that.",
+          "input_hint": "[<target>]"
+        },
+        {
+          "name": "batch",
+          "description": "Research and plan a large-scale change, then execute it in parallel across 5–30 isolated worktree agents that each open a PR.",
+          "input_hint": "<instruction>"
+        },
+        {
+          "name": "fewer-permission-prompts",
+          "description": "Scan your transcripts for common read-only Bash and MCP tool calls, then add a prioritized allowlist to project .claude/settings.json to reduce permission prompts.",
+          "input_hint": null
+        },
+        {
+          "name": "doctor",
+          "description": "Health-check the user's Claude Code setup and fix issues: diagnose installation health — what the `claude doctor` terminal diagnostics cover — from local data (duplicate or leftover installs, PATH, unparseable settings files, broken or colliding agent definitions, skills whose frontmatter fails to p",
+          "input_hint": "[prompt-audit [<path>]]"
+        },
+        {
+          "name": "loop",
+          "description": "Run a prompt or slash command on a recurring interval (e.g. /loop 5m /foo). Omit the interval to let the model self-pace.",
+          "input_hint": "[interval] [prompt]"
+        },
+        {
+          "name": "schedule",
+          "description": "Create, update, list, or run scheduled cloud agents (routines) that execute on a cron schedule.",
+          "input_hint": null
+        },
+        {
+          "name": "claude-api",
+          "description": "Reference for the Claude API / Anthropic SDK — model ids, pricing, params, streaming, tool use, MCP, agents, caching, token counting, model migration.\nTRIGGER — read BEFORE opening the target file; don't skip because it \"looks like a one-liner\" — whenever: the prompt names Claude/Anthropic in any fo",
+          "input_hint": null
+        },
+        {
+          "name": "workflow-authoring",
+          "description": "Reference for writing a Workflow tool script (script API and gotchas, resume, quality patterns, worked examples). Load before authoring a script for a workflow the user already opted into; it does not itself authorize running one.",
+          "input_hint": null
+        },
+        {
+          "name": "run",
+          "description": "Launch and drive this project's app to see a change working. Use when asked to run, start, or screenshot the app, or to confirm a change works in the real app (not just tests). First looks for a project skill that already covers launching the app; otherwise falls back to built-in patterns per projec",
+          "input_hint": null
+        },
+        {
+          "name": "run-skill-generator",
+          "description": "Author or improve the run-<unit> skill - a per-project skill that tells agents how to build, launch, and drive this project's app. Use when the user asks to set up the project, get it running, write run instructions, or verify build/run steps work from a clean environment.",
+          "input_hint": null
+        },
+        {
+          "name": "plugin-authoring",
+          "description": "Make a mod: a change to Claude's own interface or behaviour, such as a panel or pane that stays beside the chat and updates, a band, status line, toast, slash command, or hook on tool calls. Use to make, change or debug a mod or its hooks module.",
+          "input_hint": null
+        },
+        {
+          "name": "advisor",
+          "description": "Let Claude consult a stronger model at key moments",
+          "input_hint": "[fable|opus|sonnet|off]"
+        },
+        {
+          "name": "agents",
+          "description": "(removed) Ask Claude to create/manage subagents, or edit .claude/agents/",
+          "input_hint": null
+        },
+        {
+          "name": "auto-mode-setup",
+          "description": "Teach auto mode about your environment, plus optional rule tweaks",
+          "input_hint": "[--request-id <uuid>] (--wizard posture=… scope=… depth=… --propose | --expect-sha256 <64-hex> --apply-file <path>)"
+        },
+        {
+          "name": "autocompact",
+          "description": "Configure the auto-compact window size",
+          "input_hint": "[auto|<tokens>]"
+        },
+        {
+          "name": "color",
+          "description": "Set the prompt bar color for this session",
+          "input_hint": "[red|blue|green|yellow|purple|orange|pink|cyan|default]"
+        },
+        {
+          "name": "compact",
+          "description": "Free up context by summarizing the conversation so far",
+          "input_hint": "<optional custom summarization instructions>"
+        },
+        {
+          "name": "config",
+          "description": "Set a setting by key",
+          "input_hint": "key=value"
+        },
+        {
+          "name": "output-style",
+          "description": "List output styles or switch to one",
+          "input_hint": "[style]"
+        },
+        {
+          "name": "context",
+          "description": "Show current context usage",
+          "input_hint": null
+        },
+        {
+          "name": "effort",
+          "description": "Set effort level for model usage",
+          "input_hint": "<low|medium|high|xhigh|max|auto|ultracode [on|off]>"
+        },
+        {
+          "name": "fast",
+          "description": "Toggle fast mode (Opus 5.5)",
+          "input_hint": "[on|off]"
+        },
+        {
+          "name": "focus",
+          "description": "Toggle focus view: just your prompt, summary, and response",
+          "input_hint": "[on|off]"
+        },
+        {
+          "name": "heapdump",
+          "description": "Dump the JS heap to the Desktop; on Linux with no Desktop folder, the home directory",
+          "input_hint": null
+        },
+        {
+          "name": "init",
+          "description": "Initialize a new CLAUDE.md file with codebase documentation",
+          "input_hint": null
+        },
+        {
+          "name": "import",
+          "description": "Import config from another AI coding agent",
+          "input_hint": null
+        },
+        {
+          "name": "model",
+          "description": "Set the AI model for Claude Code",
+          "input_hint": "<model>"
+        },
+        {
+          "name": "__remote-workflow",
+          "description": "Run the workflow script delivered in this session environment (server-launched sessions only)",
+          "input_hint": null
+        },
+        {
+          "name": "workflow-launch-exec",
+          "description": "Execute a server-launched workflow handoff (workflow_launch event sessions only)",
+          "input_hint": null
+        },
+        {
+          "name": "reload-plugins",
+          "description": "Activate pending plugin changes in the current session",
+          "input_hint": "[--force]"
+        },
+        {
+          "name": "reload-skills",
+          "description": "Pick up skills added or changed on disk during this session",
+          "input_hint": null
+        },
+        {
+          "name": "rename",
+          "description": "Rename the current conversation",
+          "input_hint": "[name]"
+        },
+        {
+          "name": "ultrareview",
+          "description": "Start a cloud agent that finds and verifies bugs in your branch (~15-25 min, $5-$25 USD) · Runs in a cloud session. See https://code.claude.com/docs/en/claude-code-on-the-web",
+          "input_hint": null
+        },
+        {
+          "name": "security-review",
+          "description": "Complete a security review of the pending changes on the current branch",
+          "input_hint": null
+        },
+        {
+          "name": "usage-credits",
+          "description": "Configure usage credits or request them from your admin when you hit a limit",
+          "input_hint": null
+        },
+        {
+          "name": "extra-usage",
+          "description": "Renamed to /usage-credits",
+          "input_hint": null
+        },
+        {
+          "name": "usage",
+          "description": "Show session cost, plan usage, and what's contributing to your limits",
+          "input_hint": null
+        },
+        {
+          "name": "insights",
+          "description": "Generate a report analyzing your Claude Code sessions",
+          "input_hint": null
+        },
+        {
+          "name": "recap",
+          "description": "Generate a one-line session recap now",
+          "input_hint": null
+        },
+        {
+          "name": "skill-doctor",
+          "description": "Show which loaded skills are unused and costing context",
+          "input_hint": null
+        },
+        {
+          "name": "goal",
+          "description": "Set a goal — keep working until the condition is met",
+          "input_hint": null
+        },
+        {
+          "name": "design-consent",
+          "description": "Grant Claude agent access to your Design projects",
+          "input_hint": null
+        },
+        {
+          "name": "design-revoke",
+          "description": "Revoke Claude agent access to your Design projects",
+          "input_hint": null
+        },
+        {
+          "name": "list-agents",
+          "description": "List subagents, teammates, and other Claude sessions you can message",
+          "input_hint": null
+        },
+        {
+          "name": "team-onboarding",
+          "description": "Help teammates ramp on Claude Code with a guide from your usage",
+          "input_hint": null
+        },
+        {
+          "name": "artifact-emulator",
+          "description": "See a page, slide deck or design canvas artifact you made, close to how a person will see it: open its files in the real artifact viewer inside this cloud session, then screenshot it and read its console errors with a short Python Playwright script. Use it when the person asks to see or check how it",
+          "input_hint": null
+        },
+        {
+          "name": "docs",
+          "description": "docs (editable docs people share and comment on; the default for any document, named as a doc or not: a document, report, proposal, resume, cover letter, letter, contract, policy, form, template, worksheet, essay, handbook, guide, how-to, cheat sheet, SOP or other writing to keep, share, collaborate",
+          "input_hint": null
+        },
+        {
+          "name": "docx",
+          "description": "Use this skill whenever the user wants to create, read, edit, or manipulate Word documents (.docx) or Word templates (.dotx). Triggers include: any mention of Microsoft Word Documents, such as 'Word doc', 'word document', '.docx', '.dotx', 'microsoft doc'. Also use when extracting or reorganizing co",
+          "input_hint": null
+        },
+        {
+          "name": "google-workspace",
+          "description": "Read this before the first Google Drive, Docs, Sheets or Slides connector call whenever the task creates or changes a Google file. Use this skill whenever the user wants to create or change a Google Doc, Sheet or Slides file in their Google Drive. Triggers include: a request that names Google Docs, ",
+          "input_hint": null
+        },
+        {
+          "name": "import-memory",
+          "description": "Import a memory export from another AI assistant into Claude's memory — conversationally, additively, and with the content treated as data. (claude.ai sync)",
+          "input_hint": null
+        },
+        {
+          "name": "morning",
+          "description": "Render the user's morning brief as a styled HTML artifact, or set it up as a recurring weekday task. Use only when the user explicitly asks to run, see, or set up their morning brief, or if they invoke /morning by name. A question about their day, schedule, or calendar is not by itself a request for",
+          "input_hint": null
+        },
+        {
+          "name": "pdf",
+          "description": "Use this skill whenever the user wants to do anything with PDF files. This includes reading or extracting text/tables from PDFs, combining or merging multiple PDFs into one, splitting PDFs apart, rotating pages, adding watermarks, creating new PDFs, filling PDF forms, encrypting/decrypting PDFs, ext",
+          "input_hint": null
+        },
+        {
+          "name": "pptx",
+          "description": "Use this skill any time a .pptx or .potx file is involved in any way — as input, output, or both. This includes: creating slide decks, pitch decks, or presentations as PowerPoint (.pptx) files; reading, parsing, or extracting text from any .pptx or .potx file (even if the extracted content will be u",
+          "input_hint": null
+        },
+        {
+          "name": "skill-creator",
+          "description": "Create new skills, modify and improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, edit, or optimize an existing skill, run evals to test a skill, benchmark skill performance with variance analysis, or optimize a skill's description for better t",
+          "input_hint": null
+        },
+        {
+          "name": "xlsx",
+          "description": "Use this skill any time a spreadsheet file is the primary input or output. This means any task where the user wants to: open, read, edit, or fix an existing .xlsx, .xlsm, .xltx, .csv, or .tsv file (e.g., adding columns, computing formulas, formatting, charting, cleaning messy data); create a new spr",
+          "input_hint": null
+        },
+        {
+          "name": "mcp",
+          "description": "Show the MCP servers and their status, or reconnect, enable, or disable a server",
+          "input_hint": "[reconnect|enable|disable [<server>|all]]"
+        },
+        {
+          "name": "remote-control",
+          "description": "Continue this session from claude.ai/code or the Claude mobile app; `off` disconnects",
+          "input_hint": "[session name | off]"
+        }
+      ]
+    }
+  ],
+  "replies": [],
+  "exit": {
+    "type": "closed"
+  }
+}

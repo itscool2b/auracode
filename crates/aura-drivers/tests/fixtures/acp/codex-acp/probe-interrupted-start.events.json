@@ -1,0 +1,25 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    }
+  ],
+  "replies": [],
+  "exit": {
+    "type": "start_failed",
+    "data": {
+      "kind": "agent_exited",
+      "message": "The agent exited before it finished starting.",
+      "detail": null
+    }
+  }
+}
