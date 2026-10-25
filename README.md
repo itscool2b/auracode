@@ -165,8 +165,9 @@ pushes whose newest commit message contains `[bundle]` (Windows and Linux only).
 
 - Biome is the only linter and formatter outside Rust (there is no ESLint or Prettier): `pnpm lint`
   checks, `pnpm format` rewrites. It covers TypeScript, CSS, JSON, and YAML. It does not format Markdown
-  (hand-wrapped prose and tables) and never touches `pnpm-lock.yaml` (written by pnpm). Rust is formatted
-  with `cargo fmt --all`.
+  (hand-wrapped prose and tables) and never touches `pnpm-lock.yaml` (written by pnpm) or the replay
+  fixtures and goldens in `crates/aura-drivers/tests/fixtures` (written by the replay harness). Rust is
+  formatted with `cargo fmt --all`.
 - Clippy rejects `unwrap()` and `expect()` outside tests (`Cargo.toml` and `clippy.toml`).
 - The claude-control binary is never run, in CI too, because running it drives a real Claude Code
   session, which spends quota. Only its unit tests run: they feed the code canned input, and a shell
