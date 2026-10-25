@@ -2955,9 +2955,13 @@ with the floor in its reason (P50).
 
 ### 10.4 What stays manual
 
-- The bare UI on macOS with each agent and the demo agent: every block type, permission card, question card (demo
-  `/ask`), crash card (`kill -9` on the agent's pid), auth card, queue, quit and reopen (history, the interrupted turn,
-  Resume), quit with idle agents (no `-wal` file left), Ctrl+C under `pnpm dev` (the quit flow runs), the still
+- The bare UI with the demo agent is no longer manual: the chat smoke run (`.github/scripts/run-smoke.sh chat`, in CI
+  on Linux and Windows, and on a Mac by hand) drives every block type, the permission cards, the question card (demo
+  `/ask`), the error, crash (demo `/crash`) and auth cards, the queue held or sent as decision 11 says, Stop and Force
+  stop, quit through the quit flow and reopen (history, the interrupted turn, Resume), and checks that no `-wal` file
+  is left, reading the screens through their `data-testid` and `data-test-*` attributes. What stays manual: the bare
+  UI on macOS with each real agent (`AURACODE_SMOKE_AGENT=<agent id>` runs one minimal chat with it, locally only),
+  the crash card from `kill -9` on a real agent's pid, Ctrl+C under `pnpm dev` (the quit flow runs), the still
   working hint, the storage banner and the quit question while paused (optional: a small disk image as
   `AURACODE_DATA_DIR`).
 - macOS privacy: a fresh build (its ad-hoc signature is new, so no grant applies) and a chat in a `~/Desktop` folder:
