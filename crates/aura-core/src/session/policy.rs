@@ -165,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn policy_never_asks_when_auto_answer_is_never() {
+    fn policy_asks_when_auto_answer_is_never() {
         assert_eq!(
             decide(
                 &state(AutoAnswer::Never),
