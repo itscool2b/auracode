@@ -9,12 +9,22 @@
 //! adapter whose descendant lingers must still look exited.
 
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 
-use futures::future::BoxFuture;
+use futures::FutureExt;
+use futures::future::{BoxFuture, Shared};
+use process_wrap::tokio::ChildWrapper;
 use serde::{Deserialize, Serialize};
+use tokio::runtime::Handle;
+use tokio::sync::watch;
 
+use crate::io::LineSink;
+use crate::log::{LogNote, ProtocolLog, now_millis};
+use crate::registry::RegistryHandle;
 use crate::shutdown::{ShutdownPlan, ShutdownReport};
+#[cfg(unix)]
+use crate::spawn::DaemonMatch;
+use crate::stderr::StderrTail;
 
 /// What a [`ProcessControl`] forwards to.
 pub trait ControlImpl: Send + Sync + 'static {
@@ -113,12 +123,251 @@ pub struct ExitInfo {
     pub at_ms: i64,
 }
 
+impl ExitInfo {
+    pub(crate) fn from_status(status: std::process::ExitStatus) -> ExitInfo {
+        #[cfg(unix)]
+        let signal = {
+            use std::os::unix::process::ExitStatusExt;
+            status.signal()
+        };
+        #[cfg(not(unix))]
+        let signal = None;
+        ExitInfo {
+            code: status.code(),
+            signal,
+            at_ms: now_millis(),
+        }
+    }
+
+    /// An exit nobody could read a status for.
+    pub(crate) fn unknown() -> ExitInfo {
+        ExitInfo {
+            code: None,
+            signal: None,
+            at_ms: now_millis(),
+        }
+    }
+}
+
+/// What a real agent's control and its shutdown chain share.
+pub(crate) struct ControlState {
+    pub(crate) pid: u32,
+    /// Unix: the agent leads its own group, so this is its pid.
+    #[cfg(unix)]
+    pub(crate) pgid: u32,
+    /// Unix: its start time, so a recycled pid is never taken for it.
+    #[cfg(unix)]
+    pub(crate) start: crate::ptable::StartTime,
+    pub(crate) stdin: LineSink,
+    pub(crate) exit: watch::Receiver<Option<ExitInfo>>,
+    pub(crate) tail: Arc<StderrTail>,
+    pub(crate) log: ProtocolLog,
+    pub(crate) rt: Handle,
+    pub(crate) registry: RegistryHandle,
+    /// Unix: spared by the kill rule (Windows has no daemons in a job).
+    #[cfg(unix)]
+    pub(crate) daemons: Vec<DaemonMatch>,
+    /// Unix: descendants that left the group, as last recorded; kept while they still run.
+    #[cfg(unix)]
+    pub(crate) escaped: Mutex<Vec<crate::registry::EscapedProc>>,
+    /// Windows: kill requests to the waiter, which owns the job.
+    #[cfg(windows)]
+    pub(crate) kill: tokio::sync::mpsc::UnboundedSender<()>,
+    chain: Mutex<Option<Shared<BoxFuture<'static, ShutdownReport>>>>,
+}
+
+impl ControlState {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        pid: u32,
+        #[cfg(unix)] start: crate::ptable::StartTime,
+        stdin: LineSink,
+        exit: watch::Receiver<Option<ExitInfo>>,
+        tail: Arc<StderrTail>,
+        log: ProtocolLog,
+        rt: Handle,
+        registry: RegistryHandle,
+        #[cfg(unix)] daemons: Vec<DaemonMatch>,
+        #[cfg(windows)] kill: tokio::sync::mpsc::UnboundedSender<()>,
+    ) -> ControlState {
+        ControlState {
+            pid,
+            #[cfg(unix)]
+            pgid: pid,
+            #[cfg(unix)]
+            start,
+            stdin,
+            exit,
+            tail,
+            log,
+            rt,
+            registry,
+            #[cfg(unix)]
+            daemons,
+            #[cfg(unix)]
+            escaped: Mutex::new(Vec::new()),
+            #[cfg(windows)]
+            kill,
+            chain: Mutex::new(None),
+        }
+    }
+
+    pub(crate) fn exited_now(&self) -> Option<ExitInfo> {
+        *self.exit.borrow()
+    }
+}
+
+/// The control of a process [`Spawner`](crate::spawn::Spawner) started.
+pub(crate) struct ChildControl {
+    state: Arc<ControlState>,
+}
+
+impl ChildControl {
+    pub(crate) fn new(state: ControlState) -> ChildControl {
+        ChildControl {
+            state: Arc::new(state),
+        }
+    }
+}
+
+impl ControlImpl for ChildControl {
+    fn pid(&self) -> u32 {
+        self.state.pid
+    }
+
+    fn close_stdin(&self) {
+        self.state.stdin.close();
+    }
+
+    fn kill_tree(&self) {
+        crate::shutdown::kill_tree(&self.state);
+    }
+
+    fn shutdown(&self, plan: ShutdownPlan) -> BoxFuture<'static, ShutdownReport> {
+        let mut chain = lock(&self.state.chain);
+        if let Some(running) = chain.as_ref() {
+            return running.clone().boxed();
+        }
+        // A task, so the chain finishes even when every caller stops waiting for it.
+        let task = self
+            .state
+            .rt
+            .spawn(crate::shutdown::run(Arc::clone(&self.state), plan));
+        let shared = async move { task.await.unwrap_or_default() }
+            .boxed()
+            .shared();
+        *chain = Some(shared.clone());
+        shared.boxed()
+    }
+
+    fn exited(&self) -> BoxFuture<'static, ExitInfo> {
+        let mut exit = self.state.exit.clone();
+        async move {
+            match exit.wait_for(Option::is_some).await {
+                Ok(found) => found.unwrap_or_else(ExitInfo::unknown),
+                // The waiter is gone without a status (the runtime shut down).
+                Err(_) => ExitInfo::unknown(),
+            }
+        }
+        .boxed()
+    }
+
+    fn try_exited(&self) -> Option<ExitInfo> {
+        self.state.exited_now()
+    }
+
+    fn record_escaped(&self) -> BoxFuture<'static, ()> {
+        crate::shutdown::record_escaped(Arc::clone(&self.state))
+    }
+
+    fn stderr_tail(&self, max_bytes: usize) -> String {
+        self.state.tail.tail(max_bytes)
+    }
+}
+
+/// The native child beneath the wrappers, found by walking `inner_mut` and downcasting: waiting on
+/// it is the direct child's exit, never a group-wide or job-wide wait.
+pub(crate) fn native_child(child: &mut dyn ChildWrapper) -> Option<&mut tokio::process::Child> {
+    if (&*child as &dyn std::any::Any).is::<tokio::process::Child>() {
+        return (child as &mut dyn std::any::Any).downcast_mut::<tokio::process::Child>();
+    }
+    let here = std::ptr::from_ref::<dyn ChildWrapper>(child).cast::<()>();
+    let next = child.inner_mut();
+    if std::ptr::eq(
+        here,
+        std::ptr::from_ref::<dyn ChildWrapper>(next).cast::<()>(),
+    ) {
+        return None;
+    }
+    native_child(next)
+}
+
+/// What the Windows waiter is waiting for.
+#[cfg(windows)]
+enum Event {
+    Exited(std::io::Result<std::process::ExitStatus>),
+    /// A kill request; `false` once the control is gone.
+    Kill(bool),
+}
+
+/// Waits for the direct child's exit and publishes it. On Windows it also serves kill requests,
+/// before and after the exit, because terminating the job needs the child it owns; it keeps the job
+/// until the control is gone, so a late kill still reaches lingering descendants.
+pub(crate) async fn wait_child(
+    mut child: Box<dyn ChildWrapper>,
+    exit: watch::Sender<Option<ExitInfo>>,
+    log: ProtocolLog,
+    #[cfg(windows)] mut kills: tokio::sync::mpsc::UnboundedReceiver<()>,
+) {
+    #[cfg(not(windows))]
+    let status = match native_child(child.as_mut()) {
+        Some(native) => native.wait().await,
+        None => child.wait().await,
+    };
+    #[cfg(windows)]
+    let mut kills_open = true;
+    #[cfg(windows)]
+    let status = loop {
+        let event = match native_child(child.as_mut()) {
+            Some(native) => tokio::select! {
+                status = native.wait() => Event::Exited(status),
+                kill = kills.recv(), if kills_open => Event::Kill(kill.is_some()),
+            },
+            None => Event::Exited(child.wait().await),
+        };
+        match event {
+            Event::Exited(status) => break status,
+            Event::Kill(open) => {
+                kills_open = open;
+                let _ = child.start_kill();
+            }
+        }
+    };
+    let info = status.map_or_else(|_| ExitInfo::unknown(), ExitInfo::from_status);
+    log.note(LogNote::Exit {
+        code: info.code,
+        signal: info.signal,
+    });
+    exit.send_replace(Some(info));
+    #[cfg(windows)]
+    {
+        while kills_open && kills.recv().await.is_some() {
+            let _ = child.start_kill();
+        }
+        // The control is gone: whatever is left in the job goes with it.
+        let _ = child.start_kill();
+    }
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
     use std::sync::atomic::{AtomicU32, Ordering};
-
-    use futures::FutureExt;
 
     use super::*;
 

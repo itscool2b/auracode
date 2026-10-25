@@ -10,23 +10,32 @@
 use std::ffi::OsString;
 use std::fmt;
 use std::io;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use futures::FutureExt;
 use futures::future::BoxFuture;
+use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
 use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::runtime::Handle;
+use tokio::sync::watch;
 
-use crate::control::{ExitInfo, ProcessControl};
-use crate::env::ResolvedEnv;
-use crate::io::AgentIo;
-use crate::log::ProtocolLog;
-use crate::registry::LeftoverRegistry;
+use crate::control::{
+    ChildControl, ControlState, ExitInfo, ProcessControl, native_child, wait_child,
+};
+use crate::env::{EnvMap, EnvSource, ResolvedEnv, child_env, process_env, strip_launch_context};
+use crate::io::{AgentIo, LineSink, stdout_channel};
+use crate::log::{LogNote, ProtocolLog, now_millis};
+use crate::registry::{LeftoverRegistry, RegistryHandle};
+use crate::stderr::StderrTail;
+use crate::{PIPE_EOF_GRACE, STDERR_TAIL_BYTES};
 
-/// What a stub body answers until package A builds it.
-const NOT_BUILT: &str = "not implemented in this build";
+/// The longest working folder Windows accepts for a new process, in UTF-16 units.
+#[cfg(any(windows, test))]
+const WINDOWS_MAX_CWD: usize = 259;
 
 /// Where the agent process runs. An ACP agent always gets the chat folder as the protocol's `cwd`,
 /// wherever its process runs.
@@ -105,7 +114,6 @@ pub trait ProcessSpawner: Send + Sync + 'static {
 pub struct Spawner {
     registry: Arc<LeftoverRegistry>,
     /// Where the pipe tasks and the waiter run: constructors never assume a runtime context.
-    #[expect(dead_code, reason = "the spawn body (package A) runs its tasks here")]
     rt: Handle,
 }
 
@@ -123,17 +131,348 @@ impl ProcessSpawner for Spawner {
     fn spawn(
         &self,
         spec: SpawnSpec,
-        _log: ProtocolLog,
+        log: ProtocolLog,
     ) -> BoxFuture<'static, Result<SpawnedProcess, SpawnError>> {
-        let program = spec.launch.program.display().to_string();
-        async move {
-            Err(SpawnError::Spawn {
-                program,
-                source: io::Error::other(NOT_BUILT),
+        let registry = Arc::clone(&self.registry);
+        let rt = self.rt.clone();
+        spawn_agent(registry, rt, spec, log).boxed()
+    }
+}
+
+/// Starts one agent: checks, the complete env, the wrappers, the registry entry, the pipe tasks
+/// and the waiter.
+async fn spawn_agent(
+    registry: Arc<LeftoverRegistry>,
+    rt: Handle,
+    spec: SpawnSpec,
+    log: ProtocolLog,
+) -> Result<SpawnedProcess, SpawnError> {
+    let SpawnSpec {
+        launch,
+        folder,
+        env,
+        max_line_bytes,
+    } = spec;
+    let cwd = match &launch.cwd {
+        ProcessCwd::ChatFolder => folder,
+        ProcessCwd::Fixed(dir) => dir.clone(),
+    };
+    let (vars, scrubbed) = child_env(&env, &launch.set_env);
+    check(&rt, &cwd, &launch.program, &vars).await?;
+    let command = command(&launch.program, &launch.args, &cwd, &vars, Stdio::piped());
+    let mut child = start(&rt, command, false, &launch.program)?;
+    let pid = child_pid(child.as_ref(), &launch.program)?;
+    let stdin_pipe = child.stdin().take();
+    let stdout_pipe = child.stdout().take();
+    let stderr_pipe = child.stderr().take();
+
+    log.note(LogNote::Spawn {
+        label: launch.label.clone(),
+        program: launch.program.display().to_string(),
+        args: launch
+            .args
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect(),
+        cwd: cwd.display().to_string(),
+        removed: scrubbed.removed,
+        set: launch
+            .set_env
+            .iter()
+            .map(|(name, _)| name.to_string_lossy().into_owned())
+            .collect(),
+        pid,
+    });
+
+    // Unix: the start time tells this agent from a recycled pid, and the registry entry lets the
+    // next start stop it if auracode dies first. A registry failure is only a warning.
+    #[cfg(unix)]
+    let start_time = {
+        let handle = registry.handle();
+        let label = launch.label.clone();
+        let daemons = launch.daemons.clone();
+        rt.spawn_blocking(move || register_agent(&handle, pid, label, daemons))
+            .await
+            .unwrap_or(crate::ptable::StartTime::Unknown)
+    };
+
+    let tail = Arc::new(StderrTail::default());
+    let (sink, stdin_rx) = LineSink::channel();
+    let (stdout_tx, source) = stdout_channel();
+    if let Some(pipe) = stdin_pipe {
+        rt.spawn(crate::io::write_stdin(pipe, stdin_rx, log.clone()));
+    }
+    if let Some(pipe) = stdout_pipe {
+        rt.spawn(crate::io::read_stdout(
+            pipe,
+            stdout_tx,
+            log.clone(),
+            max_line_bytes,
+        ));
+    }
+    if let Some(pipe) = stderr_pipe {
+        rt.spawn(crate::stderr::drain(pipe, Arc::clone(&tail), log.clone()));
+    }
+    let (exit_tx, exit_rx) = watch::channel(None);
+    #[cfg(windows)]
+    let (kill_tx, kill_rx) = tokio::sync::mpsc::unbounded_channel();
+    rt.spawn(wait_child(
+        child,
+        exit_tx,
+        log.clone(),
+        #[cfg(windows)]
+        kill_rx,
+    ));
+    let state = ControlState::new(
+        pid,
+        #[cfg(unix)]
+        start_time,
+        sink.clone(),
+        exit_rx,
+        tail,
+        log.clone(),
+        rt,
+        registry.handle(),
+        #[cfg(unix)]
+        launch.daemons,
+        #[cfg(windows)]
+        kill_tx,
+    );
+    Ok(SpawnedProcess {
+        spawn_id: log.spawn_id().to_owned(),
+        io: AgentIo {
+            stdin: sink,
+            stdout: source,
+        },
+        control: ProcessControl::new(Arc::new(ChildControl::new(state))),
+        log,
+    })
+}
+
+/// Reads an agent's start time and records it in the registry (blocking).
+#[cfg(unix)]
+fn register_agent(
+    registry: &RegistryHandle,
+    pid: u32,
+    label: String,
+    daemons: Vec<DaemonMatch>,
+) -> crate::ptable::StartTime {
+    let start = crate::ptable::start_time(pid).unwrap_or(crate::ptable::StartTime::Unknown);
+    let entry = crate::registry::LeftoverEntry {
+        pid,
+        pgid: pid,
+        sid: session_of(pid),
+        start: start.clone(),
+        label,
+        spawned_at_ms: now_millis(),
+        daemons,
+        escaped: Vec::new(),
+    };
+    if let Err(error) = registry.register(entry) {
+        tracing::warn!(pid, %error, "could not record an agent in the leftover registry");
+    }
+    start
+}
+
+#[cfg(unix)]
+fn session_of(pid: u32) -> Option<u32> {
+    let raw = i32::try_from(pid).ok()?;
+    nix::unistd::getsid(Some(nix::unistd::Pid::from_raw(raw)))
+        .ok()
+        .and_then(|sid| u32::try_from(sid.as_raw()).ok())
+}
+
+/// The cwd and program checks, on the blocking pool: a macOS privacy prompt can hold the call
+/// until the user answers, and Unix reports a missing cwd as a missing program, so the cwd goes
+/// first.
+async fn check(rt: &Handle, cwd: &Path, program: &Path, vars: &EnvMap) -> Result<(), SpawnError> {
+    let (cwd, program) = (cwd.to_path_buf(), program.to_path_buf());
+    #[cfg(windows)]
+    let extensions = crate::env::pathext(vars);
+    #[cfg(not(windows))]
+    let _ = vars;
+    rt.spawn_blocking(move || {
+        check_cwd(&cwd)?;
+        #[cfg(windows)]
+        check_program(&program, &extensions)?;
+        #[cfg(not(windows))]
+        check_program(&program)?;
+        Ok(())
+    })
+    .await
+    .unwrap_or_else(|error| {
+        Err(SpawnError::Spawn {
+            program: String::new(),
+            source: io::Error::other(error),
+        })
+    })
+}
+
+/// The process cwd: it exists, is a folder, and may be read. Folders are never canonicalized (a
+/// Windows result carries a `\\?\` prefix Node agents mishandle).
+fn check_cwd(cwd: &Path) -> Result<(), SpawnError> {
+    #[cfg(windows)]
+    check_cwd_length(cwd)?;
+    let invalid = |reason: &str| SpawnError::InvalidCwd {
+        path: cwd.to_path_buf(),
+        reason: reason.to_owned(),
+    };
+    match std::fs::metadata(cwd) {
+        Ok(meta) if meta.is_dir() => {}
+        Ok(_) => return Err(invalid("it is not a folder")),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Err(invalid("it does not exist"));
+        }
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            return Err(SpawnError::CwdNotAllowed {
+                path: cwd.to_path_buf(),
+            });
+        }
+        Err(error) => return Err(invalid(&error.to_string())),
+    }
+    match std::fs::read_dir(cwd) {
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            Err(SpawnError::CwdNotAllowed {
+                path: cwd.to_path_buf(),
             })
         }
-        .boxed()
+        _ => Ok(()),
     }
+}
+
+/// Windows refuses a working folder longer than 259 UTF-16 units. Pure, so it is tested
+/// everywhere.
+#[cfg(any(windows, test))]
+pub(crate) fn check_cwd_length(cwd: &Path) -> Result<(), SpawnError> {
+    if cwd.to_string_lossy().encode_utf16().count() > WINDOWS_MAX_CWD {
+        return Err(SpawnError::InvalidCwd {
+            path: cwd.to_path_buf(),
+            reason: "it is longer than Windows allows for a program's working folder".into(),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn check_program(program: &Path) -> Result<(), SpawnError> {
+    let name = || program.display().to_string();
+    if !program.is_absolute() {
+        return Err(SpawnError::ProgramNotFound { program: name() });
+    }
+    match std::fs::metadata(program) {
+        Ok(meta) if meta.is_file() => {
+            use std::os::unix::fs::PermissionsExt;
+            if meta.permissions().mode() & 0o111 == 0 {
+                return Err(SpawnError::PermissionDenied { program: name() });
+            }
+            Ok(())
+        }
+        Ok(_) => Err(SpawnError::ProgramNotFound { program: name() }),
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            Err(SpawnError::PermissionDenied { program: name() })
+        }
+        Err(_) => Err(SpawnError::ProgramNotFound { program: name() }),
+    }
+}
+
+#[cfg(windows)]
+fn check_program(program: &Path, extensions: &[String]) -> Result<(), SpawnError> {
+    let name = || program.display().to_string();
+    if !program.is_absolute() || !program.is_file() {
+        return Err(SpawnError::ProgramNotFound { program: name() });
+    }
+    let runnable = program.extension().is_some_and(|extension| {
+        let extension = extension.to_string_lossy();
+        extensions.iter().any(|known| {
+            known
+                .trim_start_matches('.')
+                .eq_ignore_ascii_case(&extension)
+        })
+    });
+    if !runnable {
+        return Err(SpawnError::Spawn {
+            program: name(),
+            source: io::Error::other("it has no extension Windows runs (PATHEXT)"),
+        });
+    }
+    Ok(())
+}
+
+/// A command with exactly `vars` as its env and its stdout and stderr piped.
+fn command(
+    program: &Path,
+    args: &[OsString],
+    cwd: &Path,
+    vars: &EnvMap,
+    stdin: Stdio,
+) -> tokio::process::Command {
+    let mut command = tokio::process::Command::new(program);
+    command
+        .args(args)
+        .current_dir(cwd)
+        .env_clear()
+        .envs(vars.iter().map(|(name, value)| (name.as_os_str(), value)))
+        .stdin(stdin)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    command
+}
+
+/// The spike's wrapper stack: `KillOnDrop` everywhere; Unix adds `ResetSigmask` and a group of its
+/// own (a session of its own for helpers that ask for one); Windows adds `CREATE_NO_WINDOW` and a
+/// kill-on-close job object, for every agent and helper.
+pub(crate) fn wrap(command: tokio::process::Command, new_session: bool) -> CommandWrap {
+    let mut wrapped = CommandWrap::from(command);
+    wrapped.wrap(KillOnDrop);
+    #[cfg(unix)]
+    {
+        use process_wrap::tokio::{ProcessGroup, ProcessSession, ResetSigmask};
+        wrapped.wrap(ResetSigmask);
+        if new_session {
+            wrapped.wrap(ProcessSession);
+        } else {
+            wrapped.wrap(ProcessGroup::leader());
+        }
+    }
+    #[cfg(windows)]
+    {
+        use process_wrap::tokio::{CreationFlags, JobObject};
+        let _ = new_session;
+        wrapped.wrap(CreationFlags(
+            windows::Win32::System::Threading::CREATE_NO_WINDOW,
+        ));
+        wrapped.wrap(JobObject);
+    }
+    wrapped
+}
+
+/// Spawns inside `rt`, so the child's pipes and reaping belong to it wherever this is polled.
+fn start(
+    rt: &Handle,
+    command: tokio::process::Command,
+    new_session: bool,
+    program: &Path,
+) -> Result<Box<dyn ChildWrapper>, SpawnError> {
+    let _context = rt.enter();
+    wrap(command, new_session)
+        .spawn()
+        .map_err(|source| spawn_error(program, source))
+}
+
+fn spawn_error(program: &Path, source: io::Error) -> SpawnError {
+    let program = program.display().to_string();
+    match source.kind() {
+        io::ErrorKind::NotFound => SpawnError::ProgramNotFound { program },
+        io::ErrorKind::PermissionDenied => SpawnError::PermissionDenied { program },
+        _ => SpawnError::Spawn { program, source },
+    }
+}
+
+fn child_pid(child: &dyn ChildWrapper, program: &Path) -> Result<u32, SpawnError> {
+    child.id().ok_or_else(|| SpawnError::Spawn {
+        program: program.display().to_string(),
+        source: io::Error::other("the process exited before its pid could be read"),
+    })
 }
 
 /// A running agent: its pipes, its control, and its protocol log.
@@ -207,15 +546,249 @@ pub struct HelperOutput {
 }
 
 /// Runs a short-lived helper: stdin `/dev/null`, registered for the sweep, the whole tree killed on
-/// timeout and when the returned future is dropped.
+/// timeout and when the returned future is dropped. A helper leaves nothing behind: what its tree
+/// still runs after it exits is killed too, and its pipes get [`PIPE_EOF_GRACE`] to end.
 pub async fn run_helper(
-    _registry: &LeftoverRegistry,
+    registry: &LeftoverRegistry,
     spec: HelperSpec,
 ) -> Result<HelperOutput, SpawnError> {
-    Err(SpawnError::Spawn {
-        program: spec.program.display().to_string(),
-        source: io::Error::other(NOT_BUILT),
+    let rt = Handle::try_current().map_err(|_| SpawnError::NoRuntime)?;
+    let HelperSpec {
+        program,
+        args,
+        cwd,
+        env,
+        set,
+        new_session,
+        timeout,
+        max_stdout,
+    } = spec;
+    let env = match env {
+        HelperEnv::Resolved(env) => env,
+        HelperEnv::ProcessEnv => {
+            let mut vars = process_env();
+            strip_launch_context(&mut vars);
+            Arc::new(ResolvedEnv {
+                vars,
+                source: EnvSource::Fallback {
+                    reason: "auracode's own environment".into(),
+                },
+                warnings: Vec::new(),
+                resolved_at_ms: now_millis(),
+            })
+        }
+    };
+    let (vars, _) = child_env(&env, &set);
+    check(&rt, &cwd, &program, &vars).await?;
+    let mut child = start(
+        &rt,
+        command(&program, &args, &cwd, &vars, Stdio::null()),
+        new_session,
+        &program,
+    )?;
+    let pid = child_pid(child.as_ref(), &program)?;
+    let mut guard = HelperGuard {
+        pid,
+        #[cfg(unix)]
+        new_session,
+        rt: rt.clone(),
+        registry: registry.handle(),
+        readers: Vec::new(),
+        done: false,
+    };
+    #[cfg(unix)]
+    if guard.registry.is_enabled() {
+        let handle = guard.registry.clone();
+        let label = format!(
+            "helper {}",
+            program.file_name().map_or_else(
+                || program.display().to_string(),
+                |name| name.to_string_lossy().into_owned()
+            )
+        );
+        let _ = rt
+            .spawn_blocking(move || register_agent(&handle, pid, label, Vec::new()))
+            .await;
+    }
+
+    let stdout = Arc::new(Mutex::new(Captured::default()));
+    let tail = Arc::new(StderrTail::default());
+    let readers = [
+        child
+            .stdout()
+            .take()
+            .map(|pipe| rt.spawn(capture(pipe, Arc::clone(&stdout), max_stdout))),
+        child
+            .stderr()
+            .take()
+            .map(|pipe| rt.spawn(tail_into(pipe, Arc::clone(&tail)))),
+    ];
+    guard.readers = readers
+        .iter()
+        .flatten()
+        .map(|task| task.abort_handle())
+        .collect();
+
+    let (exit, timed_out) = match tokio::time::timeout(timeout, wait_direct(child.as_mut())).await {
+        Ok(status) => (status.ok().map(ExitInfo::from_status), false),
+        Err(_) => {
+            guard.kill_tree(child.as_mut()).await;
+            let _ = tokio::time::timeout(Duration::from_secs(2), wait_direct(child.as_mut())).await;
+            (None, true)
+        }
+    };
+    // Whatever the tree still runs (a background job of an rc file, say) goes too.
+    guard.kill_tree(child.as_mut()).await;
+    for reader in readers.into_iter().flatten() {
+        let _ = tokio::time::timeout(PIPE_EOF_GRACE, reader).await;
+    }
+    guard.finish().await;
+    let captured = std::mem::take(&mut *lock(&stdout));
+    Ok(HelperOutput {
+        exit,
+        stdout: captured.bytes,
+        stdout_truncated: captured.truncated,
+        stderr_tail: tail.tail(STDERR_TAIL_BYTES),
+        timed_out,
     })
+}
+
+/// The direct child's exit, never a group-wide or job-wide wait.
+async fn wait_direct(child: &mut dyn ChildWrapper) -> io::Result<std::process::ExitStatus> {
+    match native_child(child) {
+        Some(native) => native.wait().await,
+        None => Err(io::Error::other("no process to wait for")),
+    }
+}
+
+/// Kills a helper's tree when its future is dropped, and unregisters it.
+struct HelperGuard {
+    pid: u32,
+    #[cfg(unix)]
+    new_session: bool,
+    rt: Handle,
+    registry: RegistryHandle,
+    readers: Vec<tokio::task::AbortHandle>,
+    done: bool,
+}
+
+impl HelperGuard {
+    /// Kills the helper's group (its session, for a helper with one) or its job.
+    async fn kill_tree(&self, child: &mut dyn ChildWrapper) {
+        #[cfg(unix)]
+        {
+            let _ = child;
+            kill_group(self.pid);
+            if self.new_session {
+                let sid = self.pid;
+                let _ = self
+                    .rt
+                    .spawn_blocking(move || crate::shutdown::kill_session_blocking(sid))
+                    .await;
+            }
+        }
+        #[cfg(windows)]
+        {
+            let _ = child.start_kill();
+        }
+    }
+
+    async fn finish(&mut self) {
+        self.done = true;
+        let registry = self.registry.clone();
+        let pid = self.pid;
+        let _ = self
+            .rt
+            .spawn_blocking(move || registry.unregister(pid))
+            .await;
+    }
+}
+
+impl Drop for HelperGuard {
+    fn drop(&mut self) {
+        if self.done {
+            return;
+        }
+        // Dropped mid-run: the tree dies now (on Windows the job closes with the child next).
+        #[cfg(unix)]
+        {
+            kill_group(self.pid);
+            if self.new_session {
+                let sid = self.pid;
+                drop(
+                    self.rt
+                        .spawn_blocking(move || crate::shutdown::kill_session_blocking(sid)),
+                );
+            }
+        }
+        for reader in &self.readers {
+            reader.abort();
+        }
+        let registry = self.registry.clone();
+        let pid = self.pid;
+        drop(self.rt.spawn_blocking(move || registry.unregister(pid)));
+    }
+}
+
+#[cfg(unix)]
+fn kill_group(pgid: u32) {
+    if let Ok(raw) = i32::try_from(pgid)
+        && raw > 0
+    {
+        let _ = nix::sys::signal::killpg(
+            nix::unistd::Pid::from_raw(raw),
+            nix::sys::signal::Signal::SIGKILL,
+        );
+    }
+}
+
+/// A helper's stdout, up to its limit.
+#[derive(Debug, Default)]
+struct Captured {
+    bytes: Vec<u8>,
+    truncated: bool,
+}
+
+/// Reads to the end, keeping at most `max` bytes: the rest is still read, so the helper never
+/// blocks on a full pipe.
+async fn capture(mut pipe: impl AsyncRead + Unpin, into: Arc<Mutex<Captured>>, max: usize) {
+    let mut chunk = vec![0u8; 64 * 1024];
+    loop {
+        let read = match pipe.read(&mut chunk).await {
+            Ok(0) => return,
+            Ok(read) => read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => return,
+        };
+        let mut captured = lock(&into);
+        let room = max.saturating_sub(captured.bytes.len());
+        let bytes = chunk.get(..read).unwrap_or_default();
+        if bytes.len() > room {
+            captured.truncated = true;
+        }
+        captured
+            .bytes
+            .extend_from_slice(bytes.get(..room.min(bytes.len())).unwrap_or_default());
+    }
+}
+
+/// Reads stderr to the end into the tail.
+async fn tail_into(mut pipe: impl AsyncRead + Unpin, tail: Arc<StderrTail>) {
+    let mut chunk = vec![0u8; 16 * 1024];
+    loop {
+        match pipe.read(&mut chunk).await {
+            Ok(0) => return,
+            Ok(read) => tail.push(chunk.get(..read).unwrap_or_default()),
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => return,
+        }
+    }
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 #[cfg(test)]
@@ -248,6 +821,55 @@ mod tests {
             serde_json::to_value(&daemon).expect("serialize"),
             serde_json::json!({"program": null, "args_in_order": ["hermes_cli.main", "gateway", "run"]})
         );
+    }
+
+    #[test]
+    fn windows_long_cwd_rejected() {
+        let short = PathBuf::from(format!("C:\\{}", "a".repeat(WINDOWS_MAX_CWD - 3)));
+        assert!(check_cwd_length(&short).is_ok());
+        let long = PathBuf::from(format!("C:\\{}", "a".repeat(WINDOWS_MAX_CWD - 2)));
+        let error = check_cwd_length(&long).expect_err("too long");
+        assert!(matches!(error, SpawnError::InvalidCwd { .. }));
+        assert!(
+            error
+                .to_string()
+                .ends_with("it is longer than Windows allows for a program's working folder"),
+            "{error}"
+        );
+        // UTF-16 units, not bytes: an emoji counts two, an accented letter one.
+        let units = PathBuf::from(format!("C:\\{}", "é".repeat(WINDOWS_MAX_CWD - 3)));
+        assert!(check_cwd_length(&units).is_ok());
+        let emoji = PathBuf::from(format!("C:\\{}", "🚀".repeat(129)));
+        assert!(check_cwd_length(&emoji).is_err());
+    }
+
+    #[test]
+    fn windows_wrappers_per_agent() {
+        use process_wrap::tokio::KillOnDrop;
+        for new_session in [false, true] {
+            let wrapped = wrap(tokio::process::Command::new("agent"), new_session);
+            assert!(wrapped.has_wrap::<KillOnDrop>());
+            #[cfg(windows)]
+            {
+                use process_wrap::tokio::{CreationFlags, JobObject};
+                assert!(
+                    wrapped.has_wrap::<JobObject>(),
+                    "every agent and helper gets a job"
+                );
+                let flags = wrapped
+                    .get_wrap::<CreationFlags>()
+                    .expect("creation flags")
+                    .0;
+                assert_eq!(flags, windows::Win32::System::Threading::CREATE_NO_WINDOW);
+            }
+            #[cfg(unix)]
+            {
+                use process_wrap::tokio::{ProcessGroup, ProcessSession, ResetSigmask};
+                assert!(wrapped.has_wrap::<ResetSigmask>());
+                assert_eq!(wrapped.has_wrap::<ProcessGroup>(), !new_session);
+                assert_eq!(wrapped.has_wrap::<ProcessSession>(), new_session);
+            }
+        }
     }
 
     #[test]
