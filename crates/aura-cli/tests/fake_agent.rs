@@ -245,6 +245,53 @@ mod process {
         assert!(headless.shutdown().await.saved);
     }
 
+    /// claude-acp and codex-acp keep a session only from its first prompt, so a probe, which
+    /// never prompts, can't continue one: the agent answers the resume as not found, and auracode
+    /// starts a new session and says so. That is the agent's way, not a failed resume.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn probe_reads_a_refused_resume_of_a_session_never_prompted() {
+        let machine = Machine::with_fake_hermes();
+        let headless = machine
+            .headless(&[
+                ("AURA_FAKE_OPEN_DELAY_MS", "300"),
+                ("AURA_FAKE_FORGET_UNPROMPTED", "1"),
+            ])
+            .await;
+        let folder = repo::create(&machine.path("repo"), RepoKind::Hostile, &headless.registry)
+            .await
+            .expect("the chat folder");
+        let (out, captured) = Out::capture();
+        let outcome = probe::run(
+            &headless,
+            &ProbeArgs {
+                agent: "hermes".into(),
+                env: Vec::new(),
+                folder: None,
+            },
+            &folder,
+            true,
+            PROBE,
+            &out,
+        )
+        .await
+        .expect("the probe runs");
+        let output = captured.text();
+        assert_no_failures(&output);
+        assert_eq!(outcome, Outcome::Passed, "{output}");
+        assert!(
+            output.contains("INFO  7 resume: the agent keeps no session it was never prompted in: it answered the resume -32002 (Resource not found: fake-"),
+            "{output}"
+        );
+        assert!(
+            output.contains("auracode started a new session (fake-")
+                && output.contains("and said so: \"Could not continue the earlier session (Resource not found: fake-"),
+            "{output}"
+        );
+        assert_passed(&output, "7 resume: the options are back as they were");
+        assert_passed(&output, "9 interrupt: the next start was ready");
+        assert!(headless.shutdown().await.saved);
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn smoke_runs_every_scenario_against_a_real_process() {
         let machine = Machine::with_fake_hermes();

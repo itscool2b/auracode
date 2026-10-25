@@ -1300,6 +1300,10 @@ impl Probe<'_> {
             .ok()
             .and_then(|lists| lists.capabilities)
             .is_some_and(|capabilities| capabilities.resume);
+        let records = match &new_log {
+            Some(log) => self.log_records(log, open_settled).await,
+            None => Vec::new(),
+        };
         match (native, now.as_deref()) {
             (Some(was), Some(is)) if was == is => {
                 self.report
@@ -1313,19 +1317,34 @@ impl Probe<'_> {
                     was.unwrap_or("none")
                 ),
             ),
-            (was, is) => self.report.fail(
-                step,
-                format!(
-                    "a new session ({}) replaced {}, although the agent can continue sessions",
-                    is.unwrap_or("none"),
-                    was.unwrap_or("none")
-                ),
-            ),
+            (was, is) => {
+                // claude-acp and codex-acp keep a session only from its first prompt, and the probe
+                // never prompts: the agent refuses the resume, and auracode falls back (5.3.2).
+                let notice = chat
+                    .watch
+                    .with(|state| state.notices_since(&chat.chat_id, mark))
+                    .into_iter()
+                    .find(|notice| notice.starts_with("Could not continue the earlier session"));
+                match (refused_open(&records), notice) {
+                    (Some(answer), Some(notice)) => self.report.info(
+                        step,
+                        format!(
+                            "the agent keeps no session it was never prompted in: it answered the resume {answer}, so auracode started a new session ({}) and said so: \"{notice}\"",
+                            is.unwrap_or("none")
+                        ),
+                    ),
+                    _ => self.report.fail(
+                        step,
+                        format!(
+                            "a new session ({}) replaced {}, although the agent can continue sessions",
+                            is.unwrap_or("none"),
+                            was.unwrap_or("none")
+                        ),
+                    ),
+                }
+            }
         }
-        if let Some(log) = &new_log {
-            let records = self
-                .log_records(log, |records| logs::first_open(records).is_some())
-                .await;
+        if new_log.is_some() {
             let method = logs::first_open(&records)
                 .and_then(logs::message)
                 .and_then(|msg| msg.get("method"))
@@ -1735,6 +1754,46 @@ fn auth_method_ids(result: &Value) -> String {
     } else {
         ids.join(", ")
     }
+}
+
+/// Whether a log holds the first session open's outcome: its reply, and after an error reply the
+/// `session/new` the driver falls back to.
+fn open_settled(records: &[Value]) -> bool {
+    let Some(reply) = logs::first_open(records)
+        .and_then(logs::message)
+        .and_then(|open| open.get("id"))
+        .and_then(|id| logs::reply(records, id))
+    else {
+        return false;
+    };
+    let failed = logs::message(reply).is_some_and(|msg| msg.get("error").is_some());
+    !failed || logs::request(records, "session/new").is_some()
+}
+
+/// The error the agent answered the first session open with, when the driver opened a new session
+/// after it (spec 5.3.2): `-32002 (Resource not found: <id>)`, with the error's `data.details`
+/// when it has them.
+fn refused_open(records: &[Value]) -> Option<String> {
+    let open = logs::message(logs::first_open(records)?)?;
+    if open.get("method").and_then(Value::as_str) == Some("session/new") {
+        return None;
+    }
+    let reply = logs::reply(records, open.get("id")?)?;
+    let error = logs::message(reply)?.get("error")?;
+    logs::request(records, "session/new")?;
+    let code = error
+        .get("code")
+        .map_or_else(|| "?".to_owned(), Value::to_string);
+    let message = error
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    Some(
+        match error.pointer("/data/details").and_then(Value::as_str) {
+            Some(details) => format!("{code} ({message}: {details})"),
+            None => format!("{code} ({message})"),
+        },
+    )
 }
 
 /// The result of the first session open, when the agent answered it.
