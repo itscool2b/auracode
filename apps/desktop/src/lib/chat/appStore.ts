@@ -57,6 +57,12 @@ export class AppStore {
   readonly #listeners = new Set<() => void>();
   #state: AppSnapshot = EMPTY;
   #running = false;
+  /**
+   * Every start and stop gets a number. A poll still waiting for its answer when the store stops
+   * (React's development mode starts, stops and starts again at once) must not re-arm in the
+   * next run, or that run would poll twice.
+   */
+  #run = 0;
   #timers = new Set<ReturnType<typeof setTimeout>>();
   /**
    * Every status subscription gets a number: a new one replaces the webview's earlier one, whose
@@ -81,30 +87,33 @@ export class AppStore {
   start(): void {
     if (this.#running) return;
     this.#running = true;
-    this.#subscribeStatus();
+    const run = ++this.#run;
+    this.#subscribeStatus(run);
     void this.reloadChats();
-    void this.#pollStorage();
-    void this.#pollEnv();
-    void this.#pollAgents();
+    void this.#pollStorage(run);
+    void this.#pollEnv(run);
+    void this.#pollAgents(run);
   }
 
   stop(): void {
     this.#running = false;
+    this.#run += 1;
     this.#statusGeneration += 1;
     for (const timer of this.#timers) clearTimeout(timer);
     this.#timers.clear();
   }
 
-  #later(delay: number, run: () => void): void {
-    if (!this.#running) return;
+  /** Runs `next` after `delay`, unless run `run` has ended by then (or already has). */
+  #later(run: number, delay: number, next: () => void): void {
+    if (!this.#running || run !== this.#run) return;
     const timer = setTimeout(() => {
       this.#timers.delete(timer);
-      if (this.#running) run();
+      if (this.#running && run === this.#run) next();
     }, delay);
     this.#timers.add(timer);
   }
 
-  #subscribeStatus(): void {
+  #subscribeStatus(run: number): void {
     const generation = ++this.#statusGeneration;
     this.#transport
       .statusSubscribe(
@@ -114,15 +123,15 @@ export class AppStore {
         () => {
           if (generation !== this.#statusGeneration) return;
           // The shell ended the channel: subscribe again, and catch up on what was missed.
-          this.#later(STATUS_RESUBSCRIBE_MS, () => {
-            this.#subscribeStatus();
+          this.#later(run, STATUS_RESUBSCRIBE_MS, () => {
+            this.#subscribeStatus(run);
             void this.reloadChats();
           });
         },
       )
       .catch(() => {
         if (generation !== this.#statusGeneration) return;
-        this.#later(STATUS_RESUBSCRIBE_MS, () => this.#subscribeStatus());
+        this.#later(run, STATUS_RESUBSCRIBE_MS, () => this.#subscribeStatus(run));
       });
   }
 
@@ -162,7 +171,7 @@ export class AppStore {
     this.#set({ ...this.#state, chats: byActivity([chat, ...others]) });
   }
 
-  async #pollStorage(): Promise<void> {
+  async #pollStorage(run: number): Promise<void> {
     try {
       const storage = await this.#transport.storageStatus();
       if (!sameStorage(this.#state.storage, storage)) this.#set({ ...this.#state, storage });
@@ -170,10 +179,14 @@ export class AppStore {
       // Only a refused call fails here; the next poll tries again.
     }
     const saving = this.#state.storage?.state.state === "ok";
-    this.#later(saving ? STORAGE_POLL_MS : STORAGE_ALERT_POLL_MS, () => void this.#pollStorage());
+    this.#later(
+      run,
+      saving ? STORAGE_POLL_MS : STORAGE_ALERT_POLL_MS,
+      () => void this.#pollStorage(run),
+    );
   }
 
-  async #pollEnv(): Promise<void> {
+  async #pollEnv(run: number): Promise<void> {
     try {
       const env = await this.#transport.envStatus();
       this.#set({ ...this.#state, env, envError: null });
@@ -181,11 +194,11 @@ export class AppStore {
       this.#set({ ...this.#state, envError: errorMessage(error) });
     }
     if (this.#state.env?.state.state === "resolving") {
-      this.#later(DETECTION_POLL_MS, () => void this.#pollEnv());
+      this.#later(run, DETECTION_POLL_MS, () => void this.#pollEnv(run));
     }
   }
 
-  async #pollAgents(): Promise<void> {
+  async #pollAgents(run: number): Promise<void> {
     try {
       const agents = await this.#transport.agentsList();
       this.#set({ ...this.#state, agents });
@@ -193,7 +206,7 @@ export class AppStore {
       // Agents stay as they were; the next poll or Refresh tries again.
     }
     if (this.#state.agents?.some((agent) => agent.availability.state === "checking")) {
-      this.#later(DETECTION_POLL_MS, () => void this.#pollAgents());
+      this.#later(run, DETECTION_POLL_MS, () => void this.#pollAgents(run));
     }
   }
 
@@ -211,13 +224,14 @@ export class AppStore {
 
   /** The env banner's Retry: a new resolution, followed until it ends. */
   async retryEnv(): Promise<void> {
+    const run = this.#run;
     try {
       const env = await this.#transport.envRefresh();
       this.#set({ ...this.#state, env, envError: null });
     } catch (error) {
       this.#set({ ...this.#state, envError: errorMessage(error) });
     }
-    this.#later(DETECTION_POLL_MS, () => void this.#pollEnv());
+    this.#later(run, DETECTION_POLL_MS, () => void this.#pollEnv(run));
   }
 
   #set(state: AppSnapshot): void {

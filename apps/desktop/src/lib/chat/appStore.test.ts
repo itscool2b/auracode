@@ -121,6 +121,31 @@ describe("the app store", () => {
     store.stop();
   });
 
+  it("a restart keeps one of each poll, even with answers still on their way", async () => {
+    const fake = new FakeTransport({
+      envStatus: () => Promise.resolve({ state: { state: "resolving" }, removed: [] }),
+      agentsList: () => Promise.resolve([agent("mock", { state: "checking" })]),
+    });
+    const store = new AppStore(fake);
+    // React's development mode starts, stops and starts again before the first answers arrive.
+    store.start();
+    store.stop();
+    store.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.callsOf("storageStatus")).toHaveLength(2);
+    expect(fake.callsOf("envStatus")).toHaveLength(2);
+    expect(fake.callsOf("agentsList")).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(10 * STORAGE_POLL_MS);
+    // Only the second run polls: storage every 5 s, the env and the agents every second.
+    expect(fake.callsOf("storageStatus")).toHaveLength(2 + 10);
+    const detections = (10 * STORAGE_POLL_MS) / DETECTION_POLL_MS;
+    expect(fake.callsOf("envStatus")).toHaveLength(2 + detections);
+    expect(fake.callsOf("agentsList")).toHaveLength(2 + detections);
+    store.stop();
+    await vi.advanceTimersByTimeAsync(10 * STORAGE_POLL_MS);
+    expect(fake.callsOf("storageStatus")).toHaveLength(2 + 10);
+  });
+
   it("polls storage faster while saving is paused", async () => {
     let storage = OK_STORAGE;
     const fake = new FakeTransport({ storageStatus: () => Promise.resolve(storage) });
