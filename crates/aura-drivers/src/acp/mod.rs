@@ -1228,17 +1228,10 @@ impl Session {
                 self.opened_existing(id, ResumeOutcome::Loaded, &value);
             }
             (OpenKind::Resume(_) | OpenKind::Load(_), Err(Failure::Rpc(error)))
-                if matches!(
-                    error.code,
-                    codes::RESOURCE_NOT_FOUND | codes::METHOD_NOT_FOUND | codes::INVALID_PARAMS
-                ) =>
+                if self.not_found_reason(&error).is_some() =>
             {
                 self.replay = None;
-                let reason = if error.message.trim().is_empty() {
-                    format!("error {}", error.code)
-                } else {
-                    error.message.clone()
-                };
+                let reason = self.not_found_reason(&error).unwrap_or_default();
                 self.push_notice(NoticeLevel::Info, fresh_notice(&reason));
                 self.send_open(OpenKind::New {
                     fresh: Some(reason),
@@ -1269,6 +1262,23 @@ impl Session {
                 self.fail_start(protocol_error(message), false, ShutdownPlan::STANDARD);
             }
         }
+    }
+
+    /// When an error answer to a resume or load means the session does not exist (spec 5.3.2):
+    /// -32002, -32601 and -32602, and what the dialect reads as not found. The reason the
+    /// fallback's notice gives.
+    fn not_found_reason(&self, error: &RpcError) -> Option<String> {
+        if matches!(
+            error.code,
+            codes::RESOURCE_NOT_FOUND | codes::METHOD_NOT_FOUND | codes::INVALID_PARAMS
+        ) {
+            return Some(if error.message.trim().is_empty() {
+                format!("error {}", error.code)
+            } else {
+                error.message.clone()
+            });
+        }
+        self.dialect.open_not_found(error)
     }
 
     /// A resume or load succeeded: the session keeps its id.

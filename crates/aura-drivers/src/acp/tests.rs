@@ -767,6 +767,78 @@ async fn open_resume_variants() {
     ));
 }
 
+/// codex-acp answers the resume of a thread that has no rollout yet (Codex writes one at a
+/// thread's first turn, so every session never prompted) with -32603 "Internal error" and the
+/// reason in `data.details`, as the real-agent probe showed (spec 10.2 step 7). The codex-acp
+/// dialect reads that as not found: a new session, Fresh, and the notice with Codex's reason.
+#[tokio::test(start_paused = true)]
+async fn codex_resume_of_a_thread_without_a_rollout_starts_a_new_session() {
+    let no_rollout = |id: &Value, details: &str| {
+        json!({"jsonrpc": "2.0", "id": id, "error": {
+            "code": -32603, "message": "Internal error", "data": {"details": details}}})
+    };
+    let resume = |dialect: &str| {
+        let mut setup = setup(dialect);
+        setup.resume = Some("old-1".into());
+        setup
+    };
+    let mut harness = Harness::start(resume("codex-acp")).await;
+    let (id, _) = harness.request("initialize").await;
+    harness.reply(&id, init_result());
+    let (id, _) = harness.request("session/resume").await;
+    harness.send(no_rollout(&id, "no rollout found for thread id old-1"));
+    let (id, _) = harness.request("session/new").await;
+    harness.reply(&id, json!({"sessionId": "new-1"}));
+    let events = harness
+        .events_until(|event| matches!(event, DriverEvent::Ready(_)))
+        .await;
+    let info = ready_info(&events);
+    assert_eq!(info.native_session_id, "new-1");
+    assert_eq!(
+        info.resumed,
+        ResumeOutcome::Fresh {
+            reason: "no rollout found for thread id old-1".into()
+        }
+    );
+    assert!(
+        transcript(&events)
+            .iter()
+            .any(|(turn, event)| turn.is_none()
+                && matches!(event, AuraEvent::Notice { message, .. }
+            if message == &fresh_notice("no rollout found for thread id old-1")))
+    );
+
+    // Any other internal error from codex-acp still ends the start, the id kept for Retry.
+    let mut harness = Harness::start(resume("codex-acp")).await;
+    let (id, _) = harness.request("initialize").await;
+    harness.reply(&id, init_result());
+    let (id, _) = harness.request("session/resume").await;
+    harness.send(no_rollout(&id, "the app-server exited"));
+    let (_, exit) = harness.finish().await;
+    assert!(matches!(
+        exit,
+        DriverExit::StartFailed(DriverError {
+            kind: ErrorKind::AgentError,
+            ..
+        })
+    ));
+
+    // Another agent's -32603 is a failed start too, whatever its details say.
+    let mut harness = Harness::start(resume("generic")).await;
+    let (id, _) = harness.request("initialize").await;
+    harness.reply(&id, init_result());
+    let (id, _) = harness.request("session/resume").await;
+    harness.send(no_rollout(&id, "no rollout found for thread id old-1"));
+    let (_, exit) = harness.finish().await;
+    assert!(matches!(
+        exit,
+        DriverExit::StartFailed(DriverError {
+            kind: ErrorKind::AgentError,
+            ..
+        })
+    ));
+}
+
 #[tokio::test(start_paused = true)]
 async fn the_open_deadline_resets_on_every_update_up_to_the_ceiling() {
     let (mut harness, _, id) = open_resume(init_result()).await;

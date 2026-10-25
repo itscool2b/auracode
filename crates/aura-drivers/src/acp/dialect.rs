@@ -9,6 +9,7 @@
 //! | replay may hold unseen work | yes | no | no | no |
 //! | auth commands | launch command plus the method's args | `--cli` methods as the user's `claude` | fallback `codex login` | launch command plus the method's args |
 //! | start failure hint | `windows_breakaway_unavailable` | none | none | none |
+//! | open not found | none | none | -32603 "no rollout found" | none |
 
 use std::ffi::OsStr;
 
@@ -18,6 +19,7 @@ use aura_protocol::{AutoAnswer, Autonomy, ToolKind, UsageScope};
 
 use super::wire;
 use crate::driver::DriverEvent;
+use crate::jsonrpc::{RpcError, codes};
 
 /// How one agent family speaks ACP beyond the schema.
 pub trait AcpDialect: Send + Sync + 'static {
@@ -46,6 +48,11 @@ pub trait AcpDialect: Send + Sync + 'static {
     }
     /// A sentence added to a start failure whose stderr tail matches (Hermes on Windows).
     fn start_failure_hint(&self, _stderr_tail: &str) -> Option<String> {
+        None
+    }
+    /// An error answer to `session/resume` or `session/load` that says the session does not exist,
+    /// beyond -32002, -32601 and -32602: the reason the fallback's notice gives, or `None`.
+    fn open_not_found(&self, _error: &RpcError) -> Option<String> {
         None
     }
     fn on_request(&self, _method: &str, _params: &serde_json::Value) -> DialectReply {
@@ -89,6 +96,9 @@ pub fn dialect_for(id: &str) -> Box<dyn AcpDialect> {
 
 /// The note claude-acp's Full auto carries when the user's settings removed bypass mode.
 pub const CLAUDE_NO_BYPASS_NOTE: &str = "Claude Code's settings turn off bypass mode, so Full auto runs as Accept edits and auracode asks before other actions.";
+
+/// What codex-acp's answer to the resume of a thread that has no rollout yet says (Codex 0.164.0).
+pub const CODEX_NO_ROLLOUT: &str = "no rollout found";
 
 /// The hint for a Hermes start that failed because Windows refused its gateway's breakaway.
 pub const HERMES_BREAKAWAY_HINT: &str = "On Windows, auracode can't let Hermes start its gateway yet. Run `hermes gateway ensure` in a terminal, then press Retry.";
@@ -349,6 +359,15 @@ impl AcpDialect for CodexAcp {
             ],
             env: Vec::new(),
         }]
+    }
+
+    /// Codex writes a thread's rollout at its first turn, so it can't resume a thread never
+    /// prompted: codex-acp answers -32603 "Internal error" with "no rollout found for thread id
+    /// <id>" in `data.details`.
+    fn open_not_found(&self, error: &RpcError) -> Option<String> {
+        let details = error.data.as_ref()?.get("details")?.as_str()?;
+        (error.code == codes::INTERNAL_ERROR && details.contains(CODEX_NO_ROLLOUT))
+            .then(|| details.to_owned())
     }
 
     fn agent_label(&self) -> Option<&'static str> {

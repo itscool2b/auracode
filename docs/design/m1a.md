@@ -1381,9 +1381,11 @@ Initializing  initialize, deadline = launch.startup_timeout (60 s)
 Opening       resume = Some(id): agent advertises resume -> session/resume; else loadSession -> session/load;
                 else session/new with Fresh { "this agent can't continue earlier sessions" }
               resume or load reply:
-                -32002, -32601, -32602 -> session/new and Fresh { agent's message }, with the notice "Could not
-                  continue the earlier session (<message>); started a new one. The conversation above stays here, but
-                  the agent does not remember it."
+                -32002, -32601, -32602, or an error the dialect reads as not found (codex-acp: -32603 whose
+                  `data.details` says "no rollout found", its answer for a thread never prompted) -> session/new and
+                  Fresh { agent's message, or the dialect's reason }, with the notice "Could not continue the earlier
+                  session (<message>); started a new one. The conversation above stays here, but the agent does not
+                  remember it."
                 -32000 -> AuthRequired
                 any other error, or the open deadline -> StartFailed (AgentError or StartTimeout); the native id is
                   kept, so Retry tries to continue it again, and the card also offers Start fresh (chat_start fresh)
@@ -1591,6 +1593,9 @@ pub trait AcpDialect: Send + Sync + 'static {
     fn fallback_auth_commands(&self, _launch: &LaunchSpec, _env: &EnvMap) -> Vec<AuthCommand> { Vec::new() }
     /// A sentence added to a start failure whose stderr tail matches (Hermes on Windows, 3.2).
     fn start_failure_hint(&self, _stderr_tail: &str) -> Option<String> { None }
+    /// An error answer to a resume or load that says the session does not exist, beyond -32002, -32601 and
+    /// -32602: the reason the fallback's notice gives (5.3.2).
+    fn open_not_found(&self, _error: &RpcError) -> Option<String> { None }
     fn on_request(&self, _method: &str, _params: &serde_json::Value) -> DialectReply { DialectReply::NotMine }
     fn on_notification(&self, _method: &str, _params: &serde_json::Value) -> Vec<DriverEvent> { Vec::new() }
 }
@@ -1609,6 +1614,7 @@ as the build review's compile showed).
 | replay may hold unseen work | yes (its gateway outlives the viewer) | no | no | no |
 | auth commands | terminal method `hermes-setup` `["--setup"]` -> `hermes acp --setup` (the launch command plus the method's args) | terminal methods whose args start with `--cli` -> `[<user's claude>, rest]`, so `claude auth login --claudeai` and `--console` | none advertised as terminal -> fallback `[<user's codex>, "login"]` | launch command plus the method's args |
 | start failure hint | `windows_breakaway_unavailable` -> the 3.2 hint | none | none | none |
+| open not found | none | none | -32603 whose `data.details` holds "no rollout found" (a thread never prompted has no rollout), reason: the details | none |
 
 A terminal method's `env` (schema `AuthMethodTerminal.env`) is copied into `AuthCommand.env` and shown with the
 command.
