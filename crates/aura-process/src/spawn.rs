@@ -162,6 +162,14 @@ async fn spawn_agent(
     let command = command(&launch.program, &launch.args, &cwd, &vars, Stdio::piped());
     let mut child = start(&rt, command, false, &launch.program)?;
     let pid = child_pid(child.as_ref(), &launch.program)?;
+    // Until the control exists, a dropped spawn kills the tree and drops its registry entry.
+    let mut guard = SpawnGuard {
+        #[cfg(unix)]
+        pid,
+        rt: rt.clone(),
+        registration: Registration::new(registry.handle(), pid),
+        armed: true,
+    };
     let stdin_pipe = child.stdin().take();
     let stdout_pipe = child.stdout().take();
     let stderr_pipe = child.stderr().take();
@@ -188,10 +196,10 @@ async fn spawn_agent(
     // next start stop it if auracode dies first. A registry failure is only a warning.
     #[cfg(unix)]
     let start_time = {
-        let handle = registry.handle();
+        let registration = guard.registration.clone();
         let label = launch.label.clone();
         let daemons = launch.daemons.clone();
-        rt.spawn_blocking(move || register_agent(&handle, pid, label, daemons))
+        rt.spawn_blocking(move || register_agent(&registration, pid, label, daemons))
             .await
             .unwrap_or(crate::ptable::StartTime::Unknown)
     };
@@ -238,6 +246,7 @@ async fn spawn_agent(
         #[cfg(windows)]
         kill_tx,
     );
+    guard.armed = false;
     Ok(SpawnedProcess {
         spawn_id: log.spawn_id().to_owned(),
         io: AgentIo {
@@ -249,16 +258,16 @@ async fn spawn_agent(
     })
 }
 
-/// Reads an agent's start time and records it in the registry (blocking).
+/// Reads a process's start time and records it in the registry (blocking).
 #[cfg(unix)]
 fn register_agent(
-    registry: &RegistryHandle,
+    registration: &Registration,
     pid: u32,
     label: String,
     daemons: Vec<DaemonMatch>,
 ) -> crate::ptable::StartTime {
     let start = crate::ptable::start_time(pid).unwrap_or(crate::ptable::StartTime::Unknown);
-    let entry = crate::registry::LeftoverEntry {
+    registration.register(crate::registry::LeftoverEntry {
         pid,
         pgid: pid,
         sid: session_of(pid),
@@ -267,11 +276,78 @@ fn register_agent(
         spawned_at_ms: now_millis(),
         daemons,
         escaped: Vec::new(),
-    };
-    if let Err(error) = registry.register(entry) {
-        tracing::warn!(pid, %error, "could not record an agent in the leftover registry");
-    }
+    });
     start
+}
+
+/// A process's registry entry, which its spawn may abandon while the entry is still being written:
+/// whichever comes second (the write or the abandonment) removes it, so a dropped spawn never
+/// leaves a stale entry.
+#[derive(Debug, Clone)]
+struct Registration {
+    registry: RegistryHandle,
+    pid: u32,
+    state: Arc<Mutex<RegistrationState>>,
+}
+
+#[derive(Debug, Default)]
+struct RegistrationState {
+    written: bool,
+    abandoned: bool,
+}
+
+impl Registration {
+    fn new(registry: RegistryHandle, pid: u32) -> Registration {
+        Registration {
+            registry,
+            pid,
+            state: Arc::new(Mutex::new(RegistrationState::default())),
+        }
+    }
+
+    /// Blocking: writes the entry, unless the spawn was abandoned first. A failure is a warning.
+    #[cfg(unix)]
+    fn register(&self, entry: crate::registry::LeftoverEntry) {
+        let mut state = lock(&self.state);
+        if state.abandoned {
+            return;
+        }
+        if let Err(error) = self.registry.register(entry) {
+            tracing::warn!(pid = self.pid, %error, "could not record a process in the leftover registry");
+        }
+        state.written = true;
+    }
+
+    /// Blocking: removes the entry now, or keeps it from being written.
+    fn abandon(&self) {
+        let mut state = lock(&self.state);
+        state.abandoned = true;
+        if state.written {
+            self.registry.unregister(self.pid);
+        }
+    }
+}
+
+/// Kills a half-started agent's tree if its spawn is dropped before the control takes over.
+struct SpawnGuard {
+    #[cfg(unix)]
+    pid: u32,
+    rt: Handle,
+    registration: Registration,
+    armed: bool,
+}
+
+impl Drop for SpawnGuard {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        #[cfg(unix)]
+        kill_group(self.pid);
+        // Windows: the job closes with the child, which drops next.
+        let registration = self.registration.clone();
+        drop(self.rt.spawn_blocking(move || registration.abandon()));
+    }
 }
 
 #[cfg(unix)]
@@ -286,6 +362,7 @@ fn session_of(pid: u32) -> Option<u32> {
 /// until the user answers, and Unix reports a missing cwd as a missing program, so the cwd goes
 /// first.
 async fn check(rt: &Handle, cwd: &Path, program: &Path, vars: &EnvMap) -> Result<(), SpawnError> {
+    let name = program.display().to_string();
     let (cwd, program) = (cwd.to_path_buf(), program.to_path_buf());
     #[cfg(windows)]
     let extensions = crate::env::pathext(vars);
@@ -302,7 +379,7 @@ async fn check(rt: &Handle, cwd: &Path, program: &Path, vars: &EnvMap) -> Result
     .await
     .unwrap_or_else(|error| {
         Err(SpawnError::Spawn {
-            program: String::new(),
+            program: name,
             source: io::Error::other(error),
         })
     })
@@ -587,18 +664,22 @@ pub async fn run_helper(
         &program,
     )?;
     let pid = child_pid(child.as_ref(), &program)?;
+    let handle = registry.handle();
+    #[cfg(unix)]
+    let enabled = handle.is_enabled();
     let mut guard = HelperGuard {
+        #[cfg(unix)]
         pid,
         #[cfg(unix)]
         new_session,
         rt: rt.clone(),
-        registry: registry.handle(),
+        registration: Registration::new(handle, pid),
         readers: Vec::new(),
         done: false,
     };
     #[cfg(unix)]
-    if guard.registry.is_enabled() {
-        let handle = guard.registry.clone();
+    if enabled {
+        let registration = guard.registration.clone();
         let label = format!(
             "helper {}",
             program.file_name().map_or_else(
@@ -607,7 +688,7 @@ pub async fn run_helper(
             )
         );
         let _ = rt
-            .spawn_blocking(move || register_agent(&handle, pid, label, Vec::new()))
+            .spawn_blocking(move || register_agent(&registration, pid, label, Vec::new()))
             .await;
     }
 
@@ -632,13 +713,13 @@ pub async fn run_helper(
     let (exit, timed_out) = match tokio::time::timeout(timeout, wait_direct(child.as_mut())).await {
         Ok(status) => (status.ok().map(ExitInfo::from_status), false),
         Err(_) => {
-            guard.kill_tree(child.as_mut()).await;
+            guard.kill_tree(child.as_mut(), true).await;
             let _ = tokio::time::timeout(Duration::from_secs(2), wait_direct(child.as_mut())).await;
             (None, true)
         }
     };
-    // Whatever the tree still runs (a background job of an rc file, say) goes too.
-    guard.kill_tree(child.as_mut()).await;
+    // Whatever its group still runs (a background job of an rc file, say) goes too.
+    guard.kill_tree(child.as_mut(), false).await;
     for reader in readers.into_iter().flatten() {
         let _ = tokio::time::timeout(PIPE_EOF_GRACE, reader).await;
     }
@@ -663,23 +744,25 @@ async fn wait_direct(child: &mut dyn ChildWrapper) -> io::Result<std::process::E
 
 /// Kills a helper's tree when its future is dropped, and unregisters it.
 struct HelperGuard {
+    #[cfg(unix)]
     pid: u32,
     #[cfg(unix)]
     new_session: bool,
     rt: Handle,
-    registry: RegistryHandle,
+    registration: Registration,
     readers: Vec<tokio::task::AbortHandle>,
     done: bool,
 }
 
 impl HelperGuard {
-    /// Kills the helper's group (its session, for a helper with one) or its job.
-    async fn kill_tree(&self, child: &mut dyn ChildWrapper) {
+    /// Kills the helper's group, or its job. With `whole_session`, a helper that started a
+    /// session of its own loses every process of that session too (one snapshot of the table).
+    async fn kill_tree(&self, child: &mut dyn ChildWrapper, whole_session: bool) {
         #[cfg(unix)]
         {
             let _ = child;
             kill_group(self.pid);
-            if self.new_session {
+            if whole_session && self.new_session {
                 let sid = self.pid;
                 let _ = self
                     .rt
@@ -689,18 +772,15 @@ impl HelperGuard {
         }
         #[cfg(windows)]
         {
+            let _ = whole_session;
             let _ = child.start_kill();
         }
     }
 
     async fn finish(&mut self) {
         self.done = true;
-        let registry = self.registry.clone();
-        let pid = self.pid;
-        let _ = self
-            .rt
-            .spawn_blocking(move || registry.unregister(pid))
-            .await;
+        let registration = self.registration.clone();
+        let _ = self.rt.spawn_blocking(move || registration.abandon()).await;
     }
 }
 
@@ -724,9 +804,8 @@ impl Drop for HelperGuard {
         for reader in &self.readers {
             reader.abort();
         }
-        let registry = self.registry.clone();
-        let pid = self.pid;
-        drop(self.rt.spawn_blocking(move || registry.unregister(pid)));
+        let registration = self.registration.clone();
+        drop(self.rt.spawn_blocking(move || registration.abandon()));
     }
 }
 
@@ -870,6 +949,41 @@ mod tests {
                 assert_eq!(wrapped.has_wrap::<ProcessSession>(), new_session);
             }
         }
+    }
+
+    /// Whichever comes second, the entry's write or its abandonment, leaves no entry behind.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn an_abandoned_registration_leaves_no_entry() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let registry =
+            LeftoverRegistry::open(&dir.path().join("run"), Handle::current()).expect("registry");
+        let path = registry.path().expect("file").to_path_buf();
+        let entries = || -> usize {
+            let body: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&path).expect("read")).expect("json");
+            body["entries"].as_array().map_or(0, Vec::len)
+        };
+        let entry = |pid| crate::registry::LeftoverEntry {
+            pid,
+            pgid: pid,
+            sid: None,
+            start: crate::ptable::StartTime::Unknown,
+            label: "test".into(),
+            spawned_at_ms: 0,
+            daemons: Vec::new(),
+            escaped: Vec::new(),
+        };
+        let written_first = Registration::new(registry.handle(), 11);
+        written_first.register(entry(11));
+        assert_eq!(entries(), 1);
+        written_first.abandon();
+        assert_eq!(entries(), 0, "abandoned after the write: removed");
+        let abandoned_first = Registration::new(registry.handle(), 12);
+        abandoned_first.abandon();
+        abandoned_first.register(entry(12));
+        assert_eq!(entries(), 0, "abandoned before the write: never written");
+        registry.close().expect("close");
     }
 
     #[test]
