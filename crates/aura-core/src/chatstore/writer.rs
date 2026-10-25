@@ -1193,8 +1193,14 @@ impl Writer {
             }
         }
         let device = self.device_id.clone();
-        let load = self.read(|conn| rows::load_chat(conn, &device, chat_id, recovered))?;
-        if let Some(load) = &load {
+        let mut load = self.read(|conn| rows::load_chat(conn, &device, chat_id, recovered))?;
+        if let Some(load) = &mut load {
+            // Every row queued before the actor that loads it waits for the user (decision 11):
+            // recovery holds them, and when it could not (a damaged database, a chat whose recovery
+            // failed) they read as held all the same.
+            for row in &mut load.queue {
+                row.held = true;
+            }
             let mut queue = self.shared.lock();
             if let Some(session) = &load.agent_session {
                 queue
@@ -1691,4 +1697,64 @@ pub(crate) async fn await_reply<T: Send + 'static>(
 /// Waits for a shutdown's result from any thread, with or without a runtime.
 pub(crate) fn wait_finished(done: &std::sync::mpsc::Receiver<bool>, limit: Duration) -> bool {
     done.recv_timeout(limit).unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+    use crate::paths::DataRoot;
+    use crate::profile::Profiles;
+
+    /// Decision 11 when recovery cannot run: in a damaged database `load_chat` skips recovery, and
+    /// the rows queued before the crash still come back held, so a start sends none of them.
+    #[test]
+    fn a_load_without_recovery_still_holds_the_queue() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let profile = Profiles::new(DataRoot::at(dir.path().join("data")))
+            .open_active()
+            .expect("profile");
+        let owner = ProfileOwner::acquire(&profile).expect("owner");
+        let (store, _) = Store::open(&profile).expect("store");
+        let chat = rows::create_chat(
+            store.conn(),
+            &NewChat {
+                agent_id: "mock".into(),
+                folder: PathBuf::from("/work"),
+                device_id: "dev".into(),
+                now: 1,
+            },
+        )
+        .expect("chat");
+        rows::queue_put(
+            store.conn(),
+            "dev",
+            &QueuedRow {
+                id: "q".into(),
+                chat_id: chat.id.clone(),
+                text: "typed before the crash".into(),
+                held: false,
+                created_at: 1,
+            },
+        )
+        .expect("queue");
+        let (recovered, _) = watch::channel(None);
+        let mut writer = Writer::new(
+            Arc::new(Shared::new(WriterConfig::STANDARD)),
+            store,
+            owner,
+            "dev".into(),
+            profile.attachments_dir(),
+            profile.backups_dir(),
+            recovered,
+        );
+        writer.mode = Mode::Damaged;
+        let load = writer.load_chat(&chat.id).expect("load").expect("the chat");
+        assert_eq!(load.queue.len(), 1);
+        assert!(load.queue[0].held, "held although recovery could not run");
+        let stored =
+            rows::queued(writer.store.as_ref().expect("store").conn(), &chat.id).expect("queued");
+        assert!(!stored[0].held, "recovery did not run");
+    }
 }

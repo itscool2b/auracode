@@ -187,7 +187,7 @@ impl ChatStore {
     }
 
     /// Per-chat recovery of turns left `running` (an actor that died), then everything an actor
-    /// needs.
+    /// needs. Every queued row comes back held: none was queued by the actor that loads it.
     pub async fn load_chat(&self, chat_id: &str) -> Result<ChatLoad, StoreError> {
         self.load_chat_inner(chat_id)
             .await?
