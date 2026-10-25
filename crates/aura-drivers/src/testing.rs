@@ -728,7 +728,7 @@ mod tests {
     use std::path::PathBuf;
 
     use aura_process::testing::{FakeAgentEnd, FakeSpawner};
-    use aura_process::{EnvMap, EnvSource, ProcessCwd, Redactor, ResolvedEnv};
+    use aura_process::{EnvMap, EnvSource, ProcessCwd, ProtocolLog, Redactor, ResolvedEnv};
     use aura_protocol::session::ConfigValue;
     use aura_protocol::{
         AuraEvent, NoticeLevel, PermissionOption, PermissionOptionKind, PermissionRequest,
@@ -780,6 +780,42 @@ mod tests {
         }
     }
 
+    /// A protocol log root in a fresh temp folder, removed when the guard drops, so these tests
+    /// never write under the filesystem root (on Windows a root of `/logs` is `C:\logs`).
+    struct TempLogs(PathBuf);
+
+    impl TempLogs {
+        fn new() -> TempLogs {
+            TempLogs(
+                std::env::temp_dir().join(format!("aura-drivers-testing-{}", uuid::Uuid::now_v7())),
+            )
+        }
+
+        fn factory(&self) -> LogFactory {
+            LogFactory::new(
+                self.0.clone(),
+                Arc::new(Redactor::standard()),
+                tokio::runtime::Handle::current(),
+            )
+        }
+    }
+
+    impl Drop for TempLogs {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// Spawns through `FakeSpawner` with a log that writes nothing: the scripted driver's tests read
+    /// no log, and [`DirectSpawner`]'s own logging is tested on its own.
+    struct QuietSpawner(Arc<FakeSpawner>);
+
+    impl AgentSpawner for QuietSpawner {
+        fn spawn(&self, spec: SpawnSpec) -> BoxFuture<'static, Result<SpawnedProcess, SpawnError>> {
+            self.0.spawn(spec, ProtocolLog::disabled())
+        }
+    }
+
     struct Session {
         commands: mpsc::UnboundedSender<DriverCommand>,
         events: EventReceiver,
@@ -791,17 +827,12 @@ mod tests {
     /// Runs `driver` on a fake spawner, as the session actor would.
     fn start(driver: Box<dyn AgentDriver>) -> Session {
         let (spawner, ends) = FakeSpawner::new();
-        let logs = LogFactory::new(
-            PathBuf::from("/logs"),
-            Arc::new(Redactor::standard()),
-            tokio::runtime::Handle::current(),
-        );
         let (commands, receiver) = mpsc::unbounded_channel();
         let (sender, events) = event_channel();
         let ctx = DriverContext {
             commands: receiver,
             events: sender,
-            spawner: DirectSpawner::new(spawner.clone(), logs),
+            spawner: Arc::new(QuietSpawner(Arc::clone(&spawner))),
             setup: setup(),
         };
         let run = tokio::spawn(driver.run(ctx));
@@ -1193,18 +1224,14 @@ mod tests {
         spawner.fail_next(SpawnError::ProgramNotFound {
             program: "hermes".into(),
         });
-        let logs = LogFactory::new(
-            PathBuf::from("/logs"),
-            Arc::new(Redactor::standard()),
-            tokio::runtime::Handle::current(),
-        );
+        let logs = TempLogs::new();
         let (_commands, receiver) = mpsc::unbounded_channel();
         let (sender, _events) = event_channel();
         let exit = Box::new(driver)
             .run(DriverContext {
                 commands: receiver,
                 events: sender,
-                spawner: DirectSpawner::new(spawner, logs),
+                spawner: DirectSpawner::new(spawner, logs.factory()),
                 setup: setup(),
             })
             .await;
@@ -1296,15 +1323,11 @@ mod tests {
             // Fill the channel so the first emit waits for a permit.
             let filler = sender.reserve(DRIVER_EVENT_BYTES).await.expect("room");
             let (spawner, _ends) = FakeSpawner::new();
-            let logs = LogFactory::new(
-                PathBuf::from("/logs"),
-                Arc::new(Redactor::standard()),
-                tokio::runtime::Handle::current(),
-            );
+            let logs = TempLogs::new();
             let run = tokio::spawn(Box::new(driver).run(DriverContext {
                 commands: receiver,
                 events: sender,
-                spawner: DirectSpawner::new(spawner, logs),
+                spawner: DirectSpawner::new(spawner, logs.factory()),
                 setup: setup(),
             }));
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -1345,12 +1368,8 @@ mod tests {
     #[tokio::test]
     async fn the_direct_spawner_names_each_spawn() {
         let (spawner, _ends) = FakeSpawner::new();
-        let logs = LogFactory::new(
-            PathBuf::from("/logs"),
-            Arc::new(Redactor::standard()),
-            tokio::runtime::Handle::current(),
-        );
-        let direct = DirectSpawner::new(spawner, logs);
+        let logs = TempLogs::new();
+        let direct = DirectSpawner::new(spawner, logs.factory());
         let spec = SpawnSpec {
             launch: launch(),
             folder: PathBuf::from("/work"),
@@ -1363,5 +1382,33 @@ mod tests {
         let id = uuid::Uuid::parse_str(&first.spawn_id).expect("uuid");
         assert_eq!(id.get_version_num(), 7);
         assert_eq!(first.log.spawn_id(), first.spawn_id);
+        // Each spawn's log is `<root>/direct/<spawn id>.jsonl`. Dropping a process kills it; once
+        // both exit notes are on disk nothing else is written, so the guard's removal is final.
+        let paths = [&first, &second].map(|process| {
+            logs.0
+                .join(DIRECT_LOG_CHAT)
+                .join(format!("{}.jsonl", process.spawn_id))
+        });
+        drop((first, second));
+        for path in paths {
+            let mut written = String::new();
+            for _ in 0..1000 {
+                written = std::fs::read_to_string(&path).unwrap_or_default();
+                if written.contains("\"exit\"") {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            assert!(
+                written.contains("\"spawn\""),
+                "{}: {written}",
+                path.display()
+            );
+            assert!(
+                written.contains("\"exit\""),
+                "{}: {written}",
+                path.display()
+            );
+        }
     }
 }
