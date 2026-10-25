@@ -16,6 +16,7 @@ import {
   sessionInfo,
 } from "../../lib/chat/testing";
 import { applyEntries, emptyTranscript, renderTranscript } from "../../lib/chat/transcript";
+import { Answer } from "../Markdown";
 import { AuthCard } from "./AuthCard";
 import { ChatList } from "./ChatList";
 import { ChatView, StillWorking } from "./ChatView";
@@ -309,6 +310,27 @@ describe("the automation attributes of the chat screens", () => {
     expect(marked(html, "error-message")).toHaveLength(1);
     expect(marked(html, "question-prompt")).toHaveLength(1);
     expect(marked(html, "permission-title")).toHaveLength(1);
+  });
+
+  it("mark each markdown block of an answer with its kind", () => {
+    const html = renderToStaticMarkup(
+      <Answer
+        text={
+          "## Title\n\nSome text.\n\n- one\n- two\n\n1. first\n\n```rust\nfn main() {}\n```\n\n> quoted\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n---\n"
+        }
+      />,
+    );
+    const kinds = [...html.matchAll(/data-test-block="([a-z]+)"/g)].map((match) => match[1]);
+    expect(kinds).toEqual([
+      "heading",
+      "paragraph",
+      "list",
+      "list",
+      "code",
+      "quote",
+      "table",
+      "rule",
+    ]);
   });
 
   it("mark the transcript and its Load earlier button", async () => {

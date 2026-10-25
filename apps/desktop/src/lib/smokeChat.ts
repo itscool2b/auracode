@@ -679,9 +679,11 @@ async function chatScenario(
       throw new StepError("the edit tool shows no diff with added and removed lines");
     }
     const answer = item(ended, "message");
-    const markdown = ["h3", "ul", "pre code"].filter((tag) => answer.querySelector(tag) === null);
-    if (markdown.length > 0) {
-      throw new StepError(`the answer renders no ${markdown.join(", ")}`);
+    const missing = ["heading", "paragraph", "list", "code"].filter(
+      (kind) => answer.querySelector(`[data-test-block="${kind}"]`) === null,
+    );
+    if (missing.length > 0) {
+      throw new StepError(`the answer renders no markdown ${missing.join(", ")}`);
     }
     const usage = await waitFor("the header to show context and cost", () =>
       text(one("chat-usage")),
