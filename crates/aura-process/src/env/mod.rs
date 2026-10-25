@@ -913,7 +913,9 @@ mod tests {
         assert!(printed.contains("OPENAI_API_KEY"), "{printed}");
         assert!(!printed.contains("sk-proj"), "no values: {printed}");
         let resolver = EnvResolver::start(config, LeftoverRegistry::disabled(), Handle::current());
-        assert_eq!(resolver.get().await.vars.len(), 2);
+        let env = resolver.get().await;
+        // Unix falls back to the base env; Windows adds the registry's variables to it.
+        assert!(env.vars.contains_key(&EnvKey::from("OPENAI_API_KEY")));
         assert_eq!(
             redactor.redact_text("401: bad key sk-proj-0123456789abcdef"),
             "401: bad key <SECRET>"
@@ -921,6 +923,7 @@ mod tests {
         assert!(!format!("{resolver:?}").contains("sk-proj"));
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn a_shell_that_cannot_start_falls_back_to_the_env_without_launch_context() {
         let config = unstartable(map(&[("PATH", "/usr/bin"), ("TERM_PROGRAM", "vscode")]));
@@ -942,6 +945,7 @@ mod tests {
         assert!(!Arc::ptr_eq(&resolver.get().await, &env));
     }
 
+    #[cfg(unix)]
     #[tokio::test(start_paused = true)]
     async fn a_failed_attempt_is_retried_after_a_minute() {
         let resolver = EnvResolver::start(
@@ -1034,6 +1038,36 @@ mod tests {
             vars.get(&EnvKey::from("PATH")),
             before.get(&EnvKey::from("PATH"))
         );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_reads_the_registry_over_the_env_without_launch_context() {
+        let config = unstartable(map(&[
+            ("PATH", "C:\\from-the-process"),
+            ("TERM_PROGRAM", "vscode"),
+            ("AURA_TEST_BASE", "kept"),
+        ]));
+        let resolver = EnvResolver::start(config, LeftoverRegistry::disabled(), Handle::current());
+        let env = resolver.get().await;
+        assert_eq!(env.source, EnvSource::WindowsRegistry);
+        assert!(!env.vars.contains_key(&EnvKey::from("TERM_PROGRAM")));
+        assert_eq!(
+            env.vars.get(&EnvKey::from("AURA_TEST_BASE")),
+            Some(&OsString::from("kept"))
+        );
+        let path = env
+            .vars
+            .get(&EnvKey::from("PATH"))
+            .expect("PATH")
+            .to_string_lossy()
+            .into_owned();
+        assert!(path.to_ascii_lowercase().contains("system32"), "{path}");
+        assert!(
+            path.ends_with("C:\\from-the-process"),
+            "process entries come last: {path}"
+        );
+        assert!(matches!(resolver.status(), ResolverStatus::Ready { .. }));
     }
 
     #[tokio::test]

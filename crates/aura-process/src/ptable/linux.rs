@@ -122,6 +122,28 @@ pub(super) fn snapshot() -> io::Result<Vec<ProcInfo>> {
     Ok(table)
 }
 
+/// Whether any process that is not a zombie has group `pgid`, from each `/proc/<pid>/stat`.
+#[cfg(target_os = "linux")]
+pub(super) fn group_has_live_member(pgid: u32) -> bool {
+    let Ok(listing) = std::fs::read_dir("/proc") else {
+        return true;
+    };
+    listing.flatten().any(|entry| {
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse::<u32>().ok())
+        else {
+            return false;
+        };
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            return false;
+        };
+        stat_state(&stat) != Some('Z')
+            && parse_proc_stat(pid, &stat, &[], "").is_some_and(|info| info.pgid == pgid)
+    })
+}
+
 #[cfg(target_os = "linux")]
 pub(super) fn start_time(pid: u32) -> io::Result<StartTime> {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat"))?;

@@ -229,6 +229,8 @@ mod unix {
             return false;
         };
         match killpg(group, None) {
+            // Linux counts zombies as members until their new parent reaps them: ask /proc.
+            Ok(()) if cfg!(target_os = "linux") => ptable::group_has_live_member(state.pgid),
             Ok(()) => true,
             Err(Errno::EPERM) => state.exited_now().is_none(),
             Err(_) => false,

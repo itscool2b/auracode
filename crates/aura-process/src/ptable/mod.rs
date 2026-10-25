@@ -166,6 +166,21 @@ pub(crate) fn running_start(pid: u32) -> Option<StartTime> {
     }
 }
 
+/// Whether a process that is not a zombie is in group `pgid` (Linux, from `/proc`; elsewhere a
+/// group probe answers this).
+#[cfg(unix)]
+pub(crate) fn group_has_live_member(pgid: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux::group_has_live_member(pgid)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = pgid;
+        true
+    }
+}
+
 /// Whether `pid` still runs with `start`: the same process, not a recycled pid.
 #[cfg(unix)]
 pub(crate) fn is_same_process(pid: u32, start: &StartTime) -> bool {
