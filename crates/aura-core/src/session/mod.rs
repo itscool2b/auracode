@@ -171,18 +171,29 @@ pub trait StatusSink: Send + Sync + 'static {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SinkGone;
 
-/// The actor's own limits, which tests shrink.
+/// The manager's own limits, which tests shrink.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Knobs {
     /// An actor stops reading its driver's events while this much waits in its outbox.
     pub(crate) outbox_bytes: usize,
+    /// The chat list waits this long for its folder checks; a folder that has not answered by then
+    /// (a hung network mount) shows what it showed last.
+    pub(crate) folder_check_wait: Duration,
 }
 
 impl Knobs {
-    /// The actor outbox holds 4 MiB.
+    /// The actor outbox holds 4 MiB; the chat list waits 1 s for folder checks.
     pub(crate) const STANDARD: Knobs = Knobs {
         outbox_bytes: 4 * 1024 * 1024,
+        folder_check_wait: Duration::from_secs(1),
     };
+}
+
+/// The chat list's check of one folder: its last result, and whether one runs.
+#[derive(Debug, Clone, Copy, Default)]
+struct FolderCheck {
+    last: Option<FolderState>,
+    running: bool,
 }
 
 /// A chat's row in the list, as its actor last published it.
@@ -207,6 +218,11 @@ pub(crate) struct Shared {
     /// Subscription id -> (chat, owner).
     subscriptions: Mutex<HashMap<String, (String, String)>>,
     shutting_down: AtomicBool,
+    /// The chat list's folder checks, by folder.
+    folders: Mutex<HashMap<PathBuf, FolderCheck>>,
+    /// Tests: checks of this folder take this long (a hung network mount); they are counted.
+    #[cfg(test)]
+    slow_folder: Mutex<Option<(PathBuf, Duration, Arc<AtomicU64>)>>,
 }
 
 impl Shared {
@@ -234,6 +250,24 @@ impl Shared {
 
     fn state(&self, chat_id: &str) -> Option<ChatState> {
         lock(&self.chat_states).get(chat_id).cloned()
+    }
+
+    /// Checks one folder for the chat list (`metadata` only), on a blocking thread, and records the
+    /// result.
+    fn check_folder(&self, folder: PathBuf) {
+        #[cfg(test)]
+        if let Some((_, delay, checks)) = lock(&self.slow_folder)
+            .clone()
+            .filter(|(slow, _, _)| *slow == folder)
+        {
+            checks.fetch_add(1, Ordering::SeqCst);
+            std::thread::sleep(delay);
+        }
+        let state = folder_state(&folder, false);
+        let mut checks = lock(&self.folders);
+        let check = checks.entry(folder).or_default();
+        check.last = Some(state);
+        check.running = false;
     }
 }
 
@@ -297,6 +331,9 @@ impl SessionManager {
                     chat_states: Mutex::new(HashMap::new()),
                     subscriptions: Mutex::new(HashMap::new()),
                     shutting_down: AtomicBool::new(false),
+                    folders: Mutex::new(HashMap::new()),
+                    #[cfg(test)]
+                    slow_folder: Mutex::new(None),
                 }),
                 actors: Mutex::new(HashMap::new()),
                 next_actor: AtomicU64::new(1),
@@ -425,31 +462,64 @@ impl SessionManager {
             .chats()
             .await
             .map_err(|error| storage_error(&error))?;
-        let folders: Vec<PathBuf> = records.iter().map(|record| record.folder.clone()).collect();
-        let found = tokio::task::spawn_blocking(move || {
-            folders
-                .iter()
-                .map(|folder| folder_state(folder, false))
-                .collect::<Vec<_>>()
-        })
-        .await
-        .unwrap_or_default();
+        let found = self
+            .check_folders(records.iter().map(|record| record.folder.clone()).collect())
+            .await;
         Ok(records
             .into_iter()
-            .enumerate()
-            .map(|(index, record)| {
+            .map(|record| {
                 let state = self.shared().state(&record.id);
-                let found = found.get(index).copied().unwrap_or(FolderState::Ok);
+                let found = found.get(&record.folder).copied();
                 self.summary(record, state, found)
             })
             .collect())
     }
 
+    /// Whether each folder exists, every one checked at once on the blocking pool, waiting at most
+    /// the folder-check wait. A folder that has not answered by then (a hung network mount) reads
+    /// as its last result, or not at all, and is not checked again while its check still runs.
+    async fn check_folders(&self, mut folders: Vec<PathBuf>) -> HashMap<PathBuf, FolderState> {
+        folders.sort();
+        folders.dedup();
+        let shared = self.shared();
+        let mut started = Vec::new();
+        {
+            let mut checks = lock(&shared.folders);
+            for folder in &folders {
+                let check = checks.entry(folder.clone()).or_default();
+                if !check.running {
+                    check.running = true;
+                    started.push(folder.clone());
+                }
+            }
+        }
+        let checks: FuturesUnordered<JoinHandle<()>> = started
+            .into_iter()
+            .map(|folder| {
+                let shared = Arc::clone(shared);
+                self.deps()
+                    .rt
+                    .spawn_blocking(move || shared.check_folder(folder))
+            })
+            .collect();
+        let _ =
+            tokio::time::timeout(shared.knobs.folder_check_wait, checks.collect::<Vec<_>>()).await;
+        let checks = lock(&shared.folders);
+        folders
+            .into_iter()
+            .filter_map(|folder| {
+                let last = checks.get(&folder)?.last?;
+                Some((folder, last))
+            })
+            .collect()
+    }
+
+    /// `found`: what the list's folder check found, `None` when it did not answer in time.
     fn summary(
         &self,
         record: ChatRecord,
         state: Option<ChatState>,
-        found: FolderState,
+        found: Option<FolderState>,
     ) -> ChatSummary {
         let agent_name = self
             .deps()
@@ -457,10 +527,12 @@ impl SessionManager {
             .spec(&record.agent_id)
             .map_or_else(|| record.agent_id.clone(), |spec| spec.name.to_owned());
         // The list never reads a folder (that is what a macOS privacy prompt guards), so a refusal
-        // is the one the last start met; whether the folder exists is current.
+        // is the one the last start met; whether the folder exists is current, or what the last
+        // start found when the check did not answer.
         let folder_state = match (found, state.as_ref().map(|state| state.folder_state)) {
-            (FolderState::Ok, Some(FolderState::NotAllowed)) => FolderState::NotAllowed,
-            (found, _) => found,
+            (Some(FolderState::Ok), Some(FolderState::NotAllowed)) => FolderState::NotAllowed,
+            (Some(found), _) => found,
+            (None, last) => last.unwrap_or(FolderState::Ok),
         };
         ChatSummary {
             id: record.id,
@@ -539,7 +611,7 @@ impl SessionManager {
             })
             .await;
         let state = self.shared().state(&chat_id);
-        Ok(self.summary(record, state, FolderState::Ok))
+        Ok(self.summary(record, state, Some(FolderState::Ok)))
     }
 
     /// The join protocol: flushes, fixes `next_seq`, reads the newest page behind every earlier
@@ -880,6 +952,15 @@ impl SessionManager {
         for book in books {
             book.kill_all();
         }
+    }
+
+    /// Tests: from now on, checks of `folder` for the chat list take `delay`; returns their count.
+    #[cfg(test)]
+    pub(crate) fn slow_folder(&self, folder: &Path, delay: Duration) -> Arc<AtomicU64> {
+        let checks = Arc::new(AtomicU64::new(0));
+        *lock(&self.shared().slow_folder) =
+            Some((folder.to_path_buf(), delay, Arc::clone(&checks)));
+        checks
     }
 
     /// Tests: makes the chat's actor panic.

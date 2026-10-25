@@ -157,6 +157,7 @@ fn tight() -> (WriterConfig, Knobs) {
         },
         Knobs {
             outbox_bytes: 64 * 1024,
+            ..Knobs::STANDARD
         },
     )
 }
@@ -797,6 +798,76 @@ async fn a_blob_read_follows_the_chats_own_put_blob() {
         read_blob(&rig, &chat.id, &sha).await.expect("whole"),
         big_output()
     );
+}
+
+/// P36 and P48: the chat list never waits long for a folder. One whose check does not answer in time
+/// (a hung network mount) shows what it showed last while the others are current, and it is not
+/// checked again while its check still runs.
+#[tokio::test]
+async fn the_chat_list_never_waits_long_for_a_folder() {
+    let drivers = vec![
+        ScriptedDriver::new(vec![ready_step("a")]).0,
+        ScriptedDriver::new(vec![ready_step("b")]).0,
+    ];
+    let knobs = Knobs {
+        folder_check_wait: Duration::from_millis(200),
+        ..Knobs::STANDARD
+    };
+    let rig = rig(drivers, WriterConfig::STANDARD, knobs);
+    let slow = rig.folder.join("slow");
+    let quick = rig.folder.join("quick");
+    for folder in [&slow, &quick] {
+        std::fs::create_dir_all(folder).expect("folder");
+    }
+    let a = rig.manager.create_chat("mock", &slow).await.expect("a");
+    let b = rig.manager.create_chat("mock", &quick).await.expect("b");
+    status(&rig, &a.id, SessionStatus::Ready).await;
+    status(&rig, &b.id, SessionStatus::Ready).await;
+    let states = |listed: Vec<ChatSummary>| -> HashMap<String, FolderState> {
+        listed
+            .into_iter()
+            .map(|chat| (chat.id, chat.folder_state))
+            .collect()
+    };
+    let listed = states(rig.manager.chats().await.expect("chats"));
+    assert_eq!(
+        (listed[&a.id], listed[&b.id]),
+        (FolderState::Ok, FolderState::Ok)
+    );
+
+    let checks = rig.manager.slow_folder(&slow, Duration::from_millis(1500));
+    std::fs::remove_dir_all(&quick).expect("remove");
+    let started = std::time::Instant::now();
+    let listed = states(rig.manager.chats().await.expect("chats"));
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(
+        (listed[&a.id], listed[&b.id]),
+        (FolderState::Ok, FolderState::Missing),
+        "the hung folder shows its last state, the other one is current"
+    );
+    std::fs::remove_dir_all(&slow).expect("remove");
+    let started = std::time::Instant::now();
+    let listed = states(rig.manager.chats().await.expect("chats"));
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(listed[&a.id], FolderState::Ok);
+    assert_eq!(
+        checks.load(Ordering::SeqCst),
+        1,
+        "not checked again while its check runs"
+    );
+    // Once the hung check answers, its result shows, even while the next check hangs again.
+    tokio::time::sleep(Duration::from_millis(1600)).await;
+    let listed = states(rig.manager.chats().await.expect("chats"));
+    assert_eq!(listed[&a.id], FolderState::Missing);
+    assert_eq!(checks.load(Ordering::SeqCst), 2);
 }
 
 /// A driver that reports `Ready`, drops its event sender, and then never returns: only an abort
