@@ -390,7 +390,7 @@
         "resumed": {
           "type": "new"
         },
-        "spawn_id": "01a17268-1e53-7528-9712-40480bc8f707",
+        "spawn_id": "01a17352-af5f-73bd-8525-95db964abfde",
         "replay": null
       }
     },
@@ -435,170 +435,7 @@
           "category": "model",
           "kind": {
             "type": "select",
-            "current": "anthropic:claude-haiku-4-5-20251001",
-            "choices": [
-              {
-                "value": "auto:nous/welcome",
-                "name": "Auto · nous/welcome",
-                "description": "Provider: Auto • current",
-                "group": null
-              },
-              {
-                "value": "nous:nous/welcome",
-                "name": "Nous · free tier · nous/welcome",
-                "description": "Provider: Nous · free tier",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-fable-5.1",
-                "name": "Anthropic · claude-fable-5.1",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-fable-5",
-                "name": "Anthropic · claude-fable-5",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-opus-5-5",
-                "name": "Anthropic · claude-opus-5-5",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-opus-5",
-                "name": "Anthropic · claude-opus-5",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-sonnet-5",
-                "name": "Anthropic · claude-sonnet-5",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-opus-4-8",
-                "name": "Anthropic · claude-opus-4-8",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-opus-4-7",
-                "name": "Anthropic · claude-opus-4-7",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-opus-4-6",
-                "name": "Anthropic · claude-opus-4-6",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-sonnet-4-6",
-                "name": "Anthropic · claude-sonnet-4-6",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-opus-4-5-20251101",
-                "name": "Anthropic · claude-opus-4-5-20251101",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-sonnet-4-5-20250929",
-                "name": "Anthropic · claude-sonnet-4-5-20250929",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-opus-4-20250514",
-                "name": "Anthropic · claude-opus-4-20250514",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-sonnet-4-20250514",
-                "name": "Anthropic · claude-sonnet-4-20250514",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-haiku-4-5-20251001",
-                "name": "Anthropic · claude-haiku-4-5-20251001",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-sonnet-5-5",
-                "name": "Anthropic · claude-sonnet-5-5",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-haiku-5-5",
-                "name": "Anthropic · claude-haiku-5-5",
-                "description": "Provider: Anthropic",
-                "group": null
-              },
-              {
-                "value": "anthropic:claude-fable-5-1",
-                "name": "Anthropic · claude-fable-5-1",
-                "description": "Provider: Anthropic",
-                "group": null
-              }
-            ]
-          },
-          "pending": null
-        }
-      ]
-    },
-    {
-      "type": "options",
-      "data": [
-        {
-          "id": "mode",
-          "name": "Mode",
-          "description": null,
-          "category": "mode",
-          "kind": {
-            "type": "select",
-            "current": "dont_ask",
-            "choices": [
-              {
-                "value": "default",
-                "name": "Default",
-                "description": "Ask before edits.",
-                "group": null
-              },
-              {
-                "value": "accept_edits",
-                "name": "Accept Edits",
-                "description": "Auto-allow workspace and temp-dir edits; still asks for sensitive paths.",
-                "group": null
-              },
-              {
-                "value": "dont_ask",
-                "name": "Don't Ask",
-                "description": "Auto-allow file edits for this session except sensitive paths.",
-                "group": null
-              }
-            ]
-          },
-          "pending": null
-        },
-        {
-          "id": "model",
-          "name": "Model",
-          "description": null,
-          "category": "model",
-          "kind": {
-            "type": "select",
-            "current": "auto:nous/welcome",
+            "current": "nous:nous/welcome",
             "choices": [
               {
                 "value": "auto:nous/welcome",
@@ -761,7 +598,7 @@
           "category": "model",
           "kind": {
             "type": "select",
-            "current": "auto:nous/welcome",
+            "current": "nous:nous/welcome",
             "choices": [
               {
                 "value": "auto:nous/welcome",
@@ -924,7 +761,7 @@
           "category": "model",
           "kind": {
             "type": "select",
-            "current": "auto:nous/welcome",
+            "current": "nous:nous/welcome",
             "choices": [
               {
                 "value": "auto:nous/welcome",
@@ -1087,7 +924,7 @@
           "category": "model",
           "kind": {
             "type": "select",
-            "current": "auto:nous/welcome",
+            "current": "nous:nous/welcome",
             "choices": [
               {
                 "value": "auto:nous/welcome",
@@ -1311,7 +1148,11 @@
     {
       "set_option": "model",
       "reply": {
-        "ok": null
+        "err": {
+          "kind": "agent_error",
+          "message": "Internal error",
+          "detail": "{\"details\":\"model_resolution_failed\"}"
+        }
       }
     },
     {

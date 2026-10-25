@@ -57,18 +57,12 @@
           "category": "model",
           "kind": {
             "type": "select",
-            "current": "anthropic:auto:nous/welcome",
+            "current": "nous:nous/welcome",
             "choices": [
               {
                 "value": "nous:nous/welcome",
                 "name": "Nous · free tier · nous/welcome",
-                "description": "Provider: Nous · free tier",
-                "group": null
-              },
-              {
-                "value": "anthropic:auto:nous/welcome",
-                "name": "Anthropic · auto:nous/welcome",
-                "description": "Provider: Anthropic • current",
+                "description": "Provider: Nous · free tier • current",
                 "group": null
               },
               {
@@ -194,17 +188,6 @@
       }
     },
     {
-      "type": "event",
-      "data": {
-        "turn": null,
-        "event": {
-          "type": "notice",
-          "level": "info",
-          "message": "The model you chose earlier (auto:nous/welcome) isn't offered anymore; using Anthropic · auto:nous/welcome."
-        }
-      }
-    },
-    {
       "type": "status",
       "data": "ready"
     },
@@ -238,7 +221,7 @@
         "resumed": {
           "type": "resumed"
         },
-        "spawn_id": "01a17268-5450-745a-a5ab-6a42d9d27708",
+        "spawn_id": "01a17352-d987-7454-8564-beffd4848c91",
         "replay": {
           "user_turns": 0,
           "last_reply": null,
