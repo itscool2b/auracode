@@ -47,8 +47,10 @@ windows-sys = { version = "0.61.2", features = [
 ] }
 
 [dev-dependencies]
-# The session manager's tests run on fake processes and scripted drivers.
-aura-drivers = { workspace = true, features = ["testing"] }
+# The session manager's tests run on fake processes and scripted drivers. `replay` is unused here:
+# through feature unification it makes every `--workspace` test and clippy run (CI's included)
+# compile, lint and run aura-drivers' replay harness and its tests.
+aura-drivers = { workspace = true, features = ["testing", "replay"] }
 aura-process = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
 # Paused time makes idle eviction, flush timers and stop deadlines deterministic.

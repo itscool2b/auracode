@@ -13,8 +13,10 @@ publish.workspace = true
 # `testing`: ScriptedDriver, ScriptedDriverFactory and DirectSpawner, for the session manager's tests.
 testing = []
 # `replay`: the replay harness, which runs the real ACP driver against a fake agent playing a recorded
-# protocol log on paused time. Only aura-cli and tests turn it on.
-replay = ["aura-process/testing", "tokio/test-util"]
+# protocol log on paused time. Only aura-cli and tests turn it on. It includes `testing`, so the harness
+# may use those doubles and builds the same alone (aura-cli) as in workspace runs, where aura-core's
+# dev-dependency turns both on.
+replay = ["testing", "aura-process/testing", "tokio/test-util"]
 
 [dependencies]
 aura-process.workspace = true

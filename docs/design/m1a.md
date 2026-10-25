@@ -107,10 +107,13 @@ Workspace-internal and existing dependencies each crate gains, all in P0: `aura-
 `serde`, `serde_json`, `thiserror`, `uuid`, `tracing`, `regex`, `nix`, `windows`, `winreg`, `process-wrap`, and has a
 feature `testing`; `aura-agents` uses `aura-protocol`, `aura-process`, `tokio`, `serde`, `serde_json`, `thiserror`,
 `tracing`; `aura-drivers` gains `aura-process`, `serde`, `thiserror`, `uuid`, `sha2`, `regex`, `futures`, and a feature
-`replay = ["aura-process/testing", "tokio/test-util"]` that only `aura-cli` and dev-dependencies enable, plus
+`replay = ["testing", "aura-process/testing", "tokio/test-util"]` that only `aura-cli` and dev-dependencies enable, plus
 `schemars` 1.2.3 as a dev-dependency (for `schema_for!`); `aura-core`
 gains `tokio`, `futures`, `sha2`, `aura-process`, `aura-agents`, `aura-drivers`, with `aura-process/testing` and
-`aura-drivers/testing` as dev-dependencies; the desktop gains `aura-process`, `aura-agents`, `tauri-plugin-dialog`. `sha2`, `regex`, `winreg`, `windows` 0.62.2, `schemars` 1.2.3 and `futures-util` 0.3.34 are
+`aura-drivers` with `testing` and `replay` as dev-dependencies (aura-core uses no replay: through feature unification
+the dev-dependency makes every `--workspace` test and clippy run, CI's included, compile and run the replay harness
+and its tests); the desktop gains `aura-process`, `aura-agents`, `tauri-plugin-dialog`, with `aura-process/testing`
+and `aura-drivers/testing` as dev-dependencies (D's Rust tests of the quit flow, page loads and signals). `sha2`, `regex`, `winreg`, `windows` 0.62.2, `schemars` 1.2.3 and `futures-util` 0.3.34 are
 already in `Cargo.lock`. P0 runs the whole suite right after enabling `preserve_order`.
 
 ### 1.2 Module trees (new files unless marked)
@@ -1763,6 +1766,11 @@ virtual timeout) and compares kind, `method`, id correspondence, the permission 
 match placeholders); `err` goes to the fake stderr; `agent` records act. After each record,
 `tokio::time::sleep(1 ms)` lets every task go idle, so interleaving is deterministic. The collected `DriverEvent`s
 (durations blanked, turn tags kept) and replies are compared with `<fixture>.events.json`.
+
+The harness and its tests exist only with the `replay` feature: every `--workspace` test and clippy run has it
+(aura-core's dev-dependency, 1.1), and `cargo test -p aura-drivers --features replay` runs them alone. So
+`tests/replay.rs` starts with `#![cfg(feature = "replay")]` (`cargo test -p aura-drivers` then builds it empty), and no
+other `tests/**` file uses `aura_drivers::testing`, which only workspace runs and `replay` enable.
 
 Curation (`aura-cli fixture`): the log's redaction re-run, then literal `<HOME>`, `<USER>`, `<HOST>`, `<CWD>` (and
 Claude's project-dir spelling, as the spike's `Redactor::add_path`), native session ids to `<SESSION_n>`, ISO

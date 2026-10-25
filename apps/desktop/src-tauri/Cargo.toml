@@ -56,6 +56,9 @@ tracing-subscriber.workspace = true
 windows-version = "0.1.7"
 
 [dev-dependencies]
+# The quit, page-load and signal tests run the session manager on fake processes and scripted drivers.
+aura-drivers = { workspace = true, features = ["testing"] }
+aura-process = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
 # Paused time makes the window fallback and the demo stream tests instant and deterministic.
 tokio = { workspace = true, features = ["test-util"] }
