@@ -277,6 +277,19 @@ mod curation {
             refused.to_string().contains("older part of the log"),
             "{refused}"
         );
+        // A fixture never replaces the recording it comes from, whichever part --out names.
+        for target in [&log, &part] {
+            let before = std::fs::read_to_string(target).expect("the part");
+            let refused = curate(&log, "rotated", target)
+                .await
+                .0
+                .expect_err("--out names the log");
+            assert!(
+                refused.to_string().contains("names the log itself"),
+                "{refused}"
+            );
+            assert_eq!(std::fs::read_to_string(target).expect("the part"), before);
+        }
     }
 
     #[tokio::test(start_paused = true)]

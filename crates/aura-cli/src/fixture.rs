@@ -64,6 +64,12 @@ pub async fn run(
     out: &Out,
 ) -> Result<Outcome, CliError> {
     let parts = logs::parts(&args.log).map_err(CliError::Message)?;
+    if parts.iter().any(|part| same_file(part, &args.out)) {
+        return Err(CliError::Message(format!(
+            "--out {} names the log itself; write the fixture somewhere else",
+            args.out.display()
+        )));
+    }
     let mut text = String::new();
     for part in &parts {
         let part_text = std::fs::read_to_string(part)
@@ -155,6 +161,14 @@ pub async fn run(
     report.note(checklist(&args.out, &fixture_text, &curated_records));
     report.note(report.summary());
     Ok(report.outcome())
+}
+
+/// Whether two paths name one existing file (through links and `..`).
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
 }
 
 /// The fixture's first line: which scenario it records and the agent that played it.
