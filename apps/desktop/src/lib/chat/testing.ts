@@ -21,14 +21,14 @@ import type {
   ToolUpdate,
   UiAnswer,
 } from "../../bindings";
-import type { EventEntry } from "./transcript";
+import { type EventEntry, UNANNOUNCED_TOOL_TITLE } from "./transcript";
 import type { Transport } from "./transport";
 
 /**
  * Test support for the chat stores and the transcript: a scripted shell, builders for the protocol
- * values, and the compaction rules of the M1a spec (6.3.1), so compacted history can be checked
- * against the live stream before the real chat store exists in this package. Imported by tests
- * only.
+ * values, and the compaction rules of the M1a spec (6.3.1) as aura-core's `compact.rs` applies
+ * them, so compacted history can be checked against the live stream before the real chat store
+ * exists in this package. Imported by tests only.
  */
 
 // ---------- builders ----------
@@ -305,12 +305,15 @@ export function isStored(entry: EventEntry): boolean {
   }
 }
 
-/** The fields a tool call has when nothing set them (ACP's defaults). */
+/**
+ * The call compaction synthesizes for a tool whose turn holds updates but no call: ACP's defaults
+ * with the chat store's title (aura-core `compact.rs`, `default_tool`).
+ */
 function bareCall(id: string): ToolCall {
   return {
     tool_call_id: id,
     kind: "other",
-    title: "",
+    title: UNANNOUNCED_TOOL_TITLE,
     status: "pending",
     locations: [],
     raw_input: null,
@@ -348,19 +351,25 @@ function mergeUpdates(first: ToolUpdate, next: ToolUpdate): ToolUpdate {
   };
 }
 
+const UTF8 = new TextEncoder();
+
 /**
- * One turn's rows as compaction keeps them: each message, thought and user text concatenated into
- * pieces of at most `maxPiece` characters at the seqs of their pieces' first deltas; each tool
- * minted in the turn (`<turn id>.` prefix) as one final call at its call's seq (or its first
- * update's); updates to tools minted elsewhere merged into one update at the first one's seq; the
- * last plan and the last usage; everything else unchanged.
+ * One turn's rows as aura-core's `compact.rs` keeps them: each message, thought and user text
+ * concatenated into pieces of at most `maxPiece` bytes at the seqs of their pieces' first deltas;
+ * each tool minted in the turn (`<turn id>.` prefix) or called in it as one call with its final
+ * state, at its call's seq (the call anchors it even after an update that came first) or, with no
+ * call, synthesized at its first update's seq; updates to tools minted elsewhere merged into one
+ * update at the first one's seq; the last plan and the last usage; everything else unchanged.
  */
 function compactTurn(turnId: string, rows: readonly EventEntry[], maxPiece: number): EventEntry[] {
   /** A kept row; a text piece grows while the turn's deltas are read. */
   type Row = { seq: number; turnId: string | null; event: AuraEvent };
+  const called = new Set(
+    rows.flatMap((row) => (row.event.type === "tool_call" ? [row.event.tool_call_id] : [])),
+  );
   const kept: Row[] = [];
   const pieces = new Map<string, Row>();
-  const calls = new Map<string, { seq: number; call: ToolCall }>();
+  const own = new Map<string, { seq: number; anchored: boolean; call: ToolCall }>();
   const foreign = new Map<string, { seq: number; update: ToolUpdate }>();
   let plan: Row | null = null;
   let usage: Row | null = null;
@@ -374,7 +383,8 @@ function compactTurn(turnId: string, rows: readonly EventEntry[], maxPiece: numb
         const key = `${event.type}:${id}`;
         const piece = pieces.get(key);
         const pieceText = piece ? deltaText(piece.event) : "";
-        if (piece && pieceText.length + event.text.length <= maxPiece) {
+        const bytes = UTF8.encode(pieceText).length + UTF8.encode(event.text).length;
+        if (piece && bytes <= maxPiece) {
           piece.event = withText(piece.event, pieceText + event.text);
         } else {
           const fresh: Row = { seq: row.seq, turnId, event };
@@ -383,28 +393,32 @@ function compactTurn(turnId: string, rows: readonly EventEntry[], maxPiece: numb
         }
         break;
       }
-      case "tool_call":
+      case "tool_call": {
+        const { type: _type, ...call } = event;
+        const known = own.get(call.tool_call_id);
+        own.set(call.tool_call_id, {
+          seq: known?.anchored ? known.seq : row.seq,
+          anchored: true,
+          call,
+        });
+        break;
+      }
       case "tool_update": {
-        const { type: _type, ...fields } = event;
-        const id = fields.tool_call_id;
-        if (id.startsWith(`${turnId}.`)) {
-          const known = calls.get(id);
-          const call =
-            event.type === "tool_call"
-              ? (fields as ToolCall)
-              : applyUpdate(known?.call ?? bareCall(id), fields as ToolUpdate);
-          calls.set(id, { seq: known?.seq ?? row.seq, call });
-          if (!known) kept.push({ seq: row.seq, turnId, event: { type: "tool_call", ...call } });
-        } else if (event.type === "tool_update") {
-          const known = foreign.get(id);
-          const update = known
-            ? mergeUpdates(known.update, fields as ToolUpdate)
-            : (fields as ToolUpdate);
-          foreign.set(id, { seq: known?.seq ?? row.seq, update });
-          if (!known)
-            kept.push({ seq: row.seq, turnId, event: { type: "tool_update", ...update } });
+        const { type: _type, ...update } = event;
+        const id = update.tool_call_id;
+        if (called.has(id) || id.startsWith(`${turnId}.`)) {
+          const known = own.get(id);
+          own.set(id, {
+            seq: known?.seq ?? row.seq,
+            anchored: known?.anchored ?? false,
+            call: applyUpdate(known?.call ?? bareCall(id), update),
+          });
         } else {
-          kept.push({ ...row });
+          const known = foreign.get(id);
+          foreign.set(id, {
+            seq: known?.seq ?? row.seq,
+            update: known ? mergeUpdates(known.update, update) : update,
+          });
         }
         break;
       }
@@ -418,25 +432,15 @@ function compactTurn(turnId: string, rows: readonly EventEntry[], maxPiece: numb
         kept.push({ ...row });
     }
   }
-  // Rewrite the merged entries with their final values.
-  const result = kept.map((entry): Row => {
-    if (entry.event.type === "tool_call") {
-      const merged = calls.get(entry.event.tool_call_id);
-      return merged
-        ? { ...entry, event: { type: "tool_call", ...merged.call } as AuraEvent }
-        : entry;
-    }
-    if (entry.event.type === "tool_update") {
-      const merged = foreign.get(entry.event.tool_call_id);
-      return merged
-        ? { ...entry, event: { type: "tool_update", ...merged.update } as AuraEvent }
-        : entry;
-    }
-    return entry;
-  });
-  if (plan) result.push(plan);
-  if (usage) result.push(usage);
-  return result.sort((a, b) => a.seq - b.seq);
+  for (const { seq, call } of own.values()) {
+    kept.push({ seq, turnId, event: { type: "tool_call", ...call } });
+  }
+  for (const { seq, update } of foreign.values()) {
+    kept.push({ seq, turnId, event: { type: "tool_update", ...update } });
+  }
+  if (plan) kept.push(plan);
+  if (usage) kept.push(usage);
+  return kept.sort((a, b) => a.seq - b.seq);
 }
 
 function deltaText(event: AuraEvent): string {

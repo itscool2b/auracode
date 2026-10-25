@@ -151,7 +151,8 @@ describe("the transcript reducer", () => {
         ["t1", ev.toolUpdate("x")],
       ]),
     );
-    expect(tool(model, "x")).toMatchObject({ toolKind: "other", title: "", status: "pending" });
+    // The title is the one compaction gives the call it synthesizes for such a tool.
+    expect(tool(model, "x")).toMatchObject({ toolKind: "other", title: "Tool", status: "pending" });
   });
 
   it("applies an update to an earlier turn's tool in place", () => {
@@ -414,8 +415,14 @@ function random(seed: number): () => number {
 
 /**
  * A live stream of a few turns with what drivers and the session actor send: split deltas,
- * tools with updates (to this turn's tools, to earlier turns' tools, and untagged late ones),
- * plans, usage, cards with and without answers, notices and errors, and live header state.
+ * thoughts and their completions, tools with updates (to this turn's tools, to earlier turns'
+ * tools, and untagged late ones), plans (tagged and late), usage, cards with and without answers,
+ * notices and errors in turns and between them, and live header state.
+ *
+ * Usage outside a turn is never stored, and frames carry no turn tags, so an untagged usage
+ * report can render the same live and from history only where no turn is open: the generator
+ * sends it between turns. (A late one landing in the next turn's span would show as that turn's
+ * cost live until the turn's own report replaces it.)
  */
 function generatedStream(seed: number): EventEntry[] {
   const next = random(seed);
@@ -432,9 +439,10 @@ function generatedStream(seed: number): EventEntry[] {
     const steps = Math.floor(next() * 12);
     let toolCount = 0;
     let messageCount = 0;
+    let thoughtCount = 0;
     for (let step = 0; step < steps; step += 1) {
       const roll = next();
-      if (roll < 0.25) {
+      if (roll < 0.22) {
         messageCount += 1;
         const message = `${id}.m${messageCount}`;
         messages.push(message);
@@ -442,8 +450,18 @@ function generatedStream(seed: number): EventEntry[] {
           tagged.push([id, ev.message(message, pick(["a", "bc", "def ", "ghij\n", "é"]))]);
         }
         if (next() < 0.5) tagged.push([id, ev.messageDone(message)]);
+      } else if (roll < 0.3) {
+        thoughtCount += 1;
+        const thought = `${id}.th${thoughtCount}`;
+        for (let part = Math.floor(next() * 3); part >= 0; part -= 1) {
+          tagged.push([id, ev.thought(thought, pick(["hm", "so", " then", "ü"]))]);
+        }
+        if (next() < 0.6) tagged.push([id, ev.thoughtDone(thought, pick([null, 1200, 30]))]);
+      } else if (roll < 0.33) {
+        tagged.push([id, ev.error("agent_error", `failed at ${step}`, pick([null, "detail"]))]);
       } else if (roll < 0.35) {
-        tagged.push([id, ev.thought(`${id}.th`, pick(["hm", "so", " then"]))]);
+        // A plan the agent sent after an earlier turn's reply: untagged, so stored as it is.
+        tagged.push([null, ev.plan(`late ${step}`)]);
       } else if (roll < 0.55) {
         toolCount += 1;
         const tool = `${id}.t${toolCount}`;
@@ -500,6 +518,8 @@ function generatedStream(seed: number): EventEntry[] {
     }
     tagged.push([id, ev.turnEnded(id, pick(["end_turn", "cancelled", "error", "interrupted"]))]);
     if (next() < 0.5) tagged.push([null, ev.notice(`after ${turn}`)]);
+    if (next() < 0.3) tagged.push([null, ev.usage(turn)]);
+    if (next() < 0.2) tagged.push([null, ev.error("agent_exited", "The agent stopped.")]);
   }
   return numbered(tagged);
 }

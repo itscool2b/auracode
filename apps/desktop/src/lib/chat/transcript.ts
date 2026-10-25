@@ -205,14 +205,21 @@ export function reduce(
   return applyEntries(model, [{ seq, turnId, event }]);
 }
 
-/** A tool call that was never announced, as ACP's defaults describe it. */
+/**
+ * The title of a tool call that was never announced: the one the chat store gives the call it
+ * synthesizes for such a tool when it compacts a turn, so the block reads the same live and from
+ * history.
+ */
+export const UNANNOUNCED_TOOL_TITLE = "Tool";
+
+/** A tool call that was never announced: ACP's defaults, with the chat store's title. */
 function unannouncedTool(key: string, id: string): ToolItem {
   return {
     kind: "tool",
     key,
     id,
     toolKind: "other",
-    title: "",
+    title: UNANNOUNCED_TOOL_TITLE,
     status: "pending",
     locations: [],
     rawInput: null,
