@@ -239,7 +239,8 @@ async fn env_timeout_retries_then_falls_back() {
     assert_eq!(runs.len(), 2, "{runs:?}");
     assert_eq!(&runs[0][..2], ["-i", "-l"]);
     assert_eq!(&runs[1][..2], ["-l", "-c"]);
-    // Each hanging shell and the child it started were killed with their session.
+    // Each hanging shell and the child it started in a group of its own (where killing the
+    // shell's group never reaches) were killed with their session.
     let pids: Vec<u32> = std::fs::read_to_string(&fake.pidfile)
         .expect("pidfile")
         .split_whitespace()

@@ -32,8 +32,8 @@
 //! Invoked under a shell's name (`zsh`, `bash`, `fish`, `tcsh`, ...), it is a fake login shell:
 //! `AURA_TESTBIN_SHELL` picks `ok`, `junk`, `hang`, `hang-interactive`, `nonzero`, `no-marker` or
 //! `no-path`; `AURA_TESTBIN_RC` (`A=1;B=2`) adds variables as an rc file would; each run appends its
-//! argv to the file `AURA_TESTBIN_RECORD` names, and `hang` appends its own and its child's pid to
-//! `AURA_TESTBIN_PIDFILE`.
+//! argv to the file `AURA_TESTBIN_RECORD` names, and `hang` starts a child in a group of its own
+//! (same session) and appends its own and that child's pid to `AURA_TESTBIN_PIDFILE`.
 
 use std::ffi::OsString;
 use std::io::{self, BufRead, Write};
@@ -397,7 +397,9 @@ fn fake_shell(args: &[String]) -> Result<ExitCode> {
     let mode = std::env::var("AURA_TESTBIN_SHELL").unwrap_or_else(|_| "ok".into());
     let interactive = args.iter().any(|arg| arg == "-i");
     if mode == "hang" || (mode == "hang-interactive" && interactive) {
-        let child = spawn_self(&["hang"], Placement::Inherit)?;
+        // A background job of an rc file: a group of its own in the shell's session, which only
+        // killing the whole session reaches.
+        let child = spawn_self(&["hang"], Placement::Group)?;
         if let Some(pidfile) = std::env::var_os("AURA_TESTBIN_PIDFILE") {
             // Appended: each run of the shell adds its own line.
             let mut file = std::fs::OpenOptions::new()
