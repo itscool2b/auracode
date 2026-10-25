@@ -124,10 +124,16 @@ async fn install_marks_only_complete_installs() {
     assert!(marker["installed_at_ms"].as_i64().is_some_and(|ms| ms > 0));
 
     // The launch: node <absolute entry>, from the adapter folder, the user's binary forced.
-    let entry = folder.join("node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js");
+    let entry = folder
+        .join("node_modules")
+        .join("@agentclientprotocol")
+        .join("claude-agent-acp")
+        .join("dist")
+        .join("index.js");
     assert_eq!(launch.label, "claude-agent-acp");
     assert_eq!(launch.program, machine.tool("node"));
-    assert_eq!(launch.args, [entry.into_os_string()]);
+    assert_eq!(launch.args.len(), 1);
+    assert_eq!(std::path::PathBuf::from(&launch.args[0]), entry);
     assert_eq!(launch.cwd, ProcessCwd::Fixed(folder.clone()));
     assert_eq!(
         launch.set_env,

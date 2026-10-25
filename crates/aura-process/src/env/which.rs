@@ -43,8 +43,10 @@ pub fn find_program(name: &str, env: &EnvMap) -> Option<PathBuf> {
                 let candidate = dir.join(name);
                 return candidate.is_file().then_some(candidate);
             }
+            // Lowercase, as the files are usually named (`node.exe`, `npm.cmd`): Windows matches
+            // either way, and the path is then the one a listing shows.
             extensions.iter().find_map(|extension| {
-                let candidate = dir.join(format!("{name}{extension}"));
+                let candidate = dir.join(format!("{name}{}", extension.to_ascii_lowercase()));
                 candidate.is_file().then_some(candidate)
             })
         }
