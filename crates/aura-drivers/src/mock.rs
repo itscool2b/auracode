@@ -4,8 +4,10 @@
 //! the clock forward, and the stream steps hand out text one token every `1 / tokens_per_sec` seconds.
 //! [`run_script`] plays that timeline against Tokio's clock and sends everything through a
 //! [`FrameBatcher`], so the UI receives what a real driver produces: coalesced deltas in frames under
-//! the size limit, flushed at most once per frame interval. Because pacing follows Tokio's clock, tests
-//! play whole turns instantly and deterministically with paused time.
+//! the size limit, flushed at most once per frame interval. [`play`] is the same timeline one level
+//! down, event by event, for the demo agent's driver, whose session does its own batching. Because
+//! pacing follows Tokio's clock, tests play whole turns instantly and deterministically with paused
+//! time.
 
 use std::time::Duration;
 
@@ -377,6 +379,44 @@ where
             biased;
             () = cancel.cancelled() => {}
             () = tokio::time::sleep_until(wake) => {}
+        }
+    }
+}
+
+/// Plays `script` on Tokio's clock, handing every event to `emit` at its scripted time, without
+/// batching: the event level beneath [`run_script`], for a driver whose session batches frames.
+///
+/// Tokens that fall due together (after a stall, or while `emit` was slow) arrive as one delta per
+/// stream, exactly as [`run_script`] coalesces them. `emit` returning `false` means its receiver is
+/// gone: the run stops with [`RunOutcome::ReceiverGone`] and `emit` is not called again. When
+/// `cancel` fires, the run stops at once with [`RunOutcome::Cancelled`] and adds nothing: unlike
+/// [`run_script`] it does not close the turn, because the driver ends turns itself. Must run on a
+/// Tokio runtime with the time driver enabled.
+pub async fn play<F>(script: MockScript, cancel: CancellationToken, mut emit: F) -> RunOutcome
+where
+    F: FnMut(AuraEvent) -> bool,
+{
+    let mut timeline = Timeline::new(script.steps, Instant::now());
+    loop {
+        if cancel.is_cancelled() {
+            return RunOutcome::Cancelled;
+        }
+        let mut gone = false;
+        let due = timeline.advance(Instant::now(), &mut |event| {
+            if !gone && !emit(event) {
+                gone = true;
+            }
+        });
+        if gone {
+            return RunOutcome::ReceiverGone;
+        }
+        let Some(due) = due else {
+            return RunOutcome::Completed;
+        };
+        tokio::select! {
+            biased;
+            () = cancel.cancelled() => {}
+            () = tokio::time::sleep_until(due.next) => {}
         }
     }
 }
@@ -1659,6 +1699,126 @@ mod tests {
         }
         assert_eq!(cycle_tokens("a b ", 5), "a b a b a ");
         assert_eq!(cycle_tokens("", 5), "");
+    }
+
+    /// What `play` emitted, each event with the (paused) time since the run started.
+    async fn play_events(
+        script: MockScript,
+        cancel: CancellationToken,
+    ) -> (RunOutcome, Vec<(Duration, AuraEvent)>) {
+        let start = Instant::now();
+        let mut events = Vec::new();
+        let outcome = super::play(script, cancel, |event| {
+            events.push((start.elapsed(), event));
+            true
+        })
+        .await;
+        (outcome, events)
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn play_emits_each_event_at_its_time() {
+        let script = MockScript {
+            steps: vec![
+                MockStep::Emit(turn_started("t")),
+                MockStep::Sleep(Duration::from_secs(1)),
+                MockStep::StreamText {
+                    message_id: "m".into(),
+                    text: "one two three".into(),
+                    tokens_per_sec: 2,
+                },
+                MockStep::Emit(turn_ended("t", StopReason::EndTurn)),
+            ],
+        };
+        let (outcome, events) = play_events(script, CancellationToken::new()).await;
+        assert_eq!(outcome, RunOutcome::Completed);
+        let delta = |text: &str| AuraEvent::MessageDelta {
+            message_id: "m".into(),
+            text: text.into(),
+        };
+        assert_eq!(
+            events,
+            vec![
+                (Duration::ZERO, turn_started("t")),
+                (Duration::from_secs(1), delta("one ")),
+                (Duration::from_millis(1_500), delta("two ")),
+                (Duration::from_secs(2), delta("three")),
+                (
+                    Duration::from_millis(2_500),
+                    turn_ended("t", StopReason::EndTurn)
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn play_stops_on_cancel_without_closing_the_turn() {
+        let script = MockScript::stress("t", 100, 2_000);
+        let (outcome, events) = play_events(script, cancel_after(Duration::from_millis(500))).await;
+        assert_eq!(outcome, RunOutcome::Cancelled);
+        assert!(matches!(
+            events.first(),
+            Some((_, AuraEvent::TurnStarted { .. }))
+        ));
+        assert!(
+            !events
+                .iter()
+                .any(|(_, event)| matches!(event, AuraEvent::TurnEnded { .. })),
+            "the driver ends the turn, not play"
+        );
+        assert!(
+            events
+                .iter()
+                .all(|(at, _)| *at <= Duration::from_millis(500))
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn play_stops_when_the_receiver_is_gone() {
+        let mut calls = 0;
+        let outcome = super::play(
+            MockScript::demo_turn("t", 200),
+            CancellationToken::new(),
+            |_| {
+                calls += 1;
+                calls < 2
+            },
+        )
+        .await;
+        assert_eq!(outcome, RunOutcome::ReceiverGone);
+        assert_eq!(calls, 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn play_coalesces_what_fell_due_together() {
+        // Everything of a long turn is due at once when the clock jumps an hour ahead.
+        let script = MockScript::stress("t", MAX_TOKENS_PER_SEC, 50_000);
+        let cancel = CancellationToken::new();
+        let mut events = Vec::new();
+        let outcome = {
+            let run = super::play(script, cancel, |event| {
+                events.push(event);
+                true
+            });
+            tokio::pin!(run);
+            // The first poll emits what is due at the start and parks on the next token.
+            let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+            assert!(run.as_mut().poll(&mut context).is_pending());
+            tokio::time::advance(Duration::from_secs(3_600)).await;
+            run.await
+        };
+        assert_eq!(outcome, RunOutcome::Completed);
+        // TurnStarted, thought, ThoughtCompleted, answer (two deltas: the first token at once, the
+        // rest after the jump), MessageCompleted, UsageUpdated, TurnEnded.
+        assert!(events.len() <= 9, "{} events", events.len());
+        assert!(matches!(events.last(), Some(AuraEvent::TurnEnded { .. })));
+    }
+
+    #[test]
+    fn play_future_is_send() {
+        fn assert_send<T: Send>(_: &T) {}
+        let future = super::play(MockScript::default(), CancellationToken::new(), |_| true);
+        assert_send(&future);
     }
 
     #[test]
