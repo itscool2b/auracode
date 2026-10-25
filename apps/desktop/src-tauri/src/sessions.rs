@@ -419,6 +419,10 @@ impl AgentDriver for UnbuiltDriver {
 pub const QUIT_SESSIONS_DEADLINE: Duration = Duration::from_secs(8);
 /// The chat store's deadline when quitting, after the sessions.
 pub const QUIT_STORE_DEADLINE: Duration = Duration::from_secs(5);
+/// How much longer than a step's own deadline the quit flow waits for it. The sessions and the
+/// store keep their deadlines themselves; this bounds one that does not, since the window is
+/// hidden and every other exit request waits for the flow.
+pub const QUIT_STEP_MARGIN: Duration = Duration::from_secs(1);
 /// The chat store's deadline at `RunEvent::Exit` when the quit flow did not close it.
 pub const EXIT_STORE_DEADLINE: Duration = Duration::from_secs(1);
 
@@ -563,7 +567,8 @@ pub enum QuitOutcome {
     Kept,
     /// Everything stopped and the app was asked to exit with the request's code.
     Exited {
-        summary: ShutdownSummary,
+        /// `None` when the sessions did not stop within their deadline plus the margin.
+        summary: Option<ShutdownSummary>,
         /// Whether the store saved everything before closing.
         saved: bool,
     },
@@ -573,6 +578,10 @@ pub enum QuitOutcome {
 /// paused with unsaved data, ask first (keeping auracode open shows the window again and ends the
 /// quit); then stop every session within 8 s, commit and close the store within 5 s, delete the
 /// registry file, and exit with `code`. The next exit request passes ([`Quit::on_exit_requested`]).
+///
+/// The window is hidden and every other exit request waits for this flow, so a step that overruns
+/// its deadline by [`QUIT_STEP_MARGIN`] is left behind and the flow carries on: `RunEvent::Exit`
+/// then kills whatever runs, and closes the store if it did not close here.
 pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutcome {
     host.hide_window();
     if let Some(question) = quit_question(&host.storage())
@@ -583,19 +592,45 @@ pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutco
         tracing::info!("kept auracode open: saving is paused");
         return QuitOutcome::Kept;
     }
-    let summary = host.stop_sessions(QUIT_SESSIONS_DEADLINE).await;
-    let saved = host.close_store(QUIT_STORE_DEADLINE).await;
-    quit.mark_store_closed();
+    let summary = tokio::time::timeout(
+        QUIT_SESSIONS_DEADLINE + QUIT_STEP_MARGIN,
+        host.stop_sessions(QUIT_SESSIONS_DEADLINE),
+    )
+    .await
+    .inspect_err(|_| {
+        tracing::warn!("the sessions did not stop within their deadline; quitting anyway")
+    })
+    .ok();
+    let saved = match tokio::time::timeout(
+        QUIT_STORE_DEADLINE + QUIT_STEP_MARGIN,
+        host.close_store(QUIT_STORE_DEADLINE),
+    )
+    .await
+    {
+        Ok(saved) => {
+            quit.mark_store_closed();
+            saved
+        }
+        Err(_) => {
+            tracing::warn!(
+                "the chat store did not close within its deadline; it gets one more second at exit"
+            );
+            false
+        }
+    };
     host.close_registry();
-    tracing::info!(
-        sessions = summary.sessions,
-        graceful = summary.graceful,
-        forced = summary.forced,
-        took_ms = u64::try_from(summary.took.as_millis()).unwrap_or(u64::MAX),
-        saved,
-        code,
-        "quitting"
-    );
+    match summary {
+        Some(summary) => tracing::info!(
+            sessions = summary.sessions,
+            graceful = summary.graceful,
+            forced = summary.forced,
+            took_ms = u64::try_from(summary.took.as_millis()).unwrap_or(u64::MAX),
+            saved,
+            code,
+            "quitting"
+        ),
+        None => tracing::info!(saved, code, "quitting"),
+    }
     quit.finish();
     host.exit(code);
     QuitOutcome::Exited { summary, saved }
@@ -1181,12 +1216,15 @@ mod tests {
         Exit(i32),
     }
 
-    /// Records every call; the store and the sessions are real when given.
+    /// Records every call; the store and the sessions are real when given, and either can be
+    /// made to never finish.
     struct FakeHost {
         calls: Mutex<Vec<Call>>,
         storage: StorageStatus,
         quit_anyway: bool,
         chats: Option<ChatRuntime>,
+        stuck_sessions: bool,
+        stuck_store: bool,
     }
 
     impl FakeHost {
@@ -1196,6 +1234,8 @@ mod tests {
                 storage,
                 quit_anyway,
                 chats: None,
+                stuck_sessions: false,
+                stuck_store: false,
             }
         }
 
@@ -1228,6 +1268,9 @@ mod tests {
 
         async fn stop_sessions(&self, deadline: Duration) -> ShutdownSummary {
             self.record(Call::StopSessions(deadline));
+            if self.stuck_sessions {
+                return std::future::pending().await;
+            }
             match &self.chats {
                 Some(chats) => chats.manager.shutdown_all(deadline).await,
                 None => ShutdownSummary {
@@ -1241,6 +1284,9 @@ mod tests {
 
         async fn close_store(&self, deadline: Duration) -> bool {
             self.record(Call::CloseStore(deadline));
+            if self.stuck_store {
+                return std::future::pending().await;
+            }
             match &self.chats {
                 Some(chats) => chats.store.shutdown(deadline).await,
                 None => true,
@@ -1277,7 +1323,13 @@ mod tests {
         );
         let host = FakeHost::new(StorageStatus::default(), false);
         let outcome = run_quit(&quit, &host, 1).await;
-        assert!(matches!(outcome, QuitOutcome::Exited { saved: true, .. }));
+        assert!(matches!(
+            outcome,
+            QuitOutcome::Exited {
+                summary: Some(_),
+                saved: true
+            }
+        ));
         assert_eq!(
             host.calls(),
             [
@@ -1338,6 +1390,61 @@ mod tests {
                 Call::Exit(0),
             ]
         );
+    }
+
+    /// The window is hidden and every other exit request waits for the flow, so a step that never
+    /// finishes is left behind at its deadline plus the margin, and the app still exits; the
+    /// store, not closed here, gets its last second at `RunEvent::Exit`.
+    #[tokio::test(start_paused = true)]
+    async fn quit_carries_on_past_steps_that_never_finish() {
+        let quit = Quit::default();
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+        let mut host = FakeHost::new(StorageStatus::default(), false);
+        host.stuck_sessions = true;
+        host.stuck_store = true;
+        let started = tokio::time::Instant::now();
+        let outcome = run_quit(&quit, &host, 3).await;
+        assert_eq!(
+            started.elapsed(),
+            QUIT_SESSIONS_DEADLINE + QUIT_STORE_DEADLINE + 2 * QUIT_STEP_MARGIN
+        );
+        assert_eq!(
+            outcome,
+            QuitOutcome::Exited {
+                summary: None,
+                saved: false
+            }
+        );
+        assert_eq!(
+            host.calls(),
+            [
+                Call::Hide,
+                Call::StopSessions(QUIT_SESSIONS_DEADLINE),
+                Call::CloseStore(QUIT_STORE_DEADLINE),
+                Call::CloseRegistry,
+                Call::Exit(3),
+            ]
+        );
+        assert!(quit.is_done());
+        assert!(
+            !quit.store_closed(),
+            "RunEvent::Exit still closes the store"
+        );
+
+        // Sessions that never stop do not keep a store that closes from closing.
+        let quit = Quit::default();
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+        let mut host = FakeHost::new(StorageStatus::default(), false);
+        host.stuck_sessions = true;
+        let outcome = run_quit(&quit, &host, 0).await;
+        assert_eq!(
+            outcome,
+            QuitOutcome::Exited {
+                summary: None,
+                saved: true
+            }
+        );
+        assert!(quit.store_closed());
     }
 
     #[test]
@@ -1409,7 +1516,7 @@ mod tests {
         host.chats = Some(chats);
         let outcome = run_quit(&quit, &host, 0).await;
         assert!(
-            matches!(outcome, QuitOutcome::Exited { saved: true, summary } if summary.sessions == 0),
+            matches!(outcome, QuitOutcome::Exited { saved: true, summary: Some(summary) } if summary.sessions == 0),
             "{outcome:?}"
         );
         assert!(!wal.exists(), "the log was folded back into the database");
