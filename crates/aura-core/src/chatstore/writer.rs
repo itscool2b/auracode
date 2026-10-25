@@ -932,7 +932,19 @@ impl Writer {
             return;
         };
         let failed = *failed;
-        match self.commit(&failed.writes) {
+        let outcome = if stall.reason == PauseReason::Busy {
+            // A busy database is retried without SQLite's busy handler, whose wait (5 s) would hold
+            // every read of the second channel behind each retry: the backoff does the waiting.
+            let busy_timeout = self.swap_busy_timeout(Duration::ZERO);
+            let outcome = self.commit(&failed.writes);
+            if let Some(busy_timeout) = busy_timeout {
+                self.swap_busy_timeout(busy_timeout);
+            }
+            outcome
+        } else {
+            self.commit(&failed.writes)
+        };
+        match outcome {
             Ok(()) => {
                 self.resume(&stall);
                 self.committed(&failed.writes);
@@ -954,6 +966,24 @@ impl Writer {
                     self.failed(failed, failure);
                 }
             },
+        }
+    }
+
+    /// Sets the connection's busy timeout; returns the one it replaced, or `None` (logged) when it
+    /// could not be read or set.
+    fn swap_busy_timeout(&self, timeout: Duration) -> Option<Duration> {
+        let conn = self.store.as_ref()?.conn();
+        let swapped = conn
+            .query_row("PRAGMA busy_timeout", [], |row| row.get::<_, i64>(0))
+            .and_then(|previous| conn.busy_timeout(timeout).map(|()| previous));
+        match swapped {
+            Ok(previous) => Some(Duration::from_millis(
+                u64::try_from(previous).unwrap_or_default(),
+            )),
+            Err(error) => {
+                tracing::warn!(%error, "could not change the database's busy timeout");
+                None
+            }
         }
     }
 

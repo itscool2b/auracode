@@ -1551,6 +1551,74 @@ mod tests {
         assert_eq!(page_seqs(&page(store, &chat.id, 1).await), [0]);
     }
 
+    /// S8 under a busy pause, with the standard 5 s busy timeout: the first attempt waits it out,
+    /// then the retries skip SQLite's busy handler, so reads from saved data answer at once between
+    /// them instead of waiting behind each retry; the standard timeout is back once saving resumes.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_busy_pause_never_holds_reads_behind_its_retries() {
+        let config = WriterConfig {
+            busy_backoff_first: Duration::from_millis(10),
+            busy_backoff_max: Duration::from_millis(40),
+            busy_pause_after: Duration::from_millis(100),
+            ..WriterConfig::STANDARD
+        };
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db_path = profile(dir.path()).db_path();
+        let fixture = start_in(dir, config, |_| {});
+        let store = &fixture.store;
+        let chat = new_chat(store).await;
+        let other = Connection::open(&db_path).expect("another tool");
+        other
+            .execute_batch("BEGIN IMMEDIATE")
+            .expect("hold the write lock");
+        send(
+            store,
+            Op::AppendEvents {
+                chat_id: chat.id.clone(),
+                rows: vec![notice(0, "waits")],
+            },
+        )
+        .await;
+        let paused = status_until(store, |status| {
+            matches!(status.state, StorageState::Paused { .. })
+        })
+        .await;
+        assert!(matches!(
+            paused.state,
+            StorageState::Paused {
+                reason: PauseReason::Busy,
+                ..
+            }
+        ));
+        for _ in 0..5 {
+            let started = std::time::Instant::now();
+            assert_eq!(store.chats().await.expect("chats").len(), 1);
+            let saved = store
+                .read_saved_page(&chat.id, 1, history::DEFAULT_PAGE_BYTES)
+                .await
+                .expect("page");
+            assert_eq!((saved.items.len(), saved.unsaved_from), (0, Some(0)));
+            assert!(
+                started.elapsed() < Duration::from_secs(1),
+                "a read waited behind a retry: {:?}",
+                started.elapsed()
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        other.execute_batch("ROLLBACK").expect("let go");
+        status_until(store, |status| status.state == StorageState::Ok).await;
+        assert_eq!(page_seqs(&page(store, &chat.id, 1).await), [0]);
+        let (timeout, read) = std::sync::mpsc::channel();
+        store.with_store(move |store| {
+            let ms: i64 = store
+                .conn()
+                .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+                .expect("busy timeout");
+            let _ = timeout.send(ms);
+        });
+        assert_eq!(read.recv_timeout(Duration::from_secs(10)), Ok(5000));
+    }
+
     /// S4: damage found during a run is recorded for the next open's repair, the status turns
     /// `Failed`, and later writes go to the dead-letter file.
     #[tokio::test]
