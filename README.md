@@ -59,6 +59,7 @@ crates/aura-process/    agent processes: spawning, shutdown, leftovers, the agen
 crates/aura-agents/     the agent catalog, detection, the one-time npm adapter install, launch specs
 crates/aura-core/       device identity, data folder, profiles, the per-profile SQLite store, chat sessions
 crates/aura-drivers/    the driver contract, frame batching, the scripted mock agent; the ACP driver (M1a)
+crates/aura-cli/        dev CLI: probes and smoke-tests agents headlessly, records and replays fixtures
 apps/desktop/           Tauri v2 app: Rust shell in src-tauri/, React UI in src/
 packages/ui/            Aura design system: tokens, fonts, glass, motion, Orb, AuraField
 docs/                   plan and spike write-ups; spike code sits next to its write-up in docs/spikes/,
@@ -70,7 +71,6 @@ docs/                   plan and spike write-ups; spike code sits next to its wr
 Planned, not created yet:
 
 ```
-crates/aura-cli/        M1          dev CLI: detect and smoke-test agents, record and replay fixtures
 crates/aura-sync/       M6, M7, M9  API client, merge engines, end-to-end encryption
 crates/aura-config/     M8          per-agent config adapters for the Config Library
 apps/web/               M6          auracode.si (React Router 7 on Cloudflare Workers)
@@ -124,6 +124,26 @@ App data lives in a folder named `si.auracode.desktop` inside the local (never r
 | Linux | `$XDG_DATA_HOME/si.auracode.desktop`, or `~/.local/share/si.auracode.desktop` when `XDG_DATA_HOME` is unset |
 
 `AURACODE_DATA_DIR` moves it anywhere else (see [Environment switches](#environment-switches)).
+
+### aura-cli
+
+`aura-cli` runs agents without the app, through the same session manager, on a temporary profile
+with a fresh temporary git repository as the chat folder (M1a spec 9.5 and 10):
+
+```sh
+cargo run -p aura-cli -- agents                               # the env and each agent
+cargo run -p aura-cli -- probe hermes                         # free probe steps, no prompt
+cargo run -p aura-cli -- smoke hermes --scenario all --spend  # paid scenarios
+cargo run -p aura-cli -- fixture <log> --scenario basic --out <file>
+cargo run -p aura-cli -- replay <fixture>                     # against its golden; --update writes it
+```
+
+A probe or smoke run keeps its folder (protocol logs, database, chat folder) and ends with the
+`aura-cli fixture` command for each log it left. Its agent processes register in the real data
+folder's `run/`, so the app's next start cleans up after a crashed run, and it shares the app's
+downloaded adapters. `--data-dir <dir>` runs on that data folder's own profile instead, and is refused
+while the app runs on it. `aura-cli help` lists every option; `RUST_LOG` shows its logs on stderr
+(default: warnings only).
 
 ### Checks
 
