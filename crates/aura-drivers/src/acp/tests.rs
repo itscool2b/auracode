@@ -2393,3 +2393,30 @@ fn slow_consumer_blocks_agent_not_memory() {
     outbox.push(DriverEvent::Title(None));
     assert!(!outbox.has_head() && !outbox.is_full());
 }
+
+#[tokio::test(start_paused = true)]
+async fn stdout_ending_during_a_graceful_stop_leaves_the_process_to_its_chain() {
+    let mut harness = ready_generic().await;
+    harness.command(DriverCommand::Shutdown {
+        plan: StopPlan {
+            cancel_grace: Duration::from_secs(3),
+            process: ShutdownPlan::STANDARD,
+        },
+    });
+    assert_eq!(
+        timeout(Duration::from_secs(1), harness.end.from_client.recv())
+            .await
+            .expect("closed"),
+        None
+    );
+    // The agent closes stdout at once but takes 4 s to exit, within the chain's 5 s EOF grace.
+    harness.eof();
+    tokio::time::sleep(Duration::from_secs(4)).await;
+    assert!(
+        !harness.calls().contains(&FakeCall::KillTree),
+        "no early kill"
+    );
+    harness.exit_with(0);
+    let (_, exit) = harness.finish().await;
+    assert_eq!(exit, DriverExit::Closed);
+}

@@ -804,7 +804,9 @@ impl Session {
         match item {
             None => {
                 self.stdout_done = true;
-                if !self.exited && self.exit_wait_deadline.is_none() {
+                // A running shutdown chain owns the process's end (codex-acp needs more than 2 s
+                // after EOF); otherwise the agent gets 2 s to exit before its tree is killed.
+                if !self.exited && self.chain.is_none() && self.exit_wait_deadline.is_none() {
                     self.exit_wait_deadline = Some(now + EXIT_AFTER_EOF_GRACE);
                 }
                 self.enter_draining();
