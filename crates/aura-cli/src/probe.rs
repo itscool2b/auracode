@@ -78,8 +78,10 @@ const MODE_CHANGE_LIMIT: Duration = Duration::from_secs(35);
 /// SIGTERM grace and kill confirmation (2 s each, spec appendix A), with a margin.
 const LEFTOVER_GRACE: Duration = Duration::from_secs(6);
 
-/// Words cheaper models carry in their ids or names, cheapest first.
-const CHEAP_MARKERS: [&str; 8] = [
+/// Words cheaper models carry in their ids or names, cheapest first. Hermes names its free tier
+/// so (`Nous · free tier · nous/welcome`).
+const CHEAP_MARKERS: [&str; 9] = [
+    "free",
     "haiku",
     "nano",
     "mini",
@@ -2137,6 +2139,21 @@ mod tests {
         assert_eq!(switch_target(&mock).as_deref(), Some("mock-smart"));
         assert_eq!(cheapest(&mock).as_deref(), Some("mock-fast"));
         assert_eq!(switch_target(&model("only", &[("only", "Only")])), None);
+        // Hermes 0.22.5 offers its free tier among paid models (probe 2): free is cheapest.
+        let hermes = model(
+            "auto:nous/welcome",
+            &[
+                ("auto:nous/welcome", "Auto · nous/welcome"),
+                ("nous:nous/welcome", "Nous · free tier · nous/welcome"),
+                ("anthropic:claude-opus-5-5", "Anthropic · claude-opus-5-5"),
+                (
+                    "anthropic:claude-haiku-4-5-20251001",
+                    "Anthropic · claude-haiku-4-5-20251001",
+                ),
+            ],
+        );
+        assert_eq!(cheapest(&hermes).as_deref(), Some("nous:nous/welcome"));
+        assert_eq!(switch_target(&hermes).as_deref(), Some("nous:nous/welcome"));
     }
 
     /// The interrupt during a first install lands while npm runs: codex-acp's install (15 MB) was
