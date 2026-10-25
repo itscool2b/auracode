@@ -1,6 +1,6 @@
 [package]
 name = "aura-core"
-description = "Device identity, the app data layout, profiles, and the per-profile SQLite store"
+description = "Device identity, the app data layout, profiles, the per-profile SQLite store, and the chat session manager"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,7 +10,12 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+aura-agents.workspace = true
+aura-drivers.workspace = true
+aura-process.workspace = true
+aura-protocol.workspace = true
 dirs.workspace = true
+futures.workspace = true
 # Fallible (io::Result) instead of panicking when the OS refuses, so a broken hostname lookup
 # degrades to "This device" rather than taking the app down.
 hostname = "0.4.2"
@@ -18,11 +23,14 @@ rusqlite.workspace = true
 rusqlite_migration.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# Content addresses of blobs and the hashes of agent replies.
+sha2.workspace = true
 specta.workspace = true
 # Only for the `#[specta(type = specta_typescript::Number)]` marker on Unix-ms fields: specta's
 # TypeScript exporter rejects `i64` otherwise. Pure Rust, no Tauri.
 specta-typescript.workspace = true
 thiserror.workspace = true
+tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
@@ -39,7 +47,12 @@ windows-sys = { version = "0.61.2", features = [
 ] }
 
 [dev-dependencies]
+# The session manager's tests run on fake processes and scripted drivers.
+aura-drivers = { workspace = true, features = ["testing"] }
+aura-process = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
+# Paused time makes idle eviction, flush timers and stop deadlines deterministic.
+tokio = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true

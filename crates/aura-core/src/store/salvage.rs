@@ -1054,8 +1054,8 @@ mod tests {
     use std::collections::BTreeSet;
     use std::fs;
 
-    /// Every table of the v1 schema the copy must have, whatever was damaged.
-    const TABLES: [&str; 11] = [
+    /// Every table of the current schema the copy must have, whatever was damaged.
+    const TABLES: [&str; 12] = [
         "settings",
         "projects",
         "project_folders",
@@ -1067,6 +1067,7 @@ mod tests {
         "attachments",
         "agent_cache",
         "message_fts",
+        "queued_prompts",
     ];
 
     struct Fixture {
@@ -1273,7 +1274,11 @@ mod tests {
         assert_eq!(quick_check(&copy), "ok");
         assert_eq!(count(&copy, "projects"), 2);
         assert_eq!(count(&copy, "events"), 50);
-        assert_eq!(user_version(&copy), 1, "user_version is kept");
+        assert_eq!(
+            user_version(&copy),
+            i64::from(super::super::SCHEMA_VERSION),
+            "user_version is kept"
+        );
     }
 
     #[test]
@@ -1313,7 +1318,7 @@ mod tests {
             1,
             "the full-text index was rebuilt through its virtual table"
         );
-        assert_eq!(user_version(&copy), 1);
+        assert_eq!(user_version(&copy), i64::from(super::super::SCHEMA_VERSION));
     }
 
     #[test]
@@ -1538,7 +1543,7 @@ mod tests {
             assert!(!scratch_path(&f.out).exists(), "the rebuilt copy is gone");
             let copy = raw(&f.out);
             assert_eq!(quick_check(&copy), "ok");
-            assert_eq!(user_version(&copy), 1);
+            assert_eq!(user_version(&copy), i64::from(super::super::SCHEMA_VERSION));
             assert_eq!(fk_violations(&copy), 0);
             for table in TABLES {
                 // Fails with "no such table" if the copy lacks it.
@@ -1760,7 +1765,10 @@ mod tests {
             }
         );
         let copy = raw(&f.out);
-        assert_eq!(user_version(&copy), 2);
+        assert_eq!(
+            user_version(&copy),
+            i64::from(super::super::SCHEMA_VERSION) + 1
+        );
         // `chats` is copied before `events`, so a trigger firing on copied events would show.
         assert_eq!(
             count_where(&copy, "SELECT updated_at FROM chats WHERE id = 'c1'"),

@@ -1,5 +1,5 @@
 //! The local foundation of auracode: which device this is, where its data lives, which profile is
-//! active, and the per-profile SQLite store.
+//! active, the per-profile SQLite store, and the chat sessions that run on it.
 //!
 //! Nothing here depends on Tauri. The desktop shell and the CLI both find the data root through
 //! [`paths::DataRoot::resolve`] (the same folder as Tauri's `app_local_data_dir()`, never the roaming
@@ -25,12 +25,19 @@
 //! user. Errors are reserved for what can't be repaired (no permission, a file that can't be read,
 //! disk full, data from a newer auracode, a database another auracode process is using, a linked
 //! data folder whose disk isn't connected), and their messages are written to be shown as they are.
+//!
+//! The process that runs chats also takes the profile's owner lock ([`owner::ProfileOwner`]) between
+//! opening the profile and opening its store; the store then moves into the chat store's writer
+//! thread ([`chatstore::ChatStore`]), and [`session::SessionManager`] runs the chats on top of it.
 
+pub mod chatstore;
 pub mod device;
 pub mod error;
 pub mod ids;
+pub mod owner;
 pub mod paths;
 pub mod profile;
+pub mod session;
 pub mod store;
 pub mod time;
 
