@@ -12,7 +12,9 @@ use std::sync::Arc;
 use serde_json::{Map, Value, json};
 use tokio::sync::mpsc;
 
-use super::{Body, Direction, LiveLogs, LogLimits, Record, Redactor, SinkShared, head, lock};
+use super::{
+    Body, Direction, LiveLogs, LogLimits, Record, Redactor, SinkShared, head, lock, now_millis,
+};
 
 /// Records taken from the queue at once.
 const BATCH: usize = 256;
@@ -275,7 +277,8 @@ fn rename_if_present(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 /// The writer task: until every [`ProtocolLog`](super::ProtocolLog) clone is gone, or an I/O error
-/// stops it.
+/// stops it. Records dropped after the last one queued are counted in a last `dropped` note, so
+/// the end of a log never hides a gap.
 pub(crate) async fn run(mut rx: mpsc::Receiver<Record>, writer: Writer, live: LiveLogs) {
     let key = (writer.dir.clone(), writer.spawn_id.clone());
     let shared = Arc::clone(&writer.shared);
@@ -309,6 +312,18 @@ pub(crate) async fn run(mut rx: mpsc::Receiver<Record>, writer: Writer, live: Li
                 break;
             }
         }
+    }
+    // Every producer is gone, so the count is final.
+    let dropped = shared.take_dropped();
+    if dropped > 0
+        && let Some(mut current) = writer.take()
+    {
+        let marker = Record {
+            t: now_millis(),
+            body: Body::Dropped(dropped),
+            bytes: 0,
+        };
+        let _ = tokio::task::spawn_blocking(move || current.write_batch(vec![marker])).await;
     }
     lock(&live).remove(&key);
 }
@@ -366,6 +381,76 @@ mod tests {
             }),
             r#"{"t":2,"d":"note","note":{"dropped":3}}"#
         );
+    }
+
+    /// The capped shape replay fixtures read (spec 3.8): whatever the record's `d`, exactly `t`,
+    /// that `d`, the first half of the payload's text as `raw`, and the bytes cut; never a `msg`,
+    /// `cmd`, `line` or `note` that could be replayed as if it were whole.
+    #[test]
+    fn a_capped_record_keeps_its_direction_and_holds_raw_text_and_the_cut() {
+        let limits = LogLimits {
+            max_record_bytes: 1024,
+            ..LogLimits::STANDARD
+        };
+        let writer = writer(limits);
+        let big = "x".repeat(4096);
+        let records = [
+            (
+                "out",
+                line(
+                    Direction::Out,
+                    &format!(
+                        r#"{{"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{{"text":"{big}"}}}}"#
+                    ),
+                ),
+            ),
+            (
+                "in",
+                line(
+                    Direction::In,
+                    &format!(r#"{{"jsonrpc":"2.0","id":3,"result":{{"text":"{big}"}}}}"#),
+                ),
+            ),
+            ("err", line(Direction::Err, &big)),
+            (
+                "cmd",
+                Record {
+                    t: 1,
+                    body: Body::Command(
+                        json!({"type": "prompt", "parts": [{"type": "text", "text": big}]}),
+                    ),
+                    bytes: 0,
+                },
+            ),
+            (
+                "note",
+                Record {
+                    t: 1,
+                    body: Body::Note(crate::log::LogNote::Text(big.clone())),
+                    bytes: 0,
+                },
+            ),
+        ];
+        for (direction, record) in records {
+            let text = writer.format(record);
+            assert!(text.len() <= 1024, "{direction}: {}", text.len());
+            let value: Value = serde_json::from_str(&text).expect("json");
+            let keys: Vec<&str> = value
+                .as_object()
+                .expect("an object")
+                .keys()
+                .map(String::as_str)
+                .collect();
+            assert_eq!(keys, ["t", "d", "raw", "truncated"], "{direction}: {text}");
+            assert_eq!(value["d"], direction);
+            assert!(
+                value["raw"]
+                    .as_str()
+                    .is_some_and(|raw| raw.starts_with(['{', 'x'])),
+                "{direction}: {text}"
+            );
+            assert!(value["truncated"].as_u64().is_some_and(|cut| cut > 1024));
+        }
     }
 
     #[test]

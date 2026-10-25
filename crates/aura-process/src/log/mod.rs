@@ -17,13 +17,21 @@
 //! `d` is `out` (to the agent), `in` (from it; `msg` for JSON, `raw` for a line the driver got that
 //! is not valid JSON), `err`, `cmd` (a driver command, in processing order), or `note`; `t` is for
 //! humans, replay uses line order. A stdout line that is not JSON at all never reaches the driver,
-//! so it is not an `in` record either: it leaves a `noise` note with its size. A record over the
-//! size cap keeps the first half of its text as `raw`, plus `"truncated": n`.
+//! so it is not an `in` record either: it leaves a `noise` note with its size.
+//!
+//! A record over the size cap, whatever its `d`, has exactly these keys and nothing to replay:
+//!
+//! ```text
+//! {"t":1792840004000,"d":"in","raw":"{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",...","truncated":2097152}
+//! ```
+//!
+//! `d` is the record's own; `raw` is the first half of its payload as text (a `msg`, `cmd` or `note`
+//! serialized first, redacted before it is cut); `truncated` is the number of bytes cut.
 //!
 //! Writing never blocks the protocol path: records queue to a writer task, which redacts them
 //! ([`Redactor`]) before any byte reaches disk. A full queue drops and counts, and a
-//! `{"note":{"dropped":n}}` record marks the gap; an I/O error stops logging for that spawn with
-//! one warning. The env is never logged.
+//! `{"note":{"dropped":n}}` record marks the gap, at the latest when the log closes; an I/O error
+//! stops logging for that spawn with one warning. The env is never logged.
 
 mod redact;
 mod retention;
@@ -267,6 +275,11 @@ impl SinkShared {
         self.queued_bytes.fetch_sub(bytes, Ordering::AcqRel);
     }
 
+    /// How many records were dropped since the last `dropped` note, and starts counting again.
+    pub(crate) fn take_dropped(&self) -> u64 {
+        self.dropped.swap(0, Ordering::AcqRel)
+    }
+
     pub(crate) fn stop(&self) {
         self.stopped.store(true, Ordering::Release);
     }
@@ -380,7 +393,7 @@ impl ProtocolLog {
 impl Sink {
     /// Queues a record, first the count of what was dropped before it, if anything was.
     fn offer(&self, record: Record) {
-        let pending = self.shared.dropped.swap(0, Ordering::AcqRel);
+        let pending = self.shared.take_dropped();
         if pending > 0 {
             let marker = Record {
                 t: record.t,
@@ -898,6 +911,45 @@ mod tests {
         let mut expected: Vec<Value> = (0..8).map(Value::from).collect();
         expected.push(json!({"dropped": 12}));
         expected.push(Value::from(20));
+        assert_eq!(kinds, expected);
+    }
+
+    /// A burst dropped right before the end (the exit and shutdown notes among it) still leaves a
+    /// note, though no later record comes to carry it.
+    #[tokio::test(flavor = "current_thread")]
+    async fn records_dropped_at_the_very_end_still_leave_a_note() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let limits = LogLimits {
+            queue: 8,
+            ..LogLimits::STANDARD
+        };
+        let factory = factory(dir.path()).with_limits(limits);
+        let log = factory.open("chat", "spawn");
+        let path = log.path().expect("on");
+        // The writer cannot run while this task does not yield: 8 fit, 12 are dropped.
+        for index in 0..19 {
+            log.line(Direction::In, &format!(r#"{{"i":{index}}}"#));
+        }
+        log.note(LogNote::Exit {
+            code: Some(0),
+            signal: None,
+        });
+        let clone = log.clone();
+        drop(log);
+        drop(clone);
+        factory.idle().await;
+        let written = records(&path);
+        let kinds: Vec<Value> = written
+            .iter()
+            .map(|record| {
+                record["msg"]["i"]
+                    .clone()
+                    .as_u64()
+                    .map_or_else(|| record["note"].clone(), Value::from)
+            })
+            .collect();
+        let mut expected: Vec<Value> = (0..8).map(Value::from).collect();
+        expected.push(json!({"dropped": 12}));
         assert_eq!(kinds, expected);
     }
 
