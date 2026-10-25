@@ -1194,9 +1194,7 @@ mod tests {
     }
 
     /// The same through the session manager the app wires `page_load` to: a page that starts
-    /// loading ends its webview's chat view and status channel, and leaves another webview's. The
-    /// manager in this branch is P0's skeleton, whose chat calls answer that sessions are not
-    /// built; the test stops there until package C's manager is merged.
+    /// loading ends its webview's chat view and status channel, and leaves another webview's.
     #[tokio::test]
     async fn page_load_ends_the_webviews_channels_in_the_manager() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1204,16 +1202,11 @@ mod tests {
         let chats = testing::start(&mut booted).expect("chats");
         let folder = dir.path().join("project");
         std::fs::create_dir(&folder).expect("a chat folder");
-        let chat = match chats.manager.create_chat("mock", &folder).await {
-            Ok(chat) => chat,
-            Err(aura_core::session::SessionError::Internal(message))
-                if message.contains("not implemented in this build") =>
-            {
-                assert!(chats.store.shutdown(QUIT_STORE_DEADLINE).await);
-                return;
-            }
-            Err(error) => panic!("could not create a chat: {error}"),
-        };
+        let chat = chats
+            .manager
+            .create_chat("mock", &folder)
+            .await
+            .expect("a chat");
         let pages = Pages::default();
         let ended = [(); 3].map(|()| Arc::new(AtomicUsize::new(0)));
         let [view, status, other] = &ended;
@@ -1650,8 +1643,7 @@ mod tests {
 
     /// Quitting with no live session still commits the store and closes it: the write-ahead log is
     /// folded back, so the next launch sees a clean shutdown and checks nothing; and this
-    /// instance's registry file is gone. (P0's registry writes none, so that last check bites once
-    /// package A's registry is merged.)
+    /// instance's registry file, which the leftover registry wrote at startup (Unix), is gone.
     #[tokio::test]
     async fn quit_without_sessions_commits_and_closes() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1661,6 +1653,13 @@ mod tests {
         let wal = PathBuf::from(format!("{}-wal", db.display()));
         let run = booted.data_dir.clone().expect("data root").join(RUN_DIR);
         let chats = testing::start(&mut booted).expect("chats");
+        if cfg!(unix) {
+            assert_eq!(
+                own_registry_files(&run).len(),
+                1,
+                "the leftover registry wrote this instance's file"
+            );
+        }
         assert!(
             std::fs::metadata(&wal).is_ok_and(|meta| meta.len() > 0),
             "the session wrote to its log"

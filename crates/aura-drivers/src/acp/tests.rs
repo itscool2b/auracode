@@ -3295,9 +3295,7 @@ async fn read_log_until(path: &std::path::Path, done: impl Fn(&[Value]) -> bool)
 
 /// Contract rule 6: right after the spawner's spawn note comes the driver's start note (no env),
 /// and every command it receives becomes a `cmd` record in the order it was processed, a command
-/// held before `Ready` included. The log is read back from disk, in a fresh temp folder. A build
-/// whose protocol logs write nothing (P0's stub `LogFactory`) has nothing to read back, so there
-/// the test runs the session and stops short of the file.
+/// held before `Ready` included. The log is read back from disk, in a fresh temp folder.
 #[tokio::test]
 async fn the_log_has_the_start_note_after_the_spawn_note_and_every_command_in_order() {
     let root = std::env::temp_dir().join(format!("aura-drivers-log-test-{}", uuid::Uuid::now_v7()));
@@ -3306,7 +3304,6 @@ async fn the_log_has_the_start_note_after_the_spawn_note_and_every_command_in_or
         Arc::new(Redactor::standard()),
         tokio::runtime::Handle::current(),
     );
-    let writes = logs.open("probe", "probe").path().is_some();
     let mut harness =
         Harness::start_through(setup("generic"), |fake| DirectSpawner::new(fake, logs)).await;
     // Held until Ready, and logged when it arrives.
@@ -3331,30 +3328,28 @@ async fn the_log_has_the_start_note_after_the_spawn_note_and_every_command_in_or
     let spawn_id = harness.spawn_id.clone();
     let (_, exit) = harness.finish().await;
     assert_eq!(exit, DriverExit::Closed);
-    if writes {
-        let path = root.join(DIRECT_LOG_CHAT).join(format!("{spawn_id}.jsonl"));
-        let records = read_log_until(&path, |records| {
-            records
-                .iter()
-                .any(|record| record["cmd"]["type"] == "shutdown")
-        })
-        .await;
-        assert_eq!(records[0]["d"], "note");
-        assert!(records[0]["note"].get("spawn").is_some(), "{}", records[0]);
-        assert_eq!(records[1]["d"], "note");
-        let start = &records[1]["note"]["start"];
-        assert_eq!(start["spawn_id"], spawn_id.as_str(), "{}", records[1]);
-        assert_eq!(start["agent_id"], "generic");
-        assert!(start.get("env").is_none(), "no env in the start note");
-        let commands: Vec<&str> = records
+    let path = root.join(DIRECT_LOG_CHAT).join(format!("{spawn_id}.jsonl"));
+    let records = read_log_until(&path, |records| {
+        records
             .iter()
-            .filter(|record| record["d"] == "cmd")
-            .filter_map(|record| record["cmd"]["type"].as_str())
-            .collect();
-        assert_eq!(
-            commands,
-            ["set_autonomy", "prompt", "interrupt", "shutdown"]
-        );
-    }
+            .any(|record| record["cmd"]["type"] == "shutdown")
+    })
+    .await;
+    assert_eq!(records[0]["d"], "note");
+    assert!(records[0]["note"].get("spawn").is_some(), "{}", records[0]);
+    assert_eq!(records[1]["d"], "note");
+    let start = &records[1]["note"]["start"];
+    assert_eq!(start["spawn_id"], spawn_id.as_str(), "{}", records[1]);
+    assert_eq!(start["agent_id"], "generic");
+    assert!(start.get("env").is_none(), "no env in the start note");
+    let commands: Vec<&str> = records
+        .iter()
+        .filter(|record| record["d"] == "cmd")
+        .filter_map(|record| record["cmd"]["type"].as_str())
+        .collect();
+    assert_eq!(
+        commands,
+        ["set_autonomy", "prompt", "interrupt", "shutdown"]
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
