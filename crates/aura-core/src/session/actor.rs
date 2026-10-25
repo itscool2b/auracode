@@ -48,6 +48,7 @@ use super::normalize::{
 use super::policy::{Decision, decide};
 use super::spawner::{ProcessBook, SessionSpawner};
 use super::{ChatState, FrameSink, SessionError, Shared, SinkGone};
+use crate::chatstore::blobs::BLOB_UNSAVED;
 use crate::chatstore::rows::{ReplyHasher, turn_status};
 use crate::chatstore::{
     AgentSessionPatch, AgentSessionRow, ChatLoad, ChatRecord, ChatStore, EventRow, Op, QueuedRow,
@@ -141,9 +142,11 @@ pub(crate) enum ChatMsg {
         autonomy: Autonomy,
         reply: oneshot::Sender<Result<SessionLists, SessionError>>,
     },
-    /// Whether the chat exists (the actor loaded it).
-    Ping {
-        reply: oneshot::Sender<Result<(), SessionError>>,
+    /// Before a blob read: `Some` barrier to wait for when this chat's own `PutBlob` for it has not
+    /// reached the store yet (an unknown chat answers `ChatNotFound`).
+    Blob {
+        sha256: String,
+        reply: oneshot::Sender<Result<Option<oneshot::Receiver<()>>, SessionError>>,
     },
     Shutdown {
         plan: StopPlan,
@@ -165,6 +168,7 @@ impl ChatMsg {
             ChatMsg::SetOption { reply, .. } | ChatMsg::SetAutonomy { reply, .. } => {
                 drop(reply.send(Err(error)));
             }
+            ChatMsg::Blob { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::CancelQueued { reply, .. }
             | ChatMsg::ResumeQueue { reply }
             | ChatMsg::Interrupt { reply }
@@ -172,8 +176,7 @@ impl ChatMsg {
             | ChatMsg::Start { reply, .. }
             | ChatMsg::Stop { reply }
             | ChatMsg::RespondPermission { reply, .. }
-            | ChatMsg::RespondUi { reply, .. }
-            | ChatMsg::Ping { reply } => drop(reply.send(Err(error))),
+            | ChatMsg::RespondUi { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Shutdown { reply, .. } => {
                 let _ = reply.send(());
             }
@@ -658,7 +661,10 @@ impl ChatActor {
                 reply,
             } => self.set_option(option_id, value, reply),
             ChatMsg::SetAutonomy { autonomy, reply } => self.set_autonomy(autonomy, reply),
-            ChatMsg::Ping { reply } => drop(reply.send(Ok(()))),
+            ChatMsg::Blob { sha256, reply } => {
+                let barrier = self.blob_barrier(&sha256);
+                drop(reply.send(barrier));
+            }
             ChatMsg::Shutdown { plan, reply } => self.shutdown(plan, reply),
             #[cfg(test)]
             ChatMsg::Panic => panic!("a test asked the chat actor to panic"),
@@ -762,6 +768,28 @@ impl ChatActor {
             }
             .boxed(),
         );
+    }
+
+    /// A blob a frame named may still wait in the outbox, its `PutBlob` behind other ops: then the
+    /// store knows nothing of it yet. While saving is paused that reads as not saved yet; otherwise
+    /// the read waits for a barrier queued behind it. `None`: the read can go ahead.
+    fn blob_barrier(
+        &mut self,
+        sha256: &str,
+    ) -> Result<Option<oneshot::Receiver<()>>, SessionError> {
+        let unsent = self
+            .outbox
+            .iter()
+            .any(|op| matches!(op, Op::PutBlob { sha256: queued, .. } if queued == sha256));
+        if !unsent {
+            return Ok(None);
+        }
+        if self.store.is_paused() {
+            return Err(SessionError::BlobMissing(BLOB_UNSAVED.to_owned()));
+        }
+        let (saved, barrier) = oneshot::channel();
+        self.queue_op(Op::Barrier(saved));
+        Ok(Some(barrier))
     }
 
     /// The lowest seq below `cursor` of a row still in the outbox.

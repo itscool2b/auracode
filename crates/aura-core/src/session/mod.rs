@@ -35,7 +35,8 @@ use aura_process::{
 };
 use aura_protocol::session::{
     AgentEntry, Availability, BlobText, ChatAttach, ChatStatusUpdate, ChatSummary, ConfigValue,
-    EnvState, EnvStatus, FolderState, HistoryPage, PromptAck, SessionLists, StorageStatus,
+    EnvState, EnvStatus, FolderState, HistoryPage, PromptAck, SessionLists, StorageState,
+    StorageStatus,
 };
 use aura_protocol::{Autonomy, EventBatch, Millis, SessionStatus, UiAnswer};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -43,9 +44,9 @@ use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
-use crate::chatstore::blobs::MAX_BLOB_PAGE;
+use crate::chatstore::blobs::{BLOB_UNSAVED, MAX_BLOB_PAGE};
 use crate::chatstore::history::clamp_page_bytes;
-use crate::chatstore::{ChatRecord, ChatStore, NewChat};
+use crate::chatstore::{ChatRecord, ChatStore, NewChat, StoreError, WaitError, await_reply};
 use crate::time::now_millis;
 use actor::{ChatMsg, storage_error};
 use live::LiveAgents;
@@ -56,6 +57,9 @@ const CREATE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// `set_option` and `set_autonomy` give up after this (the actor's own 35 s plus margin).
 const OPTION_TIMEOUT: Duration = Duration::from_secs(40);
+
+/// A blob read waits this long for the chat's own `PutBlob` to reach the store.
+const BLOB_WAIT: Duration = Duration::from_secs(5);
 
 /// Permission denied, as `create_chat` reports it.
 const FOLDER_NOT_ALLOWED: &str = "auracode isn't allowed to open this folder. Allow it in System Settings > Privacy & Security > Files and Folders, then try again.";
@@ -746,7 +750,8 @@ impl SessionManager {
             })
     }
 
-    /// One page of a blob's text (at most 256 KiB), ending on a character boundary.
+    /// One page of a blob's text (at most 256 KiB), ending on a character boundary. The read follows
+    /// the chat's own `PutBlob` for it, so a blob a frame already named is never read too early.
     pub async fn blob(
         &self,
         chat_id: &str,
@@ -754,12 +759,42 @@ impl SessionManager {
         offset: u64,
         len: u32,
     ) -> Result<BlobText, SessionError> {
-        self.ask(chat_id, |reply| ChatMsg::Ping { reply }).await?;
+        let barrier = self
+            .ask(chat_id, |reply| ChatMsg::Blob {
+                sha256: sha256.to_owned(),
+                reply,
+            })
+            .await?;
+        if let Some(barrier) = barrier {
+            self.blob_saved(barrier).await?;
+        }
         self.deps()
             .store
             .read_blob(sha256, offset, len.min(MAX_BLOB_PAGE))
             .await
             .map_err(|error| storage_error(&error))
+    }
+
+    /// Waits until the chat's `PutBlob` for a blob reached the store (the barrier behind it was
+    /// answered); saving that pauses meanwhile means the output isn't saved yet.
+    async fn blob_saved(&self, barrier: oneshot::Receiver<()>) -> Result<(), SessionError> {
+        let store = &self.deps().store;
+        let unsaved = || SessionError::BlobMissing(BLOB_UNSAVED.to_owned());
+        let mut status = store.status();
+        let paused = status.wait_for(|status| matches!(status.state, StorageState::Paused { .. }));
+        tokio::select! {
+            saved = await_reply(&self.deps().rt, barrier, BLOB_WAIT) => match saved {
+                Ok(()) => Ok(()),
+                Err(_) if store.is_paused() => Err(unsaved()),
+                Err(WaitError::TimedOut) => Err(SessionError::StorageUnavailable(
+                    "it did not answer in time".into(),
+                )),
+                Err(WaitError::Gone) => Err(SessionError::StorageUnavailable(
+                    StoreError::Closed.to_string(),
+                )),
+            },
+            Ok(_) = paused => Err(unsaved()),
+        }
     }
 
     /// The folder of the chat's protocol logs, the one "Show log" reveals.

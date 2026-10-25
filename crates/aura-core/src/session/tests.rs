@@ -618,6 +618,175 @@ async fn actor_and_driver_never_deadlock() {
     assert_eq!(text, flood_text());
 }
 
+/// The full output a spilled tool call carries: 100,000 bytes.
+fn big_output() -> String {
+    "x".repeat(100_000)
+}
+
+/// A turn that emits `deltas` deltas, each in its own flush, then a tool call whose output is
+/// spilled to a blob, then hangs.
+fn spilling_driver(deltas: usize) -> ScriptedDriver {
+    let mut steps = vec![
+        Step::Spawn(launch()),
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+    ];
+    for i in 0..deltas {
+        steps.push(delta(&format!("{i:04}{}", "z".repeat(2000))));
+        steps.push(Step::Wait(Duration::from_millis(20)));
+    }
+    steps.push(Step::EmitInTurn(DriverEvent::Event {
+        turn: None,
+        event: AuraEvent::ToolCall(aura_protocol::ToolCall {
+            tool_call_id: "big".into(),
+            kind: aura_protocol::ToolKind::Execute,
+            title: "Dump".into(),
+            status: aura_protocol::ToolStatus::Completed,
+            locations: Vec::new(),
+            raw_input: None,
+            tool_name: None,
+            content: vec![aura_protocol::ToolContent::Text {
+                text: big_output(),
+                truncated: None,
+            }],
+            truncated: None,
+        }),
+    }));
+    steps.push(Step::Hang);
+    ScriptedDriver::new(steps).0
+}
+
+/// The blob a tool call's output was spilled to, once a frame named it.
+fn spilled_blob(sink: &Sink) -> Option<String> {
+    lock(&sink.frames)
+        .iter()
+        .flat_map(|frame| frame.events.iter())
+        .find_map(|event| match event {
+            AuraEvent::ToolCall(call) => match call.content.first() {
+                Some(aura_protocol::ToolContent::Text {
+                    truncated: Some(truncation),
+                    ..
+                }) => truncation.blob.clone(),
+                _ => None,
+            },
+            _ => None,
+        })
+}
+
+/// Reads a whole blob through the manager, page by page.
+async fn read_blob(rig: &Rig, chat: &str, sha256: &str) -> Result<String, SessionError> {
+    let mut text = String::new();
+    let mut offset = 0;
+    loop {
+        let page = rig.manager.blob(chat, sha256, offset, 256 * 1024).await?;
+        text.push_str(&page.text);
+        offset = page.next_offset;
+        if page.eof {
+            return Ok(text);
+        }
+    }
+}
+
+/// S8 and 7.1 `chat_blob`: while saving is paused, a blob whose `PutBlob` still waits in the actor's
+/// outbox (the FIFO is full) reads as not saved yet, though a frame already named it, never as gone;
+/// once saving resumes it reads back whole.
+#[tokio::test]
+async fn a_blob_still_in_the_outbox_reads_as_unsaved_while_paused() {
+    let (config, _) = tight();
+    let rig = rig(vec![spilling_driver(40)], config, Knobs::STANDARD);
+    let chat = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("create");
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let sink = Arc::new(Sink::default());
+    rig.manager
+        .attach(&chat.id, sink.clone())
+        .await
+        .expect("attach");
+    fill_disk(&rig.store);
+    rig.manager
+        .send(&chat.id, "dump it".into())
+        .await
+        .expect("send");
+    paused(&rig).await;
+    let probe = Arc::clone(&sink);
+    eventually("a frame names the spilled output", || {
+        spilled_blob(&probe).is_some()
+    })
+    .await;
+    let sha = spilled_blob(&sink).expect("the blob");
+    assert!(matches!(
+        rig.manager.blob(&chat.id, &sha, 0, 1000).await,
+        Err(SessionError::BlobMissing(message)) if message == crate::chatstore::blobs::BLOB_UNSAVED
+    ));
+    free_disk(&rig.store);
+    let mut storage = rig.store.status();
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        storage.wait_for(|status| status.state == StorageState::Ok),
+    )
+    .await
+    .expect("saving resumes")
+    .expect("status");
+    assert_eq!(
+        read_blob(&rig, &chat.id, &sha).await.expect("saved now"),
+        big_output()
+    );
+}
+
+/// 7.1 `chat_blob` under backpressure: a blob read right after a frame named the blob follows the
+/// chat's own `PutBlob`, which still waits in the actor's outbox behind a full FIFO, instead of
+/// overtaking it and finding no file.
+#[tokio::test]
+async fn a_blob_read_follows_the_chats_own_put_blob() {
+    let (config, _) = tight();
+    let rig = rig(vec![spilling_driver(12)], config, Knobs::STANDARD);
+    let chat = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("create");
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let sink = Arc::new(Sink::default());
+    rig.manager
+        .attach(&chat.id, sink.clone())
+        .await
+        .expect("attach");
+    // The writer takes nothing until released: the FIFO fills, then the actor's outbox.
+    let (release, held) = std::sync::mpsc::channel::<()>();
+    rig.store.with_store(move |_| {
+        let _ = held.recv_timeout(Duration::from_secs(30));
+    });
+    rig.manager
+        .send(&chat.id, "dump it".into())
+        .await
+        .expect("send");
+    let probe = Arc::clone(&sink);
+    eventually("a frame names the spilled output", || {
+        spilled_blob(&probe).is_some()
+    })
+    .await;
+    let sha = spilled_blob(&sink).expect("the blob");
+    let read = tokio::spawn({
+        let manager = rig.manager.clone();
+        let (chat_id, sha) = (chat.id.clone(), sha.clone());
+        async move { manager.blob(&chat_id, &sha, 0, 256 * 1024).await }
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    drop(release);
+    let page = read
+        .await
+        .expect("join")
+        .expect("the blob reads back once its PutBlob is saved");
+    assert_eq!(page.total, 100_000);
+    assert_eq!(
+        read_blob(&rig, &chat.id, &sha).await.expect("whole"),
+        big_output()
+    );
+}
+
 /// S22: a chat actor that panics: its processes are killed, its views end, the chat reads
 /// `Stopped`, and the next call recreates it, which recovers the running turn.
 #[tokio::test]
