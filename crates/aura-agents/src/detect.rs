@@ -15,22 +15,20 @@
 //! `Checking` until a detection ends, send download details, and hold detection or a launch
 //! preparation at a [`Gate`]; the detector records every [`Detector::forget_install`].
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use aura_process::{EnvResolver, LaunchSpec, LeftoverRegistry};
+use aura_process::{EnvResolver, LaunchSpec, LeftoverRegistry, find_program};
 use aura_protocol::session::{AgentEntry, Availability};
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, watch};
 
 use crate::catalog::{AgentSpec, Recipe, catalog};
+use crate::install::{self, InstallJob};
 use crate::launch::{self, LaunchError};
-
-/// What this build reports for every agent detection would have to probe.
-const NOT_BUILT: &str = "detection is not built in this build";
-
-/// What a built-in agent reports as its path.
-const BUILT_IN: &str = "built in";
+use crate::probe::{self, BUILT_IN, Detection};
+use crate::shared::SharedTask;
 
 /// Detects agents and prepares their launches.
 #[derive(Debug)]
@@ -42,23 +40,262 @@ pub struct Detector {
 
 #[derive(Debug)]
 enum Mode {
-    Live {
-        specs: Vec<AgentSpec>,
-        #[expect(
-            dead_code,
-            reason = "detection (package A) probes with the resolved env"
-        )]
-        env: Arc<EnvResolver>,
-        #[expect(dead_code, reason = "detection (package A) registers its probes")]
-        registry: Arc<LeftoverRegistry>,
-        #[expect(dead_code, reason = "the adapter install (package A) works here")]
-        adapters_dir: PathBuf,
-        #[expect(dead_code, reason = "detection (package A) runs its probes here")]
-        rt: Handle,
-    },
-    Fixed {
-        agents: Vec<Fixed>,
-    },
+    Live(Arc<Live>),
+    Fixed { agents: Vec<Fixed> },
+}
+
+/// A probe of one agent, shared by everyone waiting for it.
+type Probe = SharedTask<Detection>;
+
+/// An install of one adapter version, shared by every start waiting for it: when the last of them
+/// stops waiting, the install is cancelled and npm is killed.
+type Install = SharedTask<Result<PathBuf, LaunchError>>;
+
+/// How often a probe or an install is started again when the one joined was cancelled under it.
+const ATTEMPTS: usize = 3;
+
+/// The real detector: the catalog's agents, probed with the resolved env.
+struct Live {
+    specs: Vec<AgentSpec>,
+    env: Arc<EnvResolver>,
+    registry: Arc<LeftoverRegistry>,
+    adapters_dir: PathBuf,
+    rt: Handle,
+    state: Mutex<LiveState>,
+}
+
+#[derive(Default)]
+struct LiveState {
+    /// Each agent's latest detection, with the generation of the probe that made it.
+    results: HashMap<String, (u64, Detection)>,
+    probes: HashMap<String, Probe>,
+    installs: HashMap<String, Install>,
+    generation: u64,
+}
+
+impl std::fmt::Debug for Live {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let state = lock(&self.state);
+        f.debug_struct("Live")
+            .field("agents", &self.specs.len())
+            .field("detected", &state.results.len())
+            .field("adapters_dir", &self.adapters_dir)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Live {
+    /// The probe of `spec` in flight, or a new one (always a new one with `fresh`).
+    fn probe(self: &Arc<Self>, spec: &AgentSpec, fresh: bool) -> Probe {
+        let mut state = lock(&self.state);
+        if !fresh && let Some(running) = state.probes.get(spec.id).filter(|probe| probe.is_live()) {
+            return running.clone();
+        }
+        state.generation += 1;
+        let generation = state.generation;
+        let live = Arc::clone(self);
+        let id = spec.id;
+        let spec = spec.clone();
+        let probe = SharedTask::spawn(&self.rt, async move {
+            let env = live.env.get().await;
+            let detection = probe::detect(&spec, &env, &live.registry, &live.adapters_dir).await;
+            let mut state = lock(&live.state);
+            let newer = state
+                .results
+                .get(spec.id)
+                .is_some_and(|(known, _)| *known > generation);
+            if !newer {
+                state
+                    .results
+                    .insert(spec.id.to_owned(), (generation, detection.clone()));
+            }
+            detection
+        });
+        state.probes.insert(id.to_owned(), probe.clone());
+        probe
+    }
+
+    fn cached(&self, spec: &AgentSpec) -> Option<Detection> {
+        lock(&self.state)
+            .results
+            .get(spec.id)
+            .map(|(_, detection)| detection.clone())
+    }
+
+    /// The cached detection, or the one in flight, or a new one.
+    async fn detect(self: &Arc<Self>, spec: &AgentSpec) -> Detection {
+        if let Some(detection) = self.cached(spec) {
+            return detection;
+        }
+        for _ in 0..ATTEMPTS {
+            if let Some(detection) = self.probe(spec, false).wait().await {
+                return detection;
+            }
+        }
+        Detection::missing(format!(
+            "Checking {} was interrupted; try again.",
+            spec.name
+        ))
+    }
+
+    /// Probes every agent at once and waits for all of them.
+    async fn detect_every(self: &Arc<Self>, fresh: bool) {
+        let probes: Vec<Probe> = self
+            .specs
+            .iter()
+            .map(|spec| self.probe(spec, fresh))
+            .collect();
+        // Held together, so one start leaving a probe early never cancels it under this wait.
+        let _holds: Vec<_> = probes.iter().map(SharedTask::hold).collect();
+        for probe in &probes {
+            probe.wait().await;
+        }
+    }
+
+    /// Updates the cached download state of an adapter.
+    fn set_needs_download(&self, spec: &AgentSpec, needs_download: bool) {
+        if let Some((_, detection)) = lock(&self.state).results.get_mut(spec.id) {
+            detection.needs_download = needs_download;
+        }
+    }
+
+    fn entry(&self, spec: &AgentSpec) -> AgentEntry {
+        if matches!(spec.recipe, Recipe::Builtin) {
+            return entry(
+                spec,
+                Availability::Ready {
+                    version: None,
+                    path: BUILT_IN.into(),
+                },
+                false,
+            );
+        }
+        match self.cached(spec) {
+            Some(detection) => entry(spec, detection.availability, detection.needs_download),
+            None => entry(spec, Availability::Checking, false),
+        }
+    }
+
+    async fn prepare_launch(
+        self: &Arc<Self>,
+        spec: &AgentSpec,
+        progress: mpsc::UnboundedSender<String>,
+    ) -> Result<LaunchSpec, LaunchError> {
+        let detection = self.detect(spec).await;
+        let located = match (&detection.availability, detection.located) {
+            (Availability::Ready { .. }, located) => located,
+            (availability, _) => return Err(unavailable(availability)),
+        };
+        match &spec.recipe {
+            Recipe::Builtin => Ok(launch::builtin(spec)),
+            Recipe::Binary { program, args, .. } => {
+                let located = located.ok_or_else(|| LaunchError::Missing {
+                    reason: format!("{program} was not found on your PATH."),
+                })?;
+                Ok(launch::binary(spec, &located.program, program, args))
+            }
+            Recipe::NpmAdapter {
+                package,
+                version,
+                bin,
+                user_binary,
+                ..
+            } => {
+                let short = probe::short_name(user_binary);
+                let Some(located) = located else {
+                    return Err(LaunchError::Missing {
+                        reason: format!("The {short} adapter can't start here."),
+                    });
+                };
+                let node = located.node.clone().ok_or_else(|| LaunchError::Missing {
+                    reason: "Node.js was not found on your PATH.".into(),
+                })?;
+                let folder = self
+                    .adapters_dir
+                    .join(install::folder_name(package, version));
+                let entry = match install::installed_entry(&folder, package, version) {
+                    Some(entry) => entry,
+                    None => {
+                        let _ = progress.send(format!(
+                            "Downloading the {short} adapter ({package} {version}). This happens once and can take a few minutes."
+                        ));
+                        let env = self.env.get().await;
+                        let npm = find_program("npm", &env.vars).ok_or_else(|| LaunchError::Missing {
+                            reason: "npm was not found; auracode needs it once to download the adapter."
+                                .into(),
+                        })?;
+                        let job = InstallJob {
+                            package,
+                            version,
+                            bin,
+                            short_name: short.to_owned(),
+                            folder: folder.clone(),
+                            npm,
+                            node: node.clone(),
+                            env,
+                            registry: Arc::clone(&self.registry),
+                        };
+                        let entry = self.install(job).await?;
+                        self.set_needs_download(spec, false);
+                        entry
+                    }
+                };
+                Ok(launch::adapter(
+                    spec,
+                    bin,
+                    &node,
+                    &entry,
+                    &folder,
+                    user_binary,
+                    &located.program,
+                ))
+            }
+        }
+    }
+
+    /// The install of this adapter version in flight, or a new one; waits for it.
+    async fn install(&self, job: InstallJob) -> Result<PathBuf, LaunchError> {
+        let key = format!("{}@{}", job.package, job.version);
+        for _ in 0..ATTEMPTS {
+            let install: Install = {
+                let mut state = lock(&self.state);
+                match state.installs.get(&key) {
+                    // A finished install is never joined: the next start checks the marker itself.
+                    Some(running) if running.is_running() => running.clone(),
+                    _ => {
+                        let install = SharedTask::spawn(&self.rt, install::install(job.clone()));
+                        state.installs.insert(key.clone(), install.clone());
+                        install
+                    }
+                }
+            };
+            if let Some(result) = install.wait().await {
+                return result;
+            }
+        }
+        Err(LaunchError::InstallFailed {
+            reason: format!(
+                "Could not download the {} adapter: the download was interrupted.",
+                job.short_name
+            ),
+        })
+    }
+
+    fn forget_install(&self, spec: &AgentSpec) {
+        let Recipe::NpmAdapter {
+            package, version, ..
+        } = &spec.recipe
+        else {
+            return;
+        };
+        let folder = self
+            .adapters_dir
+            .join(install::folder_name(package, version));
+        if let Err(error) = install::forget(&folder) {
+            tracing::warn!(agent = spec.id, %error, "could not delete an adapter's install marker");
+        }
+        self.set_needs_download(spec, true);
+    }
 }
 
 /// An agent with fixed answers, for tests: no probes, no env, no installs.
@@ -304,25 +541,26 @@ impl Fixed {
 }
 
 impl Detector {
-    /// Detects the catalog's agents. Detection starts once the env resolves; `adapters_dir` is
-    /// `<data root>/adapters`.
-    ///
-    /// This build reports the built-in demo agent `Ready` and every other agent `Missing`: probing
-    /// and the adapter install are package A's.
+    /// Detects the catalog's agents. Detection starts in the background on `rt` at once and probes
+    /// once the env resolves; `adapters_dir` is `<data root>/adapters`.
     pub fn new(
         env: Arc<EnvResolver>,
         registry: Arc<LeftoverRegistry>,
         adapters_dir: PathBuf,
         rt: Handle,
     ) -> Arc<Detector> {
+        let live = Arc::new(Live {
+            specs: catalog().to_vec(),
+            env,
+            registry,
+            adapters_dir,
+            rt: rt.clone(),
+            state: Mutex::new(LiveState::default()),
+        });
+        let background = Arc::clone(&live);
+        rt.spawn(async move { background.detect_every(false).await });
         Arc::new(Detector {
-            mode: Mode::Live {
-                specs: catalog().to_vec(),
-                env,
-                registry,
-                adapters_dir,
-                rt,
-            },
+            mode: Mode::Live(live),
             forgotten: Mutex::new(Vec::new()),
         })
     }
@@ -342,7 +580,7 @@ impl Detector {
     /// tests can inject their own.
     pub fn spec(&self, id: &str) -> Option<AgentSpec> {
         match &self.mode {
-            Mode::Live { specs, .. } => specs.iter().find(|spec| spec.id == id).cloned(),
+            Mode::Live(live) => live.specs.iter().find(|spec| spec.id == id).cloned(),
             Mode::Fixed { agents } => find(agents, id).map(|fixed| fixed.agent.spec.clone()),
         }
     }
@@ -352,7 +590,7 @@ impl Detector {
     /// `Checking`. A fixed agent answers its `detected` availability, or `availability` without one.
     pub async fn detect(&self, spec: &AgentSpec) -> Availability {
         match &self.mode {
-            Mode::Live { .. } => live_availability(spec),
+            Mode::Live(live) => live.detect(spec).await.availability,
             Mode::Fixed { agents } => match find(agents, spec.id) {
                 Some(fixed) => fixed.detect().await,
                 None => Availability::Missing {
@@ -370,9 +608,17 @@ impl Detector {
     /// every agent, and waits for the results; a fixed detector runs `detect` for each agent in
     /// turn.
     pub async fn detect_all(&self, refresh: bool) -> Vec<AgentEntry> {
-        if refresh && let Mode::Fixed { agents } = &self.mode {
-            for fixed in agents {
-                fixed.detect().await;
+        if refresh {
+            match &self.mode {
+                Mode::Fixed { agents } => {
+                    for fixed in agents {
+                        fixed.detect().await;
+                    }
+                }
+                Mode::Live(live) => {
+                    live.env.refresh();
+                    live.detect_every(true).await;
+                }
             }
         }
         self.cached()
@@ -381,10 +627,7 @@ impl Detector {
     /// The last results, without waiting: `Checking` until an agent's first detection ends.
     pub fn cached(&self) -> Vec<AgentEntry> {
         match &self.mode {
-            Mode::Live { specs, .. } => specs
-                .iter()
-                .map(|spec| entry(spec, live_availability(spec), false))
-                .collect(),
+            Mode::Live(live) => live.specs.iter().map(|spec| live.entry(spec)).collect(),
             Mode::Fixed { agents } => agents.iter().map(Fixed::entry).collect(),
         }
     }
@@ -404,12 +647,7 @@ impl Detector {
                     reason: unknown(spec),
                 }),
             },
-            Mode::Live { .. } => match spec.recipe {
-                Recipe::Builtin => Ok(launch::builtin(spec)),
-                Recipe::Binary { .. } | Recipe::NpmAdapter { .. } => Err(LaunchError::Missing {
-                    reason: NOT_BUILT.into(),
-                }),
-            },
+            Mode::Live(live) => live.prepare_launch(spec, progress).await,
         }
     }
 
@@ -418,11 +656,15 @@ impl Detector {
     /// adapter needs its download again.
     pub fn forget_install(&self, spec: &AgentSpec) {
         lock(&self.forgotten).push(spec.id.to_owned());
-        if let Mode::Fixed { agents } = &self.mode
-            && let Some(fixed) = find(agents, spec.id)
-            && matches!(fixed.agent.spec.recipe, Recipe::NpmAdapter { .. })
-        {
-            lock(&fixed.state).needs_download = true;
+        match &self.mode {
+            Mode::Live(live) => live.forget_install(spec),
+            Mode::Fixed { agents } => {
+                if let Some(fixed) = find(agents, spec.id)
+                    && matches!(fixed.agent.spec.recipe, Recipe::NpmAdapter { .. })
+                {
+                    lock(&fixed.state).needs_download = true;
+                }
+            }
         }
     }
 
@@ -439,19 +681,6 @@ fn find<'a>(agents: &'a [Fixed], id: &str) -> Option<&'a Fixed> {
 /// The reason an agent the detector does not know cannot start.
 fn unknown(spec: &AgentSpec) -> String {
     format!("auracode doesn't know an agent called \"{}\".", spec.id)
-}
-
-/// What this build's live detector reports.
-fn live_availability(spec: &AgentSpec) -> Availability {
-    match spec.recipe {
-        Recipe::Builtin => Availability::Ready {
-            version: None,
-            path: BUILT_IN.into(),
-        },
-        Recipe::Binary { .. } | Recipe::NpmAdapter { .. } => Availability::Missing {
-            reason: NOT_BUILT.into(),
-        },
-    }
 }
 
 /// The error for an agent that cannot start, from its availability.
@@ -566,32 +795,42 @@ mod tests {
         detector.cached()[0].needs_download
     }
 
+    /// With nothing on `PATH`, detection finds nothing to run and probes nothing.
     #[tokio::test]
-    async fn this_build_reports_the_demo_agent_ready_and_the_rest_missing() {
+    async fn a_live_detector_with_an_empty_path_reports_why_each_agent_is_missing() {
         let detector = live();
-        let entries = detector.detect_all(false).await;
+        let entries = detector.detect_all(true).await;
         let ids: Vec<&str> = entries.iter().map(|entry| entry.id.as_str()).collect();
         assert_eq!(ids, ["hermes", "claude-acp", "codex-acp", "mock"]);
-        for entry in &entries {
-            if entry.id == "mock" {
-                assert!(matches!(entry.availability, Availability::Ready { .. }));
-            } else {
-                assert_eq!(
-                    entry.availability,
-                    Availability::Missing {
-                        reason: NOT_BUILT.into()
-                    }
-                );
-            }
-            assert!(!entry.needs_download);
-        }
+        let reasons: Vec<Availability> = entries
+            .iter()
+            .map(|entry| entry.availability.clone())
+            .collect();
+        assert_eq!(
+            reasons,
+            [
+                Availability::Missing {
+                    reason: "hermes was not found on your PATH.".into()
+                },
+                Availability::Missing {
+                    reason: "Node.js 22 or newer is required (found none).".into()
+                },
+                Availability::Missing {
+                    reason: "Node.js 22 or newer is required (found none).".into()
+                },
+                Availability::Ready {
+                    version: None,
+                    path: BUILT_IN.into()
+                },
+            ]
+        );
+        assert!(entries.iter().all(|entry| !entry.needs_download));
         assert_eq!(entries[0].launch, "hermes acp");
         assert_eq!(
             entries[1].launch,
             "@agentclientprotocol/claude-agent-acp 0.95.0 with your claude"
         );
         assert_eq!(detector.cached(), entries);
-        assert_eq!(detector.detect_all(true).await, entries);
 
         let mock = detector.spec("mock").expect("mock");
         let launch = detector
@@ -604,10 +843,12 @@ mod tests {
         assert_eq!(launch.startup_timeout, Duration::from_secs(5));
 
         let hermes = detector.spec("hermes").expect("hermes");
-        assert!(matches!(
+        assert_eq!(
             detector.prepare_launch(&hermes, progress()).await,
-            Err(LaunchError::Missing { .. })
-        ));
+            Err(LaunchError::Missing {
+                reason: "hermes was not found on your PATH.".into()
+            })
+        );
         assert!(matches!(
             detector.detect(&hermes).await,
             Availability::Missing { .. }
@@ -615,6 +856,16 @@ mod tests {
         assert!(detector.spec("cursor").is_none());
         detector.forget_install(&claude());
         assert_eq!(detector.forgotten(), ["claude-acp"]);
+    }
+
+    #[tokio::test]
+    async fn the_demo_agent_is_ready_before_any_detection() {
+        let detector = live();
+        let entries = detector.cached();
+        assert!(matches!(
+            entries[3].availability,
+            Availability::Ready { .. }
+        ));
     }
 
     #[tokio::test]
