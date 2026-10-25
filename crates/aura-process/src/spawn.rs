@@ -600,7 +600,7 @@ pub enum HelperEnv {
 }
 
 /// A short-lived helper: the env resolver's shell, a `--version` probe, the adapter install.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct HelperSpec {
     pub program: PathBuf,
     pub args: Vec<OsString>,
@@ -614,6 +614,23 @@ pub struct HelperSpec {
     pub timeout: Duration,
     /// stdout beyond this is dropped (`stdout_truncated`).
     pub max_stdout: usize,
+}
+
+/// Prints `set` names only, as [`LaunchSpec`] does: values can be credentials.
+impl fmt::Debug for HelperSpec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let set: Vec<_> = self.set.iter().map(|(name, _)| name).collect();
+        f.debug_struct("HelperSpec")
+            .field("program", &self.program)
+            .field("args", &self.args)
+            .field("cwd", &self.cwd)
+            .field("env", &self.env)
+            .field("set", &set)
+            .field("new_session", &self.new_session)
+            .field("timeout", &self.timeout)
+            .field("max_stdout", &self.max_stdout)
+            .finish()
+    }
 }
 
 /// What a helper produced.
@@ -894,6 +911,40 @@ mod tests {
         let text = format!("{launch:?}");
         assert!(text.contains("ANTHROPIC_API_KEY"), "{text}");
         assert!(!text.contains("sk-ant-secret-value"), "{text}");
+    }
+
+    #[test]
+    fn helper_spec_debug_shows_variable_names_but_never_values() {
+        let resolved = ResolvedEnv {
+            vars: [(
+                crate::env::EnvKey::from("OPENAI_API_KEY"),
+                OsString::from("sk-proj-resolved-value"),
+            )]
+            .into_iter()
+            .collect(),
+            source: EnvSource::Fallback {
+                reason: "test".into(),
+            },
+            warnings: Vec::new(),
+            resolved_at_ms: 0,
+        };
+        let helper = HelperSpec {
+            program: PathBuf::from("/usr/local/bin/npm"),
+            args: vec!["ci".into()],
+            cwd: PathBuf::from("/data/adapters/x"),
+            env: HelperEnv::Resolved(Arc::new(resolved)),
+            set: vec![("NPM_TOKEN".into(), "npm_secret-set-value".into())],
+            new_session: false,
+            timeout: Duration::from_secs(600),
+            max_stdout: 65_536,
+        };
+        let text = format!("{helper:?}");
+        for name in ["NPM_TOKEN", "OPENAI_API_KEY", "/usr/local/bin/npm", "ci"] {
+            assert!(text.contains(name), "{name}: {text}");
+        }
+        for value in ["npm_secret-set-value", "sk-proj-resolved-value"] {
+            assert!(!text.contains(value), "{value}: {text}");
+        }
     }
 
     #[test]
