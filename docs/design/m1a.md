@@ -1679,6 +1679,8 @@ its signature for the M0 demo stream and stress view), drops a script's `TurnSta
 pub enum Step {
     Expect(CommandMatch),          // waits for the next command; a mismatch panics the driver task (Panicked)
     Emit(DriverEvent),
+    EmitInTurn(DriverEvent),       // tagged with the last Prompt's turn: the actor mints turn ids (5.3.5)
+    EndTurn { stop_reason: StopReason, usage: Option<TokenUsage>, error: Option<DriverError> },   // for that turn
     Wait(Duration),                // virtual time under paused clocks
     Spawn(LaunchSpec),             // spawns through ctx.spawner and keeps the process (recorded controls)
     Exit(DriverExit),              // run returns this
@@ -1693,7 +1695,12 @@ impl ScriptHandle {
     pub fn emit(&self, event: DriverEvent);                    // inject at any time, in order with the steps
     pub fn exit(&self, exit: DriverExit);
     pub fn commands(&self) -> Vec<LoggedCommand>;              // everything received so far
+    /// Waits for, then returns, the first received command `matcher` matches that no earlier `wait_for` returned
+    /// (a Prompt, to read the turn id the actor minted).
+    pub async fn wait_for(&self, matcher: CommandMatch) -> LoggedCommand;
+    pub fn set_option_reply(&self, reply: Result<(), DriverError>);    // default: Ok(())
     pub fn set_autonomy_reply(&self, state: AutonomyState);   // default: requested level, no mode, Never
+    pub fn set_autonomy_result(&self, reply: Result<AutonomyState, DriverError>);   // or an error
 }
 pub struct ScriptedDriverFactory { /* queue */ }
 impl ScriptedDriverFactory { pub fn new(drivers: Vec<ScriptedDriver>) -> Arc<ScriptedDriverFactory>; }
@@ -1703,8 +1710,10 @@ impl DirectSpawner { pub fn new(base: Arc<dyn ProcessSpawner>, logs: LogFactory)
 impl AgentSpawner for DirectSpawner {}
 ```
 
-`SetOption` gets `Ok` unless a step says otherwise; `ScriptedDriver` keeps contract rules 2, 3 and 7 only as far as
-its steps say (C's tests use it to break them on purpose). `factory.rs`: `StandardDriverFactory::new() ->
+`SetOption` and `SetAutonomy` get the handle's replies: `Ok` and the default state unless the handle says otherwise
+(an `Err` stands for an agent that refused, as the ACP driver's -32602, which the manager reports as `OptionInvalid`).
+`EmitInTurn` and `EndTurn` before any `Prompt` panic the driver task. `ScriptedDriver` keeps contract rules 2, 3 and 7
+only as far as its steps say (C's tests use it to break them on purpose). `factory.rs`: `StandardDriverFactory::new() ->
 Arc<StandardDriverFactory>` creates `AcpDriver` for `DriverKind::Acp` and `MockDriver::new(MockBehavior::default())`
 for `DriverKind::Mock`.
 

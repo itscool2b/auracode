@@ -6,12 +6,17 @@
 //! [`ScriptedDriverFactory`] hands out queued drivers in order, and [`DirectSpawner`] is an
 //! [`AgentSpawner`] over any [`ProcessSpawner`] (a `FakeSpawner` in tests) without a session.
 //!
+//! The session actor mints turn ids, so a script cannot name them: [`Step::EmitInTurn`] and
+//! [`Step::EndTurn`] use the turn of the last `Prompt` the driver received, and
+//! [`ScriptHandle::wait_for`] waits for a command (a `Prompt`, to read its turn id) without polling.
+//!
 //! A scripted driver keeps the contract's rules only as far as its steps say, so tests can break
 //! them on purpose: it ends no turn, answers no permission and waits for no permit unless a step
-//! does. What it always does: it records every command; it answers every `SetOption` with `Ok` and
-//! every `SetAutonomy` with the handle's reply (by default the requested level, no mode, `Never`),
-//! except while it hangs, when it keeps the replies unanswered; it waits for event permits; and a
-//! closed command channel ends it with `Closed` (contract rule 4), except while it hangs.
+//! does. What it always does: it records every command; it answers every `SetOption` and
+//! `SetAutonomy` with the handle's replies (by default `Ok`, and the requested level with no mode
+//! and `Never`), except while it hangs, when it keeps the replies unanswered; it waits for event
+//! permits; and a closed command channel ends it with `Closed` (contract rule 4), except while it
+//! hangs.
 
 use std::collections::VecDeque;
 use std::fmt;
@@ -21,10 +26,12 @@ use std::time::Duration;
 use aura_process::{
     LaunchSpec, LogFactory, MAX_LINE_BYTES, ProcessSpawner, SpawnError, SpawnSpec, SpawnedProcess,
 };
-use aura_protocol::{AutoAnswer, Autonomy, AutonomyState, DriverKind, ErrorKind};
+use aura_protocol::{
+    AutoAnswer, Autonomy, AutonomyState, DriverKind, ErrorKind, StopReason, TokenUsage,
+};
 use futures::FutureExt;
 use futures::future::BoxFuture;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
 
 use crate::driver::{
@@ -41,6 +48,17 @@ pub enum Step {
     Expect(CommandMatch),
     /// Hands the event over, waiting for a permit (and answering commands meanwhile).
     Emit(DriverEvent),
+    /// Like `Emit`, with the event tagged with the turn of the last `Prompt` the driver received:
+    /// the `turn` of an `Event`, a `Permission` or a `UiRequest`, the `turn_id` of a `TurnEnded`.
+    /// Other events go out unchanged. Before any `Prompt`, it panics the driver task.
+    EmitInTurn(DriverEvent),
+    /// `TurnEnded` for the turn of the last `Prompt` the driver received. Before any `Prompt`, it
+    /// panics the driver task.
+    EndTurn {
+        stop_reason: StopReason,
+        usage: Option<TokenUsage>,
+        error: Option<DriverError>,
+    },
     /// Virtual time under paused clocks. Commands and injections are handled meanwhile.
     Wait(Duration),
     /// Spawns through the session's spawner and keeps the process until `run` returns (its control
@@ -119,10 +137,20 @@ pub struct ScriptHandle {
     inject: mpsc::UnboundedSender<Injected>,
 }
 
-#[derive(Default)]
 struct Shared {
-    commands: Mutex<Vec<LoggedCommand>>,
-    autonomy_reply: Mutex<Option<AutonomyState>>,
+    commands: Mutex<Vec<Received>>,
+    /// How many commands arrived, so `wait_for` wakes on each.
+    arrived: watch::Sender<usize>,
+    option_reply: Mutex<Result<(), DriverError>>,
+    /// `None`: the requested level, no native mode, `Never`.
+    autonomy_reply: Mutex<Option<Result<AutonomyState, DriverError>>>,
+}
+
+/// A command the driver received.
+struct Received {
+    command: LoggedCommand,
+    /// An earlier [`ScriptHandle::wait_for`] returned it.
+    claimed: bool,
 }
 
 enum Injected {
@@ -132,7 +160,12 @@ enum Injected {
 
 impl ScriptedDriver {
     pub fn new(steps: Vec<Step>) -> (ScriptedDriver, ScriptHandle) {
-        let shared = Arc::new(Shared::default());
+        let shared = Arc::new(Shared {
+            commands: Mutex::new(Vec::new()),
+            arrived: watch::Sender::new(0),
+            option_reply: Mutex::new(Ok(())),
+            autonomy_reply: Mutex::new(None),
+        });
         let (inject, injected) = mpsc::unbounded_channel();
         let driver = ScriptedDriver {
             steps: steps.into(),
@@ -165,13 +198,44 @@ impl ScriptHandle {
 
     /// Every command received so far, in order.
     pub fn commands(&self) -> Vec<LoggedCommand> {
-        lock(&self.shared.commands).clone()
+        lock(&self.shared.commands)
+            .iter()
+            .map(|received| received.command.clone())
+            .collect()
+    }
+
+    /// Waits until the driver has received a command that `matcher` matches and that no earlier
+    /// `wait_for` returned, then returns it. Commands count from the driver's start, so one that
+    /// arrived before the call is returned at once; with none coming, it waits forever (wrap it in
+    /// a timeout).
+    pub async fn wait_for(&self, matcher: CommandMatch) -> LoggedCommand {
+        let mut arrived = self.shared.arrived.subscribe();
+        loop {
+            if let Some(command) = self.shared.claim(&matcher) {
+                return command;
+            }
+            // The handle keeps the sender alive, so this only ever waits for the next command.
+            if arrived.changed().await.is_err() {
+                std::future::pending::<()>().await;
+            }
+        }
+    }
+
+    /// What `SetOption` answers from now on; the default is `Ok`. An `Err` stands for an agent
+    /// that refused the value (ACP -32602) or did not answer in time.
+    pub fn set_option_reply(&self, reply: Result<(), DriverError>) {
+        *lock(&self.shared.option_reply) = reply;
     }
 
     /// What `SetAutonomy` answers from now on. The default is the requested level, no native mode,
     /// [`AutoAnswer::Never`].
     pub fn set_autonomy_reply(&self, state: AutonomyState) {
-        *lock(&self.shared.autonomy_reply) = Some(state);
+        self.set_autonomy_result(Ok(state));
+    }
+
+    /// The same, or an error from now on (a mode change the agent refused).
+    pub fn set_autonomy_result(&self, reply: Result<AutonomyState, DriverError>) {
+        *lock(&self.shared.autonomy_reply) = Some(reply);
     }
 }
 
@@ -184,13 +248,37 @@ impl fmt::Debug for ScriptHandle {
 }
 
 impl Shared {
-    fn autonomy_reply(&self, requested: Autonomy) -> AutonomyState {
-        lock(&self.autonomy_reply).clone().unwrap_or(AutonomyState {
-            requested,
-            native_mode: None,
-            auto_answer: AutoAnswer::Never,
-            note: None,
-        })
+    fn record(&self, command: LoggedCommand) {
+        lock(&self.commands).push(Received {
+            command,
+            claimed: false,
+        });
+        self.arrived.send_modify(|count| *count += 1);
+    }
+
+    /// The first unclaimed command `matcher` matches, now claimed.
+    fn claim(&self, matcher: &CommandMatch) -> Option<LoggedCommand> {
+        let mut commands = lock(&self.commands);
+        let received = commands
+            .iter_mut()
+            .find(|received| !received.claimed && matcher.matches(&received.command))?;
+        received.claimed = true;
+        Some(received.command.clone())
+    }
+
+    fn option_reply(&self) -> Result<(), DriverError> {
+        lock(&self.option_reply).clone()
+    }
+
+    fn autonomy_reply(&self, requested: Autonomy) -> Result<AutonomyState, DriverError> {
+        lock(&self.autonomy_reply)
+            .clone()
+            .unwrap_or(Ok(AutonomyState {
+                requested,
+                native_mode: None,
+                auto_answer: AutoAnswer::Never,
+                note: None,
+            }))
     }
 }
 
@@ -218,6 +306,7 @@ impl AgentDriver for ScriptedDriver {
             injected,
             injections_open: true,
             received: VecDeque::new(),
+            current_turn: None,
             processes: Vec::new(),
         };
         runner.run(steps).boxed()
@@ -238,6 +327,8 @@ struct Runner {
     injections_open: bool,
     /// Commands received and not yet consumed by an `Expect`.
     received: VecDeque<LoggedCommand>,
+    /// The turn of the last `Prompt` received.
+    current_turn: Option<String>,
     /// Kept alive until `run` returns.
     processes: Vec<SpawnedProcess>,
 }
@@ -259,6 +350,24 @@ impl Runner {
             }
             match step {
                 Step::Emit(event) => self.emit(event).await,
+                Step::EmitInTurn(event) => {
+                    let turn_id = self.turn();
+                    self.emit(in_turn(event, turn_id)).await;
+                }
+                Step::EndTurn {
+                    stop_reason,
+                    usage,
+                    error,
+                } => {
+                    let turn_id = self.turn();
+                    self.emit(DriverEvent::TurnEnded {
+                        turn_id,
+                        stop_reason,
+                        usage,
+                        error,
+                    })
+                    .await;
+                }
                 Step::Wait(duration) => {
                     // The channel may have closed while an earlier step waited for a permit.
                     if !self.commands_open {
@@ -335,7 +444,7 @@ impl Runner {
         while self.commands_open {
             match self.commands.recv().await {
                 Some(command) => {
-                    lock(&self.shared.commands).push(LoggedCommand::from(&command));
+                    self.shared.record(LoggedCommand::from(&command));
                     unanswered.push(command);
                 }
                 None => self.commands_open = false,
@@ -388,16 +497,16 @@ impl Runner {
     /// Records a command, answers it when it carries a reply, and queues it for `Expect`.
     fn accept(&mut self, command: DriverCommand) {
         let logged = LoggedCommand::from(&command);
-        lock(&self.shared.commands).push(logged.clone());
+        self.shared.record(logged.clone());
         match command {
+            DriverCommand::Prompt { turn, .. } => self.current_turn = Some(turn.turn_id),
             DriverCommand::SetOption { reply, .. } => {
-                let _ = reply.send(Ok(()));
+                let _ = reply.send(self.shared.option_reply());
             }
             DriverCommand::SetAutonomy { autonomy, reply } => {
-                let _ = reply.send(Ok(self.shared.autonomy_reply(autonomy)));
+                let _ = reply.send(self.shared.autonomy_reply(autonomy));
             }
-            DriverCommand::Prompt { .. }
-            | DriverCommand::Interrupt
+            DriverCommand::Interrupt
             | DriverCommand::RespondPermission { .. }
             | DriverCommand::RespondUi { .. }
             | DriverCommand::Shutdown { .. } => {}
@@ -429,6 +538,14 @@ impl Runner {
         }
     }
 
+    /// The turn of the last `Prompt` received; a turn step before any `Prompt` is a broken script.
+    fn turn(&self) -> String {
+        match &self.current_turn {
+            Some(turn_id) => turn_id.clone(),
+            None => panic!("ScriptedDriver: a turn step came before any Prompt"),
+        }
+    }
+
     async fn spawn(&mut self, launch: LaunchSpec) -> Result<(), DriverExit> {
         let spec = SpawnSpec {
             launch,
@@ -443,6 +560,44 @@ impl Runner {
             }
             Err(error) => Err(DriverExit::StartFailed(spawn_failure(&error))),
         }
+    }
+}
+
+/// `event` tagged with `turn_id`, for [`Step::EmitInTurn`].
+fn in_turn(event: DriverEvent, turn_id: String) -> DriverEvent {
+    match event {
+        DriverEvent::Event { event, .. } => DriverEvent::Event {
+            turn: Some(turn_id),
+            event,
+        },
+        DriverEvent::Permission { request, .. } => DriverEvent::Permission {
+            turn: Some(turn_id),
+            request,
+        },
+        DriverEvent::UiRequest { request, .. } => DriverEvent::UiRequest {
+            turn: Some(turn_id),
+            request,
+        },
+        DriverEvent::TurnEnded {
+            stop_reason,
+            usage,
+            error,
+            ..
+        } => DriverEvent::TurnEnded {
+            turn_id,
+            stop_reason,
+            usage,
+            error,
+        },
+        untagged @ (DriverEvent::Status(_)
+        | DriverEvent::Ready(_)
+        | DriverEvent::PermissionWithdrawn { .. }
+        | DriverEvent::UiWithdrawn { .. }
+        | DriverEvent::Commands(_)
+        | DriverEvent::Options(_)
+        | DriverEvent::Autonomy(_)
+        | DriverEvent::Title(_)
+        | DriverEvent::AuthRequired(_)) => untagged,
     }
 }
 
@@ -575,7 +730,10 @@ mod tests {
     use aura_process::testing::{FakeAgentEnd, FakeSpawner};
     use aura_process::{EnvMap, EnvSource, ProcessCwd, Redactor, ResolvedEnv};
     use aura_protocol::session::ConfigValue;
-    use aura_protocol::{AuraEvent, NoticeLevel, PromptPart, StopReason};
+    use aura_protocol::{
+        AuraEvent, NoticeLevel, PermissionOption, PermissionOptionKind, PermissionRequest,
+        PromptPart, ToolKind, UsageScope,
+    };
     use tokio::sync::oneshot;
     use tokio::task::JoinHandle;
 
@@ -765,6 +923,211 @@ mod tests {
             })
             .expect("send");
         assert_eq!(answer.await.expect("answered"), Ok(custom));
+        drop(session.commands);
+        assert_eq!(session.run.await.expect("join"), DriverExit::Closed);
+    }
+
+    fn set_option(session: &Session) -> oneshot::Receiver<Result<(), DriverError>> {
+        let (reply, answer) = oneshot::channel();
+        session
+            .commands
+            .send(DriverCommand::SetOption {
+                option_id: "model".into(),
+                value: ConfigValue::Choice {
+                    value: "gone".into(),
+                },
+                reply,
+            })
+            .expect("send");
+        answer
+    }
+
+    fn set_autonomy(
+        session: &Session,
+        autonomy: Autonomy,
+    ) -> oneshot::Receiver<Result<AutonomyState, DriverError>> {
+        let (reply, answer) = oneshot::channel();
+        session
+            .commands
+            .send(DriverCommand::SetAutonomy { autonomy, reply })
+            .expect("send");
+        answer
+    }
+
+    #[tokio::test]
+    async fn option_and_autonomy_replies_can_be_errors() {
+        let (driver, handle) = ScriptedDriver::new(Vec::new());
+        let session = start(Box::new(driver));
+        let refused = DriverError {
+            kind: ErrorKind::AgentError,
+            message: "Unknown model: gone".into(),
+            detail: None,
+        };
+        handle.set_option_reply(Err(refused.clone()));
+        assert_eq!(set_option(&session).await.expect("answered"), Err(refused));
+        handle.set_option_reply(Ok(()));
+        assert_eq!(set_option(&session).await.expect("answered"), Ok(()));
+
+        let failed = DriverError {
+            kind: ErrorKind::AgentError,
+            message: "The agent refused the mode change.".into(),
+            detail: Some("-32603".into()),
+        };
+        handle.set_autonomy_result(Err(failed.clone()));
+        assert_eq!(
+            set_autonomy(&session, Autonomy::Ask)
+                .await
+                .expect("answered"),
+            Err(failed)
+        );
+        let state = AutonomyState {
+            requested: Autonomy::Ask,
+            native_mode: Some("default".into()),
+            auto_answer: AutoAnswer::Never,
+            note: None,
+        };
+        handle.set_autonomy_reply(state.clone());
+        assert_eq!(
+            set_autonomy(&session, Autonomy::Ask)
+                .await
+                .expect("answered"),
+            Ok(state)
+        );
+        drop(session.commands);
+        assert_eq!(session.run.await.expect("join"), DriverExit::Closed);
+    }
+
+    #[tokio::test]
+    async fn turn_steps_tag_the_last_prompts_turn() {
+        let request = PermissionRequest {
+            request_id: "p1".into(),
+            tool_call_id: None,
+            title: "Run ls".into(),
+            kind: Some(ToolKind::Execute),
+            raw_input: None,
+            content: Vec::new(),
+            locations: Vec::new(),
+            options: vec![PermissionOption {
+                option_id: "allow".into(),
+                kind: PermissionOptionKind::AllowOnce,
+                label: "Allow once".into(),
+            }],
+            truncated: None,
+        };
+        let delta = AuraEvent::MessageDelta {
+            message_id: "m1".into(),
+            text: "ok".into(),
+        };
+        let usage = TokenUsage {
+            input_tokens: 3,
+            output_tokens: 1,
+            cache_read_tokens: None,
+            cache_write_tokens: None,
+            reasoning_tokens: None,
+            scope: UsageScope::Turn,
+        };
+        let (driver, _handle) = ScriptedDriver::new(vec![
+            Step::Expect(CommandMatch::Prompt),
+            Step::EmitInTurn(DriverEvent::Event {
+                turn: None,
+                event: delta.clone(),
+            }),
+            Step::EmitInTurn(DriverEvent::Permission {
+                turn: None,
+                request: request.clone(),
+            }),
+            Step::EmitInTurn(DriverEvent::Title(Some("Listing files".into()))),
+            Step::EndTurn {
+                stop_reason: StopReason::EndTurn,
+                usage: Some(usage.clone()),
+                error: None,
+            },
+        ]);
+        let mut session = start(Box::new(driver));
+        session
+            .commands
+            .send(prompt("019a-minted-by-the-actor"))
+            .expect("send");
+        let turn = Some("019a-minted-by-the-actor".to_owned());
+        assert_eq!(
+            session.events.recv().await,
+            Some(DriverEvent::Event {
+                turn: turn.clone(),
+                event: delta
+            })
+        );
+        assert_eq!(
+            session.events.recv().await,
+            Some(DriverEvent::Permission { turn, request })
+        );
+        assert_eq!(
+            session.events.recv().await,
+            Some(DriverEvent::Title(Some("Listing files".into()))),
+            "an event that carries no turn goes out unchanged"
+        );
+        assert_eq!(
+            session.events.recv().await,
+            Some(DriverEvent::TurnEnded {
+                turn_id: "019a-minted-by-the-actor".into(),
+                stop_reason: StopReason::EndTurn,
+                usage: Some(usage),
+                error: None,
+            })
+        );
+        drop(session.commands);
+        assert_eq!(session.run.await.expect("join"), DriverExit::Closed);
+    }
+
+    #[tokio::test]
+    async fn a_turn_step_before_any_prompt_panics_the_driver() {
+        let (driver, _handle) = ScriptedDriver::new(vec![Step::EndTurn {
+            stop_reason: StopReason::EndTurn,
+            usage: None,
+            error: None,
+        }]);
+        let session = start(Box::new(driver));
+        assert!(session.run.await.expect_err("panicked").is_panic());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn wait_for_returns_each_matching_command_once() {
+        let (driver, handle) = ScriptedDriver::new(Vec::new());
+        let session = start(Box::new(driver));
+        let waiting = tokio::spawn({
+            let handle = handle.clone();
+            async move { handle.wait_for(CommandMatch::Prompt).await }
+        });
+        tokio::task::yield_now().await;
+        let _autonomy = set_autonomy(&session, Autonomy::Ask);
+        session.commands.send(prompt("t1")).expect("send");
+        session.commands.send(prompt("t2")).expect("send");
+        let first = waiting.await.expect("join");
+        assert_eq!(
+            first,
+            LoggedCommand::Prompt {
+                turn_id: "t1".into(),
+                parts: vec![PromptPart::Text { text: "hi".into() }]
+            },
+            "a command that arrives while it waits"
+        );
+        assert!(matches!(
+            handle.wait_for(CommandMatch::Prompt).await,
+            LoggedCommand::Prompt { turn_id, .. } if turn_id == "t2"
+        ));
+        assert_eq!(
+            handle.wait_for(CommandMatch::SetAutonomy).await,
+            LoggedCommand::SetAutonomy {
+                autonomy: Autonomy::Ask
+            },
+            "an earlier command nobody claimed yet"
+        );
+        let again = tokio::time::timeout(
+            Duration::from_millis(50),
+            handle.wait_for(CommandMatch::Prompt),
+        )
+        .await;
+        assert!(again.is_err(), "each command is returned once");
+        assert_eq!(handle.commands().len(), 3, "commands() still lists all");
         drop(session.commands);
         assert_eq!(session.run.await.expect("join"), DriverExit::Closed);
     }
