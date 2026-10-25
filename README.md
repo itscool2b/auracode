@@ -54,9 +54,11 @@ Pending, each waiting on the repository owner:
 ## Layout
 
 ```
-crates/aura-protocol/   shared types: AuraEvent, event frames, capabilities (serde, exported to TypeScript)
-crates/aura-core/       device identity, data folder, profiles, the per-profile SQLite store
-crates/aura-drivers/    frame batching for the UI and the scripted mock agent; agent drivers arrive in M1
+crates/aura-protocol/   shared types: events, frames, IPC and session types (serde, exported to TypeScript)
+crates/aura-process/    agent processes: spawning, shutdown, leftovers, the agents' env, protocol logs
+crates/aura-agents/     the agent catalog, detection, the one-time npm adapter install, launch specs
+crates/aura-core/       device identity, data folder, profiles, the per-profile SQLite store, chat sessions
+crates/aura-drivers/    the driver contract, frame batching, the scripted mock agent; the ACP driver (M1a)
 apps/desktop/           Tauri v2 app: Rust shell in src-tauri/, React UI in src/
 packages/ui/            Aura design system: tokens, fonts, glass, motion, Orb, AuraField
 docs/                   plan and spike write-ups; spike code sits next to its write-up in docs/spikes/,
@@ -68,7 +70,6 @@ docs/                   plan and spike write-ups; spike code sits next to its wr
 Planned, not created yet:
 
 ```
-crates/aura-agents/     M1          agent catalog, login-shell environment, detection, versions, auth
 crates/aura-cli/        M1          dev CLI: detect and smoke-test agents, record and replay fixtures
 crates/aura-sync/       M6, M7, M9  API client, merge engines, end-to-end encryption
 crates/aura-config/     M8          per-agent config adapters for the Config Library
