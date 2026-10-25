@@ -442,14 +442,11 @@ async fn card_before_ready() {
         .attach(&chat.id, sink.clone())
         .await
         .expect("attach");
-    let card = sink
-        .wait_for("the card", |event| {
-            matches!(event, AuraEvent::PermissionRequested(_))
-        })
-        .await;
-    assert!(
-        matches!(card, AuraEvent::PermissionRequested(request) if request.request_id == "guarded-model")
-    );
+    let is_card = |event: &AuraEvent| matches!(event, AuraEvent::PermissionRequested(request) if request.request_id == "guarded-model");
+    // The card is in the attach's page when it reached the store first, else it arrives live.
+    if !attach.history.items.iter().any(|item| is_card(&item.event)) {
+        sink.wait_for("the card", is_card).await;
+    }
     assert_eq!(attach.snapshot.session.status, SessionStatus::Starting);
     assert_eq!(
         h.statuses.last(&chat.id).map(|update| update.status),
