@@ -30,6 +30,9 @@
 //!   and codex-acp's do: resuming or loading one never prompted answers -32002.
 //! - `AURA_FAKE_SLOW_CHILD_MS` (Unix): `initialize` starts a child in the agent's process group
 //!   that exits this long after a SIGTERM, as claude-agent-acp's `claude auth status` does.
+//! - `AURA_FAKE_EFFORT`: an `effort` config option (`thought_level`) that follows the model, as
+//!   codex-acp's does: `fake:mini` offers no `high`, so a switch to it from `high` sets `medium`
+//!   (told in a `config_option_update`), and switching back keeps `medium`.
 
 use std::collections::BTreeMap;
 use std::io::{BufRead, Write};
@@ -121,6 +124,9 @@ struct Session {
     /// Prompts the session ran.
     #[serde(default)]
     prompts: u64,
+    /// The `effort` option's value (`AURA_FAKE_EFFORT`).
+    #[serde(default)]
+    effort: String,
 }
 
 /// What real agents did in the probes, each turned on by a variable (see the module docs).
@@ -130,6 +136,7 @@ struct Quirks {
     hermes_models: bool,
     forget_unprompted: bool,
     slow_child: Option<u64>,
+    effort: bool,
 }
 
 impl Quirks {
@@ -142,6 +149,7 @@ impl Quirks {
             hermes_models: on("AURA_FAKE_HERMES_MODELS"),
             forget_unprompted: on("AURA_FAKE_FORGET_UNPROMPTED"),
             slow_child: millis("AURA_FAKE_SLOW_CHILD_MS"),
+            effort: on("AURA_FAKE_EFFORT"),
         }
     }
 }
@@ -224,6 +232,11 @@ impl Agent {
                     } else {
                         "fake:large".into()
                     },
+                    effort: if self.quirks.effort {
+                        "high".into()
+                    } else {
+                        String::new()
+                    },
                     ..Session::default()
                 };
                 self.save(&session)?;
@@ -259,19 +272,40 @@ impl Agent {
             }
             "session/set_model" => {
                 std::thread::sleep(self.quirks.set_delay);
-                let hermes_models = self.quirks.hermes_models;
-                self.change(id, params, |session, params| {
-                    let picked = text(params, "modelId");
-                    session.model = if hermes_models {
-                        hermes_model_switch(&session.model, &picked)
-                    } else {
-                        picked
-                    };
-                    json!({})
-                })
+                let (hermes_models, effort) = (self.quirks.hermes_models, self.quirks.effort);
+                let Some(session) = self.sessions.get_mut(&text(params, "sessionId")) else {
+                    return fail(id, -32602, "unknown session");
+                };
+                let picked = text(params, "modelId");
+                session.model = if hermes_models {
+                    hermes_model_switch(&session.model, &picked)
+                } else {
+                    picked
+                };
+                let follows =
+                    effort && !effort_choices(&session.model).contains(&session.effort.as_str());
+                if follows {
+                    session.effort = "medium".into();
+                }
+                let session = session.clone();
+                self.save(&session)?;
+                if effort {
+                    update(
+                        &session.id,
+                        json!({"sessionUpdate": "config_option_update",
+                               "configOptions": [effort_option(&session)]}),
+                    )?;
+                }
+                reply(id, json!({}))
             }
             "session/set_config_option" => {
                 std::thread::sleep(self.quirks.set_delay);
+                if self.quirks.effort && text(params, "configId") == "effort" {
+                    return self.change(id, params, |session, params| {
+                        session.effort = text(params, "value");
+                        json!({"configOptions": [effort_option(session)]})
+                    });
+                }
                 reply(id, json!({"configOptions": []}))
             }
             other => fail(id, -32601, &format!("method not found: {other}")),
@@ -307,7 +341,7 @@ impl Agent {
                 json!({"modelId": "fake:mini", "name": "fake/mini"}),
             ]
         };
-        json!({
+        let mut offers = json!({
             "models": {
                 "availableModels": models,
                 "currentModelId": session.model
@@ -320,7 +354,11 @@ impl Agent {
                     {"id": "dont_ask", "name": "Don't Ask"}
                 ]
             }
-        })
+        });
+        if self.quirks.effort {
+            offers["configOptions"] = json!([effort_option(session)]);
+        }
+        offers
     }
 
     /// A settings change of the session `params` names.
@@ -555,6 +593,31 @@ enum Written {
     Refused,
     Cancelled,
     Ended,
+}
+
+/// The efforts a model offers (`AURA_FAKE_EFFORT`): `fake:mini` stops at `medium`.
+fn effort_choices(model: &str) -> &'static [&'static str] {
+    if model == "fake:mini" {
+        &["low", "medium"]
+    } else {
+        &["low", "medium", "high"]
+    }
+}
+
+/// The `effort` config option of a session (`AURA_FAKE_EFFORT`).
+fn effort_option(session: &Session) -> Value {
+    let options: Vec<Value> = effort_choices(&session.model)
+        .iter()
+        .map(|value| {
+            let mut name = (*value).to_owned();
+            if let Some(first) = name.get_mut(..1) {
+                first.make_ascii_uppercase();
+            }
+            json!({"value": value, "name": name})
+        })
+        .collect();
+    json!({"id": "effort", "name": "Effort", "category": "thought_level", "type": "select",
+           "currentValue": session.effort, "options": options})
 }
 
 /// Hermes 0.22.5's `session/set_model`: the part before the first colon names the provider only

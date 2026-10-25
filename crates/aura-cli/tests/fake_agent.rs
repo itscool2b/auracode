@@ -341,6 +341,48 @@ mod process {
         assert!(headless.shutdown().await.saved);
     }
 
+    /// codex-acp's effort follows its model: a model that offers no `ultra` sets `medium`, and
+    /// switching back keeps it. The probe chose every option's value (step 4), so a restart, which
+    /// re-applies what was chosen, brings the chosen effort back rather than the one the agent
+    /// picked on its own; the probe says what the switch changed and checks the chosen values.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn probe_tells_an_option_the_agent_changed_with_the_model_from_a_lost_one() {
+        let machine = Machine::with_fake_hermes();
+        let headless = machine
+            .headless(&[
+                ("AURA_FAKE_OPEN_DELAY_MS", "300"),
+                ("AURA_FAKE_EFFORT", "1"),
+            ])
+            .await;
+        let folder = repo::create(&machine.path("repo"), RepoKind::Hostile, &headless.registry)
+            .await
+            .expect("the chat folder");
+        let (out, captured) = Out::capture();
+        let outcome = probe::run(
+            &headless,
+            &ProbeArgs {
+                agent: "hermes".into(),
+                env: Vec::new(),
+                folder: None,
+            },
+            &folder,
+            true,
+            PROBE,
+            &out,
+        )
+        .await
+        .expect("the probe runs");
+        let output = captured.text();
+        assert_no_failures(&output);
+        assert_eq!(outcome, Outcome::Passed, "{output}");
+        assert!(
+            output.contains("INFO  4 options: switching the model changed effort (High (high) -> Medium (medium)), and switching back left it"),
+            "{output}"
+        );
+        assert_passed(&output, "7 resume: the options are back as they were");
+        assert!(headless.shutdown().await.saved);
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn smoke_runs_every_scenario_against_a_real_process() {
         let machine = Machine::with_fake_hermes();

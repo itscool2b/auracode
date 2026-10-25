@@ -7,10 +7,10 @@
 //! | 1 initialize | from the protocol log: the agent's name and version, protocol version, capabilities, auth methods, time to answer; nothing used the hostile chat folder's npm files |
 //! | 2 session | the options, the legacy models and modes, the current model, anything asked before ready |
 //! | 3 commands | after 3 s: the slash commands and the largest commands update |
-//! | 4 options, autonomy | every option set to its current value; the model switched and back (Hermes: what a second session reports meanwhile); Full auto, Auto-edit, Ask and back, against the dialect's candidates |
+//! | 4 options, autonomy | every option set to its current value; the model switched to the cheapest and back (what else the switch changed; Hermes: what a second session reports meanwhile); Full auto, Auto-edit, Ask and back, each mode reaching the agent, against the dialect's candidates |
 //! | 5 cancel | an interrupt while idle changes nothing |
-//! | 6 close | Stop: stdin closed, the exit and the shutdown steps; nothing left in the process table (Unix) |
-//! | 7 resume | Start again: the native session continues, no transcript comes back, the options are back |
+//! | 6 close | Stop: stdin closed, the exit and the shutdown steps; nothing left in the process table (Unix), once a stop's chain is over |
+//! | 7 resume | Start again: the native session continues (or the agent says why not: claude-acp and codex-acp keep no session before its first prompt), no transcript comes back, the options are back as step 4 chose them (or the agent no longer offers a value, and auracode says so) |
 //! | 8 auth | an agent that needs a sign-in: its card (codex-acp with `--env CODEX_HOME=<empty folder>`) |
 //! | 9 interrupt | an interrupt right after initialize stops the start with nothing left, and the next start works |
 //!
@@ -294,10 +294,11 @@ impl Probe<'_> {
         self.options_step(&chat, lists.as_ref(), &watch).await;
         self.autonomy_step(&chat).await;
         self.cancel_step(&chat).await;
-        let before_stop = chat.lists().await.ok();
         let native = chat.info().and_then(|info| info.native_session_id);
         if self.close_step(&chat).await {
-            self.resume_step(&chat, before_stop.as_ref(), native.as_deref())
+            // Step 4 chose every option's value as it was at the start, so a restart, which
+            // re-applies what was chosen (5.3.2), must bring those values back.
+            self.resume_step(&chat, lists.as_ref(), native.as_deref())
                 .await;
             self.interrupted_start_step(&chat).await;
         }
@@ -889,6 +890,23 @@ impl Probe<'_> {
                     name_of(&original)
                 ),
             );
+            // An agent may change other options with the model (codex-acp: a model that offers
+            // no `ultra` sets `medium`) and keep them when it switches back.
+            if let Ok(now) = chat.lists().await {
+                let others = |options: &[ConfigOption]| -> Vec<ConfigOption> {
+                    options
+                        .iter()
+                        .filter(|option| option.id != model.id)
+                        .cloned()
+                        .collect()
+                };
+                for text in changed_options(&others(&lists.options), &others(&now.options)) {
+                    self.report.info(
+                        step,
+                        format!("switching the model changed {text}, and switching back left it"),
+                    );
+                }
+            }
         }
     }
 
@@ -1282,10 +1300,12 @@ impl Probe<'_> {
         }
     }
 
+    /// Start again: the native session continues (or the agent says why it can't), no transcript
+    /// comes back, and the options are back as `chosen` (what step 4 set them to).
     async fn resume_step(
         &mut self,
         chat: &ChatRun<'_>,
-        before: Option<&SessionLists>,
+        chosen: Option<&SessionLists>,
         native: Option<&str>,
     ) {
         let step = "7 resume";
@@ -1430,13 +1450,13 @@ impl Probe<'_> {
                 format!("the replay differs from what was stored: {notice}"),
             );
         }
-        if let Some(before) = before {
+        if let Some(chosen) = chosen {
             match chat.lists().await {
                 Ok(after) => {
                     let notices = chat
                         .watch
                         .with(|state| state.notices_since(&chat.chat_id, mark));
-                    let (gone, changed) = resume_changes(&before.options, &after.options, &notices);
+                    let (gone, changed) = resume_changes(&chosen.options, &after.options, &notices);
                     for text in gone {
                         self.report.info(step, text);
                     }
