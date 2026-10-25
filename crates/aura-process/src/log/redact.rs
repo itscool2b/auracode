@@ -11,6 +11,10 @@
 //!    literals from [`Redactor::set_secrets`] to `<SECRET>`, token shapes (`sk-ant-...`, `ghp_...`,
 //!    JWTs, `Bearer ...`, ...) to `<TOKEN>`, and email addresses to `<EMAIL>`.
 //!
+//! JSON text that does not parse (the head of a line cut before it was queued) gets rules 1 and 2
+//! from a tokenizer that tracks the path of keys, so they reach the same strings as in parsed JSON,
+//! then rule 3.
+//!
 //! The stderr tail shown in an error card, or stored in an error's detail, passes
 //! [`Redactor::redact_text`] too, in the session actor: drivers hand it over raw.
 
@@ -18,7 +22,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::sync::{LazyLock, RwLock, RwLockReadGuard};
 
-use regex::{Captures, NoExpand, Regex};
+use regex::{NoExpand, Regex};
 use serde_json::{Map, Value};
 
 /// What a secret literal becomes.
@@ -89,11 +93,6 @@ static TOKENS: LazyLock<Option<Regex>> = LazyLock::new(|| {
 static BEARER: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r"\b((?i:bearer))(\s+)[A-Za-z0-9._~+/=-]{16,}").ok());
 
-/// `"key": "value"` pairs in JSON text that could not be parsed (a record cut at the size cap), so
-/// the key rules still reach the string values they can see.
-static KEYED_STRING: LazyLock<Option<Regex>> =
-    LazyLock::new(|| Regex::new(r#""((?:[^"\\]|\\.){1,128})"(\s*:\s*)"(?:[^"\\]|\\.)*""#).ok());
-
 /// Compiled patterns and the secret literals of every env resolved so far. Shared as
 /// `Arc<Redactor>`: the env resolver adds the literals, protocol logs and the session actor redact
 /// with them.
@@ -160,25 +159,12 @@ impl Redactor {
         redact_str(text, &secrets)
     }
 
-    /// Redacts JSON text that could not be parsed, such as the head of a line cut at the record
-    /// cap: the string value of every `"key": "value"` pair whose key rule matches becomes
-    /// `"<REDACTED>"`, then rule 3 applies to the whole text.
+    /// Redacts JSON text that could not be parsed, such as the head of a line cut before it was
+    /// queued: rules 1 and 2 by [`blank_by_keys`], which tracks where each string sits as
+    /// [`redact_value`](Self::redact_value) sees it in parsed JSON, then rule 3 over the whole text.
     pub(crate) fn redact_json_text<'a>(&self, text: &'a str) -> Cow<'a, str> {
         let secrets = self.read();
-        let keyed = match KEYED_STRING.as_ref() {
-            Some(pattern) if text.contains('"') => pattern.replace_all(text, |caps: &Captures| {
-                let key = caps.get(1).map_or("", |key| key.as_str());
-                if sensitive_key(&normalize_key(key)) {
-                    let gap = caps.get(2).map_or(":", |gap| gap.as_str());
-                    format!("\"{key}\"{gap}\"{REDACTED}\"")
-                } else {
-                    caps.get(0)
-                        .map_or_else(String::new, |whole| whole.as_str().to_owned())
-                }
-            }),
-            _ => Cow::Borrowed(text),
-        };
-        match keyed {
+        match blank_by_keys(text) {
             Cow::Borrowed(text) => redact_str(text, &secrets),
             Cow::Owned(text) => Cow::Owned(redact_str(&text, &secrets).into_owned()),
         }
@@ -221,25 +207,32 @@ fn walk(value: &mut Value, blank: bool, secrets: &Secrets) {
                 walk(item, blank, secrets);
             }
         }
-        Value::Object(fields) => {
-            for (key, field) in fields.iter_mut() {
-                if blank {
-                    walk(field, true, secrets);
-                    continue;
-                }
-                let key = normalize_key(key);
-                if sensitive_key(&key) || (key == "env" && field.is_object()) {
-                    walk(field, true, secrets);
-                } else if (key == "env" || key == "headers") && field.is_array() {
-                    walk_name_values(field, secrets);
-                } else {
-                    walk(field, false, secrets);
-                }
-            }
-            redact_keys(fields, secrets);
-        }
+        Value::Object(fields) => walk_fields(fields, blank, false, secrets),
         Value::Null | Value::Bool(_) | Value::Number(_) => {}
     }
+}
+
+/// An object's fields. `entry` marks a `{ "name", "value" }` entry of an `env` or `headers` array,
+/// whose `value` is blanked (rule 2); its other fields follow the rules as anywhere else.
+fn walk_fields(fields: &mut Map<String, Value>, blank: bool, entry: bool, secrets: &Secrets) {
+    for (key, field) in fields.iter_mut() {
+        if blank {
+            walk(field, true, secrets);
+            continue;
+        }
+        let normalized = normalize_key(key);
+        if sensitive_key(&normalized)
+            || (normalized == "env" && field.is_object())
+            || (entry && key == "value")
+        {
+            walk(field, true, secrets);
+        } else if (normalized == "env" || normalized == "headers") && field.is_array() {
+            walk_name_values(field, secrets);
+        } else {
+            walk(field, false, secrets);
+        }
+    }
+    redact_keys(fields, secrets);
 }
 
 /// An `env` or `headers` array: the `value` of each `{ "name", "value" }` entry is blanked, the rest
@@ -252,17 +245,156 @@ fn walk_name_values(array: &mut Value, secrets: &Secrets) {
         let is_pair = item
             .as_object()
             .is_some_and(|entry| entry.contains_key("name") && entry.contains_key("value"));
-        if !is_pair {
-            walk(item, false, secrets);
-            continue;
-        }
-        if let Value::Object(entry) = item {
-            for (key, field) in entry.iter_mut() {
-                walk(field, key == "value", secrets);
-            }
-            redact_keys(entry, secrets);
+        match item {
+            Value::Object(entry) if is_pair => walk_fields(entry, false, true, secrets),
+            _ => walk(item, false, secrets),
         }
     }
+}
+
+/// Where the tokenizer of [`blank_by_keys`] is: one frame per open object or array.
+#[derive(Debug)]
+enum Frame {
+    Object {
+        /// Every string inside is blanked.
+        blank: bool,
+        /// An element of an `env` or `headers` array: its `value` is blanked.
+        entry: bool,
+        /// The last key read, normalized, and whether it was exactly `value`.
+        key: Option<String>,
+        key_is_value: bool,
+    },
+    Array {
+        blank: bool,
+        /// An `env` or `headers` array, whose object elements are entries.
+        entries: bool,
+    },
+}
+
+impl Frame {
+    /// The frame of an object (`object`) or array opened as the next value inside `parent`.
+    fn child(parent: Option<&Frame>, object: bool) -> Frame {
+        let (blank, key, key_is_value, entry) = match parent {
+            Some(Frame::Object {
+                blank,
+                entry,
+                key,
+                key_is_value,
+            }) => (*blank, key.as_deref(), *key_is_value, *entry),
+            Some(Frame::Array { blank, .. }) => (*blank, None, false, false),
+            None => (false, None, false, false),
+        };
+        let blank = blank
+            || key.is_some_and(sensitive_key)
+            || (object && key == Some("env"))
+            || (entry && key_is_value);
+        if object {
+            Frame::Object {
+                blank,
+                entry: !blank && matches!(parent, Some(Frame::Array { entries: true, .. })),
+                key: None,
+                key_is_value: false,
+            }
+        } else {
+            Frame::Array {
+                blank,
+                entries: !blank && matches!(key, Some("env" | "headers")),
+            }
+        }
+    }
+
+    /// Whether a string value read as the next value inside this frame is blanked.
+    fn blanks_value(&self) -> bool {
+        match self {
+            Frame::Object {
+                blank,
+                entry,
+                key,
+                key_is_value,
+            } => *blank || key.as_deref().is_some_and(sensitive_key) || (*entry && *key_is_value),
+            Frame::Array { blank, .. } => *blank,
+        }
+    }
+}
+
+/// Rules 1 and 2 over JSON text that does not parse (the head of a cut line, or a malformed line),
+/// with a tokenizer that tracks the path of keys: every string value at or under a credential,
+/// identity or `env` key becomes `"<REDACTED>"`, and so does the `value` of every object in an
+/// `env` or `headers` array. A string inside an object is a key when a `:` follows it. A blanked
+/// string the text ends inside loses everything after its opening quote. Keys, numbers and the
+/// structure are copied as they are.
+fn blank_by_keys(text: &str) -> Cow<'_, str> {
+    let bytes = text.as_bytes();
+    let mut out = String::new();
+    let mut copied = 0;
+    let mut stack: Vec<Frame> = Vec::new();
+    let mut at = 0;
+    while let Some(&byte) = bytes.get(at) {
+        match byte {
+            b'"' => {
+                let (end, closed) = string_end(bytes, at);
+                let is_key = matches!(stack.last(), Some(Frame::Object { .. }))
+                    && bytes
+                        .get(end..)
+                        .and_then(|rest| rest.iter().find(|byte| !byte.is_ascii_whitespace()))
+                        == Some(&b':');
+                if is_key {
+                    let quoted = text.get(at..end).unwrap_or_default();
+                    let raw = serde_json::from_str::<String>(quoted).unwrap_or_else(|_| {
+                        quoted
+                            .trim_start_matches('"')
+                            .trim_end_matches('"')
+                            .to_owned()
+                    });
+                    if let Some(Frame::Object {
+                        key, key_is_value, ..
+                    }) = stack.last_mut()
+                    {
+                        *key_is_value = raw == "value";
+                        *key = Some(normalize_key(&raw));
+                    }
+                } else if stack.last().is_some_and(Frame::blanks_value) {
+                    out.push_str(text.get(copied..at).unwrap_or_default());
+                    out.push('"');
+                    out.push_str(REDACTED);
+                    if closed {
+                        out.push('"');
+                    }
+                    copied = end;
+                }
+                at = end;
+            }
+            b'{' | b'[' => {
+                let frame = Frame::child(stack.last(), byte == b'{');
+                stack.push(frame);
+                at += 1;
+            }
+            b'}' | b']' => {
+                stack.pop();
+                at += 1;
+            }
+            _ => at += 1,
+        }
+    }
+    if copied == 0 {
+        return Cow::Borrowed(text);
+    }
+    out.push_str(text.get(copied..).unwrap_or_default());
+    Cow::Owned(out)
+}
+
+/// The end of the JSON string opening at `start` (just past its closing quote), and whether it
+/// closed before the text ended.
+fn string_end(bytes: &[u8], start: usize) -> (usize, bool) {
+    let mut at = start + 1;
+    while let Some(&byte) = bytes.get(at) {
+        match byte {
+            b'\\' => at += 2,
+            b'"' => return (at + 1, true),
+            _ => at += 1,
+        }
+    }
+    (bytes.len(), false)
 }
 
 /// Rule 3 over an object's keys: a key holding an email or a token is replaced, in place.
@@ -414,7 +546,6 @@ mod tests {
     fn the_patterns_compile() {
         assert!(TOKENS.is_some());
         assert!(BEARER.is_some());
-        assert!(KEYED_STRING.is_some());
     }
 
     #[test]
@@ -650,7 +781,8 @@ mod tests {
                 {"name": "fs", "command": "/bin/fs", "args": ["--root", "/w"],
                  "env": [{"name": "API_KEY", "value": "v1"}, {"name": "MODE", "value": "fast"}]},
                 {"name": "web", "type": "http", "url": "https://example.com/mcp",
-                 "headers": [{"name": "X-Api", "value": "h1"}]},
+                 "headers": [{"name": "X-Api", "value": "h1"},
+                             {"name": "X-Other", "value": "h2", "token": "t1", "env": {"A": "b"}}]},
             ],
             "env": {"PATH": "/usr/bin", "PORT": 3000},
             "notEnv": {"name": "n", "value": "kept"},
@@ -663,7 +795,8 @@ mod tests {
                     {"name": "fs", "command": "/bin/fs", "args": ["--root", "/w"],
                      "env": [{"name": "API_KEY", "value": "<REDACTED>"}, {"name": "MODE", "value": "<REDACTED>"}]},
                     {"name": "web", "type": "http", "url": "https://example.com/mcp",
-                     "headers": [{"name": "X-Api", "value": "<REDACTED>"}]},
+                     "headers": [{"name": "X-Api", "value": "<REDACTED>"},
+                                 {"name": "X-Other", "value": "<REDACTED>", "token": "<REDACTED>", "env": {"A": "<REDACTED>"}}]},
                 ],
                 "env": {"PATH": "<REDACTED>", "PORT": 3000},
                 "notEnv": {"name": "n", "value": "kept"},
@@ -708,5 +841,28 @@ mod tests {
             redactor.redact_json_text("no keys here"),
             Cow::Borrowed(_)
         ));
+    }
+
+    /// Rules 1 and 2 reach the same strings in text that does not parse as in parsed JSON:
+    /// strings with ordinary keys under a sensitive or `env` key, and name/value entries.
+    #[test]
+    fn unparsable_json_text_follows_the_key_path_as_parsed_json_does() {
+        let redactor = Redactor::standard();
+        let head = r#"{"jsonrpc":"2.0","method":"x","params":{"account":{"uuid":"u-1","subscriptionType":"max","seats":3},"credentials":{"user":"me","list":["a",{"deep":"b"}]},"env":{"FOO":"v","PORT":3000},"mcpServers":[{"name":"fs","env":[{"name":"API_KEY","value":"v1"},{"value":{"nested":"v2"},"name":"N"}],"headers":[{"name":"X-Api","value":"h1"}]}],"models":[{"name":"opus","displayName":"Opus"}],"note":"a { [ \" } ] \\ in a string","huge":"aaaa"#;
+        let blanked = r#"{"jsonrpc":"2.0","method":"x","params":{"account":{"uuid":"<REDACTED>","subscriptionType":"<REDACTED>","seats":3},"credentials":{"user":"<REDACTED>","list":["<REDACTED>",{"deep":"<REDACTED>"}]},"env":{"FOO":"<REDACTED>","PORT":3000},"mcpServers":[{"name":"fs","env":[{"name":"API_KEY","value":"<REDACTED>"},{"value":{"nested":"<REDACTED>"},"name":"N"}],"headers":[{"name":"X-Api","value":"<REDACTED>"}]}],"models":[{"name":"opus","displayName":"Opus"}],"note":"a { [ \" } ] \\ in a string","huge":"aaaa"#;
+        assert_eq!(redactor.redact_json_text(head), blanked);
+        // Whole, the same text parses, and redact_value blanks the same strings.
+        let mut whole: Value = serde_json::from_str(&format!("{head}\"}}}}")).expect("whole json");
+        redactor.redact_value(&mut whole);
+        assert_eq!(whole.to_string(), format!("{blanked}\"}}}}"));
+        // A blanked string the text ends inside loses everything after its opening quote.
+        assert_eq!(
+            redactor.redact_json_text(r#"{"env":{"KEY":"half a secr"#),
+            r#"{"env":{"KEY":"<REDACTED>"#
+        );
+        assert_eq!(
+            redactor.redact_json_text(r#"[{"headers":[{"value":"h"#),
+            r#"[{"headers":[{"value":"<REDACTED>"#
+        );
     }
 }

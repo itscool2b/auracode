@@ -953,6 +953,43 @@ mod tests {
         assert_eq!(kinds, expected);
     }
 
+    /// A line over the parse limit is cut before it is queued, so the writer never sees whole
+    /// JSON; the key rules still reach every string under a sensitive or `env` key.
+    #[tokio::test]
+    async fn a_cut_line_keeps_nothing_under_sensitive_or_env_keys() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let factory = factory(dir.path());
+        let log = factory.open("chat", "spawn");
+        let path = log.path().expect("on");
+        let huge = format!(
+            r#"{{"jsonrpc":"2.0","method":"session/update","params":{{"account":{{"uuid":"acct-uuid-1","subscriptionType":"tier-max"}},"credentials":{{"user":"cred-user-1"}},"env":{{"FOO":"env-value-1","PORT":3000}},"mcp":[{{"env":[{{"name":"API_KEY","value":"pair-value-1"}}],"headers":[{{"name":"X","value":"header-value-1"}}]}}],"text":"{}"}}}}"#,
+            "y".repeat(PARSE_LIMIT)
+        );
+        log.line(Direction::In, &huge);
+        drop(log);
+        factory.idle().await;
+        let text = std::fs::read_to_string(&path).expect("read");
+        for private in [
+            "acct-uuid-1",
+            "tier-max",
+            "cred-user-1",
+            "env-value-1",
+            "pair-value-1",
+            "header-value-1",
+        ] {
+            assert!(!text.contains(private), "{private} reached the log");
+        }
+        let written = records(&path);
+        assert_eq!(written.len(), 1);
+        assert!(written[0]["truncated"].as_u64().is_some_and(|cut| cut > 0));
+        let raw = written[0]["raw"].as_str().expect("raw");
+        assert!(
+            raw.contains(r#""env":{"FOO":"<REDACTED>","PORT":3000}"#),
+            "{}",
+            head(raw, 600)
+        );
+    }
+
     #[tokio::test]
     async fn an_unwritable_folder_stops_logging_with_no_error_for_the_spawn() {
         let dir = tempfile::tempdir().expect("tempdir");
