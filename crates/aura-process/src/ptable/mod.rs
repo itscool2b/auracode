@@ -113,19 +113,30 @@ pub fn matches_daemon(info: &ProcInfo, daemons: &[DaemonMatch]) -> bool {
     })
 }
 
-/// The declared daemons in `table` and every process below them, which the kill rule spares.
+/// What the kill rule spares in `table`: every declared daemon that left the agent's group
+/// `group`, and every process below it outside that group. A daemon still in the group is only a
+/// member: it dies with the group, and its subtree is not spared.
 #[cfg(any(unix, test))]
 pub(crate) fn spared_daemons(
     table: &[ProcInfo],
     daemons: &[DaemonMatch],
+    group: u32,
 ) -> std::collections::HashSet<u32> {
     let mut spared = std::collections::HashSet::new();
     if daemons.is_empty() {
         return spared;
     }
-    for info in table.iter().filter(|info| matches_daemon(info, daemons)) {
+    for info in table
+        .iter()
+        .filter(|info| info.pgid != group && matches_daemon(info, daemons))
+    {
         spared.insert(info.pid);
-        spared.extend(descendants(table, info.pid).iter().map(|below| below.pid));
+        spared.extend(
+            descendants(table, info.pid)
+                .iter()
+                .filter(|below| below.pgid != group)
+                .map(|below| below.pid),
+        );
     }
     spared
 }

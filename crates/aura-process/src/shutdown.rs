@@ -155,7 +155,6 @@ pub(crate) fn record_escaped(_state: Arc<ControlState>) -> BoxFuture<'static, ()
 
 #[cfg(unix)]
 mod unix {
-    use std::collections::HashSet;
     use std::sync::{Arc, Mutex, MutexGuard};
     use std::time::Duration;
 
@@ -182,7 +181,9 @@ mod unix {
         pub(crate) spared: Vec<u32>,
     }
 
-    /// Sorts `table` (an agent's descendants and group) by the kill rule.
+    /// Sorts `table` (an agent's descendants and group) by the kill rule. Only a declared daemon
+    /// that left the group is spared, with its subtree: one still in the group is a member like
+    /// any other, and its descendants elsewhere are escaped descendants.
     pub(crate) fn classify(
         table: &[ProcInfo],
         root: u32,
@@ -191,10 +192,7 @@ mod unix {
     ) -> Tree {
         let below = descendants(table, root);
         let in_group = |info: &ProcInfo| info.pgid == pgid;
-        let spared: HashSet<u32> = spared_daemons(&below, daemons)
-            .into_iter()
-            .filter(|pid| below.iter().any(|info| info.pid == *pid && !in_group(info)))
-            .collect();
+        let spared = spared_daemons(&below, daemons, pgid);
         let mut tree = Tree {
             members: table
                 .iter()
@@ -550,17 +548,22 @@ mod unix {
                 proc(504, 503, 700, &["bg-pty-host"]),
                 proc(505, 504, 800, &["zsh"]),
                 proc(506, 1, 500, &["orphaned-member"]),
-                // A daemon match inside the group dies with the group anyway.
+                // A daemon match inside the group is only a member: it dies with the group, and
+                // what it started in a group of its own is an escaped descendant like any other.
                 proc(507, 500, 500, &["claude", "daemon", "run"]),
+                proc(508, 507, 900, &["bg-pty-host"]),
+                proc(509, 508, 900, &["zsh"]),
             ];
             let tree = classify(&table, 500, 500, &daemons);
             let mut members = tree.members.clone();
             members.sort_unstable();
             assert_eq!(members, [500, 501, 506, 507]);
-            let escaped: Vec<u32> = tree.escaped.iter().map(|proc| proc.pid).collect();
-            assert_eq!(escaped, [502]);
+            let mut escaped: Vec<u32> = tree.escaped.iter().map(|proc| proc.pid).collect();
+            escaped.sort_unstable();
+            assert_eq!(escaped, [502, 508, 509]);
             assert_eq!(tree.spared, [503, 504, 505]);
-            assert_eq!(tree.escaped[0].start, table[2].start);
+            let vite = tree.escaped.iter().find(|proc| proc.pid == 502);
+            assert_eq!(vite.map(|proc| &proc.start), Some(&table[2].start));
         }
     }
 }

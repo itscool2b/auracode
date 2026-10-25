@@ -10,9 +10,9 @@
 //!    [`SWEEP_WINDOW_SLACK`] (a process started after that window cannot belong to the dead
 //!    instance, so a terminal job that later reused the group id is never touched); (b) the
 //!    entry's escaped processes whose pid and start time still match; (c) when the entry's leader
-//!    is alive with its recorded start time, its descendants. Declared daemons and their subtrees
-//!    are spared. SIGTERM, [`SWEEP_SIGTERM_GRACE`], SIGKILL, start times re-checked before each
-//!    signal.
+//!    is alive with its recorded start time, its descendants. Declared daemons outside the entry's
+//!    group are spared with their subtrees (one in the group is a member like any other).
+//!    SIGTERM, [`SWEEP_SIGTERM_GRACE`], SIGKILL, start times re-checked before each signal.
 //! 4. The file is deleted.
 //!
 //! Every skipped candidate is logged with its reason.
@@ -284,7 +284,8 @@ fn plan(
         found.extend(descendants(table, entry.pid).iter().map(candidate));
     }
 
-    let spared = spared_daemons(table, &entry.daemons);
+    // As at shutdown: only a daemon that left the agent's group is spared, with its subtree.
+    let spared = spared_daemons(table, &entry.daemons, entry.pgid);
     found.retain(|candidate| {
         let keep = !spared.contains(&candidate.pid);
         if !keep {
@@ -513,6 +514,35 @@ mod tests {
             alive.contains_key(&5400) && alive.contains_key(&5401),
             "the daemon's subtree survives"
         );
+    }
+
+    /// The sweep and shutdown agree: a daemon match still in the agent's group is a member, so it
+    /// and what it started elsewhere are stopped; one that left the group is spared.
+    #[test]
+    fn a_daemon_match_in_the_group_is_stopped_with_its_subtree() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        write_file(
+            dir.path(),
+            dead_instance(),
+            vec![entry(5001, T0, Vec::new())],
+            T0 + 600,
+        );
+        let gateway = ["python3", "-m", "hermes_cli.main", "gateway", "run"];
+        let fake = Fake::new(vec![
+            proc(5001, 1, 5001, 42, T0, &["hermes", "acp"]),
+            // In the agent's group: a member, with a PTY host that left the group below it.
+            proc(5500, 5001, 5001, 42, T0 + 1, &gateway),
+            proc(5501, 5500, 5501, 5501, T0 + 2, &["pty-host"]),
+            // Outside the group: spared with its child.
+            proc(5600, 5001, 5600, 5600, T0 + 3, &gateway),
+            proc(5601, 5600, 5600, 5600, T0 + 4, &["gateway-worker"]),
+        ]);
+        let report = sweep(dir.path(), &own(), &fake);
+        let mut killed: Vec<u32> = report.killed.iter().map(|(pid, _)| *pid).collect();
+        killed.sort_unstable();
+        assert_eq!(killed, [5001, 5500, 5501], "{report:?}");
+        let alive = fake.alive.lock().expect("lock");
+        assert!(alive.contains_key(&5600) && alive.contains_key(&5601));
     }
 
     #[test]
