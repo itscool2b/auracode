@@ -772,13 +772,18 @@ spaces, Linux `/proc/<pid>/cmdline` split on NUL). Declared in M1a:
 Everything else an agent starts (shells, dev servers, watchers, PTY hosts that called `setsid`, Node children spawned
 `detached`) dies at Stop, force stop, crash cleanup and quit, which matches Windows, where the job kills them. A
 vendor daemon that only changed its process group while still parented under the agent is protected by its
-declaration, not by its group. Agents are spawned with `process_group(0)`, not `setsid`.
+declaration, not by its group. A match still in the agent's group is a member like any other: it dies with the
+group, and its subtree is not spared (the sweep applies the same rule). Agents are spawned with `process_group(0)`,
+not `setsid`.
 
-`kill_tree()` is step 0 and step 5 at once: `killpg(pgid, SIGKILL)` runs inline, so it works from a run-event
-callback with no runtime; the walk for escaped descendants runs on the runtime handle captured at spawn (best effort
-when the process is exiting; the registry's escaped list covers the next sweep). On Windows it is a non-blocking
-request to the waiter, and the job dies with auracode in any case. After every turn the session calls
-`record_escaped()`, so a crash leaves the next sweep a list of the agent's escaped descendants.
+`kill_tree()` is step 0 and step 5 at once, and needs no runtime (a run-event callback has none):
+`killpg(pgid, SIGSTOP)` runs inline, so nothing in the group can exit, fork or orphan its children; a walk on a thread
+of its own then sends SIGKILL to the escaped descendants it finds, to the group, and to the recorded escaped
+descendants that still run as themselves. It returns once that is done, or after 1 s with `killpg(pgid, SIGKILL)`
+sent itself. Once the waiter has reaped the agent, the group's id is free for a new group, so nothing signals the group
+after it was seen empty, or once the agent's pid names a new process. On Windows it is a non-blocking request to the
+waiter, and the job dies with auracode in any case. After every turn the session calls `record_escaped()`, so a crash
+leaves the next sweep a list of the agent's escaped descendants.
 
 Timings: codex-acp closes its app-server's stdin on its own stdin EOF and sends SIGTERM 2 s later, so EOF needs more
 than 2 s; claude-agent-acp exits on stdin EOF; Claude's SDKs wait 5 s.
@@ -860,7 +865,9 @@ Windows: base = `process_env()` minus `strip_launch_context`; every value of HKL
 `SYSTEM\CurrentControlSet\Control\Session Manager\Environment`, then of HKCU `Environment` (user wins), read with
 `winreg`, `REG_EXPAND_SZ` expanded by `expand_env_strings` (`%NAME%` case-insensitive, unknown names kept literally,
 cycle guard); `PATH` = `merge_windows_path(system, user, process)`: system, then user, then process entries not yet
-present, de-duplicated case-insensitively, first occurrence kept. Runs on a blocking thread.
+present, de-duplicated case-insensitively, first occurrence kept. Runs on a blocking thread. `USERNAME` and
+`PROCESSOR_ARCHITECTURE` keep the base's values, in the expansion too: HKLM's are `SYSTEM` and the machine's own
+architecture (Windows' `CreateEnvironmentBlock` and Chocolatey's `refreshenv` keep the logon's as well).
 
 Caching: started at boot in the background; boot never waits. `get()` shares the in-flight attempt; a failed attempt
 older than 60 s is retried on the next `get()`; `refresh()` starts a new one; running sessions keep the env they
@@ -925,11 +932,11 @@ processing order, from the driver), `note`. `t` is for humans; replay uses line 
 
 | Limit | Value | Behaviour |
 |---|---|---|
-| record | 256 KiB | longer: the first 128 KiB plus `"truncated": n` |
+| record | 256 KiB | longer: `{"t","d","raw","truncated"}`, with the record's own `d`, the first 128 KiB of its payload as text in `raw` (a `msg`, `cmd` or `note` serialized first) and the bytes cut in `truncated`; nothing in it can be replayed |
 | file | 8 MiB | rotate; 3 files per spawn, the oldest deleted |
 | total | 256 MiB per profile | oldest files first |
 | age | 14 days | deleted |
-| queue | 4,096 records | full: drop and count; a `{"note":{"dropped":n}}` follows; the protocol path never waits |
+| queue | 4,096 records | full: drop and count; a `{"note":{"dropped":n}}` follows, at the latest when the log closes; the protocol path never waits |
 | I/O error, disk full | | logging for that spawn stops with one app-log warning |
 
 Retention runs at boot (background) and when a session ends.
