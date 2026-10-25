@@ -845,8 +845,9 @@ macOS and Linux:
 otherwise runs `/etc/zshrc_Apple_Terminal`'s session save and restore against the user's tab history, the "Restored
 session" output seen on this Mac), names starting with `npm_` (`npm_config_*`, `npm_package_*`, `npm_lifecycle_*`,
 `npm_execpath`, ...), `INIT_CWD`, names starting with `PNPM_` or `pnpm_`, and names starting with `TAURI_` (a
-`pnpm dev` launch). It applies only to the shell's input: whatever the user's own rc files export comes back through
-the shell's output. AppImage's additions (`APPDIR`, `APPIMAGE`, `ARGV0`, `OWD`, AppRun's `LD_LIBRARY_PATH` and GTK
+`pnpm dev` launch). Names and prefixes compare case-sensitively on every OS, unlike the scrub's (3.7): npm, pnpm and
+Tauri set them in a fixed case, and a user's own `NPM_TOKEN` or `NPM_CONFIG_REGISTRY` must survive on Windows too. It
+applies only to the shell's input: whatever the user's own rc files export comes back through the shell's output. AppImage's additions (`APPDIR`, `APPIMAGE`, `ARGV0`, `OWD`, AppRun's `LD_LIBRARY_PATH` and GTK
 variables) join this list in M5, when the AppImage exists.
 
 Windows: base = `process_env()` minus `strip_launch_context`; every value of HKLM

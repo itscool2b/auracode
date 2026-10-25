@@ -330,8 +330,11 @@ const LAUNCH_CONTEXT_NAMES: &[&str] = &[
 const LAUNCH_CONTEXT_PREFIXES: &[&str] = &["SHELL_SESSION_", "npm_", "PNPM_", "pnpm_", "TAURI_"];
 
 /// Removes the variables that describe how auracode itself was launched; returns their names,
-/// sorted. Applies to the resolver shell's input and to the fallback. Names compare as
-/// [`EnvKey`]s do (ASCII case-insensitively on Windows).
+/// sorted. Applies to the resolver shell's input and to the fallback.
+///
+/// Names and prefixes compare case-sensitively on every OS, unlike the scrub's: npm, pnpm and Tauri
+/// set these names in a fixed case, and a user's own `NPM_TOKEN` or `NPM_CONFIG_REGISTRY` must
+/// reach the shell on Windows too.
 pub fn strip_launch_context(vars: &mut EnvMap) -> Vec<String> {
     let doomed: Vec<EnvKey> = vars
         .keys()
@@ -353,12 +356,10 @@ fn is_launch_context(name: &OsStr) -> bool {
     let Some(name) = name.to_str() else {
         return false;
     };
-    LAUNCH_CONTEXT_NAMES
-        .iter()
-        .any(|exact| scrub::name_eq(name, exact))
+    LAUNCH_CONTEXT_NAMES.contains(&name)
         || LAUNCH_CONTEXT_PREFIXES
             .iter()
-            .any(|prefix| scrub::name_starts_with(name, prefix))
+            .any(|prefix| name.starts_with(prefix))
 }
 
 /// Words that make a variable's value a secret, compared ignoring ASCII case.
@@ -470,6 +471,38 @@ mod tests {
             ]
         );
         assert_eq!(names(&vars), ["HOME", "PATH", "SHELL", "TERM"]);
+    }
+
+    /// On Windows too: the scrub ignores case there, launch context never does.
+    #[test]
+    fn launch_context_names_match_case_sensitively_on_every_os() {
+        let mut vars = map(&[
+            ("npm_config_user_agent", "pnpm/12"),
+            ("NPM_TOKEN", "npm_0123456789abcdef"),
+            ("NPM_CONFIG_REGISTRY", "https://registry.example.com/"),
+            ("Pnpm_Store", "/x"),
+            ("tauri_cli_flag", "1"),
+            ("Term_Program", "vscode"),
+            ("init_cwd", "/repo"),
+            ("shell_session_dir", "/y"),
+        ]);
+        let removed = strip_launch_context(&mut vars);
+        assert_eq!(removed, ["npm_config_user_agent"]);
+        // Sorted here: a Windows map orders its keys ignoring case.
+        let mut kept = names(&vars);
+        kept.sort();
+        assert_eq!(
+            kept,
+            [
+                "NPM_CONFIG_REGISTRY",
+                "NPM_TOKEN",
+                "Pnpm_Store",
+                "Term_Program",
+                "init_cwd",
+                "shell_session_dir",
+                "tauri_cli_flag",
+            ]
+        );
     }
 
     #[test]

@@ -171,7 +171,7 @@ pub fn scrub(vars: &mut EnvMap) -> ScrubReport {
 }
 
 /// Name equality as the OS sees it: exact on Unix, ASCII case-insensitive on Windows.
-pub(super) fn name_eq(name: &str, other: &str) -> bool {
+fn name_eq(name: &str, other: &str) -> bool {
     if cfg!(windows) {
         name.eq_ignore_ascii_case(other)
     } else {
@@ -180,7 +180,7 @@ pub(super) fn name_eq(name: &str, other: &str) -> bool {
 }
 
 /// Prefix match with [`name_eq`]'s case rule.
-pub(super) fn name_starts_with(name: &str, prefix: &str) -> bool {
+fn name_starts_with(name: &str, prefix: &str) -> bool {
     name.get(..prefix.len())
         .is_some_and(|head| name_eq(head, prefix))
 }
