@@ -59,6 +59,7 @@ crates/aura-protocol/   shared types: AuraEvent, event frames, capabilities (ser
 crates/aura-core/       device identity, data folder, profiles, the per-profile SQLite store
 crates/aura-drivers/    frame batching for the UI and the scripted mock agent; agent drivers arrive in M1
 apps/desktop/           Tauri v2 app: Rust shell in src-tauri/, React UI in src/
+apps/design-lab/        M1a Design Lab: visual directions rendered from a recorded chat (see its README)
 packages/ui/            Aura design system: tokens, fonts, glass, motion, Orb, AuraField
 docs/                   plan and spike write-ups; spike code sits next to its write-up in docs/spikes/,
                         and docs/spikes/doc-check/ tests the write-ups against the code they cite

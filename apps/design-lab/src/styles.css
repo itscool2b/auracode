@@ -1,0 +1,57 @@
+@import "tailwindcss";
+@import "@auracode/ui/fonts.css";
+@import "@auracode/ui/tokens.css";
+
+/*
+ * Lab-wide base styles. Shared: directions bring their own CSS from their folders (see the README).
+ * No Tailwind-only syntax here, so the file stays plain CSS for Biome.
+ */
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #050507;
+    color: var(--aura-text-1);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--aura-focus-ring);
+    outline-offset: 2px;
+  }
+
+  code,
+  pre,
+  kbd {
+    font-family: var(--font-mono);
+  }
+}
+
+/*
+ * `?motion=reduce` and the OS setting, one selector: the lab keeps <html data-motion> current (see
+ * src/lab/reducedMotion.ts). These mirror the reduced-motion block of @auracode/ui's tokens.css,
+ * which only a real OS setting can trigger.
+ */
+:root[data-motion="reduce"] {
+  --aura-duration-instant: 1ms;
+  --aura-duration-fast: 1ms;
+  --aura-duration-base: 1ms;
+  --aura-duration-slow: 1ms;
+  --aura-duration-slower: 1ms;
+  --aura-duration-ambient: 1ms;
+  --aura-duration-fade: 160ms;
+  --aura-ease-spring: var(--aura-ease-standard);
+  --aura-rise-distance: 0px;
+}

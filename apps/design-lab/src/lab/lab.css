@@ -1,0 +1,248 @@
+/* The lab's own pages and controls: gallery, HUD, error and not-found screens. */
+
+/* The element around a direction's App: fills the window, and scopes the direction's CSS. */
+.lab-direction {
+  position: absolute;
+  inset: 0;
+}
+
+.lab-hud {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 28px);
+  padding: 7px 10px;
+  border-radius: 14px;
+  background: rgb(14 14 18 / 0.78);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  color: rgb(255 255 255 / 0.86);
+  font: 12px / 1.2 var(--font-sans);
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.lab-hud[data-visible],
+.lab-hud:focus-within {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+.lab-hud-link,
+.lab-hud-state {
+  color: inherit;
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.lab-hud-link:hover,
+.lab-hud-state:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.lab-hud-states {
+  display: flex;
+  gap: 2px;
+}
+
+.lab-hud-state[aria-current="page"] {
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+}
+
+.lab-hud-select,
+.lab-hud-button {
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(255 255 255 / 0.06);
+  color: inherit;
+  font: inherit;
+}
+
+.lab-hud-button {
+  min-width: 52px;
+}
+
+.lab-hud-range {
+  width: 180px;
+  accent-color: #c9d6e2;
+}
+
+.lab-hud-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: rgb(255 255 255 / 0.6);
+  white-space: nowrap;
+}
+
+.lab-crash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 80px;
+  background: rgb(20 6 8 / 0.82);
+  color: #ffd3cf;
+  font: 13px / 1.5 var(--font-sans);
+}
+
+.lab-crash-title {
+  font-size: 18px;
+  color: #fff;
+}
+
+.lab-crash-message {
+  margin: 0;
+  font: 12px / 1.5 var(--font-mono);
+  white-space: pre-wrap;
+  overflow: auto;
+}
+
+.lab-missing {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #07070a;
+  color: rgb(255 255 255 / 0.7);
+  font: 14px / 1.5 var(--font-sans);
+}
+
+.lab-missing-title {
+  font: 40px / 1.1 var(--font-display);
+  color: #fff;
+}
+
+.lab-missing a {
+  color: #fff;
+}
+
+.lab-gallery {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  background: #07070a;
+  color: rgb(255 255 255 / 0.92);
+  font-family: var(--font-sans);
+}
+
+.lab-gallery .lab-wallpaper {
+  position: fixed;
+}
+
+.lab-gallery-inner {
+  position: relative;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 72px 40px 80px;
+}
+
+.lab-gallery-header {
+  margin-bottom: 40px;
+}
+
+.lab-gallery-kicker {
+  color: rgb(255 255 255 / 0.5);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lab-gallery-title {
+  margin: 4px 0 10px;
+  font: 64px / 1 var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.lab-gallery-lede {
+  color: rgb(255 255 255 / 0.62);
+  font-size: 15px;
+}
+
+.lab-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 28px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lab-gallery-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.lab-gallery-preview {
+  position: relative;
+  display: block;
+  aspect-ratio: 1440 / 900;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
+  background: #0b0b0f;
+}
+
+.lab-gallery-preview iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  pointer-events: none;
+}
+
+.lab-gallery-preview:focus-visible {
+  outline: 2px solid #c9d6e2;
+  outline-offset: 3px;
+}
+
+.lab-gallery-name {
+  font: 30px / 1.1 var(--font-display);
+}
+
+.lab-gallery-tagline {
+  margin-top: 4px;
+  color: rgb(255 255 255 / 0.62);
+  font-size: 14px;
+}
+
+.lab-gallery-states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.lab-gallery-states a {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  color: rgb(255 255 255 / 0.82);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.lab-gallery-states a:hover {
+  background: rgb(255 255 255 / 0.08);
+}
