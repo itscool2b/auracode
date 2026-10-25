@@ -5,12 +5,16 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use aura_agents::{Detector, FixedAgent};
-use aura_drivers::driver::{DriverEvent, DriverExit, ReadyInfo, ResumeOutcome};
+use aura_drivers::driver::{
+    AgentDriver, DriverContext, DriverEvent, DriverExit, ReadyInfo, ResumeOutcome,
+};
 use aura_drivers::testing::{CommandMatch, ScriptedDriver, Step};
 use aura_process::testing::{FakeAgentEnd, FakeCall, FakeSpawner};
 use aura_process::{EnvKey, EnvMap, LaunchSpec, ProcessCwd, ResolvedEnv};
 use aura_protocol::session::{PauseReason, StorageState};
 use aura_protocol::{AuraEvent, Capabilities, StopReason};
+use futures::FutureExt;
+use futures::future::BoxFuture;
 
 use super::*;
 use crate::chatstore::WriterConfig;
@@ -66,6 +70,14 @@ fn delta(text: &str) -> Step {
 }
 
 fn rig(drivers: Vec<ScriptedDriver>, config: WriterConfig, knobs: Knobs) -> Rig {
+    rig_with(
+        aura_drivers::testing::ScriptedDriverFactory::new(drivers),
+        config,
+        knobs,
+    )
+}
+
+fn rig_with(drivers: Arc<dyn DriverFactory>, config: WriterConfig, knobs: Knobs) -> Rig {
     let dir = tempfile::tempdir().expect("tempdir");
     let profile = Profiles::new(DataRoot::at(dir.path().join("data")))
         .open_active()
@@ -109,7 +121,7 @@ fn rig(drivers: Vec<ScriptedDriver>, config: WriterConfig, knobs: Knobs) -> Rig 
             env,
             spawner: spawner.clone(),
             detector,
-            drivers: aura_drivers::testing::ScriptedDriverFactory::new(drivers),
+            drivers,
             logs,
             redactor,
             device_id: "device".into(),
@@ -785,6 +797,111 @@ async fn a_blob_read_follows_the_chats_own_put_blob() {
         read_blob(&rig, &chat.id, &sha).await.expect("whole"),
         big_output()
     );
+}
+
+/// A driver that reports `Ready`, drops its event sender, and then never returns: only an abort
+/// ends it, which it records.
+struct DropsItsEvents {
+    aborted: Arc<AtomicBool>,
+}
+
+/// Records that the future holding it was dropped, as an abort does.
+struct SetOnDrop(Arc<AtomicBool>);
+
+impl Drop for SetOnDrop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+
+impl AgentDriver for DropsItsEvents {
+    fn run(self: Box<Self>, ctx: DriverContext) -> BoxFuture<'static, DriverExit> {
+        let aborted = SetOnDrop(self.aborted);
+        async move {
+            let _aborted = aborted;
+            let DriverContext {
+                commands, events, ..
+            } = ctx;
+            let ready = DriverEvent::Ready(ReadyInfo {
+                native_session_id: "n1".into(),
+                agent_name: None,
+                agent_version: None,
+                capabilities: Capabilities::default(),
+                resumed: ResumeOutcome::New,
+                spawn_id: "spawn-1".into(),
+                replay: None,
+            });
+            if let Ok(permit) = events.reserve(ready.approx_bytes()).await {
+                permit.send(ready);
+            }
+            drop(events);
+            let _commands = commands;
+            std::future::pending::<DriverExit>().await
+        }
+        .boxed()
+    }
+}
+
+/// Hands out one driver; later starts fail.
+struct OneDriver(Mutex<Option<Box<dyn AgentDriver>>>);
+
+impl DriverFactory for OneDriver {
+    fn create(&self, _kind: aura_protocol::DriverKind) -> Box<dyn AgentDriver> {
+        lock(&self.0).take().unwrap_or_else(|| {
+            Box::new(
+                ScriptedDriver::new(vec![Step::Exit(DriverExit::StartFailed(
+                    aura_drivers::driver::DriverError {
+                        kind: aura_protocol::ErrorKind::Internal,
+                        message: "The test has no driver left for this start.".into(),
+                        detail: None,
+                    },
+                ))])
+                .0,
+            )
+        })
+    }
+}
+
+/// 6.5.4 force stop, step 3, and 6.5.6: a driver that already dropped its event sender and then
+/// hangs is still aborted 5 s after the kill; until it ends, the chat keeps its live slot.
+#[tokio::test(start_paused = true)]
+async fn force_stop_aborts_a_driver_whose_events_already_closed() {
+    let aborted = Arc::new(AtomicBool::new(false));
+    let driver: Box<dyn AgentDriver> = Box::new(DropsItsEvents {
+        aborted: Arc::clone(&aborted),
+    });
+    let rig = rig_with(
+        Arc::new(OneDriver(Mutex::new(Some(driver)))),
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+    );
+    let chat = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("create");
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    // Let the actor see the event channel close, so the join leaves the driver first.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    rig.manager.force_stop(&chat.id).await.expect("force stop");
+    status(&rig, &chat.id, SessionStatus::Stopped).await;
+    assert!(!aborted.load(Ordering::SeqCst));
+    assert!(
+        rig.manager.has_live_sessions(),
+        "the chat keeps its slot while its driver runs"
+    );
+    let started = tokio::time::Instant::now();
+    let probe = Arc::clone(&aborted);
+    eventually("the wedged driver is aborted", || {
+        probe.load(Ordering::SeqCst)
+    })
+    .await;
+    assert!(
+        started.elapsed() < Duration::from_secs(6),
+        "aborted 5 s after the kill: {:?}",
+        started.elapsed()
+    );
+    eventually("its slot is free", || !rig.manager.has_live_sessions()).await;
 }
 
 /// S22: a chat actor that panics: its processes are killed, its views end, the chat reads

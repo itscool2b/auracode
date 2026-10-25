@@ -2,8 +2,9 @@
 //! chats.
 //!
 //! A chat holds a slot from the moment its start begins (preparation included) until its driver
-//! ended, so a 13th start fails at once instead of evicting anything. A native session is claimed
-//! for the resume id before spawning and again for the id the agent returns at `Ready`: two
+//! ended and the processes a force stop or a crash kills are gone, so a 13th start fails at once
+//! instead of evicting anything. A native session is claimed for the resume id before spawning and
+//! again for the id the agent returns at `Ready`, and stays claimed as long as the slot: two
 //! processes on one session interleave one transcript (the Claude spike), so the second chat is
 //! refused.
 

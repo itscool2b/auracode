@@ -9,8 +9,10 @@
 //! chains, and the abort of a driver that has not returned 5 s after a kill.
 //!
 //! Drivers are generations: a force stop retires the current one at once (its event receiver is
-//! dropped, so no late event is ever applied, and its processes get the FORCE chain), and a new start
-//! can begin while the retired task still winds down.
+//! dropped, so no late event is ever applied, and its processes get the FORCE chain), and the chat
+//! reads `Stopped` at once. A retired generation, like one that crashed, keeps the chat's live slot
+//! and native sessions until its processes are gone and its task ended; a new start waits for that
+//! before it spawns anything, so one native session never has two processes.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -24,7 +26,9 @@ use aura_drivers::driver::{
     DriverTimings, EventReceiver, PermissionOutcome, ReadyInfo, ResumeOutcome, SessionSetup,
     StopPlan, TurnRef, event_channel,
 };
-use aura_process::{ExitInfo, LaunchSpec, ResolvedEnv, STDERR_TAIL_SHOWN_BYTES, ShutdownPlan};
+use aura_process::{
+    ExitInfo, LaunchSpec, ProcessControl, ResolvedEnv, STDERR_TAIL_SHOWN_BYTES, ShutdownPlan,
+};
 use aura_protocol::session::{
     AuthPrompt, Availability, ChatAttach, ChatSnapshot, ChatSummary, ConfigCategory, ConfigKind,
     ConfigOption, ConfigValue, ErrorInfo, FolderState, HistoryPage, PromptAck, QueuedPrompt,
@@ -38,7 +42,7 @@ use aura_protocol::{
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use futures::stream::{FuturesUnordered, StreamExt};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::{AbortHandle, JoinError, JoinHandle};
 use tokio::time::Instant;
 
@@ -269,6 +273,8 @@ struct LiveDriver {
     events: Option<EventReceiver>,
     /// Joins `in_flight` once the event channel closed.
     join: Option<JoinHandle<DriverExit>>,
+    /// Aborts the driver's task, wherever its join handle went.
+    abort: AbortHandle,
     ready: bool,
     stop: Stop,
     spawn_id: Option<String>,
@@ -338,6 +344,8 @@ enum Done {
         generation: u64,
         result: Result<DriverExit, JoinError>,
     },
+    /// A FORCE chain on a process of a retired generation ended.
+    Retired(u64),
     Abort(AbortHandle),
     Nothing,
 }
@@ -379,6 +387,12 @@ pub(crate) struct ChatActor {
     progress: Option<mpsc::UnboundedReceiver<String>>,
     in_flight: FuturesUnordered<BoxFuture<'static, Done>>,
     generation: u64,
+    /// Generations force-stopped or crashed whose processes or task still wind down, with how many
+    /// FORCE chains and joins each still waits for. They keep the chat's live slot and native
+    /// sessions, and a new start waits for them.
+    retiring: Vec<(u64, usize)>,
+    /// How many generations retire, for the preparation of a start to wait on.
+    winding_down: watch::Sender<usize>,
     agent_session: Option<AgentSessionRow>,
     autonomy: Autonomy,
     autonomy_state: AutonomyState,
@@ -471,6 +485,8 @@ impl ChatActor {
             progress: None,
             in_flight: FuturesUnordered::new(),
             generation: 0,
+            retiring: Vec::new(),
+            winding_down: watch::Sender::new(0),
             agent_session,
             autonomy,
             autonomy_state: stopped_autonomy(autonomy, None),
@@ -1144,37 +1160,27 @@ impl ChatActor {
         if let Some(mut driver) = self.driver.take() {
             // No late event of this driver is ever applied.
             driver.events = None;
-            for control in self.book.close(driver.generation) {
-                self.in_flight.push(
-                    async move {
-                        let chain = control.shutdown(ShutdownPlan::FORCE);
-                        let _report = chain.await;
-                        drop(control);
-                        Done::Nothing
-                    }
-                    .boxed(),
-                );
-            }
             let generation = driver.generation;
-            if let Some(join) = driver.join.take() {
-                let abort = join.abort_handle();
-                self.in_flight.push(
-                    async move {
-                        Done::DriverJoined {
-                            generation,
-                            result: join.await,
-                        }
-                    }
-                    .boxed(),
-                );
-                self.in_flight.push(
-                    async move {
-                        tokio::time::sleep(ABORT_AFTER_KILL).await;
-                        Done::Abort(abort)
-                    }
-                    .boxed(),
-                );
+            let controls = self.book.close(generation);
+            // Each FORCE chain and the driver's join: the generation keeps the chat's live slot and
+            // native sessions until its processes are gone and its task ended.
+            self.retire(generation, controls.len() + 1);
+            for control in controls {
+                self.in_flight.push(force_chain(generation, control));
             }
+            // The join is still here, or already in `in_flight` when the event channel closed first;
+            // either way its `DriverJoined` comes, at the latest once the abort below lands.
+            if let Some(join) = driver.join.take() {
+                self.in_flight.push(join_driver(generation, join));
+            }
+            let abort = driver.abort.clone();
+            self.in_flight.push(
+                async move {
+                    tokio::time::sleep(ABORT_AFTER_KILL).await;
+                    Done::Abort(abort)
+                }
+                .boxed(),
+            );
             // Retired: its commands channel closes with it, and its exit counts as this stop.
             drop(driver.commands);
         }
@@ -1226,7 +1232,7 @@ impl ChatActor {
         for event in self.normalizer.close_untagged(ResolvedBy::System, now) {
             self.push_normalized(event, None);
         }
-        self.shared.live.release(&self.chat_id);
+        self.release_if_idle();
         self.set_status(SessionStatus::Stopped, None);
         self.refresh_attention();
         self.flush();
@@ -1250,7 +1256,7 @@ impl ChatActor {
                 preparing.abort.abort();
                 self.progress = None;
             }
-            self.shared.live.release(&self.chat_id);
+            self.release_if_idle();
             self.set_status(SessionStatus::Stopped, None);
             return;
         }
@@ -1313,7 +1319,7 @@ impl ChatActor {
                     if let Some(preparing) = self.preparing.take() {
                         preparing.abort.abort();
                         self.progress = None;
-                        self.shared.live.release(&self.chat_id);
+                        self.release_if_idle();
                         self.status = SessionStatus::Stopped;
                     } else {
                         self.pending_start = Some(true);
@@ -1357,6 +1363,7 @@ impl ChatActor {
         let (progress, details) = mpsc::unbounded_channel();
         self.progress = Some(details);
         let folder = self.chat.folder.clone();
+        let winding_down = self.winding_down.subscribe();
         let deps = &self.shared.deps;
         let task = deps.rt.spawn(prepare(
             folder,
@@ -1364,6 +1371,7 @@ impl ChatActor {
             Arc::clone(&deps.detector),
             Arc::clone(&deps.env),
             progress,
+            winding_down,
         ));
         let abort = task.abort_handle();
         self.in_flight.push(
@@ -1482,6 +1490,7 @@ impl ChatActor {
             generation,
             commands,
             events: Some(event_rx),
+            abort: join.abort_handle(),
             join: Some(join),
             ready: false,
             stop: Stop::None,
@@ -1725,7 +1734,7 @@ impl ChatActor {
         if let Some(preparing) = self.preparing.take() {
             preparing.abort.abort();
             self.progress = None;
-            self.shared.live.release(&self.chat_id);
+            self.release_if_idle();
             self.set_status(SessionStatus::Stopped, None);
         }
         let stoppable = self
@@ -1826,6 +1835,7 @@ impl ChatActor {
                 drop(reply.send(Ok(self.lists())));
             }
             Done::DriverJoined { generation, result } => self.on_driver_joined(generation, result),
+            Done::Retired(generation) => self.retired_one(generation),
             Done::Abort(abort) => abort.abort(),
             Done::Nothing => {}
         }
@@ -2383,15 +2393,7 @@ impl ChatActor {
         driver.events = None;
         let generation = driver.generation;
         if let Some(join) = driver.join.take() {
-            self.in_flight.push(
-                async move {
-                    Done::DriverJoined {
-                        generation,
-                        result: join.await,
-                    }
-                }
-                .boxed(),
-            );
+            self.in_flight.push(join_driver(generation, join));
         }
     }
 
@@ -2403,6 +2405,7 @@ impl ChatActor {
         if !current {
             // A retired (force-stopped) driver ended: its exit counts as that stop.
             self.book.clear(generation);
+            self.retired_one(generation);
             return;
         }
         let Some(driver) = self.driver.take() else {
@@ -2419,7 +2422,7 @@ impl ChatActor {
         if self.conflict {
             self.conflict = false;
             self.kill_generation(generation);
-            self.shared.live.release(&self.chat_id);
+            self.release_if_idle();
             self.set_status(SessionStatus::Failed, None);
             self.after_stop();
             return;
@@ -2454,26 +2457,64 @@ impl ChatActor {
         }
     }
 
-    /// The FORCE chain on every process of `generation`, then the record is cleared.
+    /// The FORCE chain on every process of `generation` (whose driver ended), then the record is
+    /// cleared; the generation retires until the chains end.
     fn kill_generation(&mut self, generation: u64) {
-        for control in self.book.close(generation) {
-            self.in_flight.push(
-                async move {
-                    let chain = control.shutdown(ShutdownPlan::FORCE);
-                    let _report = chain.await;
-                    drop(control);
-                    Done::Nothing
-                }
-                .boxed(),
-            );
+        let controls = self.book.close(generation);
+        self.retire(generation, controls.len());
+        for control in controls {
+            self.in_flight.push(force_chain(generation, control));
         }
         self.book.clear(generation);
+    }
+
+    /// `generation` was force-stopped or crashed: it keeps the chat's live slot and native sessions
+    /// until `outstanding` more FORCE chains and joins of it have ended.
+    fn retire(&mut self, generation: u64, outstanding: usize) {
+        if outstanding == 0 {
+            return;
+        }
+        match self
+            .retiring
+            .iter_mut()
+            .find(|(retired, _)| *retired == generation)
+        {
+            Some((_, left)) => *left = left.saturating_add(outstanding),
+            None => self.retiring.push((generation, outstanding)),
+        }
+        self.winding_down.send_replace(self.retiring.len());
+    }
+
+    /// A FORCE chain or the join of a retired generation ended; the last one frees what it held.
+    fn retired_one(&mut self, generation: u64) {
+        let Some(at) = self
+            .retiring
+            .iter()
+            .position(|(retired, _)| *retired == generation)
+        else {
+            return;
+        };
+        let left = &mut self.retiring[at].1;
+        *left = left.saturating_sub(1);
+        if *left == 0 {
+            self.retiring.remove(at);
+            self.winding_down.send_replace(self.retiring.len());
+            self.release_if_idle();
+        }
+    }
+
+    /// Gives the chat's live slot and native sessions back once nothing of it runs: no driver, no
+    /// start preparation, and no retired generation whose processes or task still wind down.
+    fn release_if_idle(&self) {
+        if self.driver.is_none() && self.preparing.is_none() && self.retiring.is_empty() {
+            self.shared.live.release(&self.chat_id);
+        }
     }
 
     /// The driver closed as asked.
     fn closed(&mut self, generation: u64, auth: bool) {
         self.book.clear(generation);
-        self.shared.live.release(&self.chat_id);
+        self.release_if_idle();
         let now = now_millis();
         if let Some(turn) = self.turn.take() {
             // The cancel grace ran out before the turn's own end.
@@ -2531,7 +2572,7 @@ impl ChatActor {
     /// The driver ended without being asked (or panicked, or was aborted).
     fn crashed(&mut self, generation: u64, message: String, stderr_tail: Option<String>) {
         self.kill_generation(generation);
-        self.shared.live.release(&self.chat_id);
+        self.release_if_idle();
         let detail = stderr_tail
             .map(|tail| self.error_text(&tail, true))
             .filter(|tail| !tail.trim().is_empty());
@@ -2669,7 +2710,7 @@ impl ChatActor {
         detail: Option<String>,
         auth: bool,
     ) {
-        self.shared.live.release(&self.chat_id);
+        self.release_if_idle();
         let message = self.error_text(&message, false);
         self.last_error = Some(ErrorInfo {
             kind,
@@ -3198,6 +3239,27 @@ fn elapsed_ms(started: Instant) -> u64 {
     u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
+/// The FORCE chain on one process of a retired `generation`.
+fn force_chain(generation: u64, control: ProcessControl) -> BoxFuture<'static, Done> {
+    async move {
+        let _report = control.shutdown(ShutdownPlan::FORCE).await;
+        drop(control);
+        Done::Retired(generation)
+    }
+    .boxed()
+}
+
+/// A driver's task, once it returns (or is aborted).
+fn join_driver(generation: u64, join: JoinHandle<DriverExit>) -> BoxFuture<'static, Done> {
+    async move {
+        Done::DriverJoined {
+            generation,
+            result: join.await,
+        }
+    }
+    .boxed()
+}
+
 async fn sleep_until(at: Option<Instant>) {
     match at {
         Some(at) => tokio::time::sleep_until(at).await,
@@ -3220,14 +3282,19 @@ async fn next_progress(progress: &mut Option<mpsc::UnboundedReceiver<String>>) -
 }
 
 /// A start's preparation: the folder, detection, the adapter install and launch spec, the env. One
-/// task, so dropping it (Esc, force stop, Stop, quit) kills a running install or probe.
+/// task, so dropping it (Esc, force stop, Stop, quit) kills a running install or probe. It begins
+/// once no earlier generation of the chat winds down: a process still being killed holds its native
+/// session, which this start may resume.
 async fn prepare(
     folder: PathBuf,
     spec: AgentSpec,
     detector: Arc<aura_agents::Detector>,
     env: Arc<aura_process::EnvResolver>,
     progress: mpsc::UnboundedSender<String>,
+    mut winding_down: watch::Receiver<usize>,
 ) -> Result<Prepared, StartFailure> {
+    // The actor holds the sender for as long as this task can matter.
+    let _ = winding_down.wait_for(|retiring| *retiring == 0).await;
     check_folder(folder).await?;
     match detector.detect(&spec).await {
         Availability::Missing { reason } | Availability::Broken { reason } => {

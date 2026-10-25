@@ -662,6 +662,65 @@ async fn one_process_per_native_session() {
     );
 }
 
+/// S28 and S20 after a force stop: the chat reads `Stopped` at once, but it keeps its native
+/// session and its live slot until its process is gone and its wedged driver was aborted (5 s), so
+/// another chat cannot take the slot meanwhile and an immediate Retry waits instead of opening the
+/// same session in a second process.
+#[tokio::test(start_paused = true)]
+async fn a_force_stopped_agent_holds_its_session_until_its_process_is_gone() {
+    let options = Options {
+        agents: vec![with_process(mock_spec())],
+        limits: ManagerLimits {
+            max_live_agents: 1,
+            ..ManagerLimits::STANDARD
+        },
+        ..Options::default()
+    };
+    let (wedged, _) = ScriptedDriver::new(vec![
+        Step::Spawn(launch()),
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Hang,
+    ]);
+    let (resumed, _) = ScriptedDriver::new(vec![Step::Spawn(launch()), ready_step("n1")]);
+    let h = Harness::with(vec![wedged, resumed], options);
+    let a = h.chat().await;
+    h.status(&a.id, SessionStatus::Ready).await;
+    h.manager.send(&a.id, "go".into()).await.expect("send");
+    h.status(&a.id, SessionStatus::Running).await;
+    h.manager.force_stop(&a.id).await.expect("force stop");
+    h.status(&a.id, SessionStatus::Stopped).await;
+    let stopped = tokio::time::Instant::now();
+    assert!(
+        h.manager.has_live_sessions(),
+        "its process is still being killed"
+    );
+    let b = h.chat().await;
+    h.status(&b.id, SessionStatus::Failed).await;
+    assert_eq!(
+        errors(&h.stored(&b.id).await),
+        [(
+            ErrorKind::SpawnFailed,
+            "1 agents are already running. Stop one, then try again.".to_owned()
+        )],
+        "the force-stopped agent still holds the only slot"
+    );
+    h.manager.start(&a.id, false).await.expect("Retry at once");
+    let probe = Arc::clone(&h.factory);
+    eventually("the Retry's driver starts", || probe.setups().len() == 2).await;
+    assert!(
+        stopped.elapsed() >= Duration::from_secs(4),
+        "the Retry waited for the wedged driver's abort: {:?}",
+        stopped.elapsed()
+    );
+    assert!(
+        h.spawner.controls()[0].was_killed(),
+        "the old process was gone before the new driver started"
+    );
+    h.status(&a.id, SessionStatus::Ready).await;
+    assert_eq!(h.factory.setups()[1].resume.as_deref(), Some("n1"));
+}
+
 /// S35: a second process cannot own the profile; the first one's chats keep working.
 #[tokio::test(start_paused = true)]
 async fn second_owner_is_refused() {
