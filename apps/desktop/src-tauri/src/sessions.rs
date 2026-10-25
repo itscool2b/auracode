@@ -427,6 +427,7 @@ pub const EXIT_STORE_DEADLINE: Duration = Duration::from_secs(1);
 pub struct Quit {
     phase: Mutex<QuitPhase>,
     store_closed: AtomicBool,
+    /// Signals since auracode last kept running: the second one exits at once.
     signals: AtomicU32,
 }
 
@@ -478,7 +479,8 @@ impl Quit {
         self.store_closed.load(Ordering::Acquire)
     }
 
-    /// Counts a signal; returns how many arrived, this one included.
+    /// Counts a signal; returns how many arrived since auracode last kept running, this one
+    /// included.
     pub fn count_signal(&self) -> u32 {
         self.signals
             .fetch_add(1, Ordering::AcqRel)
@@ -491,8 +493,11 @@ impl Quit {
         self.finish();
     }
 
+    /// The user kept auracode open: the flow is over, so a later signal starts a new one instead
+    /// of counting as the second signal of this one.
     fn keep_running(&self) {
         *lock(&self.phase) = QuitPhase::Running;
+        self.signals.store(0, Ordering::Release);
     }
 
     fn finish(&self) {
@@ -698,8 +703,9 @@ pub trait SignalHost: Send + Sync + 'static {
 }
 
 /// What one signal does: the first starts the quit flow, any later one (the flow is running) kills
-/// every agent, closes the store within 1 s and exits with 128 plus the signal's number. Returns
-/// the exit code of a hard exit.
+/// every agent, closes the store within 1 s and exits with 128 plus the signal's number. Keeping
+/// auracode open at the flow's question starts the count over. Returns the exit code of a hard
+/// exit.
 pub fn on_signal(quit: &Quit, host: &impl SignalHost, number: i32) -> Option<i32> {
     if quit.count_signal() == 1 {
         tracing::info!(signal = number, "quitting on a signal");
@@ -1477,14 +1483,42 @@ mod tests {
         );
     }
 
+    /// Keeping auracode open at the quit question ends that flow: the next signal, however much
+    /// later, starts a new one rather than exiting at once and losing the unsaved data the
+    /// question protected. A second signal during the new flow still exits at once.
+    #[tokio::test]
+    async fn a_signal_after_keeping_auracode_open_quits_again() {
+        let quit = Quit::default();
+        let host = Arc::new(FakeSignals::default());
+        assert_eq!(on_signal(&quit, &host, 15), None);
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+        let flow = FakeHost::new(paused(PauseReason::DiskFull, 10), false);
+        assert_eq!(run_quit(&quit, &flow, 0).await, QuitOutcome::Kept);
+
+        assert_eq!(on_signal(&quit, &host, 2), None, "a new flow");
+        assert_eq!(*lock(&host.calls), ["request_exit", "request_exit"]);
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+        assert_eq!(on_signal(&quit, &host, 1), Some(129));
+        assert_eq!(
+            *lock(&host.calls),
+            [
+                "request_exit",
+                "request_exit",
+                "kill_now",
+                "close_store_now",
+                "exit_now 129"
+            ]
+        );
+    }
+
     /// Marks the re-executed copy of the test binary that receives real signals.
     #[cfg(unix)]
     const SIGNAL_CHILD: &str = "AURACODE_DESKTOP_TEST_SIGNAL_CHILD";
 
     /// Real signals, in a child copy of the test binary: once the handlers are installed, SIGTERM
-    /// asks for the quit flow and SIGINT during it exits with 130 after killing the agents and
-    /// closing the store. A child, because a handled SIGINT would stop Ctrl+C from ending the test
-    /// run itself.
+    /// asks for the quit flow; after the user keeps auracode open, SIGHUP asks for it again; and
+    /// SIGINT during that flow exits with 130 after killing the agents and closing the store. A
+    /// child, because a handled SIGINT would stop Ctrl+C from ending the test run itself.
     #[cfg(unix)]
     #[test]
     fn signal_starts_quit_flow() {
@@ -1526,6 +1560,11 @@ mod tests {
             send("TERM");
             wait_for(1).await;
             assert_eq!(*lock(&host.calls), ["request_exit"]);
+            // The quit question was answered with Keep auracode open.
+            quit.keep_running();
+            send("HUP");
+            wait_for(2).await;
+            assert_eq!(*lock(&host.calls), ["request_exit", "request_exit"]);
             send("INT");
             tokio::time::timeout(Duration::from_secs(5), task)
                 .await
@@ -1534,6 +1573,7 @@ mod tests {
             assert_eq!(
                 *lock(&host.calls),
                 [
+                    "request_exit",
                     "request_exit",
                     "kill_now",
                     "close_store_now",
