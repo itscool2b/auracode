@@ -656,6 +656,7 @@ impl LogFactory {
 #[derive(Clone)] pub struct ProtocolLog { /* Option<bounded sender>, dropped counter, spawn id */ }
 impl ProtocolLog {
     pub fn disabled() -> ProtocolLog;                         // carries a fresh UUIDv7 spawn id
+    pub fn disabled_with_id(spawn_id: impl Into<String>) -> ProtocolLog;   // carries this one (replay, 5.8)
     pub fn spawn_id(&self) -> &str;                           // copied into SpawnedProcess::spawn_id
     pub fn line(&self, direction: Direction, line: &str);     // non-blocking; drops and counts when full
     pub fn command(&self, command: serde_json::Value);
@@ -1747,8 +1748,9 @@ pub fn scan_clean(text: &str) -> Vec<String>;                     // emails, tok
 ```
 
 A fixture is a curated protocol log (3.8 format) plus fixture-only `{"d":"agent", ...}` records. On a current-thread
-runtime with paused time, `run` takes the `SessionSetup` from the `start` note (cwd `<CWD>`, test timings), then walks
-the records: `cmd` sends the matching `DriverCommand` (replies collected); `in` writes the line to the driver, a
+runtime with paused time, `run` takes the `SessionSetup` from the `start` note (cwd `<CWD>`, test timings) and spawns
+through `FakeSpawner` with `ProtocolLog::disabled_with_id(<the start note's spawn_id>)`, so the ids the driver mints
+outside a turn match the recording; then it walks the records: `cmd` sends the matching `DriverCommand` (replies collected); `in` writes the line to the driver, a
 response's `id` rewritten to the live id of the request it answers; `out` reads the next line the driver wrote (5 s
 virtual timeout) and compares kind, `method`, id correspondence, the permission `outcome`, and for `session/prompt`,
 `session/set_config_option`, `session/set_mode` and `session/set_model` the text, ids and value (paths and session ids
@@ -2783,7 +2785,7 @@ draft keep their numbers; new cases are appended to each table.
 |---|---|
 | `Cargo.toml`, `Cargo.lock`, every crate's `Cargo.toml` (new crates `aura-process`, `aura-agents`; the desktop gains both) | the dependencies and features of 1.1, including tokio `signal` and aura-drivers' `replay` feature; nobody else touches manifests or the lock until phase 2 |
 | `crates/aura-protocol/src/{lib.rs,session.rs,lenient.rs}` | all of section 2, with round-trip, `is_stored`, `kind` and lenient-enum tests |
-| `crates/aura-process/**` | every public item of 3.1. Stub bodies return errors such as `SpawnError::Spawn { source: io::Error::other("not implemented in this build") }`, never `todo!()` (clippy and `-D warnings` reject it). **Implemented:** `testing.rs` (`FakeSpawner`, `FakeControl`), `EnvResolver::fixed`, `ProtocolLog::disabled`, `strip_launch_context`, `child_env`, `scrub`. **Functional stubs:** `EnvResolver::start` resolves at once to `process_env()` minus `strip_launch_context` as `Fallback`; `LeftoverRegistry::open` returns `disabled()`; `LogFactory::open` returns `ProtocolLog::disabled()`; `Redactor::standard()` replaces only the secret literals (A adds the key rules and the patterns), and the stub `EnvResolver::start` hands its env's `secret_values` to the config's redactor. |
+| `crates/aura-process/**` | every public item of 3.1. Stub bodies return errors such as `SpawnError::Spawn { source: io::Error::other("not implemented in this build") }`, never `todo!()` (clippy and `-D warnings` reject it). **Implemented:** `testing.rs` (`FakeSpawner`, `FakeControl`), `EnvResolver::fixed`, `ProtocolLog::disabled` and `disabled_with_id`, `strip_launch_context`, `child_env`, `scrub`, `secret_values`. **Functional stubs:** `EnvResolver::start` resolves at once to `process_env()` minus `strip_launch_context` as `Fallback`; `LeftoverRegistry::open` returns `disabled()`; `LogFactory::open` returns `ProtocolLog::disabled()`; `Redactor::standard()` replaces only the secret literals (A adds the key rules and the patterns), and the stub `EnvResolver::start` hands its env's `secret_values` to the config's redactor. |
 | `crates/aura-agents/**` | the catalog data (complete), `Detector` signatures. **Implemented:** `Detector::fixed` (with `FixedAgent`, `Gate` and `forgotten`), `Detector::spec`, `parse_version`, `version_at_least`. **Functional stub:** `Detector::new` reports the mock `Ready` and every other agent `Missing { "detection is not built in this build" }`; `prepare_launch` works for `Builtin` |
 | `crates/aura-drivers/src/{lib.rs,driver.rs,testing.rs,batch.rs,mock.rs}`, plus empty module files with their declarations for B (`jsonrpc.rs`, `acp/{mod,wire,map,options,dialect,permissions}.rs`, `mock_driver.rs`, `factory.rs`, `replay/{mod,fixture,fake_agent,golden,curate}.rs`) | section 5.1 complete, `event_channel` included; `ScriptedDriver`, `ScriptHandle`, `ScriptedDriverFactory` and `DirectSpawner` implemented (5.7); the tagged push and flush in `batch.rs`; the rename fallout |
 | `crates/aura-core/{migrations/0002_sessions.sql,src/store.rs,src/store/salvage.rs,src/lib.rs,src/error.rs,src/owner.rs,src/chatstore/mod.rs,src/session/mod.rs}`, plus empty files for C's other modules | migration 0002 with its tests; `ProfileOwner` and `CoreError::ProfileInUse` implemented with a two-process test; the API skeletons of 6.1 and 6.4 |

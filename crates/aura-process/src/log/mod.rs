@@ -134,9 +134,13 @@ impl ProtocolLog {
         ProtocolLog::disabled_with_id(uuid::Uuid::now_v7().hyphenated().to_string())
     }
 
-    pub(crate) fn disabled_with_id(spawn_id: String) -> ProtocolLog {
+    /// A log that writes nothing, carrying `spawn_id`: a replay spawns with the recorded id, so the
+    /// ids a driver mints outside a turn match the golden events.
+    pub fn disabled_with_id(spawn_id: impl Into<String>) -> ProtocolLog {
         ProtocolLog {
-            inner: Arc::new(LogInner { spawn_id }),
+            inner: Arc::new(LogInner {
+                spawn_id: spawn_id.into(),
+            }),
         }
     }
 
@@ -266,6 +270,14 @@ mod tests {
         log.line(Direction::In, "{}");
         log.note(LogNote::Text("x".into()));
         log.command(serde_json::json!({"type": "interrupt"}));
+        assert_eq!(log.path(), None);
+    }
+
+    #[test]
+    fn a_disabled_log_can_carry_a_given_spawn_id() {
+        let log = ProtocolLog::disabled_with_id("019a0000-0000-7000-8000-00000000abcd");
+        assert_eq!(log.spawn_id(), "019a0000-0000-7000-8000-00000000abcd");
+        assert_eq!(log.clone().spawn_id(), log.spawn_id());
         assert_eq!(log.path(), None);
     }
 
