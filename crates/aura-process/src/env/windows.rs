@@ -1,10 +1,24 @@
 //! The Windows environment: HKLM `SYSTEM\CurrentControlSet\Control\Session Manager\Environment`,
 //! then HKCU `Environment` (the user wins), read through `winreg` on a blocking thread. `REG_EXPAND_SZ`
 //! values are expanded; `PATH` is system, then user, then the entries of auracode's own `PATH` not
-//! yet present. The merge and the expansion are pure and build on every OS, so their tests run
-//! everywhere.
+//! yet present. `USERNAME` and `PROCESSOR_ARCHITECTURE` stay as the logon set them. The merge and
+//! the expansion are pure and build on every OS, so their tests run everywhere.
 
 use std::collections::HashSet;
+
+#[cfg(any(windows, test))]
+use super::{EnvKey, EnvMap};
+
+/// Names the registry holds but the logon owns, kept as auracode's own env has them: HKLM's
+/// `USERNAME` is `SYSTEM` (meant for services), and its `PROCESSOR_ARCHITECTURE` is the machine's,
+/// while a process under emulation has the emulated one. Windows' `CreateEnvironmentBlock` sets
+/// both from the logon, and Chocolatey's `refreshenv` restores both after reading the registry.
+#[cfg(any(windows, test))]
+const LOGON_OWNED: &[&str] = &["USERNAME", "PROCESSOR_ARCHITECTURE"];
+
+/// One registry value: its name, its text, and whether it is `REG_EXPAND_SZ`.
+#[cfg(any(windows, test))]
+pub(crate) type RegValue = (String, String, bool);
 
 /// Expands `%NAME%` references with `lookup`, as `REG_EXPAND_SZ` values need. Names reach `lookup`
 /// as written; Windows lookups ignore case. A value that `lookup` returns is expanded in turn,
@@ -85,16 +99,12 @@ pub fn merge_windows_path(
 
 /// The registry's environment over `base` (auracode's own env without its launch context).
 #[cfg(windows)]
-pub(crate) fn registry_env(base: &super::EnvMap) -> std::io::Result<super::EnvMap> {
-    use super::EnvKey;
+pub(crate) fn registry_env(base: &EnvMap) -> std::io::Result<EnvMap> {
     use std::io;
     use winreg::enums::RegType;
     use winreg::types::FromRegValue;
 
-    /// One registry value: its name, its text, and whether it is `REG_EXPAND_SZ`.
-    type Value = (String, String, bool);
-
-    fn read(key: &winreg::RegKey) -> Vec<Value> {
+    fn read(key: &winreg::RegKey) -> Vec<RegValue> {
         key.enum_values()
             .flatten()
             .filter_map(|(name, value)| {
@@ -118,9 +128,24 @@ pub(crate) fn registry_env(base: &super::EnvMap) -> std::io::Result<super::EnvMa
         Err(error) if error.kind() == io::ErrorKind::NotFound => Vec::new(),
         Err(error) => return Err(error),
     };
+    Ok(merge_registry(base, &system, &user))
+}
+
+/// The registry's variables over `base`: every value of `system` (HKLM), then of `user` (HKCU,
+/// which wins), `REG_EXPAND_SZ` expanded (a name missing from both falls back to `base`), and
+/// `PATH` merged by [`merge_windows_path`]. The logon-owned names ([`LOGON_OWNED`]) stay as `base`
+/// has them, in the expansion too. Pure.
+#[cfg(any(windows, test))]
+pub(crate) fn merge_registry(base: &EnvMap, system: &[RegValue], user: &[RegValue]) -> EnvMap {
+    let from_registry = |name: &str| {
+        !LOGON_OWNED
+            .iter()
+            .any(|owned| owned.eq_ignore_ascii_case(name))
+    };
     let raw = |name: &str| -> Option<String> {
         user.iter()
             .chain(system.iter())
+            .filter(|(known, _, _)| from_registry(known))
             .find(|(known, _, _)| known.eq_ignore_ascii_case(name))
             .map(|(_, text, _)| text.clone())
             .or_else(|| {
@@ -135,7 +160,7 @@ pub(crate) fn registry_env(base: &super::EnvMap) -> std::io::Result<super::EnvMa
             text.to_owned()
         }
     };
-    let path_of = |values: &[Value]| -> Option<String> {
+    let path_of = |values: &[RegValue]| -> Option<String> {
         values
             .iter()
             .find(|(name, _, _)| name.eq_ignore_ascii_case("Path"))
@@ -143,7 +168,7 @@ pub(crate) fn registry_env(base: &super::EnvMap) -> std::io::Result<super::EnvMa
     };
     let mut vars = base.clone();
     for (name, text, expand) in system.iter().chain(user.iter()) {
-        if name.eq_ignore_ascii_case("Path") {
+        if name.eq_ignore_ascii_case("Path") || !from_registry(name) {
             continue;
         }
         vars.insert(EnvKey::from(name.as_str()), resolve(text, *expand).into());
@@ -152,12 +177,12 @@ pub(crate) fn registry_env(base: &super::EnvMap) -> std::io::Result<super::EnvMa
         .get(&EnvKey::from("PATH"))
         .map(|value| value.to_string_lossy().into_owned());
     let path = merge_windows_path(
-        path_of(&system).as_deref(),
-        path_of(&user).as_deref(),
+        path_of(system).as_deref(),
+        path_of(user).as_deref(),
         process_path.as_deref(),
     );
     vars.insert(EnvKey::from("Path"), path.into());
-    Ok(vars)
+    vars
 }
 
 #[cfg(test)]
@@ -214,6 +239,65 @@ mod tests {
         assert_eq!(merge_windows_path(None, None, None), "");
     }
 
+    fn registry(values: &[(&str, &str, bool)]) -> Vec<RegValue> {
+        values
+            .iter()
+            .map(|(name, text, expand)| ((*name).to_owned(), (*text).to_owned(), *expand))
+            .collect()
+    }
+
+    fn value<'a>(vars: &'a EnvMap, name: &str) -> Option<&'a str> {
+        vars.get(&EnvKey::from(name))
+            .and_then(|value| value.to_str())
+    }
+
+    #[test]
+    fn the_registry_never_replaces_the_logon_user_or_architecture() {
+        let base: EnvMap = [
+            ("USERNAME", "me"),
+            ("PROCESSOR_ARCHITECTURE", "x86"),
+            ("USERPROFILE", "C:\\Users\\me"),
+            ("PATH", "C:\\from-the-process"),
+            ("KEPT", "from the process"),
+        ]
+        .into_iter()
+        .map(|(name, text)| (EnvKey::from(name), text.into()))
+        .collect();
+        // What HKLM's Environment key holds on a stock install, and an HKCU that names a user.
+        let system = registry(&[
+            ("USERNAME", "SYSTEM", false),
+            ("PROCESSOR_ARCHITECTURE", "AMD64", false),
+            ("SystemRoot", "C:\\Windows", false),
+            ("TEMP", "%SystemRoot%\\TEMP", true),
+            ("Path", "%SystemRoot%\\system32", true),
+        ]);
+        let user = registry(&[
+            ("TEMP", "%USERPROFILE%\\AppData\\Local\\Temp", true),
+            ("TOOLS", "C:\\Users\\%USERNAME%\\tools", true),
+            ("username", "someone-else", false),
+            ("Path", "%USERPROFILE%\\bin", true),
+        ]);
+        let vars = merge_registry(&base, &system, &user);
+        assert_eq!(value(&vars, "USERNAME"), Some("me"));
+        assert_eq!(value(&vars, "PROCESSOR_ARCHITECTURE"), Some("x86"));
+        assert_eq!(
+            value(&vars, "TOOLS"),
+            Some("C:\\Users\\me\\tools"),
+            "expanded with the logon's user, never SYSTEM"
+        );
+        assert_eq!(
+            value(&vars, "TEMP"),
+            Some("C:\\Users\\me\\AppData\\Local\\Temp"),
+            "the user wins"
+        );
+        assert_eq!(value(&vars, "SystemRoot"), Some("C:\\Windows"));
+        assert_eq!(value(&vars, "KEPT"), Some("from the process"));
+        assert_eq!(
+            value(&vars, "Path"),
+            Some("C:\\Windows\\system32;C:\\Users\\me\\bin;C:\\from-the-process")
+        );
+    }
+
     #[cfg(windows)]
     #[test]
     fn windows_registry_read() {
@@ -221,12 +305,20 @@ mod tests {
         super::super::strip_launch_context(&mut base);
         let vars = registry_env(&base).expect("the registry is readable");
         let path = vars
-            .get(&super::super::EnvKey::from("PATH"))
+            .get(&EnvKey::from("PATH"))
             .expect("a PATH")
             .to_string_lossy()
             .into_owned();
         assert!(path.to_ascii_lowercase().contains("system32"), "{path}");
         assert!(!path.contains("%SystemRoot%"), "expanded: {path}");
-        assert!(vars.contains_key(&super::super::EnvKey::from("SystemRoot")));
+        assert!(vars.contains_key(&EnvKey::from("SystemRoot")));
+        // HKLM says USERNAME=SYSTEM; the logon's values stay.
+        for name in ["USERNAME", "PROCESSOR_ARCHITECTURE"] {
+            assert_eq!(
+                vars.get(&EnvKey::from(name)),
+                base.get(&EnvKey::from(name)),
+                "{name}"
+            );
+        }
     }
 }
