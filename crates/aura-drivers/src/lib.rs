@@ -1,7 +1,7 @@
 //! Agent drivers: everything that turns an agent's native stream into [`AuraEvent`]s.
 //!
 //! - [`driver`]: the contract between a session and a driver (the actor, its commands and events,
-//!   the bounded event channel, the spawner seam). Frozen for M1a; [`testing`] holds its test
+//!   the bounded event channel, the spawner seam). Frozen for M1a; `testing` (feature `testing`) holds its test
 //!   doubles for the session manager's tests.
 //! - [`batch`]: the [`batch::FrameBatcher`], which packs events into size-limited, sequence-numbered
 //!   frames for the UI, carrying each event's turn tag for storage.

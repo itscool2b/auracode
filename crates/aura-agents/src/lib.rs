@@ -1,6 +1,6 @@
 //! The agents auracode can start, and what it takes to start each one.
 //!
-//! - [`catalog`]: the data. Each [`AgentSpec`] names its driver, its dialect, how to find and run it
+//! - [`catalog`](mod@catalog): the data. Each [`AgentSpec`] names its driver, its dialect, how to find and run it
 //!   ([`Recipe`]), its start timeout, the vendor daemons the kill rule spares, and the version last
 //!   verified with auracode.
 //! - [`Detector`]: whether each agent can start here ([`Availability`]), probed with the resolved,

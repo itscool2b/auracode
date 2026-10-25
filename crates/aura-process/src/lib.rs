@@ -4,7 +4,7 @@
 //! below every one of them and knows no `AuraEvent`; it is tested against plain child processes.
 //!
 //! - [`spawn`]: [`LaunchSpec`] says what to run; a [`ProcessSpawner`] starts it with all three pipes
-//!   and the complete, scrubbed environment ([`env`]), in its own process group (Unix) or job object
+//!   and the complete, scrubbed environment ([`env`](mod@env)), in its own process group (Unix) or job object
 //!   (Windows). [`run_helper`] runs short-lived helpers (the login shell, `--version` probes, the
 //!   adapter install).
 //! - [`io`]: stdin is a never-blocking [`LineSink`]; stdout a [`LineSource`] of bounded lines, so a

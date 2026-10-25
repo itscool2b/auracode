@@ -40,8 +40,8 @@ pub enum ProcessCwd {
 }
 
 /// A descendant that is a vendor daemon and must survive shutdown (Hermes' gateway, Claude's
-/// daemon): argv[0]'s file name equals `program` when set, and the words of `args_in_order` appear in
-/// argv in that order (not necessarily adjacent). A match is spared with its whole subtree.
+/// daemon): the file name of `argv[0]` equals `program` when set, and the words of `args_in_order`
+/// appear in argv in that order (not necessarily adjacent). A match is spared with its whole subtree.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DaemonMatch {
     pub program: Option<String>,
