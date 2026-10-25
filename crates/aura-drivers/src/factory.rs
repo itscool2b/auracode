@@ -36,14 +36,26 @@ mod tests {
 
     use aura_process::testing::FakeSpawner;
     use aura_process::{
-        EnvMap, EnvSource, LaunchSpec, LogFactory, ProcessCwd, Redactor, ResolvedEnv,
+        EnvMap, EnvSource, LaunchSpec, ProcessCwd, ProcessSpawner, ProtocolLog, ResolvedEnv,
+        SpawnError, SpawnSpec, SpawnedProcess,
     };
     use aura_protocol::Autonomy;
+    use futures::future::BoxFuture;
     use tokio::sync::mpsc;
 
     use super::*;
-    use crate::driver::{DriverContext, DriverEvent, DriverTimings, SessionSetup, event_channel};
-    use crate::testing::DirectSpawner;
+    use crate::driver::{
+        AgentSpawner, DriverContext, DriverEvent, DriverTimings, SessionSetup, event_channel,
+    };
+
+    /// Spawns through `FakeSpawner` with a log that writes nothing, so the test leaves no file.
+    struct QuietSpawner(Arc<FakeSpawner>);
+
+    impl AgentSpawner for QuietSpawner {
+        fn spawn(&self, spec: SpawnSpec) -> BoxFuture<'static, Result<SpawnedProcess, SpawnError>> {
+            self.0.spawn(spec, ProtocolLog::disabled())
+        }
+    }
 
     fn setup(dialect: &str) -> SessionSetup {
         SessionSetup {
@@ -84,17 +96,12 @@ mod tests {
 
         // The demo agent reaches Ready without a process.
         let (spawner, mut ends) = FakeSpawner::new();
-        let logs = LogFactory::new(
-            PathBuf::from("/logs"),
-            Arc::new(Redactor::standard()),
-            tokio::runtime::Handle::current(),
-        );
         let (_commands, receiver) = mpsc::unbounded_channel();
         let (sender, mut events) = event_channel();
         tokio::spawn(factory.create(DriverKind::Mock).run(DriverContext {
             commands: receiver,
             events: sender,
-            spawner: DirectSpawner::new(spawner.clone(), logs.clone()),
+            spawner: Arc::new(QuietSpawner(Arc::clone(&spawner))),
             setup: setup("mock"),
         }));
         loop {
@@ -114,7 +121,7 @@ mod tests {
         tokio::spawn(factory.create(DriverKind::Acp).run(DriverContext {
             commands: receiver,
             events: sender,
-            spawner: DirectSpawner::new(spawner, logs),
+            spawner: Arc::new(QuietSpawner(spawner)),
             setup: setup("hermes"),
         }));
         let mut end = ends.recv().await.expect("spawned");

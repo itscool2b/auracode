@@ -1483,13 +1483,25 @@ mod tests {
 
     use aura_process::testing::FakeSpawner;
     use aura_process::{
-        EnvMap, EnvSource, LaunchSpec, LogFactory, ProcessCwd, Redactor, ResolvedEnv,
+        EnvMap, EnvSource, LaunchSpec, ProcessCwd, ProcessSpawner, ProtocolLog, ResolvedEnv,
+        SpawnError, SpawnSpec, SpawnedProcess,
     };
     use tokio::time::timeout;
 
     use super::*;
-    use crate::driver::{DriverTimings, EventReceiver, StopPlan, TurnRef, event_channel};
-    use crate::testing::DirectSpawner;
+    use crate::driver::{
+        AgentSpawner, DriverTimings, EventReceiver, StopPlan, TurnRef, event_channel,
+    };
+
+    /// Spawns through `FakeSpawner` with a log that writes nothing. The demo agent spawns
+    /// nothing; a spawn would leave no file behind either.
+    struct QuietSpawner(Arc<FakeSpawner>);
+
+    impl AgentSpawner for QuietSpawner {
+        fn spawn(&self, spec: SpawnSpec) -> BoxFuture<'static, Result<SpawnedProcess, SpawnError>> {
+            self.0.spawn(spec, ProtocolLog::disabled())
+        }
+    }
 
     fn setup(autonomy: Autonomy, desired: BTreeMap<String, ConfigValue>) -> SessionSetup {
         SessionSetup {
@@ -1533,17 +1545,12 @@ mod tests {
     impl Demo {
         fn start_with(behavior: MockBehavior, setup: SessionSetup) -> Demo {
             let (spawner, _ends) = FakeSpawner::new();
-            let logs = LogFactory::new(
-                PathBuf::from("/logs"),
-                Arc::new(Redactor::standard()),
-                tokio::runtime::Handle::current(),
-            );
             let (commands, receiver) = mpsc::unbounded_channel();
             let (sender, events) = event_channel();
             let ctx = DriverContext {
                 commands: receiver,
                 events: sender,
-                spawner: DirectSpawner::new(spawner, logs),
+                spawner: Arc::new(QuietSpawner(spawner)),
                 setup,
             };
             let run = tokio::spawn(Box::new(MockDriver::new(behavior)).run(ctx));

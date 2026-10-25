@@ -23,9 +23,10 @@ use tokio::time::timeout;
 
 use super::*;
 use crate::driver::{
-    DriverTimings, EventReceiver, PermissionOutcome, ReadyInfo, TurnRef, event_channel,
+    AgentSpawner, DriverTimings, EventReceiver, PermissionOutcome, ReadyInfo, TurnRef,
+    event_channel,
 };
-use crate::testing::DirectSpawner;
+use crate::testing::{DIRECT_LOG_CHAT, DirectSpawner};
 
 const SESSION: &str = "sess-1";
 
@@ -76,6 +77,16 @@ fn init_result() -> Value {
     })
 }
 
+/// Spawns through `FakeSpawner` with a log that writes nothing, so tests leave no files behind (a
+/// `DirectSpawner` writes one per spawn once protocol logs are written).
+struct QuietSpawner(Arc<FakeSpawner>);
+
+impl AgentSpawner for QuietSpawner {
+    fn spawn(&self, spec: SpawnSpec) -> BoxFuture<'static, Result<SpawnedProcess, SpawnError>> {
+        aura_process::ProcessSpawner::spawn(&*self.0, spec, ProtocolLog::disabled())
+    }
+}
+
 struct Harness {
     /// The spawn id `Ready` reported.
     spawn_id: String,
@@ -89,18 +100,21 @@ struct Harness {
 
 impl Harness {
     async fn start(setup: SessionSetup) -> Harness {
-        let (spawner, mut ends) = FakeSpawner::new();
-        let logs = LogFactory::new(
-            PathBuf::from("/logs"),
-            Arc::new(Redactor::standard()),
-            tokio::runtime::Handle::current(),
-        );
+        Harness::start_through(setup, |fake| Arc::new(QuietSpawner(fake))).await
+    }
+
+    /// `start`, spawning through what `spawner` makes of the fake spawner.
+    async fn start_through(
+        setup: SessionSetup,
+        spawner: impl FnOnce(Arc<FakeSpawner>) -> Arc<dyn AgentSpawner>,
+    ) -> Harness {
+        let (fake, mut ends) = FakeSpawner::new();
         let (commands, receiver) = mpsc::unbounded_channel();
         let (sender, events) = event_channel();
         let ctx = DriverContext {
             commands: receiver,
             events: sender,
-            spawner: DirectSpawner::new(spawner.clone(), logs),
+            spawner: spawner(Arc::clone(&fake)),
             setup,
         };
         let run = tokio::spawn(Box::new(AcpDriver::new()).run(ctx));
@@ -117,7 +131,7 @@ impl Harness {
             run,
             end,
             exit: Some(exit),
-            spawner,
+            spawner: fake,
         }
     }
 
@@ -427,18 +441,13 @@ async fn a_failed_spawn_is_a_start_failure_by_kind() {
     ] {
         let (spawner, _ends) = FakeSpawner::new();
         spawner.fail_next(error);
-        let logs = LogFactory::new(
-            PathBuf::from("/logs"),
-            Arc::new(Redactor::standard()),
-            tokio::runtime::Handle::current(),
-        );
         let (_commands, receiver) = mpsc::unbounded_channel();
         let (sender, mut events) = event_channel();
         let exit = Box::new(AcpDriver::new())
             .run(DriverContext {
                 commands: receiver,
                 events: sender,
-                spawner: DirectSpawner::new(spawner, logs),
+                spawner: Arc::new(QuietSpawner(spawner)),
                 setup: setup("generic"),
             })
             .await;
@@ -2943,11 +2952,11 @@ fn mode_names_read_once_in_the_hand_picked_note() {
 
 /// Holds every spawn for a while before it starts (a macOS privacy prompt answered slowly).
 struct SlowSpawner {
-    inner: Arc<DirectSpawner>,
+    inner: QuietSpawner,
     delay: Duration,
 }
 
-impl crate::driver::AgentSpawner for SlowSpawner {
+impl AgentSpawner for SlowSpawner {
     fn spawn(
         &self,
         spec: aura_process::SpawnSpec,
@@ -2964,15 +2973,10 @@ impl crate::driver::AgentSpawner for SlowSpawner {
 #[tokio::test(start_paused = true)]
 async fn the_start_timeout_covers_only_the_launch() {
     let (spawner, mut ends) = FakeSpawner::new();
-    let logs = LogFactory::new(
-        PathBuf::from("/logs"),
-        Arc::new(Redactor::standard()),
-        tokio::runtime::Handle::current(),
-    );
     let (_commands, receiver) = mpsc::unbounded_channel();
     let (sender, mut events) = event_channel();
     let slow = SlowSpawner {
-        inner: DirectSpawner::new(spawner, logs),
+        inner: QuietSpawner(spawner),
         delay: Duration::from_secs(120),
     };
     let run = tokio::spawn(Box::new(AcpDriver::new()).run(DriverContext {
@@ -3267,4 +3271,90 @@ async fn stdout_ending_during_a_graceful_stop_leaves_the_process_to_its_chain() 
     harness.exit_with(0);
     let (_, exit) = harness.finish().await;
     assert_eq!(exit, DriverExit::Closed);
+}
+
+// ---- the protocol log ------------------------------------------------------------------------
+
+/// The records of a protocol log file, read again until `done` holds or 5 s pass: the writer task
+/// appends on the blocking pool, a little after the driver handed a record over.
+async fn read_log_until(path: &std::path::Path, done: impl Fn(&[Value]) -> bool) -> Vec<Value> {
+    for _ in 0..250 {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            let records: Vec<Value> = text
+                .lines()
+                .filter_map(|line| serde_json::from_str(line).ok())
+                .collect();
+            if done(&records) {
+                return records;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("{} never held the expected records", path.display());
+}
+
+/// Contract rule 6: right after the spawner's spawn note comes the driver's start note (no env),
+/// and every command it receives becomes a `cmd` record in the order it was processed, a command
+/// held before `Ready` included. The log is read back from disk, in a fresh temp folder. A build
+/// whose protocol logs write nothing (P0's stub `LogFactory`) has nothing to read back, so there
+/// the test runs the session and stops short of the file.
+#[tokio::test]
+async fn the_log_has_the_start_note_after_the_spawn_note_and_every_command_in_order() {
+    let root = std::env::temp_dir().join(format!("aura-drivers-log-test-{}", uuid::Uuid::now_v7()));
+    let logs = LogFactory::new(
+        root.clone(),
+        Arc::new(Redactor::standard()),
+        tokio::runtime::Handle::current(),
+    );
+    let writes = logs.open("probe", "probe").path().is_some();
+    let mut harness =
+        Harness::start_through(setup("generic"), |fake| DirectSpawner::new(fake, logs)).await;
+    // Held until Ready, and logged when it arrives.
+    let early = set_autonomy(&harness, Autonomy::Ask);
+    open_with(&mut harness, init_result(), json!({"sessionId": SESSION})).await;
+    assert!(early.await.expect("answered").is_ok());
+    harness.prompt("T", "go");
+    let (prompt, _) = harness.request("session/prompt").await;
+    harness.command(DriverCommand::Interrupt);
+    harness.request_or_notification("session/cancel").await;
+    harness.reply(&prompt, json!({"stopReason": "cancelled"}));
+    harness.events_until(is_turn_ended).await;
+    harness.command(DriverCommand::Shutdown {
+        plan: StopPlan {
+            cancel_grace: Duration::from_secs(1),
+            process: ShutdownPlan::STANDARD,
+        },
+    });
+    assert_eq!(harness.end.from_client.recv().await, None, "stdin closed");
+    harness.exit_with(0);
+    harness.eof();
+    let spawn_id = harness.spawn_id.clone();
+    let (_, exit) = harness.finish().await;
+    assert_eq!(exit, DriverExit::Closed);
+    if writes {
+        let path = root.join(DIRECT_LOG_CHAT).join(format!("{spawn_id}.jsonl"));
+        let records = read_log_until(&path, |records| {
+            records
+                .iter()
+                .any(|record| record["cmd"]["type"] == "shutdown")
+        })
+        .await;
+        assert_eq!(records[0]["d"], "note");
+        assert!(records[0]["note"].get("spawn").is_some(), "{}", records[0]);
+        assert_eq!(records[1]["d"], "note");
+        let start = &records[1]["note"]["start"];
+        assert_eq!(start["spawn_id"], spawn_id.as_str(), "{}", records[1]);
+        assert_eq!(start["agent_id"], "generic");
+        assert!(start.get("env").is_none(), "no env in the start note");
+        let commands: Vec<&str> = records
+            .iter()
+            .filter(|record| record["d"] == "cmd")
+            .filter_map(|record| record["cmd"]["type"].as_str())
+            .collect();
+        assert_eq!(
+            commands,
+            ["set_autonomy", "prompt", "interrupt", "shutdown"]
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
 }
