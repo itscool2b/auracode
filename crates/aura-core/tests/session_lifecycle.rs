@@ -1145,6 +1145,40 @@ async fn queue_survives_a_restart_held() {
     }
 }
 
+/// S15 and S24: quitting holds the rows queued before it in the database itself, before any
+/// recovery at the next start could.
+#[tokio::test(start_paused = true)]
+async fn quit_holds_the_queue() {
+    let (driver, handle) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let h = Harness::new(vec![driver]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.send(&chat.id, "work".into()).await.expect("send");
+    let later = h
+        .manager
+        .send(&chat.id, "later".into())
+        .await
+        .expect("send");
+    command(&handle, CommandMatch::Prompt).await;
+    let summary = h.manager.shutdown_all(Duration::from_secs(8)).await;
+    assert_eq!((summary.sessions, summary.forced), (1, 0));
+    assert!(h.store.shutdown(Duration::from_secs(5)).await);
+    let conn = rusqlite::Connection::open(h.profile.db_path()).expect("raw");
+    let rows: Vec<(String, bool)> = conn
+        .prepare("SELECT id, held FROM queued_prompts WHERE chat_id = ?1")
+        .expect("prepare")
+        .query_map([&chat.id], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("query")
+        .map(|row| row.expect("row"))
+        .collect();
+    assert_eq!(rows, [(later.prompt_id, true)]);
+}
+
 /// S36: quitting with no live session: `shutdown_all` does nothing, the store commits what is
 /// queued and closes, and the next launch reports a clean shutdown.
 #[tokio::test(start_paused = true)]

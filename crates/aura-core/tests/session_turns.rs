@@ -368,6 +368,136 @@ async fn send_while_stopping_restarts() {
     );
 }
 
+/// S15: a Stop holds the rows queued before it, so nothing starts the agent again on its own; Send
+/// queued releases them, restarts the agent with native resume and sends them in order.
+#[tokio::test(start_paused = true)]
+async fn queue_is_held_after_a_stop() {
+    let (first, first_handle) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let (second, handle) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        end_turn(StopReason::EndTurn),
+        Step::Expect(CommandMatch::Prompt),
+        end_turn(StopReason::EndTurn),
+    ]);
+    let h = Harness::new(vec![first, second]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.send(&chat.id, "work".into()).await.expect("send");
+    let one = h.manager.send(&chat.id, "one".into()).await.expect("send");
+    let two = h.manager.send(&chat.id, "two".into()).await.expect("send");
+    assert!(one.queued && two.queued);
+    command(&first_handle, CommandMatch::Prompt).await;
+    h.manager.stop(&chat.id).await.expect("stop");
+    h.status(&chat.id, SessionStatus::Stopped).await;
+    tokio::time::sleep(Duration::from_secs(30)).await;
+    assert_eq!(
+        h.statuses.last(&chat.id).map(|update| update.status),
+        Some(SessionStatus::Stopped),
+        "nothing starts the agent on its own"
+    );
+    assert_eq!(h.factory.setups().len(), 1, "no second driver");
+    let rows: Vec<(String, bool)> = h
+        .queue(&chat.id)
+        .await
+        .into_iter()
+        .map(|row| (row.prompt_id, row.held))
+        .collect();
+    assert_eq!(rows, [(one.prompt_id, true), (two.prompt_id, true)]);
+    h.manager.resume_queue(&chat.id).await.expect("Send queued");
+    assert_eq!(
+        prompt_text(&command(&handle, CommandMatch::Prompt).await),
+        "one"
+    );
+    assert_eq!(
+        prompt_text(&command(&handle, CommandMatch::Prompt).await),
+        "two"
+    );
+    h.status(&chat.id, SessionStatus::Ready).await;
+    assert!(h.queue(&chat.id).await.is_empty());
+    assert_eq!(h.factory.setups()[1].resume.as_deref(), Some("n1"));
+}
+
+/// S15 and S39: a prompt typed while the agent stops is queued, not held, but a second Stop holds
+/// it: the agent stays stopped and no second driver starts; Send queued sends it.
+#[tokio::test(start_paused = true)]
+async fn a_second_stop_holds_what_was_typed_while_stopping() {
+    let (first, first_handle) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Wait(Duration::from_secs(2)),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let (second, handle) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        end_turn(StopReason::EndTurn),
+    ]);
+    let h = Harness::new(vec![first, second]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.send(&chat.id, "work".into()).await.expect("send");
+    command(&first_handle, CommandMatch::Prompt).await;
+    h.manager.stop(&chat.id).await.expect("stop");
+    command(&first_handle, CommandMatch::Shutdown).await;
+    h.status(&chat.id, SessionStatus::Stopping).await;
+    let typed = h
+        .manager
+        .send(&chat.id, "typed while stopping".into())
+        .await
+        .expect("send");
+    assert!(typed.queued);
+    h.manager.stop(&chat.id).await.expect("the second Stop");
+    h.status(&chat.id, SessionStatus::Stopped).await;
+    tokio::time::sleep(Duration::from_secs(30)).await;
+    assert_eq!(
+        h.statuses.last(&chat.id).map(|update| update.status),
+        Some(SessionStatus::Stopped)
+    );
+    assert_eq!(h.factory.setups().len(), 1, "no second driver");
+    let rows = h.queue(&chat.id).await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].prompt_id, typed.prompt_id);
+    assert!(rows[0].held, "typed before the second Stop: held");
+    h.manager.resume_queue(&chat.id).await.expect("Send queued");
+    assert_eq!(
+        prompt_text(&command(&handle, CommandMatch::Prompt).await),
+        "typed while stopping"
+    );
+}
+
+/// A Stop given while the agent stops for a Start fresh drops that start: the agent stays stopped.
+#[tokio::test(start_paused = true)]
+async fn a_stop_drops_a_start_asked_for_while_stopping() {
+    let (first, first_handle) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Wait(Duration::from_secs(2)),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let (second, _) = ScriptedDriver::new(vec![ready_step("n2")]);
+    let h = Harness::new(vec![first, second]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.start(&chat.id, true).await.expect("Start fresh");
+    command(&first_handle, CommandMatch::Shutdown).await;
+    h.status(&chat.id, SessionStatus::Stopping).await;
+    h.manager.stop(&chat.id).await.expect("stop");
+    h.status(&chat.id, SessionStatus::Stopped).await;
+    tokio::time::sleep(Duration::from_secs(30)).await;
+    assert_eq!(
+        h.statuses.last(&chat.id).map(|update| update.status),
+        Some(SessionStatus::Stopped)
+    );
+    assert_eq!(h.factory.setups().len(), 1, "the Start fresh was dropped");
+}
+
 /// S15: a crash holds the queue, and a prompt typed after the crash goes out at the next `Ready`.
 #[tokio::test(start_paused = true)]
 async fn queue_is_held_after_a_crash_and_new_prompts_go_first() {

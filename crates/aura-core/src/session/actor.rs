@@ -644,6 +644,8 @@ impl ChatActor {
                 drop(reply.send(result));
             }
             ChatMsg::Stop { reply } => {
+                // A start asked for while the agent stops (Start fresh, say) gives way to the Stop.
+                self.pending_start = None;
                 self.stop();
                 drop(reply.send(Ok(())));
             }
@@ -1216,6 +1218,9 @@ impl ChatActor {
     }
 
     fn stop(&mut self) {
+        // Every Stop holds what is queued until now, one that repeats a stop in progress included: a
+        // prompt typed while the agent stops is not held, and would start it again once it stopped.
+        self.hold_queue();
         match self.status {
             SessionStatus::Stopped
             | SessionStatus::Failed
@@ -1225,7 +1230,6 @@ impl ChatActor {
             }
             _ => {}
         }
-        self.hold_queue();
         if self.driver.is_none() {
             if let Some(preparing) = self.preparing.take() {
                 preparing.abort.abort();
