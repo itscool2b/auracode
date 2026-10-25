@@ -93,7 +93,7 @@ export function permissionResolutionLabel(
   if (resolution.decision.type === "cancelled") return closed ?? "Dismissed";
   const { option_id } = resolution.decision;
   const label = options.find((option) => option.option_id === option_id)?.label ?? option_id;
-  return closed === null ? label : `${closed}: ${label}`;
+  return closed === null ? `You chose: ${label}` : `${closed}: ${label}`;
 }
 
 /** The answer a question got, in words. */
@@ -112,7 +112,9 @@ export function answerLabel(answer: UiAnswer, prompt: UiPrompt): string {
 
 export function questionResolutionLabel(resolution: QuestionResolution, prompt: UiPrompt): string {
   if (resolution.by === "user") {
-    return resolution.answer === null ? "Dismissed" : answerLabel(resolution.answer, prompt);
+    return resolution.answer === null
+      ? "Dismissed"
+      : `You answered: ${answerLabel(resolution.answer, prompt)}`;
   }
   if (resolution.answer !== null) return answerLabel(resolution.answer, prompt);
   return closedBy(resolution.by) ?? "Closed";

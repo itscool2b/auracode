@@ -39,21 +39,21 @@ describe("resolved cards", () => {
         },
         OPTIONS,
       );
-    expect(label("user", "reject")).toBe("Reject");
+    expect(label("user", "reject")).toBe("You chose: Reject");
     expect(label("user", null)).toBe("Dismissed");
     expect(label("auto", "allow")).toBe("Auto-approved: Allow once");
     expect(label("agent", null)).toBe("Withdrawn by the agent");
     expect(label("turn", null)).toBe("Closed when the turn ended");
     expect(label("system", null)).toBe("Closed when the agent stopped");
     expect(label("other", null)).toBe("Closed");
-    expect(label("user", "unknown-option")).toBe("unknown-option");
+    expect(label("user", "unknown-option")).toBe("You chose: unknown-option");
   });
 
   it("show a question's answer, or who closed it", () => {
     const select = { type: "select" as const, message: "Which?", options: ["Red", "Green"] };
     expect(
       questionResolutionLabel({ answer: { type: "select", index: 1 }, by: "user" }, select),
-    ).toBe("Green");
+    ).toBe("You answered: Green");
     expect(questionResolutionLabel({ answer: null, by: "user" }, select)).toBe("Dismissed");
     expect(questionResolutionLabel({ answer: null, by: "agent" }, select)).toBe(
       "Withdrawn by the agent",
