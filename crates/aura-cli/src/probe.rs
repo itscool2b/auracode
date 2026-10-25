@@ -89,6 +89,10 @@ const CHEAP_MARKERS: [&str; 8] = [
     "fast",
 ];
 
+/// Words the descriptions of cheaper models use, cheapest first, read when no id or name carries a
+/// marker: codex-acp describes `gpt-6-luna` as "Fast and affordable model for easier tasks".
+const CHEAP_DESCRIPTIONS: [&str; 4] = ["cheapest", "cheap", "affordable", "fast"];
+
 /// The names `--env` sets, for messages; values are never printed.
 fn env_names(args: &ProbeArgs) -> String {
     args.env
@@ -1943,12 +1947,23 @@ pub fn cheapest(model: &ConfigOption) -> Option<String> {
     cheapest_of(&choices).map(|choice| choice.value.clone())
 }
 
-/// The first choice carrying the cheapest marker any of them carries.
+/// The first choice carrying the cheapest marker any of them carries in its id or name, else the
+/// first whose description says it is cheap (codex-acp's models name no size).
 fn cheapest_of<'a>(choices: &[&'a ConfigChoice]) -> Option<&'a ConfigChoice> {
-    CHEAP_MARKERS.iter().find_map(|marker| {
+    let by_name = CHEAP_MARKERS.iter().find_map(|marker| {
         choices.iter().copied().find(|choice| {
             choice.value.to_lowercase().contains(marker)
                 || choice.name.to_lowercase().contains(marker)
+        })
+    });
+    by_name.or_else(|| {
+        CHEAP_DESCRIPTIONS.iter().find_map(|marker| {
+            choices.iter().copied().find(|choice| {
+                choice
+                    .description
+                    .as_deref()
+                    .is_some_and(|description| description.to_lowercase().contains(marker))
+            })
         })
     })
 }
@@ -2077,6 +2092,54 @@ mod tests {
         assert_eq!(switch_target(&mock).as_deref(), Some("mock-smart"));
         assert_eq!(cheapest(&mock).as_deref(), Some("mock-fast"));
         assert_eq!(switch_target(&model("only", &[("only", "Only")])), None);
+    }
+
+    /// codex-acp's models (codex 0.164.0) carry no size in their ids or names; their descriptions
+    /// say which is the cheap one, as the real-agent probe showed.
+    #[test]
+    fn the_cheapest_model_is_found_by_its_description_when_its_name_says_nothing() {
+        let mut codex = model(
+            "gpt-6-astra",
+            &[
+                ("gpt-6.1-sol", "6.1 Sol"),
+                ("gpt-6-astra", "6 Astra"),
+                ("gpt-6-sol", "6 Sol"),
+                ("gpt-6-luna", "6 Luna"),
+                ("gpt-5.6-sol", "5.6 Sol"),
+                ("gpt-5.6-terra", "5.6 Terra"),
+                ("gpt-5.6-luna", "5.6 Luna"),
+            ],
+        );
+        let descriptions = [
+            "Latest workhorse model for coding and everyday work.",
+            "Frontier intelligence for the most demanding work.",
+            "Previous generation workhorse model.",
+            "Fast and affordable model for easier tasks.",
+            "Older generation workhorse model.",
+            "Older balanced model for straightforward work.",
+            "Older fast and efficient model.",
+        ];
+        if let ConfigKind::Select { choices, .. } = &mut codex.kind {
+            for (choice, description) in choices.iter_mut().zip(descriptions) {
+                choice.description = Some(description.into());
+            }
+        }
+        assert_eq!(cheapest(&codex).as_deref(), Some("gpt-6-luna"));
+        assert_eq!(switch_target(&codex).as_deref(), Some("gpt-6-luna"));
+        // A name that says it wins over any description.
+        let mut claude = model(
+            "opus",
+            &[
+                ("opus", "Opus 5.5"),
+                ("sonnet", "Sonnet 5.5"),
+                ("haiku", "Haiku 5.5"),
+            ],
+        );
+        if let ConfigKind::Select { choices, .. } = &mut claude.kind {
+            choices[1].description = Some("Most efficient and affordable".into());
+            choices[2].description = Some("Fastest for quick answers".into());
+        }
+        assert_eq!(cheapest(&claude).as_deref(), Some("haiku"));
     }
 
     #[test]
