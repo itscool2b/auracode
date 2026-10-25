@@ -482,6 +482,12 @@ impl Shared {
         self.paused.load(Ordering::Acquire)
     }
 
+    /// Tests: how many items wait in the FIFO.
+    #[cfg(test)]
+    pub(crate) fn queued(&self) -> usize {
+        self.lock().items.len()
+    }
+
     /// The pause's reason, while paused.
     pub(crate) fn pause_reason(&self) -> Option<PauseReason> {
         match self.status.borrow().state {

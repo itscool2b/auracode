@@ -750,6 +750,16 @@ mod tests {
         .clone()
     }
 
+    /// Holds the writer until the returned sender is dropped: it serves the second channel first,
+    /// so every op queued meanwhile lands in one batch, whatever the scheduling.
+    fn hold(store: &ChatStore) -> std::sync::mpsc::Sender<()> {
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        store.with_store(move |_| {
+            let _ = wait.recv_timeout(Duration::from_secs(30));
+        });
+        release
+    }
+
     fn dead_letters(profile: &Profile) -> Vec<serde_json::Value> {
         let mut lines = Vec::new();
         for entry in std::fs::read_dir(profile.backups_dir())
@@ -824,7 +834,7 @@ mod tests {
             .shared
             .commits
             .load(std::sync::atomic::Ordering::Relaxed);
-        store.with_store(|_| std::thread::sleep(Duration::from_millis(300)));
+        let held = hold(store);
         for seq in 0..600 {
             send(
                 store,
@@ -835,6 +845,7 @@ mod tests {
             )
             .await;
         }
+        drop(held);
         assert!(store.barrier().await);
         let commits = store
             .shared
@@ -924,7 +935,7 @@ mod tests {
         let store = &fixture.store;
         let chat = new_chat(store).await;
         send(store, queued_prompt(&chat.id)).await;
-        store.with_store(|_| std::thread::sleep(Duration::from_millis(100)));
+        let held = hold(store);
         send(
             store,
             Op::AppendEvents {
@@ -942,6 +953,7 @@ mod tests {
             },
         )
         .await;
+        drop(held);
         assert!(store.barrier().await);
         assert_eq!(page_seqs(&page(store, &chat.id, 10).await), [0, 2]);
         let load = store.load_chat(&chat.id).await.expect("load");
@@ -965,7 +977,7 @@ mod tests {
         let fixture = start(WriterConfig::STANDARD);
         let store = &fixture.store;
         let chat = new_chat(store).await;
-        store.with_store(|_| std::thread::sleep(Duration::from_millis(100)));
+        let held = hold(store);
         send(
             store,
             Op::AppendEvents {
@@ -990,6 +1002,7 @@ mod tests {
             },
         )
         .await;
+        drop(held);
         assert!(store.barrier().await);
         assert_eq!(page_seqs(&page(store, &chat.id, 10).await), [0, 1]);
         let dead = dead_letters(&fixture.profile);
@@ -1011,7 +1024,7 @@ mod tests {
         let fixture = start(WriterConfig::STANDARD);
         let store = &fixture.store;
         let chat = new_chat(store).await;
-        store.with_store(|_| std::thread::sleep(Duration::from_millis(100)));
+        let held = hold(store);
         send(
             store,
             Op::AppendEvents {
@@ -1029,6 +1042,7 @@ mod tests {
             },
         )
         .await;
+        drop(held);
         assert!(store.barrier().await);
         send(
             store,
@@ -1090,7 +1104,7 @@ mod tests {
         let blob = Arc::<[u8]>::from(big.as_bytes());
         let blob_id = sha(&blob);
         // Everything below lands in one batch, which fails as a whole.
-        store.with_store(|_| std::thread::sleep(Duration::from_millis(200)));
+        let held = hold(store);
         send(
             store,
             Op::PutBlob {
@@ -1110,6 +1124,7 @@ mod tests {
             )
             .await;
         }
+        drop(held);
         let paused = status_until(store, |status| {
             matches!(status.state, StorageState::Paused { .. })
         })
@@ -1200,7 +1215,7 @@ mod tests {
                 .expect("cap");
         });
         // Hold the writer so the writes and the read behind them land in one batch.
-        store.with_store(|_| std::thread::sleep(Duration::from_millis(200)));
+        let held = hold(&store);
         let big = "w".repeat(60_000);
         let blob = Arc::<[u8]>::from(big.as_bytes());
         let blob_id = sha(&blob);
@@ -1227,6 +1242,14 @@ mod tests {
             let store = Arc::clone(&store);
             async move { store.chats().await }
         });
+        let read_queued = tokio::time::timeout(Duration::from_secs(10), async {
+            while store.shared.queued() < 5 {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await;
+        assert!(read_queued.is_ok(), "the read waits behind the writes");
+        drop(held);
         status_until(&store, |status| {
             matches!(status.state, StorageState::Paused { .. })
         })
