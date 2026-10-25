@@ -18,6 +18,8 @@ pub mod catalog;
 mod detect;
 mod install;
 mod launch;
+mod probe;
+mod shared;
 
 use std::time::Duration;
 

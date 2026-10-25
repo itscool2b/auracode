@@ -1,0 +1,332 @@
+//! Detection against fake tools on a fake `PATH`: missing and broken binaries, probes that hang,
+//! Node's floor, the user's own CLI behind an adapter (its variable, its floor), and npm only until
+//! the adapter is installed.
+
+#[cfg(test)]
+mod common;
+
+use std::path::PathBuf;
+use std::time::Duration;
+
+use aura_agents::LaunchError;
+use aura_process::ProcessCwd;
+use aura_protocol::session::Availability;
+use common::{Machine, Reaper, gone, spec};
+use tokio::sync::mpsc;
+
+#[cfg(test)]
+fn progress() -> mpsc::UnboundedSender<String> {
+    mpsc::unbounded_channel().0
+}
+
+#[cfg(test)]
+fn ready_path(availability: &Availability) -> PathBuf {
+    match availability {
+        Availability::Ready { path, .. } => PathBuf::from(path),
+        other => panic!("ready: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn detect_missing_binary() {
+    let machine = Machine::with_tools(&["node", "npm"]);
+    let detector = machine.detector(machine.env(&[]));
+    assert_eq!(
+        detector.detect(&spec("hermes")).await,
+        Availability::Missing {
+            reason: "hermes was not found on your PATH.".into()
+        }
+    );
+    assert!(matches!(
+        detector.prepare_launch(&spec("hermes"), progress()).await,
+        Err(LaunchError::Missing { .. })
+    ));
+}
+
+#[tokio::test]
+async fn detect_broken_binary() {
+    let machine = Machine::new();
+    machine.mode("hermes", "fail");
+    let detector = machine.detector(machine.env(&[]));
+    assert_eq!(
+        detector.detect(&spec("hermes")).await,
+        Availability::Broken {
+            reason: "`hermes --version` failed: ImportError: No module named 'hermes_cli'".into()
+        },
+        "the first stderr line is quoted"
+    );
+    assert!(matches!(
+        detector.prepare_launch(&spec("hermes"), progress()).await,
+        Err(LaunchError::Broken { .. })
+    ));
+}
+
+/// Real time: the probe limit is 10 s, and a paused clock would fire it before the probe started.
+#[tokio::test]
+async fn probe_timeout_kills_tree() {
+    let machine = Machine::new();
+    machine.mode("hermes", "hang");
+    let detector = machine.detector(machine.env(&[]));
+    let started = tokio::time::Instant::now();
+    let availability = detector.detect(&spec("hermes")).await;
+    assert_eq!(
+        availability,
+        Availability::Broken {
+            reason: "`hermes --version` did not answer within 10 seconds.".into()
+        }
+    );
+    assert!(started.elapsed() >= Duration::from_secs(10));
+    let pids = machine.pids("hermes").await;
+    let (_reaper, held) = Reaper::hold(&pids);
+    for process in &held {
+        assert!(
+            gone(process).await,
+            "{process:?} outlived the probe's timeout"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_ready_binary_shows_its_version_and_launches_from_the_chat_folder() {
+    let machine = Machine::new();
+    let detector = machine.detector(machine.env(&[]));
+    let hermes = spec("hermes");
+    assert_eq!(
+        detector.detect(&hermes).await,
+        Availability::Ready {
+            version: Some("Hermes 0.22.5".into()),
+            path: machine.tool("hermes").display().to_string(),
+        }
+    );
+    let launch = detector
+        .prepare_launch(&hermes, progress())
+        .await
+        .expect("launch");
+    assert_eq!(launch.label, "hermes acp");
+    assert_eq!(launch.program, machine.tool("hermes"));
+    assert_eq!(launch.args, ["acp"]);
+    assert_eq!(launch.cwd, ProcessCwd::ChatFolder);
+    assert_eq!(launch.daemons, hermes.daemons);
+    assert_eq!(launch.startup_timeout, Duration::from_secs(60));
+    assert!(launch.set_env.is_empty());
+    // The probe ran in the home folder.
+    let runs = machine.runs("hermes");
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0]["argv"], serde_json::json!(["--version"]));
+    assert_eq!(
+        std::fs::canonicalize(runs[0]["cwd"].as_str().expect("cwd")).expect("canonical"),
+        std::fs::canonicalize(&machine.home).expect("canonical")
+    );
+}
+
+#[tokio::test]
+async fn find_program_follows_path_order() {
+    let machine = Machine::with_tools(&[]);
+    let first = machine.root.path().join("first");
+    let second = machine.root.path().join("second");
+    let shadowed = machine.install_tool(&second, "hermes");
+    let winner = machine.install_tool(&first, "hermes");
+    let detector = machine.detector(machine.env_with_path(&[&first, &second], &[]));
+    let availability = detector.detect(&spec("hermes")).await;
+    assert_eq!(ready_path(&availability), winner);
+    assert_ne!(winner, shadowed);
+}
+
+#[tokio::test]
+async fn adapter_recipe_checks_node() {
+    let machine = Machine::with_tools(&["npm", "claude"]);
+    let detector = machine.detector(machine.env(&[]));
+    assert_eq!(
+        detector.detect(&spec("claude-acp")).await,
+        Availability::Missing {
+            reason: "Node.js 22 or newer is required (found none).".into()
+        }
+    );
+
+    let machine = Machine::new();
+    machine.version("node", "v20.11.1");
+    let detector = machine.detector(machine.env(&[]));
+    assert_eq!(
+        detector.detect(&spec("codex-acp")).await,
+        Availability::Missing {
+            reason: "Node.js 22 or newer is required (found 20.11.1).".into()
+        }
+    );
+
+    let machine = Machine::new();
+    machine.version("node", "v22.0.0");
+    let detector = machine.detector(machine.env(&[]));
+    assert!(matches!(
+        detector.detect(&spec("codex-acp")).await,
+        Availability::Ready { .. }
+    ));
+}
+
+#[tokio::test]
+async fn adapter_requires_user_binary() {
+    let machine = Machine::with_tools(&["node", "npm"]);
+    let detector = machine.detector(machine.env(&[]));
+    assert_eq!(
+        detector.detect(&spec("claude-acp")).await,
+        Availability::Missing {
+            reason: "The Claude adapter drives your own Claude Code, and claude was not found on your PATH.".into()
+        }
+    );
+    assert_eq!(
+        detector.detect(&spec("codex-acp")).await,
+        Availability::Missing {
+            reason:
+                "The Codex adapter drives your own Codex, and codex was not found on your PATH."
+                    .into()
+        }
+    );
+}
+
+#[tokio::test]
+async fn an_adapter_ready_names_the_binary_that_will_run() {
+    let machine = Machine::new();
+    let detector = machine.detector(machine.env(&[]));
+    let claude = spec("claude-acp");
+    assert_eq!(
+        detector.detect(&claude).await,
+        Availability::Ready {
+            version: Some("Claude Code 2.1.310 via claude-agent-acp 0.95.0".into()),
+            path: machine.tool("claude").display().to_string(),
+        }
+    );
+    let entries = detector.detect_all(false).await;
+    let entry = entries
+        .iter()
+        .find(|entry| entry.id == "claude-acp")
+        .expect("entry");
+    assert!(entry.needs_download, "not installed yet");
+    // Detection never installs and never runs an adapter.
+    assert!(machine.runs("npm").is_empty());
+    assert!(!machine.adapters.exists());
+    let node_runs = machine.runs("node");
+    assert!(!node_runs.is_empty());
+    assert!(
+        node_runs
+            .iter()
+            .all(|run| run["argv"] == serde_json::json!(["--version"])),
+        "only node --version: {node_runs:?}"
+    );
+}
+
+#[tokio::test]
+async fn version_floor() {
+    let machine = Machine::new();
+    machine.version("claude", "2.0.1 (Claude Code)");
+    machine.version("codex", "codex-cli 0.150.0");
+    let detector = machine.detector(machine.env(&[]));
+    assert_eq!(
+        detector.detect(&spec("claude-acp")).await,
+        Availability::Broken {
+            reason: "auracode needs Claude Code 2.1.309 or newer (found 2.0.1).".into()
+        }
+    );
+    assert_eq!(
+        detector.detect(&spec("codex-acp")).await,
+        Availability::Broken {
+            reason: "auracode needs Codex 0.160.1 or newer (found 0.150.0).".into()
+        }
+    );
+}
+
+#[tokio::test]
+async fn npm_is_needed_only_until_the_adapter_is_installed() {
+    let machine = Machine::with_tools(&["node", "claude", "codex"]);
+    let detector = machine.detector(machine.env(&[]));
+    assert_eq!(
+        detector.detect(&spec("claude-acp")).await,
+        Availability::Missing {
+            reason: "npm was not found; auracode needs it once to download the adapter.".into()
+        }
+    );
+}
+
+#[tokio::test]
+async fn user_launch_env_is_detected_and_forced() {
+    let machine = Machine::new();
+    let custom = machine.root.path().join("custom");
+    let own_claude = machine.install_tool(&custom, "claude");
+    let own_codex = machine.install_tool(&custom, "codex");
+    let env = machine.env(&[
+        (
+            "CLAUDE_CODE_EXECUTABLE",
+            own_claude.to_str().expect("utf-8"),
+        ),
+        ("CODEX_PATH", own_codex.to_str().expect("utf-8")),
+    ]);
+    let detector = machine.detector(env);
+    for (id, own, variable) in [
+        ("claude-acp", &own_claude, "CLAUDE_CODE_EXECUTABLE"),
+        ("codex-acp", &own_codex, "CODEX_PATH"),
+    ] {
+        let agent = spec(id);
+        assert_eq!(
+            ready_path(&detector.detect(&agent).await),
+            *own,
+            "{id}: shown"
+        );
+        let launch = detector
+            .prepare_launch(&agent, progress())
+            .await
+            .expect("installs and launches");
+        assert_eq!(
+            launch.set_env,
+            [(variable.into(), own.clone().into_os_string())],
+            "{id}: used, through the adapter's variable"
+        );
+    }
+}
+
+#[tokio::test]
+async fn empty_user_binary_env_is_overridden() {
+    for value in ["", "/nonexistent/claude", "relative/claude"] {
+        let machine = Machine::new();
+        let detector = machine.detector(machine.env(&[("CLAUDE_CODE_EXECUTABLE", value)]));
+        let claude = spec("claude-acp");
+        assert_eq!(
+            ready_path(&detector.detect(&claude).await),
+            machine.tool("claude"),
+            "{value:?}"
+        );
+        let launch = detector
+            .prepare_launch(&claude, progress())
+            .await
+            .expect("launch");
+        assert_eq!(
+            launch.set_env,
+            [(
+                "CLAUDE_CODE_EXECUTABLE".into(),
+                machine.tool("claude").into_os_string()
+            )],
+            "{value:?}: overridden with the detected binary, never left for the adapter's bundled CLI"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_refresh_probes_again() {
+    let machine = Machine::new();
+    let detector = machine.detector(machine.env(&[]));
+    let hermes = spec("hermes");
+    assert!(matches!(
+        detector.detect(&hermes).await,
+        Availability::Ready { version: Some(version), .. } if version == "Hermes 0.22.5"
+    ));
+    machine.version("hermes", "Hermes Agent v0.23.0");
+    assert!(
+        matches!(detector.detect(&hermes).await, Availability::Ready { version: Some(version), .. } if version == "Hermes 0.22.5"),
+        "cached until a refresh"
+    );
+    let entries = detector.detect_all(true).await;
+    let entry = entries
+        .iter()
+        .find(|entry| entry.id == "hermes")
+        .expect("entry");
+    assert!(
+        matches!(&entry.availability, Availability::Ready { version: Some(version), .. } if version == "Hermes 0.23.0")
+    );
+}

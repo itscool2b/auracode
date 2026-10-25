@@ -22,9 +22,11 @@ use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use futures::FutureExt;
+use futures::future::{BoxFuture, Shared};
 use tokio::runtime::Handle;
 
 use crate::log::Redactor;
@@ -32,6 +34,10 @@ use crate::registry::LeftoverRegistry;
 
 pub use scrub::{DenyReason, ScrubReport, deny_reason, node_options_has_debugger_hook, scrub};
 pub use shell::parse_env0;
+#[cfg(unix)]
+pub(crate) use which::is_program;
+#[cfg(windows)]
+pub(crate) use which::pathext;
 pub use which::{find_exe, find_program};
 pub use windows::{expand_env_strings, merge_windows_path};
 
@@ -220,62 +226,122 @@ impl EnvResolverConfig {
     }
 }
 
-/// Resolves the env once in the background and hands every caller the same result.
-#[derive(Debug)]
+/// Resolves the env in the background and hands every caller the same result.
 pub struct EnvResolver {
-    current: Mutex<Arc<ResolvedEnv>>,
+    inner: Arc<ResolverInner>,
+}
+
+struct ResolverInner {
+    /// `None` for a fixed resolver.
+    live: Option<Live>,
+    state: Mutex<ResolverState>,
+}
+
+struct Live {
+    config: EnvResolverConfig,
+    registry: Arc<LeftoverRegistry>,
+    rt: Handle,
+}
+
+/// One resolution, shared by everyone waiting for it.
+type Attempt = Shared<BoxFuture<'static, Arc<ResolvedEnv>>>;
+
+#[derive(Default)]
+struct ResolverState {
+    current: Option<Arc<ResolvedEnv>>,
+    /// How long the attempt that produced `current` took.
+    took_ms: u64,
+    /// When that attempt finished.
+    finished: Option<tokio::time::Instant>,
+    in_flight: Option<Attempt>,
 }
 
 impl EnvResolver {
-    /// Starts resolving on `rt`; boot never waits for it.
-    ///
-    /// This build resolves at once to auracode's own env minus [`strip_launch_context`], reported
-    /// as [`EnvSource::Fallback`]: the login-shell resolution is package A's. The redactor gets
-    /// that env's secret literals.
+    /// Starts resolving on `rt`; boot never waits for it. The first attempt starts at once.
     pub fn start(
         config: EnvResolverConfig,
-        _registry: Arc<LeftoverRegistry>,
-        _rt: Handle,
+        registry: Arc<LeftoverRegistry>,
+        rt: Handle,
     ) -> Arc<EnvResolver> {
-        let mut vars = config.base.unwrap_or_else(process_env);
-        strip_launch_context(&mut vars);
-        if let Some(redactor) = &config.redactor {
-            redactor.set_secrets(secret_values(&vars));
+        let resolver = Arc::new(EnvResolver {
+            inner: Arc::new(ResolverInner {
+                live: Some(Live {
+                    config,
+                    registry,
+                    rt,
+                }),
+                state: Mutex::new(ResolverState::default()),
+            }),
+        });
+        {
+            let mut state = lock(&resolver.inner.state);
+            resolver.begin(&mut state);
         }
-        Arc::new(EnvResolver {
-            current: Mutex::new(Arc::new(ResolvedEnv {
-                vars,
-                source: EnvSource::Fallback {
-                    reason: "login-shell resolution is not built in this build".into(),
-                },
-                warnings: Vec::new(),
-                resolved_at_ms: now_millis(),
-            })),
-        })
+        resolver
     }
 
     /// Tests: no shell; [`get`](Self::get) returns `env` at once. No redactor gets its secrets.
     pub fn fixed(env: ResolvedEnv) -> Arc<EnvResolver> {
+        let took_ms = match &env.source {
+            EnvSource::LoginShell { took_ms, .. } => *took_ms,
+            EnvSource::WindowsRegistry | EnvSource::Fallback { .. } => 0,
+        };
         Arc::new(EnvResolver {
-            current: Mutex::new(Arc::new(env)),
+            inner: Arc::new(ResolverInner {
+                live: None,
+                state: Mutex::new(ResolverState {
+                    current: Some(Arc::new(env)),
+                    took_ms,
+                    finished: None,
+                    in_flight: None,
+                }),
+            }),
         })
     }
 
-    /// The resolved env, sharing the attempt in flight.
+    /// The resolved env, sharing the attempt in flight. A fallback older than
+    /// [`EnvResolverConfig::retry_after`] is retried first.
     pub async fn get(&self) -> Arc<ResolvedEnv> {
-        self.current_env()
+        let attempt = {
+            let mut state = lock(&self.inner.state);
+            if let Some(attempt) = &state.in_flight {
+                attempt.clone()
+            } else if let Some(current) = &state.current
+                && !self.stale(&state)
+            {
+                return Arc::clone(current);
+            } else {
+                match self.begin(&mut state) {
+                    Some(attempt) => attempt,
+                    None => return Arc::new(empty_env()),
+                }
+            }
+        };
+        attempt.await
     }
 
     /// The last resolved env, if any attempt finished.
     pub fn current(&self) -> Option<Arc<ResolvedEnv>> {
-        Some(self.current_env())
+        lock(&self.inner.state).current.clone()
     }
 
-    /// Starts a new attempt. Running sessions keep the env they started with.
-    pub fn refresh(&self) {}
+    /// Starts a new attempt, unless one is running. Running sessions keep the env they started
+    /// with.
+    pub fn refresh(&self) {
+        let mut state = lock(&self.inner.state);
+        if state.in_flight.is_none() {
+            self.begin(&mut state);
+        }
+    }
 
     pub fn status(&self) -> ResolverStatus {
-        let env = self.current_env();
+        let state = lock(&self.inner.state);
+        if state.in_flight.is_some() {
+            return ResolverStatus::Resolving;
+        }
+        let Some(env) = &state.current else {
+            return ResolverStatus::Resolving;
+        };
         match &env.source {
             EnvSource::LoginShell { took_ms, .. } => ResolverStatus::Ready {
                 source: env.source.clone(),
@@ -284,7 +350,7 @@ impl EnvResolver {
             },
             EnvSource::WindowsRegistry => ResolverStatus::Ready {
                 source: env.source.clone(),
-                took_ms: 0,
+                took_ms: state.took_ms,
                 vars: env.vars.len(),
             },
             EnvSource::Fallback { reason } => ResolverStatus::Fallback {
@@ -293,11 +359,250 @@ impl EnvResolver {
         }
     }
 
-    fn current_env(&self) -> Arc<ResolvedEnv> {
-        match self.current.lock() {
-            Ok(current) => Arc::clone(&current),
-            Err(poisoned) => Arc::clone(&poisoned.into_inner()),
+    /// Whether the current env is a fallback old enough to try again.
+    fn stale(&self, state: &ResolverState) -> bool {
+        let Some(live) = &self.inner.live else {
+            return false;
+        };
+        let failed = state
+            .current
+            .as_ref()
+            .is_some_and(|env| matches!(env.source, EnvSource::Fallback { .. }));
+        failed
+            && state
+                .finished
+                .is_some_and(|finished| finished.elapsed() >= live.config.retry_after)
+    }
+
+    /// Starts an attempt on the runtime and records it as in flight. `None` for a fixed resolver.
+    fn begin(&self, state: &mut ResolverState) -> Option<Attempt> {
+        let live = self.inner.live.as_ref()?;
+        let inner = Arc::clone(&self.inner);
+        let task = live.rt.spawn(async move {
+            let Some(live) = &inner.live else {
+                return Arc::new(empty_env());
+            };
+            let started = tokio::time::Instant::now();
+            let env = resolve(&live.config, &live.registry).await;
+            if let Some(redactor) = &live.config.redactor {
+                redactor.set_secrets(secret_values(&env.vars));
+            }
+            let env = Arc::new(env);
+            let mut state = lock(&inner.state);
+            state.current = Some(Arc::clone(&env));
+            state.took_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            state.finished = Some(tokio::time::Instant::now());
+            state.in_flight = None;
+            env
+        });
+        let inner = Arc::clone(&self.inner);
+        let attempt = async move {
+            match task.await {
+                Ok(env) => env,
+                Err(_) => failed_attempt(&inner),
+            }
         }
+        .boxed()
+        .shared();
+        state.in_flight = Some(attempt.clone());
+        Some(attempt)
+    }
+}
+
+impl fmt::Debug for EnvResolver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let state = lock(&self.inner.state);
+        f.debug_struct("EnvResolver")
+            .field("fixed", &self.inner.live.is_none())
+            .field("current", &state.current)
+            .field("resolving", &state.in_flight.is_some())
+            .finish()
+    }
+}
+
+/// The answer when an attempt's task ended without one (the runtime is shutting down, or the
+/// attempt panicked), so no caller waits forever: the last env, or else the fallback, `base` or
+/// auracode's own env without its launch context. A new fallback is the current env from then on,
+/// and its secrets reach the redactor before any caller gets it, as every resolution's do.
+fn failed_attempt(inner: &ResolverInner) -> Arc<ResolvedEnv> {
+    let mut state = lock(&inner.state);
+    state.in_flight = None;
+    if let Some(current) = &state.current {
+        return Arc::clone(current);
+    }
+    let config = inner.live.as_ref().map(|live| &live.config);
+    let mut vars = config
+        .and_then(|config| config.base.clone())
+        .unwrap_or_else(process_env);
+    strip_launch_context(&mut vars);
+    if let Some(redactor) = config.and_then(|config| config.redactor.as_ref()) {
+        redactor.set_secrets(secret_values(&vars));
+    }
+    let env = Arc::new(fallback(
+        vars,
+        "the environment could not be read".into(),
+        Vec::new(),
+    ));
+    state.current = Some(Arc::clone(&env));
+    state.finished = Some(tokio::time::Instant::now());
+    env
+}
+
+/// An env with nothing in it, for a resolver with nothing to resolve.
+fn empty_env() -> ResolvedEnv {
+    ResolvedEnv {
+        vars: EnvMap::new(),
+        source: EnvSource::Fallback {
+            reason: "no environment".into(),
+        },
+        warnings: Vec::new(),
+        resolved_at_ms: now_millis(),
+    }
+}
+
+/// One resolution: the login shell (macOS and Linux) or the registry (Windows), with the known
+/// dirs appended and the shell's own bookkeeping variables removed.
+async fn resolve(config: &EnvResolverConfig, registry: &LeftoverRegistry) -> ResolvedEnv {
+    let mut base = config.base.clone().unwrap_or_else(process_env);
+    strip_launch_context(&mut base);
+    #[cfg(windows)]
+    {
+        let _ = registry;
+        let input = base.clone();
+        let read = tokio::task::spawn_blocking(move || windows::registry_env(&input)).await;
+        match read {
+            Ok(Ok(vars)) => ResolvedEnv {
+                vars,
+                source: EnvSource::WindowsRegistry,
+                warnings: Vec::new(),
+                resolved_at_ms: now_millis(),
+            },
+            Ok(Err(error)) => fallback(
+                base,
+                format!("the registry could not be read: {error}"),
+                Vec::new(),
+            ),
+            Err(error) => fallback(
+                base,
+                format!("the registry could not be read: {error}"),
+                Vec::new(),
+            ),
+        }
+    }
+    #[cfg(unix)]
+    {
+        let home = home_dir(config, &base);
+        let known = config
+            .known_dirs
+            .clone()
+            .unwrap_or_else(|| standard_known_dirs(&home));
+        let default = shell::platform_default();
+        let mut env = match shell::login_shell(config, registry, &base, &home, &default).await {
+            Ok(env) => env,
+            Err((reason, warnings)) => fallback(base, reason, warnings),
+        };
+        for name in ["PWD", "OLDPWD", "SHLVL", "_", "AURACODE_RESOLVING_ENV"] {
+            env.vars.remove(&EnvKey::from(name));
+        }
+        append_known_dirs(&mut env.vars, &known);
+        env
+    }
+}
+
+/// auracode's own env, without its launch context, as the env of last resort.
+fn fallback(vars: EnvMap, reason: String, warnings: Vec<String>) -> ResolvedEnv {
+    ResolvedEnv {
+        vars,
+        source: EnvSource::Fallback { reason },
+        warnings,
+        resolved_at_ms: now_millis(),
+    }
+}
+
+/// The user's home: the config's, the env's `HOME`, the passwd entry's, or `/`.
+#[cfg(unix)]
+fn home_dir(config: &EnvResolverConfig, base: &EnvMap) -> PathBuf {
+    if let Some(home) = &config.home {
+        return home.clone();
+    }
+    if let Some(home) = base.get(&EnvKey::from("HOME")).map(PathBuf::from)
+        && home.is_absolute()
+    {
+        return home;
+    }
+    nix::unistd::User::from_uid(nix::unistd::getuid())
+        .ok()
+        .flatten()
+        .map(|user| user.dir)
+        .filter(|dir| dir.is_absolute())
+        .unwrap_or_else(|| PathBuf::from("/"))
+}
+
+#[cfg(unix)]
+/// The folders agents install into, whose absence from a launchd `PATH` would hide them:
+/// `~/.local/bin`, the opencode, grok, pi, bun and volta bins, the asdf and mise shims, the
+/// `prefix=` of `~/.npmrc` (read, never by running npm) plus `/bin`, Homebrew's and `/usr/local/bin`.
+/// nvm is left to the login shell: it is a shell function the fallback cannot resolve reliably.
+pub(crate) fn standard_known_dirs(home: &std::path::Path) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = [
+        ".local/bin",
+        ".opencode/bin",
+        ".grok/bin",
+        ".pi/agent/bin",
+        ".bun/bin",
+        ".volta/bin",
+        ".asdf/shims",
+        ".local/share/mise/shims",
+    ]
+    .iter()
+    .map(|relative| home.join(relative))
+    .collect();
+    if let Some(prefix) = std::fs::read_to_string(home.join(".npmrc"))
+        .ok()
+        .and_then(|npmrc| npmrc_prefix(&npmrc, home))
+    {
+        dirs.push(prefix.join("bin"));
+    }
+    dirs.push(PathBuf::from("/opt/homebrew/bin"));
+    dirs.push(PathBuf::from("/usr/local/bin"));
+    dirs
+}
+
+/// The `prefix` of an `.npmrc`: `prefix=/path` or `prefix = "~/path"`; a relative prefix is ignored.
+#[cfg(unix)]
+pub(crate) fn npmrc_prefix(npmrc: &str, home: &std::path::Path) -> Option<PathBuf> {
+    let value = npmrc.lines().rev().find_map(|line| {
+        let line = line.trim();
+        if line.starts_with(';') || line.starts_with('#') {
+            return None;
+        }
+        let (key, value) = line.split_once('=')?;
+        (key.trim() == "prefix").then(|| value.trim().trim_matches(|c| c == '"' || c == '\''))
+    })?;
+    let path = match value.strip_prefix("~/") {
+        Some(rest) => home.join(rest),
+        None => PathBuf::from(value),
+    };
+    path.is_absolute().then_some(path)
+}
+
+/// Appends each existing dir that `PATH` lacks, in order.
+#[cfg(unix)]
+pub(crate) fn append_known_dirs(vars: &mut EnvMap, known: &[PathBuf]) {
+    let key = EnvKey::from("PATH");
+    let mut dirs: Vec<PathBuf> = vars
+        .get(&key)
+        .map(|path| std::env::split_paths(path).collect())
+        .unwrap_or_default();
+    let mut changed = false;
+    for dir in known {
+        if !dirs.contains(dir) && dir.is_dir() {
+            dirs.push(dir.clone());
+            changed = true;
+        }
+    }
+    if changed && let Ok(path) = std::env::join_paths(&dirs) {
+        vars.insert(key, path);
     }
 }
 
@@ -396,6 +701,12 @@ pub fn process_env() -> EnvMap {
     std::env::vars_os()
         .map(|(name, value)| (EnvKey::from(name), value))
         .collect()
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 fn now_millis() -> i64 {
@@ -588,41 +899,240 @@ mod tests {
         );
     }
 
+    /// A config whose shell cannot start: every attempt falls back, and nothing of the user's
+    /// own runs.
+    fn unstartable(base: EnvMap) -> EnvResolverConfig {
+        EnvResolverConfig {
+            base: Some(base),
+            shell: Some(PathBuf::from("/nonexistent/aura-test/zsh")),
+            home: Some(std::env::temp_dir()),
+            known_dirs: Some(Vec::new()),
+            ..EnvResolverConfig::standard()
+        }
+    }
+
     #[tokio::test]
     async fn the_resolver_hands_each_envs_secrets_to_the_redactor() {
         let redactor = Arc::new(Redactor::standard());
         let config = EnvResolverConfig {
-            base: Some(map(&[
+            redactor: Some(Arc::clone(&redactor)),
+            ..unstartable(map(&[
                 ("PATH", "/usr/bin"),
                 ("OPENAI_API_KEY", "sk-proj-0123456789abcdef"),
-            ])),
-            redactor: Some(Arc::clone(&redactor)),
-            ..EnvResolverConfig::standard()
+            ]))
         };
         let printed = format!("{config:?}");
         assert!(printed.contains("OPENAI_API_KEY"), "{printed}");
         assert!(!printed.contains("sk-proj"), "no values: {printed}");
         let resolver = EnvResolver::start(config, LeftoverRegistry::disabled(), Handle::current());
-        assert_eq!(resolver.get().await.vars.len(), 2);
+        let env = resolver.get().await;
+        // Unix falls back to the base env; Windows adds the registry's variables to it.
+        assert!(env.vars.contains_key(&EnvKey::from("OPENAI_API_KEY")));
         assert_eq!(
             redactor.redact_text("401: bad key sk-proj-0123456789abcdef"),
             "401: bad key <SECRET>"
         );
+        assert!(!format!("{resolver:?}").contains("sk-proj"));
     }
 
-    #[tokio::test]
-    async fn the_stub_resolver_answers_at_once_without_launch_context() {
-        let base = map(&[("PATH", "/usr/bin"), ("TERM_PROGRAM", "vscode")]);
+    /// An attempt whose task never answers (its runtime shut down first) still hands its env's
+    /// secrets to the redactor before anyone gets that env, and its fallback becomes current.
+    #[test]
+    fn a_failed_attempt_still_hands_its_secrets_to_the_redactor() {
+        let doomed = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let redactor = Arc::new(Redactor::standard());
         let config = EnvResolverConfig {
-            base: Some(base),
-            ..EnvResolverConfig::standard()
+            redactor: Some(Arc::clone(&redactor)),
+            ..unstartable(map(&[
+                ("PATH", "/usr/bin"),
+                ("OPENAI_API_KEY", "sk-proj-fallback-0123456789"),
+                ("TERM_PROGRAM", "vscode"),
+            ]))
         };
+        let resolver = EnvResolver::start(
+            config,
+            LeftoverRegistry::disabled(),
+            doomed.handle().clone(),
+        );
+        // A current-thread runtime runs nothing until driven: its attempt never started.
+        drop(doomed);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let env = runtime.block_on(resolver.get());
+        assert_eq!(
+            env.source,
+            EnvSource::Fallback {
+                reason: "the environment could not be read".into()
+            }
+        );
+        assert_eq!(
+            names(&env.vars),
+            ["OPENAI_API_KEY", "PATH"],
+            "the configured base, without its launch context"
+        );
+        assert_eq!(
+            redactor.redact_text("401: bad key sk-proj-fallback-0123456789"),
+            "401: bad key <SECRET>"
+        );
+        assert!(
+            resolver
+                .current()
+                .is_some_and(|current| Arc::ptr_eq(&current, &env))
+        );
+        assert!(matches!(resolver.status(), ResolverStatus::Fallback { .. }));
+        assert!(Arc::ptr_eq(&runtime.block_on(resolver.get()), &env));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_shell_that_cannot_start_falls_back_to_the_env_without_launch_context() {
+        let config = unstartable(map(&[("PATH", "/usr/bin"), ("TERM_PROGRAM", "vscode")]));
         let resolver = EnvResolver::start(config, LeftoverRegistry::disabled(), Handle::current());
+        assert_eq!(resolver.status(), ResolverStatus::Resolving);
+        assert!(resolver.current().is_none());
         let env = resolver.get().await;
         assert_eq!(names(&env.vars), ["PATH"]);
-        assert!(matches!(env.source, EnvSource::Fallback { .. }));
+        let EnvSource::Fallback { reason } = &env.source else {
+            panic!("a fallback: {:?}", env.source);
+        };
+        assert!(reason.contains("/nonexistent/aura-test/zsh"), "{reason}");
         assert!(matches!(resolver.status(), ResolverStatus::Fallback { .. }));
         assert!(resolver.current().is_some());
+        // A failed attempt is not retried before `retry_after`; `refresh` starts one at once.
+        assert!(Arc::ptr_eq(&resolver.get().await, &env));
+        resolver.refresh();
+        assert_eq!(resolver.status(), ResolverStatus::Resolving);
+        assert!(!Arc::ptr_eq(&resolver.get().await, &env));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(start_paused = true)]
+    async fn a_failed_attempt_is_retried_after_a_minute() {
+        let resolver = EnvResolver::start(
+            unstartable(map(&[("PATH", "/usr/bin")])),
+            LeftoverRegistry::disabled(),
+            Handle::current(),
+        );
+        let first = resolver.get().await;
+        tokio::time::advance(Duration::from_secs(59)).await;
+        assert!(Arc::ptr_eq(&resolver.get().await, &first), "too early");
+        tokio::time::advance(Duration::from_secs(2)).await;
+        let second = resolver.get().await;
+        assert!(!Arc::ptr_eq(&second, &first), "retried");
+        assert!(Arc::ptr_eq(&resolver.get().await, &second));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn known_dirs_include_the_npmrc_prefix() {
+        let home = std::path::Path::new("/Users/me");
+        assert_eq!(
+            npmrc_prefix(
+                "registry=https://r.example\n; prefix=/ignored\nprefix = \"~/.npm-global\"\n",
+                home
+            ),
+            Some(PathBuf::from("/Users/me/.npm-global"))
+        );
+        assert_eq!(
+            npmrc_prefix("prefix=/opt/npm\n", home),
+            Some(PathBuf::from("/opt/npm"))
+        );
+        assert_eq!(npmrc_prefix("prefix=relative/dir\n", home), None);
+        assert_eq!(npmrc_prefix("# prefix=/x\n", home), None);
+        let dirs = standard_known_dirs(home);
+        for expected in [
+            "/Users/me/.local/bin",
+            "/Users/me/.asdf/shims",
+            "/Users/me/.local/share/mise/shims",
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+        ] {
+            assert!(dirs.contains(&PathBuf::from(expected)), "{expected}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn known_dirs_appended() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let home = dir.path();
+        for relative in [
+            ".local/bin",
+            ".asdf/shims",
+            ".local/share/mise/shims",
+            "npm-prefix/bin",
+        ] {
+            std::fs::create_dir_all(home.join(relative)).expect("mkdir");
+        }
+        std::fs::write(
+            home.join(".npmrc"),
+            format!("prefix={}\n", home.join("npm-prefix").display()),
+        )
+        .expect("npmrc");
+        let mut known = standard_known_dirs(home);
+        known.retain(|dir| dir.starts_with(home));
+        let present = home.join(".local/bin");
+        let mut vars = map(&[("HOME", "/h")]);
+        vars.insert(
+            EnvKey::from("PATH"),
+            std::env::join_paths(["/usr/bin", present.to_str().expect("utf-8")]).expect("join"),
+        );
+        append_known_dirs(&mut vars, &known);
+        let path: Vec<PathBuf> =
+            std::env::split_paths(vars.get(&EnvKey::from("PATH")).expect("PATH")).collect();
+        assert_eq!(
+            path,
+            [
+                PathBuf::from("/usr/bin"),
+                present,
+                home.join(".asdf/shims"),
+                home.join(".local/share/mise/shims"),
+                home.join("npm-prefix/bin"),
+            ],
+            "existing dirs missing from PATH are appended in order; missing ones are not"
+        );
+        // Nothing to add leaves PATH as it was.
+        let before = vars.clone();
+        append_known_dirs(&mut vars, &known);
+        assert_eq!(
+            vars.get(&EnvKey::from("PATH")),
+            before.get(&EnvKey::from("PATH"))
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_reads_the_registry_over_the_env_without_launch_context() {
+        let config = unstartable(map(&[
+            ("PATH", "C:\\from-the-process"),
+            ("TERM_PROGRAM", "vscode"),
+            ("AURA_TEST_BASE", "kept"),
+        ]));
+        let resolver = EnvResolver::start(config, LeftoverRegistry::disabled(), Handle::current());
+        let env = resolver.get().await;
+        assert_eq!(env.source, EnvSource::WindowsRegistry);
+        assert!(!env.vars.contains_key(&EnvKey::from("TERM_PROGRAM")));
+        assert_eq!(
+            env.vars.get(&EnvKey::from("AURA_TEST_BASE")),
+            Some(&OsString::from("kept"))
+        );
+        let path = env
+            .vars
+            .get(&EnvKey::from("PATH"))
+            .expect("PATH")
+            .to_string_lossy()
+            .into_owned();
+        assert!(path.to_ascii_lowercase().contains("system32"), "{path}");
+        assert!(
+            path.ends_with("C:\\from-the-process"),
+            "process entries come last: {path}"
+        );
+        assert!(matches!(resolver.status(), ResolverStatus::Ready { .. }));
     }
 
     #[tokio::test]
