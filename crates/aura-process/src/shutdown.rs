@@ -237,12 +237,12 @@ mod unix {
         }
     }
 
-    /// The escaped processes that still run as themselves (blocking: reads the process table).
+    /// The escaped processes that still run as themselves (blocking: one read of the process
+    /// table, however many there are).
     fn alive_escaped(escaped: &[EscapedProc]) -> Vec<EscapedProc> {
-        escaped
-            .iter()
-            .filter(|proc| ptable::is_same_process(proc.pid, &proc.start))
-            .cloned()
+        ptable::still_running(escaped.iter().map(|proc| (proc.pid, &proc.start)))
+            .into_iter()
+            .map(|(pid, start)| EscapedProc { pid, start })
             .collect()
     }
 

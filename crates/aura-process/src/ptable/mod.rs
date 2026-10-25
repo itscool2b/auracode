@@ -166,6 +166,36 @@ pub(crate) fn running_start(pid: u32) -> Option<StartTime> {
     }
 }
 
+/// Which of `processes` still run as themselves (pid and start time), from one read of the table.
+#[cfg(unix)]
+pub(crate) fn still_running<'a, I>(processes: I) -> Vec<(u32, StartTime)>
+where
+    I: IntoIterator<Item = (u32, &'a StartTime)>,
+{
+    let wanted: Vec<(u32, &StartTime)> = processes
+        .into_iter()
+        .filter(|(_, start)| **start != StartTime::Unknown)
+        .collect();
+    #[cfg(target_os = "linux")]
+    {
+        wanted
+            .into_iter()
+            .filter(|(pid, start)| linux::running_start(*pid).is_some_and(|now| now == **start))
+            .map(|(pid, start)| (pid, start.clone()))
+            .collect()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let pids: Vec<u32> = wanted.iter().map(|(pid, _)| *pid).collect();
+        let now = macos::running_starts(&pids);
+        wanted
+            .into_iter()
+            .filter(|(pid, start)| now.get(pid).is_some_and(|found| found == *start))
+            .map(|(pid, start)| (pid, start.clone()))
+            .collect()
+    }
+}
+
 /// Whether a process that is not a zombie is in group `pgid` (Linux, from `/proc`; elsewhere a
 /// group probe answers this).
 #[cfg(unix)]

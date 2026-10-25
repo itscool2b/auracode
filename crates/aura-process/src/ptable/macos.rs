@@ -217,6 +217,37 @@ pub(super) fn running_start(pid: u32) -> Option<StartTime> {
     Some(StartTime::MacLstart(lstart))
 }
 
+/// The start time of each of `pids` that runs (not a zombie), from one `ps` call.
+#[cfg(all(unix, not(target_os = "linux")))]
+pub(super) fn running_starts(pids: &[u32]) -> std::collections::HashMap<u32, StartTime> {
+    let mut found = std::collections::HashMap::new();
+    if pids.is_empty() {
+        return found;
+    }
+    let list = pids
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let Ok(text) = ps(&["-o", "pid=,stat=,lstart=", "-p", &list]) else {
+        return found;
+    };
+    for line in text.lines() {
+        let mut words = line.split_whitespace();
+        let (Some(pid), Some(stat)) = (words.next(), words.next()) else {
+            continue;
+        };
+        if stat.starts_with('Z') {
+            continue;
+        }
+        let lstart = words.collect::<Vec<_>>().join(" ");
+        if let (Ok(pid), Some(_)) = (pid.parse::<u32>(), lstart_epoch(&lstart)) {
+            found.insert(pid, StartTime::MacLstart(lstart));
+        }
+    }
+    found
+}
+
 /// `kern.boottime`'s seconds, read once.
 #[cfg(all(unix, not(target_os = "linux")))]
 pub(super) fn boot_marker() -> Option<String> {
