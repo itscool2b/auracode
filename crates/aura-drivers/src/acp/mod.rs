@@ -72,6 +72,10 @@ pub const OUTBOX_BYTES: usize = 8 * 1024 * 1024;
 /// Updates buffered while `session/new` is pending; later ones are dropped with a log line.
 pub const EARLY_UPDATES: usize = 256;
 
+/// The JSON bytes those buffered updates may hold together (one larger update passes alone), so
+/// the buffer is bounded by bytes like every other stage, not only by count.
+pub const EARLY_UPDATE_BYTES: usize = 8 * 1024 * 1024;
+
 /// The last reply a replay summary keeps.
 pub const REPLAY_REPLY_BYTES: usize = 64 * 1024;
 
@@ -217,12 +221,17 @@ fn log_command(log: &ProtocolLog, command: &DriverCommand) {
     }
 }
 
-/// Events waiting for permits, bounded so a slow session pauses stdout.
+/// Events waiting for permits, bounded so a slow session pauses stdout. Transcript events produced
+/// before `Ready` wait here too (rule 1) and count toward the same bound, so an agent that streams
+/// while the session is being configured pauses stdout instead of growing memory.
 struct Outbox {
     sender: EventSender,
     /// False once the session dropped the receiver: later events are discarded.
     open: bool,
     queue: VecDeque<(DriverEvent, usize)>,
+    /// Transcript events produced before `Ready`, handed over right after it.
+    held: Vec<(DriverEvent, usize)>,
+    /// Approximate bytes of `queue` and `held` together.
     bytes: usize,
 }
 
@@ -232,6 +241,7 @@ impl Outbox {
             sender,
             open: true,
             queue: VecDeque::new(),
+            held: Vec::new(),
             bytes: 0,
         }
     }
@@ -245,6 +255,31 @@ impl Outbox {
         self.queue.push_back((event, size));
     }
 
+    /// Keeps a transcript event until `Ready`; it counts toward the bound meanwhile.
+    fn hold(&mut self, event: DriverEvent) {
+        if !self.open {
+            return;
+        }
+        let size = event.approx_bytes();
+        self.bytes = self.bytes.saturating_add(size);
+        self.held.push((event, size));
+    }
+
+    /// `Ready` is queued: what was held follows it.
+    fn release_held(&mut self) {
+        self.queue.extend(self.held.drain(..));
+    }
+
+    /// The start ended without `Ready`, so what was held can never be handed over (rule 1).
+    /// Returns how many events that was.
+    fn drop_held(&mut self) -> usize {
+        let count = self.held.len();
+        for (_, size) in self.held.drain(..) {
+            self.bytes = self.bytes.saturating_sub(size);
+        }
+        count
+    }
+
     fn head_bytes(&self) -> usize {
         self.queue.front().map_or(0, |(_, size)| *size)
     }
@@ -254,7 +289,7 @@ impl Outbox {
     }
 
     fn is_full(&self) -> bool {
-        self.queue.len() >= OUTBOX_EVENTS || self.bytes >= OUTBOX_BYTES
+        self.queue.len() + self.held.len() >= OUTBOX_EVENTS || self.bytes >= OUTBOX_BYTES
     }
 
     fn deliver(&mut self, permit: Result<EventPermit, ChannelClosed>) {
@@ -273,6 +308,7 @@ impl Outbox {
     fn discard(&mut self) {
         self.open = false;
         self.queue.clear();
+        self.held.clear();
         self.bytes = 0;
     }
 
@@ -533,7 +569,9 @@ struct Session {
     open: Option<OpenState>,
     session_id: Option<String>,
     resumed: ResumeOutcome,
+    /// Updates for a session not named yet (`session/new` pending), and their JSON bytes.
     early: Vec<Value>,
+    early_bytes: usize,
     replay: Option<ReplayCollector>,
     replay_summary: Option<ReplaySummary>,
     options: Option<OptionModel>,
@@ -546,8 +584,8 @@ struct Session {
     after_turn: Vec<Op>,
     /// Commands that arrived before `Ready`.
     held: VecDeque<DriverCommand>,
-    /// Transcript events produced before `Ready`, handed over right after it (rule 1).
-    held_events: Vec<DriverEvent>,
+    /// Transcript events of a start that ended without `Ready` (rule 1 forbids handing them over).
+    dropped_before_ready: usize,
     mapper: Mapper,
     prompt: Option<PromptState>,
     permissions: PendingPermissions,
@@ -611,6 +649,7 @@ impl Session {
             session_id: None,
             resumed: ResumeOutcome::New,
             early: Vec::new(),
+            early_bytes: 0,
             replay: None,
             replay_summary: None,
             options: None,
@@ -621,7 +660,7 @@ impl Session {
             op_busy: false,
             after_turn: Vec::new(),
             held,
-            held_events: Vec::new(),
+            dropped_before_ready: 0,
             prompt: None,
             permissions: PendingPermissions::default(),
             usage_total: None,
@@ -688,9 +727,9 @@ impl Session {
     }
 
     fn finish(self) -> DriverExit {
-        if !self.held_events.is_empty() {
+        if self.dropped_before_ready > 0 {
             tracing::debug!(
-                count = self.held_events.len(),
+                count = self.dropped_before_ready,
                 "transcript events of a start that never reached Ready were dropped"
             );
         }
@@ -1216,6 +1255,7 @@ impl Session {
         self.outbox.push(DriverEvent::Options(model.options()));
         self.options = Some(model);
         // Updates that arrived before the session had a name.
+        self.early_bytes = 0;
         for params in std::mem::take(&mut self.early) {
             self.on_update(&params);
         }
@@ -1254,9 +1294,7 @@ impl Session {
             replay: self.replay_summary.take(),
         };
         self.outbox.push(DriverEvent::Ready(info));
-        for event in std::mem::take(&mut self.held_events) {
-            self.outbox.push(event);
-        }
+        self.outbox.release_held();
         while let Some(command) = self.held.pop_front() {
             match command {
                 command @ (DriverCommand::SetOption { .. } | DriverCommand::SetAutonomy { .. }) => {
@@ -1353,10 +1391,15 @@ impl Session {
             (None, theirs) => match self.open_kind() {
                 Some(OpenKind::New { .. }) => {
                     // The reply names the session; until then nothing can be matched.
-                    if self.early.len() < EARLY_UPDATES {
+                    let size = json_bytes(params);
+                    let fits = self.early.is_empty()
+                        || (self.early.len() < EARLY_UPDATES
+                            && self.early_bytes.saturating_add(size) <= EARLY_UPDATE_BYTES);
+                    if fits {
+                        self.early_bytes = self.early_bytes.saturating_add(size);
                         self.early.push(params.clone());
                     } else {
-                        tracing::debug!("an early update dropped: the buffer is full");
+                        tracing::debug!(size, "an early update dropped: the buffer is full");
                     }
                     return;
                 }
@@ -1462,12 +1505,15 @@ impl Session {
         }
     }
 
-    /// Hands an event over; before `Ready` transcript events wait for it (rule 1).
+    /// Hands an event over; before `Ready` transcript events wait for it (rule 1), counting
+    /// toward the outbox's bound. Once a start ended without `Ready`, nothing waits for it.
     fn push(&mut self, event: DriverEvent) {
-        if !self.ready && holds_until_ready(&event) {
-            self.held_events.push(event);
-        } else {
+        if self.ready || !holds_until_ready(&event) {
             self.outbox.push(event);
+        } else if self.phase == Phase::Running {
+            self.outbox.hold(event);
+        } else {
+            self.dropped_before_ready = self.dropped_before_ready.saturating_add(1);
         }
     }
 
@@ -2236,17 +2282,24 @@ impl Session {
 
     /// Whatever waits for the agent's answer gets none: start requests, option and autonomy
     /// changes (their dropped replies read as "the agent stopped"), held commands. A running
-    /// prompt's reply is still welcome.
+    /// prompt's reply is still welcome. A start that ends here never reaches `Ready`, so the
+    /// transcript events it held go too; otherwise they would keep stdout paused to the end.
     fn stop_waiting(&mut self) {
         self.pending
             .retain(|_, request| matches!(request.purpose, Purpose::Prompt));
         self.open = None;
         self.replay = None;
+        self.early.clear();
+        self.early_bytes = 0;
         self.op_busy = false;
         self.autonomy_target = None;
         self.ops.clear();
         self.after_turn.clear();
         self.held.clear();
+        if !self.ready {
+            let dropped = self.outbox.drop_held();
+            self.dropped_before_ready = self.dropped_before_ready.saturating_add(dropped);
+        }
     }
 }
 
@@ -2283,6 +2336,27 @@ fn send<T>(reply: Option<oneshot::Sender<T>>, value: T) {
 
 fn difference(now: Option<u64>, before: Option<u64>) -> Option<u64> {
     now.map(|now| now.saturating_sub(before.unwrap_or(0)))
+}
+
+/// The length of `value` as JSON, counted without building the text.
+fn json_bytes(value: &Value) -> usize {
+    struct Count(usize);
+    impl std::io::Write for Count {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0 = self.0.saturating_add(buf.len());
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut count = Count(0);
+    match serde_json::to_writer(&mut count, value) {
+        Ok(()) => count.0,
+        // A JSON value always serializes; if it ever did not, it would count as too large.
+        Err(_) => usize::MAX,
+    }
 }
 
 /// The agent's error, raw (the session redacts it).

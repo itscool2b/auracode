@@ -2437,7 +2437,7 @@ async fn the_start_timeout_covers_only_the_launch() {
 }
 
 #[test]
-fn slow_consumer_blocks_agent_not_memory() {
+fn the_outbox_is_full_at_64_events_or_8_mib_with_held_events_counted() {
     // The driver reads stdout only while its outbox has room: 64 events or 8 MiB.
     let (sender, _receiver) = event_channel();
     let mut outbox = Outbox::new(sender);
@@ -2446,7 +2446,7 @@ fn slow_consumer_blocks_agent_not_memory() {
         outbox.push(small.clone());
     }
     assert!(!outbox.is_full());
-    outbox.push(small);
+    outbox.push(small.clone());
     assert!(outbox.is_full(), "64 events");
     let (sender, _receiver) = event_channel();
     let mut outbox = Outbox::new(sender);
@@ -2455,7 +2455,224 @@ fn slow_consumer_blocks_agent_not_memory() {
     // Once the session stops reading for good, nothing is kept.
     outbox.discard();
     outbox.push(DriverEvent::Title(None));
+    outbox.hold(DriverEvent::Title(None));
     assert!(!outbox.has_head() && !outbox.is_full());
+
+    // Events held for Ready count toward the same bound, and go out after it in order.
+    let (sender, _receiver) = event_channel();
+    let mut outbox = Outbox::new(sender);
+    outbox.push(small.clone());
+    for _ in 0..OUTBOX_EVENTS - 1 {
+        outbox.hold(small.clone());
+    }
+    assert!(outbox.is_full(), "held events count");
+    assert_eq!(outbox.queue.len(), 1, "but they cannot be handed over yet");
+    outbox.release_held();
+    assert_eq!(outbox.queue.len(), OUTBOX_EVENTS);
+    // A start that ends without Ready drops them, and with them their weight.
+    let (sender, _receiver) = event_channel();
+    let mut outbox = Outbox::new(sender);
+    outbox.hold(DriverEvent::Title(Some("x".repeat(OUTBOX_BYTES))));
+    assert!(outbox.is_full());
+    assert_eq!(outbox.drop_held(), 1);
+    assert!(!outbox.is_full() && !outbox.has_head());
+}
+
+#[tokio::test(start_paused = true)]
+async fn slow_consumer_blocks_agent_not_memory() {
+    let mut harness = ready_generic().await;
+    // The agent writes 2,000 updates and then a request, while nobody reads events.
+    for index in 0..2_000 {
+        harness.update(chunk(&format!("{index} ")));
+    }
+    harness.agent_request(json!("after-the-flood"), "x/unknown", json!({}));
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    // The driver stopped reading once its outbox was full (about 256 events in the channel, 64
+    // in the outbox and 16 lines in the reader's channel): the request is still in the pipe.
+    harness.no_line();
+    // Once the session reads again, everything arrives in order and the request is answered.
+    let expected: String = (0..2_000).map(|index| format!("{index} ")).collect();
+    let mut text = String::new();
+    while text.len() < expected.len() {
+        if let DriverEvent::Event {
+            event: AuraEvent::MessageDelta { text: piece, .. },
+            ..
+        } = harness.event().await
+        {
+            text.push_str(&piece);
+        }
+    }
+    assert_eq!(text, expected);
+    let reply = harness.line().await;
+    assert_eq!(reply["id"], "after-the-flood");
+    assert_eq!(reply["error"]["code"], -32601);
+}
+
+/// A generic agent's model option, with `current` as its value.
+fn model_option(current: &str) -> Value {
+    json!({"id": "model", "name": "Model", "category": "model", "type": "select", "currentValue": current,
+           "options": [{"value": "a", "name": "A"}, {"value": "b", "name": "B"}]})
+}
+
+/// A generic agent configuring an earlier choice of model, whose answer the agent sends only after
+/// 2,000 updates and before a request of its own; nobody reads events.
+async fn flood_while_configuring() -> Harness {
+    let mut chosen = setup("generic");
+    chosen
+        .desired
+        .insert("model".into(), ConfigValue::Choice { value: "b".into() });
+    let mut harness = Harness::start(chosen).await;
+    let (id, _) = harness.request("initialize").await;
+    harness.reply(&id, init_result());
+    let (id, _) = harness.request("session/new").await;
+    harness.reply(
+        &id,
+        json!({"sessionId": SESSION, "configOptions": [model_option("a")]}),
+    );
+    let (set, params) = harness.request("session/set_config_option").await;
+    assert_eq!(params["value"], "b");
+    for index in 0..2_000 {
+        harness.update(chunk(&format!("{index} ")));
+    }
+    harness.reply(&set, json!({"configOptions": [model_option("b")]}));
+    harness.agent_request(json!("after-the-flood"), "x/unknown", json!({}));
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    harness
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_flood_while_configuring_pauses_stdout_and_loses_nothing() {
+    let mut harness = flood_while_configuring().await;
+    // Transcript events wait for Ready and count toward the outbox, so reading stopped after
+    // about 64 of them: the request is unanswered and memory stays bounded.
+    harness.no_line();
+    // The choice's answer sits behind the flood, so its request times out and the start goes on.
+    tokio::time::sleep(Duration::from_secs(30)).await;
+    let expected: String = (0..2_000).map(|index| format!("{index} ")).collect();
+    let mut events = Vec::new();
+    let mut text = String::new();
+    while text.len() < expected.len() {
+        let event = harness.event().await;
+        if let DriverEvent::Event {
+            event: AuraEvent::MessageDelta { text: piece, .. },
+            ..
+        } = &event
+        {
+            text.push_str(piece);
+        }
+        events.push(event);
+    }
+    assert_eq!(text, expected, "nothing was dropped, and the order held");
+    let ready_at = events
+        .iter()
+        .position(|event| matches!(event, DriverEvent::Ready(_)))
+        .expect("Ready");
+    let first_delta = events
+        .iter()
+        .position(|event| {
+            matches!(
+                event,
+                DriverEvent::Event {
+                    event: AuraEvent::MessageDelta { .. },
+                    ..
+                }
+            )
+        })
+        .expect("a delta");
+    assert!(ready_at < first_delta, "rule 1");
+    assert!(transcript(&events).iter().any(|(_, event)| matches!(event,
+        AuraEvent::Notice { message, .. } if message == "auracode could not restore the model you chose earlier (the agent did not answer within 30 seconds).")));
+    let reply = harness.line().await;
+    assert_eq!(reply["id"], "after-the-flood");
+    assert_eq!(reply["error"]["code"], -32601);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_start_that_ends_while_events_wait_for_ready_still_returns() {
+    // A stop: what waited for Ready can never be handed over, so it no longer keeps stdout paused.
+    let mut harness = flood_while_configuring().await;
+    harness.no_line();
+    harness.command(DriverCommand::Shutdown {
+        plan: StopPlan {
+            cancel_grace: Duration::from_secs(3),
+            process: ShutdownPlan::STANDARD,
+        },
+    });
+    let (events, exit) = harness.finish().await;
+    assert_eq!(exit, DriverExit::Closed);
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, DriverEvent::Ready(_)))
+    );
+    assert!(
+        transcript(&events)
+            .iter()
+            .all(|(_, event)| matches!(event, AuraEvent::Notice { .. })),
+        "rule 1: no transcript event without Ready"
+    );
+
+    // The agent's exit, with a descendant still holding the pipe: the same, within the grace.
+    let mut harness = flood_while_configuring().await;
+    harness.no_line();
+    harness.exit_with(1);
+    let (events, exit) = harness.finish().await;
+    assert!(
+        matches!(
+            exit,
+            DriverExit::StartFailed(DriverError {
+                kind: ErrorKind::AgentExited,
+                ..
+            })
+        ),
+        "{exit:?}"
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, DriverEvent::Ready(_)))
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn early_updates_are_bounded_by_bytes_too() {
+    let mut harness = Harness::start(setup("generic")).await;
+    let (id, _) = harness.request("initialize").await;
+    harness.reply(&id, init_result());
+    let (open, _) = harness.request("session/new").await;
+    // Three updates of 3 MiB before the reply names the session: the third would take the buffer
+    // past 8 MiB, so it is dropped.
+    for marker in ["first", "second", "third"] {
+        harness.update(chunk(&format!("{marker}:{}", "x".repeat(3 * 1024 * 1024))));
+    }
+    harness.reply(&open, json!({"sessionId": SESSION}));
+    harness.update(json!({"sessionUpdate": "session_info_update", "title": "after"}));
+    let events = harness
+        .events_until(|event| event == &DriverEvent::Title(Some("after".into())))
+        .await;
+    let markers: Vec<String> = transcript(&events)
+        .into_iter()
+        .filter_map(|(_, event)| match event {
+            AuraEvent::MessageDelta { text, .. } => text.split(':').next().map(str::to_owned),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(markers, ["first", "second"]);
+
+    // One update larger than the whole buffer still passes when it comes alone.
+    let mut harness = Harness::start(setup("generic")).await;
+    let (id, _) = harness.request("initialize").await;
+    harness.reply(&id, init_result());
+    let (open, _) = harness.request("session/new").await;
+    harness.update(chunk(&format!("big:{}", "x".repeat(EARLY_UPDATE_BYTES))));
+    harness.reply(&open, json!({"sessionId": SESSION}));
+    harness.update(json!({"sessionUpdate": "session_info_update", "title": "after"}));
+    let events = harness
+        .events_until(|event| event == &DriverEvent::Title(Some("after".into())))
+        .await;
+    assert!(transcript(&events).iter().any(
+        |(_, event)| matches!(event, AuraEvent::MessageDelta { text, .. } if text.starts_with("big:"))
+    ));
 }
 
 #[tokio::test(start_paused = true)]
