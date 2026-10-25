@@ -428,7 +428,11 @@ pub fn sweep_notice(report: &SweepReport) -> Option<String> {
 
 /// The driver factory the app starts agents with until package B's `StandardDriverFactory` (the
 /// ACP driver and the demo agent's driver) lands at the merge. Every start fails with a sentence
-/// that says why, as an error card in the chat.
+/// that says why, as an error card in the chat (an `internal` one, which offers no Retry).
+///
+/// At B's merge, [`Outside::real`] must take `aura_drivers::factory::StandardDriverFactory::new()`
+/// and this type goes. No test fails if that is forgotten, since every test passes its own
+/// factory: the merge adds one that starts the demo agent through `Outside::real` to `Ready`.
 struct UnbuiltDrivers;
 
 impl DriverFactory for UnbuiltDrivers {
@@ -1649,8 +1653,24 @@ mod tests {
         assert_eq!(question.keep, "Keep auracode open");
     }
 
+    /// This instance's leftover registry files in `run`: `<pid>-<start>.json` (spec 3.5).
+    fn own_registry_files(run: &Path) -> Vec<String> {
+        let prefix = format!("{}-", std::process::id());
+        std::fs::read_dir(run)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .filter_map(|entry| entry.file_name().into_string().ok())
+                    .filter(|name| name.starts_with(&prefix) && name.ends_with(".json"))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Quitting with no live session still commits the store and closes it: the write-ahead log is
-    /// folded back, so the next launch sees a clean shutdown and checks nothing.
+    /// folded back, so the next launch sees a clean shutdown and checks nothing; and this
+    /// instance's registry file is gone. (P0's registry writes none, so that last check bites once
+    /// package A's registry is merged.)
     #[tokio::test]
     async fn quit_without_sessions_commits_and_closes() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1658,6 +1678,7 @@ mod tests {
         let mut booted = boot(Ok(root.clone()));
         let db = PathBuf::from(&booted.db.as_ref().expect("db").path);
         let wal = PathBuf::from(format!("{}-wal", db.display()));
+        let run = booted.data_dir.clone().expect("data root").join(RUN_DIR);
         let chats = testing::start(&mut booted).expect("chats");
         assert!(
             std::fs::metadata(&wal).is_ok_and(|meta| meta.len() > 0),
@@ -1675,6 +1696,11 @@ mod tests {
             "{outcome:?}"
         );
         assert!(!wal.exists(), "the log was folded back into the database");
+        assert_eq!(
+            own_registry_files(&run),
+            Vec::<String>::new(),
+            "the registry file is removed"
+        );
         let chats = host.chats.take().expect("chats");
         assert!(
             !exit_last_resort(&quit, &chats),
