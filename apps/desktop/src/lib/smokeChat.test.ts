@@ -149,10 +149,11 @@ describe("the chat scenario's script", () => {
     expect(PROMPTS.autoApproved.split(" ")[0]).toBe("/permission");
     expect(PROMPTS.dismiss.split(" ")[0]).toBe("/ask");
     expect(PROMPTS.atQuit.split(" ")[0]).toBe("/ignore-cancel");
-    // Plain prompts play the demo turn.
-    for (const prompt of [PROMPTS.demo, PROMPTS.busy, PROMPTS.beforeFail, PROMPTS.beforeCrash]) {
-      expect(prompt.startsWith("/")).toBe(false);
+    for (const prompt of [PROMPTS.busy, PROMPTS.beforeFail, PROMPTS.beforeCrash]) {
+      expect(prompt.split(" ")[0]).toBe("/slow");
     }
+    // A plain prompt plays the demo turn.
+    expect(PROMPTS.demo.startsWith("/")).toBe(false);
   });
 
   it("knows what the demo agent echoes", () => {

@@ -181,15 +181,15 @@ export const PROMPTS = {
   big: "/big",
   background: "/background",
   slow: "/slow",
-  busy: "Explain the change",
+  busy: "/slow while a prompt waits behind it",
   queued: "/echo queued behind a turn",
   hang: "/hang",
   afterStop: "/echo typed after the stop",
   heldAtStop: "/echo held at stop",
-  beforeFail: "Show the plan again",
+  beforeFail: "/slow before a failing turn",
   fail: "/fail",
   heldAtError: "/echo held at error",
-  beforeCrash: "One more demo turn",
+  beforeCrash: "/slow before a crash",
   crash: "/crash",
   heldAtCrash: "/echo held at crash",
   auth: "/auth",
@@ -259,15 +259,15 @@ export const SEGMENTS = {
   background: turn(PROMPTS.background, "end_turn", ["tool:execute:completed", "message"]),
   backgroundLate: between(["permission:user:allow", "notice:info"]),
   slow: turn(PROMPTS.slow, "cancelled", ["message"]),
-  busy: demoTurn(PROMPTS.busy),
+  busy: turn(PROMPTS.busy, "end_turn", ["message"]),
   queued: echoTurn(PROMPTS.queued),
   hang: turn(PROMPTS.hang, "cancelled", ["message"]),
   afterStop: echoTurn(PROMPTS.afterStop),
   heldAtStop: echoTurn(PROMPTS.heldAtStop),
-  beforeFail: demoTurn(PROMPTS.beforeFail),
+  beforeFail: turn(PROMPTS.beforeFail, "end_turn", ["message"]),
   fail: turn(PROMPTS.fail, "error", ["error:agent_error"]),
   heldAtError: echoTurn(PROMPTS.heldAtError),
-  beforeCrash: demoTurn(PROMPTS.beforeCrash),
+  beforeCrash: turn(PROMPTS.beforeCrash, "end_turn", ["message"]),
   crash: turn(PROMPTS.crash, "error", ["message", "error:agent_exited"]),
   heldAtCrash: echoTurn(PROMPTS.heldAtCrash),
   auth: turn(PROMPTS.auth, "error", ["error:auth_required"]),
@@ -363,10 +363,6 @@ function turnOf(prompt: string): SegmentView | null {
     (segment) => segment.kind === "turn" && segment.prompt === prompt,
   );
   return turns[turns.length - 1] ?? null;
-}
-
-async function waitTurn(prompt: string, timeoutMs?: number): Promise<SegmentView> {
-  return waitFor(`a turn for "${prompt}"`, () => turnOf(prompt), timeoutMs);
 }
 
 async function waitTurnEnded(prompt: string, timeoutMs?: number): Promise<SegmentView> {
@@ -540,16 +536,17 @@ async function sendQueued(prompt: string): Promise<SegmentView> {
   return ended;
 }
 
-/** Sends a demo-turn prompt and queues `then` behind it while it runs. */
-async function queueBehindDemoTurn(busy: string, then: readonly string[]): Promise<void> {
+/**
+ * Sends `busy`, a `/slow` prompt (its answer streams for about 4.7 s), and `then` right behind it:
+ * the session manager takes prompts in order, so each one queues behind the running turn whatever
+ * the page shows yet. Each waits in the queue, not held, until the slow turn ends normally.
+ */
+async function queueBehindSlowTurn(busy: string, then: readonly string[]): Promise<void> {
   await send(busy);
-  await waitTurn(busy);
-  for (const prompt of then) {
-    await send(prompt);
-    await waitQueued(prompt, false);
-  }
+  for (const prompt of then) await send(prompt);
+  for (const prompt of then) await waitQueued(prompt, false);
   const ended = await waitTurnEnded(busy);
-  expectSegment(ended, demoTurn(busy));
+  expectSegment(ended, turn(busy, "end_turn", ["message"]));
 }
 
 /** Chooses `agentId` on New chat, and the folder the smoke run's folder picker answers. */
@@ -745,8 +742,8 @@ async function chatScenario(
   });
 
   await checks.run("permission-withdrawn", async () => {
+    // The agent withdraws its card a second after asking: the turn shows how the card ended.
     await send(PROMPTS.withdraw);
-    await waitAsking(PROMPTS.withdraw);
     const ended = await waitTurnEnded(PROMPTS.withdraw);
     expectSegment(ended, SEGMENTS.withdraw);
     expectReply(ended, "The demo agent withdrew its request.");
@@ -840,7 +837,7 @@ async function chatScenario(
   });
 
   await checks.run("queue-after-turn", async () => {
-    await queueBehindDemoTurn(PROMPTS.busy, [PROMPTS.queued]);
+    await queueBehindSlowTurn(PROMPTS.busy, [PROMPTS.queued]);
     const ended = await waitTurnEnded(PROMPTS.queued);
     expectSegment(ended, echoTurn(PROMPTS.queued));
     expectReply(ended, echoed(PROMPTS.queued));
@@ -870,7 +867,7 @@ async function chatScenario(
   });
 
   await checks.run("error-card", async () => {
-    await queueBehindDemoTurn(PROMPTS.beforeFail, [PROMPTS.fail, PROMPTS.heldAtError]);
+    await queueBehindSlowTurn(PROMPTS.beforeFail, [PROMPTS.fail, PROMPTS.heldAtError]);
     const failed = await waitTurnEnded(PROMPTS.fail);
     expectSegment(failed, SEGMENTS.fail);
     const card = item(failed, "error");
@@ -892,7 +889,7 @@ async function chatScenario(
   });
 
   await checks.run("crash-card", async () => {
-    await queueBehindDemoTurn(PROMPTS.beforeCrash, [PROMPTS.crash, PROMPTS.heldAtCrash]);
+    await queueBehindSlowTurn(PROMPTS.beforeCrash, [PROMPTS.crash, PROMPTS.heldAtCrash]);
     const crashed = await waitTurnEnded(PROMPTS.crash);
     expectSegment(crashed, SEGMENTS.crash);
     const card = item(crashed, "error");
