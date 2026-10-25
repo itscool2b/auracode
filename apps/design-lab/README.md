@@ -1,13 +1,17 @@
 # auracode Design Lab
 
-The M1a Design Lab from [docs/plan.md](../../docs/plan.md): three visual directions for the auracode
-UI, each rendering the same recorded-style chat, so the owner can pick one. Every direction gets the
-same data (the transcript model, the workspace, a timeline player) and differs only in how it
-presents it, inside a simulated 1440x900 macOS window floating over a wallpaper (the stand-in for the
-native Liquid Glass behind the real, transparent window). The chosen direction graduates into the
-real UI in M2a.
+The M1a Design Lab from [docs/plan.md](../../docs/plan.md): visual directions for the auracode UI
+(Aurora, Noir and Halo, then Orbit after the owner turned those three down), each rendering the same
+recorded-style chat, so the owner could pick one. The owner chose **Orbit**: the gallery opens with
+it, marked as chosen, and it graduates into the real UI in M2a. The other three stay for comparison.
+Every direction gets the same data (the transcript model, the workspace, a timeline player) and
+differs only in how it presents it, inside a simulated 1440x900 macOS window floating over a
+wallpaper (the stand-in for the native Liquid Glass behind the real, transparent window).
 
 ## The directions
+
+The gallery lists Orbit, the chosen direction, first and then the others in the order they were
+made. Below they are described in the order they were made, so Orbit comes last.
 
 **Aurora** (`#/aurora`): immersive light behind heavy glass, the agent's colour glowing through every
 layer. The agent's light sits as two lobes on the transcript sheet's edges, in a deeper version of
@@ -29,6 +33,12 @@ adds to it. Send is the agent's orb in a 3px ring that turns while the agent wor
 while it waits. The slab under the composer is one status line for the running turn, tool groups stay
 single rows until opened, and Esc works through one keyboard layer, from the topmost menu down to
 stopping the turn.
+
+**Orbit** (`#/orbit`, chosen): mission control for your agents, from the design language in
+[docs/design/visual-language.md](../../docs/design/visual-language.md). Black and white, sentences
+and numbers, one orange that means look here. Paper panes laid on a warm grey tray (light) or black
+(dark), separated by hairlines, not glass. Every agent is a line-drawn orbit with a square satellite
+whose motion is its state. It renders every lab state, the two new ones included, in both themes.
 
 Each direction's own README (`src/directions/<id>/README.md`) has the full design notes. To compare
 them without running anything, open the shots: `shots/index.json` lists every screenshot and video.
@@ -72,24 +82,37 @@ pnpm --filter @auracode/design-lab shoot --direction aurora --server http://loca
 
 It builds the lab into a private folder, serves it with `vite preview` on the port, and writes
 `shots/<direction>/<engine>-<shot>.png` at 1440x900 and 2x for `streaming-t7.5`, `streaming-t24`,
-`settled`, `empty`, `permission`, `picker` and `settled-reduced-motion`, plus
-`<engine>-streaming.webm` (14 s from t=0 at 1x), in WebKit and Chromium by default. `--server` shoots
+`settled`, `empty`, `permission`, `picker`, `changes`, `onboarding` (frozen at t=1.6) and
+`settled-reduced-motion`, plus `<engine>-streaming.webm` (14 s from t=0 at 1x), in WebKit and
+Chromium by default. A direction is shot only in the states its `meta.ts` lists, on its own wallpaper.
+`--themes dark,light` shoots each theme the direction draws (`?theme=`, with the OS colour scheme
+emulated to match) and names the files `<engine>-<theme>-<shot>.png` and
+`<engine>-<theme>-streaming.webm`; without it, one dark pass keeps the names above. `--server` shoots
 a running lab instead, and `--dev` serves with the dev server, so a direction that is broken mid-edit
 only breaks its own pages. Run `node scripts/shoot.mjs --help` for every option.
 
-`shots/index.json` indexes the final shots: for each direction its id, name, tagline and key ideas,
-and the path (relative to the index) and lab URL of every screenshot and video. `shots/` is review
+```sh
+node scripts/shoot.mjs --direction orbit --port 5190 --themes dark,light
+```
+
+`shots/index.json` indexes the final shots: `chosen` (the chosen direction's id), then for each
+direction, chosen first, its id, name, tagline (and `chosen: true` on the chosen one), key ideas,
+and, for a direction that lists them, its `states` and `themes`, then the engine, theme (when shot
+with `--themes`), shot name, path (relative to the index) and lab URL of every screenshot, and the
+same for every video plus its `playbackSeconds`. Orbit is shot with `--themes dark,light` (36
+screenshots and 4 videos); Aurora, Noir and Halo with one dark pass (14 and 2 each). `shots/` is review
 material and is not committed.
 
 ## URLs
 
 ```
-#/                                   gallery: every direction, live thumbnails, links to each state
+#/                                   gallery: the chosen direction first, then the rest, with live
+                                     thumbnails and links to each state
 #/<direction>                        that direction, streaming
 #/<direction>/<state>?<params>       that direction in one state
 ```
 
-Directions: `aurora`, `noir`, `halo`.
+Directions: `orbit` (chosen), `aurora`, `noir`, `halo`.
 
 | State | What it shows |
 |---|---|
@@ -98,6 +121,12 @@ Directions: `aurora`, `noir`, `halo`.
 | `empty` | A new chat with no messages: the hero moment |
 | `permission` | The Codex chat waiting on a permission card |
 | `picker` | The composer's agent > model > effort picker open over the settled chat |
+| `changes` | The settled chat with the right panel open on the turn's diffs (`workspace.rightPanel`) |
+| `onboarding` | First-run agent discovery, played as a timeline and looping (`workspace.discovery`) |
+
+The first five are every direction's. The last two are opt-in: a direction lists the states it renders
+in its `meta.ts` (`states`), and the gallery, the controls and the shoot script skip the rest, so
+`#/aurora/changes` says the state is missing instead of rendering half a window.
 
 | Param | Effect |
 |---|---|
@@ -106,12 +135,14 @@ Directions: `aurora`, `noir`, `halo`.
 | `motion=reduce` | Render as if the OS asked for reduced motion |
 | `play=1`, `play=0` | Force playback on (any state plays and loops) or off |
 | `hud=1`, `hud=0` | Pin the lab controls open, or hide them |
-| `wall=dusk`, `dawn`, `graphite` | Wallpaper behind the window (dawn is the bright, hard case) |
+| `wall=dusk`, `dawn`, `graphite` | Wallpaper behind the window (dawn is the bright, hard case); the default is the direction's own (`meta.ts`), else dusk |
+| `theme=dark`, `light` | The appearance (default dark). Passed to every direction as the `theme` prop and set as `data-theme` around it; directions that list only dark in `meta.ts` ignore it |
 | `thumb=1` | Gallery thumbnail: tight margins, no controls |
 
-Example: `#/noir/streaming?t=24&wall=dawn`. The lab controls (direction, state, play, scrub, speed,
-reduced motion) appear when the pointer nears the bottom edge. Keys: Space plays or pauses, the
-arrows step 2 s (10 s with Shift), H pins them.
+Example: `#/noir/streaming?t=24&wall=dawn`, `#/orbit/onboarding?t=1.6&theme=light`. The lab controls
+(direction, state, play, scrub, speed, reduced motion, and the theme for directions that draw both)
+appear when the pointer nears the bottom edge. Keys: Space plays or pauses, the arrows step 2 s (10 s
+with Shift), H pins them.
 
 ## Layout
 
@@ -125,11 +156,13 @@ src/
     golden.ts              Claude Code fixes the flaky orb pacing test (about 48 s)
     golden-files.ts        the files the golden turn edits, before and after
     approval.ts            Codex stops on "Run cargo test -p aura-drivers?"
+    discovery.ts           first-run discovery: five agents found, two missing (about 3 s)
     timeline.ts            authored scripts to timed, seeded stream events
     workspace.ts           projects, chats, agent dock, models, composers, lookup helpers
     scenes.ts              which recording, chat and composer each state shows
   model/                   shared logic, pure and tested
     transcript.ts          the reducer: timed events in, TranscriptModel out
+    discovery.ts           the discovery reducer: scan events in, DiscoveryModel out
     types.ts               TranscriptModel and everything in it
     player.ts              the playback clock: speed, loop, pause, seek
     usePlayer.ts           the player a direction receives, and usePlayhead
@@ -140,8 +173,10 @@ src/
     format.ts              durations, counts, costs, paths
   shared/                  the simulated desktop: WindowChrome, Wallpaper, PlainTranscript
   directions/
-    index.ts               the registry: id -> { id, name, tagline, App }
+    index.ts               the registry: id -> { id, name, tagline, states, themes, wallpaper, App },
+                           in gallery order, and CHOSEN_DIRECTION_ID ("orbit")
     types.ts               DirectionProps, Direction
+    orbit/                 the chosen direction
     aurora/ noir/ halo/    one folder per direction, each owned by one designer
 scripts/shoot.mjs          screenshots and video in WebKit and Chromium
 ```
@@ -149,16 +184,20 @@ scripts/shoot.mjs          screenshots and video in WebKit and Chromium
 ## Building a direction
 
 Your folder (`src/directions/<id>/`) is yours alone: `App.tsx` exports `App`, which renders everything
-inside the 1440x900 window, and `meta.ts` holds the name and tagline the gallery shows. Import types
-and helpers from `src/kit.ts` (`import { usePlayhead, type DirectionProps } from "../../kit"`), and
-orbs, the aura, brands, glass and tokens from `@auracode/ui`.
+inside the 1440x900 window, and `meta.ts` holds the name and tagline the gallery shows, plus, when
+you need them, the states you render (`states`, default the core five), the themes you draw (`themes`,
+default dark only) and the desktop you open on (`wallpaper`, default dusk). Import types and helpers
+from `src/kit.ts` (`import { usePlayhead, type DirectionProps } from "../../kit"`), and orbs, the aura,
+brands, glass and tokens from `@auracode/ui`.
 
 ```ts
 interface DirectionProps {
-  state: LabState;              // "streaming" | "settled" | "empty" | "permission" | "picker"
-  model: TranscriptModel;       // the open chat at the playhead (no turns in "empty")
-  workspace: Workspace;         // sidebar, agent dock, composer (pickerOpen in "picker")
+  state: LabState;              // the core five, or "changes" | "onboarding" when meta.ts lists them
+  model: TranscriptModel;       // the open chat at the playhead (no turns in "empty", "onboarding")
+  workspace: Workspace;         // sidebar, dock, composer (pickerOpen in "picker"), rightPanel in
+                                // "changes", discovery (the scan at the playhead) in "onboarding"
   player: Player;               // the timeline; read the moving playhead with usePlayhead(player)
+  theme?: LabTheme;             // "dark" | "light", from ?theme=
 }
 ```
 

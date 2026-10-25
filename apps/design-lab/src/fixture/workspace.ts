@@ -191,8 +191,11 @@ function chat(
   agent: AgentBrandId,
   status: ChatSummary["status"],
   updated: string,
+  changes?: ChatSummary["changes"],
 ): ChatSummary {
-  return { id, projectId, title, agent, status, updated };
+  return changes
+    ? { id, projectId, title, agent, status, updated, changes }
+    : { id, projectId, title, agent, status, updated };
 }
 
 export const PROJECTS: readonly Project[] = [
@@ -202,17 +205,24 @@ export const PROJECTS: readonly Project[] = [
     color: "#9db7c9",
     expanded: true,
     chats: [
+      // A running chat's time is how long it has been running.
       chat(
         CHAT_PACING,
         PROJECT_AURACODE,
         "Fix the flaky orb pacing test",
         "claude-code",
         "running",
-        "now",
+        "3m",
       ),
       chat(CHAT_ACP, PROJECT_AURACODE, "Wire up the ACP client", "codex", "needs_approval", "2m"),
-      chat(CHAT_HERO, PROJECT_AURACODE, "Landing page hero", "antigravity", "done_unseen", "14m"),
-      chat(CHAT_TRAY, PROJECT_AURACODE, "Tray icon states", "pi", "idle", "1h"),
+      chat(CHAT_HERO, PROJECT_AURACODE, "Landing page hero", "antigravity", "done_unseen", "14m", {
+        added: 248,
+        removed: 31,
+      }),
+      chat(CHAT_TRAY, PROJECT_AURACODE, "Tray icon states", "pi", "idle", "1h", {
+        added: 36,
+        removed: 9,
+      }),
     ],
   },
   {
@@ -272,6 +282,8 @@ export const BASE_WORKSPACE: Workspace = {
   activeProjectId: PROJECT_AURACODE,
   composer: COMPOSERS[CHAT_PACING] ?? NEW_CHAT_COMPOSER,
   account: { kind: "local", label: "Local" },
+  rightPanel: null,
+  discovery: null,
 };
 
 /** Every chat in sidebar order. */

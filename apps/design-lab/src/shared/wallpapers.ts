@@ -8,10 +8,15 @@ import { seededRandom } from "../fixture/timeline";
  * - dusk: deep indigo with violet, cyan and ember ribbons. The default.
  * - dawn: bright pastels, the hard case for contrast (text over pale glass).
  * - graphite: near-neutral greys, the quiet case.
+ * - satin: a plain neutral desk with faint grain and no ribbons, for directions whose window must
+ *   sit on nothing (Orbit: no decorative gradient behind the app).
  */
-export type WallpaperId = "dusk" | "dawn" | "graphite";
+export type WallpaperId = "dusk" | "dawn" | "graphite" | "satin";
 
-export const WALLPAPER_IDS: readonly WallpaperId[] = ["dusk", "dawn", "graphite"];
+export const WALLPAPER_IDS: readonly WallpaperId[] = ["dusk", "dawn", "graphite", "satin"];
+
+/** The wallpaper a page opens on when neither the URL nor the direction names one. */
+export const DEFAULT_WALLPAPER: WallpaperId = "dusk";
 
 export function isWallpaperId(value: string): value is WallpaperId {
   return (WALLPAPER_IDS as readonly string[]).includes(value);
@@ -82,6 +87,13 @@ const PALETTES: Readonly<Record<WallpaperId, WallpaperPalette>> = {
       { from: "#6f86a6", to: "#a9b4c4", opacity: 0.3 },
     ],
     grain: 0.08,
+    grainBlend: "overlay",
+  },
+  satin: {
+    base: ["#151514", "#191918", "#121211"],
+    fields: [],
+    strands: [],
+    grain: 0.04,
     grainBlend: "overlay",
   },
 };

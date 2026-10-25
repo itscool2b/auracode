@@ -79,6 +79,11 @@ export interface ChatSummary {
   readonly status: ChatStatus;
   /** Relative time for the row ("now", "4m", "Tue"). Fixed text, so screenshots never drift. */
   readonly updated: string;
+  /**
+   * Lines the chat's last turn changed, when it changed any: for ledgers and notifications
+   * ("+248 −31"). Optional; directions that do not show outcomes ignore it.
+   */
+  readonly changes?: { readonly added: number; readonly removed: number };
 }
 
 export interface Project {
@@ -141,6 +146,87 @@ export interface Composer {
   readonly pickerOpen: boolean;
 }
 
+/** The tabs of the right panel, the second pane beside the transcript. */
+export type RightPanelTab = "changes" | "files" | "plan" | "session";
+
+/** Which edits the Changes tab shows: this turn's, the whole chat's, or the branch's since main. */
+export type ChangesScope = "turn" | "chat" | "branch";
+
+/** The right panel, when it is open (the `changes` state opens it on the turn's diffs). */
+export interface RightPanel {
+  readonly tab: RightPanelTab;
+  readonly scope: ChangesScope;
+  /** The file whose diff is open, or null for none. */
+  readonly expandedFile: string | null;
+}
+
+/**
+ * First-run agent discovery (the `onboarding` state): the app looks for each agent it knows on
+ * this machine and reports what it finds. Not an AuraEvent: detection runs in the core before any
+ * chat exists. Timed like a recording, so the player drives it.
+ */
+export type DiscoveryEvent =
+  | {
+      readonly type: "scan_started";
+      /** Where the scan looks, in order ("PATH", "~/.local/bin"). */
+      readonly locations: readonly string[];
+    }
+  | {
+      readonly type: "agent_found";
+      readonly agent: AgentBrandId;
+      /** The binary that answered. */
+      readonly path: string;
+      readonly version: string;
+      readonly signedIn: boolean;
+    }
+  | {
+      readonly type: "agent_missing";
+      readonly agent: AgentBrandId;
+      /** A command that installs it, shown so it can be copied. */
+      readonly installCommand: string;
+    }
+  | { readonly type: "scan_finished" };
+
+/** One discovery event and when it arrived, in ms from the start of the scan. */
+export interface TimedDiscoveryEvent {
+  readonly at: number;
+  readonly event: DiscoveryEvent;
+}
+
+/** A recorded scan: its events in arrival order. */
+export interface DiscoveryTimeline {
+  /** The agents looked for, in display order. */
+  readonly candidates: readonly AgentBrandId[];
+  readonly events: readonly TimedDiscoveryEvent[];
+  /** How long the scan plays, in ms: at least until its last event arrives. */
+  readonly duration: number;
+}
+
+/** What the scan knows about one agent so far. */
+export interface DiscoveredAgent {
+  readonly id: AgentBrandId;
+  readonly name: string;
+  /** Still being looked for, found on this machine, or reported missing. */
+  readonly status: "looking" | "found" | "missing";
+  readonly path: string | null;
+  readonly version: string | null;
+  /** Whether it is signed in, or null until found. */
+  readonly signedIn: boolean | null;
+  readonly installCommand: string | null;
+  /** When it was found or reported missing, ms on the scan's timeline; null while looking. */
+  readonly at: number | null;
+}
+
+/** The scan at the playhead, reduced from its events (see src/model/discovery.ts). */
+export interface DiscoveryModel {
+  readonly status: "idle" | "scanning" | "done";
+  readonly locations: readonly string[];
+  /** Every candidate in display order, with what is known about it so far. */
+  readonly agents: readonly DiscoveredAgent[];
+  readonly startedAt: number | null;
+  readonly finishedAt: number | null;
+}
+
 /** Everything around the transcript: sidebar, agent dock, composer. */
 export interface Workspace {
   readonly projects: readonly Project[];
@@ -153,4 +239,8 @@ export interface Workspace {
   readonly composer: Composer;
   /** Signed out: the base app needs no account. */
   readonly account: { readonly kind: "local"; readonly label: string };
+  /** The right panel when it is open (the `changes` state), else null. */
+  readonly rightPanel: RightPanel | null;
+  /** First-run agent discovery at the playhead (the `onboarding` state), else null. */
+  readonly discovery: DiscoveryModel | null;
 }

@@ -192,6 +192,34 @@
   gap: 14px;
 }
 
+.lab-gallery-card-chosen {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 28px;
+}
+
+@media (max-width: 900px) {
+  .lab-gallery-card-chosen {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+}
+
+.lab-gallery-chosen {
+  display: inline-block;
+  margin-left: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fff;
+  color: #07070a;
+  font: 600 12px / 1.4 var(--font-sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
 .lab-gallery-preview {
   position: relative;
   display: block;
@@ -215,6 +243,10 @@
 .lab-gallery-preview:focus-visible {
   outline: 2px solid #c9d6e2;
   outline-offset: 3px;
+}
+
+.lab-gallery-card-chosen .lab-gallery-preview {
+  border-color: rgb(255 255 255 / 0.32);
 }
 
 .lab-gallery-name {

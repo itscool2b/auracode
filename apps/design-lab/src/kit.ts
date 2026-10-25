@@ -10,15 +10,23 @@ export type {
   AgentInfo,
   AgentModel,
   Autonomy,
+  ChangesScope,
   ChatStatus,
   ChatSummary,
   Composer,
   Cost,
+  DiscoveredAgent,
+  DiscoveryEvent,
+  DiscoveryModel,
+  DiscoveryTimeline,
+  LimitWindow,
   PermissionOption,
   PermissionOptionKind,
   PlanEntry,
   PlanStatus,
   Project,
+  RightPanel,
+  RightPanelTab,
   StopReason,
   TokenUsage,
   ToolContent,
@@ -40,7 +48,8 @@ export {
   modelLabel,
 } from "./fixture/workspace";
 export { stageHref } from "./lab/route";
-export { LAB_STATES, type LabState, STATE_INFO } from "./lab/states";
+export { CORE_STATES, LAB_STATES, type LabState, STATE_INFO } from "./lab/states";
+export { LAB_THEMES, type LabTheme } from "./lab/theme";
 export {
   ANSI_COLOR_NAMES,
   type AnsiColor,
@@ -50,6 +59,7 @@ export {
   stripAnsi,
 } from "./model/ansi";
 export type { DiffHunk, DiffLine, FileDiff } from "./model/diff";
+export { discoveryCounts } from "./model/discovery";
 export {
   basename,
   dirname,
@@ -70,7 +80,7 @@ export {
 } from "./model/markdown";
 export type { ToolFamily } from "./model/tools";
 export type * from "./model/types";
-export { type Player, usePlayhead } from "./model/usePlayer";
+export { type Player, type PlayerConfig, usePlayer, usePlayhead } from "./model/usePlayer";
 export {
   TITLEBAR_HEIGHT,
   TRAFFIC_LIGHTS,

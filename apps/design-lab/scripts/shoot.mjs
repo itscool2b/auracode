@@ -5,9 +5,12 @@
  *
  *   node scripts/shoot.mjs --direction <id|all> --port <n> [options]
  *
- *   --direction, -d <id|all>   a direction id (aurora, noir, halo, ...) or "all"
+ *   --direction, -d <id|all>   a direction id (aurora, noir, halo, orbit, ...) or "all"
  *   --port, -p <n>             where to serve the lab while shooting (never 1420: the desktop app's)
  *   --engines <list>           comma-separated: webkit, chromium, firefox (default webkit,chromium)
+ *   --themes <list>            comma-separated: dark, light. Shoots each theme a direction renders
+ *                              (?theme=, with the OS colour scheme emulated to match) and names the
+ *                              files <engine>-<theme>-<shot>.png. Without it: dark, named as before
  *   --server <url>             shoot an already running lab (a dev or preview server) instead
  *   --dev                      serve with the Vite dev server instead of a build: a direction that
  *                              is broken mid-edit then breaks only its own pages
@@ -18,8 +21,11 @@
  *
  * For each direction and engine it writes, at 1440x900 and deviceScaleFactor 2,
  * shots/<direction>/<engine>-<shot>.png, plus <engine>-streaming.webm: 14 s of the streaming state
- * from t=0 at 1x (where the engine can record video). Before each shot it waits for the direction
- * to mount, fonts to load, live orbs to show, finite animations to finish, and two animation frames.
+ * from t=0 at 1x (where the engine can record video). With --themes, the names carry the theme:
+ * <engine>-<theme>-<shot>.png and <engine>-<theme>-streaming.webm. A direction is shot only in the
+ * states and themes its meta.ts lists, on its own wallpaper. Before each shot it waits for the
+ * direction to mount, fonts to load, live orbs to show, finite animations to finish, and two
+ * animation frames.
  *
  * Without --server it builds the lab into node_modules/.cache/shoot-<pid> (private to this run, so
  * parallel runs never collide) and serves it with `vite preview` on the port. The server, the
@@ -41,8 +47,9 @@ const DESKTOP_DEV_PORT = 1420;
 const VIDEO_MS = 14_000;
 
 /**
- * The shots, by name: `#/<direction>/<path>?<query>`. `reducedMotion` also emulates the OS setting,
- * so CSS media queries and the lab's `?motion=reduce` agree.
+ * The shots, by name: `#/<direction>/<path>?<query>`, where the path is the lab state.
+ * `reducedMotion` also emulates the OS setting, so CSS media queries and the lab's `?motion=reduce`
+ * agree.
  */
 const SHOTS = [
   { name: "streaming-t7.5", path: "streaming", query: "t=7.5" },
@@ -51,10 +58,13 @@ const SHOTS = [
   { name: "empty", path: "empty", query: "" },
   { name: "permission", path: "permission", query: "" },
   { name: "picker", path: "picker", query: "" },
+  { name: "changes", path: "changes", query: "" },
+  { name: "onboarding", path: "onboarding", query: "t=1.6" },
   { name: "settled-reduced-motion", path: "settled", query: "motion=reduce", reducedMotion: true },
 ];
 
 const ENGINES = { chromium, webkit, firefox };
+const THEMES = ["dark", "light"];
 
 function fail(message) {
   console.error(`shoot: ${message}`);
@@ -69,6 +79,7 @@ function parseOptions() {
         direction: { type: "string", short: "d" },
         port: { type: "string", short: "p" },
         engines: { type: "string", default: "webkit,chromium" },
+        themes: { type: "string" },
         server: { type: "string" },
         dev: { type: "boolean", default: false },
         only: { type: "string" },
@@ -104,6 +115,21 @@ function parseOptions() {
     if (!(engine in ENGINES)) fail(`unknown engine "${engine}" (webkit, chromium, firefox).`);
   }
   if (engines.length === 0) fail("--engines lists no engine.");
+  let themes = null;
+  if (parsed.themes !== undefined) {
+    themes = [
+      ...new Set(
+        parsed.themes
+          .split(",")
+          .map((name) => name.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
+    for (const theme of themes) {
+      if (!THEMES.includes(theme)) fail(`unknown theme "${theme}" (${THEMES.join(", ")}).`);
+    }
+    if (themes.length === 0) fail("--themes lists no theme.");
+  }
   const only = parsed.only
     ? new Set(
         parsed.only
@@ -130,6 +156,7 @@ function parseOptions() {
     direction: parsed.direction,
     port,
     engines,
+    themes,
     server,
     dev: parsed.dev,
     only,
@@ -419,41 +446,92 @@ async function settle(page, settleMs) {
   );
 }
 
-async function directionIds(browser, base, wanted) {
+/** The directions to shoot, with the states and themes each renders (from its meta.ts). */
+async function directionsToShoot(browser, base, wanted) {
   const context = await browser.newContext({ viewport: VIEWPORT });
   try {
     const page = await context.newPage();
     // A page that is no direction: the lab boots (and lists its directions) without rendering one.
     await page.goto(`${base}#/-`);
     const known = await page.waitForFunction(
-      () => window.__designLab?.directions.map((direction) => direction.id) ?? false,
+      () =>
+        window.__designLab?.directions.map(({ id, states, themes }) => ({ id, states, themes })) ??
+        false,
       null,
       { timeout: 30_000 },
     );
-    const ids = await known.jsonValue();
-    if (wanted === "all") return ids;
-    if (!ids.includes(wanted)) {
+    const directions = await known.jsonValue();
+    if (wanted === "all") return directions;
+    const found = directions.find((direction) => direction.id === wanted);
+    if (!found) {
+      const ids = directions.map((direction) => direction.id);
       throw new Error(`no direction "${wanted}" (known: ${ids.join(", ")}).`);
     }
-    return [wanted];
+    return [found];
   } finally {
     await context.close();
   }
 }
 
+/** `<engine>-<shot>.png` without --themes (the names from before themes), else with the theme. */
+function shotName(engine, theme, shot) {
+  return theme === null ? `${engine}-${shot}` : `${engine}-${theme}-${shot}`;
+}
+
 async function shoot(browser, engine, base, direction, options, written, failures) {
-  const folder = join(options.out, direction);
+  const folder = join(options.out, direction.id);
   mkdirSync(folder, { recursive: true });
+  const states = new Set(direction.states ?? []);
+  const supportedThemes = direction.themes ?? ["dark"];
+  // Without --themes, one pass as before: dark, with the old file names.
+  const themes = options.themes ?? [null];
+
+  for (const theme of themes) {
+    if (aborting) return;
+    if (theme !== null && !supportedThemes.includes(theme)) {
+      console.log(`  (skipping ${theme}: ${direction.id} renders ${supportedThemes.join(", ")})`);
+      continue;
+    }
+    await shootTheme(
+      browser,
+      engine,
+      base,
+      direction.id,
+      states,
+      theme,
+      folder,
+      options,
+      written,
+      failures,
+    );
+  }
+}
+
+async function shootTheme(
+  browser,
+  engine,
+  base,
+  direction,
+  states,
+  theme,
+  folder,
+  options,
+  written,
+  failures,
+) {
+  const themeParam = theme === null || theme === "dark" ? "" : `theme=${theme}`;
+  const colorScheme = theme ?? "dark";
 
   for (const shot of SHOTS) {
     if (options.only && !options.only.has(shot.name)) continue;
-    const query = ["hud=0", shot.query].filter(Boolean).join("&");
+    if (!states.has(shot.path)) continue;
+    const query = ["hud=0", shot.query, themeParam].filter(Boolean).join("&");
     const url = `${base}#/${direction}/${shot.path}?${query}`;
-    const file = join(folder, `${engine}-${shot.name}.png`);
+    const file = join(folder, `${shotName(engine, theme, shot.name)}.png`);
     const context = await browser.newContext({
       viewport: VIEWPORT,
       deviceScaleFactor: 2,
-      colorScheme: "dark",
+      colorScheme,
       reducedMotion: shot.reducedMotion ? "reduce" : "no-preference",
     });
     try {
@@ -467,21 +545,22 @@ async function shoot(browser, engine, base, direction, options, written, failure
       console.log(`  ${file}${errors.length ? `  (page errors: ${errors.join("; ")})` : ""}`);
     } catch (error) {
       if (aborting) return;
-      failures.push(`${engine} ${direction} ${shot.name}: ${error.message}`);
-      console.error(`  failed: ${engine} ${shot.name}: ${error.message}`);
+      const label = theme === null ? shot.name : `${theme} ${shot.name}`;
+      failures.push(`${engine} ${direction} ${label}: ${error.message}`);
+      console.error(`  failed: ${engine} ${label}: ${error.message}`);
     } finally {
       await context.close().catch(() => {});
     }
   }
 
-  if (!options.video) return;
-  const videoDir = join(RUN_DIR, `video-${engine}-${direction}`);
-  const file = join(folder, `${engine}-streaming.webm`);
+  if (!options.video || !states.has("streaming")) return;
+  const videoDir = join(RUN_DIR, `video-${engine}-${direction}-${theme ?? "default"}`);
+  const file = join(folder, `${shotName(engine, theme, "streaming")}.webm`);
   let context;
   try {
     context = await browser.newContext({
       viewport: VIEWPORT,
-      colorScheme: "dark",
+      colorScheme,
       recordVideo: { dir: videoDir, size: VIEWPORT },
     });
   } catch (error) {
@@ -491,7 +570,8 @@ async function shoot(browser, engine, base, direction, options, written, failure
   try {
     const page = await context.newPage();
     // Frozen at t=0 until the page has settled, then played in real time from the start.
-    await page.goto(`${base}#/${direction}/streaming?t=0&hud=0`);
+    const query = ["t=0", "hud=0", themeParam].filter(Boolean).join("&");
+    await page.goto(`${base}#/${direction}/streaming?${query}`);
     await settle(page, 0);
     await page.evaluate(() => {
       const player = window.__designLab?.player;
@@ -510,8 +590,9 @@ async function shoot(browser, engine, base, direction, options, written, failure
     console.log(`  ${file}`);
   } catch (error) {
     if (aborting) return;
-    failures.push(`${engine} ${direction} video: ${error.message}`);
-    console.error(`  failed: ${engine} video: ${error.message}`);
+    const label = theme === null ? "video" : `${theme} video`;
+    failures.push(`${engine} ${direction} ${label}: ${error.message}`);
+    console.error(`  failed: ${engine} ${label}: ${error.message}`);
   } finally {
     await context?.close().catch(() => {});
     rmSync(videoDir, { recursive: true, force: true });
@@ -531,9 +612,9 @@ async function main() {
     if (aborting) break;
     const browser = await launch(engine);
     try {
-      const ids = await directionIds(browser, base, options.direction);
-      for (const direction of ids) {
-        console.log(`${engine} / ${direction}`);
+      const directions = await directionsToShoot(browser, base, options.direction);
+      for (const direction of directions) {
+        console.log(`${engine} / ${direction.id}`);
         await shoot(browser, engine, base, direction, options, written, failures);
       }
     } finally {

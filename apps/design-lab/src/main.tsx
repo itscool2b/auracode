@@ -13,7 +13,16 @@ declare global {
   interface Window {
     /** What scripts/shoot.mjs reads: the directions and states, and the open stage's player. */
     __designLab?: {
-      readonly directions: readonly { id: string; name: string; tagline: string }[];
+      readonly directions: readonly {
+        readonly id: string;
+        readonly name: string;
+        readonly tagline: string;
+        /** The states it renders: the shoot script skips the others. */
+        readonly states: readonly string[];
+        /** The themes it renders: the shoot script skips the others. */
+        readonly themes: readonly string[];
+        readonly wallpaper: string;
+      }[];
       readonly states: readonly string[];
       player?: Player;
     };
@@ -21,7 +30,14 @@ declare global {
 }
 
 window.__designLab = {
-  directions: DIRECTIONS.map(({ id, name, tagline }) => ({ id, name, tagline })),
+  directions: DIRECTIONS.map(({ id, name, tagline, states, themes, wallpaper }) => ({
+    id,
+    name,
+    tagline,
+    states,
+    themes,
+    wallpaper,
+  })),
   states: LAB_STATES,
 };
 

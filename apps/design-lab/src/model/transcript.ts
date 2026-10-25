@@ -788,8 +788,11 @@ export function auraFor(activity: OrbState): AuraIntensity {
   }
 }
 
-/** How many events of a time-ordered timeline have arrived by `time` (ms). Binary search. */
-export function eventsAt(events: readonly TimedEvent[], time: number): number {
+/**
+ * How many events of a time-ordered timeline have arrived by `time` (ms). Binary search. Works for
+ * any timeline of `{ at }` entries: a chat recording, or a discovery scan.
+ */
+export function eventsAt(events: readonly { readonly at: number }[], time: number): number {
   let low = 0;
   let high = events.length;
   while (low < high) {

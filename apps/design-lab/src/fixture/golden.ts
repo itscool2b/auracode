@@ -23,6 +23,9 @@ const PACING = "packages/ui/src/orb/pacing.ts";
 const PACING_TEST = "packages/ui/src/orb/pacing.test.ts";
 const TEST_COMMAND = "pnpm --filter @auracode/ui test pacing";
 
+/** The files the golden turn edits, in the order it first edits them. */
+export const GOLDEN_EDITED_FILES: readonly string[] = [PACING, PACING_TEST];
+
 export const GOLDEN_THOUGHT = `The test only fails on CI, about 1 run in 20, so something in it depends on timing. Let me read pacing.ts and its test. If the test drives shouldDrawFrame from a real clock, timer jitter on a busy runner could make a tick land just before the 16.7 ms interval, and that frame would be skipped. I should check whether shouldDrawFrame tolerates early frames at all, and whether anything in the test reads performance.now() directly.`;
 
 export const GOLDEN_CAUSE = `Found it. The flaky case is "draws a 60 fps orb on every tick" in \`pacing.test.ts\`. It sleeps with \`setTimeout\` and reads \`performance.now()\`, so it assumes each frame arrives exactly 16.7 ms after the last one. Node only fires timers on whole milliseconds, and a shared CI runner adds jitter on top, so now and then a tick lands at 16.4 ms. \`shouldDrawFrame\` demands the full interval, skips that frame, and the test counts 59 instead of 60.

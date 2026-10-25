@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { DIRECTIONS } from "../directions";
+import { DIRECTIONS, getDirection } from "../directions";
 import { type Player, usePlayhead } from "../model/usePlayer";
 import { type StageRoute, stageHref } from "./route";
-import { LAB_STATES, STATE_INFO } from "./states";
+import { CORE_STATES, STATE_INFO } from "./states";
 
 const SPEEDS = [0.25, 0.5, 1, 2, 4] as const;
 
@@ -21,7 +21,8 @@ function typingInto(target: EventTarget | null): boolean {
 }
 
 /**
- * The lab's controls, outside the window: direction, state, play, scrub, speed, reduced motion.
+ * The lab's controls, outside the window: direction, state, play, scrub, speed, reduced motion,
+ * and the theme for directions that draw more than one.
  * Hidden until the pointer nears the bottom edge (so screenshots never show it), pinned with
  * `?hud=1` or the H key. Keys: Space plays or pauses, arrows step 2 s (10 s with Shift).
  */
@@ -72,7 +73,25 @@ export function Hud({
     return () => window.removeEventListener("keydown", onKey);
   }, [player]);
 
-  const link = (changes: Partial<StageRoute>): string => stageHref({ ...route, ...changes });
+  const current = getDirection(route.direction);
+  const states = current?.states ?? CORE_STATES;
+  const themes = current?.themes ?? [];
+  const link = (changes: Partial<StageRoute>): string =>
+    stageHref({ ...route, defaultWallpaper: current?.wallpaper, ...changes });
+  /** Another direction: this state and theme when it has them, on its own wallpaper. */
+  const switchTo = (id: string): string => {
+    const next = getDirection(id);
+    const supported = next?.states ?? CORE_STATES;
+    const state = supported.includes(route.state) ? route.state : (supported[0] ?? "streaming");
+    return stageHref({
+      ...route,
+      direction: id,
+      state,
+      t: state === route.state ? route.t : null,
+      wallpaper: undefined,
+      theme: next?.themes.includes(route.theme) ? route.theme : undefined,
+    });
+  };
 
   return (
     <div className="lab-hud" data-visible={pinned || near ? "" : undefined}>
@@ -84,7 +103,7 @@ export function Hud({
         aria-label="Direction"
         value={route.direction}
         onChange={(event) => {
-          window.location.hash = link({ direction: event.target.value });
+          window.location.hash = switchTo(event.target.value);
         }}
       >
         {DIRECTIONS.map((direction) => (
@@ -94,7 +113,7 @@ export function Hud({
         ))}
       </select>
       <nav className="lab-hud-states" aria-label="State">
-        {LAB_STATES.map((state) => (
+        {states.map((state) => (
           <a
             key={state}
             href={link({ state, t: null, play: null })}
@@ -148,6 +167,14 @@ export function Hud({
       <a className="lab-hud-link" href={link({ reducedMotion: !route.reducedMotion })}>
         {route.reducedMotion ? "Full motion" : "Reduce motion"}
       </a>
+      {themes.length > 1 ? (
+        <a
+          className="lab-hud-link"
+          href={link({ theme: route.theme === "light" ? "dark" : "light" })}
+        >
+          {route.theme === "light" ? "Dark" : "Light"}
+        </a>
+      ) : null}
     </div>
   );
 }

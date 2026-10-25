@@ -81,8 +81,12 @@ export const Wallpaper = memo(function Wallpaper({
       data-wallpaper={id}
       style={{ background: `linear-gradient(135deg, ${top} 0%, ${middle} 52%, ${bottom} 100%)` }}
     >
-      <RibbonLayer ribbons={layout.fields} prefix={`${prefix}-f`} blur={64} />
-      <RibbonLayer ribbons={layout.strands} prefix={`${prefix}-s`} blur={9} />
+      {layout.fields.length > 0 ? (
+        <RibbonLayer ribbons={layout.fields} prefix={`${prefix}-f`} blur={64} />
+      ) : null}
+      {layout.strands.length > 0 ? (
+        <RibbonLayer ribbons={layout.strands} prefix={`${prefix}-s`} blur={9} />
+      ) : null}
       {grain ? (
         <div
           className="lab-wallpaper-grain"
