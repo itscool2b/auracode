@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use aura_protocol::{Autonomy, Millis};
+use aura_protocol::{Autonomy, Millis, StopReason};
 use rusqlite::{Connection, OptionalExtension, params};
 use sha2::{Digest, Sha256};
 
@@ -429,6 +429,20 @@ pub(crate) fn append_events(
         ])?;
     }
     Ok(())
+}
+
+/// `turns.status` for a stop reason, under v1's CHECK.
+pub(crate) fn turn_status(stop_reason: StopReason) -> TurnStatus {
+    match stop_reason {
+        StopReason::Interrupted => TurnStatus::Interrupted,
+        StopReason::Error => TurnStatus::Failed,
+        StopReason::EndTurn
+        | StopReason::MaxTokens
+        | StopReason::MaxTurnRequests
+        | StopReason::Refusal
+        | StopReason::Cancelled
+        | StopReason::Other => TurnStatus::Completed,
+    }
 }
 
 pub(crate) fn turn_status_str(status: TurnStatus) -> &'static str {

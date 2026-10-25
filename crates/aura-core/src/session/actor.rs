@@ -48,11 +48,10 @@ use super::normalize::{
 use super::policy::{Decision, decide};
 use super::spawner::{ProcessBook, SessionSpawner};
 use super::{ChatState, FrameSink, SessionError, Shared, SinkGone};
-use crate::chatstore::rows::ReplyHasher;
+use crate::chatstore::rows::{ReplyHasher, turn_status};
 use crate::chatstore::{
     AgentSessionPatch, AgentSessionRow, ChatLoad, ChatRecord, ChatStore, EventRow, Op, QueuedRow,
-    ReplayCheck, StoreError, TitleSource, TurnEnd, TurnRow, TurnStatus, WaitError, await_reply,
-    op_bytes,
+    ReplayCheck, StoreError, TitleSource, TurnEnd, TurnRow, WaitError, await_reply, op_bytes,
 };
 use crate::ids::new_id;
 use crate::time::now_millis;
@@ -226,20 +225,6 @@ fn clone_error(error: &SessionError) -> SessionError {
         }
         SessionError::ShuttingDown => SessionError::ShuttingDown,
         other => SessionError::Internal(other.to_string()),
-    }
-}
-
-/// `turns.status` for a stop reason, under v1's CHECK.
-pub(crate) fn turn_status(stop_reason: StopReason) -> TurnStatus {
-    match stop_reason {
-        StopReason::Interrupted => TurnStatus::Interrupted,
-        StopReason::Error => TurnStatus::Failed,
-        StopReason::EndTurn
-        | StopReason::MaxTokens
-        | StopReason::MaxTurnRequests
-        | StopReason::Refusal
-        | StopReason::Cancelled
-        | StopReason::Other => TurnStatus::Completed,
     }
 }
 

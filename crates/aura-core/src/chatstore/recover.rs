@@ -5,7 +5,8 @@
 //!    turn, is resolved `Cancelled` / dismissed `by: System`: inside a running turn before its
 //!    `TurnEnded`, otherwise outside any turn.
 //! 2. Every running turn gets `TurnEnded { Interrupted, recovered: true }` and is marked interrupted,
-//!    ending when its last row was written.
+//!    ending when its last row was written; a running turn whose own `TurnEnded` row was saved (only
+//!    its `EndTurn` was lost) ends as that row says instead, and gets nothing appended.
 //! 3. Every ended turn not compacted yet is compacted.
 //! 4. Every queued prompt is held: auracode never sends a message on its own after a restart.
 //!
@@ -14,10 +15,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use aura_protocol::{AuraEvent, Millis, PermissionDecision, ResolvedBy, StopReason};
-use rusqlite::{Connection, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use super::compact::{self, CompactLimits};
-use super::{EventRow, RecoveryReport, rows};
+use super::{EventRow, RecoveryReport, TurnEnd, history, rows};
 
 /// Which chats a recovery covers.
 #[derive(Debug, Clone, Copy)]
@@ -185,7 +186,17 @@ fn recover_chat(
         rows: Vec::new(),
     };
 
+    // The running turns that end here, interrupted; their open requests are resolved inside them.
+    let mut interrupted: BTreeSet<&str> = BTreeSet::new();
     for (turn_id, started_at) in &running {
+        // A turn whose own `TurnEnded` was saved ended; only its `EndTurn` was lost (a crash between
+        // the two commits, or an actor that died with it still queued), so it ends as that row says.
+        // The actor resolved the turn's requests before that row, in the same op.
+        if let Some(end) = saved_end(conn, chat_id, turn_id)? {
+            rows::end_turn(conn, &end)?;
+            continue;
+        }
+        interrupted.insert(turn_id.as_str());
         let last_at: Option<Millis> = conn
             .prepare_cached(
                 "SELECT created_at FROM events WHERE turn_id = ?1 ORDER BY seq DESC LIMIT 1",
@@ -219,12 +230,11 @@ fn recover_chat(
         .execute(params![turn_id, StopReason::Interrupted.as_str(), ended_at, ended_seq])?;
         report.interrupted_turns += 1;
     }
-    let running_ids: BTreeSet<&str> = running.iter().map(|(id, _)| id.as_str()).collect();
     for request in open.iter().filter(|request| {
         request
             .turn_id
             .as_deref()
-            .is_none_or(|turn| !running_ids.contains(turn))
+            .is_none_or(|turn| !interrupted.contains(turn))
     }) {
         out.push(None, &resolution(request), now);
         report.resolved_requests += 1;
@@ -245,6 +255,33 @@ fn recover_chat(
     }
     rows::queue_hold(conn, Some(chat_id), true)?;
     Ok(report)
+}
+
+/// How a running turn ended, from its saved `TurnEnded` row (read leniently, as history pages read
+/// it: a row that does not parse ends the turn with `Other`), when it has one.
+fn saved_end(conn: &Connection, chat_id: &str, turn_id: &str) -> rusqlite::Result<Option<TurnEnd>> {
+    let row: Option<(u32, String, Millis)> = conn
+        .prepare_cached(
+            "SELECT seq, payload, created_at FROM events \
+             WHERE chat_id = ?1 AND turn_id = ?2 AND kind = 'turn_ended' ORDER BY seq DESC LIMIT 1",
+        )?
+        .query_row(params![chat_id, turn_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .optional()?;
+    Ok(row.map(|(seq, payload, created_at)| {
+        let stop_reason = match history::parse_row("turn_ended", &payload, Some(turn_id)) {
+            Some(AuraEvent::TurnEnded { stop_reason, .. }) => stop_reason,
+            _ => StopReason::Other,
+        };
+        TurnEnd {
+            turn_id: turn_id.to_owned(),
+            status: rows::turn_status(stop_reason),
+            stop_reason,
+            ended_at: created_at,
+            last_event_seq: seq,
+        }
+    }))
 }
 
 /// The chat's requests that never got a resolution, in seq order.
@@ -432,6 +469,103 @@ mod tests {
             ("interrupted", "interrupted", 3, 5)
         );
         // A second recovery finds nothing to do.
+        let again = recover(
+            db.store.conn_mut(),
+            Scope::All,
+            "dev",
+            &CompactLimits::STANDARD,
+            60,
+        )
+        .expect("again");
+        assert_eq!(again, RecoveryReport::default());
+    }
+
+    /// A running turn whose own `TurnEnded` was saved (its `EndTurn` was lost between the two
+    /// commits) ends as that row says: nothing is appended, the turn takes the row's reason, time
+    /// and seq, and it is compacted. A saved end that does not parse reads as `Other`.
+    #[test]
+    fn a_running_turn_whose_end_was_saved_ends_as_saved() {
+        let mut db = TestDb::new();
+        let chat = db.chat("/work");
+        db.turn(&chat, "t1", 1, 0);
+        db.turn(&chat, "t2", 2, 3);
+        let started = |turn: &str| AuraEvent::TurnStarted {
+            turn_id: turn.into(),
+            prompt_id: None,
+        };
+        let mut garbled = event_row(5, Some("t2"), &started("t2"));
+        garbled.kind = "turn_ended";
+        garbled.payload =
+            r#"{"type":"turn_ended","turn_id":"t2","stop_reason":"teleported","usage":7}"#.into();
+        db.append(
+            &chat,
+            &[
+                event_row(0, Some("t1"), &started("t1")),
+                event_row(1, Some("t1"), &delta("t1.m1", "All done")),
+                event_row(
+                    2,
+                    Some("t1"),
+                    &AuraEvent::TurnEnded {
+                        turn_id: "t1".into(),
+                        stop_reason: StopReason::EndTurn,
+                        usage: None,
+                        duration_ms: Some(9),
+                        recovered: false,
+                    },
+                ),
+                event_row(3, Some("t2"), &started("t2")),
+                event_row(4, Some("t2"), &delta("t2.m1", "Also done")),
+                garbled,
+            ],
+        );
+        let report = recover(
+            db.store.conn_mut(),
+            Scope::All,
+            "dev",
+            &CompactLimits::STANDARD,
+            50,
+        )
+        .expect("recover");
+        assert_eq!(
+            report,
+            RecoveryReport {
+                interrupted_turns: 0,
+                resolved_requests: 0,
+                compacted_turns: 2
+            }
+        );
+        let seqs: Vec<u32> = db
+            .conn()
+            .prepare("SELECT seq FROM events WHERE chat_id = ?1 ORDER BY seq")
+            .expect("prepare")
+            .query_map(params![chat], |row| row.get(0))
+            .expect("query")
+            .map(|row| row.expect("row"))
+            .collect();
+        assert_eq!(seqs, [0, 1, 2, 3, 4, 5], "nothing appended");
+        let turn = |id: &str| -> (String, String, i64, i64, bool) {
+            db.conn()
+                .query_row(
+                    "SELECT status, stop_reason, ended_at, last_event_seq, compacted_at IS NOT NULL \
+                     FROM turns WHERE id = ?1",
+                    params![id],
+                    |row| {
+                        Ok((
+                            row.get(0)?,
+                            row.get(1)?,
+                            row.get(2)?,
+                            row.get(3)?,
+                            row.get(4)?,
+                        ))
+                    },
+                )
+                .expect("turn")
+        };
+        assert_eq!(
+            turn("t1"),
+            ("completed".into(), "end_turn".into(), 2, 2, true)
+        );
+        assert_eq!(turn("t2"), ("completed".into(), "other".into(), 5, 5, true));
         let again = recover(
             db.store.conn_mut(),
             Scope::All,
