@@ -12,8 +12,9 @@
 //! Phases: Running (commands are read), Closing (a `Shutdown` or a failed start: cancel a running
 //! turn and wait at most the grace for its reply, close stdin, run the shutdown chain while stdout
 //! keeps being read), Draining (stdout ended or the process exited: no more commands; stdout is read
-//! to its end, at most [`PIPE_EOF_GRACE`] after the exit; EOF with the process alive gets 2 s, then
-//! the tree is killed). `run` returns once stdout ended, the process exited and the outbox is empty.
+//! to its end, but after the exit for at most [`PIPE_EOF_GRACE`] in all, a grace that runs only
+//! while the outbox has room; EOF with the process alive gets 2 s, then the tree is killed). `run`
+//! returns once stdout ended, the process exited and the outbox is empty.
 
 pub mod dialect;
 pub mod map;
@@ -555,10 +556,12 @@ struct Session {
     commands_list: Option<Vec<SlashCommand>>,
     commands_deadline: Option<Instant>,
     unknown_tags: HashSet<String>,
-    /// The outbox had room at the last loop turn.
-    room: bool,
-    /// Since when stdout has been awaited (with room) after the exit.
-    eof_wait_since: Option<Instant>,
+    /// stdout's grace after the exit (spec 5.3.3) is a budget, spent only while stdout is awaited
+    /// with room in the outbox: a slow session never eats it, and a descendant that keeps writing
+    /// to the pipe cannot stretch it.
+    eof_grace_used: Duration,
+    /// Since when the grace has been running, while it runs.
+    eof_grace_since: Option<Instant>,
     /// stdout ended with the process alive: when to kill it (and then, when to give up).
     exit_wait_deadline: Option<Instant>,
     killed: bool,
@@ -625,8 +628,8 @@ impl Session {
             commands_list: None,
             commands_deadline: None,
             unknown_tags: HashSet::new(),
-            room: true,
-            eof_wait_since: None,
+            eof_grace_used: Duration::ZERO,
+            eof_grace_since: None,
             exit_wait_deadline: None,
             killed: false,
             cancel_deadline: None,
@@ -652,7 +655,7 @@ impl Session {
             if self.finished() {
                 return self.finish();
             }
-            self.refresh_room();
+            self.tick_eof_grace();
             let deadline = self.next_deadline();
             let head = self.outbox.head_bytes();
             tokio::select! {
@@ -725,13 +728,24 @@ impl Session {
         error
     }
 
-    fn refresh_room(&mut self) {
-        let room = !self.outbox.is_full();
-        if room && !self.room && self.exited && !self.stdout_done {
-            // The grace for stdout after the exit counts only while it is being read.
-            self.eof_wait_since = Some(Instant::now());
+    /// Runs stdout's grace while the process has exited, stdout is open and the outbox has room,
+    /// and banks what it spent whenever one of those stops being true. Called at every loop turn.
+    fn tick_eof_grace(&mut self) {
+        let runs = self.exited && !self.stdout_done && !self.outbox.is_full();
+        match (runs, self.eof_grace_since) {
+            (true, None) => self.eof_grace_since = Some(Instant::now()),
+            (false, Some(since)) => {
+                self.eof_grace_used = self.eof_grace_used.saturating_add(since.elapsed());
+                self.eof_grace_since = None;
+            }
+            _ => {}
         }
-        self.room = room;
+    }
+
+    /// When stdout's grace runs out, while it runs.
+    fn eof_grace_deadline(&self) -> Option<Instant> {
+        self.eof_grace_since
+            .map(|since| since + PIPE_EOF_GRACE.saturating_sub(self.eof_grace_used))
     }
 
     fn next_deadline(&self) -> Option<Instant> {
@@ -747,9 +761,7 @@ impl Session {
         consider(self.open.as_ref().map(|open| open.deadline(&self.setup)));
         consider(self.commands_deadline);
         consider(self.cancel_deadline);
-        if self.exited && !self.stdout_done && self.room {
-            consider(self.eof_wait_since.map(|since| since + PIPE_EOF_GRACE));
-        }
+        consider(self.eof_grace_deadline());
         consider(self.exit_wait_deadline);
         next
     }
@@ -800,30 +812,22 @@ impl Session {
     }
 
     fn on_stdout(&mut self, item: Option<StdoutItem>) {
-        let now = Instant::now();
         match item {
             None => {
                 self.stdout_done = true;
                 // A running shutdown chain owns the process's end (codex-acp needs more than 2 s
                 // after EOF); otherwise the agent gets 2 s to exit before its tree is killed.
                 if !self.exited && self.chain.is_none() && self.exit_wait_deadline.is_none() {
-                    self.exit_wait_deadline = Some(now + EXIT_AFTER_EOF_GRACE);
+                    self.exit_wait_deadline = Some(Instant::now() + EXIT_AFTER_EOF_GRACE);
                 }
                 self.enter_draining();
             }
-            Some(item) => {
-                if self.exited {
-                    self.eof_wait_since = Some(now);
-                }
-                match item {
-                    StdoutItem::Line(line) => {
-                        for incoming in parse_line(&line) {
-                            self.on_incoming(incoming);
-                        }
-                    }
-                    StdoutItem::Oversized { bytes, keys } => self.on_oversized(bytes, keys),
+            Some(StdoutItem::Line(line)) => {
+                for incoming in parse_line(&line) {
+                    self.on_incoming(incoming);
                 }
             }
+            Some(StdoutItem::Oversized { bytes, keys }) => self.on_oversized(bytes, keys),
         }
     }
 
@@ -831,9 +835,6 @@ impl Session {
         self.exited = true;
         self.exit = Some(exit);
         self.exit_wait_deadline = None;
-        if !self.stdout_done {
-            self.eof_wait_since = Some(Instant::now());
-        }
         self.enter_draining();
     }
 
@@ -851,9 +852,6 @@ impl Session {
                 self.exit = report.exit;
             }
             self.exit_wait_deadline = None;
-            if !self.stdout_done {
-                self.eof_wait_since = Some(Instant::now());
-            }
         }
     }
 
@@ -893,14 +891,8 @@ impl Session {
         if self.cancel_deadline.is_some_and(|at| at <= now) {
             self.close_process();
         }
-        if self.exited
-            && !self.stdout_done
-            && self.room
-            && self
-                .eof_wait_since
-                .is_some_and(|since| since + PIPE_EOF_GRACE <= now)
-        {
-            // A descendant may hold the pipe open; what came before the grace is all there is.
+        if self.eof_grace_deadline().is_some_and(|at| at <= now) {
+            // A descendant may hold the pipe open; what came within the grace is all there is.
             tracing::debug!(spawn_id = %self.spawn_id, "stdout stayed open after the exit");
             self.stdout_done = true;
             self.enter_draining();

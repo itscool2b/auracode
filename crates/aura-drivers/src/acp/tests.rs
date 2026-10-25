@@ -2111,6 +2111,70 @@ async fn a_descendant_holding_stdout_gets_the_pipe_grace() {
     assert!(start.elapsed() >= PIPE_EOF_GRACE);
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_descendant_that_keeps_writing_after_the_exit_gets_only_the_pipe_grace() {
+    let mut harness = ready_generic().await;
+    harness.exit_with(0);
+    let exited = tokio::time::Instant::now();
+    // A descendant holds the pipe and writes a line every 500 ms for five minutes.
+    let to_client = harness.end.to_client.clone();
+    let writer = tokio::spawn(async move {
+        for index in 0..600 {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let update = json!({"jsonrpc": "2.0", "method": "session/update", "params": {
+                "sessionId": SESSION,
+                "update": {"sessionUpdate": "session_info_update", "title": format!("t{index}")}}});
+            if to_client.send(FakeLine::Line(update.to_string())).is_err() {
+                return;
+            }
+        }
+    });
+    let (events, exit) = harness.finish().await;
+    let took = exited.elapsed();
+    assert!(matches!(exit, DriverExit::Crashed { .. }), "{exit:?}");
+    // Lines do not stretch the grace: 2 s of reading in all, and the crash is reported.
+    assert!(
+        took >= PIPE_EOF_GRACE && took < PIPE_EOF_GRACE + Duration::from_millis(500),
+        "{took:?}"
+    );
+    let titles = events
+        .iter()
+        .filter(|event| matches!(event, DriverEvent::Title(_)))
+        .count();
+    assert!(
+        titles >= 3,
+        "what came within the grace was handled: {titles}"
+    );
+    writer.abort();
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_pipe_grace_pauses_while_the_session_is_slow_and_never_starts_over() {
+    let mut harness = ready_generic().await;
+    harness.exit_with(0);
+    let exited = tokio::time::Instant::now();
+    // 1 s of the grace passes with nothing to read.
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    // Then far more than the outbox holds arrives while nobody reads events: the grace waits.
+    for index in 0..1_000 {
+        harness.update(chunk(&format!("{index} ")));
+    }
+    tokio::time::sleep(Duration::from_secs(30)).await;
+    // Once the session reads again, the rest of the grace runs: 1 s, not a fresh 2 s.
+    let (events, exit) = harness.finish().await;
+    let took = exited.elapsed();
+    assert!(matches!(exit, DriverExit::Crashed { .. }), "{exit:?}");
+    assert!(
+        took >= Duration::from_secs(32) && took < Duration::from_millis(32_500),
+        "{took:?}"
+    );
+    let deltas = transcript(&events)
+        .iter()
+        .filter(|(_, event)| matches!(event, AuraEvent::MessageDelta { .. }))
+        .count();
+    assert_eq!(deltas, 1_000, "every line was handled");
+}
+
 // ---- shutdown ----------------------------------------------------------------------------------
 
 #[tokio::test(start_paused = true)]
