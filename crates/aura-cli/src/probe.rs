@@ -425,7 +425,7 @@ impl Probe<'_> {
         match output {
             Ok(output) if output.exit.is_some_and(|exit| exit.code == Some(0)) => {
                 let printed = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-                let same = same_folder(Path::new(&printed), adapter);
+                let same = prefix_names_folder(&printed, adapter);
                 self.report.check(
                     same,
                     step,
@@ -1579,6 +1579,63 @@ pub fn bundled_clis(folder: &Path) -> Vec<String> {
     found
 }
 
+/// Whether what `npm prefix` printed names `folder`. npm masks every UUID it prints, so a folder
+/// whose path holds one (a data root in a folder named after a session id) prints with `***`
+/// there.
+fn prefix_names_folder(printed: &str, folder: &Path) -> bool {
+    if same_folder(Path::new(printed), folder) {
+        return true;
+    }
+    let real = std::fs::canonicalize(folder).unwrap_or_else(|_| folder.to_path_buf());
+    [real.as_path(), folder]
+        .iter()
+        .any(|path| mask_uuids(&path.to_string_lossy()) == printed)
+}
+
+/// `text` with every UUID as npm prints it: `***` (`@npmcli/redact` masks them, any case, as whole
+/// words, since legacy npm tokens look like UUIDs).
+fn mask_uuids(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let is_word = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
+    let mut masked = String::with_capacity(text.len());
+    let mut copied = 0;
+    let mut at = 0;
+    while at < bytes.len() {
+        let word_starts = at == 0 || !is_word(bytes[at - 1]);
+        match uuid_end(bytes, at) {
+            Some(end) if word_starts && bytes.get(end).is_none_or(|&next| !is_word(next)) => {
+                // A UUID is ASCII, so both ends are character boundaries.
+                masked.push_str(text.get(copied..at).unwrap_or_default());
+                masked.push_str("***");
+                copied = end;
+                at = end;
+            }
+            _ => at += 1,
+        }
+    }
+    masked.push_str(text.get(copied..).unwrap_or_default());
+    masked
+}
+
+/// Where a UUID (8-4-4-4-12 hex digits) starting at `start` ends.
+fn uuid_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut at = start;
+    for (index, digits) in [8, 4, 4, 4, 12].into_iter().enumerate() {
+        if index > 0 {
+            if bytes.get(at) != Some(&b'-') {
+                return None;
+            }
+            at += 1;
+        }
+        let group = bytes.get(at..at + digits)?;
+        if !group.iter().all(u8::is_ascii_hexdigit) {
+            return None;
+        }
+        at += digits;
+    }
+    Some(at)
+}
+
 /// Whether two paths name the same folder (through links, as `npm prefix` prints the real one).
 fn same_folder(a: &Path, b: &Path) -> bool {
     match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
@@ -1902,6 +1959,32 @@ mod tests {
         std::fs::write(modules.join("zod/index.js"), vec![0u8; 1500]).expect("a file");
         assert_eq!(folder_size(dir.path()), 1500);
         assert_eq!(megabytes(1_500_000), "1.5 MB");
+    }
+
+    /// npm masks every UUID it prints (`@npmcli/redact`), so `npm prefix` in a folder whose path
+    /// holds one prints `***` there: seen with a data root in a folder named after a session id.
+    #[test]
+    fn npm_prefix_names_the_folder_through_npms_uuid_mask() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let uuid = "d8fa469e-d838-43CE-8a75-2cd4fce641be";
+        let folder = dir.path().join(uuid).join("adapters");
+        std::fs::create_dir_all(&folder).expect("the folder");
+        let real = std::fs::canonicalize(&folder)
+            .expect("canonical")
+            .display()
+            .to_string();
+        assert!(prefix_names_folder(&real, &folder));
+        assert!(prefix_names_folder(&real.replace(uuid, "***"), &folder));
+        assert!(!prefix_names_folder(&real.replace(uuid, "x***"), &folder));
+        assert!(!prefix_names_folder(
+            &real.replace("adapters", "***"),
+            &folder
+        ));
+        // A UUID inside a longer word is not one npm masks.
+        assert_eq!(
+            mask_uuids(&format!("/a/{uuid}/b-{uuid}/c_{uuid}x/{uuid}")),
+            format!("/a/***/b-***/c_{uuid}x/***")
+        );
     }
 
     #[test]
