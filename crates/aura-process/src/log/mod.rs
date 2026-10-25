@@ -724,6 +724,43 @@ mod tests {
         );
     }
 
+    /// Claude's `initialize` account and claude-acp's `_auth/status_update` never reach disk.
+    #[tokio::test]
+    async fn auth_status_redacted() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let factory = factory(dir.path());
+        let log = factory.open("chat", "auth");
+        let path = log.path().expect("on");
+        log.line(
+            Direction::In,
+            r#"{"jsonrpc":"2.0","method":"_auth/status_update","params":{"sessionId":"s1","authStatus":{"status":"authenticated","account":{"email":"someone@example.com","organization":"Acme Corp"}}}}"#,
+        );
+        log.line(
+            Direction::In,
+            r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentInfo":{"name":"claude-agent-acp","version":"0.95.0"},"account":{"emailAddress":"someone@example.com","organizationName":"Acme Corp","organizationUuid":"6f1d2c3b-0000-4000-8000-000000000000","accountUuid":"a1b2"},"models":[{"modelId":"opus","name":"Opus","displayName":"Claude Opus"}]}}"#,
+        );
+        drop(log);
+        factory.idle().await;
+        let text = std::fs::read_to_string(&path).expect("read");
+        for private in ["someone@example.com", "Acme Corp", "6f1d2c3b", "a1b2"] {
+            assert!(!text.contains(private), "{private} reached the log: {text}");
+        }
+        let written = records(&path);
+        assert_eq!(
+            written[0]["msg"]["params"]["authStatus"],
+            json!({"status": "authenticated", "account": {"email": "<REDACTED>", "organization": "<REDACTED>"}})
+        );
+        assert_eq!(
+            written[1]["msg"]["result"]["agentInfo"]["name"],
+            json!("claude-agent-acp")
+        );
+        assert_eq!(
+            written[1]["msg"]["result"]["models"][0],
+            json!({"modelId": "opus", "name": "Opus", "displayName": "Claude Opus"}),
+            "model names stay readable"
+        );
+    }
+
     #[tokio::test]
     async fn long_records_keep_their_first_half_and_say_how_much_was_cut() {
         let dir = tempfile::tempdir().expect("tempdir");

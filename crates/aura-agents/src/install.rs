@@ -177,6 +177,11 @@ pub(crate) async fn install(job: InstallJob) -> Result<PathBuf, LaunchError> {
 
     let redactor = Redactor::standard();
     redactor.set_secrets(secret_values(&job.env.vars));
+    tracing::info!(
+        package = job.package,
+        version = job.version,
+        "installing an adapter"
+    );
     let npm = run_helper(
         &job.registry,
         HelperSpec {
@@ -205,6 +210,12 @@ pub(crate) async fn install(job: InstallJob) -> Result<PathBuf, LaunchError> {
         return Err(failed("npm did not finish within 10 minutes.".into()));
     }
     let code = npm.exit.and_then(|exit| exit.code);
+    tracing::info!(
+        package = job.package,
+        version = job.version,
+        code,
+        "npm ci finished"
+    );
     if code != Some(0) {
         let line = npm_error_line(&npm.stderr_tail).map_or_else(
             || {
@@ -266,6 +277,11 @@ pub(crate) async fn install(job: InstallJob) -> Result<PathBuf, LaunchError> {
     blocking(move || write_marker(&folder, &marker))
         .await
         .map_err(|error| failed(format!("{error}.")))?;
+    tracing::info!(
+        package = job.package,
+        version = job.version,
+        "adapter installed"
+    );
     Ok(entry)
 }
 

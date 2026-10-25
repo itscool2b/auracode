@@ -217,6 +217,16 @@ impl ControlState {
     }
 }
 
+impl Drop for ControlState {
+    /// The last handle and any chain are gone, so is the process tree (the last handle's drop
+    /// killed it): the registry no longer needs its entry. Registry writes block, so on the pool.
+    fn drop(&mut self) {
+        let registry = self.registry.clone();
+        let pid = self.pid;
+        drop(self.rt.spawn_blocking(move || registry.unregister(pid)));
+    }
+}
+
 /// The control of a process [`Spawner`](crate::spawn::Spawner) started.
 pub(crate) struct ChildControl {
     state: Arc<ControlState>,
