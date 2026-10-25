@@ -1783,9 +1783,11 @@ other `tests/**` file uses `aura_drivers::testing`, which only workspace runs an
 
 Curation (`aura-cli fixture`): the log's redaction re-run, then literal `<HOME>`, `<USER>`, `<HOST>`, `<CWD>` (and
 Claude's project-dir spelling, as the spike's `Redactor::add_path`), native session ids to `<SESSION_n>`, ISO
-timestamps to `<TIME>`, `t` made relative; then `scan_clean` must return nothing. Fixtures live in
-`crates/aura-drivers/tests/fixtures/acp/<agent>/<scenario>.jsonl` with `<scenario>.events.json` beside them, and a
-test scans every committed fixture for `@` email shapes, token prefixes, `/Users/`, `/home/`, `C:\Users\`.
+timestamps to `<TIME>`, `t` made relative; then `scan_clean` must return nothing. A log holding a capped record
+(3.8) cannot become a fixture: `curate` refuses it with the line and the bytes cut, and `Fixture::parse` refuses one
+found in a fixture. Fixtures live in `crates/aura-drivers/tests/fixtures/acp/<agent>/<scenario>.jsonl` with
+`<scenario>.events.json` beside them, and a test scans every committed fixture for `@` email shapes, token prefixes,
+`/Users/`, `/home/`, `C:\Users\`.
 
 Synthetic fixtures written before any real run (B owns them): `new-session`, `new-session-early-update`,
 `legacy-models-modes`, `load-replay`, `open-replay-long` (the open deadline resets on each replayed update),
