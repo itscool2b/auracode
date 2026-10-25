@@ -258,6 +258,79 @@ async fn env_timeout_retries_then_falls_back() {
     reaper.assert_gone().await;
 }
 
+/// Quit during boot: the runtime shuts down with the resolution in flight. The shell's whole
+/// session dies with the dropped attempt, and whoever waits gets the fallback, whose secrets
+/// reached the redactor first.
+#[test]
+fn a_resolution_dropped_at_shutdown_kills_the_shells_session() {
+    let fake = FakeShell::new("zsh");
+    let redactor = Arc::new(Redactor::standard());
+    let config = EnvResolverConfig {
+        redactor: Some(Arc::clone(&redactor)),
+        ..fake.config("hang", &[("MY_API_KEY", "fallback-secret-0123456789")])
+    };
+    let doomed = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .expect("runtime");
+    let resolver = EnvResolver::start(
+        config,
+        LeftoverRegistry::disabled(),
+        doomed.handle().clone(),
+    );
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    let waiting = runtime.spawn({
+        let resolver = Arc::clone(&resolver);
+        async move { resolver.get().await }
+    });
+    let mut reaper = Reaper::new();
+    let pids = runtime.block_on(async {
+        let deadline = tokio::time::Instant::now() + common::STARTUP;
+        loop {
+            let pids: Vec<u32> = std::fs::read_to_string(&fake.pidfile)
+                .unwrap_or_default()
+                .split_whitespace()
+                .map(|pid| pid.parse().expect("pid"))
+                .collect();
+            if pids.len() == 2 {
+                return pids;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "the shell never hung"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    });
+    reaper.hold_all(&pids);
+    doomed.shutdown_timeout(Duration::from_secs(10));
+    let env = runtime.block_on(waiting).expect("join");
+    assert_eq!(
+        env.source,
+        EnvSource::Fallback {
+            reason: "the environment could not be read".into()
+        }
+    );
+    assert_eq!(get(&env, "MY_API_KEY"), Some("fallback-secret-0123456789"));
+    assert_eq!(
+        redactor.redact_text("echo fallback-secret-0123456789"),
+        "echo <SECRET>"
+    );
+    runtime.block_on(async {
+        for pid in &pids {
+            assert!(
+                wait_gone(*pid, GONE_WITHIN).await,
+                "{pid} outlived its dropped resolution"
+            );
+        }
+        reaper.assert_gone().await;
+    });
+}
+
 #[tokio::test]
 async fn an_rc_that_hangs_only_interactively_is_read_without_it() {
     let fake = FakeShell::new("zsh");

@@ -399,24 +399,7 @@ impl EnvResolver {
         let attempt = async move {
             match task.await {
                 Ok(env) => env,
-                Err(_) => {
-                    // The runtime is shutting down (or the attempt panicked): answer with
-                    // auracode's own env so no caller waits forever.
-                    let mut state = lock(&inner.state);
-                    state.in_flight = None;
-                    state.current.clone().unwrap_or_else(|| {
-                        let mut vars = process_env();
-                        strip_launch_context(&mut vars);
-                        Arc::new(ResolvedEnv {
-                            vars,
-                            source: EnvSource::Fallback {
-                                reason: "the environment could not be read".into(),
-                            },
-                            warnings: Vec::new(),
-                            resolved_at_ms: now_millis(),
-                        })
-                    })
-                }
+                Err(_) => failed_attempt(&inner),
             }
         }
         .boxed()
@@ -435,6 +418,34 @@ impl fmt::Debug for EnvResolver {
             .field("resolving", &state.in_flight.is_some())
             .finish()
     }
+}
+
+/// The answer when an attempt's task ended without one (the runtime is shutting down, or the
+/// attempt panicked), so no caller waits forever: the last env, or else the fallback, `base` or
+/// auracode's own env without its launch context. A new fallback is the current env from then on,
+/// and its secrets reach the redactor before any caller gets it, as every resolution's do.
+fn failed_attempt(inner: &ResolverInner) -> Arc<ResolvedEnv> {
+    let mut state = lock(&inner.state);
+    state.in_flight = None;
+    if let Some(current) = &state.current {
+        return Arc::clone(current);
+    }
+    let config = inner.live.as_ref().map(|live| &live.config);
+    let mut vars = config
+        .and_then(|config| config.base.clone())
+        .unwrap_or_else(process_env);
+    strip_launch_context(&mut vars);
+    if let Some(redactor) = config.and_then(|config| config.redactor.as_ref()) {
+        redactor.set_secrets(secret_values(&vars));
+    }
+    let env = Arc::new(fallback(
+        vars,
+        "the environment could not be read".into(),
+        Vec::new(),
+    ));
+    state.current = Some(Arc::clone(&env));
+    state.finished = Some(tokio::time::Instant::now());
+    env
 }
 
 /// An env with nothing in it, for a resolver with nothing to resolve.
@@ -921,6 +932,59 @@ mod tests {
             "401: bad key <SECRET>"
         );
         assert!(!format!("{resolver:?}").contains("sk-proj"));
+    }
+
+    /// An attempt whose task never answers (its runtime shut down first) still hands its env's
+    /// secrets to the redactor before anyone gets that env, and its fallback becomes current.
+    #[test]
+    fn a_failed_attempt_still_hands_its_secrets_to_the_redactor() {
+        let doomed = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let redactor = Arc::new(Redactor::standard());
+        let config = EnvResolverConfig {
+            redactor: Some(Arc::clone(&redactor)),
+            ..unstartable(map(&[
+                ("PATH", "/usr/bin"),
+                ("OPENAI_API_KEY", "sk-proj-fallback-0123456789"),
+                ("TERM_PROGRAM", "vscode"),
+            ]))
+        };
+        let resolver = EnvResolver::start(
+            config,
+            LeftoverRegistry::disabled(),
+            doomed.handle().clone(),
+        );
+        // A current-thread runtime runs nothing until driven: its attempt never started.
+        drop(doomed);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let env = runtime.block_on(resolver.get());
+        assert_eq!(
+            env.source,
+            EnvSource::Fallback {
+                reason: "the environment could not be read".into()
+            }
+        );
+        assert_eq!(
+            names(&env.vars),
+            ["OPENAI_API_KEY", "PATH"],
+            "the configured base, without its launch context"
+        );
+        assert_eq!(
+            redactor.redact_text("401: bad key sk-proj-fallback-0123456789"),
+            "401: bad key <SECRET>"
+        );
+        assert!(
+            resolver
+                .current()
+                .is_some_and(|current| Arc::ptr_eq(&current, &env))
+        );
+        assert!(matches!(resolver.status(), ResolverStatus::Fallback { .. }));
+        assert!(Arc::ptr_eq(&runtime.block_on(resolver.get()), &env));
     }
 
     #[cfg(unix)]

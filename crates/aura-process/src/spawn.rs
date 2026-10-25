@@ -817,11 +817,15 @@ impl Drop for HelperGuard {
         {
             kill_group(self.pid);
             if self.new_session {
+                // On a thread of its own, not the blocking pool: a runtime that is shutting down
+                // drops this future and takes no more blocking work.
                 let sid = self.pid;
-                drop(
-                    self.rt
-                        .spawn_blocking(move || crate::shutdown::kill_session_blocking(sid)),
-                );
+                let killer = std::thread::Builder::new()
+                    .name("aura-kill-session".into())
+                    .spawn(move || crate::shutdown::kill_session_blocking(sid));
+                if killer.is_err() {
+                    crate::shutdown::kill_session_blocking(sid);
+                }
             }
         }
         for reader in &self.readers {
