@@ -77,9 +77,12 @@ async fn probe_timeout_kills_tree() {
     );
     assert!(started.elapsed() >= Duration::from_secs(10));
     let pids = machine.pids("hermes").await;
-    let _reaper = Reaper(pids.clone());
-    for pid in pids {
-        assert!(gone(pid).await, "{pid} outlived the probe's timeout");
+    let (_reaper, held) = Reaper::hold(&pids);
+    for process in &held {
+        assert!(
+            gone(process).await,
+            "{process:?} outlived the probe's timeout"
+        );
     }
 }
 

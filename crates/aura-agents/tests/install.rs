@@ -224,7 +224,7 @@ async fn adapter_never_runs_in_chat_folder() {
         )
         .await
         .expect("spawn");
-    let _reaper = Reaper(vec![process.control.pid()]);
+    let (_reaper, _) = Reaper::hold(&[process.control.pid()]);
     let Some(StdoutItem::Line(line)) = process.io.stdout.next().await else {
         panic!("the fake adapter reports where it runs");
     };
@@ -253,17 +253,17 @@ async fn interrupted_install_is_redone() {
         }
     });
     let pids = machine.pids("npm").await;
-    let _reaper = Reaper(pids.clone());
+    let (_reaper, held) = Reaper::hold(&pids);
     let folder = machine.adapter_folder(CLAUDE_FOLDER);
     let partial = folder.join("node_modules/@agentclientprotocol/claude-agent-acp/package.json");
     assert!(partial.exists(), "npm got part of the way");
     // Esc, force stop, Stop or quit during the download: the preparation is dropped.
     preparing.abort();
     assert!(preparing.await.expect_err("aborted").is_cancelled());
-    for pid in &pids {
+    for process in &held {
         assert!(
-            gone(*pid).await,
-            "npm ({pid}) was killed with the dropped preparation"
+            gone(process).await,
+            "npm ({process:?}) was killed with the dropped preparation"
         );
     }
     assert!(!folder.join("installed.json").exists(), "nothing marked");

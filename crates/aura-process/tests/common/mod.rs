@@ -184,11 +184,24 @@ impl Reaper {
         }
     }
 
-    /// Asserts that nothing held runs any more, by pid and start time, within the spike's bar.
+    /// Asserts that nothing held runs any more, by pid and start time, within the spike's bar: a
+    /// recycled pid is not the process that was held.
     pub async fn assert_gone(&self) {
-        for pid in self.pids() {
+        #[cfg(unix)]
+        for (pid, start) in &self.held {
+            let deadline = tokio::time::Instant::now() + GONE_WITHIN;
+            while running_as(*pid, start) {
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "process {pid} was left running"
+                );
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        }
+        #[cfg(windows)]
+        for pid in &self.held {
             assert!(
-                wait_gone(pid, GONE_WITHIN).await,
+                wait_gone(*pid, GONE_WITHIN).await,
                 "process {pid} was left running"
             );
         }
@@ -212,6 +225,12 @@ impl Reaper {
         #[cfg(windows)]
         self.held.retain(|held| *held != pid);
     }
+}
+
+/// Whether `pid` still runs as the process that started at `start` (a zombie has exited).
+#[cfg(unix)]
+fn running_as(pid: u32, start: &aura_process::ptable::StartTime) -> bool {
+    alive(pid) && aura_process::ptable::start_time(pid).is_ok_and(|now| now == *start)
 }
 
 impl Drop for Reaper {

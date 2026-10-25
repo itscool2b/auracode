@@ -184,11 +184,66 @@ pub fn alive(pid: u32) -> bool {
     String::from_utf8_lossy(&output.stdout).contains(&format!("\"{pid}\""))
 }
 
-/// Polls until `pid` is gone; whether that happened within 5 s.
-pub async fn gone(pid: u32) -> bool {
+/// A process a test started, identified by its pid and, on Unix, its start time, so a recycled
+/// pid is never taken for it.
+#[derive(Debug, Clone)]
+pub struct Held {
+    pid: u32,
+    /// `None`: it had exited already when it was held (Windows keeps no start times).
+    #[cfg(unix)]
+    start: Option<aura_process::ptable::StartTime>,
+}
+
+impl Held {
+    pub fn new(pid: u32) -> Held {
+        Held {
+            pid,
+            #[cfg(unix)]
+            start: aura_process::ptable::start_time(pid).ok(),
+        }
+    }
+
+    /// Whether the process still runs as itself.
+    pub fn running(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.start.as_ref().is_some_and(|start| {
+                alive(self.pid)
+                    && aura_process::ptable::start_time(self.pid).is_ok_and(|now| now == *start)
+            })
+        }
+        #[cfg(windows)]
+        {
+            alive(self.pid)
+        }
+    }
+
+    /// Kills it, only while it still runs as itself.
+    fn kill(&self) {
+        if !self.running() {
+            return;
+        }
+        #[cfg(unix)]
+        {
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &self.pid.to_string()])
+                .output();
+        }
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/T", "/PID", &self.pid.to_string()])
+                .output();
+        }
+    }
+}
+
+/// Polls until `process` is gone (or its pid belongs to another process); whether that happened
+/// within 5 s.
+pub async fn gone(process: &Held) -> bool {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
-        if !alive(pid) {
+        if !process.running() {
             return true;
         }
         if tokio::time::Instant::now() >= deadline {
@@ -198,32 +253,23 @@ pub async fn gone(pid: u32) -> bool {
     }
 }
 
-/// Kills `pid` if a test left it running (a failed assertion).
-pub fn kill(pid: u32) {
-    #[cfg(unix)]
-    {
-        let _ = std::process::Command::new("kill")
-            .args(["-9", &pid.to_string()])
-            .output();
-    }
-    #[cfg(windows)]
-    {
-        let _ = std::process::Command::new("taskkill")
-            .args(["/F", "/T", "/PID", &pid.to_string()])
-            .output();
+/// Holds the processes a test started and kills, when dropped, those still running as
+/// themselves, so a failing test leaves nothing behind and never hits a recycled pid.
+#[derive(Debug, Default)]
+pub struct Reaper(Vec<Held>);
+
+impl Reaper {
+    /// Holds `pids`, read now with their start times; returns what it holds, for [`gone`].
+    pub fn hold(pids: &[u32]) -> (Reaper, Vec<Held>) {
+        let held: Vec<Held> = pids.iter().map(|pid| Held::new(*pid)).collect();
+        (Reaper(held.clone()), held)
     }
 }
 
-/// Kills the pids it holds when dropped, so a failing test leaves nothing behind.
-#[derive(Default)]
-pub struct Reaper(pub Vec<u32>);
-
 impl Drop for Reaper {
     fn drop(&mut self) {
-        for pid in &self.0 {
-            if alive(*pid) {
-                kill(*pid);
-            }
+        for process in &self.0 {
+            process.kill();
         }
     }
 }
