@@ -10,11 +10,12 @@
 //! takes ops out of the FIFO, so memory stays bounded by the FIFO plus one batch.
 //!
 //! A full disk or a database busy past its timeout stalls the writer on the failed batch: it keeps
-//! only that batch, retries it, and stops taking ops, while it still serves the second channel
-//! (reads from saved data). Any other error rolls back and re-runs the batch one op per
-//! transaction; an op that fails again (or panics) goes to `<profile>/backups/deadletter-<millis>.jsonl`.
-//! Damage is recorded for the next open's repair, and from then on every write goes to the
-//! dead-letter file so sessions keep running.
+//! only that batch, retries it (a busy one without SQLite's own wait, so the retries never hold the
+//! reads up), and stops taking ops, while it still serves the second channel (reads from saved
+//! data). Any other error rolls back and re-runs the batch one op per transaction; an op that fails
+//! again (or panics) goes to `<profile>/backups/deadletter-<millis>.jsonl`. Damage is recorded for
+//! the next open's repair, and from then on every write goes to the dead-letter file so sessions
+//! keep running.
 
 use std::collections::{HashMap, VecDeque};
 use std::fs::{File, OpenOptions};

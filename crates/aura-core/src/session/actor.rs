@@ -146,8 +146,9 @@ pub(crate) enum ChatMsg {
         autonomy: Autonomy,
         reply: oneshot::Sender<Result<SessionLists, SessionError>>,
     },
-    /// Before a blob read: `Some` barrier to wait for when this chat's own `PutBlob` for it has not
-    /// reached the store yet (an unknown chat answers `ChatNotFound`).
+    /// Before a blob read: a barrier to wait for when this chat's own `PutBlob` for the blob has not
+    /// reached the store yet, `BlobMissing` when it waits on a paused store, `ChatNotFound` for a
+    /// chat that does not exist.
     Blob {
         sha256: String,
         reply: oneshot::Sender<Result<Option<oneshot::Receiver<()>>, SessionError>>,
