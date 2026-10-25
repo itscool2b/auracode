@@ -507,6 +507,8 @@ struct ReplayCollector {
     in_user_run: bool,
     reply: String,
     hasher: Sha256,
+    /// Agent text other than whitespace arrived after the last user run. Without it there is no
+    /// reply and no hash, as the session's own reply hash has none for a turn without agent text.
     has_reply: bool,
 }
 
@@ -535,13 +537,13 @@ impl ReplayCollector {
             }
             Update::AgentMessageChunk(chunk) => {
                 self.in_user_run = false;
-                self.has_reply = true;
                 let room = REPLAY_REPLY_BYTES.saturating_sub(self.reply.len());
                 self.reply.push_str(prefix_within(&chunk.text, room));
                 let mut buffer = [0; 4];
                 for character in chunk.text.chars().filter(|c| !c.is_whitespace()) {
                     self.hasher
                         .update(character.encode_utf8(&mut buffer).as_bytes());
+                    self.has_reply = true;
                 }
             }
             _ => self.in_user_run = false,

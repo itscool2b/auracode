@@ -838,6 +838,40 @@ async fn hermes_replay_summary_counts_user_turns_and_keeps_the_last_reply() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_replayed_reply_with_no_text_but_whitespace_is_no_reply() {
+    let user = |text: &str| json!({"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": text}});
+    for chunks in [vec![""], vec![" ", "\n\t", ""]] {
+        let mut hermes = setup("hermes");
+        hermes.resume = Some("h-1".into());
+        let mut harness = Harness::start(hermes).await;
+        let (id, _) = harness.request("initialize").await;
+        harness.reply(&id, init_result());
+        let (open, _) = harness.request("session/resume").await;
+        harness.update_for("h-1", user("first"));
+        harness.update_for("h-1", chunk("An answer."));
+        harness.update_for("h-1", user("second"));
+        for text in &chunks {
+            harness.update_for("h-1", chunk(text));
+        }
+        harness.reply(&open, json!({}));
+        let events = harness
+            .events_until(|event| matches!(event, DriverEvent::Ready(_)))
+            .await;
+        // As the session hashes no reply for a turn without agent text, the summary carries
+        // none: an empty hash would read as Hermes having continued the session.
+        assert_eq!(
+            ready_info(&events).replay,
+            Some(ReplaySummary {
+                user_turns: 2,
+                last_reply: None,
+                last_reply_sha256: None,
+            }),
+            "{chunks:?}"
+        );
+    }
+}
+
+#[tokio::test(start_paused = true)]
 async fn updates_before_the_new_session_is_named_are_buffered() {
     let mut harness = Harness::start(setup("generic")).await;
     let (id, _) = harness.request("initialize").await;
