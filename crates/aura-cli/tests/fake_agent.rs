@@ -71,7 +71,12 @@ mod process {
         let machine = Machine::with_fake_hermes();
         let headless = machine
             .headless_setting(
-                &[("AURA_FAKE_OPEN_DELAY_MS", "300")],
+                // Settings answer late, as a real agent's do: each autonomy level must still reach
+                // the agent before the walk goes on.
+                &[
+                    ("AURA_FAKE_OPEN_DELAY_MS", "300"),
+                    ("AURA_FAKE_SET_DELAY_MS", "150"),
+                ],
                 &[("AURA_PROBE_SET", "a value that is never logged")],
             )
             .await;
@@ -160,6 +165,17 @@ mod process {
             .cloned()
             .unwrap_or_default();
         assert_eq!(set, serde_json::json!(["AURA_PROBE_SET"]));
+        // Full auto at the start, then the walk: Auto-edit, Ask and Full auto again, each mode
+        // sent once the one before it landed (a later change replaces one still on its way).
+        let modes: Vec<&str> = logs::requests_of(&first, &["session/set_mode"])
+            .filter_map(logs::message)
+            .filter_map(|msg| msg.pointer("/params/modeId").and_then(|id| id.as_str()))
+            .collect();
+        assert_eq!(
+            modes,
+            ["dont_ask", "accept_edits", "default", "dont_ask"],
+            "{output}"
+        );
         for (log, _) in &logs {
             let text = std::fs::read_to_string(log).expect("a log");
             assert!(

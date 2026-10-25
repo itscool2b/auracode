@@ -69,6 +69,10 @@ impl ProbeTimings {
     };
 }
 
+/// How long a mode change may take to reach the agent: the driver's option request timeout (30 s,
+/// spec appendix A) with a margin.
+const MODE_CHANGE_LIMIT: Duration = Duration::from_secs(35);
+
 /// Words cheaper models carry in their ids or names, cheapest first.
 const CHEAP_MARKERS: [&str; 8] = [
     "haiku",
@@ -1003,6 +1007,16 @@ impl Probe<'_> {
                     continue;
                 }
             };
+            // The policy applies at once and the mode change follows (spec 5.5.2); a later change
+            // replaces one still on its way, so the walk waits for each mode to reach the agent.
+            let state = match self.mode_lands(chat, state).await {
+                Ok(state) => state,
+                Err(why) => {
+                    self.report
+                        .fail(step, format!("{}: {why}", level_name(level)));
+                    continue;
+                }
+            };
             let expected = expected_modes(&self.spec, level);
             let text = autonomy_text(level, &state);
             if state.requested != level {
@@ -1023,6 +1037,41 @@ impl Probe<'_> {
                     ),
                 );
             }
+        }
+    }
+
+    /// Waits until the agent runs the mode `state` names: the session's Mode option reads it, with
+    /// nothing pending. Returns the autonomy in effect then, where a candidate whose mode change
+    /// failed meanwhile shows as the one the driver fell back to.
+    async fn mode_lands(
+        &self,
+        chat: &ChatRun<'_>,
+        state: AutonomyState,
+    ) -> Result<AutonomyState, String> {
+        let Some(mode) = state.native_mode.clone() else {
+            return Ok(state);
+        };
+        let deadline = Instant::now() + MODE_CHANGE_LIMIT;
+        loop {
+            let lists = chat.lists().await.map_err(|error| error.to_string())?;
+            let landed = lists
+                .options
+                .iter()
+                .find(|option| option.category == ConfigCategory::Mode)
+                .is_some_and(|option| {
+                    option.pending.is_none()
+                        && matches!(&option.kind, ConfigKind::Select { current, .. } if *current == mode)
+                });
+            if landed || lists.autonomy.native_mode.as_deref() != Some(mode.as_str()) {
+                return Ok(lists.autonomy);
+            }
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "the agent did not switch to the mode {mode} within {} s",
+                    MODE_CHANGE_LIMIT.as_secs()
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
 
