@@ -311,6 +311,122 @@ describe("tool blocks and full outputs", () => {
     expect(content).toContain("the whole output");
   });
 
+  it("load_full_output: a terminal output keeps its end while its full text pages in", () => {
+    const sha = "f".repeat(64);
+    // The full output is 30 bytes: 23 of start, then the end kept inline ("the end", 7 bytes).
+    const full = "0123456789abcdefghijklmthe end";
+    const content = {
+      type: "terminal" as const,
+      output: "the end",
+      exit_code: 1,
+      truncated: { total_bytes: 30, blob: sha },
+    };
+    const page = (loaded: number, eof = false): BlobState => ({
+      text: full.slice(0, loaded),
+      nextOffset: loaded,
+      total: 30,
+      eof,
+      loading: false,
+      error: null,
+    });
+    const render = (blob: BlobState | undefined, card = false) => {
+      const blobs = new Map(blob ? [[sha, blob]] : []);
+      return card
+        ? renderToStaticMarkup(
+            <PermissionCard
+              item={permission({ content: [content] })}
+              request={undefined}
+              onRespond={noop}
+              blobs={blobs}
+              onLoadBlob={noop}
+            />,
+          )
+        : renderToStaticMarkup(
+            <ToolContentView content={content} blobs={blobs} onLoadBlob={noop} />,
+          );
+    };
+    const pres = (html: string) =>
+      [...html.matchAll(/<pre class="ui-pre">(.*?)<\/pre>/g)].map((match) => match[1]);
+
+    expect(pres(render(undefined))).toEqual(["the end"]);
+    // The first page stops short of the end: the start, what lies between, then the end.
+    const partial = render(page(20));
+    expect(pres(partial)).toEqual(["0123456789abcdefghij", "the end"]);
+    expect(partial).toContain("3 bytes not loaded yet. The end of the output:");
+    expect(partial).toContain("exit 1");
+    expect(buttons(partial)).toEqual([{ label: "Load more (20 of 30 bytes)", disabled: false }]);
+    // A permission card shows its content the same way.
+    expect(pres(render(page(20), true))).toEqual(["0123456789abcdefghij", "the end"]);
+    // Pages that reach into the end show it once, joined.
+    expect(pres(render(page(25)))).toEqual([full]);
+    const done = render(page(30, true));
+    expect(pres(done)).toEqual([full]);
+    expect(buttons(done)).toEqual([]);
+  });
+
+  it("load_full_output: the end joins the pages at a byte offset, across multibyte characters", () => {
+    const sha = "9".repeat(64);
+    // 14 bytes of start, then the end "é end" (6 bytes: "é" takes two).
+    const full = "0123456789abcdé end";
+    const blob: BlobState = {
+      text: "0123456789abcdé",
+      nextOffset: 16,
+      total: 20,
+      eof: false,
+      loading: false,
+      error: null,
+    };
+    const html = renderToStaticMarkup(
+      <ToolContentView
+        content={{
+          type: "terminal",
+          output: "é end",
+          exit_code: null,
+          truncated: { total_bytes: 20, blob: sha },
+        }}
+        blobs={new Map([[sha, blob]])}
+        onLoadBlob={noop}
+      />,
+    );
+    expect(html).toContain(`<pre class="ui-pre">${full}</pre>`);
+  });
+
+  it("load_full_output: says what an output longer than its kept 64 MiB lacks", () => {
+    const sha = "8".repeat(64);
+    // A blob keeps the first bytes of a longer output (here 20 of 100).
+    const kept: BlobState = {
+      text: "x".repeat(20),
+      nextOffset: 20,
+      total: 20,
+      eof: true,
+      loading: false,
+      error: null,
+    };
+    const blobs = new Map([[sha, kept]]);
+    const terminal = renderToStaticMarkup(
+      <ToolContentView
+        content={{
+          type: "terminal",
+          output: "the end",
+          exit_code: null,
+          truncated: { total_bytes: 100, blob: sha },
+        }}
+        blobs={blobs}
+        onLoadBlob={noop}
+      />,
+    );
+    expect(terminal).toContain("73 bytes in between weren&#x27;t kept");
+    expect(terminal).toContain(">the end</pre>");
+    const text = renderToStaticMarkup(
+      <ToolContentView
+        content={{ type: "text", text: "xxxx", truncated: { total_bytes: 100, blob: sha } }}
+        blobs={blobs}
+        onLoadBlob={noop}
+      />,
+    );
+    expect(text).toContain("The remaining 80 bytes weren&#x27;t kept");
+  });
+
   it("load_full_output: a diff that did not fit renders from its blob", () => {
     const sha = "d".repeat(64);
     const blobs = new Map([

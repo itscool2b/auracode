@@ -73,6 +73,49 @@ export function Locations({ locations }: { readonly locations: readonly ToolLoca
   );
 }
 
+const UTF8 = new TextEncoder();
+const UTF8_TEXT = new TextDecoder();
+
+/** What a cut terminal output shows once pages of its full text arrive. */
+export interface TerminalParts {
+  /** The loaded start of the full output; `null` until a page arrives. */
+  readonly head: string | null;
+  /** Bytes between `head` and `tail` that are not shown. */
+  readonly between: number;
+  /** The end of the output still to show after `head`. */
+  readonly tail: string;
+}
+
+/**
+ * A cut terminal output keeps its end inline, since the end explains failures. While pages of the
+ * full output load from the start, the loaded start shows, then how much lies between, then that
+ * end, until the pages reach it. Pages and the inline end are both cut on character boundaries,
+ * so a byte offset into the full output is one into its end as well. A full output keeps only its
+ * first 64 MiB, so the pages may never reach the end.
+ */
+export function terminalParts(
+  output: string,
+  truncation: Truncation | null,
+  blob: BlobState | undefined,
+): TerminalParts {
+  if (truncation === null || blob === undefined || blob.nextOffset === 0) {
+    return { head: null, between: 0, tail: output };
+  }
+  const end = UTF8.encode(output);
+  const endStart = Math.max(0, truncation.total_bytes - end.length);
+  if (blob.nextOffset < endStart) {
+    return { head: blob.text, between: endStart - blob.nextOffset, tail: output };
+  }
+  const rest = end.subarray(Math.min(end.length, blob.nextOffset - endStart));
+  return { head: blob.text, between: 0, tail: UTF8_TEXT.decode(rest) };
+}
+
+/** A full output keeps only its first 64 MiB: what an output loaded to its last page lacks. */
+function unkeptBytes(truncation: Truncation | null, blob: BlobState | undefined): number {
+  if (truncation === null || !blob?.eof) return 0;
+  return Math.max(0, truncation.total_bytes - blob.total);
+}
+
 /** One entry of a tool's (or a card's) content: text, a diff, or terminal output. */
 export function ToolContentView({
   content,
@@ -81,23 +124,45 @@ export function ToolContentView({
 }: { readonly content: ToolContent } & BlobProps) {
   const blob = content.truncated?.blob ? blobs.get(content.truncated.blob) : undefined;
   switch (content.type) {
-    case "text":
+    case "text": {
+      const unkept = unkeptBytes(content.truncated, blob);
       return (
         <div className="chat-command">
           <pre className="ui-pre">{blob?.text || content.text}</pre>
+          {unkept > 0 ? (
+            <p className="chat-marker">
+              The remaining {formatCount(unkept)} bytes weren't kept: an output keeps its first 64
+              MiB.
+            </p>
+          ) : null}
           <FullOutput truncation={content.truncated} blob={blob} onLoadBlob={onLoadBlob} />
         </div>
       );
-    case "terminal":
+    }
+    case "terminal": {
+      const { head, between, tail } = terminalParts(content.output, content.truncated, blob);
       return (
         <div className="chat-command">
-          <pre className="ui-pre">{blob?.text || content.output}</pre>
+          {head === null || between === 0 ? (
+            <pre className="ui-pre">{(head ?? "") + tail}</pre>
+          ) : (
+            <>
+              <pre className="ui-pre">{head}</pre>
+              <p className="chat-marker">
+                {blob?.eof
+                  ? `${formatCount(between)} bytes in between weren't kept (an output keeps its first 64 MiB). The end of the output:`
+                  : `${formatCount(between)} bytes not loaded yet. The end of the output:`}
+              </p>
+              <pre className="ui-pre">{tail}</pre>
+            </>
+          )}
           {content.exit_code !== null ? (
             <span className="ui-muted ui-mono">exit {content.exit_code}</span>
           ) : null}
           <FullOutput truncation={content.truncated} blob={blob} onLoadBlob={onLoadBlob} />
         </div>
       );
+    }
     case "diff":
       return (
         <div className="chat-command">
