@@ -207,6 +207,21 @@ describe("the header", () => {
       "Start fresh",
       "Show log",
     ]);
+    // The list has the newer folder state (it reloads after a failed start); the snapshot is from
+    // the join.
+    expect(fresh).not.toContain("folder missing");
+    const missing = renderToStaticMarkup(
+      <Header
+        state={stopped}
+        listed={chatSummary("c1", { folder_state: "missing", status: "failed" })}
+        agent={null}
+        resumable={false}
+        onStart={noop}
+        onStop={noop}
+        onShowLog={noop}
+      />,
+    );
+    expect(missing).toContain("folder missing");
 
     const running = await stateWith(historyPage("c1", []), {
       session: sessionInfo({

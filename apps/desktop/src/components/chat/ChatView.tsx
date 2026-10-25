@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import type { AgentEntry, StorageStatus } from "../../bindings";
+import type { AgentEntry, ChatSummary, StorageStatus } from "../../bindings";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
@@ -20,11 +20,14 @@ import type { TurnActions } from "./TurnView";
 export function ChatView({
   chatId,
   transport,
+  listed,
   storage,
   agents,
 }: {
   readonly chatId: string;
   readonly transport: Transport;
+  /** The chat as the chat list has it, which follows its folder state after the join. */
+  readonly listed: ChatSummary | null;
   /** The polled storage status: a failed join retries, and an unsaved gap joins again, on change. */
   readonly storage: StorageStatus | null;
   readonly agents: readonly AgentEntry[] | null;
@@ -98,6 +101,7 @@ export function ChatView({
     <div className="chat-view">
       <Header
         state={state}
+        listed={listed}
         agent={agent}
         resumable={resumable}
         onStart={(fresh) => void store.start(fresh)}

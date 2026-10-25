@@ -1,4 +1,4 @@
-import type { AgentEntry } from "../../bindings";
+import type { AgentEntry, ChatSummary } from "../../bindings";
 import type { ChatState } from "../../lib/chat/chatStore";
 import { contextLabel, costLabel, folderStateLabel, statusWord } from "../../lib/chat/present";
 import { hasProcess } from "../../lib/chat/transcript";
@@ -10,6 +10,7 @@ import { hasProcess } from "../../lib/chat/transcript";
  */
 export function Header({
   state,
+  listed = null,
   agent,
   resumable,
   onStart,
@@ -17,6 +18,11 @@ export function Header({
   onShowLog,
 }: {
   readonly state: ChatState;
+  /**
+   * The chat as the chat list has it. Its folder state is the newer one: the list reloads after
+   * a start fails or gets past the folder check, while the snapshot is from the join.
+   */
+  readonly listed?: ChatSummary | null;
   /** The chat's agent as detection sees it, for the version that will run. */
   readonly agent: AgentEntry | null;
   /** There is an earlier session a start would continue. */
@@ -25,7 +31,8 @@ export function Header({
   readonly onStop: () => void;
   readonly onShowLog: () => void;
 }) {
-  const { chat, session } = state;
+  const { session } = state;
+  const chat = listed ?? state.chat;
   const status = session?.status ?? chat?.status ?? "stopped";
   const live = hasProcess(status);
   const name = session?.agent_name ?? chat?.agent_name ?? agent?.name ?? "Agent";

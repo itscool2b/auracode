@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentEntry, EnvStatus, StorageStatus } from "../../bindings";
+import type { AgentEntry, ChatSummary, EnvStatus, StorageStatus } from "../../bindings";
 import { CommandError } from "../ipc";
 import {
   AppStore,
@@ -82,6 +82,97 @@ describe("the app store", () => {
     });
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.callsOf("chatsList")).toHaveLength(2);
+    store.stop();
+  });
+
+  it("reloads the list when a start fails or gets past a folder problem, for the folder's state", async () => {
+    let row: Partial<ChatSummary> = { status: "starting", folder_state: "ok" };
+    const fake = new FakeTransport({ chatsList: () => Promise.resolve([chatSummary("c1", row)]) });
+    const store = new AppStore(fake);
+    store.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const update = (status: ChatSummary["status"], at: number) =>
+      fake.statusChannels[0]?.onUpdate({
+        chat_id: "c1",
+        status,
+        needs_attention: false,
+        title: null,
+        updated_at: at,
+      });
+
+    // The start fails because the folder is gone: no update says so, the list does.
+    row = { status: "failed", folder_state: "missing" };
+    update("failed", 2);
+    expect(store.getSnapshot().chats?.[0]?.status).toBe("failed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.callsOf("chatsList")).toHaveLength(2);
+    expect(store.getSnapshot().chats?.[0]).toMatchObject({
+      status: "failed",
+      folder_state: "missing",
+    });
+
+    // Retry, with the folder back: a start that gets ready passed the folder check.
+    row = { status: "starting", folder_state: "ok" };
+    update("starting", 3);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.callsOf("chatsList")).toHaveLength(2);
+    row = { status: "ready", folder_state: "ok" };
+    update("ready", 4);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.callsOf("chatsList")).toHaveLength(3);
+    expect(store.getSnapshot().chats?.[0]).toMatchObject({ status: "ready", folder_state: "ok" });
+
+    // Other changes keep the list as it is.
+    update("running", 5);
+    update("ready", 6);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.callsOf("chatsList")).toHaveLength(3);
+    store.stop();
+  });
+
+  it("applies updates that arrive during a reload on top of its answer, and only the newest", async () => {
+    const answers: ((chats: ChatSummary[]) => void)[] = [];
+    const fake = new FakeTransport({
+      chatsList: () => new Promise((resolve) => answers.push(resolve)),
+    });
+    const store = new AppStore(fake);
+    store.start();
+    answers[0]?.([chatSummary("c1", { status: "stopped", updated_at: 1 })]);
+    await vi.advanceTimersByTimeAsync(0);
+    const update = (chat: string, status: ChatSummary["status"], at: number) =>
+      fake.statusChannels[0]?.onUpdate({
+        chat_id: chat,
+        status,
+        needs_attention: false,
+        title: null,
+        updated_at: at,
+      });
+
+    // A chat the list lacks reloads it; c1 starts while the list is read, and the list was read
+    // before that.
+    update("c2", "starting", 2);
+    update("c1", "starting", 3);
+    answers[1]?.([
+      chatSummary("c1", { status: "stopped", updated_at: 1 }),
+      chatSummary("c2", { status: "starting", updated_at: 2 }),
+    ]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getSnapshot().chats?.map((chat) => [chat.id, chat.status])).toEqual([
+      ["c1", "starting"],
+      ["c2", "starting"],
+    ]);
+
+    // Two reloads on their way: the older one answering last changes nothing.
+    void store.reloadChats();
+    void store.reloadChats();
+    answers[3]?.([chatSummary("c1", { status: "ready" }), chatSummary("c3", { status: "ready" })]);
+    await vi.advanceTimersByTimeAsync(0);
+    answers[2]?.([chatSummary("c1", { status: "stopped" })]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getSnapshot().chats?.map((chat) => [chat.id, chat.status])).toEqual([
+      ["c1", "ready"],
+      ["c3", "ready"],
+    ]);
     store.stop();
   });
 

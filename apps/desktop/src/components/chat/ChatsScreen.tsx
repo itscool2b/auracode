@@ -80,6 +80,7 @@ export function ChatsScreen({
             key={selected}
             chatId={selected}
             transport={transport}
+            listed={snapshot.chats?.find((chat) => chat.id === selected) ?? null}
             storage={snapshot.storage}
             agents={snapshot.agents}
           />

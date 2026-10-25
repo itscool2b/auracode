@@ -16,6 +16,11 @@ import type { Transport } from "./transport";
  * The storage status is polled (every 2 s while saving is paused or failed, every 5 s otherwise),
  * and so are the env while it resolves and the agents while one is still being checked: none of
  * them has a channel of its own.
+ *
+ * A status update carries no folder state, so the list reloads when a chat's start fails (the
+ * folder may be missing or not allowed) and when a chat listed with a folder problem gets ready
+ * (its start got past the folder check). Updates that arrive while a reload is on its way are
+ * applied again on top of its answer, and only the newest reload's answer counts.
  */
 
 export interface AppSnapshot {
@@ -52,6 +57,29 @@ function byActivity(chats: readonly ChatSummary[]): ChatSummary[] {
   return [...chats].sort((a, b) => b.updated_at - a.updated_at);
 }
 
+/** `chats` with one chat's row changed by a status update. */
+function withUpdate(chats: readonly ChatSummary[], update: ChatStatusUpdate): ChatSummary[] {
+  return byActivity(
+    chats.map((chat) =>
+      chat.id === update.chat_id
+        ? {
+            ...chat,
+            status: update.status,
+            needs_attention: update.needs_attention,
+            title: update.title ?? chat.title,
+            updated_at: update.updated_at,
+          }
+        : chat,
+    ),
+  );
+}
+
+/** Whether an update can change what the list knows about a chat's folder. */
+function foldersMayChange(known: ChatSummary, update: ChatStatusUpdate): boolean {
+  if (update.status === "failed") return known.status !== "failed";
+  return known.folder_state !== "ok" && (update.status === "ready" || update.status === "running");
+}
+
 export class AppStore {
   readonly #transport: Transport;
   readonly #listeners = new Set<() => void>();
@@ -69,6 +97,11 @@ export class AppStore {
    * channel then ends, and that end must not subscribe yet again.
    */
   #statusGeneration = 0;
+  /** Every chat list reload gets a number; `#reloading` is the newest one while it is on its way. */
+  #reloads = 0;
+  #reloading: number | null = null;
+  /** Status updates that arrived while `#reloading` was on its way, newest last. */
+  #missed: ChatStatusUpdate[] = [];
 
   constructor(transport: Transport) {
     this.#transport = transport;
@@ -136,33 +169,40 @@ export class AppStore {
   }
 
   async reloadChats(): Promise<void> {
+    const reload = ++this.#reloads;
+    this.#reloading = reload;
+    this.#missed = [];
     try {
       const chats = await this.#transport.chatsList();
-      this.#set({ ...this.#state, chats: byActivity(chats), chatsError: null });
+      if (reload !== this.#reloads) return;
+      // The list may have been read before an update that arrived meanwhile.
+      const next = this.#missed.reduce(withUpdate, byActivity(chats));
+      this.#set({ ...this.#state, chats: next, chatsError: null });
     } catch (error) {
+      if (reload !== this.#reloads) return;
       this.#set({ ...this.#state, chatsError: errorMessage(error) });
+    } finally {
+      if (reload === this.#reloads) {
+        this.#reloading = null;
+        this.#missed = [];
+      }
     }
   }
 
-  /** One status channel update: the chat's row changes; a chat this list lacks reloads it. */
+  /**
+   * One status channel update: the chat's row changes; a chat this list lacks reloads it, and so
+   * does one whose folder state the update may have changed.
+   */
   applyStatus(update: ChatStatusUpdate): void {
+    if (this.#reloading !== null) this.#missed.push(update);
     const chats = this.#state.chats;
-    if (chats === null || !chats.some((chat) => chat.id === update.chat_id)) {
+    const known = chats?.find((chat) => chat.id === update.chat_id);
+    if (chats === null || known === undefined) {
       void this.reloadChats();
       return;
     }
-    const next = chats.map((chat) =>
-      chat.id === update.chat_id
-        ? {
-            ...chat,
-            status: update.status,
-            needs_attention: update.needs_attention,
-            title: update.title ?? chat.title,
-            updated_at: update.updated_at,
-          }
-        : chat,
-    );
-    this.#set({ ...this.#state, chats: byActivity(next) });
+    this.#set({ ...this.#state, chats: withUpdate(chats, update) });
+    if (foldersMayChange(known, update)) void this.reloadChats();
   }
 
   /** A chat this window just created (or opened) joins the list at once. */
