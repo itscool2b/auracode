@@ -1,0 +1,504 @@
+//! A fake ACP agent for aura-cli's tests. Tests copy it as `hermes` (with `.exe` on Windows) into
+//! a folder on the test env's `PATH`: it answers `--version` the way Hermes does, and under `acp`
+//! speaks enough ACP for every probe step and every smoke scenario, so the CLI runs end to end
+//! through a real process, the real ACP driver and real protocol logs, with no real agent. It
+//! lives in this crate because a test can only find the binaries of its own package.
+//!
+//! - `initialize`: protocol version 1, load and resume, one terminal auth method.
+//! - `session/new`, `session/load`, `session/resume`: Hermes' legacy `models` (`fake:large`,
+//!   `fake:mini`) and `modes` (`default`, `accept_edits`, `dont_ask`), then three slash commands.
+//!   Sessions persist in `$AURA_FAKE_STATE`, one JSON file each, so a resume in a new process
+//!   continues them; an unknown session answers -32002. `AURA_FAKE_OPEN_DELAY_MS` delays every
+//!   open's reply, which gives an interrupted start its window.
+//! - `session/set_mode`, `session/set_model`, `session/set_config_option` (`[]`, as Hermes).
+//! - `session/prompt`, by its text: the smoke scenarios' prompts (`Reply with exactly: ok`, the two
+//!   files, counting to 300 until cancelled, the last number, the files created); anything else
+//!   gets `fake reply`. In the `default` mode a file is written only after the client allows it.
+//!   Usage is the session's running total, as Hermes reports it.
+//! - `session/cancel` ends a running prompt `cancelled`; stdin's end ends the process.
+
+use std::collections::BTreeMap;
+use std::io::{BufRead, Write};
+use std::path::PathBuf;
+use std::process::ExitCode;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::time::Duration;
+
+use serde_json::{Value, json};
+
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+/// Pacing of the counting prompt: one number per tick.
+const TICK: Duration = Duration::from_millis(15);
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|arg| arg == "--version") {
+        println!("Hermes Agent v0.22.5 (aura-cli fake)");
+        return ExitCode::SUCCESS;
+    }
+    if args.get(1).map(String::as_str) != Some("acp") {
+        eprintln!("usage: hermes acp");
+        return ExitCode::FAILURE;
+    }
+    match serve() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("fake agent: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// What the stdin reader hands over: a message, or the end of stdin.
+type Incoming = Option<Value>;
+
+fn serve() -> Result<()> {
+    let (sender, receiver) = mpsc::channel::<Incoming>();
+    std::thread::spawn(move || {
+        for line in std::io::stdin().lock().lines() {
+            let Ok(line) = line else { break };
+            if let Ok(message) = serde_json::from_str::<Value>(&line)
+                && sender.send(Some(message)).is_err()
+            {
+                return;
+            }
+        }
+        let _ = sender.send(None);
+    });
+    eprintln!("INFO fake agent ready");
+    let mut agent = Agent::new()?;
+    while let Ok(Some(message)) = receiver.recv() {
+        if agent.handle(message, &receiver)? == Flow::Ended {
+            break;
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Flow {
+    Going,
+    /// stdin ended.
+    Ended,
+}
+
+/// One session, as stored between processes.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+struct Session {
+    id: String,
+    cwd: PathBuf,
+    mode: String,
+    model: String,
+    files: Vec<String>,
+    last_number: u64,
+    input_tokens: u64,
+    output_tokens: u64,
+}
+
+struct Agent {
+    state: PathBuf,
+    open_delay: Duration,
+    sessions: BTreeMap<String, Session>,
+    next_request: u64,
+}
+
+impl Agent {
+    fn new() -> Result<Agent> {
+        let state = std::env::var_os("AURA_FAKE_STATE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir().join("aura-cli-fake-agent-state"));
+        std::fs::create_dir_all(&state)?;
+        let open_delay = std::env::var("AURA_FAKE_OPEN_DELAY_MS")
+            .ok()
+            .and_then(|ms| ms.parse().ok())
+            .map_or(Duration::ZERO, Duration::from_millis);
+        Ok(Agent {
+            state,
+            open_delay,
+            sessions: BTreeMap::new(),
+            next_request: 1,
+        })
+    }
+
+    fn handle(&mut self, message: Value, incoming: &Receiver<Incoming>) -> Result<Flow> {
+        let method = message.get("method").and_then(Value::as_str);
+        let id = message.get("id").cloned();
+        let params = message.get("params").cloned().unwrap_or(Value::Null);
+        match (method, id) {
+            (Some("session/prompt"), Some(id)) => self.prompt(&id, &params, incoming),
+            (Some(method), Some(id)) => {
+                self.request(method, &id, &params)?;
+                Ok(Flow::Going)
+            }
+            // A cancel while no prompt runs, or another notification: nothing to do.
+            (Some(_), None) | (None, _) => Ok(Flow::Going),
+        }
+    }
+
+    fn request(&mut self, method: &str, id: &Value, params: &Value) -> Result<()> {
+        match method {
+            "initialize" => reply(
+                id,
+                json!({
+                    "protocolVersion": 1,
+                    "agentCapabilities": {
+                        "loadSession": true,
+                        "promptCapabilities": {"image": false},
+                        "sessionCapabilities": {"resume": {}}
+                    },
+                    "authMethods": [{
+                        "id": "hermes-setup",
+                        "name": "Configure the fake",
+                        "type": "terminal",
+                        "args": ["--setup"]
+                    }],
+                    "agentInfo": {"name": "fake-hermes", "version": "0.22.5"}
+                }),
+            ),
+            "session/new" => {
+                std::thread::sleep(self.open_delay);
+                let session = Session {
+                    id: format!("fake-{}-{}", std::process::id(), self.sessions.len() + 1),
+                    cwd: PathBuf::from(text(params, "cwd")),
+                    mode: "default".into(),
+                    model: "fake:large".into(),
+                    ..Session::default()
+                };
+                self.save(&session)?;
+                let mut result = offers(&session);
+                result["sessionId"] = json!(session.id);
+                reply(id, result)?;
+                commands(&session.id)?;
+                self.sessions.insert(session.id.clone(), session);
+                Ok(())
+            }
+            "session/load" | "session/resume" => {
+                std::thread::sleep(self.open_delay);
+                let session_id = text(params, "sessionId");
+                let Some(mut session) = self.load(&session_id) else {
+                    return fail(id, -32002, &format!("session {session_id} not found"));
+                };
+                session.cwd = PathBuf::from(text(params, "cwd"));
+                self.save(&session)?;
+                reply(id, offers(&session))?;
+                commands(&session.id)?;
+                self.sessions.insert(session.id.clone(), session);
+                Ok(())
+            }
+            "session/set_mode" => self.change(id, params, |session, params| {
+                session.mode = text(params, "modeId");
+                json!({})
+            }),
+            "session/set_model" => self.change(id, params, |session, params| {
+                session.model = text(params, "modelId");
+                json!({})
+            }),
+            "session/set_config_option" => reply(id, json!({"configOptions": []})),
+            other => fail(id, -32601, &format!("method not found: {other}")),
+        }
+    }
+
+    /// A settings change of the session `params` names.
+    fn change(
+        &mut self,
+        id: &Value,
+        params: &Value,
+        apply: impl FnOnce(&mut Session, &Value) -> Value,
+    ) -> Result<()> {
+        let session_id = text(params, "sessionId");
+        let Some(session) = self.sessions.get_mut(&session_id) else {
+            return fail(id, -32602, "unknown session");
+        };
+        let result = apply(session, params);
+        let session = session.clone();
+        self.save(&session)?;
+        reply(id, result)
+    }
+
+    fn prompt(
+        &mut self,
+        id: &Value,
+        params: &Value,
+        incoming: &Receiver<Incoming>,
+    ) -> Result<Flow> {
+        let session_id = text(params, "sessionId");
+        let Some(mut session) = self.sessions.get(&session_id).cloned() else {
+            fail(id, -32602, "unknown session")?;
+            return Ok(Flow::Going);
+        };
+        let prompt: String = params
+            .get("prompt")
+            .and_then(Value::as_array)
+            .map(|blocks| {
+                blocks
+                    .iter()
+                    .filter_map(|block| block.get("text").and_then(Value::as_str))
+                    .collect()
+            })
+            .unwrap_or_default();
+        session.input_tokens += 10;
+        let mut stop = "end_turn";
+        let mut said = String::new();
+        if prompt.contains("Reply with exactly: ok") {
+            for piece in ["o", "k"] {
+                chunk(&session.id, piece)?;
+                said.push_str(piece);
+            }
+        } else if prompt.contains("Count from 1 to 300") {
+            for number in 1..=300 {
+                let piece = format!("{number}\n");
+                chunk(&session.id, &piece)?;
+                said.push_str(&piece);
+                session.last_number = number;
+                match incoming.recv_timeout(TICK) {
+                    Ok(Some(message)) if is_cancel(&message) => {
+                        stop = "cancelled";
+                        break;
+                    }
+                    Ok(Some(message)) => {
+                        if self.side(message)? == Flow::Ended {
+                            return Ok(Flow::Ended);
+                        }
+                    }
+                    Ok(None) | Err(RecvTimeoutError::Disconnected) => return Ok(Flow::Ended),
+                    Err(RecvTimeoutError::Timeout) => {}
+                }
+            }
+        } else if prompt.contains("What was the last number you wrote") {
+            said = session.last_number.to_string();
+            chunk(&session.id, &said)?;
+        } else if prompt.contains("aura-perm.txt") || prompt.contains("Create it now.") {
+            match self.write_file(&mut session, "aura-perm.txt", "", incoming)? {
+                Written::Yes => said = "done.".into(),
+                Written::Refused => said = "I did not create aura-perm.txt.".into(),
+                Written::Cancelled => stop = "cancelled",
+                Written::Ended => return Ok(Flow::Ended),
+            }
+            if !said.is_empty() {
+                chunk(&session.id, &said)?;
+            }
+        } else if prompt.contains("aura-auto.txt") {
+            match self.write_file(&mut session, "aura-auto.txt", "hi\n", incoming)? {
+                Written::Yes => said = "Created aura-auto.txt.".into(),
+                Written::Refused => said = "I did not create aura-auto.txt.".into(),
+                Written::Cancelled => stop = "cancelled",
+                Written::Ended => return Ok(Flow::Ended),
+            }
+            if !said.is_empty() {
+                chunk(&session.id, &said)?;
+            }
+        } else if prompt.contains("Which files did you create") {
+            said = session.files.join("\n");
+            chunk(&session.id, &said)?;
+        } else {
+            said = "fake reply".into();
+            chunk(&session.id, &said)?;
+        }
+        session.output_tokens += said.split_whitespace().count().max(1) as u64;
+        self.save(&session)?;
+        let usage =
+            json!({"inputTokens": session.input_tokens, "outputTokens": session.output_tokens});
+        self.sessions.insert(session.id.clone(), session);
+        reply(id, json!({"stopReason": stop, "usage": usage}))?;
+        Ok(Flow::Going)
+    }
+
+    /// Writes a file in the session's folder; in the `default` mode only once the client allows
+    /// it.
+    fn write_file(
+        &mut self,
+        session: &mut Session,
+        name: &str,
+        contents: &str,
+        incoming: &Receiver<Incoming>,
+    ) -> Result<Written> {
+        let call = format!("call-{}", self.next_request);
+        update(
+            &session.id,
+            json!({"sessionUpdate": "tool_call", "toolCallId": call, "title": format!("Write {name}"),
+                   "kind": "edit", "status": "pending", "rawInput": {"path": name}}),
+        )?;
+        if session.mode == "default" {
+            let request = format!("perm-{}", self.next_request);
+            self.next_request += 1;
+            send(&json!({
+                "jsonrpc": "2.0",
+                "id": request,
+                "method": "session/request_permission",
+                "params": {
+                    "sessionId": session.id,
+                    "toolCall": {"toolCallId": call, "title": format!("Write {name}"), "kind": "edit"},
+                    "options": [
+                        {"optionId": "allow", "name": "Allow once", "kind": "allow_once"},
+                        {"optionId": "reject", "name": "Reject", "kind": "reject_once"}
+                    ]
+                }
+            }))?;
+            let mut cancelled = false;
+            let answer = loop {
+                match incoming.recv() {
+                    Ok(Some(message))
+                        if message.get("method").is_none()
+                            && message.get("id") == Some(&json!(request)) =>
+                    {
+                        break message;
+                    }
+                    Ok(Some(message)) if is_cancel(&message) => cancelled = true,
+                    Ok(Some(message)) => {
+                        if self.side(message)? == Flow::Ended {
+                            return Ok(Written::Ended);
+                        }
+                    }
+                    Ok(None) | Err(_) => return Ok(Written::Ended),
+                }
+            };
+            let allowed = answer
+                .pointer("/result/outcome/optionId")
+                .and_then(Value::as_str)
+                == Some("allow");
+            if !allowed {
+                update(
+                    &session.id,
+                    json!({"sessionUpdate": "tool_call_update", "toolCallId": call, "status": "failed"}),
+                )?;
+                return Ok(if cancelled {
+                    Written::Cancelled
+                } else {
+                    Written::Refused
+                });
+            }
+        } else {
+            self.next_request += 1;
+        }
+        std::fs::write(session.cwd.join(name), contents)?;
+        if !session.files.iter().any(|file| file == name) {
+            session.files.push(name.to_owned());
+        }
+        update(
+            &session.id,
+            json!({"sessionUpdate": "tool_call_update", "toolCallId": call, "status": "completed"}),
+        )?;
+        Ok(Written::Yes)
+    }
+
+    /// A message that arrives while a prompt runs: settings changes are answered, the rest is
+    /// ignored.
+    fn side(&mut self, message: Value) -> Result<Flow> {
+        let method = message
+            .get("method")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        if let (Some(method), Some(id)) = (method, message.get("id").cloned()) {
+            let params = message.get("params").cloned().unwrap_or(Value::Null);
+            if method == "session/prompt" {
+                fail(&id, -32603, "a prompt is already running")?;
+            } else {
+                self.request(&method, &id, &params)?;
+            }
+        }
+        Ok(Flow::Going)
+    }
+
+    fn path(&self, session_id: &str) -> PathBuf {
+        let safe: String = session_id
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        self.state.join(format!("{safe}.json"))
+    }
+
+    fn save(&self, session: &Session) -> Result<()> {
+        std::fs::write(self.path(&session.id), serde_json::to_string(session)?)?;
+        Ok(())
+    }
+
+    fn load(&self, session_id: &str) -> Option<Session> {
+        let text = std::fs::read_to_string(self.path(session_id)).ok()?;
+        serde_json::from_str(&text).ok()
+    }
+}
+
+enum Written {
+    Yes,
+    Refused,
+    Cancelled,
+    Ended,
+}
+
+/// The legacy `models` and `modes` an open answers with.
+fn offers(session: &Session) -> Value {
+    json!({
+        "models": {
+            "availableModels": [
+                {"modelId": "fake:large", "name": "fake/large"},
+                {"modelId": "fake:mini", "name": "fake/mini"}
+            ],
+            "currentModelId": session.model
+        },
+        "modes": {
+            "currentModeId": session.mode,
+            "availableModes": [
+                {"id": "default", "name": "Default"},
+                {"id": "accept_edits", "name": "Accept Edits"},
+                {"id": "dont_ask", "name": "Don't Ask"}
+            ]
+        }
+    })
+}
+
+fn commands(session_id: &str) -> Result<()> {
+    update(
+        session_id,
+        json!({"sessionUpdate": "available_commands_update", "availableCommands": [
+            {"name": "help", "description": "Show what the fake can do"},
+            {"name": "model", "description": "Switch the model", "input": {"hint": "model id"}},
+            {"name": "reset", "description": "Start over"}
+        ]}),
+    )
+}
+
+fn is_cancel(message: &Value) -> bool {
+    message.get("method").and_then(Value::as_str) == Some("session/cancel")
+}
+
+fn text(params: &Value, key: &str) -> String {
+    params
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned()
+}
+
+fn chunk(session_id: &str, piece: &str) -> Result<()> {
+    update(
+        session_id,
+        json!({"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": piece}}),
+    )
+}
+
+fn update(session_id: &str, update: Value) -> Result<()> {
+    send(&json!({"jsonrpc": "2.0", "method": "session/update",
+                 "params": {"sessionId": session_id, "update": update}}))
+}
+
+fn reply(id: &Value, result: Value) -> Result<()> {
+    send(&json!({"jsonrpc": "2.0", "id": id, "result": result}))
+}
+
+fn fail(id: &Value, code: i64, message: &str) -> Result<()> {
+    send(&json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}))
+}
+
+fn send(message: &Value) -> Result<()> {
+    let mut out = std::io::stdout().lock();
+    writeln!(out, "{message}")?;
+    out.flush()?;
+    Ok(())
+}
