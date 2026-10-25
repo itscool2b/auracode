@@ -40,7 +40,7 @@ pub use env::{
     DenyReason, EnvKey, EnvMap, EnvResolver, EnvResolverConfig, EnvSource, ResolvedEnv,
     ResolverStatus, ScrubReport, child_env, deny_reason, expand_env_strings, find_exe,
     find_program, merge_windows_path, node_options_has_debugger_hook, parse_env0, process_env,
-    scrub, strip_launch_context,
+    scrub, secret_values, strip_launch_context,
 };
 pub use io::{AgentIo, LineSink, LineSource, StdinClosed, StdoutItem, TopKeys};
 pub use log::{

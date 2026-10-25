@@ -610,7 +610,8 @@ pub enum EnvSource { LoginShell { shell: PathBuf, interactive: bool, took_ms: u6
                      Fallback { reason: String } }
 pub struct EnvResolverConfig { pub timeout: Duration, pub retry_timeout: Duration, pub retry_after: Duration,
                                pub shell: Option<PathBuf>, pub base: Option<EnvMap>, pub home: Option<PathBuf>,
-                               pub known_dirs: Option<Vec<PathBuf>> }
+                               pub known_dirs: Option<Vec<PathBuf>>,
+                               pub redactor: Option<Arc<Redactor>> }   // gets every env's secret literals (3.6)
 impl EnvResolverConfig { pub fn standard() -> EnvResolverConfig; }   // 10 s, 5 s, 60 s, rest None
 pub struct EnvResolver { /* watch of the current attempt */ }
 impl EnvResolver {
@@ -631,6 +632,8 @@ pub struct ScrubReport { pub removed: Vec<String> }           // sorted names
 pub fn strip_launch_context(vars: &mut EnvMap) -> Vec<String>;
 /// The complete env of one child: resolved, scrubbed, then every `set` entry.
 pub fn child_env(resolved: &ResolvedEnv, set: &[(OsString, OsString)]) -> (EnvMap, ScrubReport);
+/// The values of variables whose names contain KEY, TOKEN, SECRET, PASSWORD or CREDENTIAL, ignoring ASCII case (3.6).
+pub fn secret_values(vars: &EnvMap) -> Vec<String>;
 pub fn process_env() -> EnvMap;
 pub fn find_program(name: &str, env: &EnvMap) -> Option<PathBuf>;
 pub fn find_exe(name: &str, env: &EnvMap) -> Option<PathBuf>;   // Windows: `<name>.exe` only; Unix: find_program
@@ -668,7 +671,8 @@ pub enum LogNote { Spawn { label: String, program: String, args: Vec<String>, cw
 pub struct Redactor { /* compiled patterns, secret literals */ }
 impl Redactor {
     pub fn standard() -> Redactor;
-    pub fn set_secrets(&self, values: Vec<String>);           // env values of secret-looking names, >= 12 chars
+    /// Adds secret literals (`secret_values`); keeps those of at least 12 characters and never drops earlier ones.
+    pub fn set_secrets(&self, values: Vec<String>);
     pub fn redact_value(&self, value: &mut serde_json::Value);
     pub fn redact_text<'a>(&self, text: &'a str) -> Cow<'a, str>;
 }
@@ -854,8 +858,13 @@ present, de-duplicated case-insensitively, first occurrence kept. Runs on a bloc
 Caching: started at boot in the background; boot never waits. `get()` shares the in-flight attempt; a failed attempt
 older than 60 s is retried on the next `get()`; `refresh()` starts a new one; running sessions keep the env they
 started with. **Memory only**: the env holds API keys, so it never reaches disk, not even `PATH`. After each
-resolution, values of variables whose names contain `KEY`, `TOKEN`, `SECRET`, `PASSWORD` or `CREDENTIAL` and that are
-at least 12 characters long go to `Redactor::set_secrets`.
+resolution, and before any caller gets that env, the resolver (package A) hands the values of variables whose names
+contain `KEY`, `TOKEN`, `SECRET`, `PASSWORD` or `CREDENTIAL`, ignoring ASCII case (`secret_values`; npm's
+`npm_config_//registry.npmjs.org/:_authToken` counts), to `Redactor::set_secrets` on `EnvResolverConfig::redactor`.
+`set_secrets` keeps the values of at least 12 characters and never drops earlier ones, because running sessions keep
+the env they started with. The desktop passes the shared redactor at boot, the one `LogFactory` and `ManagerDeps` hold
+(7.2), so protocol logs and the session actor redact the same literals. `EnvResolver::fixed` hands its env to no
+redactor: tests call `set_secrets` themselves.
 
 ### 3.7 The scrub (the plan's exact denylist, in `env/scrub.rs`)
 
@@ -1095,7 +1104,8 @@ launch   LaunchSpec { label: <bin>, program: <node>, args: [<absolute entry>], c
 
 - Progress detail: "Downloading the Claude adapter (@agentclientprotocol/claude-agent-acp 0.95.0). This happens once
   and can take a few minutes." A failure gives `InstallFailed { "Could not download the Claude adapter: <first npm
-  error line, redacted>" }` and marks nothing. Dropping the future (Esc, force stop, Stop, quit during Starting) kills
+  error line, redacted>" }` and marks nothing (the detector holds no shared redactor: it redacts with a
+  `Redactor::standard()` given the install env's `secret_values`). Dropping the future (Esc, force stop, Stop, quit during Starting) kills
   npm; the unmarked folder is cleaned at the next attempt, so an interrupted download never leaves a broken install
   in use. A start that later fails on `ERR_MODULE_NOT_FOUND`, `MODULE_NOT_FOUND` or `Cannot find module` calls
   `forget_install` (6.5.5), so Retry downloads it again.
@@ -2495,9 +2505,10 @@ sentence: `chat_not_found`, `unknown_agent`, `agent_unavailable`, `invalid_folde
   passed to every constructor that spawns (Tauri's `setup` hook runs outside any Tokio context): `ChatStore::start`
   (the `Store` and the owner move into the writer thread; `AppState` keeps `Option<Arc<ChatStore>>` and
   `Option<SessionManager>` instead of `Mutex<Option<Store>>`), `LeftoverRegistry::open(<data root>/run, rt)`,
-  `sweep_stale` and log retention on background tasks, `EnvResolver::start`, `Detector::new(..., <data root>/adapters,
-  rt)` (detection starts once the env resolves), `LogFactory::new(<profile>/logs/protocol, ..)`,
-  `SessionManager::new`.
+  `sweep_stale` and log retention on background tasks, one `Arc<Redactor>` (`Redactor::standard()`) shared by the
+  next three, `EnvResolver::start` (with the redactor in `EnvResolverConfig::redactor`, 3.6), `Detector::new(...,
+  <data root>/adapters, rt)` (detection starts once the env resolves), `LogFactory::new(<profile>/logs/protocol,
+  redactor, rt)`, `SessionManager::new` (`ManagerDeps.redactor`).
 - **Page load:** `Builder::on_page_load`, on `PageLoadEvent::Started` -> `manager.drop_owner(webview.label())`: a
   reloaded page has new callback ids, so frames for the old ones would be lost.
 - **Quit**, on every first `RunEvent::ExitRequested` (any code, any cause):
@@ -2771,7 +2782,7 @@ draft keep their numbers; new cases are appended to each table.
 |---|---|
 | `Cargo.toml`, `Cargo.lock`, every crate's `Cargo.toml` (new crates `aura-process`, `aura-agents`; the desktop gains both) | the dependencies and features of 1.1, including tokio `signal` and aura-drivers' `replay` feature; nobody else touches manifests or the lock until phase 2 |
 | `crates/aura-protocol/src/{lib.rs,session.rs,lenient.rs}` | all of section 2, with round-trip, `is_stored`, `kind` and lenient-enum tests |
-| `crates/aura-process/**` | every public item of 3.1. Stub bodies return errors such as `SpawnError::Spawn { source: io::Error::other("not implemented in this build") }`, never `todo!()` (clippy and `-D warnings` reject it). **Implemented:** `testing.rs` (`FakeSpawner`, `FakeControl`), `EnvResolver::fixed`, `ProtocolLog::disabled`, `strip_launch_context`, `child_env`, `scrub`. **Functional stubs:** `EnvResolver::start` resolves at once to `process_env()` minus `strip_launch_context` as `Fallback`; `LeftoverRegistry::open` returns `disabled()`; `LogFactory::open` returns `ProtocolLog::disabled()`; `Redactor::standard()` redacts nothing yet. |
+| `crates/aura-process/**` | every public item of 3.1. Stub bodies return errors such as `SpawnError::Spawn { source: io::Error::other("not implemented in this build") }`, never `todo!()` (clippy and `-D warnings` reject it). **Implemented:** `testing.rs` (`FakeSpawner`, `FakeControl`), `EnvResolver::fixed`, `ProtocolLog::disabled`, `strip_launch_context`, `child_env`, `scrub`. **Functional stubs:** `EnvResolver::start` resolves at once to `process_env()` minus `strip_launch_context` as `Fallback`; `LeftoverRegistry::open` returns `disabled()`; `LogFactory::open` returns `ProtocolLog::disabled()`; `Redactor::standard()` replaces only the secret literals (A adds the key rules and the patterns), and the stub `EnvResolver::start` hands its env's `secret_values` to the config's redactor. |
 | `crates/aura-agents/**` | the catalog data (complete), `Detector` signatures. **Implemented:** `Detector::fixed` (with `FixedAgent`, `Gate` and `forgotten`), `Detector::spec`, `parse_version`, `version_at_least`. **Functional stub:** `Detector::new` reports the mock `Ready` and every other agent `Missing { "detection is not built in this build" }`; `prepare_launch` works for `Builtin` |
 | `crates/aura-drivers/src/{lib.rs,driver.rs,testing.rs,batch.rs,mock.rs}`, plus empty module files with their declarations for B (`jsonrpc.rs`, `acp/{mod,wire,map,options,dialect,permissions}.rs`, `mock_driver.rs`, `factory.rs`, `replay/{mod,fixture,fake_agent,golden,curate}.rs`) | section 5.1 complete, `event_channel` included; `ScriptedDriver`, `ScriptHandle`, `ScriptedDriverFactory` and `DirectSpawner` implemented (5.7); the tagged push and flush in `batch.rs`; the rename fallout |
 | `crates/aura-core/{migrations/0002_sessions.sql,src/store.rs,src/store/salvage.rs,src/lib.rs,src/error.rs,src/owner.rs,src/chatstore/mod.rs,src/session/mod.rs}`, plus empty files for C's other modules | migration 0002 with its tests; `ProfileOwner` and `CoreError::ProfileInUse` implemented with a two-process test; the API skeletons of 6.1 and 6.4 |

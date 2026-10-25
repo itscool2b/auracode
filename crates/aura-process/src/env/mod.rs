@@ -7,7 +7,9 @@
 //! API keys, so it never reaches disk.
 //!
 //! Every child then gets [`child_env`]: the resolved env, minus the scrub's denylist ([`scrub`]),
-//! plus the spawn's own `set` entries. Values are never logged; reports carry names only.
+//! plus the spawn's own `set` entries. Values are never logged; reports carry names only, and the
+//! values of secret-looking variables ([`secret_values`]) go to the shared [`Redactor`] after each
+//! resolution, so an agent that echoes a key never writes it into a protocol log.
 
 mod scrub;
 mod shell;
@@ -25,6 +27,7 @@ use std::time::Duration;
 
 use tokio::runtime::Handle;
 
+use crate::log::Redactor;
 use crate::registry::LeftoverRegistry;
 
 pub use scrub::{DenyReason, ScrubReport, deny_reason, node_options_has_debugger_hook, scrub};
@@ -173,6 +176,10 @@ pub struct EnvResolverConfig {
     pub base: Option<EnvMap>,
     pub home: Option<PathBuf>,
     pub known_dirs: Option<Vec<PathBuf>>,
+    /// Gets the secret literals of every env the resolver produces ([`secret_values`]), before
+    /// any caller sees that env: the shared redactor of protocol logs and sessions. `None` leaves
+    /// redaction to the caller (tests).
+    pub redactor: Option<Arc<Redactor>>,
 }
 
 /// Prints `base` names only: values hold API keys.
@@ -192,12 +199,13 @@ impl fmt::Debug for EnvResolverConfig {
             )
             .field("home", &self.home)
             .field("known_dirs", &self.known_dirs)
+            .field("redactor", &self.redactor)
             .finish()
     }
 }
 
 impl EnvResolverConfig {
-    /// 10 s, 5 s, 60 s, and the user's real shell, env, home and known dirs.
+    /// 10 s, 5 s, 60 s, the user's real shell, env, home and known dirs, and no redactor.
     pub fn standard() -> EnvResolverConfig {
         EnvResolverConfig {
             timeout: Duration::from_secs(10),
@@ -207,6 +215,7 @@ impl EnvResolverConfig {
             base: None,
             home: None,
             known_dirs: None,
+            redactor: None,
         }
     }
 }
@@ -221,7 +230,8 @@ impl EnvResolver {
     /// Starts resolving on `rt`; boot never waits for it.
     ///
     /// This build resolves at once to auracode's own env minus [`strip_launch_context`], reported
-    /// as [`EnvSource::Fallback`]: the login-shell resolution is package A's.
+    /// as [`EnvSource::Fallback`]: the login-shell resolution is package A's. The redactor gets
+    /// that env's secret literals.
     pub fn start(
         config: EnvResolverConfig,
         _registry: Arc<LeftoverRegistry>,
@@ -229,6 +239,9 @@ impl EnvResolver {
     ) -> Arc<EnvResolver> {
         let mut vars = config.base.unwrap_or_else(process_env);
         strip_launch_context(&mut vars);
+        if let Some(redactor) = &config.redactor {
+            redactor.set_secrets(secret_values(&vars));
+        }
         Arc::new(EnvResolver {
             current: Mutex::new(Arc::new(ResolvedEnv {
                 vars,
@@ -241,7 +254,7 @@ impl EnvResolver {
         })
     }
 
-    /// Tests: no shell; [`get`](Self::get) returns `env` at once.
+    /// Tests: no shell; [`get`](Self::get) returns `env` at once. No redactor gets its secrets.
     pub fn fixed(env: ResolvedEnv) -> Arc<EnvResolver> {
         Arc::new(EnvResolver {
             current: Mutex::new(Arc::new(env)),
@@ -346,6 +359,25 @@ fn is_launch_context(name: &OsStr) -> bool {
         || LAUNCH_CONTEXT_PREFIXES
             .iter()
             .any(|prefix| scrub::name_starts_with(name, prefix))
+}
+
+/// Words that make a variable's value a secret, compared ignoring ASCII case.
+const SECRET_NAME_WORDS: &[&str] = &["KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"];
+
+/// The values the redactor must hide: those of variables whose names contain `KEY`, `TOKEN`,
+/// `SECRET`, `PASSWORD` or `CREDENTIAL`, ignoring ASCII case (so npm's
+/// `npm_config_//registry.npmjs.org/:_authToken` counts). [`Redactor::set_secrets`] drops the
+/// ones shorter than 12 characters. Names or values that are not Unicode are skipped.
+pub fn secret_values(vars: &EnvMap) -> Vec<String> {
+    vars.iter()
+        .filter_map(|(name, value)| {
+            let name = name.as_os_str().to_str()?.to_ascii_uppercase();
+            if !SECRET_NAME_WORDS.iter().any(|word| name.contains(word)) {
+                return None;
+            }
+            value.to_str().map(str::to_owned)
+        })
+        .collect()
 }
 
 /// The complete env of one child: resolved, scrubbed, then every `set` entry.
@@ -491,6 +523,58 @@ mod tests {
         let text = format!("{env:?}");
         assert!(text.contains("ANTHROPIC_API_KEY"), "{text}");
         assert!(!text.contains("secret"), "{text}");
+    }
+
+    #[test]
+    fn secret_values_are_those_of_secret_looking_names() {
+        let vars = map(&[
+            ("ANTHROPIC_API_KEY", "sk-ant-api03-abcdefghijklmnop"),
+            ("GITHUB_TOKEN", "ghp_0123456789abcdefghij"),
+            (
+                "npm_config_//registry.npmjs.org/:_authToken",
+                "npm_0123456789abcdef",
+            ),
+            ("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG"),
+            ("DB_PASSWORD", "hunter2hunter2"),
+            ("GOOGLE_APPLICATION_CREDENTIALS", "/Users/me/gcp.json"),
+            ("PATH", "/usr/bin:/bin"),
+            ("HOME", "/Users/me"),
+        ]);
+        let mut values = secret_values(&vars);
+        values.sort();
+        assert_eq!(
+            values,
+            [
+                "/Users/me/gcp.json",
+                "ghp_0123456789abcdefghij",
+                "hunter2hunter2",
+                "npm_0123456789abcdef",
+                "sk-ant-api03-abcdefghijklmnop",
+                "wJalrXUtnFEMI/K7MDENG",
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn the_resolver_hands_each_envs_secrets_to_the_redactor() {
+        let redactor = Arc::new(Redactor::standard());
+        let config = EnvResolverConfig {
+            base: Some(map(&[
+                ("PATH", "/usr/bin"),
+                ("OPENAI_API_KEY", "sk-proj-0123456789abcdef"),
+            ])),
+            redactor: Some(Arc::clone(&redactor)),
+            ..EnvResolverConfig::standard()
+        };
+        let printed = format!("{config:?}");
+        assert!(printed.contains("OPENAI_API_KEY"), "{printed}");
+        assert!(!printed.contains("sk-proj"), "no values: {printed}");
+        let resolver = EnvResolver::start(config, LeftoverRegistry::disabled(), Handle::current());
+        assert_eq!(resolver.get().await.vars.len(), 2);
+        assert_eq!(
+            redactor.redact_text("401: bad key sk-proj-0123456789abcdef"),
+            "401: bad key <SECRET>"
+        );
     }
 
     #[tokio::test]
