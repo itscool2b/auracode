@@ -113,8 +113,9 @@ gains `tokio`, `futures`, `sha2`, `aura-process`, `aura-agents`, `aura-drivers`,
 `aura-drivers` with `testing` and `replay` as dev-dependencies (aura-core uses no replay: through feature unification
 the dev-dependency makes every `--workspace` test and clippy run, CI's included, compile and run the replay harness
 and its tests); the desktop gains `aura-process`, `aura-agents`, `tauri-plugin-dialog`, with `aura-process/testing`
-and `aura-drivers/testing` as dev-dependencies (D's Rust tests of the quit flow, page loads and signals). `sha2`, `regex`, `winreg`, `windows` 0.62.2, `schemars` 1.2.3 and `futures-util` 0.3.34 are
-already in `Cargo.lock`. P0 runs the whole suite right after enabling `preserve_order`.
+and `aura-drivers/testing` as dev-dependencies (D's Rust tests of the quit flow, page loads and signals). `sha2`,
+`regex`, `winreg`, `windows` 0.62.2, `schemars` 1.2.3 and `futures-util` 0.3.34 are already in `Cargo.lock`. P0 runs
+the whole suite right after enabling `preserve_order`.
 
 ### 1.2 Module trees (new files unless marked)
 
@@ -851,8 +852,9 @@ session" output seen on this Mac), names starting with `npm_` (`npm_config_*`, `
 `npm_execpath`, ...), `INIT_CWD`, names starting with `PNPM_` or `pnpm_`, and names starting with `TAURI_` (a
 `pnpm dev` launch). Names and prefixes compare case-sensitively on every OS, unlike the scrub's (3.7): npm, pnpm and
 Tauri set them in a fixed case, and a user's own `NPM_TOKEN` or `NPM_CONFIG_REGISTRY` must survive on Windows too. It
-applies only to the shell's input: whatever the user's own rc files export comes back through the shell's output. AppImage's additions (`APPDIR`, `APPIMAGE`, `ARGV0`, `OWD`, AppRun's `LD_LIBRARY_PATH` and GTK
-variables) join this list in M5, when the AppImage exists.
+applies only to the shell's input: whatever the user's own rc files export comes back through the shell's output.
+AppImage's additions (`APPDIR`, `APPIMAGE`, `ARGV0`, `OWD`, AppRun's `LD_LIBRARY_PATH` and GTK variables) join this
+list in M5, when the AppImage exists.
 
 Windows: base = `process_env()` minus `strip_launch_context`; every value of HKLM
 `SYSTEM\CurrentControlSet\Control\Session Manager\Environment`, then of HKCU `Environment` (user wins), read with
@@ -1000,7 +1002,7 @@ impl Detector {
     /// from `new` on, once the env resolves. `refresh: true` resolves the env again, probes every agent and waits for
     /// the results (`agents_refresh`).
     pub async fn detect_all(&self, refresh: bool) -> Vec<aura_protocol::session::AgentEntry>;
-    pub fn cached(&self) -> Vec<aura_protocol::session::AgentEntry>;    // Checking until an agent's first detection ends
+    pub fn cached(&self) -> Vec<aura_protocol::session::AgentEntry>;    // Checking until its first detection ends
     /// Installs an npm adapter when it is not installed (one shared attempt per package; `progress` receives status
     /// details), then builds the launch spec. Dropping the future kills a running install.
     pub async fn prepare_launch(&self, spec: &AgentSpec, progress: mpsc::UnboundedSender<String>)
@@ -1111,10 +1113,10 @@ launch   LaunchSpec { label: <bin>, program: <node>, args: [<absolute entry>], c
 - Progress detail: "Downloading the Claude adapter (@agentclientprotocol/claude-agent-acp 0.95.0). This happens once
   and can take a few minutes." A failure gives `InstallFailed { "Could not download the Claude adapter: <first npm
   error line, redacted>" }` and marks nothing (the detector holds no shared redactor: it redacts with a
-  `Redactor::standard()` given the install env's `secret_values`). Dropping the future (Esc, force stop, Stop, quit during Starting) kills
-  npm; the unmarked folder is cleaned at the next attempt, so an interrupted download never leaves a broken install
-  in use. A start that later fails on `ERR_MODULE_NOT_FOUND`, `MODULE_NOT_FOUND` or `Cannot find module` calls
-  `forget_install` (6.5.5), so Retry downloads it again.
+  `Redactor::standard()` given the install env's `secret_values`). Dropping the future (Esc, force stop, Stop, quit
+  during Starting) kills npm; the unmarked folder is cleaned at the next attempt, so an interrupted download never
+  leaves a broken install in use. A start that later fails on `ERR_MODULE_NOT_FOUND`, `MODULE_NOT_FOUND` or
+  `Cannot find module` calls `forget_install` (6.5.5), so Retry downloads it again.
 - `--omit=optional` drops the CLIs the adapters bundle, which are optional dependencies (the Agent SDK's eight
   `@anthropic-ai/claude-agent-sdk-<platform>` packages; `@openai/codex`'s six platform packages): the fallback to a
   bundled CLI becomes impossible and the download shrinks by the size of one native CLI for this platform. `--ignore-scripts`: neither adapter's
@@ -1759,13 +1761,13 @@ pub fn scan_clean(text: &str) -> Vec<String>;                     // emails, tok
 A fixture is a curated protocol log (3.8 format) plus fixture-only `{"d":"agent", ...}` records. On a current-thread
 runtime with paused time, `run` takes the `SessionSetup` from the `start` note (cwd `<CWD>`, test timings) and spawns
 through `FakeSpawner` with `ProtocolLog::disabled_with_id(<the start note's spawn_id>)`, so the ids the driver mints
-outside a turn match the recording; then it walks the records: `cmd` sends the matching `DriverCommand` (replies collected); `in` writes the line to the driver, a
-response's `id` rewritten to the live id of the request it answers; `out` reads the next line the driver wrote (5 s
-virtual timeout) and compares kind, `method`, id correspondence, the permission `outcome`, and for `session/prompt`,
-`session/set_config_option`, `session/set_mode` and `session/set_model` the text, ids and value (paths and session ids
-match placeholders); `err` goes to the fake stderr; `agent` records act. After each record,
-`tokio::time::sleep(1 ms)` lets every task go idle, so interleaving is deterministic. The collected `DriverEvent`s
-(durations blanked, turn tags kept) and replies are compared with `<fixture>.events.json`.
+outside a turn match the recording; then it walks the records: `cmd` sends the matching `DriverCommand` (replies
+collected); `in` writes the line to the driver, a response's `id` rewritten to the live id of the request it answers;
+`out` reads the next line the driver wrote (5 s virtual timeout) and compares kind, `method`, id correspondence, the
+permission `outcome`, and for `session/prompt`, `session/set_config_option`, `session/set_mode` and `session/set_model`
+the text, ids and value (paths and session ids match placeholders); `err` goes to the fake stderr; `agent` records act.
+After each record, `tokio::time::sleep(1 ms)` lets every task go idle, so interleaving is deterministic. The collected
+`DriverEvent`s (durations blanked, turn tags kept) and replies are compared with `<fixture>.events.json`.
 
 The harness and its tests exist only with the `replay` feature: every `--workspace` test and clippy run has it
 (aura-core's dev-dependency, 1.1), and `cargo test -p aura-drivers --features replay` runs them alone. So
@@ -1893,7 +1895,7 @@ pub enum StoreError {
     #[error("auracode's database is closed.")] Closed,
     #[error("auracode's database is damaged: {0}")] Damaged(String),
     /// "The full output is no longer available." (the file is gone), or "The full output isn't saved yet because the
-    /// disk is full." (it waits in the failed batch or the FIFO); the manager passes it on as SessionError::BlobMissing.
+    /// disk is full." (it waits in the failed batch or the FIFO); passed on as SessionError::BlobMissing.
     #[error("{0}")] BlobMissing(String),
     #[error("{0}")] Other(String),
 }
@@ -2137,7 +2139,7 @@ pub enum SessionError {
     #[error("{0} agents are already running. Stop one, then try again.")]                 TooManyAgents(usize),
     #[error("Too many views are open for this chat.")]                                    TooManySubscriptions,
     #[error("auracode's database is not available: {0}")]                                 StorageUnavailable(String),
-    #[error("{0}")]                                                                       BlobMissing(String),  // the store's sentence
+    #[error("{0}")]                                                                       BlobMissing(String),
     #[error("auracode is shutting down.")]                                                ShuttingDown,
     #[error("Something went wrong inside auracode: {0}")]                                 Internal(String),
 }
