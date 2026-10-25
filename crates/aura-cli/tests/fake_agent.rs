@@ -292,6 +292,55 @@ mod process {
         assert!(headless.shutdown().await.saved);
     }
 
+    /// Hermes 0.22.5 can't switch a session back to its configured model when that model's
+    /// provider is `auto`: `auto:<model>` reads as a model of the provider in use. After a restart
+    /// the session runs another model and no longer offers the configured one; auracode says so in
+    /// a notice. The probe reports that as the agent's doing, not as options auracode lost.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn probe_reads_a_model_the_agent_no_longer_offers_after_the_restart() {
+        let machine = Machine::with_fake_hermes();
+        let headless = machine
+            .headless(&[
+                ("AURA_FAKE_OPEN_DELAY_MS", "300"),
+                ("AURA_FAKE_HERMES_MODELS", "1"),
+            ])
+            .await;
+        let folder = repo::create(&machine.path("repo"), RepoKind::Hostile, &headless.registry)
+            .await
+            .expect("the chat folder");
+        let (out, captured) = Out::capture();
+        let outcome = probe::run(
+            &headless,
+            &ProbeArgs {
+                agent: "hermes".into(),
+                env: Vec::new(),
+                folder: None,
+            },
+            &folder,
+            true,
+            PROBE,
+            &out,
+        )
+        .await
+        .expect("the probe runs");
+        let output = captured.text();
+        assert_no_failures(&output);
+        assert_eq!(outcome, Outcome::Passed, "{output}");
+        assert_passed(
+            &output,
+            "4 options: the model switched to fake · mini (fake:mini)",
+        );
+        assert!(
+            output.contains("INFO  4 options: while switched, a second session reports auto:large: the switch stays inside the session"),
+            "{output}"
+        );
+        assert!(
+            output.contains("INFO  7 resume: model: the agent no longer offers auto:large and runs fake · auto:large (fake:auto:large); auracode said so: \"The model you chose earlier (auto:large) isn't offered anymore; using fake · auto:large.\""),
+            "{output}"
+        );
+        assert!(headless.shutdown().await.saved);
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn smoke_runs_every_scenario_against_a_real_process() {
         let machine = Machine::with_fake_hermes();

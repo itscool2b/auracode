@@ -1416,7 +1416,13 @@ impl Probe<'_> {
         if let Some(before) = before {
             match chat.lists().await {
                 Ok(after) => {
-                    let changed = changed_options(&before.options, &after.options);
+                    let notices = chat
+                        .watch
+                        .with(|state| state.notices_since(&chat.chat_id, mark));
+                    let (gone, changed) = resume_changes(&before.options, &after.options, &notices);
+                    for text in gone {
+                        self.report.info(step, text);
+                    }
                     self.report.check(
                         changed.is_empty(),
                         step,
@@ -1846,18 +1852,35 @@ fn options_text(options: &[ConfigOption]) -> String {
 
 /// The ids of options whose current value differs between two lists (or that one lacks).
 fn changed_options(before: &[ConfigOption], after: &[ConfigOption]) -> Vec<String> {
+    resume_changes(before, after, &[]).1
+}
+
+/// What a restart changed in the options: the earlier values the agent no longer offers, each with
+/// auracode's notice about it (5.3.2: Hermes 0.22.5 can't switch back to an `auto:` model, so the
+/// session reopens on another), then every other change, which auracode should not have made.
+fn resume_changes(
+    before: &[ConfigOption],
+    after: &[ConfigOption],
+    notices: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let mut gone = Vec::new();
     let mut changed = Vec::new();
     for option in before {
-        let now = after.iter().find(|other| other.id == option.id);
-        match now {
-            Some(now) if current_value(now) == current_value(option) => {}
-            Some(now) => changed.push(format!(
+        let Some(now) = after.iter().find(|other| other.id == option.id) else {
+            changed.push(format!("{} (gone)", option.id));
+            continue;
+        };
+        if current_value(now) == current_value(option) {
+            continue;
+        }
+        match no_longer_offered(option, now, notices) {
+            Some(text) => gone.push(text),
+            None => changed.push(format!(
                 "{} ({} -> {})",
                 option.id,
                 current_text(option),
                 current_text(now)
             )),
-            None => changed.push(format!("{} (gone)", option.id)),
         }
     }
     for option in after {
@@ -1865,7 +1888,36 @@ fn changed_options(before: &[ConfigOption], after: &[ConfigOption]) -> Vec<Strin
             changed.push(format!("{} (new)", option.id));
         }
     }
-    changed
+    (gone, changed)
+}
+
+/// When `before`'s value is not among `after`'s choices and auracode said so in a notice: the line
+/// that says it.
+fn no_longer_offered(
+    before: &ConfigOption,
+    after: &ConfigOption,
+    notices: &[String],
+) -> Option<String> {
+    let (
+        ConfigKind::Select {
+            current: earlier, ..
+        },
+        ConfigKind::Select { choices, .. },
+    ) = (&before.kind, &after.kind)
+    else {
+        return None;
+    };
+    if choices.iter().any(|choice| &choice.value == earlier) {
+        return None;
+    }
+    let notice = notices.iter().find(|notice| {
+        notice.contains("isn't offered anymore") && notice.contains(&format!("({earlier})"))
+    })?;
+    Some(format!(
+        "{}: the agent no longer offers {earlier} and runs {}; auracode said so: \"{notice}\"",
+        before.id,
+        current_text(after)
+    ))
 }
 
 /// The model to switch to: the cheapest-looking choice that is not current, else any other.

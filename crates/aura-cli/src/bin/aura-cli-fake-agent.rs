@@ -291,8 +291,15 @@ impl Agent {
             if !ids.contains(&session.model.as_str()) {
                 ids.push(&session.model);
             }
+            // Named as Hermes names them: the provider, then the model.
             ids.iter()
-                .map(|id| json!({"modelId": id, "name": id.replace(':', " · ")}))
+                .map(|id| {
+                    let name = id.split_once(':').map_or_else(
+                        || (*id).to_owned(),
+                        |(provider, model)| format!("{provider} · {model}"),
+                    );
+                    json!({"modelId": id, "name": name})
+                })
                 .collect::<Vec<_>>()
         } else {
             vec![
