@@ -92,7 +92,8 @@ export function ChatView({
   }
 
   const agent = agents?.find((entry) => entry.id === state.chat?.agent_id) ?? null;
-  const held = state.queue.some((row) => row.held);
+  // The session's own word, not the marks: which prompts are held is exact only per snapshot.
+  const held = state.session?.queue_held === true;
   return (
     <div className="chat-view">
       <Header
@@ -137,6 +138,7 @@ export function ChatView({
         ) : null}
         <QueueList
           queue={state.queue}
+          held={held}
           onRemove={(promptId) => void store.cancelQueued(promptId)}
           onSendQueued={() => void store.resumeQueue()}
         />

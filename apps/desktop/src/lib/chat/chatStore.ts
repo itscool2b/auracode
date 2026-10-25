@@ -12,6 +12,7 @@ import type {
   QueuedPrompt,
   SessionInfo,
   SessionLists,
+  SessionStatus,
   StorageStatus,
   UiAnswer,
   UsageInfo,
@@ -35,6 +36,12 @@ import type { Transport } from "./transport";
  * them; the lists (options, slash commands, autonomy) are fetched on attach and again, debounced,
  * whenever the session's `revision` changes; Esc interrupts, then force-stops; "Load full output"
  * pages through a blob; "Still working" shows after a minute without frames during a turn.
+ *
+ * **Held prompts.** "Send queued" follows `SessionInfo.queue_held`. Which prompts are held, the
+ * frames never say: the marks come from the snapshot, and a hold holds every prompt queued until
+ * then. When the frames cannot place a hold against the prompts listed (one queued as the hold
+ * ran, or a hold while some were already held), the view joins again: the snapshot's queue is
+ * exact.
  */
 
 export type ChatPhase = "attaching" | "live" | "failed";
@@ -137,17 +144,24 @@ function isCode(error: unknown, code: string): boolean {
   return error instanceof CommandError && error.code === code;
 }
 
-/** Whether a stop in this status holds every prompt queued until now. */
-function holdsQueue(status: SessionInfo["status"]): boolean {
-  switch (status) {
+/**
+ * Whether a change of status can come with a hold of the queue (spec 6.5.3 to 6.5.5): an interrupt,
+ * a stop or quit, a force stop or a crash, a sign-in the agent needs, an error that ends a turn, or
+ * a start that fails in the middle of one. A plain start, a dispatch and the end of a cancel hold
+ * nothing.
+ */
+function mayHold(from: SessionStatus, to: SessionStatus): boolean {
+  switch (to) {
     case "cancelling":
     case "stopping":
     case "stopped":
-    case "failed":
     case "auth_required":
       return true;
-    case "starting":
     case "ready":
+      return from === "running";
+    case "failed":
+      return from !== "starting";
+    case "starting":
     case "running":
       return false;
   }
@@ -183,6 +197,14 @@ export class ChatStore {
   #interruptAsked = false;
   /** A snapshot taken in `auth_required` is fresh: no need to join again for its commands. */
   #authRefreshed = false;
+  /**
+   * Prompts queued since the last `session_updated` (or the snapshot): a hold that update reports
+   * may have run before or after them. Every flush ends with the update when it changed, so a
+   * prompt listed before it was queued before any hold the next one reports.
+   */
+  #queuedSinceUpdate = new Set<string>();
+  /** A join for state the frames do not carry is due once the current frame is applied. */
+  #rejoinDue = false;
   /** The channel ended while its attach call ran: the attach's answer decides what follows. */
   #endedWhileAttaching = false;
   /** Joins that lost their subscription again before any live frame arrived. */
@@ -330,6 +352,7 @@ export class ChatStore {
     this.#expectedSeq = attached.next_seq;
     this.#interruptAsked = false;
     this.#authRefreshed = snapshot.session.status === "auth_required";
+    this.#queuedSinceUpdate = new Set();
     this.#lastActivity = this.#now();
     this.#set({
       ...this.#state,
@@ -414,17 +437,20 @@ export class ChatStore {
       }
       case "prompt_lifecycle": {
         if (event.state === "queued") {
+          // A prompt is queued unheld; a hold later catches it.
           const queued: QueuedPrompt = {
             prompt_id: event.prompt_id,
             preview: event.preview ?? "",
             held: false,
             created_at: this.#now(),
           };
+          this.#queuedSinceUpdate.add(event.prompt_id);
           return {
             ...state,
             queue: [...state.queue.filter((row) => row.prompt_id !== event.prompt_id), queued],
           };
         }
+        this.#queuedSinceUpdate.delete(event.prompt_id);
         return { ...state, queue: state.queue.filter((row) => row.prompt_id !== event.prompt_id) };
       }
       case "usage_updated": {
@@ -444,17 +470,23 @@ export class ChatStore {
 
   #sessionChanged(state: ChatState, session: SessionInfo): ChatState {
     const previous = state.session;
+    const recent = this.#queuedSinceUpdate;
+    this.#queuedSinceUpdate = new Set();
     let queue = state.queue;
+    let rejoin = false;
     if (!session.queue_held) {
+      // Nothing is held.
       if (queue.some((row) => row.held)) queue = queue.map((row) => ({ ...row, held: false }));
-    } else if (
-      previous === null ||
-      !previous.queue_held ||
-      (previous.status !== session.status && holdsQueue(session.status))
-    ) {
-      // A stop, an error or a crash holds every prompt queued until now; the frames say only
-      // that some are held, and those that arrive afterwards are not.
-      queue = queue.map((row) => (row.held ? row : { ...row, held: true }));
+    } else if (previous === null || !previous.queue_held) {
+      // A hold ran since the last update and caught every prompt listed before it. One queued
+      // since that update may have come just after the hold: only the snapshot can tell.
+      queue = queue.map((row) =>
+        row.held || recent.has(row.prompt_id) ? row : { ...row, held: true },
+      );
+      rejoin = queue.some((row) => !row.held);
+    } else if (previous.status !== session.status && mayHold(previous.status, session.status)) {
+      // Some prompts were held already, so a hold now changes nothing the frames show.
+      rejoin = queue.some((row) => !row.held);
     }
     if (session.status !== "running" && session.status !== "cancelling") {
       this.#interruptAsked = false;
@@ -466,16 +498,27 @@ export class ChatStore {
     if (session.status === "auth_required" && state.auth === null && !this.#authRefreshed) {
       // The frames carry no sign-in commands: a fresh snapshot does.
       this.#authRefreshed = true;
-      queueMicrotask(() => void this.reattach());
+      rejoin = true;
     } else if (session.status !== "auth_required") {
       this.#authRefreshed = false;
     }
+    if (rejoin) this.#rejoinSoon();
     return {
       ...state,
       session,
       queue,
       auth: session.status === "auth_required" ? state.auth : null,
     };
+  }
+
+  /** Joins again once the current frame is applied: the snapshot carries what frames do not. */
+  #rejoinSoon(): void {
+    if (this.#rejoinDue) return;
+    this.#rejoinDue = true;
+    queueMicrotask(() => {
+      this.#rejoinDue = false;
+      void this.reattach();
+    });
   }
 
   /** The older page: the same turn continues when the newest one cut it. */

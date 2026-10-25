@@ -264,39 +264,160 @@ describe("history pages", () => {
 });
 
 describe("the session's live state", () => {
-  it("follows the queue through the prompt lifecycle and marks held prompts", async () => {
+  it("follows the queue through the prompt lifecycle and marks the prompts a stop holds", async () => {
     const fake = new FakeTransport();
     const store = await opened(fake);
     const channel = fake.lastAttach();
+    // As the actor flushes: each flush ends with the session's update when it changed.
+    channel.onFrame(frame(CHAT, 0, [ev.session({ status: "running" })]));
     channel.onFrame(
-      frame(CHAT, 0, [
-        ev.session({ status: "running" }),
-        ev.lifecycle("p2", "queued", "second"),
-        ev.lifecycle("p3", "queued", "third"),
-      ]),
+      frame(CHAT, 1, [ev.lifecycle("p2", "queued", "second"), ev.session({ status: "running" })]),
+    );
+    channel.onFrame(
+      frame(CHAT, 3, [ev.lifecycle("p3", "queued", "third"), ev.session({ status: "running" })]),
     );
     expect(store.getSnapshot().queue.map((row) => [row.prompt_id, row.preview, row.held])).toEqual([
       ["p2", "second", false],
       ["p3", "third", false],
     ]);
     // A stop holds every prompt queued until now; one typed afterwards is not held.
+    channel.onFrame(frame(CHAT, 5, [ev.session({ status: "cancelling", queue_held: true })]));
     channel.onFrame(
-      frame(CHAT, 3, [
-        ev.session({ status: "cancelling", queue_held: true }),
+      frame(CHAT, 6, [
         ev.lifecycle("p4", "queued", "fourth"),
         ev.lifecycle("p2", "cancelled"),
+        ev.session({ status: "cancelling", queue_held: true }),
       ]),
     );
     expect(store.getSnapshot().queue.map((row) => [row.prompt_id, row.held])).toEqual([
       ["p3", true],
       ["p4", false],
     ]);
-    channel.onFrame(frame(CHAT, 6, [ev.session({ status: "ready", queue_held: false })]));
+    // Send queued releases them.
+    channel.onFrame(frame(CHAT, 9, [ev.session({ status: "ready", queue_held: false })]));
     expect(store.getSnapshot().queue.every((row) => !row.held)).toBe(true);
-    channel.onFrame(frame(CHAT, 7, [ev.lifecycle("p3", "started"), ev.usage(0.5), ev.limits()]));
+    channel.onFrame(frame(CHAT, 10, [ev.lifecycle("p3", "started"), ev.usage(0.5), ev.limits()]));
     expect(store.getSnapshot().queue.map((row) => row.prompt_id)).toEqual(["p4"]);
     expect(store.getSnapshot().usage?.cost?.amount).toBe(0.5);
     expect(store.getSnapshot().limits).toEqual([]);
+    await settled();
+    expect(fake.methods(), "every hold was placed without joining again").toEqual([
+      "attach",
+      "lists",
+    ]);
+  });
+
+  it("joins again for the exact queue when an error holds prompts while others were held", async () => {
+    const fake = new FakeTransport();
+    const store = await opened(fake, historyPage(CHAT, []), 0, {
+      session: sessionInfo({ status: "running", queue_held: true }),
+      queue: [{ prompt_id: "a", preview: "older", held: true, created_at: 1 }],
+    });
+    const channel = fake.lastAttach();
+    // A prompt typed during the turn waits behind it, unheld...
+    channel.onFrame(
+      frame(CHAT, 0, [
+        ev.lifecycle("c", "queued", "typed during the turn"),
+        ev.session({ status: "running", queue_held: true }),
+      ]),
+    );
+    expect(store.getSnapshot().queue.map((row) => [row.prompt_id, row.held])).toEqual([
+      ["a", true],
+      ["c", false],
+    ]);
+    // ...until the turn ends with an error, which holds it too: queue_held was true already, so
+    // nothing in the frames says the typed prompt is held now.
+    channel.onFrame(
+      frame(CHAT, 2, [
+        ev.error("agent_error", "The agent failed."),
+        ev.session({ status: "ready", queue_held: true }),
+      ]),
+    );
+    await settled();
+    expect(fake.methods().slice(-2)).toEqual(["detach", "attach"]);
+    expect(store.getSnapshot().session?.queue_held, "Send queued shows meanwhile").toBe(true);
+    fake.lastAttach().resolve(
+      attachResult(CHAT, 4, historyPage(CHAT, []), {
+        session: sessionInfo({ status: "ready", queue_held: true }),
+        queue: [
+          { prompt_id: "a", preview: "older", held: true, created_at: 1 },
+          { prompt_id: "c", preview: "typed during the turn", held: true, created_at: 2 },
+        ],
+      }),
+    );
+    await settled();
+    expect(store.getSnapshot().queue.map((row) => [row.prompt_id, row.held])).toEqual([
+      ["a", true],
+      ["c", true],
+    ]);
+    // With the older one removed, the typed prompt still shows held and Send queued still shows.
+    fake
+      .lastAttach()
+      .onFrame(
+        frame(CHAT, 4, [
+          ev.lifecycle("a", "cancelled"),
+          ev.session({ status: "ready", queue_held: true }),
+        ]),
+      );
+    expect(store.getSnapshot().queue.map((row) => [row.prompt_id, row.held])).toEqual([
+      ["c", true],
+    ]);
+    expect(store.getSnapshot().session?.queue_held).toBe(true);
+    await settled();
+    expect(fake.callsOf("attach")).toHaveLength(2);
+  });
+
+  it("joins again when a prompt was queued as the hold ran", async () => {
+    const fake = new FakeTransport();
+    const store = await opened(fake, historyPage(CHAT, []), 0, {
+      session: sessionInfo({ status: "running" }),
+    });
+    const channel = fake.lastAttach();
+    channel.onFrame(
+      frame(CHAT, 0, [ev.lifecycle("p1", "queued", "first"), ev.session({ status: "running" })]),
+    );
+    // The flush that reports the stop also carries a prompt typed in the same moment: it may
+    // have come before the hold or after it.
+    channel.onFrame(
+      frame(CHAT, 2, [
+        ev.lifecycle("p2", "queued", "second"),
+        ev.session({ status: "cancelling", queue_held: true }),
+      ]),
+    );
+    expect(store.getSnapshot().queue.map((row) => [row.prompt_id, row.held])).toEqual([
+      ["p1", true],
+      ["p2", false],
+    ]);
+    await settled();
+    expect(fake.methods().slice(-2)).toEqual(["detach", "attach"]);
+  });
+
+  it("marks nothing held for a start that fails, which holds nothing", async () => {
+    const fake = new FakeTransport();
+    const store = await opened(fake, historyPage(CHAT, []), 0, {
+      session: sessionInfo({ status: "stopped", queue_held: true }),
+      queue: [{ prompt_id: "a", preview: "held at the restart", held: true, created_at: 1 }],
+    });
+    const channel = fake.lastAttach();
+    // A prompt sent to a stopped chat starts it; the start fails.
+    channel.onFrame(
+      frame(CHAT, 0, [
+        ev.lifecycle("b", "queued", "new"),
+        ev.session({ status: "starting", queue_held: true }),
+      ]),
+    );
+    channel.onFrame(
+      frame(CHAT, 2, [
+        ev.error("spawn_failed", "Could not start the agent."),
+        ev.session({ status: "failed", queue_held: true }),
+      ]),
+    );
+    expect(store.getSnapshot().queue.map((row) => [row.prompt_id, row.held])).toEqual([
+      ["a", true],
+      ["b", false],
+    ]);
+    await settled();
+    expect(fake.methods()).toEqual(["attach", "lists"]);
   });
 
   it("lists_refetch_on_revision: a new revision refetches the lists, debounced", async () => {

@@ -337,15 +337,35 @@ describe("the queue and the composer's stop button", () => {
           { prompt_id: "p1", preview: "first", held: true, created_at: 1 },
           { prompt_id: "p2", preview: "second", held: false, created_at: 2 },
         ]}
+        held={true}
         onRemove={noop}
         onSendQueued={noop}
       />,
     );
     expect(html.match(/>held</g)).toHaveLength(1);
     expect(buttons(html).map((b) => b.label)).toEqual(["Remove", "Remove", "Send queued"]);
-    expect(renderToStaticMarkup(<QueueList queue={[]} onRemove={noop} onSendQueued={noop} />)).toBe(
-      "",
+    expect(
+      renderToStaticMarkup(
+        <QueueList queue={[]} held={false} onRemove={noop} onSendQueued={noop} />,
+      ),
+    ).toBe("");
+  });
+
+  it("offers Send queued whenever the session says prompts are held, marked or not", () => {
+    const unmarked = [{ prompt_id: "p1", preview: "first", held: false, created_at: 1 }];
+    const held = renderToStaticMarkup(
+      <QueueList queue={unmarked} held={true} onRemove={noop} onSendQueued={noop} />,
     );
+    expect(buttons(held).map((b) => b.label)).toEqual(["Remove", "Send queued"]);
+    const none = renderToStaticMarkup(
+      <QueueList queue={unmarked} held={false} onRemove={noop} onSendQueued={noop} />,
+    );
+    expect(buttons(none).map((b) => b.label)).toEqual(["Remove"]);
+    // A held prompt the list does not know yet (its join is on its way) still gets the button.
+    const unknown = renderToStaticMarkup(
+      <QueueList queue={[]} held={true} onRemove={noop} onSendQueued={noop} />,
+    );
+    expect(buttons(unknown).map((b) => b.label)).toEqual(["Send queued"]);
   });
 
   it("escape_twice: Stop while a turn runs or starts, Force stop while it cancels", () => {
