@@ -29,6 +29,11 @@
 //! 8. An event read after the driver processed `Prompt(t)` and before that prompt's reply is tagged
 //!    `t`; every other event is untagged, including updates the agent sends after its reply and
 //!    requests from background work.
+//!
+//! Error text crosses raw: a driver holds no session redactor, so it puts stderr tails and the
+//! agent's error text into [`DriverError`] and [`DriverExit::Crashed`] unredacted, and never writes
+//! them to the app log. The session actor redacts them, with the session's secret literals, before
+//! it shows or stores them.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -324,7 +329,9 @@ pub struct ReplaySummary {
     pub last_reply_sha256: Option<String>,
 }
 
-/// A failure a driver reports. `message` is a sentence the UI shows.
+/// A failure a driver reports. `message` is a sentence the UI shows. `message` and `detail` may
+/// carry the agent's own text or a stderr tail, unredacted: the session redacts both before it
+/// shows or stores them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
 #[error("{message}")]
 pub struct DriverError {
@@ -339,7 +346,9 @@ pub struct DriverError {
 pub enum DriverExit {
     /// Asked to stop, and did.
     Closed,
-    /// Ended without being asked. The tail is redacted.
+    /// Ended without being asked. `stderr_tail` is the raw tail
+    /// ([`ControlImpl::stderr_tail`](aura_process::ControlImpl::stderr_tail), not redacted): the
+    /// session redacts it before it shows or stores it.
     Crashed {
         exit: Option<ExitInfo>,
         stderr_tail: String,

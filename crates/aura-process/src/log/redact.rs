@@ -12,7 +12,7 @@
 //!    literals from [`Redactor::set_secrets`] to `<SECRET>`.
 //!
 //! The stderr tail shown in an error card, or stored in an error's detail, passes
-//! [`Redactor::redact_text`] too.
+//! [`Redactor::redact_text`] too, in the session actor: drivers hand it over raw.
 
 use std::borrow::Cow;
 use std::fmt;

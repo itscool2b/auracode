@@ -948,7 +948,8 @@ Retention runs at boot (background) and when a session ends.
 4. Env values never appear in a record at all.
 
 Account data never reaches SQLite either: `initialize` replies, auth notifications and catalogs are not events. The
-stderr tail shown in an error card, or stored in `Error.detail`, passes `redact_text` first.
+stderr tail shown in an error card, or stored in `Error.detail`, passes `redact_text` first, in the session actor
+(6.5.5): drivers hand it over raw.
 
 ---
 
@@ -1229,7 +1230,7 @@ pub struct DriverError { pub kind: ErrorKind, pub message: String, pub detail: O
 
 pub enum DriverExit {
     Closed,                                                          // asked to stop and did
-    Crashed { exit: Option<ExitInfo>, stderr_tail: String },         // ended without being asked (tail redacted)
+    Crashed { exit: Option<ExitInfo>, stderr_tail: String },         // ended without being asked (the raw tail)
     StartFailed(DriverError),                                        // never reached Ready
     Panicked,                                                        // set by the session actor only
 }
@@ -1278,6 +1279,11 @@ Contract every driver keeps (tested for `AcpDriver` and `MockDriver`):
    the receiver at force stop) ends the driver's interest in events.
 8. An event read after the driver processed `Prompt(t)` and before that prompt's reply is tagged `t`; every other
    event is untagged, including updates the agent sends after its reply and requests from background work.
+
+Error text crosses raw: a driver holds no session redactor, so it puts stderr tails and the agent's error text into
+`DriverError` and `Crashed` unredacted, and never writes them to the app log. The session actor passes every driver
+error's message and detail and every `Crashed` tail through `redact_text`, with the session's secret literals, before
+it shows or stores them (6.5.3, 6.5.5).
 
 How M1b to M1d fit without rework: Claude stream-json maps `--permission-mode`, `--session-id`/`--resume` into its own
 `SpawnSpec` (with `CLAUDE_CODE_SDK_READS_SESSION_STATE=1` in `set_env`), `control_request interrupt` to `Interrupt`,
@@ -1356,7 +1362,7 @@ Spawning      ctx.spawner.spawn(SpawnSpec { launch, folder, env, max_line_bytes:
               other -> SpawnFailed
 Initializing  initialize, deadline = launch.startup_timeout (60 s)
               reply protocolVersion != 1 -> ProtocolMismatch "This agent speaks ACP protocol version N; auracode
-              supports version 1."; error reply -> AgentError; EOF or exit -> AgentExited (redacted stderr tail, plus
+              supports version 1."; error reply -> AgentError; EOF or exit -> AgentExited (the raw stderr tail, plus
               the dialect's start hint when one matches); deadline -> StartTimeout. Recorded leniently: loadSession,
               sessionCapabilities.{resume, additionalDirectories}, promptCapabilities.image, authMethods,
               agentInfo.{name, version}.
@@ -1571,7 +1577,7 @@ pub trait AcpDialect: Send + Sync + 'static {
     fn auth_command(&self, method: &wire::AuthMethod, launch: &LaunchSpec, env: &EnvMap) -> Option<AuthCommand>;
     /// Fallback commands when the agent advertises none (codex-acp: `codex login`).
     fn fallback_auth_commands(&self, _launch: &LaunchSpec, _env: &EnvMap) -> Vec<AuthCommand> { Vec::new() }
-    /// A sentence added to a start failure whose redacted stderr tail matches (Hermes on Windows, 3.2).
+    /// A sentence added to a start failure whose stderr tail matches (Hermes on Windows, 3.2).
     fn start_failure_hint(&self, _stderr_tail: &str) -> Option<String> { None }
     fn on_request(&self, _method: &str, _params: &serde_json::Value) -> DialectReply { DialectReply::NotMine }
     fn on_notification(&self, _method: &str, _params: &serde_json::Value) -> Vec<DriverEvent> { Vec::new() }
@@ -2278,7 +2284,8 @@ interrupt (a turn is open), force_stop or stop
 DriverEvent::TurnEnded { stop_reason, usage, error }
   normalizer closes open messages and thoughts; open cards and questions tagged with this turn -> resolved { Cancelled,
     by: Turn }
-  push Error { kind, message, detail } if error; TurnEnded { turn_id, stop_reason, usage, duration_ms, recovered: false };
+  push Error { kind, message, detail } if error (message and detail redacted, 5.1); TurnEnded { turn_id, stop_reason,
+    usage, duration_ms, recovered: false };
     PromptLifecycle { Completed | Cancelled (Cancelled, Interrupted) | Failed (Error) }; flush now
   error kind AuthRequired -> the failed prompt goes back into the queue, held (same prompt_id; its original created_at
     keeps its place); QueueHoldAll; Shutdown { cancel_grace: 0, process: STANDARD }; state Stopping, then AuthRequired
@@ -2320,12 +2327,13 @@ left; anything not handed over is lost and logged (counts), and recovery ends th
   auracode is quitting.
 - `Crashed`, `Panicked`, or the task was aborted: first `control.shutdown(FORCE)` on every recorded process, then the
   list is cleared (the driver may have died with its agent still running); push `Error { AgentExited, "The agent
-  stopped unexpectedly (exit code N).", detail: redacted stderr tail, at most 2 KiB }`; an open turn ends
+  stopped unexpectedly (exit code N).", detail: the stderr tail through redact_text, at most 2 KiB }`; an open turn ends
   `TurnEnded { Error }` with cards and questions resolved `System`; untagged ones are resolved `System`;
   `QueueHoldAll`; state `Stopped`; `last_error` set.
 - `StartFailed(e)`: the recorded processes are force-stopped as above; state `Failed` (or `AuthRequired` with `auth`
-  from the `AuthRequired` event); `last_error`; an `Error` event stored outside any turn, with the dialect's start
-  hint appended when one matches. For an adapter whose redacted stderr tail shows `ERR_MODULE_NOT_FOUND`,
+  from the `AuthRequired` event); `last_error`; an `Error` event stored outside any turn, from `e` with its message
+  and detail through `redact_text` (the driver already appended the dialect's start hint when one matches). For an
+  adapter whose stderr tail shows `ERR_MODULE_NOT_FOUND`,
   `MODULE_NOT_FOUND` or `Cannot find module`: `detector.forget_install(spec)` and the message "The <agent> adapter's
   files are damaged. Press Retry to download it again."
 
@@ -2592,7 +2600,7 @@ draft keep their numbers; new cases are appended to each table.
 | P4 | user's claude or codex missing, node present; the user's variable empty or broken | `Missing` when no binary; an empty or broken variable is overridden with the detected binary; the bundled CLIs are never installed (`--omit=optional`), so the adapter cannot fall back to them | `adapter_requires_user_binary`, `empty_user_binary_env_is_overridden` (A), free probe 0 (phase 2) |
 | P5 | several installs | `PATH` order wins | `find_program_follows_path_order` (A) |
 | P6 | first start of an adapter | the install runs as its own step (10 min timeout, download detail); the 60 s start timeout covers only the launch | `install_marks_only_complete_installs` (A), `install_detail` (C) |
-| P7 | agent exits before `initialize` | `StartFailed { AgentExited }` with the redacted stderr tail (plus the dialect's hint) | `agent_exits_before_initialize` (B) |
+| P7 | agent exits before `initialize` | `StartFailed { AgentExited }` with the stderr tail (plus the dialect's hint), redacted by the actor | `agent_exits_before_initialize` (B) |
 | P8 | agent never answers `initialize` | `StartTimeout`, process stopped | `initialize_timeout_stops_process` (B) |
 | P9 | protocol version other than 1 | `ProtocolMismatch`, process stopped | fixture `protocol-mismatch` (B) |
 | P10 | crash mid-turn | processes force-stopped, `Error { AgentExited, tail }`, `TurnEnded { Error }`, cards resolved `System`, `Stopped`, rows held, Retry resumes | fixture `eof-mid-turn` (B), `crash_mid_turn` (C) |
