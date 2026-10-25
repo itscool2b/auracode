@@ -1,0 +1,357 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    },
+    {
+      "type": "status",
+      "data": "configuring"
+    },
+    {
+      "type": "options",
+      "data": []
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": null,
+        "auto_answer": {
+          "type": "all"
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "<SESSION_1>",
+        "agent_name": "ACP Agent",
+        "agent_version": "1.0.0",
+        "capabilities": {
+          "images": true,
+          "steer": false,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": false,
+          "set_effort": false,
+          "permissions": true,
+          "plans": true,
+          "usage": true,
+          "limits": false,
+          "slash_commands": true,
+          "add_dirs": false,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "new"
+        },
+        "spawn_id": "019a0000-0000-7000-8000-0000000000a1",
+        "replay": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "prompting"
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "thought_delta",
+          "thought_id": "019a0000-0001-7000-8000-000000000001.t1",
+          "text": "The build fails in main.rs."
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "thought_delta",
+          "thought_id": "019a0000-0001-7000-8000-000000000001.t1",
+          "text": " Let me read it."
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "thought_completed",
+          "thought_id": "019a0000-0001-7000-8000-000000000001.t1",
+          "duration_ms": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "tool_call",
+          "tool_call_id": "019a0000-0001-7000-8000-000000000001.toolu_01",
+          "kind": "read",
+          "title": "Read main.rs",
+          "status": "in_progress",
+          "locations": [
+            {
+              "path": "<CWD>/src/main.rs",
+              "line": 1
+            }
+          ],
+          "raw_input": {
+            "file_path": "<CWD>/src/main.rs"
+          },
+          "tool_name": "Read",
+          "content": [],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "019a0000-0001-7000-8000-000000000001.toolu_01",
+          "status": "completed",
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": null,
+          "tool_name": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "use foo;\nfn main() {}\n",
+              "truncated": null
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "message_delta",
+          "message_id": "019a0000-0001-7000-8000-000000000001.m1",
+          "text": "I'll fix "
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "message_delta",
+          "message_id": "019a0000-0001-7000-8000-000000000001.m1",
+          "text": "the import."
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "message_completed",
+          "message_id": "019a0000-0001-7000-8000-000000000001.m1"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "tool_call",
+          "tool_call_id": "019a0000-0001-7000-8000-000000000001.toolu_02",
+          "kind": "edit",
+          "title": "Edit main.rs",
+          "status": "pending",
+          "locations": [],
+          "raw_input": null,
+          "tool_name": "Edit",
+          "content": [
+            {
+              "type": "diff",
+              "path": "<CWD>/src/main.rs",
+              "old_text": "use foo;",
+              "new_text": "use crate::foo;",
+              "truncated": null
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "019a0000-0001-7000-8000-000000000001.toolu_02",
+          "status": "completed",
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": null,
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "plan_updated",
+          "entries": [
+            {
+              "content": "Read main.rs",
+              "status": "completed",
+              "priority": "high"
+            },
+            {
+              "content": "Fix the import",
+              "status": "completed",
+              "priority": "medium"
+            },
+            {
+              "content": "Run the build",
+              "status": "in_progress",
+              "priority": "low"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "message_delta",
+          "message_id": "019a0000-0001-7000-8000-000000000001.m2",
+          "text": "Fixed."
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "message_delta",
+          "message_id": "019a0000-0001-7000-8000-000000000001.m2",
+          "text": " The build passes."
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "message_completed",
+          "message_id": "019a0000-0001-7000-8000-000000000001.m2"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "message_delta",
+          "message_id": "019a0000-0001-7000-8000-000000000001.m3",
+          "text": "Anything else?"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "usage_updated",
+          "context_used": 18000,
+          "context_size": 200000,
+          "cost": {
+            "amount": 0.0421,
+            "currency": "USD"
+          }
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "message_completed",
+          "message_id": "019a0000-0001-7000-8000-000000000001.m3"
+        }
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "019a0000-0001-7000-8000-000000000001",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 1200,
+          "output_tokens": 100,
+          "cache_read_tokens": 800,
+          "cache_write_tokens": null,
+          "reasoning_tokens": null,
+          "scope": "session"
+        },
+        "error": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    }
+  ],
+  "replies": [],
+  "exit": {
+    "type": "closed"
+  }
+}

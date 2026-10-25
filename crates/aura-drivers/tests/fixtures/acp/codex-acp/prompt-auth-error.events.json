@@ -1,0 +1,332 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    },
+    {
+      "type": "status",
+      "data": "configuring"
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "mode",
+          "name": "Mode",
+          "description": "Approval and sandboxing preset for the session",
+          "category": "mode",
+          "kind": {
+            "type": "select",
+            "current": "agent",
+            "choices": [
+              {
+                "value": "read-only",
+                "name": "Read-only",
+                "description": "Requires approval to edit files and access the internet.",
+                "group": null
+              },
+              {
+                "value": "workspace-write",
+                "name": "Workspace access",
+                "description": "Edit workspace files; ask before writing outside the workspace or accessing the network.",
+                "group": null
+              },
+              {
+                "value": "agent",
+                "name": "Auto review",
+                "description": "Only ask for actions detected as potentially unsafe",
+                "group": null
+              },
+              {
+                "value": "agent-full-access",
+                "name": "Full access",
+                "description": "Unrestricted access to the internet and any file on your computer",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "gpt-5.5-codex",
+            "choices": [
+              {
+                "value": "gpt-5.5-codex",
+                "name": "GPT-5.5 Codex",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "gpt-5.5-mini",
+                "name": "GPT-5.5 mini",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "reasoning_effort",
+          "name": "Reasoning effort",
+          "description": null,
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "medium",
+            "choices": [
+              {
+                "value": "low",
+                "name": "Low",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "Medium",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "High",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "fast",
+          "name": "Fast",
+          "description": null,
+          "category": "model_config",
+          "kind": {
+            "type": "toggle",
+            "current": false
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "mode",
+          "name": "Mode",
+          "description": "Approval and sandboxing preset for the session",
+          "category": "mode",
+          "kind": {
+            "type": "select",
+            "current": "agent-full-access",
+            "choices": [
+              {
+                "value": "read-only",
+                "name": "Read-only",
+                "description": "Requires approval to edit files and access the internet.",
+                "group": null
+              },
+              {
+                "value": "workspace-write",
+                "name": "Workspace access",
+                "description": "Edit workspace files; ask before writing outside the workspace or accessing the network.",
+                "group": null
+              },
+              {
+                "value": "agent",
+                "name": "Auto review",
+                "description": "Only ask for actions detected as potentially unsafe",
+                "group": null
+              },
+              {
+                "value": "agent-full-access",
+                "name": "Full access",
+                "description": "Unrestricted access to the internet and any file on your computer",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "gpt-5.5-codex",
+            "choices": [
+              {
+                "value": "gpt-5.5-codex",
+                "name": "GPT-5.5 Codex",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "gpt-5.5-mini",
+                "name": "GPT-5.5 mini",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "reasoning_effort",
+          "name": "Reasoning effort",
+          "description": null,
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "medium",
+            "choices": [
+              {
+                "value": "low",
+                "name": "Low",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "Medium",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "High",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "fast",
+          "name": "Fast",
+          "description": null,
+          "category": "model_config",
+          "kind": {
+            "type": "toggle",
+            "current": false
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": "agent-full-access",
+        "auto_answer": {
+          "type": "never"
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "<SESSION_1>",
+        "agent_name": "Codex",
+        "agent_version": "2.2.2",
+        "capabilities": {
+          "images": true,
+          "steer": false,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": true,
+          "set_effort": true,
+          "permissions": true,
+          "plans": true,
+          "usage": true,
+          "limits": false,
+          "slash_commands": true,
+          "add_dirs": false,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "new"
+        },
+        "spawn_id": "019a0000-0000-7000-8000-0000000000a1",
+        "replay": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "prompting"
+    },
+    {
+      "type": "auth_required",
+      "data": {
+        "message": "Codex needs you to sign in. Run the command below in a terminal, then press Retry.",
+        "commands": [
+          {
+            "label": "Sign in to Codex",
+            "argv": [
+              "/opt/agents/bin/codex",
+              "login"
+            ],
+            "env": []
+          }
+        ]
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "019a0000-0001-7000-8000-000000000001",
+        "stop_reason": "error",
+        "usage": null,
+        "error": {
+          "kind": "auth_required",
+          "message": "Codex needs you to sign in.",
+          "detail": null
+        }
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    }
+  ],
+  "replies": [],
+  "exit": {
+    "type": "closed"
+  }
+}
