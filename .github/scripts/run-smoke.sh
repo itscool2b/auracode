@@ -60,6 +60,8 @@ if [ -n "$agent" ] && { is_on "${CI:-}" || is_on "${GITHUB_ACTIONS:-}"; }; then
 fi
 
 scratch="$(to_unix_path "${RUNNER_TEMP:-${TMPDIR:-/tmp}}")"
+# macOS's TMPDIR ends with a slash.
+scratch=${scratch%/}
 
 # launch <label> <scenario the report must name> <data folder> [VAR=value...]: runs the app once in
 # smoke mode with the data folder and the variables given, and checks its one result line and its

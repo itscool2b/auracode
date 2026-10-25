@@ -1161,6 +1161,16 @@ test_smoke_chat_runs_two_launches_on_one_data_folder() {
   assert_out "::notice::The chat-reopen launch's quit removed its registry file and closed the database."
 }
 
+test_smoke_folders_have_no_doubled_slash_when_the_temp_folder_ends_with_one() {
+  smoke_env
+  export RUNNER_TEMP="$tmp/runner/"
+  chat_app
+  run run-smoke.sh "$tmp/app" chat
+  assert_status 0
+  assert_under "$(launched 1 data)" "$tmp/runner/auracode-smoke-chat." "the data folder"
+  assert_under "$(launched 1 folder)" "$tmp/runner/auracode smoke chat." "the chat folder"
+}
+
 test_smoke_chat_gives_windows_apps_windows_paths() {
   smoke_env
   fake_cygpath
