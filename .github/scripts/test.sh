@@ -6,8 +6,10 @@
 # set one up gets a `gh` that fails), apps and cargo builds are small fakes, and every test runs in
 # a subshell inside its own temporary folder.
 set -uo pipefail
-# The retry settings (lib.sh) come from the tests alone, never from the caller's environment.
-unset CI_GH_ATTEMPTS CI_GH_RETRY_DELAY
+# The retry settings (lib.sh) and the smoke switches come from the tests alone, never from the
+# caller's environment.
+unset CI_GH_ATTEMPTS CI_GH_RETRY_DELAY AURACODE_SMOKE AURACODE_SMOKE_EXIT AURACODE_SMOKE_FOLDER \
+  AURACODE_SMOKE_AGENT
 
 scripts="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REAL_JQ="$(command -v jq)" || {
@@ -914,8 +916,8 @@ fake_app() { # <shell code>
   chmod +x "$tmp/app"
 }
 
-PASSING='AURACODE_SMOKE_RESULT {"ok":true,"events_received":120,"frames_received":40,"seq_gaps":0,"rendered_chars":900,"fps_min":55.5,"fps_avg":59.8,"errors":[]}'
-FAILING='AURACODE_SMOKE_RESULT {"ok":false,"events_received":3,"frames_received":1,"seq_gaps":2,"rendered_chars":0,"fps_min":0,"fps_avg":0,"errors":["the demo answer did not render","the stream skipped sequence numbers 2 time(s)"]}'
+PASSING='AURACODE_SMOKE_RESULT {"ok":true,"scenario":"stream","stream":{"events_received":120,"frames_received":40,"seq_gaps":0,"rendered_chars":900,"fps_min":55.5,"fps_avg":59.8},"checks":[],"errors":[]}'
+FAILING='AURACODE_SMOKE_RESULT {"ok":false,"scenario":"stream","stream":{"events_received":3,"frames_received":1,"seq_gaps":2,"rendered_chars":0,"fps_min":0,"fps_avg":0},"checks":[],"errors":["the demo answer did not render","the stream skipped sequence numbers 2 time(s)"]}'
 
 smoke_env() {
   mkdir -p "$tmp/runner"
@@ -928,9 +930,9 @@ test_smoke_passes_on_a_clean_report() {
 echo 'some other stdout line'
 echo '$PASSING'
 exit 0"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 0
-  assert_out "::notice::Smoke check passed: 120 events in 40 frames, 0 sequence gaps, 900 characters rendered, 55.5/59.8 fps (min/avg)."
+  assert_out "::notice::Smoke check passed (stream): 120 events in 40 frames, 0 sequence gaps, 900 characters rendered, 55.5/59.8 fps (min/avg)."
   assert_out "INFO auracode: main window created"
 }
 
@@ -943,7 +945,7 @@ test_smoke_runs_the_app_in_smoke_mode_with_fresh_data() {
   if read -r line; then echo stdin=open; else echo stdin=eof; fi
 } >'$tmp/seen'
 echo '$PASSING'"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 0
   grep -Fxq 'smoke=1 exit=1' "$tmp/seen" || fail "smoke mode was not switched on" "$(cat "$tmp/seen")"
   grep -Fxq 'fresh=yes' "$tmp/seen" || fail "the data directory was missing or not empty" "$(cat "$tmp/seen")"
@@ -957,7 +959,7 @@ test_smoke_gives_windows_apps_windows_paths() {
   export RUNNER_TEMP='C:\fake\runner'
   fake_app "echo \"\$AURACODE_DATA_DIR\" >'$tmp/seen'
 echo '$PASSING'"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 0
   grep -Fq 'C:\fake\runner\auracode-smoke.' "$tmp/seen" || fail "AURACODE_DATA_DIR is not a Windows path" "$(cat "$tmp/seen")"
 }
@@ -966,9 +968,9 @@ test_smoke_fails_on_a_failing_report() {
   smoke_env
   fake_app "echo '$FAILING'
 exit 1"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 1
-  assert_out "::error::The smoke check failed (3 events in 1 frames, 2 sequence gaps, 0 characters rendered, 0/0 fps (min/avg)):"
+  assert_out "::error::The stream smoke check failed (3 events in 1 frames, 2 sequence gaps, 0 characters rendered, 0/0 fps (min/avg)):"
   assert_out "  - the demo answer did not render"
   assert_out "  - the stream skipped sequence numbers 2 time(s)"
 }
@@ -977,9 +979,9 @@ test_smoke_reads_the_minimal_fallback_report() {
   smoke_env
   fake_app "echo 'AURACODE_SMOKE_RESULT {\"ok\":false,\"errors\":[\"could not serialize the report: boom\"]}'
 exit 1"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 1
-  assert_out "The smoke check failed (? events in ? frames, ? sequence gaps, ? characters rendered, ?/? fps (min/avg)):"
+  assert_out "The stream smoke check failed (? events in ? frames, ? sequence gaps, ? characters rendered, ?/? fps (min/avg)):"
   assert_out "  - could not serialize the report: boom"
 }
 
@@ -987,36 +989,36 @@ test_smoke_fails_on_a_failing_report_even_with_exit_code_zero() {
   smoke_env
   fake_app "echo '$FAILING'
 exit 0"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 1
-  assert_out "The smoke check failed"
+  assert_out "The stream smoke check failed"
 }
 
 test_smoke_fails_without_a_result_line() {
   smoke_env
   fake_app "echo 'the window opened'
 exit 0"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 1
-  assert_out "The app exited with code 0 without printing an AURACODE_SMOKE_RESULT line"
+  assert_out "The stream launch exited with code 0 without printing an AURACODE_SMOKE_RESULT line"
 }
 
 test_smoke_reports_a_crash() {
   smoke_env
   fake_app "echo 'thread main panicked' >&2
 exit 101"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 1
-  assert_out "The app exited with code 101 without printing an AURACODE_SMOKE_RESULT line"
+  assert_out "The stream launch exited with code 101 without printing an AURACODE_SMOKE_RESULT line"
 }
 
 test_smoke_fails_when_a_pass_is_followed_by_a_crash() {
   smoke_env
   fake_app "echo '$PASSING'
 exit 3"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 1
-  assert_out "reported a pass (120 events in 40 frames"
+  assert_out "The stream smoke check reported a pass (120 events in 40 frames"
   assert_out "but the app then exited with code 3"
 }
 
@@ -1024,15 +1026,15 @@ test_smoke_rejects_two_reports() {
   smoke_env
   fake_app "echo '$PASSING'
 echo '$PASSING'"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 1
-  assert_out "The app printed 2 AURACODE_SMOKE_RESULT lines; it must report exactly once."
+  assert_out "The stream launch printed 2 AURACODE_SMOKE_RESULT lines; it must report exactly once."
 }
 
 test_smoke_rejects_a_report_that_is_not_json() {
   smoke_env
   fake_app "echo 'AURACODE_SMOKE_RESULT {\"ok\":'"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 1
   assert_out "is not a JSON object with a boolean \"ok\""
 }
@@ -1040,7 +1042,7 @@ test_smoke_rejects_a_report_that_is_not_json() {
 test_smoke_rejects_a_report_without_a_boolean_ok() {
   smoke_env
   fake_app "echo 'AURACODE_SMOKE_RESULT {\"ok\":\"yes\",\"errors\":[]}'"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 1
   assert_out "is not a JSON object with a boolean \"ok\""
 }
@@ -1048,16 +1050,16 @@ test_smoke_rejects_a_report_without_a_boolean_ok() {
 test_smoke_reads_crlf_output() {
   smoke_env
   fake_app "printf '%s\\r\\n' 'log line' '$PASSING'"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 0
-  assert_out "Smoke check passed"
+  assert_out "Smoke check passed (stream)"
 }
 
 test_smoke_counts_only_lines_that_start_with_the_marker() {
   smoke_env
   fake_app "echo 'debug: will print AURACODE_SMOKE_RESULT {\"ok\":false} when done'
 echo '$PASSING'"
-  run run-smoke.sh "$tmp/app"
+  run run-smoke.sh "$tmp/app" stream
   assert_status 0
 }
 
@@ -1066,6 +1068,239 @@ test_smoke_needs_an_executable() {
   run run-smoke.sh "$tmp/missing-app"
   assert_status 1
   assert_out "$tmp/missing-app is not an executable file"
+}
+
+test_smoke_rejects_an_unknown_scenario() {
+  smoke_env
+  fake_app ": >'$tmp/ran'"
+  run run-smoke.sh "$tmp/app" streams
+  assert_status 1
+  assert_out "usage: run-smoke.sh <app executable> [stream|chat|all]"
+  refute_path "$tmp/ran"
+}
+
+CHAT_PASSING='AURACODE_SMOKE_RESULT {"ok":true,"scenario":"chat","stream":null,"checks":[{"name":"create-chat","ok":true,"detail":"ready after 300 ms"},{"name":"echo-turn","ok":true,"detail":"the reply read hi"}],"errors":[]}'
+REOPEN_PASSING='AURACODE_SMOKE_RESULT {"ok":true,"scenario":"chat_reopen","stream":null,"checks":[{"name":"reopen-history","ok":true,"detail":"28 segments"}],"errors":[]}'
+AGENT_PASSING='AURACODE_SMOKE_RESULT {"ok":true,"scenario":"agent","stream":null,"checks":[{"name":"agent-replies","ok":true,"detail":"got ok"}],"errors":[]}'
+CHAT_FAILING='AURACODE_SMOKE_RESULT {"ok":false,"scenario":"chat","stream":null,"checks":[{"name":"create-chat","ok":true,"detail":"ready"},{"name":"echo-turn","ok":false,"detail":"timed out after 20 s waiting for the reply"},{"name":"demo-turn","ok":false,"detail":"not run: echo-turn failed"}],"errors":["2 of 3 checks failed: echo-turn, demo-turn"]}'
+
+# A fake app for the chat launches: it logs what each launch was given (one line per launch in
+# $tmp/launches, tab-separated: AURACODE_SMOKE, AURACODE_SMOKE_EXIT, AURACODE_SMOKE_AGENT,
+# AURACODE_DATA_DIR, AURACODE_SMOKE_FOLDER, whether that folder exists, stdin) and answers each
+# scenario with a passing report. <extra> runs before it reports.
+chat_app() { # [extra shell code]
+  cat >"$tmp/app" <<EOF
+#!/usr/bin/env bash
+if [ -d "\${AURACODE_SMOKE_FOLDER:-/nonexistent}" ]; then exists=yes; else exists=no; fi
+if read -r line; then stdin=open; else stdin=eof; fi
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "\$AURACODE_SMOKE" "\$AURACODE_SMOKE_EXIT" \
+  "\${AURACODE_SMOKE_AGENT-unset}" "\$AURACODE_DATA_DIR" "\${AURACODE_SMOKE_FOLDER-unset}" \
+  "\$exists" "\$stdin" >>'$tmp/launches'
+${1:-}
+case "\$AURACODE_SMOKE:\${AURACODE_SMOKE_AGENT:-}" in
+1:) echo '$PASSING' ;;
+chat:) echo '$CHAT_PASSING' ;;
+chat-reopen:) echo '$REOPEN_PASSING' ;;
+chat:*) echo '$AGENT_PASSING' ;;
+*) echo "fake app: unexpected launch \$AURACODE_SMOKE" >&2; exit 2 ;;
+esac
+EOF
+  chmod +x "$tmp/app"
+}
+
+launch_count() {
+  if [ -f "$tmp/launches" ]; then
+    grep -c '' "$tmp/launches" || true
+  else
+    echo 0
+  fi
+}
+
+# launched <n> <what>: what the nth launch was given: smoke, exit, agent, data, folder, exists (the
+# folder), stdin.
+launched() {
+  local column
+  case $2 in
+  smoke) column=1 ;; exit) column=2 ;; agent) column=3 ;; data) column=4 ;; folder) column=5 ;;
+  exists) column=6 ;; stdin) column=7 ;;
+  *) fail "launched: no field $2" ;;
+  esac
+  sed -n "${1}p" "$tmp/launches" | cut -f "$column"
+}
+
+# assert_launch <n> <smoke> <exit> <agent> <exists> <stdin>: the nth launch's switches.
+assert_launch() {
+  assert_eq "$2 $3 $4 $5 $6" \
+    "$(launched "$1" smoke) $(launched "$1" exit) $(launched "$1" agent) $(launched "$1" exists) $(launched "$1" stdin)" \
+    "launch $1's switches (smoke, exit, agent, folder exists, stdin)"
+}
+
+assert_under() { # <path> <prefix> <what>
+  case $1 in "$2"*) ;; *) fail "expected $3 under $2, got \"$1\"" ;; esac
+}
+
+test_smoke_chat_runs_two_launches_on_one_data_folder() {
+  smoke_env
+  chat_app
+  run run-smoke.sh "$tmp/app" chat
+  assert_status 0
+  assert_eq 2 "$(launch_count)" "the number of launches"
+  assert_launch 1 chat 1 unset yes eof
+  assert_launch 2 chat-reopen 1 unset yes eof
+  assert_under "$(launched 1 data)" "$tmp/runner/auracode-smoke-chat." "the data folder"
+  assert_under "$(launched 1 folder)" "$tmp/runner/auracode smoke chat." "the chat folder"
+  assert_eq "$(launched 1 data)" "$(launched 2 data)" "the reopened launch's data folder"
+  assert_eq "$(launched 1 folder)" "$(launched 2 folder)" "the reopened launch's chat folder"
+  [ -z "$(ls -A "$(launched 1 folder)")" ] || fail "the chat folder was not empty"
+  assert_out "ok    create-chat: ready after 300 ms"
+  assert_out "ok    echo-turn: the reply read hi"
+  assert_out "::notice::Smoke check passed (chat): 2 of 2 checks passed."
+  assert_out "::notice::The chat launch's quit removed its registry file and closed the database."
+  assert_out "ok    reopen-history: 28 segments"
+  assert_out "::notice::Smoke check passed (chat-reopen): 1 of 1 checks passed."
+  assert_out "::notice::The chat-reopen launch's quit removed its registry file and closed the database."
+}
+
+test_smoke_chat_gives_windows_apps_windows_paths() {
+  smoke_env
+  fake_cygpath
+  export RUNNER_TEMP='C:\fake\runner'
+  chat_app
+  run run-smoke.sh "$tmp/app" chat
+  assert_status 0
+  assert_under "$(launched 1 data)" 'C:\fake\runner\auracode-smoke-chat.' "the data folder"
+  assert_under "$(launched 1 folder)" 'C:\fake\runner\auracode smoke chat.' "the chat folder"
+}
+
+test_smoke_chat_lists_each_check_and_skips_the_reopen_after_a_failure() {
+  smoke_env
+  chat_app "if [ \"\$AURACODE_SMOKE\" = chat ]; then echo '$CHAT_FAILING'; exit 1; fi"
+  run run-smoke.sh "$tmp/app" chat
+  assert_status 1
+  assert_eq 1 "$(launch_count)" "the number of launches"
+  assert_out "ok    create-chat: ready"
+  assert_out "FAIL  echo-turn: timed out after 20 s waiting for the reply"
+  assert_out "FAIL  demo-turn: not run: echo-turn failed"
+  assert_out "::error::The chat smoke check failed (1 of 3 checks passed):"
+  assert_out "  - 2 of 3 checks failed: echo-turn, demo-turn"
+  assert_out "::warning::Skipped the chat-reopen launch: it starts from what the chat launch leaves."
+}
+
+test_smoke_chat_fails_when_the_quit_left_its_registry_file() {
+  smoke_env
+  chat_app "mkdir -p \"\$AURACODE_DATA_DIR/run\" && echo '{}' >\"\$AURACODE_DATA_DIR/run/4242-17.json\""
+  run run-smoke.sh "$tmp/app" chat
+  assert_status 1
+  assert_out "::error::The chat launch's quit left its leftover registry file behind:"
+  assert_out "run/4242-17.json"
+  assert_eq 1 "$(launch_count)" "the number of launches"
+}
+
+test_smoke_chat_fails_when_the_quit_left_the_write_ahead_log() {
+  smoke_env
+  chat_app "if [ \"\$AURACODE_SMOKE\" = chat-reopen ]; then mkdir -p \"\$AURACODE_DATA_DIR/profiles/local\" && echo pages >\"\$AURACODE_DATA_DIR/profiles/local/aura.db-wal\"; fi"
+  run run-smoke.sh "$tmp/app" chat
+  assert_status 1
+  assert_out "::error::The chat-reopen launch's quit left the database's write-ahead log behind, so it never closed the database:"
+  assert_out "profiles/local/aura.db-wal"
+}
+
+# SQLite leaves an empty -wal behind a read-only connection; only one holding pages means the
+# database was not closed.
+test_smoke_chat_accepts_an_empty_write_ahead_log() {
+  smoke_env
+  chat_app "mkdir -p \"\$AURACODE_DATA_DIR/profiles/local\" && : >\"\$AURACODE_DATA_DIR/profiles/local/aura.db-wal\""
+  run run-smoke.sh "$tmp/app" chat
+  assert_status 0
+}
+
+# An app older than this script ignores AURACODE_SMOKE=chat and runs the stream check, whose
+# report would otherwise pass.
+test_smoke_chat_rejects_a_report_for_another_scenario() {
+  local report
+  for report in "$PASSING" 'AURACODE_SMOKE_RESULT {"ok":true,"events_received":1,"frames_received":1,"seq_gaps":0,"rendered_chars":1,"fps_min":60,"fps_avg":60,"errors":[]}'; do
+    smoke_env
+    : >"$tmp/launches"
+    chat_app "echo '$report'; exit 0"
+    run run-smoke.sh "$tmp/app" chat
+    assert_status 1
+    assert_out "::error::The chat launch reported the stream scenario, not chat: is $tmp/app older than this script?"
+    assert_eq 1 "$(launch_count)" "the number of launches for $report"
+  done
+}
+
+test_smoke_runs_every_scenario_by_default_and_keeps_going_after_a_failure() {
+  smoke_env
+  chat_app "if [ \"\$AURACODE_SMOKE\" = 1 ]; then echo '$FAILING'; exit 1; fi"
+  run run-smoke.sh "$tmp/app"
+  assert_status 1
+  assert_eq 3 "$(launch_count)" "the number of launches"
+  assert_launch 1 1 1 unset no eof
+  assert_eq unset "$(launched 1 folder)" "the stream launch's chat folder"
+  assert_under "$(launched 1 data)" "$tmp/runner/auracode-smoke." "the stream launch's data folder"
+  assert_launch 2 chat 1 unset yes eof
+  assert_launch 3 chat-reopen 1 unset yes eof
+  [ "$(launched 1 data)" != "$(launched 2 data)" ] || fail "the stream and chat launches shared a data folder"
+  assert_out "::error::The stream smoke check failed"
+  assert_out "::notice::Smoke check passed (chat): 2 of 2 checks passed."
+  assert_out "::notice::Smoke check passed (chat-reopen): 1 of 1 checks passed."
+}
+
+test_smoke_all_passes_when_every_scenario_passes() {
+  smoke_env
+  chat_app
+  run run-smoke.sh "$tmp/app" all
+  assert_status 0
+  assert_eq 3 "$(launch_count)" "the number of launches"
+}
+
+# The stream check refuses an agent, and the reopened launch needs none: a caller's chat switches
+# reach only the launches that take them.
+test_smoke_stream_gets_none_of_the_callers_chat_switches() {
+  smoke_env
+  unset CI GITHUB_ACTIONS
+  export AURACODE_SMOKE=chat AURACODE_SMOKE_FOLDER="$tmp" AURACODE_SMOKE_AGENT=claude-acp
+  chat_app
+  run run-smoke.sh "$tmp/app" stream
+  assert_status 0
+  assert_launch 1 1 1 unset no eof
+  assert_eq unset "$(launched 1 folder)" "the stream launch's chat folder"
+}
+
+test_smoke_agent_runs_one_minimal_chat_locally() {
+  smoke_env
+  unset CI GITHUB_ACTIONS
+  export AURACODE_SMOKE_AGENT=' claude-acp '
+  chat_app
+  run run-smoke.sh "$tmp/app" chat
+  assert_status 0
+  assert_eq 1 "$(launch_count)" "the number of launches"
+  assert_launch 1 chat 1 claude-acp yes eof
+  assert_under "$(launched 1 data)" "$tmp/runner/auracode-smoke-chat." "the data folder"
+  assert_out "ok    agent-replies: got ok"
+  assert_out "::notice::Smoke check passed (agent): 1 of 1 checks passed."
+  assert_out "::notice::The agent launch's quit removed its registry file and closed the database."
+}
+
+test_smoke_agent_is_refused_under_ci() {
+  local ci
+  for ci in CI GITHUB_ACTIONS; do
+    smoke_env
+    unset CI GITHUB_ACTIONS
+    export AURACODE_SMOKE_AGENT=claude-acp "$ci"=true
+    chat_app
+    run run-smoke.sh "$tmp/app" stream
+    assert_status 1
+    assert_out "::error::AURACODE_SMOKE_AGENT=claude-acp runs a real agent, which spends its user's quota: it is for local runs only, and CI must never set it."
+    assert_eq 0 "$(launch_count)" "the number of launches under $ci"
+    unset "$ci"
+  done
+  # Off values are not CI.
+  smoke_env
+  export AURACODE_SMOKE_AGENT=claude-acp CI=false GITHUB_ACTIONS=0
+  chat_app
+  run run-smoke.sh "$tmp/app" chat
+  assert_status 0
 }
 
 # --- Runner. -------------------------------------------------------------------------------------
