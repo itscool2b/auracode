@@ -51,7 +51,7 @@ use crate::store::Store;
 use writer::{Permits, Request, Shared, Work, Writer};
 #[cfg(test)]
 pub(crate) use writer::{SavedRead, TestWork};
-pub(crate) use writer::{WaitError, WriterConfig, await_reply};
+pub(crate) use writer::{WaitError, WriterConfig, await_reply, op_bytes};
 
 /// A call that gets no answer within this fails.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -635,7 +635,6 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     use super::test_support::event_row;
-    use super::writer::op_bytes;
     use super::*;
     use crate::paths::DataRoot;
     use crate::profile::Profiles;
