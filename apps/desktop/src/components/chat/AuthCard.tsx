@@ -20,9 +20,11 @@ export function AuthCard({
   const [copied, setCopied] = useState<number | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   return (
-    <div className="chat-block" data-kind="auth">
+    <div className="chat-block" data-kind="auth" data-testid="auth-card">
       <div className="chat-block-head">
-        <span className="chat-block-title">{auth.message}</span>
+        <span className="chat-block-title" data-testid="auth-message">
+          {auth.message}
+        </span>
         <span className="chat-block-tag">Sign-in needed</span>
       </div>
       {auth.commands.map((command, index) => {
@@ -31,7 +33,9 @@ export function AuthCard({
           // biome-ignore lint/suspicious/noArrayIndexKey: the agent's methods are positional.
           <div key={index} className="chat-command">
             <span>{command.label}</span>
-            <pre className="ui-pre">{text}</pre>
+            <pre className="ui-pre" data-testid="auth-command">
+              {text}
+            </pre>
             {command.env.length > 0 ? (
               <span className="ui-muted">Sets {command.env.map(([name]) => name).join(", ")}</span>
             ) : null}
@@ -40,6 +44,7 @@ export function AuthCard({
                 type="button"
                 className="ui-button"
                 data-kind="quiet"
+                data-testid="auth-copy"
                 onClick={() => {
                   copy(text).then(
                     () => {
@@ -57,12 +62,18 @@ export function AuthCard({
         );
       })}
       {problem !== null ? (
-        <span role="alert" className="ui-error">
+        <span role="alert" className="ui-error" data-testid="auth-error">
           {problem}
         </span>
       ) : null}
       <div className="ui-row">
-        <button type="button" className="ui-button" data-kind="primary" onClick={onRetry}>
+        <button
+          type="button"
+          className="ui-button"
+          data-kind="primary"
+          data-testid="auth-retry"
+          onClick={onRetry}
+        >
           Retry
         </button>
         <span className="ui-muted">Sign in in a terminal first, then press Retry.</span>

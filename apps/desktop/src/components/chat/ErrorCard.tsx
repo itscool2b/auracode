@@ -20,25 +20,52 @@ export function ErrorCard({
   readonly onShowLog: () => void;
 }) {
   return (
-    <div className="chat-block" data-kind="error">
+    <div
+      className="chat-block"
+      data-kind="error"
+      data-testid="item"
+      data-test-kind="error"
+      data-test-error-kind={item.errorKind}
+    >
       <div className="chat-block-head">
-        <span className="chat-block-title">{item.message}</span>
+        <span className="chat-block-title" data-testid="error-message">
+          {item.message}
+        </span>
       </div>
       {item.detail !== null && item.detail !== "" ? (
-        <pre className="ui-pre">{item.detail}</pre>
+        <pre className="ui-pre" data-testid="error-detail">
+          {item.detail}
+        </pre>
       ) : null}
       <div className="ui-row">
         {actions.retry ? (
-          <button type="button" className="ui-button" data-kind="primary" onClick={onRetry}>
+          <button
+            type="button"
+            className="ui-button"
+            data-kind="primary"
+            data-testid="error-retry"
+            onClick={onRetry}
+          >
             Retry
           </button>
         ) : null}
         {actions.startFresh ? (
-          <button type="button" className="ui-button" onClick={onStartFresh}>
+          <button
+            type="button"
+            className="ui-button"
+            data-testid="error-start-fresh"
+            onClick={onStartFresh}
+          >
             Start fresh
           </button>
         ) : null}
-        <button type="button" className="ui-button" data-kind="quiet" onClick={onShowLog}>
+        <button
+          type="button"
+          className="ui-button"
+          data-kind="quiet"
+          data-testid="error-show-log"
+          onClick={onShowLog}
+        >
           Show log
         </button>
       </div>

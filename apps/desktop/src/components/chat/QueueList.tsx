@@ -19,17 +19,25 @@ export function QueueList({
 }) {
   if (queue.length === 0 && !held) return null;
   return (
-    <section aria-label="Queued messages">
+    <section aria-label="Queued messages" data-testid="queue">
       {queue.length > 0 ? (
         <ul className="chat-queue">
           {queue.map((row) => (
-            <li key={row.prompt_id}>
-              <span title={row.preview}>{row.preview || "(empty)"}</span>
+            <li
+              key={row.prompt_id}
+              data-testid="queued-prompt"
+              data-test-prompt-id={row.prompt_id}
+              data-test-held={String(row.held)}
+            >
+              <span title={row.preview} data-testid="queued-preview">
+                {row.preview || "(empty)"}
+              </span>
               {row.held ? <span className="chat-held">held</span> : null}
               <button
                 type="button"
                 className="ui-button"
                 data-kind="quiet"
+                data-testid="queued-remove"
                 onClick={() => onRemove(row.prompt_id)}
               >
                 Remove
@@ -40,7 +48,12 @@ export function QueueList({
       ) : null}
       {held ? (
         <div className="ui-row">
-          <button type="button" className="ui-button" onClick={onSendQueued}>
+          <button
+            type="button"
+            className="ui-button"
+            data-testid="send-queued"
+            onClick={onSendQueued}
+          >
             Send queued
           </button>
           <span className="ui-muted">

@@ -15,11 +15,13 @@ export function SlashMenu({
 }) {
   if (commands.length === 0) return null;
   return (
-    <ul id={id} className="chat-slash" aria-label="Slash commands">
+    <ul id={id} className="chat-slash" aria-label="Slash commands" data-testid="slash-menu">
       {commands.map((command, index) => (
         <li key={command.name}>
           <button
             type="button"
+            data-testid="slash-command"
+            data-test-name={command.name}
             data-active={index === active}
             aria-current={index === active ? "true" : undefined}
             // The textarea keeps the focus, so typing goes on while the menu is open.

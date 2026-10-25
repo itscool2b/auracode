@@ -40,12 +40,18 @@ export function ChatList({
   readonly onNewChat: () => void;
 }) {
   return (
-    <nav aria-label="Chats" className="chat-segment">
-      <button type="button" className="ui-button chat-new" data-kind="primary" onClick={onNewChat}>
+    <nav aria-label="Chats" className="chat-segment" data-testid="chat-list">
+      <button
+        type="button"
+        className="ui-button chat-new"
+        data-kind="primary"
+        data-testid="new-chat-button"
+        onClick={onNewChat}
+      >
         New chat
       </button>
       {error !== null ? (
-        <p role="alert" className="ui-error">
+        <p role="alert" className="ui-error" data-testid="chats-error">
           {error}
         </p>
       ) : null}
@@ -86,10 +92,15 @@ function ChatRow({
       className="chat-row"
       aria-current={selected}
       title={chat.folder}
+      data-testid="chat-row"
+      data-test-chat-id={chat.id}
+      data-test-status={chat.status}
+      data-test-attention={String(chat.needs_attention)}
+      data-test-folder-state={chat.folder_state}
       onClick={() => onSelect(chat.id)}
     >
       <span className="chat-row-title">
-        <span>{chat.title ?? "New chat"}</span>
+        <span data-testid="chat-row-title">{chat.title ?? "New chat"}</span>
         {chat.needs_attention ? (
           <span className="chat-dot" role="img" aria-label="Waiting for your answer" />
         ) : null}

@@ -353,7 +353,7 @@ describe("the pickers", () => {
     );
     expect(settledHtml).toContain('<option value="fast" selected="">Fast</option>');
     expect(settledHtml).toMatch(/<input[^>]*checked/);
-    expect(settledHtml).not.toContain("saving");
+    expect(settledHtml).not.toContain("(saving…)");
   });
 
   it("show the autonomy note and the agent mode in effect", () => {

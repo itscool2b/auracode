@@ -1,4 +1,4 @@
-import type { Value } from "../../bindings";
+import type { PermissionDecision, Value } from "../../bindings";
 import type { RequestState } from "../../lib/chat/chatStore";
 import { permissionResolutionLabel } from "../../lib/chat/present";
 import type { PermissionItem } from "../../lib/chat/transcript";
@@ -12,6 +12,11 @@ export function rawInputSummary(input: Value | null): string | null {
   if (input === null) return null;
   const text = typeof input === "string" ? input : JSON.stringify(input, null, 2);
   return text.length > RAW_INPUT_CHARS ? `${text.slice(0, RAW_INPUT_CHARS)}…` : text;
+}
+
+/** A decision as `data-test-decision` carries it: the chosen option's id, or `cancelled`. */
+export function decisionMark(decision: PermissionDecision): string {
+  return decision.type === "cancelled" ? "cancelled" : decision.option_id;
 }
 
 /**
@@ -36,9 +41,21 @@ export function PermissionCard({
   const closed = resolution !== null || request?.gone === true;
   const busy = request?.busy === true;
   return (
-    <div className="chat-block" data-kind="permission" data-resolved={closed}>
+    <div
+      className="chat-block"
+      data-kind="permission"
+      data-resolved={closed}
+      data-testid="item"
+      data-test-kind="permission"
+      data-test-request-id={ask.request_id}
+      data-test-resolved-by={resolution?.by ?? ""}
+      data-test-decision={resolution === null ? "" : decisionMark(resolution.decision)}
+      data-test-gone={String(request?.gone === true)}
+    >
       <div className="chat-block-head">
-        <span className="chat-block-title">{ask.title}</span>
+        <span className="chat-block-title" data-testid="permission-title">
+          {ask.title}
+        </span>
         {ask.kind !== null ? (
           <span className="chat-block-tag">{ask.kind.replace("_", " ")}</span>
         ) : null}
@@ -53,9 +70,13 @@ export function PermissionCard({
         <EventDetails truncation={ask.truncated} blobs={blobs} onLoadBlob={onLoadBlob} />
       ) : null}
       {resolution !== null ? (
-        <p className="chat-resolution">{permissionResolutionLabel(resolution, ask.options)}</p>
+        <p className="chat-resolution" data-testid="permission-resolution">
+          {permissionResolutionLabel(resolution, ask.options)}
+        </p>
       ) : request?.gone ? (
-        <p className="chat-resolution">This request is no longer waiting for an answer.</p>
+        <p className="chat-resolution" data-testid="permission-resolution">
+          This request is no longer waiting for an answer.
+        </p>
       ) : (
         <div className="ui-row">
           {ask.options.map((option) => (
@@ -64,6 +85,9 @@ export function PermissionCard({
               type="button"
               className="ui-button"
               data-kind={option.kind === "allow_once" ? "primary" : undefined}
+              data-testid="permission-option"
+              data-test-option-id={option.option_id}
+              data-test-option-kind={option.kind}
               disabled={busy}
               onClick={() => onRespond(option.option_id)}
             >
@@ -74,6 +98,7 @@ export function PermissionCard({
             <button
               type="button"
               className="ui-button"
+              data-testid="permission-dismiss"
               disabled={busy}
               onClick={() => onRespond(null)}
             >
@@ -83,7 +108,7 @@ export function PermissionCard({
         </div>
       )}
       {request?.error ? (
-        <span role="alert" className="ui-error">
+        <span role="alert" className="ui-error" data-testid="permission-error">
           {request.error}
         </span>
       ) : null}
