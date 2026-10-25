@@ -1,2 +1,606 @@
-//! Recovery (package C), at startup and per chat: open requests resolved `System`, running turns
-//! ended `Interrupted` and marked `recovered`, ended turns compacted, queued prompts held.
+//! Recovery, at startup (every chat, the writer's first op) and per chat (`load_chat`, for an actor
+//! that died):
+//!
+//! 1. Every `PermissionRequested` and `UiRequest` without a later resolution, inside or outside a
+//!    turn, is resolved `Cancelled` / dismissed `by: System`: inside a running turn before its
+//!    `TurnEnded`, otherwise outside any turn.
+//! 2. Every running turn gets `TurnEnded { Interrupted, recovered: true }` and is marked interrupted,
+//!    ending when its last row was written.
+//! 3. Every ended turn not compacted yet is compacted.
+//! 4. Every queued prompt is held: auracode never sends a message on its own after a restart.
+//!
+//! The partial answer survives; no tool update is invented. Each chat recovers in one transaction.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use aura_protocol::{AuraEvent, Millis, PermissionDecision, ResolvedBy, StopReason};
+use rusqlite::{Connection, TransactionBehavior, params};
+
+use super::compact::{self, CompactLimits};
+use super::{EventRow, RecoveryReport, rows};
+
+/// Which chats a recovery covers.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Scope<'a> {
+    All,
+    Chat(&'a str),
+}
+
+/// Recovers `scope`, one transaction per chat. A chat whose recovery fails is skipped (and logged)
+/// unless the failure is damage, a full disk or a busy database, which the caller handles.
+pub(crate) fn recover(
+    conn: &mut Connection,
+    scope: Scope<'_>,
+    device_id: &str,
+    limits: &CompactLimits,
+    now: Millis,
+) -> rusqlite::Result<RecoveryReport> {
+    let chats = match scope {
+        Scope::All => chats_needing_recovery(conn)?,
+        Scope::Chat(chat_id) => vec![chat_id.to_owned()],
+    };
+    let mut report = RecoveryReport::default();
+    for chat_id in chats {
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        match recover_chat(&tx, &chat_id, device_id, limits, now) {
+            Ok(chat) => {
+                tx.commit()?;
+                report.interrupted_turns += chat.interrupted_turns;
+                report.resolved_requests += chat.resolved_requests;
+                report.compacted_turns += chat.compacted_turns;
+            }
+            Err(error) if is_fatal(&error) => return Err(error),
+            Err(error) => {
+                drop(tx);
+                tracing::error!(chat_id, %error, "could not recover a chat; its rows stay as they are");
+            }
+        }
+    }
+    if let Scope::All = scope {
+        rows::queue_hold(conn, None, true)?;
+    }
+    Ok(report)
+}
+
+/// Errors the writer handles itself: damage, a full disk, a busy database.
+fn is_fatal(error: &rusqlite::Error) -> bool {
+    use rusqlite::ErrorCode;
+    matches!(
+        error.sqlite_error_code(),
+        Some(
+            ErrorCode::DatabaseCorrupt
+                | ErrorCode::NotADatabase
+                | ErrorCode::DiskFull
+                | ErrorCode::DatabaseBusy
+                | ErrorCode::DatabaseLocked
+        )
+    )
+}
+
+/// Chats with a running turn, an unanswered request, or an ended turn not compacted yet.
+fn chats_needing_recovery(conn: &Connection) -> rusqlite::Result<Vec<String>> {
+    let mut chats = BTreeSet::new();
+    let mut running =
+        conn.prepare("SELECT DISTINCT chat_id FROM turns WHERE status = 'running'")?;
+    for chat in running.query_map([], |row| row.get::<_, String>(0))? {
+        chats.insert(chat?);
+    }
+    let mut uncompacted = conn.prepare(
+        "SELECT DISTINCT chat_id FROM turns WHERE status <> 'running' AND compacted_at IS NULL",
+    )?;
+    for chat in uncompacted.query_map([], |row| row.get::<_, String>(0))? {
+        chats.insert(chat?);
+    }
+    let mut requests = conn.prepare(
+        "SELECT chat_id, payload FROM events \
+         WHERE kind IN ('permission_requested', 'permission_resolved', 'ui_request', 'ui_resolved') \
+         ORDER BY chat_id, seq",
+    )?;
+    let mut open: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for row in requests.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })? {
+        let (chat_id, payload) = row?;
+        track_request(open.entry(chat_id).or_default(), &payload);
+    }
+    chats.extend(
+        open.into_iter()
+            .filter(|(_, requests)| !requests.is_empty())
+            .map(|(chat, _)| chat),
+    );
+    Ok(chats.into_iter().collect())
+}
+
+/// Adds a request id on its request and removes it on its resolution.
+fn track_request(open: &mut BTreeSet<String>, payload: &str) {
+    match serde_json::from_str::<AuraEvent>(payload) {
+        Ok(AuraEvent::PermissionRequested(request)) => {
+            open.insert(request.request_id);
+        }
+        Ok(AuraEvent::UiRequest(request)) => {
+            // A notification is never open: nothing answers it.
+            if !matches!(request.prompt, aura_protocol::UiPrompt::Notify { .. }) {
+                open.insert(request.request_id);
+            }
+        }
+        Ok(
+            AuraEvent::PermissionResolved { request_id, .. }
+            | AuraEvent::UiResolved { request_id, .. },
+        ) => {
+            open.remove(&request_id);
+        }
+        _ => {}
+    }
+}
+
+/// The rows recovery adds, numbered from the chat's next seq.
+struct Appender {
+    next: u32,
+    rows: Vec<EventRow>,
+}
+
+impl Appender {
+    /// Adds a row; returns its seq.
+    fn push(&mut self, turn_id: Option<&str>, event: &AuraEvent, at: Millis) -> u32 {
+        let seq = self.next;
+        self.rows.push(EventRow {
+            seq,
+            turn_id: turn_id.map(str::to_owned),
+            kind: event.kind(),
+            payload: serde_json::to_string(event).unwrap_or_default(),
+            created_at: at,
+        });
+        self.next = self.next.saturating_add(1);
+        seq
+    }
+}
+
+/// An unanswered request: its id, whether it is a question, and the turn it was stored in.
+struct OpenRequest {
+    id: String,
+    question: bool,
+    turn_id: Option<String>,
+}
+
+fn recover_chat(
+    conn: &Connection,
+    chat_id: &str,
+    device_id: &str,
+    limits: &CompactLimits,
+    now: Millis,
+) -> rusqlite::Result<RecoveryReport> {
+    let mut report = RecoveryReport::default();
+    let open = open_requests(conn, chat_id)?;
+    let running: Vec<(String, Millis)> = conn
+        .prepare_cached(
+            "SELECT id, started_at FROM turns WHERE chat_id = ?1 AND status = 'running' ORDER BY first_event_seq",
+        )?
+        .query_map(params![chat_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let max_seq: Option<u32> = conn
+        .prepare_cached("SELECT MAX(seq) FROM events WHERE chat_id = ?1")?
+        .query_row(params![chat_id], |row| row.get(0))?;
+    let mut out = Appender {
+        next: max_seq.map_or(0, |max| max.saturating_add(1)),
+        rows: Vec::new(),
+    };
+
+    for (turn_id, started_at) in &running {
+        let last_at: Option<Millis> = conn
+            .prepare_cached(
+                "SELECT created_at FROM events WHERE turn_id = ?1 ORDER BY seq DESC LIMIT 1",
+            )?
+            .query_row(params![turn_id], |row| row.get(0))
+            .ok();
+        let ended_at = last_at.unwrap_or(*started_at);
+        for request in open
+            .iter()
+            .filter(|request| request.turn_id.as_deref() == Some(turn_id.as_str()))
+        {
+            out.push(Some(turn_id), &resolution(request), ended_at);
+            report.resolved_requests += 1;
+        }
+        let ended_seq = out.push(
+            Some(turn_id),
+            &AuraEvent::TurnEnded {
+                turn_id: turn_id.clone(),
+                stop_reason: StopReason::Interrupted,
+                usage: None,
+                duration_ms: None,
+                recovered: true,
+            },
+            ended_at,
+        );
+        rows::append_events(conn, device_id, chat_id, &std::mem::take(&mut out.rows))?;
+        conn.prepare_cached(
+            "UPDATE turns SET status = 'interrupted', stop_reason = ?2, ended_at = ?3, last_event_seq = ?4 \
+             WHERE id = ?1",
+        )?
+        .execute(params![turn_id, StopReason::Interrupted.as_str(), ended_at, ended_seq])?;
+        report.interrupted_turns += 1;
+    }
+    let running_ids: BTreeSet<&str> = running.iter().map(|(id, _)| id.as_str()).collect();
+    for request in open.iter().filter(|request| {
+        request
+            .turn_id
+            .as_deref()
+            .is_none_or(|turn| !running_ids.contains(turn))
+    }) {
+        out.push(None, &resolution(request), now);
+        report.resolved_requests += 1;
+    }
+    rows::append_events(conn, device_id, chat_id, &out.rows)?;
+
+    let uncompacted: Vec<String> = conn
+        .prepare_cached(
+            "SELECT id FROM turns WHERE chat_id = ?1 AND status <> 'running' AND compacted_at IS NULL \
+             ORDER BY first_event_seq",
+        )?
+        .query_map(params![chat_id], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    for turn_id in uncompacted {
+        if compact::apply(conn, chat_id, &turn_id, device_id, limits, now)? {
+            report.compacted_turns += 1;
+        }
+    }
+    rows::queue_hold(conn, Some(chat_id), true)?;
+    Ok(report)
+}
+
+/// The chat's requests that never got a resolution, in seq order.
+fn open_requests(conn: &Connection, chat_id: &str) -> rusqlite::Result<Vec<OpenRequest>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT turn_id, payload FROM events WHERE chat_id = ?1 \
+         AND kind IN ('permission_requested', 'permission_resolved', 'ui_request', 'ui_resolved') ORDER BY seq",
+    )?;
+    let mut open: Vec<OpenRequest> = Vec::new();
+    for row in stmt.query_map(params![chat_id], |row| {
+        Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?))
+    })? {
+        let (turn_id, payload) = row?;
+        match serde_json::from_str::<AuraEvent>(&payload) {
+            Ok(AuraEvent::PermissionRequested(request)) => open.push(OpenRequest {
+                id: request.request_id,
+                question: false,
+                turn_id,
+            }),
+            Ok(AuraEvent::UiRequest(request)) => {
+                if !matches!(request.prompt, aura_protocol::UiPrompt::Notify { .. }) {
+                    open.push(OpenRequest {
+                        id: request.request_id,
+                        question: true,
+                        turn_id,
+                    });
+                }
+            }
+            Ok(
+                AuraEvent::PermissionResolved { request_id, .. }
+                | AuraEvent::UiResolved { request_id, .. },
+            ) => {
+                open.retain(|request| request.id != request_id);
+            }
+            _ => {}
+        }
+    }
+    Ok(open)
+}
+
+fn resolution(request: &OpenRequest) -> AuraEvent {
+    if request.question {
+        AuraEvent::UiResolved {
+            request_id: request.id.clone(),
+            answer: None,
+            by: ResolvedBy::System,
+        }
+    } else {
+        AuraEvent::PermissionResolved {
+            request_id: request.id.clone(),
+            decision: PermissionDecision::Cancelled,
+            by: ResolvedBy::System,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use aura_protocol::{
+        PermissionOption, PermissionOptionKind, PermissionRequest, ToolKind, UiPrompt, UiRequest,
+    };
+
+    use super::*;
+    use crate::chatstore::QueuedRow;
+    use crate::chatstore::test_support::{TestDb, event_row};
+
+    fn permission(id: &str) -> AuraEvent {
+        AuraEvent::PermissionRequested(PermissionRequest {
+            request_id: id.into(),
+            tool_call_id: None,
+            title: "Run it?".into(),
+            kind: Some(ToolKind::Execute),
+            raw_input: None,
+            content: Vec::new(),
+            locations: Vec::new(),
+            options: vec![PermissionOption {
+                option_id: "allow".into(),
+                kind: PermissionOptionKind::AllowOnce,
+                label: "Allow".into(),
+            }],
+            truncated: None,
+        })
+    }
+
+    fn question(id: &str) -> AuraEvent {
+        AuraEvent::UiRequest(UiRequest {
+            request_id: id.into(),
+            prompt: UiPrompt::Select {
+                message: "Which?".into(),
+                options: vec!["a".into(), "b".into()],
+            },
+        })
+    }
+
+    fn delta(id: &str, text: &str) -> AuraEvent {
+        AuraEvent::MessageDelta {
+            message_id: id.into(),
+            text: text.into(),
+        }
+    }
+
+    /// S1: a running turn ends interrupted and recovered, its open card resolved before its
+    /// `TurnEnded`, compacted, the partial message kept.
+    #[test]
+    fn recovery_interrupts_running_turns() {
+        let mut db = TestDb::new();
+        let chat = db.chat("/work");
+        db.turn(&chat, "t1", 1, 0);
+        db.append(
+            &chat,
+            &[
+                event_row(
+                    0,
+                    Some("t1"),
+                    &AuraEvent::TurnStarted {
+                        turn_id: "t1".into(),
+                        prompt_id: Some("p".into()),
+                    },
+                ),
+                event_row(1, Some("t1"), &delta("t1.m1", "Half an ")),
+                event_row(2, Some("t1"), &delta("t1.m1", "answer")),
+                event_row(3, Some("t1"), &permission("t1.p1")),
+            ],
+        );
+        let report = recover(
+            db.store.conn_mut(),
+            Scope::All,
+            "dev",
+            &CompactLimits::STANDARD,
+            50,
+        )
+        .expect("recover");
+        assert_eq!(
+            report,
+            RecoveryReport {
+                interrupted_turns: 1,
+                resolved_requests: 1,
+                compacted_turns: 1
+            }
+        );
+        let events = db.events(&chat);
+        let tail: Vec<_> = events
+            .iter()
+            .map(|(seq, turn, event)| (*seq, turn.clone(), event.kind()))
+            .collect();
+        assert_eq!(
+            tail,
+            [
+                (0, Some("t1".into()), "turn_started"),
+                (1, Some("t1".into()), "message_delta"),
+                (3, Some("t1".into()), "permission_requested"),
+                (4, Some("t1".into()), "permission_resolved"),
+                (5, Some("t1".into()), "turn_ended"),
+            ]
+        );
+        assert_eq!(events[1].2, delta("t1.m1", "Half an answer"));
+        assert_eq!(
+            events[3].2,
+            AuraEvent::PermissionResolved {
+                request_id: "t1.p1".into(),
+                decision: PermissionDecision::Cancelled,
+                by: ResolvedBy::System
+            }
+        );
+        assert_eq!(
+            events[4].2,
+            AuraEvent::TurnEnded {
+                turn_id: "t1".into(),
+                stop_reason: StopReason::Interrupted,
+                usage: None,
+                duration_ms: None,
+                recovered: true
+            }
+        );
+        let (status, stop_reason, ended_at, last): (String, String, i64, i64) = db
+            .conn()
+            .query_row(
+                "SELECT status, stop_reason, ended_at, last_event_seq FROM turns WHERE id = 't1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("turn");
+        assert_eq!(
+            (status.as_str(), stop_reason.as_str(), ended_at, last),
+            ("interrupted", "interrupted", 3, 5)
+        );
+        // A second recovery finds nothing to do.
+        let again = recover(
+            db.store.conn_mut(),
+            Scope::All,
+            "dev",
+            &CompactLimits::STANDARD,
+            60,
+        )
+        .expect("again");
+        assert_eq!(again, RecoveryReport::default());
+    }
+
+    /// S37: cards and questions open outside a turn (or in an ended one) are resolved `System`
+    /// outside any turn; answered ones and notifications are left alone; queued prompts are held.
+    #[test]
+    fn recovery_resolves_outside_turn_requests() {
+        let mut db = TestDb::new();
+        let chat = db.chat("/work");
+        db.turn(&chat, "t1", 1, 0);
+        db.append(
+            &chat,
+            &[
+                event_row(
+                    0,
+                    Some("t1"),
+                    &AuraEvent::TurnStarted {
+                        turn_id: "t1".into(),
+                        prompt_id: None,
+                    },
+                ),
+                event_row(1, Some("t1"), &permission("t1.p1")),
+                event_row(
+                    2,
+                    Some("t1"),
+                    &AuraEvent::TurnEnded {
+                        turn_id: "t1".into(),
+                        stop_reason: StopReason::EndTurn,
+                        usage: None,
+                        duration_ms: None,
+                        recovered: false,
+                    },
+                ),
+                event_row(3, None, &permission("s.p1")),
+                event_row(4, None, &question("s.p2")),
+                event_row(5, None, &permission("s.p3")),
+                event_row(
+                    6,
+                    None,
+                    &AuraEvent::PermissionResolved {
+                        request_id: "s.p3".into(),
+                        decision: PermissionDecision::Cancelled,
+                        by: ResolvedBy::User,
+                    },
+                ),
+                event_row(
+                    7,
+                    None,
+                    &AuraEvent::UiRequest(UiRequest {
+                        request_id: "s.n".into(),
+                        prompt: UiPrompt::Notify {
+                            message: "fyi".into(),
+                        },
+                    }),
+                ),
+            ],
+        );
+        db.conn()
+            .execute("UPDATE turns SET status = 'completed'", [])
+            .expect("end");
+        rows::queue_put(
+            db.conn(),
+            "dev",
+            &QueuedRow {
+                id: "q".into(),
+                chat_id: chat.clone(),
+                text: "next".into(),
+                held: false,
+                created_at: 1,
+            },
+        )
+        .expect("queue");
+        let report = recover(
+            db.store.conn_mut(),
+            Scope::All,
+            "dev",
+            &CompactLimits::STANDARD,
+            77,
+        )
+        .expect("recover");
+        assert_eq!(report.resolved_requests, 3);
+        assert_eq!(report.interrupted_turns, 0);
+        assert_eq!(report.compacted_turns, 1);
+        let added: Vec<_> = db
+            .events(&chat)
+            .into_iter()
+            .filter(|(seq, _, _)| *seq >= 8)
+            .collect();
+        assert_eq!(
+            added,
+            [
+                (
+                    8,
+                    None,
+                    AuraEvent::PermissionResolved {
+                        request_id: "t1.p1".into(),
+                        decision: PermissionDecision::Cancelled,
+                        by: ResolvedBy::System
+                    }
+                ),
+                (
+                    9,
+                    None,
+                    AuraEvent::PermissionResolved {
+                        request_id: "s.p1".into(),
+                        decision: PermissionDecision::Cancelled,
+                        by: ResolvedBy::System
+                    }
+                ),
+                (
+                    10,
+                    None,
+                    AuraEvent::UiResolved {
+                        request_id: "s.p2".into(),
+                        answer: None,
+                        by: ResolvedBy::System
+                    }
+                ),
+            ]
+        );
+        assert!(rows::queued(db.conn(), &chat).expect("queue")[0].held);
+    }
+
+    #[test]
+    fn per_chat_recovery_touches_only_that_chat() {
+        let mut db = TestDb::new();
+        let a = db.chat("/a");
+        let b = db.chat("/b");
+        for (chat, turn) in [(&a, "ta"), (&b, "tb")] {
+            db.turn(chat, turn, 1, 0);
+            db.append(
+                chat,
+                &[event_row(
+                    0,
+                    Some(turn),
+                    &AuraEvent::TurnStarted {
+                        turn_id: turn.into(),
+                        prompt_id: None,
+                    },
+                )],
+            );
+        }
+        let report = recover(
+            db.store.conn_mut(),
+            Scope::Chat(&a),
+            "dev",
+            &CompactLimits::STANDARD,
+            5,
+        )
+        .expect("recover");
+        assert_eq!(report.interrupted_turns, 1);
+        let status = |turn: &str| -> String {
+            db.conn()
+                .query_row(
+                    "SELECT status FROM turns WHERE id = ?1",
+                    params![turn],
+                    |row| row.get(0),
+                )
+                .expect("status")
+        };
+        assert_eq!(status("ta"), "interrupted");
+        assert_eq!(status("tb"), "running");
+    }
+}
