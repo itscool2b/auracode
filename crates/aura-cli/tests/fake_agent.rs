@@ -383,6 +383,51 @@ mod process {
         assert!(headless.shutdown().await.saved);
     }
 
+    /// From its `nous` provider, which checks the model, Hermes 0.22.5 refuses the switch back to
+    /// its configured `auto:` model outright. The probe says the agent refused a model it offers,
+    /// and the restart brings back the model that was set last.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn probe_reads_a_refused_switch_back_as_the_agents_doing() {
+        let machine = Machine::with_fake_hermes();
+        let headless = machine
+            .headless(&[
+                ("AURA_FAKE_OPEN_DELAY_MS", "300"),
+                ("AURA_FAKE_HERMES_MODELS", "refuse"),
+            ])
+            .await;
+        let folder = repo::create(&machine.path("repo"), RepoKind::Hostile, &headless.registry)
+            .await
+            .expect("the chat folder");
+        let (out, captured) = Out::capture();
+        let outcome = probe::run(
+            &headless,
+            &ProbeArgs {
+                agent: "hermes".into(),
+                env: Vec::new(),
+                folder: None,
+            },
+            &folder,
+            true,
+            PROBE,
+            &out,
+        )
+        .await
+        .expect("the probe runs");
+        let output = captured.text();
+        assert_no_failures(&output);
+        assert_eq!(outcome, Outcome::Passed, "{output}");
+        assert_passed(
+            &output,
+            "4 options: the model switched to fake · mini (fake:mini)",
+        );
+        assert!(
+            output.contains("INFO  4 options: the agent refused to switch back to auto · large (auto:large), a model it offers itself: Internal error"),
+            "{output}"
+        );
+        assert_passed(&output, "7 resume: the options are back as they were");
+        assert!(headless.shutdown().await.saved);
+    }
+
     /// Step 8: an agent that needs a sign-in shows its card, and its protocol log is offered as
     /// the `probe-auth` fixture like every other probe's (spec 10.2).
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

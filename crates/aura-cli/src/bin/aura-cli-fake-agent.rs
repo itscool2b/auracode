@@ -25,7 +25,9 @@
 //! - `AURA_FAKE_HERMES_MODELS`: Hermes 0.22.5's models. The configured model is `auto:large`, and
 //!   a model id names its provider only when the provider is one Hermes knows (`fake`), so a
 //!   switch to `fake:mini` and back to `auto:large` leaves `fake:auto:large`, and `auto:large` is
-//!   offered only while the session's provider is `auto`.
+//!   offered only while the session's provider is `auto`. `AURA_FAKE_HERMES_MODELS=refuse`
+//!   answers that switch back -32603 instead, as Hermes does from its `nous` provider, which
+//!   checks the model.
 //! - `AURA_FAKE_FORGET_UNPROMPTED`: a session exists only from its first prompt, as claude-acp's
 //!   and codex-acp's do: resuming or loading one never prompted answers -32002.
 //! - `AURA_FAKE_SLOW_CHILD_MS` (Unix): `initialize` starts a child in the agent's process group
@@ -136,6 +138,8 @@ struct Session {
 struct Quirks {
     set_delay: Duration,
     hermes_models: bool,
+    /// `AURA_FAKE_HERMES_MODELS=refuse`.
+    refuse_switch_back: bool,
     forget_unprompted: bool,
     slow_child: Option<u64>,
     effort: bool,
@@ -150,6 +154,8 @@ impl Quirks {
             set_delay: millis("AURA_FAKE_SET_DELAY_MS")
                 .map_or(Duration::ZERO, Duration::from_millis),
             hermes_models: on("AURA_FAKE_HERMES_MODELS"),
+            refuse_switch_back: std::env::var("AURA_FAKE_HERMES_MODELS")
+                .is_ok_and(|value| value == "refuse"),
             forget_unprompted: on("AURA_FAKE_FORGET_UNPROMPTED"),
             slow_child: millis("AURA_FAKE_SLOW_CHILD_MS"),
             effort: on("AURA_FAKE_EFFORT"),
@@ -284,6 +290,13 @@ impl Agent {
                     return fail(id, -32602, "unknown session");
                 };
                 let picked = text(params, "modelId");
+                let names_no_provider = !picked.starts_with("fake:");
+                if self.quirks.refuse_switch_back
+                    && names_no_provider
+                    && !session.model.starts_with("auto:")
+                {
+                    return fail(id, -32603, "Internal error");
+                }
                 session.model = if hermes_models {
                     hermes_model_switch(&session.model, &picked)
                 } else {

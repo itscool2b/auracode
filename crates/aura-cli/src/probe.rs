@@ -32,6 +32,8 @@ use serde_json::Value;
 
 use crate::CliError;
 use crate::args::ProbeArgs;
+use aura_core::session::SessionError;
+
 use crate::chat::{ChatRun, StartEnd};
 use crate::headless::Headless;
 use crate::logs;
@@ -68,6 +70,30 @@ impl ProbeTimings {
         log: Duration::from_secs(5),
         install_run: Duration::from_secs(10),
     };
+}
+
+/// Why a model switch did not show.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SetFailure {
+    /// The agent answered the change with an error.
+    Refused(String),
+    /// The change went through, but the session reports another value.
+    NotReported(String),
+    /// The session could not ask (the agent stopped, say).
+    Failed(String),
+}
+
+impl SetFailure {
+    fn text(&self, value: &str) -> String {
+        match self {
+            SetFailure::Refused(error) | SetFailure::Failed(error) => {
+                format!("switching the model to {value} failed: {error}")
+            }
+            SetFailure::NotReported(reported) => {
+                format!("the model was set to {value}, but the session reports {reported}")
+            }
+        }
+    }
 }
 
 /// How long a mode change may take to reach the agent: the driver's option request timeout (30 s,
@@ -297,14 +323,14 @@ impl Probe<'_> {
         self.initialize_step(&chat).await;
         let lists = self.session_step(&chat, &asked).await;
         self.commands_step(&chat).await;
-        self.options_step(&chat, lists.as_ref(), &watch).await;
+        let chosen = self.options_step(&chat, lists.as_ref(), &watch).await;
         self.autonomy_step(&chat).await;
         self.cancel_step(&chat).await;
         let native = chat.info().and_then(|info| info.native_session_id);
         if self.close_step(&chat).await {
             // Step 4 chose every option's value as it was at the start, so a restart, which
             // re-applies what was chosen (5.3.2), must bring those values back.
-            self.resume_step(&chat, lists.as_ref(), native.as_deref())
+            self.resume_step(&chat, chosen.as_ref(), native.as_deref())
                 .await;
             self.interrupted_start_step(&chat).await;
         }
@@ -794,16 +820,18 @@ impl Probe<'_> {
         );
     }
 
+    /// Sets every option to its current value, then switches the model and back. Returns the
+    /// options as chosen: their values at the start, with the model the agent took last.
     async fn options_step(
         &mut self,
         chat: &ChatRun<'_>,
         lists: Option<&SessionLists>,
         watch: &std::sync::Arc<Watch>,
-    ) {
+    ) -> Option<SessionLists> {
         let step = "4 options";
         let Some(lists) = lists else {
             self.report.skip(step, "no options to set");
-            return;
+            return None;
         };
         let mut failed = false;
         for option in &lists.options {
@@ -844,16 +872,27 @@ impl Probe<'_> {
                 Err(error) => self.report.fail(step, error),
             }
         }
-        self.model_switch(chat, lists, watch).await;
+        let mut chosen = lists.clone();
+        if let Some((option_id, value)) = self.model_switch(chat, lists, watch).await
+            && let Some(option) = chosen
+                .options
+                .iter_mut()
+                .find(|option| option.id == option_id)
+            && let ConfigKind::Select { current, .. } = &mut option.kind
+        {
+            *current = value;
+        }
+        Some(chosen)
     }
 
-    /// Switches the model to the cheapest-looking choice and back; both changes must show.
+    /// Switches the model to the cheapest-looking choice and back; both changes must show. Returns
+    /// the model option's id and the value the agent took last, when they changed hands.
     async fn model_switch(
         &mut self,
         chat: &ChatRun<'_>,
         lists: &SessionLists,
         watch: &std::sync::Arc<Watch>,
-    ) {
+    ) -> Option<(String, String)> {
         let step = "4 options";
         let Some(model) = lists
             .options
@@ -861,15 +900,15 @@ impl Probe<'_> {
             .find(|option| option.category == ConfigCategory::Model)
         else {
             self.report.skip(step, "the agent offers no model option");
-            return;
+            return None;
         };
         let ConfigKind::Select { current, choices } = &model.kind else {
             self.report.skip(step, "the model option is not a list");
-            return;
+            return None;
         };
         let Some(target) = switch_target(model) else {
             self.report.skip(step, "only one model is offered");
-            return;
+            return None;
         };
         let original = current.clone();
         let name_of = |value: &str| {
@@ -878,46 +917,74 @@ impl Probe<'_> {
                 .find(|choice| choice.value == value)
                 .map_or_else(|| value.to_owned(), |choice| choice.name.clone())
         };
-        let switched = self.set_model(chat, &model.id, &target).await;
-        if switched {
-            self.report.pass(
-                step,
-                format!("the model switched to {} ({target})", name_of(&target)),
-            );
-            if self.spec.dialect == "hermes" {
-                self.second_session(chat, watch, &original, &target).await;
-            }
-        }
-        if self.set_model(chat, &model.id, &original).await {
-            self.report.pass(
-                step,
-                format!(
-                    "the model switched back to {} ({original})",
-                    name_of(&original)
-                ),
-            );
-            // An agent may change other options with the model (codex-acp: a model that offers
-            // no `ultra` sets `medium`) and keep them when it switches back.
-            if let Ok(now) = chat.lists().await {
-                let others = |options: &[ConfigOption]| -> Vec<ConfigOption> {
-                    options
-                        .iter()
-                        .filter(|option| option.id != model.id)
-                        .cloned()
-                        .collect()
-                };
-                for text in changed_options(&others(&lists.options), &others(&now.options)) {
-                    self.report.info(
-                        step,
-                        format!("switching the model changed {text}, and switching back left it"),
-                    );
+        match self.set_model(chat, &model.id, &target).await {
+            Ok(()) => {
+                self.report.pass(
+                    step,
+                    format!("the model switched to {} ({target})", name_of(&target)),
+                );
+                if self.spec.dialect == "hermes" {
+                    self.second_session(chat, watch, &original, &target).await;
                 }
             }
+            Err(failure) => {
+                self.report.fail(step, failure.text(&target));
+                return None;
+            }
         }
+        match self.set_model(chat, &model.id, &original).await {
+            // Hermes 0.22.5 can't take a session back to its configured `auto:` model: from a
+            // provider that checks the model (its `nous`) it refuses the id it offered itself.
+            Err(SetFailure::Refused(error)) => {
+                self.report.info(
+                    step,
+                    format!(
+                        "the agent refused to switch back to {} ({original}), a model it offers itself: {error}",
+                        name_of(&original)
+                    ),
+                );
+                return Some((model.id.clone(), target));
+            }
+            Err(failure) => {
+                self.report.fail(step, failure.text(&original));
+                return Some((model.id.clone(), target));
+            }
+            Ok(()) => {}
+        }
+        self.report.pass(
+            step,
+            format!(
+                "the model switched back to {} ({original})",
+                name_of(&original)
+            ),
+        );
+        // An agent may change other options with the model (codex-acp: a model that offers
+        // no `ultra` sets `medium`) and keep them when it switches back.
+        if let Ok(now) = chat.lists().await {
+            let others = |options: &[ConfigOption]| -> Vec<ConfigOption> {
+                options
+                    .iter()
+                    .filter(|option| option.id != model.id)
+                    .cloned()
+                    .collect()
+            };
+            for text in changed_options(&others(&lists.options), &others(&now.options)) {
+                self.report.info(
+                    step,
+                    format!("switching the model changed {text}, and switching back left it"),
+                );
+            }
+        }
+        Some((model.id.clone(), original))
     }
 
     /// Sets the model and checks that the session reports it.
-    async fn set_model(&mut self, chat: &ChatRun<'_>, option_id: &str, value: &str) -> bool {
+    async fn set_model(
+        &mut self,
+        chat: &ChatRun<'_>,
+        option_id: &str,
+        value: &str,
+    ) -> Result<(), SetFailure> {
         let step = "4 options";
         let (result, cards) = chat
             .answering(self.headless.manager.set_option(
@@ -950,24 +1017,14 @@ impl Probe<'_> {
                     }
                     tokio::time::sleep(Duration::from_millis(50)).await;
                 };
-                let ok = reported.as_ref() == Some(&wanted);
-                if !ok {
-                    self.report.fail(
-                        step,
-                        format!(
-                            "the model was set to {value}, but the session reports {reported:?}"
-                        ),
-                    );
+                if reported.as_ref() == Some(&wanted) {
+                    Ok(())
+                } else {
+                    Err(SetFailure::NotReported(format!("{reported:?}")))
                 }
-                ok
             }
-            Err(error) => {
-                self.report.fail(
-                    step,
-                    format!("switching the model to {value} failed: {error}"),
-                );
-                false
-            }
+            Err(SessionError::OptionInvalid(message)) => Err(SetFailure::Refused(message)),
+            Err(error) => Err(SetFailure::Failed(error.to_string())),
         }
     }
 
