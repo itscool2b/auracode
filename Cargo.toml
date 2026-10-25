@@ -20,6 +20,8 @@ publish = false
 [workspace.dependencies]
 # internal
 aura-protocol = { path = "crates/aura-protocol" }
+aura-process = { path = "crates/aura-process" }
+aura-agents = { path = "crates/aura-agents" }
 aura-core = { path = "crates/aura-core" }
 aura-drivers = { path = "crates/aura-drivers" }
 
