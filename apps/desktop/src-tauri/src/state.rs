@@ -1,14 +1,14 @@
-//! The app-wide state Tauri manages: startup results, the profile store, the database repair
-//! notice, the background integrity check, running demo streams, and the launch switches.
+//! The app-wide state Tauri manages: startup results, the chat runtime (the chat store and the
+//! session manager), the database repair notice, the quit flow's state, each webview's page, the
+//! background integrity check, running demo streams, and the launch switches.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use aura_core::device::DeviceIdentity;
-use aura_core::owner::ProfileOwner;
 use aura_core::profile::ProfileMeta;
-use aura_core::store::Store;
+use aura_core::session::{SessionError, SessionManager};
 use serde::Serialize;
 
 use crate::boot::{Booted, DbInfo, Recovery};
@@ -18,6 +18,7 @@ use crate::glass::GlassEffect;
 use crate::integrity::IntegrityCheck;
 use crate::launch::{LaunchMode, LaunchOptions};
 use crate::os::OsInfo;
+use crate::sessions::{self, ChatRuntime, Pages, Quit};
 use crate::sync::lock;
 use crate::window::ShowOnce;
 
@@ -62,13 +63,15 @@ pub struct AppState {
     /// The data root as a path (`info.data_dir` is its display string): the one folder the page
     /// may reveal, through `reveal_data_dir`.
     data_dir: Option<PathBuf>,
-    /// The profile database. `rusqlite::Connection` is `Send` but not `Sync`, hence the mutex.
-    store: Mutex<Option<Store>>,
-    /// The profile's owner lock, held for the app's life: one process runs a profile's sessions.
-    _owner: Option<ProfileOwner>,
-    /// The repair whose notice is still shown, until `acknowledge_recovery` succeeds. Locked
-    /// before `store` whenever both are held.
+    /// The chat store (which owns the profile database and its owner lock) and the session
+    /// manager on top of it. `None` when startup failed before they could start.
+    chats: Option<ChatRuntime>,
+    /// The repair whose notice is still shown, until `acknowledge_recovery` succeeds.
     recovery: Mutex<Option<Recovery>>,
+    /// Where quitting stands; shared with the quit and signal tasks.
+    pub quit: Arc<Quit>,
+    /// Each webview's current page, for the sinks of its channels.
+    pub pages: Arc<Pages>,
     /// The background check after a session that did not close the database. Started once the
     /// window is shown, closed at exit before the store.
     pub integrity: IntegrityCheck,
@@ -81,8 +84,11 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// `booted` is what startup produced; `chats` what [`sessions::start_chats`] built from it (the
+    /// store and the owner lock moved there).
     pub fn new(
         booted: Booted,
+        chats: Option<ChatRuntime>,
         os: &OsInfo,
         glass: GlassEffect,
         launch: LaunchOptions,
@@ -113,9 +119,10 @@ impl AppState {
         AppState {
             info,
             data_dir: booted.data_dir,
-            store: Mutex::new(booted.store),
-            _owner: booted.owner,
+            chats,
             recovery: Mutex::new(booted.recovery),
+            quit: Arc::default(),
+            pages: Arc::default(),
             integrity: IntegrityCheck::new(booted.integrity_check),
             demos: DemoSessions::default(),
             launch,
@@ -124,16 +131,14 @@ impl AppState {
         }
     }
 
-    /// The startup snapshot, with what can change since read live: the schema version from the
-    /// database, so the card shows what is on disk now, and the repair notice, which goes once
-    /// dismissed (a reloaded page must not show it again).
+    /// The startup snapshot (the schema version is the one startup opened), with what can change
+    /// since read live: notices that arrived after startup (the sweep's), and the repair notice,
+    /// which goes once dismissed (a reloaded page must not show it again).
     pub fn app_info(&self) -> AppInfo {
         let mut info = self.info.clone();
-        if let (Some(db), Some(store)) = (info.db.as_mut(), lock(&self.store).as_ref()) {
-            match store.schema_version() {
-                Ok(version) => db.schema_version = version,
-                Err(error) => tracing::warn!(%error, "could not read the schema version"),
-            }
+        if let Some(chats) = &self.chats {
+            info.notices
+                .extend(lock(&chats.late_notices).iter().cloned());
         }
         info.recovery_notice = lock(&self.recovery)
             .as_ref()
@@ -147,31 +152,55 @@ impl AppState {
         self.data_dir.as_deref()
     }
 
+    /// The chat store and the session manager, when startup got that far.
+    pub fn chats(&self) -> Option<&ChatRuntime> {
+        self.chats.as_ref()
+    }
+
+    /// The session manager every chat command wraps. Without one (startup failed, and the UI
+    /// shows its error screen) a command answers `storage_unavailable`.
+    pub fn sessions(&self) -> Result<&SessionManager, AppError> {
+        self.chats
+            .as_ref()
+            .map(|chats| &chats.manager)
+            .ok_or_else(|| {
+                SessionError::StorageUnavailable(
+                    "auracode could not open your data when it started".into(),
+                )
+                .into()
+            })
+    }
+
     /// Dismisses the repair notice for good: aura-core removes the repair's record (keeping the
     /// damaged copy), so no later launch reports it. It acknowledges exactly the repair startup
     /// reported; nothing can name another path. With no notice (there was none, or it was already
     /// dismissed) this does nothing, so calling it twice is harmless. On failure the notice stays,
     /// in `app_info` and on the next launch.
-    pub fn acknowledge_recovery(&self) -> Result<(), AppError> {
-        let mut recovery = lock(&self.recovery);
-        let Some(pending) = recovery.as_ref() else {
+    pub async fn acknowledge_recovery(&self) -> Result<(), AppError> {
+        let Some(pending) = lock(&self.recovery).clone() else {
             return Ok(());
         };
-        let store = lock(&self.store);
-        let Some(store) = store.as_ref() else {
+        let Some(chats) = &self.chats else {
             return Err(AppError::new(
                 AppErrorCode::AcknowledgeFailed,
                 "Could not dismiss the notice: the database is closed.",
             ));
         };
-        match store.acknowledge_recovery(&pending.quarantined) {
+        match chats
+            .store
+            .acknowledge_recovery(pending.quarantined.clone())
+            .await
+        {
             Ok(removed) => {
                 if !removed {
                     // Another auracode process (the CLI) acknowledged it, or its record was
                     // removed by hand: either way there is nothing left to report.
                     tracing::info!(quarantined = %pending.quarantined, "the database repair was already acknowledged");
                 }
-                *recovery = None;
+                let mut recovery = lock(&self.recovery);
+                if recovery.as_ref() == Some(&pending) {
+                    *recovery = None;
+                }
                 Ok(())
             }
             Err(error) => {
@@ -184,12 +213,20 @@ impl AppState {
         }
     }
 
-    /// Closes the profile database, at exit. The process ends without running destructors, and
-    /// only a closed connection folds SQLite's write-ahead log back into the file and removes it;
-    /// a log left behind tells the next launch this one did not end cleanly
-    /// (`StoreInfo::unclean_shutdown`). Returns whether a database was open.
-    pub fn close_store(&self) -> bool {
-        lock(&self.store).take().is_some()
+    /// `RunEvent::Exit`: the integrity check closes first, so one that has not begun never starts
+    /// after the store closes (a running one reads through its own connection and ends with the
+    /// process); then every agent process is killed and the store closes within 1 s unless the quit
+    /// flow closed it ([`sessions::exit_last_resort`]); then the demo streams stop. Only a closed
+    /// connection folds SQLite's write-ahead log back into the file; a log left behind tells the
+    /// next launch this one did not end cleanly.
+    pub fn at_exit(&self) {
+        if self.integrity.close() {
+            tracing::info!("the integrity check is still running; it ends with the process");
+        }
+        if let Some(chats) = &self.chats {
+            sessions::exit_last_resort(&self.quit, chats);
+        }
+        self.demos.cancel_all();
     }
 }
 
@@ -209,9 +246,18 @@ mod tests {
         }
     }
 
-    fn state(booted: Booted) -> AppState {
+    /// The state of a launch, with its chats started on fakes (needs a Tokio runtime).
+    fn state(mut booted: Booted) -> AppState {
+        let chats = sessions::testing::start(&mut booted);
         let launch = LaunchOptions::from_lookup(|_| None);
-        AppState::new(booted, &os(), GlassEffect::None, launch, "0.1.0".into())
+        AppState::new(
+            booted,
+            chats,
+            &os(),
+            GlassEffect::None,
+            launch,
+            "0.1.0".into(),
+        )
     }
 
     /// A data root whose database the last launch found damaged and repaired. Returns the folder,
@@ -253,16 +299,32 @@ mod tests {
         notice.ends_with(&format!(" {quarantined}."))
     }
 
-    #[test]
-    fn app_info_combines_startup_os_glass_and_launch() {
+    /// The state of the next launch, after `state` exited.
+    fn state_after_exit(state: AppState, root: &DataRoot) -> AppState {
+        state.at_exit();
+        drop(state);
+        self::state(boot(Ok(root.clone())))
+    }
+
+    #[tokio::test]
+    async fn app_info_combines_startup_os_glass_and_launch() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let booted = boot(Ok(DataRoot::at(dir.path().join("data"))));
+        let mut booted = boot(Ok(DataRoot::at(dir.path().join("data"))));
+        let chats = sessions::testing::start(&mut booted);
+        assert!(chats.is_some());
         let launch = LaunchOptions::from_lookup(|name| match name {
             STRESS_ENV => Some("orbs=0".into()),
             NO_GLASS_ENV => Some("1".into()),
             _ => None,
         });
-        let state = AppState::new(booted, &os(), GlassEffect::None, launch, "0.1.0".into());
+        let state = AppState::new(
+            booted,
+            chats,
+            &os(),
+            GlassEffect::None,
+            launch,
+            "0.1.0".into(),
+        );
         let info = state.app_info();
 
         assert_eq!(info.app_version, "0.1.0");
@@ -281,6 +343,7 @@ mod tests {
         );
         assert_eq!(info.notices.len(), 2, "{:?}", info.notices);
         assert!(info.notices[0].starts_with("AURACODE_STRESS was ignored"));
+        assert!(state.sessions().is_ok());
 
         let data = dir.path().join("data");
         assert_eq!(state.data_dir(), Some(data.as_path()));
@@ -290,10 +353,26 @@ mod tests {
             None,
             "a first launch checks nothing"
         );
+        state.at_exit();
     }
 
-    #[test]
-    fn closing_the_store_at_exit_leaves_no_write_ahead_log() {
+    /// The sweep's notice arrives after startup and shows with the others from then on.
+    #[tokio::test]
+    async fn notices_that_arrive_after_startup_are_listed() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let state = state(boot(Ok(DataRoot::at(dir.path().join("data")))));
+        assert!(state.app_info().notices.is_empty());
+        let chats = state.chats().expect("chats");
+        lock(&chats.late_notices).push("auracode stopped 1 agent process.".into());
+        assert_eq!(
+            state.app_info().notices,
+            ["auracode stopped 1 agent process."]
+        );
+        state.at_exit();
+    }
+
+    #[tokio::test]
+    async fn exiting_closes_the_store_and_leaves_no_write_ahead_log() {
         let dir = tempfile::tempdir().expect("tempdir");
         let booted = boot(Ok(DataRoot::at(dir.path().join("data"))));
         let db = PathBuf::from(&booted.db.as_ref().expect("db").path);
@@ -304,18 +383,26 @@ mod tests {
             "creating the database wrote to its log"
         );
 
-        assert!(state.close_store());
+        state.at_exit();
         assert!(!wal.exists(), "the log was folded back into the database");
-        assert!(!state.close_store(), "closing twice is harmless");
+        assert!(state.quit.store_closed());
+        state.at_exit();
         // The startup facts are still there for a late app_info.
         assert!(state.app_info().db.is_some());
     }
 
-    #[test]
-    fn a_failed_startup_still_answers_app_info() {
+    #[tokio::test]
+    async fn a_failed_startup_still_answers_app_info() {
         let booted = boot(Err(aura_core::CoreError::NoDataDir));
         let launch = LaunchOptions::from_lookup(|_| None);
-        let state = AppState::new(booted, &os(), GlassEffect::Vibrancy, launch, "0.1.0".into());
+        let state = AppState::new(
+            booted,
+            None,
+            &os(),
+            GlassEffect::Vibrancy,
+            launch,
+            "0.1.0".into(),
+        );
         let info = state.app_info();
         assert!(info.fatal.is_some());
         assert_eq!(info.data_dir, None);
@@ -328,10 +415,14 @@ mod tests {
         assert_eq!(json["launch"]["type"], "normal");
         assert!(json["device"].is_null());
         assert!(json["recovery_notice"].is_null());
+
+        let error = state.sessions().expect_err("no sessions");
+        assert_eq!(error.code, AppErrorCode::StorageUnavailable);
+        state.at_exit();
     }
 
-    #[test]
-    fn a_dismissed_repair_notice_is_gone_now_and_on_the_next_launch() {
+    #[tokio::test]
+    async fn a_dismissed_repair_notice_is_gone_now_and_on_the_next_launch() {
         let (_dir, root, quarantined) = repaired();
         let state = state(boot(Ok(root.clone())));
         let info = state.app_info();
@@ -339,7 +430,7 @@ mod tests {
         assert!(names(&notice, &quarantined), "{notice}");
         assert!(info.notices.is_empty(), "{:?}", info.notices);
 
-        state.acknowledge_recovery().expect("acknowledge");
+        state.acknowledge_recovery().await.expect("acknowledge");
         assert_eq!(
             state.app_info().recovery_notice,
             None,
@@ -353,50 +444,51 @@ mod tests {
             Path::new(&quarantined).exists(),
             "the damaged copy itself is kept"
         );
-        drop(state);
 
-        let next = state_after_exit(&root);
+        let next = state_after_exit(state, &root);
         assert_eq!(next.app_info().recovery_notice, None);
         assert_eq!(next.app_info().db.expect("db").outcome, OpenOutcome::Opened);
+        next.at_exit();
     }
 
-    /// The state of the next launch.
-    fn state_after_exit(root: &DataRoot) -> AppState {
-        state(boot(Ok(root.clone())))
-    }
-
-    #[test]
-    fn acknowledging_twice_is_harmless() {
+    #[tokio::test]
+    async fn acknowledging_twice_is_harmless() {
         let (_dir, root, quarantined) = repaired();
         let state = state(boot(Ok(root.clone())));
-        state.acknowledge_recovery().expect("acknowledge");
+        state.acknowledge_recovery().await.expect("acknowledge");
         state
             .acknowledge_recovery()
+            .await
             .expect("a second acknowledge does nothing");
         assert_eq!(state.app_info().recovery_notice, None);
         assert!(Path::new(&quarantined).exists());
-        drop(state);
-        assert_eq!(state_after_exit(&root).app_info().recovery_notice, None);
+        let next = state_after_exit(state, &root);
+        assert_eq!(next.app_info().recovery_notice, None);
+        next.at_exit();
     }
 
-    #[test]
-    fn acknowledging_without_a_notice_does_nothing() {
+    #[tokio::test]
+    async fn acknowledging_without_a_notice_does_nothing() {
         let dir = tempfile::tempdir().expect("tempdir");
         let state = state(boot(Ok(DataRoot::at(dir.path().join("data")))));
         assert_eq!(state.app_info().recovery_notice, None);
-        state.acknowledge_recovery().expect("nothing to dismiss");
-        // Not even a store is needed when there is nothing to acknowledge.
-        state.close_store();
         state
             .acknowledge_recovery()
+            .await
+            .expect("nothing to dismiss");
+        // Not even a store is needed when there is nothing to acknowledge.
+        state.at_exit();
+        state
+            .acknowledge_recovery()
+            .await
             .expect("still nothing to dismiss");
     }
 
     /// The page passes no path, and the shell passes on only the one startup recorded: with two
     /// repairs on record, dismissing the reported (newest) one leaves the older one, which the next
     /// launch reports in turn.
-    #[test]
-    fn only_the_repair_startup_reported_is_acknowledged() {
+    #[tokio::test]
+    async fn only_the_repair_startup_reported_is_acknowledged() {
         let (_dir, root, older) = repaired();
         let newer = damage_and_repair(&root);
         assert_ne!(older, newer);
@@ -404,27 +496,28 @@ mod tests {
         let state = state(boot(Ok(root.clone())));
         let notice = state.app_info().recovery_notice.expect("a notice");
         assert!(names(&notice, &newer), "the newest repair first: {notice}");
-        state.acknowledge_recovery().expect("acknowledge");
+        state.acknowledge_recovery().await.expect("acknowledge");
         assert!(!record(&newer).exists());
         assert!(record(&older).exists(), "the other repair was not touched");
-        drop(state);
 
-        let next = state_after_exit(&root);
+        let next = state_after_exit(state, &root);
         let notice = next.app_info().recovery_notice.expect("the older repair");
         assert!(names(&notice, &older), "{notice}");
+        next.at_exit();
     }
 
-    #[test]
-    fn acknowledging_with_the_store_closed_fails_and_keeps_the_notice() {
+    #[tokio::test]
+    async fn acknowledging_with_the_store_closed_fails_and_keeps_the_notice() {
         let (_dir, root, quarantined) = repaired();
         let state = state(boot(Ok(root.clone())));
-        assert!(state.close_store());
+        state.at_exit();
         let error = state
             .acknowledge_recovery()
+            .await
             .expect_err("the store is closed");
         assert_eq!(error.code, AppErrorCode::AcknowledgeFailed);
         assert!(
-            error.message.contains("database is closed"),
+            error.message.starts_with("Could not dismiss the notice: "),
             "{}",
             error.message
         );
@@ -433,18 +526,42 @@ mod tests {
             "the notice stays"
         );
         assert!(record(&quarantined).exists());
-        drop(state);
+        let next = state_after_exit(state, &root);
         assert!(
-            state_after_exit(&root).app_info().recovery_notice.is_some(),
+            next.app_info().recovery_notice.is_some(),
             "and shows again on the next launch"
         );
+        next.at_exit();
+    }
+
+    /// Without chats at all (startup failed after the repair was found), dismissing fails and the
+    /// notice stays.
+    #[tokio::test]
+    async fn acknowledging_without_chats_fails_and_keeps_the_notice() {
+        let (_dir, root, _quarantined) = repaired();
+        let booted = boot(Ok(root));
+        let launch = LaunchOptions::from_lookup(|_| None);
+        let state = AppState::new(
+            booted,
+            None,
+            &os(),
+            GlassEffect::None,
+            launch,
+            "0.1.0".into(),
+        );
+        let error = state
+            .acknowledge_recovery()
+            .await
+            .expect_err("no store to ask");
+        assert_eq!(error.code, AppErrorCode::AcknowledgeFailed);
+        assert!(state.app_info().recovery_notice.is_some());
     }
 
     /// An I/O failure (here: no permission to delete in the backups folder) keeps the notice, and
     /// a later attempt that can write succeeds.
     #[cfg(unix)]
-    #[test]
-    fn acknowledging_that_cannot_remove_the_record_fails_and_keeps_the_notice() {
+    #[tokio::test]
+    async fn acknowledging_that_cannot_remove_the_record_fails_and_keeps_the_notice() {
         use std::os::unix::fs::PermissionsExt;
 
         let (_dir, root, quarantined) = repaired();
@@ -456,10 +573,11 @@ mod tests {
         if std::fs::write(backups.join("probe"), b"").is_ok() {
             std::fs::set_permissions(backups, mode).expect("restore");
             eprintln!("skipped: this user can write to a read-only folder");
+            state.at_exit();
             return;
         }
 
-        let result = state.acknowledge_recovery();
+        let result = state.acknowledge_recovery().await;
         std::fs::set_permissions(backups, mode).expect("restore");
         let error = result.expect_err("the record could not be removed");
         assert_eq!(error.code, AppErrorCode::AcknowledgeFailed);
@@ -477,12 +595,14 @@ mod tests {
 
         state
             .acknowledge_recovery()
+            .await
             .expect("works once it can write");
         assert_eq!(state.app_info().recovery_notice, None);
+        state.at_exit();
     }
 
-    #[test]
-    fn a_launch_after_a_crash_holds_its_integrity_check_until_the_window_shows() {
+    #[tokio::test]
+    async fn a_launch_after_a_crash_holds_its_integrity_check_until_the_window_shows() {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = DataRoot::at(dir.path().join("data"));
         let first = boot(Ok(root.clone()));
@@ -501,5 +621,6 @@ mod tests {
         assert_eq!(state.integrity.pending(), Some(db));
         assert!(!state.integrity.close(), "nothing running yet");
         assert_eq!(state.integrity.pending(), None, "and now nothing ever will");
+        state.at_exit();
     }
 }

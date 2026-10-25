@@ -51,7 +51,10 @@ export const commands = {
 	 *  background, and an agent still being checked reads `checking`.
 	 */
 	agentsList: () => __TAURI_INVOKE<AgentEntry[]>("agents_list"),
-	/**  Resolves the environment again and probes every agent, in parallel, within 15 s. */
+	/**
+	 *  Resolves the environment again and probes every agent, in parallel, within 15 s; agents whose
+	 *  probe has not ended by then keep their last known availability.
+	 */
 	agentsRefresh: () => __TAURI_INVOKE<AgentEntry[]>("agents_refresh"),
 	/**
 	 *  The environment agents start with: resolving, resolved (and how), or a fallback, with the
