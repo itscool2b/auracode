@@ -54,7 +54,8 @@ pub struct ProbeTimings {
     pub settle: Duration,
     /// How long a written record may take to reach the log file.
     pub log: Duration,
-    /// How long a first install runs before step 9 interrupts it.
+    /// How long step 9 waits for a first install's npm to run before it interrupts the install
+    /// anyway (at once once npm shows in the process table).
     pub install_run: Duration,
 }
 
@@ -65,7 +66,7 @@ impl ProbeTimings {
         commands: Duration::from_secs(3),
         settle: Duration::from_millis(500),
         log: Duration::from_secs(5),
-        install_run: Duration::from_secs(2),
+        install_run: Duration::from_secs(10),
     };
 }
 
@@ -319,7 +320,19 @@ impl Probe<'_> {
                 .fail(step, "the first start never showed the adapter's download");
             return;
         }
-        tokio::time::sleep(self.timings.install_run).await;
+        // A small adapter installs within a second or two, so the interrupt goes as soon as npm
+        // runs (or once the wait is over where no process table can show it).
+        let deadline = Instant::now() + self.timings.install_run;
+        while Instant::now() < deadline && !is_installed(adapter) {
+            match ps::snapshot() {
+                Some(table) if npm_install_running(&table) => break,
+                Some(_) => tokio::time::sleep(Duration::from_millis(50)).await,
+                None => {
+                    tokio::time::sleep_until(deadline.into()).await;
+                    break;
+                }
+            }
+        }
         if let Err(error) = self.headless.manager.interrupt(&chat.chat_id).await {
             self.report.fail(step, error);
             return;
@@ -1584,6 +1597,14 @@ pub fn adapter_folder(headless: &Headless, spec: &AgentSpec) -> Option<PathBuf> 
     }
 }
 
+/// Whether the adapter install's npm runs: `npm ci` with the flags the install gives it (spec 4).
+fn npm_install_running(table: &[ProcInfo]) -> bool {
+    table.iter().any(|info| {
+        let has = |word: &str| info.argv.iter().any(|arg| arg == word);
+        has("ci") && has("--omit=optional") && has("--ignore-scripts")
+    })
+}
+
 /// Whether an adapter folder holds a complete install (its marker).
 fn is_installed(folder: &Path) -> bool {
     folder.join("installed.json").is_file()
@@ -2092,6 +2113,32 @@ mod tests {
         assert_eq!(switch_target(&mock).as_deref(), Some("mock-smart"));
         assert_eq!(cheapest(&mock).as_deref(), Some("mock-fast"));
         assert_eq!(switch_target(&model("only", &[("only", "Only")])), None);
+    }
+
+    /// The interrupt during a first install lands while npm runs: codex-acp's install (15 MB) was
+    /// over before a fixed two-second wait ended, so step 9 never interrupted it.
+    #[test]
+    fn the_install_interrupt_waits_for_npm_to_run() {
+        let proc = |pid: u32, argv: &str| ProcInfo {
+            pid,
+            ppid: 1,
+            pgid: pid,
+            sid: None,
+            start: aura_process::ptable::StartTime::Unknown,
+            argv: argv.split(' ').map(str::to_owned).collect(),
+        };
+        let quiet = vec![
+            proc(10, "/bin/zsh"),
+            proc(11, "node /opt/homebrew/bin/npm ci"),
+            proc(12, "node /opt/homebrew/bin/npm install --omit=optional"),
+        ];
+        assert!(!npm_install_running(&quiet));
+        let mut installing = quiet;
+        installing.push(proc(
+            13,
+            "node /opt/homebrew/bin/npm ci --omit=optional --ignore-scripts --no-audit --no-fund",
+        ));
+        assert!(npm_install_running(&installing));
     }
 
     /// codex-acp's models (codex 0.164.0) carry no size in their ids or names; their descriptions
