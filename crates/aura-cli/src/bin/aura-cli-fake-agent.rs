@@ -30,6 +30,8 @@
 //!   and codex-acp's do: resuming or loading one never prompted answers -32002.
 //! - `AURA_FAKE_SLOW_CHILD_MS` (Unix): `initialize` starts a child in the agent's process group
 //!   that exits this long after a SIGTERM, as claude-agent-acp's `claude auth status` does.
+//! - `AURA_FAKE_AUTH_REQUIRED`: no one is signed in: `session/new` answers -32000, as codex-acp
+//!   does with an empty `CODEX_HOME`.
 //! - `AURA_FAKE_EFFORT`: an `effort` config option (`thought_level`) that follows the model, as
 //!   codex-acp's does: `fake:mini` offers no `high`, so a switch to it from `high` sets `medium`
 //!   (told in a `config_option_update`), and switching back keeps `medium`.
@@ -137,6 +139,7 @@ struct Quirks {
     forget_unprompted: bool,
     slow_child: Option<u64>,
     effort: bool,
+    auth_required: bool,
 }
 
 impl Quirks {
@@ -150,6 +153,7 @@ impl Quirks {
             forget_unprompted: on("AURA_FAKE_FORGET_UNPROMPTED"),
             slow_child: millis("AURA_FAKE_SLOW_CHILD_MS"),
             effort: on("AURA_FAKE_EFFORT"),
+            auth_required: on("AURA_FAKE_AUTH_REQUIRED"),
         }
     }
 }
@@ -223,6 +227,9 @@ impl Agent {
             }
             "session/new" => {
                 std::thread::sleep(self.open_delay);
+                if self.quirks.auth_required {
+                    return fail(id, -32000, "Authentication required");
+                }
                 let session = Session {
                     id: format!("fake-{}-{}", std::process::id(), self.sessions.len() + 1),
                     cwd: PathBuf::from(text(params, "cwd")),

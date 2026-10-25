@@ -272,6 +272,10 @@ impl Probe<'_> {
                     .pass("start", format!("ready in {:.1} s", took.as_secs_f64()));
             }
             StartEnd::AuthRequired => {
+                self.main_log = chat.logs().last().cloned();
+                if let Some(log) = self.main_log.clone() {
+                    self.named_logs.push((log, "probe-auth"));
+                }
                 self.initialize_step(&chat).await;
                 self.auth_step(&chat).await;
                 self.end(&chat).await;

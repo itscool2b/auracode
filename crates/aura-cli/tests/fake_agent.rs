@@ -383,6 +383,45 @@ mod process {
         assert!(headless.shutdown().await.saved);
     }
 
+    /// Step 8: an agent that needs a sign-in shows its card, and its protocol log is offered as
+    /// the `probe-auth` fixture like every other probe's (spec 10.2).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn probe_shows_the_sign_in_card_and_offers_its_log() {
+        let machine = Machine::with_fake_hermes();
+        let headless = machine.headless(&[("AURA_FAKE_AUTH_REQUIRED", "1")]).await;
+        let folder = repo::create(&machine.path("repo"), RepoKind::Hostile, &headless.registry)
+            .await
+            .expect("the chat folder");
+        let (out, captured) = Out::capture();
+        let outcome = probe::run(
+            &headless,
+            &ProbeArgs {
+                agent: "hermes".into(),
+                env: Vec::new(),
+                folder: None,
+            },
+            &folder,
+            true,
+            PROBE,
+            &out,
+        )
+        .await
+        .expect("the probe runs");
+        let output = captured.text();
+        assert_no_failures(&output);
+        assert_eq!(outcome, Outcome::Passed, "{output}");
+        assert!(
+            output
+                .contains("INFO  8 auth: the agent needs a sign-in: Hermes needs you to sign in."),
+            "{output}"
+        );
+        let logs = named_logs(&output);
+        let names: Vec<&str> = logs.iter().map(|(_, name)| name.as_str()).collect();
+        assert_eq!(names, ["probe-auth"], "{output}");
+        assert!(headless.shutdown().await.saved);
+        curates_and_replays(&machine, &logs[0].0, "probe-auth");
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn smoke_runs_every_scenario_against_a_real_process() {
         let machine = Machine::with_fake_hermes();
