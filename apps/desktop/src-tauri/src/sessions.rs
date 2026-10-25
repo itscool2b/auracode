@@ -942,7 +942,7 @@ mod tests {
     use tauri::ipc::InvokeResponseBody;
 
     use super::*;
-    use crate::boot::boot;
+    use crate::boot::{boot, boot_next};
 
     fn frame(chat: &str, seq: u32) -> EventBatch {
         EventBatch {
@@ -1150,7 +1150,7 @@ mod tests {
 
         assert!(chats.store.shutdown(QUIT_STORE_DEADLINE).await);
         drop(chats);
-        let third = boot(Ok(root));
+        let third = boot_next(&root);
         assert_eq!(third.fatal, None, "free once the store closed");
         assert_eq!(third.integrity_check, None, "and closed cleanly");
     }
@@ -1414,7 +1414,7 @@ mod tests {
         );
         drop(chats);
 
-        let next = boot(Ok(root));
+        let next = boot_next(&root);
         assert_eq!(next.fatal, None);
         assert_eq!(next.db.expect("db").outcome, OpenOutcome::Opened);
         assert_eq!(next.integrity_check, None, "a clean shutdown");
@@ -1433,7 +1433,7 @@ mod tests {
         assert!(quit.store_closed());
         assert!(!exit_last_resort(&quit, &chats), "only once");
         drop(chats);
-        let next = boot(Ok(root));
+        let next = boot_next(&root);
         assert_eq!(next.integrity_check, None);
     }
 

@@ -166,6 +166,27 @@ pub fn boot(root: aura_core::Result<DataRoot>) -> Booted {
     booted
 }
 
+/// Boots `root` as the next launch does, once the last owner's lock is really free. A test that
+/// drops an owner and boots again at once can find the lock still held for a moment: a process
+/// another test spawns at that instant holds a copy of every open file until its exec closes the
+/// close-on-exec ones. So this retries `ProfileInUse` for up to 5 s.
+#[cfg(test)]
+pub(crate) fn boot_next(root: &DataRoot) -> Booted {
+    use std::time::{Duration, Instant};
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let booted = boot(Ok(root.clone()));
+        let in_use = booted.fatal.as_deref().is_some_and(|fatal| {
+            fatal.starts_with("auracode is already running with the profile in ")
+        });
+        if !in_use || Instant::now() >= deadline {
+            return booted;
+        }
+        drop(booted);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 /// The notice for a database aura-core had to repair: how much of it the new database holds, and
 /// where the damaged original is, since whatever the copy lacks is only there.
 pub fn recovery_notice(quarantined: &str, salvage: &Salvage) -> String {
@@ -258,7 +279,7 @@ mod tests {
         let device_id = first.device.expect("device").device_id;
         drop(first.store);
         drop(first.owner);
-        let second = boot(Ok(root));
+        let second = boot_next(&root);
         assert_eq!(second.fatal, None);
         assert_eq!(second.device.expect("device").device_id, device_id);
         assert_eq!(second.db.expect("db").outcome, OpenOutcome::Opened);
@@ -276,13 +297,13 @@ mod tests {
         crash(first.store.expect("store"));
         drop(first.owner);
 
-        let second = boot(Ok(root.clone()));
+        let second = boot_next(&root);
         assert_eq!(second.fatal, None);
         assert_eq!(second.db.as_ref().expect("db").outcome, OpenOutcome::Opened);
         assert_eq!(second.integrity_check, Some(db), "the store's own file");
         drop(second);
 
-        let third = boot(Ok(root));
+        let third = boot_next(&root);
         assert_eq!(
             third.integrity_check, None,
             "the launch after the crash closed the database cleanly"
@@ -310,7 +331,7 @@ mod tests {
         drop(first.owner);
         fs::write(&db_path, vec![0x5a; 8192]).expect("corrupt the database");
 
-        let booted = boot(Ok(root.clone()));
+        let booted = boot_next(&root);
         assert_eq!(booted.fatal, None);
         let db = booted.db.expect("db");
         let OpenOutcome::RecoveredFromCorruption {
@@ -343,7 +364,7 @@ mod tests {
         drop(booted.store);
         drop(booted.owner);
 
-        let again = boot(Ok(root));
+        let again = boot_next(&root);
         assert_eq!(
             again.recovery.as_ref().map(|r| r.quarantined.as_str()),
             Some(quarantined.as_str()),
@@ -390,7 +411,7 @@ mod tests {
         drop(first.owner);
         let before = fs::read(&db_path).expect("read");
 
-        let booted = boot(Ok(root));
+        let booted = boot_next(&root);
         let fatal = booted.fatal.expect("fatal error");
         assert!(fatal.contains("newer version of auracode"), "{fatal}");
         assert!(booted.store.is_none());
@@ -433,7 +454,7 @@ mod tests {
         drop(second);
 
         drop(first);
-        let third = boot(Ok(root));
+        let third = boot_next(&root);
         assert_eq!(third.fatal, None, "free once the first launch ended");
         assert!(third.owner.is_some());
     }

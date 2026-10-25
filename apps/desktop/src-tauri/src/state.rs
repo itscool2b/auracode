@@ -233,7 +233,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::boot::boot;
+    use crate::boot::{boot, boot_next};
     use crate::launch::{NO_GLASS_ENV, STRESS_ENV};
     use aura_core::paths::DataRoot;
     use aura_core::store::OpenOutcome;
@@ -271,11 +271,11 @@ mod tests {
 
     /// Damages `root`'s database and boots, which repairs it. Returns where the damaged copy went.
     fn damage_and_repair(root: &DataRoot) -> String {
-        let first = boot(Ok(root.clone()));
+        let first = boot_next(root);
         let db = PathBuf::from(&first.db.as_ref().expect("db").path);
         drop(first);
         std::fs::write(&db, vec![0x5a; 8192]).expect("damage the database");
-        let repaired = boot(Ok(root.clone()));
+        let repaired = boot_next(root);
         let quarantined = repaired
             .recovery
             .as_ref()
@@ -303,7 +303,7 @@ mod tests {
     fn state_after_exit(state: AppState, root: &DataRoot) -> AppState {
         state.at_exit();
         drop(state);
-        self::state(boot(Ok(root.clone())))
+        self::state(boot_next(root))
     }
 
     #[tokio::test]
@@ -424,7 +424,7 @@ mod tests {
     #[tokio::test]
     async fn a_dismissed_repair_notice_is_gone_now_and_on_the_next_launch() {
         let (_dir, root, quarantined) = repaired();
-        let state = state(boot(Ok(root.clone())));
+        let state = state(boot_next(&root));
         let info = state.app_info();
         let notice = info.recovery_notice.expect("the repair is still reported");
         assert!(names(&notice, &quarantined), "{notice}");
@@ -454,7 +454,7 @@ mod tests {
     #[tokio::test]
     async fn acknowledging_twice_is_harmless() {
         let (_dir, root, quarantined) = repaired();
-        let state = state(boot(Ok(root.clone())));
+        let state = state(boot_next(&root));
         state.acknowledge_recovery().await.expect("acknowledge");
         state
             .acknowledge_recovery()
@@ -493,7 +493,7 @@ mod tests {
         let newer = damage_and_repair(&root);
         assert_ne!(older, newer);
 
-        let state = state(boot(Ok(root.clone())));
+        let state = state(boot_next(&root));
         let notice = state.app_info().recovery_notice.expect("a notice");
         assert!(names(&notice, &newer), "the newest repair first: {notice}");
         state.acknowledge_recovery().await.expect("acknowledge");
@@ -509,7 +509,7 @@ mod tests {
     #[tokio::test]
     async fn acknowledging_with_the_store_closed_fails_and_keeps_the_notice() {
         let (_dir, root, quarantined) = repaired();
-        let state = state(boot(Ok(root.clone())));
+        let state = state(boot_next(&root));
         state.at_exit();
         let error = state
             .acknowledge_recovery()
@@ -539,7 +539,7 @@ mod tests {
     #[tokio::test]
     async fn acknowledging_without_chats_fails_and_keeps_the_notice() {
         let (_dir, root, _quarantined) = repaired();
-        let booted = boot(Ok(root));
+        let booted = boot_next(&root);
         let launch = LaunchOptions::from_lookup(|_| None);
         let state = AppState::new(
             booted,
@@ -565,7 +565,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         let (_dir, root, quarantined) = repaired();
-        let state = state(boot(Ok(root.clone())));
+        let state = state(boot_next(&root));
         let backups = Path::new(&quarantined).parent().expect("backups folder");
         let mode = std::fs::metadata(backups).expect("metadata").permissions();
         std::fs::set_permissions(backups, std::fs::Permissions::from_mode(0o500)).expect("chmod");
@@ -617,7 +617,7 @@ mod tests {
         std::fs::write(&db, file).expect("restore");
         std::fs::write(&wal, log).expect("restore the log");
 
-        let state = state(boot(Ok(root)));
+        let state = state(boot_next(&root));
         assert_eq!(state.integrity.pending(), Some(db));
         assert!(!state.integrity.close(), "nothing running yet");
         assert_eq!(state.integrity.pending(), None, "and now nothing ever will");

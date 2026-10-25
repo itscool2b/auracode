@@ -471,7 +471,17 @@ pub async fn chat_reveal_log(state: State<'_, AppState>, chat_id: String) -> Res
     let manager = state.sessions()?;
     // The id joins a path below, so only a chat this profile has gets that far.
     let known = sessions::is_plain_id(&chat_id)
-        && manager.chats().await?.iter().any(|chat| chat.id == chat_id);
+        && manager
+            .chats()
+            .await
+            .map_err(|error| {
+                AppError::new(
+                    AppErrorCode::RevealFailed,
+                    format!("Could not show the chat's log: {error}"),
+                )
+            })?
+            .iter()
+            .any(|chat| chat.id == chat_id);
     if !known {
         return Err(SessionError::ChatNotFound(chat_id).into());
     }
