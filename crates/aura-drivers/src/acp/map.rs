@@ -109,7 +109,8 @@ pub struct Mapper {
     turn: Option<String>,
     counters: HashMap<String, Counters>,
     tools: HashMap<String, Tool>,
-    /// Tool call ids seen only in permission requests (Hermes' `perm-check-N`): never blocks.
+    /// Tool call ids seen only in permission requests (Hermes' `perm-check-N`): no block, and the
+    /// status-only updates that close their cards are dropped, until an update brings more.
     permission_only: HashSet<String>,
     message: Option<Open>,
     thought: Option<Open>,
@@ -198,12 +199,16 @@ impl Mapper {
             }
             Update::ToolCallUpdate(fields) => {
                 events.extend(self.close_open(now));
-                if self.permission_only.contains(&fields.tool_call_id) {
-                    // The permission card already showed it; a block would be a stray "Tool".
+                if self.permission_only.contains(&fields.tool_call_id) && !shows_more(&fields) {
+                    // A permission card's close (Hermes sends its status alone): the card showed
+                    // it, and a block would be a stray "Tool".
                     if events.is_empty() {
                         return Mapped::Nothing("an update to a permission request's tool call");
                     }
                 } else {
+                    // Output for a tool the agent named only in a permission request is a block
+                    // after all (A3), and later updates land on it.
+                    self.permission_only.remove(&fields.tool_call_id);
                     events.extend(self.tool_call_update(fields));
                 }
             }
@@ -461,6 +466,26 @@ impl Mapper {
 
 fn tagged(turn: Option<String>, event: AuraEvent) -> DriverEvent {
     DriverEvent::Event { turn, event }
+}
+
+/// Whether an update carries anything beyond its tool call id and status: a title, name or kind,
+/// content, locations or raw input. Empty values count as nothing.
+fn shows_more(fields: &ToolFields) -> bool {
+    fields
+        .title
+        .as_deref()
+        .is_some_and(|title| !title.is_empty())
+        || fields.name.as_deref().is_some_and(|name| !name.is_empty())
+        || fields.kind.is_some()
+        || fields
+            .content
+            .as_ref()
+            .is_some_and(|content| !content.is_empty())
+        || fields
+            .locations
+            .as_ref()
+            .is_some_and(|locations| !locations.is_empty())
+        || fields.raw_input.is_some()
 }
 
 fn thought_completed(open: Open, now: Instant) -> DriverEvent {
@@ -1057,6 +1082,100 @@ mod tests {
         );
         assert_eq!(mapper.mint_permission(), "T.p1");
         assert_eq!(mapper.mint_permission(), "T.p2");
+    }
+
+    #[test]
+    fn a_permissions_tool_call_becomes_a_block_once_an_update_brings_output() {
+        let mut mapper = in_turn();
+        assert_eq!(mapper.permission_tool("ask-1"), None);
+        // Empty values bring nothing: still the card's own business.
+        assert_eq!(
+            mapper.map(
+                update(
+                    json!({"sessionUpdate": "tool_call_update", "toolCallId": "ask-1",
+                "status": "in_progress", "title": "", "content": [], "locations": []})
+                ),
+                Instant::now()
+            ),
+            Mapped::Nothing("an update to a permission request's tool call")
+        );
+        // Output for a tool the agent announced only through the permission request: the block
+        // is synthesized (A3), so the output is not lost.
+        assert_eq!(
+            events(
+                &mut mapper,
+                json!({"sessionUpdate": "tool_call_update", "toolCallId": "ask-1", "status": "completed",
+                       "content": [{"type": "content", "content": {"type": "text", "text": "done"}}]})
+            ),
+            [
+                event(
+                    Some("T"),
+                    AuraEvent::ToolCall(ToolCall {
+                        tool_call_id: "T.ask-1".into(),
+                        kind: ToolKind::Other,
+                        title: UNNAMED_TOOL.into(),
+                        status: ToolStatus::Pending,
+                        locations: Vec::new(),
+                        raw_input: None,
+                        tool_name: None,
+                        content: Vec::new(),
+                        truncated: None,
+                    })
+                ),
+                event(
+                    Some("T"),
+                    AuraEvent::ToolUpdate(ToolUpdate {
+                        tool_call_id: "T.ask-1".into(),
+                        status: Some(ToolStatus::Completed),
+                        title: None,
+                        kind: None,
+                        locations: None,
+                        raw_input: None,
+                        tool_name: None,
+                        content: Some(vec![ToolContent::Text {
+                            text: "done".into(),
+                            truncated: None
+                        }]),
+                        truncated: None,
+                    })
+                ),
+            ]
+        );
+        // From then on its status-only updates land on that block.
+        let DriverEvent::Event {
+            event: AuraEvent::ToolUpdate(close),
+            ..
+        } = single(
+            &mut mapper,
+            json!({"sessionUpdate": "tool_call_update", "toolCallId": "ask-1", "status": "failed"}),
+        )
+        else {
+            panic!("an update to the block");
+        };
+        assert_eq!(
+            (close.tool_call_id.as_str(), close.status),
+            ("T.ask-1", Some(ToolStatus::Failed))
+        );
+        // Each kind of output counts: a title, a name, a kind, locations, raw input.
+        for extra in [
+            json!({"title": "Search"}),
+            json!({"name": "grep"}),
+            json!({"kind": "search"}),
+            json!({"locations": [{"path": "/w/a.rs"}]}),
+            json!({"rawInput": {"pattern": "x"}}),
+        ] {
+            let mut mapper = in_turn();
+            mapper.permission_tool("ask-2");
+            let mut fields = json!({"sessionUpdate": "tool_call_update", "toolCallId": "ask-2", "status": "pending"});
+            for (key, value) in extra.as_object().expect("an object") {
+                fields[key] = value.clone();
+            }
+            let shown = events(&mut mapper, fields);
+            assert!(
+                matches!(&shown[0], DriverEvent::Event { event: AuraEvent::ToolCall(call), .. } if call.tool_call_id == "T.ask-2"),
+                "{extra}: {shown:?}"
+            );
+        }
     }
 
     #[test]
