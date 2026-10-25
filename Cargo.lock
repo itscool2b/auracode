@@ -243,6 +243,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "aura-cli"
+version = "0.1.0"
+dependencies = [
+ "aura-agents",
+ "aura-core",
+ "aura-drivers",
+ "aura-process",
+ "aura-protocol",
+ "dirs 6.0.0",
+ "futures",
+ "hostname",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "aura-core"
 version = "0.1.0"
 dependencies = [
