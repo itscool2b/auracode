@@ -10,11 +10,14 @@ mod demo {
     use std::time::Duration;
 
     use aura_cli::args::{ProbeArgs, Scenario, SmokeArgs};
+    use aura_cli::chat::{ChatRun, StartEnd};
     use aura_cli::out::Out;
     use aura_cli::probe::{self, ProbeTimings};
     use aura_cli::repo::{self, RepoKind};
     use aura_cli::report::Outcome;
     use aura_cli::smoke::{self, SmokeTimings};
+    use aura_cli::watch::Watch;
+    use aura_protocol::SessionStatus;
 
     use crate::common::{Machine, assert_no_failures, assert_passed, lines};
 
@@ -169,6 +172,42 @@ mod demo {
         assert!(!headless.manager.has_live_sessions());
         assert!(headless.shutdown().await.saved);
         assert!(machine.registry_files().is_empty());
+    }
+
+    /// A chat waiting for a sign-in keeps no process (spec 6.5.1), so stopping it has nothing to
+    /// wait for: the probe of an agent that needs one (codex-acp with an empty `CODEX_HOME`) once
+    /// waited out the stop limit twice at its end.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn stopping_a_chat_that_waits_for_a_sign_in_ends_at_once() {
+        let machine = Machine::new();
+        let headless = machine.headless(&[]).await;
+        let folder = repo::create(&machine.path("repo"), RepoKind::Plain, &headless.registry)
+            .await
+            .expect("the chat folder");
+        let watch = Watch::new();
+        headless.manager.status_subscribe(watch.status_sink());
+        let spec = headless.detector.spec("mock").expect("the demo agent");
+        let chat = ChatRun::create(&headless, &watch, &spec, &folder)
+            .await
+            .expect("the chat");
+        assert_eq!(
+            chat.settle(Duration::from_secs(30)).await.0,
+            StartEnd::Ready
+        );
+        chat.send("/auth").await.expect("the prompt is sent");
+        assert!(
+            chat.wait_status(SessionStatus::AuthRequired, Duration::from_secs(30))
+                .await
+        );
+        let started = std::time::Instant::now();
+        assert!(
+            chat.stop(Duration::from_secs(3)).await.expect("stop"),
+            "a chat with no process counts as stopped"
+        );
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert_eq!(chat.status(), Some(SessionStatus::AuthRequired));
+        assert!(!headless.manager.has_live_sessions());
+        assert!(headless.shutdown().await.saved);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

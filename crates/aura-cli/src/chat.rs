@@ -148,9 +148,13 @@ impl<'a> ChatRun<'a> {
         Ok(self.settle(limit).await)
     }
 
-    /// Stops the agent and waits until the chat reads `Stopped`.
+    /// Stops the agent and waits until the chat reads `Stopped`. A chat that could not start or
+    /// that waits for a sign-in has no process (spec 6.5.1) and counts as stopped as it is.
     pub async fn stop(&self, limit: Duration) -> Result<bool, SessionError> {
-        if self.status() == Some(SessionStatus::Stopped) {
+        if matches!(
+            self.status(),
+            Some(SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired)
+        ) {
             return Ok(true);
         }
         self.headless.manager.stop(&self.chat_id).await?;
