@@ -20,6 +20,11 @@ const MIN_NEEDLE: usize = 4;
 pub enum CurateError {
     #[error("line {line} is not a protocol log record")]
     NotARecord { line: usize },
+    /// The log capped this record (spec 3.8), so a fixture made from the log could not replay it.
+    #[error(
+        "line {line} is a record the log capped ({cut} bytes cut), which a fixture cannot replay"
+    )]
+    Capped { line: usize, cut: u64 },
     #[error("the curated fixture still holds personal data: {}", .findings.join("; "))]
     Unclean { findings: Vec<String> },
 }
@@ -72,6 +77,12 @@ pub fn curate(
             serde_json::from_str(line).map_err(|_| CurateError::NotARecord { line: index + 1 })?;
         if !record.is_object() {
             return Err(CurateError::NotARecord { line: index + 1 });
+        }
+        if let Some(cut) = record.get("truncated") {
+            return Err(CurateError::Capped {
+                line: index + 1,
+                cut: cut.as_u64().unwrap_or_default(),
+            });
         }
         redactor.redact_value(&mut record);
         records.push(record);
@@ -333,6 +344,24 @@ mod tests {
             curate("[1]\n", HOME, CWD, "u", "h"),
             Err(CurateError::NotARecord { line: 1 })
         ));
+    }
+
+    #[test]
+    fn a_capped_record_is_refused_with_its_line() {
+        let text = log(&[
+            json!({"t": 1, "d": "err", "line": "INFO ready"}),
+            json!({"t": 2, "d": "in", "raw": "{\"jsonrpc\":\"2.0\",\"method\":\"session/upd",
+                "truncated": 131_072}),
+        ]);
+        let error = curate(&text, HOME, CWD, "someone", "host-name").expect_err("capped");
+        assert_eq!(
+            error,
+            CurateError::Capped {
+                line: 2,
+                cut: 131_072
+            }
+        );
+        assert!(error.to_string().contains("cannot replay"), "{error}");
     }
 
     #[test]

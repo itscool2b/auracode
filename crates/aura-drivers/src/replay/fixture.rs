@@ -16,6 +16,10 @@
 //!
 //! `t` is for humans and may be missing; replay uses line order. Other notes (`spawn`, `exit`,
 //! `text` for a comment) are kept as [`FixtureRecord::Note`].
+//!
+//! A record the log capped (spec 3.8: `{"t","d","raw","truncated"}`, whatever its `d`) holds only
+//! the first half of its payload, so nothing in it can be replayed: the parser refuses it, naming
+//! the line, instead of replaying a capped `in` record as half a line.
 
 use std::io;
 use std::path::Path;
@@ -124,6 +128,11 @@ fn record(mut value: Value) -> Result<FixtureRecord, String> {
         .and_then(Value::as_str)
         .ok_or("no \"d\"")?
         .to_owned();
+    if let Some(cut) = value.get("truncated") {
+        return Err(format!(
+            "a capped \"{direction}\" record ({cut} bytes cut), which cannot be replayed"
+        ));
+    }
     let mut take = |key: &str| {
         value
             .get_mut(key)
@@ -245,6 +254,40 @@ mod tests {
             assert_eq!((error.name.as_str(), error.line), ("broken", 2), "{text}");
             assert!(error.reason.contains(needle), "{text}: {}", error.reason);
         }
+    }
+
+    /// The capped shape of spec 3.8, for every `d` the log writes: the record's own `d`, the first
+    /// half of its payload as text in `raw`, and the bytes cut. An `in` record with `raw` and no
+    /// `truncated` is still a line that was not JSON.
+    #[test]
+    fn capped_records_are_refused_for_every_direction() {
+        for direction in ["out", "in", "err", "cmd", "note"] {
+            let first = json!({"t": 1, "d": "note", "note": {"text": "first"}});
+            let capped = json!({"t": 2, "d": direction,
+                "raw": "{\"jsonrpc\":\"2.0\",\"method\":\"session/upd", "truncated": 131_072});
+            let text = format!("{first}\n{capped}\n");
+            let error = Fixture::parse("capped", &text).expect_err("refused");
+            assert_eq!(
+                (error.name.as_str(), error.line),
+                ("capped", 2),
+                "{direction}"
+            );
+            assert!(
+                error
+                    .reason
+                    .contains(&format!("capped \"{direction}\" record"))
+                    && error.reason.contains("131072 bytes cut")
+                    && error.reason.contains("cannot be replayed"),
+                "{direction}: {}",
+                error.reason
+            );
+        }
+        let fixture = Fixture::parse("raw", "{\"d\":\"in\",\"raw\":\"Debugger listening\"}\n")
+            .expect("a raw line without truncated still parses");
+        assert_eq!(
+            fixture.records,
+            [FixtureRecord::InRaw("Debugger listening".into())]
+        );
     }
 
     #[test]
