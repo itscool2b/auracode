@@ -637,6 +637,80 @@ async fn crash_mid_turn() {
     assert_eq!(h.factory.setups()[1].resume.as_deref(), Some("n1"));
 }
 
+/// A driver that ends `Closed` mid-turn without being asked to stop broke the contract: it counts
+/// as a crash (its processes force-stopped, the error card, the turn ended `Error`, the queue held),
+/// and the queued prompt does not start the agent again.
+#[tokio::test(start_paused = true)]
+async fn an_unasked_close_counts_as_a_crash() {
+    let (first, first_handle) = ScriptedDriver::new(vec![
+        Step::Spawn(launch()),
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        in_turn(message("m1", "partial")),
+        Step::Wait(Duration::from_secs(1)),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let (second, _) = ScriptedDriver::new(vec![
+        Step::Spawn(launch()),
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        end_turn(StopReason::EndTurn),
+    ]);
+    let options = Options {
+        agents: vec![aura_agents::FixedAgent::new(
+            mock_spec(),
+            ready(),
+            Some(launch()),
+        )],
+        ..Options::default()
+    };
+    let h = Harness::with(vec![first, second], options);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.send(&chat.id, "work".into()).await.expect("send");
+    let queued = h
+        .manager
+        .send(&chat.id, "queued".into())
+        .await
+        .expect("send");
+    command(&first_handle, CommandMatch::Prompt).await;
+    h.status(&chat.id, SessionStatus::Stopped).await;
+    tokio::time::sleep(Duration::from_secs(30)).await;
+    assert_eq!(
+        h.statuses.last(&chat.id).map(|update| update.status),
+        Some(SessionStatus::Stopped)
+    );
+    assert_eq!(h.factory.setups().len(), 1, "no second driver");
+    let control = &h.spawner.controls()[0];
+    assert!(
+        control
+            .calls()
+            .contains(&FakeCall::Shutdown(aura_process::ShutdownPlan::FORCE)),
+        "{:?}",
+        control.calls()
+    );
+    let stored = h.stored(&chat.id).await;
+    assert!(stored.iter().any(|event| matches!(
+        event,
+        AuraEvent::Error { kind: ErrorKind::AgentExited, message, .. }
+            if message == "The agent stopped unexpectedly."
+    )));
+    assert!(matches!(
+        stored
+            .iter()
+            .rev()
+            .find(|event| matches!(event, AuraEvent::TurnEnded { .. })),
+        Some(AuraEvent::TurnEnded {
+            stop_reason: StopReason::Error,
+            ..
+        })
+    ));
+    let rows = h.queue(&chat.id).await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].prompt_id, queued.prompt_id);
+    assert!(rows[0].held);
+}
+
 /// P47 and S23: a driver task that panics mid-turn: every recorded process is force-stopped, an
 /// error card, `Stopped`.
 #[tokio::test(start_paused = true)]

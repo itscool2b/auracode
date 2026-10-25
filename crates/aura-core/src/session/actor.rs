@@ -2407,11 +2407,17 @@ impl ChatActor {
             return;
         }
         match exit {
-            DriverExit::Closed => self.closed(generation, auth),
+            DriverExit::Closed if stopping => self.closed(generation, auth),
             DriverExit::Crashed { .. } | DriverExit::Panicked if stopping => {
                 // It ended while being stopped: no crash card, but nothing may stay running.
                 self.kill_generation(generation);
                 self.closed(generation, auth);
+            }
+            DriverExit::Closed => {
+                // `Closed` means asked to stop and did. A driver that ends on its own broke that:
+                // whatever ended it may still run, and nothing queued may start the agent again.
+                tracing::warn!(chat_id = %self.chat_id, "a driver closed without being asked to stop; it counts as a crash");
+                self.crashed(generation, crash_message(None), None);
             }
             DriverExit::Crashed { exit, stderr_tail } => {
                 let message = crash_message(exit.as_ref());
