@@ -11,14 +11,29 @@
 //! ([`LaunchOptions::single_instance`]).
 
 use std::ffi::{OsStr, OsString};
+use std::path::Path;
 
 use aura_core::paths::DATA_DIR_ENV;
 use serde::{Deserialize, Serialize};
 
-/// `1` runs the smoke check: a demo turn, a cancelled turn, and a short stress burst.
+use crate::smoke::SmokeScenario;
+
+/// Which smoke check to run ([`SmokeScenario`]): `1` (or `stream`) the stream check (a demo turn, a
+/// cancelled turn, and a short stress burst), `chat` the chat screens against the demo agent, and
+/// `chat-reopen` the second launch of that check on the same data folder.
 pub const SMOKE_ENV: &str = "AURACODE_SMOKE";
 /// With smoke mode, `1` exits after the report: code 0 when it passed, 1 otherwise.
 pub const SMOKE_EXIT_ENV: &str = "AURACODE_SMOKE_EXIT";
+/// The chat scenarios' chat folder, an absolute path. The folder picker answers it without showing
+/// a dialog, so the run creates its chat through the New chat screen as a user would.
+pub const SMOKE_FOLDER_ENV: &str = "AURACODE_SMOKE_FOLDER";
+/// With `AURACODE_SMOKE=chat`, one minimal chat with this agent (a catalog id) instead of the demo
+/// agent's scenario. A real agent spends its user's quota, so this is refused under CI.
+pub const SMOKE_AGENT_ENV: &str = "AURACODE_SMOKE_AGENT";
+/// Set by CI systems; GitHub Actions sets both.
+pub const CI_ENVS: [&str; 2] = ["CI", "GITHUB_ACTIONS"];
+/// The built-in demo agent's catalog id, which the chat scenarios use.
+pub const DEMO_AGENT: &str = "mock";
 /// `orbs=24,rate=200,aura=1,seconds=0` opens the stress view with those settings.
 pub const STRESS_ENV: &str = "AURACODE_STRESS";
 /// `1` disables window effects and transparency (an opaque window).
@@ -174,20 +189,187 @@ fn moves_data_root(value: &OsStr) -> bool {
     }
 }
 
+/// What a smoke launch runs: its scenario, with the agent and folder the chat scenarios use.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+pub struct SmokePlan {
+    pub scenario: SmokeScenario,
+    /// The agent the chat scenarios create their chat with: the demo agent for `chat` and
+    /// `chat_reopen`, `AURACODE_SMOKE_AGENT`'s for `agent`; `null` for `stream`.
+    pub agent_id: Option<String>,
+    /// `AURACODE_SMOKE_FOLDER`, which the folder picker answers; `null` for `stream`.
+    pub folder: Option<String>,
+}
+
+impl SmokePlan {
+    /// Whether this plan opens chats (every scenario but the stream check).
+    pub fn chats(&self) -> bool {
+        self.scenario != SmokeScenario::Stream
+    }
+}
+
+/// Why the smoke switches cannot run a scenario. Smoke mode still holds (automation is waiting
+/// for a result), so the launch prints a failing report instead of running one.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{message}")]
+pub struct SmokeSetupError {
+    /// The scenario asked for, when `AURACODE_SMOKE` named one.
+    pub scenario: Option<SmokeScenario>,
+    pub message: String,
+}
+
+impl SmokeSetupError {
+    fn new(scenario: Option<SmokeScenario>, message: String) -> SmokeSetupError {
+        SmokeSetupError { scenario, message }
+    }
+}
+
+/// Reads the smoke switches: `None` when `AURACODE_SMOKE` is unset, blank, or an explicit off
+/// (`0`, `false`, `no`, `off`); otherwise the plan, or why it cannot run.
+///
+/// - `1`, `true`, `yes`, `on` or `stream` (any case): the stream check. `chat`: the chat scenario,
+///   or with `agent` set the minimal chat with that agent. `chat-reopen`: the chat scenario's
+///   second launch. Anything else names no scenario.
+/// - The chat scenarios need `folder` (`AURACODE_SMOKE_FOLDER`): an absolute path in valid Unicode
+///   (a chat folder reaches the agent as a JSON string). Whether it exists is the session manager's
+///   to check, as for any new chat.
+/// - `agent` (`AURACODE_SMOKE_AGENT`) must be a catalog id and goes with `chat` only. It is refused
+///   when `in_ci` (`CI` or `GITHUB_ACTIONS` is on): a real agent run spends the user's quota.
+pub fn parse_smoke(
+    value: Option<&str>,
+    folder: Option<OsString>,
+    agent: Option<&str>,
+    in_ci: bool,
+) -> Option<Result<SmokePlan, SmokeSetupError>> {
+    let value = value
+        .map(str::trim)
+        .filter(|v| !v.is_empty() && !is_falsy(v))?;
+    let named = if is_truthy(value) {
+        Some(SmokeScenario::Stream)
+    } else {
+        match value.to_ascii_lowercase().as_str() {
+            "stream" => Some(SmokeScenario::Stream),
+            "chat" => Some(SmokeScenario::Chat),
+            "chat-reopen" | "chat_reopen" => Some(SmokeScenario::ChatReopen),
+            _ => None,
+        }
+    };
+    let Some(named) = named else {
+        return Some(Err(SmokeSetupError::new(
+            None,
+            format!(
+                "{SMOKE_ENV}=\"{value}\" names no smoke run: use 1 (or stream), chat or chat-reopen."
+            ),
+        )));
+    };
+    Some(smoke_plan(
+        named,
+        folder,
+        agent.map(str::trim).filter(|agent| !agent.is_empty()),
+        in_ci,
+    ))
+}
+
+fn smoke_plan(
+    named: SmokeScenario,
+    folder: Option<OsString>,
+    agent: Option<&str>,
+    in_ci: bool,
+) -> Result<SmokePlan, SmokeSetupError> {
+    let scenario = match (named, agent) {
+        (SmokeScenario::Chat, Some(_)) => SmokeScenario::Agent,
+        (_, Some(_)) => {
+            return Err(SmokeSetupError::new(
+                Some(named),
+                format!("{SMOKE_AGENT_ENV} goes with {SMOKE_ENV}=chat only."),
+            ));
+        }
+        (named, None) => named,
+    };
+    if scenario == SmokeScenario::Stream {
+        return Ok(SmokePlan {
+            scenario,
+            agent_id: None,
+            folder: None,
+        });
+    }
+    let agent_id = match agent {
+        None => DEMO_AGENT.to_owned(),
+        Some(_) if in_ci => {
+            return Err(SmokeSetupError::new(
+                Some(scenario),
+                format!(
+                    "{SMOKE_AGENT_ENV} runs a real agent, which spends its user's quota, so it is for local runs only: it is refused while CI or GITHUB_ACTIONS is set."
+                ),
+            ));
+        }
+        Some(id) => match aura_agents::get(id) {
+            Some(spec) => spec.id.to_owned(),
+            None => {
+                let known: Vec<&str> = aura_agents::catalog().iter().map(|spec| spec.id).collect();
+                return Err(SmokeSetupError::new(
+                    Some(scenario),
+                    format!(
+                        "{SMOKE_AGENT_ENV}=\"{id}\" is not an agent auracode knows ({}).",
+                        known.join(", ")
+                    ),
+                ));
+            }
+        },
+    };
+    let needs = || {
+        SmokeSetupError::new(
+            Some(scenario),
+            format!(
+                "{SMOKE_ENV}={} needs {SMOKE_FOLDER_ENV}: an absolute path to the folder its chat opens in.",
+                if scenario == SmokeScenario::ChatReopen {
+                    "chat-reopen"
+                } else {
+                    "chat"
+                }
+            ),
+        )
+    };
+    // Blank reads as unset, the rule `AURACODE_DATA_DIR` follows.
+    let folder = folder
+        .filter(|folder| moves_data_root(folder))
+        .ok_or_else(needs)?;
+    let folder = folder.into_string().map_err(|folder| {
+        SmokeSetupError::new(
+            Some(scenario),
+            format!(
+                "{SMOKE_FOLDER_ENV} must be valid Unicode, not {}.",
+                Path::new(&folder).display()
+            ),
+        )
+    })?;
+    if !Path::new(&folder).is_absolute() {
+        return Err(SmokeSetupError::new(
+            Some(scenario),
+            format!("{SMOKE_FOLDER_ENV} must be an absolute path, not \"{folder}\"."),
+        ));
+    }
+    Ok(SmokePlan {
+        scenario,
+        agent_id: Some(agent_id),
+        folder: Some(folder),
+    })
+}
+
 /// What the UI should open into. Smoke mode wins over the stress view, since it is the one that
 /// exits by itself and a CI job is waiting on it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LaunchMode {
     Normal,
-    Smoke,
+    Smoke { plan: SmokePlan },
     Stress { config: StressConfig },
 }
 
 /// Every launch switch, read once.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LaunchOptions {
-    pub smoke: bool,
+    /// `AURACODE_SMOKE` asked for a smoke run: what it runs, or why it cannot ([`parse_smoke`]).
+    pub smoke: Option<Result<SmokePlan, SmokeSetupError>>,
     pub smoke_exit: bool,
     pub no_glass: bool,
     /// `AURACODE_DATA_DIR` gives this launch its own data folder: a second dev instance, a portable
@@ -209,16 +391,39 @@ impl LaunchOptions {
     /// other switches treat such a value as unset.
     pub fn from_lookup(lookup: impl Fn(&str) -> Option<OsString>) -> LaunchOptions {
         let text = |name: &str| lookup(name).and_then(|value| value.into_string().ok());
-        let smoke = env_flag(text(SMOKE_ENV).as_deref());
+        let in_ci = CI_ENVS.iter().any(|name| env_flag(text(name).as_deref()));
+        let smoke = parse_smoke(
+            text(SMOKE_ENV).as_deref(),
+            lookup(SMOKE_FOLDER_ENV),
+            text(SMOKE_AGENT_ENV).as_deref(),
+            in_ci,
+        );
         LaunchOptions {
+            smoke_exit: smoke.is_some() && env_flag(text(SMOKE_EXIT_ENV).as_deref()),
             smoke,
-            smoke_exit: smoke && env_flag(text(SMOKE_EXIT_ENV).as_deref()),
             no_glass: env_flag(text(NO_GLASS_ENV).as_deref()),
             own_data_dir: lookup(DATA_DIR_ENV).is_some_and(|value| moves_data_root(&value)),
             stress: text(STRESS_ENV)
                 .filter(|value| !value.trim().is_empty() && !is_falsy(value.trim()))
                 .map(|value| parse_stress_config(&value)),
         }
+    }
+
+    /// Whether `AURACODE_SMOKE` asked for a smoke run, whether or not it can run.
+    pub fn is_smoke(&self) -> bool {
+        self.smoke.is_some()
+    }
+
+    /// The smoke run this launch makes, when its switches are valid.
+    pub fn smoke_plan(&self) -> Option<&SmokePlan> {
+        self.smoke.as_ref().and_then(|smoke| smoke.as_ref().ok())
+    }
+
+    /// The folder the folder picker answers without a dialog: a chat scenario's chat folder.
+    pub fn smoke_folder(&self) -> Option<&str> {
+        self.smoke_plan()
+            .filter(|plan| plan.chats())
+            .and_then(|plan| plan.folder.as_deref())
     }
 
     /// Whether this launch registers the single-instance plugin, which makes a later launch focus
@@ -230,12 +435,16 @@ impl LaunchOptions {
     /// never hand over to it. Sharing data with a running instance is safe: aura-core coordinates
     /// processes that open the same database.
     pub fn single_instance(&self) -> bool {
-        !self.smoke && !self.own_data_dir
+        !self.is_smoke() && !self.own_data_dir
     }
 
+    /// A smoke launch whose switches are not valid opens the normal screen: it reports its failure
+    /// itself (and exits with `AURACODE_SMOKE_EXIT`), and must not open the stress view either.
     pub fn mode(&self) -> LaunchMode {
-        if self.smoke {
-            return LaunchMode::Smoke;
+        match &self.smoke {
+            Some(Ok(plan)) => return LaunchMode::Smoke { plan: plan.clone() },
+            Some(Err(_)) => return LaunchMode::Normal,
+            None => {}
         }
         match &self.stress {
             Some(Ok(config)) => LaunchMode::Stress { config: *config },
@@ -246,6 +455,9 @@ impl LaunchOptions {
     /// Sentences for the UI's notices list: settings that were present but could not be used.
     pub fn notices(&self) -> Vec<String> {
         let mut notices = Vec::new();
+        if let Some(Err(error)) = &self.smoke {
+            notices.push(format!("{SMOKE_ENV} was ignored: {error}"));
+        }
         if let Some(Err(error)) = &self.stress {
             notices.push(format!(
                 "{STRESS_ENV} was ignored because it is not valid: {error}."
@@ -399,6 +611,38 @@ mod tests {
         assert!(!env_flag(None));
     }
 
+    fn stream_plan() -> SmokePlan {
+        SmokePlan {
+            scenario: SmokeScenario::Stream,
+            agent_id: None,
+            folder: None,
+        }
+    }
+
+    /// An absolute folder on every OS (a Windows path needs its drive).
+    fn absolute(name: &str) -> String {
+        std::env::temp_dir()
+            .join(name)
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    fn plan(
+        value: &str,
+        folder: Option<&str>,
+        agent: Option<&str>,
+        in_ci: bool,
+    ) -> Option<Result<SmokePlan, SmokeSetupError>> {
+        parse_smoke(Some(value), folder.map(OsString::from), agent, in_ci)
+    }
+
+    fn setup_error(scenario: Option<SmokeScenario>, message: &str) -> SmokeSetupError {
+        SmokeSetupError {
+            scenario,
+            message: message.to_owned(),
+        }
+    }
+
     #[test]
     fn smoke_wins_over_stress_and_exit_needs_smoke() {
         let both = options(&[
@@ -406,12 +650,238 @@ mod tests {
             (SMOKE_EXIT_ENV, "1"),
             (STRESS_ENV, "orbs=3"),
         ]);
-        assert_eq!(both.mode(), LaunchMode::Smoke);
+        assert_eq!(
+            both.mode(),
+            LaunchMode::Smoke {
+                plan: stream_plan()
+            }
+        );
         assert!(both.smoke_exit);
 
         let exit_alone = options(&[(SMOKE_EXIT_ENV, "1")]);
         assert!(!exit_alone.smoke_exit, "exit without smoke must do nothing");
         assert_eq!(exit_alone.mode(), LaunchMode::Normal);
+    }
+
+    #[test]
+    fn the_stream_check_answers_to_on_values_and_its_name() {
+        for value in ["1", "true", " YES ", "on", "stream", "Stream"] {
+            assert_eq!(
+                plan(value, None, None, false),
+                Some(Ok(stream_plan())),
+                "{value:?}"
+            );
+        }
+        // Its folder is unused, so it is not checked.
+        assert_eq!(
+            plan("1", Some("relative"), None, false),
+            Some(Ok(stream_plan()))
+        );
+    }
+
+    #[test]
+    fn unset_blank_and_off_values_are_no_smoke_run() {
+        assert_eq!(parse_smoke(None, None, None, false), None);
+        for value in ["", "  ", "0", "off", "FALSE", "no"] {
+            assert_eq!(
+                plan(value, Some("/x"), Some("mock"), false),
+                None,
+                "{value:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_chat_scenarios_use_the_demo_agent_in_their_folder() {
+        let folder = absolute("smoke chat");
+        assert_eq!(
+            plan(" chat ", Some(&folder), None, false),
+            Some(Ok(SmokePlan {
+                scenario: SmokeScenario::Chat,
+                agent_id: Some(DEMO_AGENT.into()),
+                folder: Some(folder.clone()),
+            }))
+        );
+        for value in ["chat-reopen", "CHAT_REOPEN"] {
+            assert_eq!(
+                plan(value, Some(&folder), None, false),
+                Some(Ok(SmokePlan {
+                    scenario: SmokeScenario::ChatReopen,
+                    agent_id: Some(DEMO_AGENT.into()),
+                    folder: Some(folder.clone()),
+                })),
+                "{value}"
+            );
+        }
+    }
+
+    /// The UI never runs a scenario these switches cannot run; the launch reports why instead.
+    #[test]
+    fn a_smoke_run_that_cannot_run_says_why() {
+        assert_eq!(
+            plan("chta", None, None, false),
+            Some(Err(setup_error(
+                None,
+                "AURACODE_SMOKE=\"chta\" names no smoke run: use 1 (or stream), chat or chat-reopen."
+            )))
+        );
+        for folder in [None, Some(""), Some("   ")] {
+            assert_eq!(
+                plan("chat", folder, None, false),
+                Some(Err(setup_error(
+                    Some(SmokeScenario::Chat),
+                    "AURACODE_SMOKE=chat needs AURACODE_SMOKE_FOLDER: an absolute path to the folder its chat opens in."
+                ))),
+                "{folder:?}"
+            );
+        }
+        assert_eq!(
+            plan("chat-reopen", None, None, false),
+            Some(Err(setup_error(
+                Some(SmokeScenario::ChatReopen),
+                "AURACODE_SMOKE=chat-reopen needs AURACODE_SMOKE_FOLDER: an absolute path to the folder its chat opens in."
+            )))
+        );
+        assert_eq!(
+            plan("chat", Some("work/chat"), None, false),
+            Some(Err(setup_error(
+                Some(SmokeScenario::Chat),
+                "AURACODE_SMOKE_FOLDER must be an absolute path, not \"work/chat\"."
+            )))
+        );
+    }
+
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn a_smoke_folder_must_be_unicode() {
+        let folder = not_unicode(std::env::temp_dir().as_os_str());
+        let refused = parse_smoke(Some("chat"), Some(folder), None, false);
+        let Some(Err(error)) = refused else {
+            panic!("accepted: {refused:?}");
+        };
+        assert_eq!(error.scenario, Some(SmokeScenario::Chat));
+        assert!(
+            error
+                .message
+                .starts_with("AURACODE_SMOKE_FOLDER must be valid Unicode"),
+            "{}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn a_smoke_agent_runs_the_minimal_chat_with_that_agent() {
+        let folder = absolute("agent chat");
+        for (given, id) in [("claude-acp", "claude-acp"), (" hermes ", "hermes")] {
+            assert_eq!(
+                plan("chat", Some(&folder), Some(given), false),
+                Some(Ok(SmokePlan {
+                    scenario: SmokeScenario::Agent,
+                    agent_id: Some(id.into()),
+                    folder: Some(folder.clone()),
+                }))
+            );
+        }
+        // Blank means unset: the demo agent's scenario.
+        assert_eq!(
+            plan("chat", Some(&folder), Some("  "), false).map(|plan| plan.map(|p| p.scenario)),
+            Some(Ok(SmokeScenario::Chat))
+        );
+        assert_eq!(
+            plan("chat", Some(&folder), Some("gpt-cli"), false),
+            Some(Err(setup_error(
+                Some(SmokeScenario::Agent),
+                "AURACODE_SMOKE_AGENT=\"gpt-cli\" is not an agent auracode knows (hermes, claude-acp, codex-acp, mock)."
+            )))
+        );
+        for value in ["1", "chat-reopen"] {
+            let refused = plan(value, Some(&folder), Some("claude-acp"), false);
+            assert!(
+                matches!(&refused, Some(Err(error)) if error.message == "AURACODE_SMOKE_AGENT goes with AURACODE_SMOKE=chat only."),
+                "{value}: {refused:?}"
+            );
+        }
+    }
+
+    /// A real agent spends its user's quota: CI never runs one, even the demo agent's minimal chat.
+    #[test]
+    fn a_smoke_agent_is_refused_under_ci() {
+        let folder = absolute("agent chat");
+        for agent in ["claude-acp", "mock"] {
+            assert_eq!(
+                plan("chat", Some(&folder), Some(agent), true),
+                Some(Err(setup_error(
+                    Some(SmokeScenario::Agent),
+                    "AURACODE_SMOKE_AGENT runs a real agent, which spends its user's quota, so it is for local runs only: it is refused while CI or GITHUB_ACTIONS is set."
+                )))
+            );
+        }
+        // The demo agent's own scenario runs in CI.
+        assert!(matches!(
+            plan("chat", Some(&folder), None, true),
+            Some(Ok(_))
+        ));
+        for ci in ["CI", "GITHUB_ACTIONS"] {
+            let refused = options(&[
+                (SMOKE_ENV, "chat"),
+                (SMOKE_FOLDER_ENV, &folder),
+                (SMOKE_AGENT_ENV, "claude-acp"),
+                (ci, "true"),
+            ]);
+            assert!(matches!(refused.smoke, Some(Err(_))), "{ci}");
+        }
+        let local = options(&[
+            (SMOKE_ENV, "chat"),
+            (SMOKE_FOLDER_ENV, &folder),
+            (SMOKE_AGENT_ENV, "claude-acp"),
+            ("CI", "false"),
+        ]);
+        assert_eq!(
+            local.smoke_plan().map(|plan| plan.scenario),
+            Some(SmokeScenario::Agent)
+        );
+    }
+
+    #[test]
+    fn a_smoke_run_that_cannot_run_still_counts_as_smoke() {
+        let broken = options(&[
+            (SMOKE_ENV, "chat"),
+            (SMOKE_EXIT_ENV, "1"),
+            (STRESS_ENV, "orbs=3"),
+        ]);
+        assert!(broken.is_smoke());
+        assert!(broken.smoke_exit, "it exits after reporting its failure");
+        assert!(!broken.single_instance());
+        assert_eq!(broken.smoke_plan(), None);
+        assert_eq!(
+            broken.mode(),
+            LaunchMode::Normal,
+            "neither a scenario nor the stress view"
+        );
+        assert_eq!(
+            broken.notices(),
+            vec![
+                "AURACODE_SMOKE was ignored: AURACODE_SMOKE=chat needs AURACODE_SMOKE_FOLDER: an absolute path to the folder its chat opens in."
+                    .to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn the_folder_picker_answers_only_a_chat_scenario_folder() {
+        let folder = absolute("picked");
+        let chat = options(&[(SMOKE_ENV, "chat"), (SMOKE_FOLDER_ENV, &folder)]);
+        assert_eq!(chat.smoke_folder(), Some(folder.as_str()));
+        let stream = options(&[(SMOKE_ENV, "1"), (SMOKE_FOLDER_ENV, &folder)]);
+        assert_eq!(stream.smoke_folder(), None);
+        let plain = options(&[(SMOKE_FOLDER_ENV, &folder)]);
+        assert_eq!(plain.smoke_folder(), None);
+    }
+
+    #[test]
+    fn the_demo_agent_is_in_the_catalog() {
+        let spec = aura_agents::get(DEMO_AGENT).expect("the demo agent");
+        assert_eq!(spec.kind, aura_protocol::DriverKind::Mock);
     }
 
     #[test]
@@ -506,7 +976,7 @@ mod tests {
         let garbled = LaunchOptions::from_lookup(|name| {
             (name != DATA_DIR_ENV).then(|| not_unicode(OsStr::new("1")))
         });
-        assert!(!garbled.smoke && !garbled.no_glass && !garbled.own_data_dir);
+        assert!(garbled.smoke.is_none() && !garbled.no_glass && !garbled.own_data_dir);
         assert_eq!(garbled.stress, None);
     }
 
@@ -585,6 +1055,20 @@ mod tests {
         assert_eq!(
             serde_json::to_value(LaunchMode::Normal).expect("serialize"),
             serde_json::json!({ "type": "normal" })
+        );
+        assert_eq!(
+            serde_json::to_value(LaunchMode::Smoke {
+                plan: SmokePlan {
+                    scenario: SmokeScenario::ChatReopen,
+                    agent_id: Some(DEMO_AGENT.into()),
+                    folder: Some("/work".into()),
+                }
+            })
+            .expect("serialize"),
+            serde_json::json!({
+                "type": "smoke",
+                "plan": { "scenario": "chat_reopen", "agent_id": "mock", "folder": "/work" }
+            })
         );
     }
 }

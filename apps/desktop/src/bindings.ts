@@ -42,8 +42,8 @@ export const commands = {
 	acknowledgeRecovery: () => typedError<null, AppError>(__TAURI_INVOKE("acknowledge_recovery")),
 	/**
 	 *  Smoke mode only: prints `AURACODE_SMOKE_RESULT <json>` on stdout and, with
-	 *  `AURACODE_SMOKE_EXIT=1`, exits with 0 when the run passed and 1 otherwise. Only the first report
-	 *  counts.
+	 *  `AURACODE_SMOKE_EXIT=1`, exits with 0 when the run passed and 1 otherwise, through the quit
+	 *  flow like any other exit. Only the first report counts.
 	 */
 	smokeReport: (report: SmokeReport) => typedError<null, AppError>(__TAURI_INVOKE("smoke_report", { report })),
 	/**
@@ -65,7 +65,8 @@ export const commands = {
 	envRefresh: () => __TAURI_INVOKE<EnvStatus>("env_refresh"),
 	/**
 	 *  Shows the system folder picker and returns the chosen folder, or `null` when the user cancelled.
-	 *  Resolves when the dialog closes.
+	 *  Resolves when the dialog closes. A chat smoke run's picker answers its folder
+	 *  (`AURACODE_SMOKE_FOLDER`) at once: automation cannot click through a system dialog.
 	 */
 	pickFolder: () => typedError<string | null, AppError>(__TAURI_INVOKE("pick_folder")),
 	/**  Every chat, newest activity first. */
@@ -141,6 +142,13 @@ export const commands = {
 	storageStatus: () => __TAURI_INVOKE<StorageStatus>("storage_status"),
 };
 
+/* Constants */
+export const SMOKE_AGENT_CHECKS = ["agent-available","agent-starts","agent-replies"] as const;
+
+export const SMOKE_CHAT_CHECKS = ["chats-screen","pick-folder","create-chat","pickers","slash-menu","echo-turn","demo-turn","option-change","auto-approved","autonomy-ask","permission-allow","permission-reject","permission-withdrawn","question-answer","question-dismiss","big-output","background-output","cancel-turn","queue-after-turn","queue-held-at-stop","error-card","queue-held-at-error","crash-card","queue-held-at-crash","auth-card","auth-retry","force-stop","send-starts-agent","transcript","quit-with-turn"] as const;
+
+export const SMOKE_CHAT_REOPEN_CHECKS = ["reopen-list","reopen-no-start","reopen-history","reopen-interrupted","reopen-held","reopen-blob","reopen-resume","reopen-send-queued"] as const;
+
 /* Types */
 /**  An agent auracode can start, as the New chat screen shows it. */
 export type AgentEntry = {
@@ -169,7 +177,7 @@ export type AppErrorCode =
 "too_many_streams" | 
 /**  The main window does not exist (it was closed, or creating it failed). */
 "window_unavailable" | 
-/**  A command that only works in smoke mode (`AURACODE_SMOKE=1`) was called outside it. */
+/**  A command that only works in smoke mode (`AURACODE_SMOKE`) was called outside it. */
 "not_in_smoke_mode" | 
 /**  Startup could not determine a data folder at all, so there is nothing to show. */
 "data_dir_unknown" | 
@@ -542,7 +550,7 @@ export type HistoryPage = {
  *  What the UI should open into. Smoke mode wins over the stress view, since it is the one that
  *  exits by itself and a CI job is waiting on it.
  */
-export type LaunchMode = { type: "normal" } | { type: "smoke" } | { type: "stress"; config: StressConfig };
+export type LaunchMode = { type: "normal" } | { type: "smoke"; plan: SmokePlan } | { type: "stress"; config: StressConfig };
 
 /**  One account rate-limit window (Claude's five-hour/weekly windows, Codex's primary/secondary). */
 export type LimitWindow = {
@@ -730,23 +738,60 @@ export type SlashCommand = {
 	input_hint: string | null,
 };
 
-/**  What the UI's smoke run measured. */
+/**  One check a chat scenario made: its name, whether it held, and what was seen. */
+export type SmokeCheck = {
+	name: string,
+	ok: boolean,
+	/**  What the check saw, or why it failed (or did not run). */
+	detail: string,
+};
+
+/**  What a smoke launch runs: its scenario, with the agent and folder the chat scenarios use. */
+export type SmokePlan = {
+	scenario: SmokeScenario,
+	/**
+	 *  The agent the chat scenarios create their chat with: the demo agent for `chat` and
+	 *  `chat_reopen`, `AURACODE_SMOKE_AGENT`'s for `agent`; `null` for `stream`.
+	 */
+	agent_id: string | null,
+	/**  `AURACODE_SMOKE_FOLDER`, which the folder picker answers; `null` for `stream`. */
+	folder: string | null,
+};
+
+/**  What the UI's smoke run found. */
 export type SmokeReport = {
 	ok: boolean,
-	/**  Events applied across every stream of the run. */
-	events_received: number,
-	/**  Frames (`EventBatch`es) received across every stream of the run. */
-	frames_received: number,
-	/**  Sequence gaps the stream reducer detected. Any gap fails the run. */
-	seq_gaps: number,
-	/**  Characters of streamed answer text present in the rendered DOM. */
-	rendered_chars: number,
-	/**  Lowest frame rate over half-second windows of the stress burst. */
-	fps_min: number | null,
-	/**  Average frame rate over the stress burst. */
-	fps_avg: number | null,
+	/**
+	 *  The scenario that ran; `null` only in a report made before any could (a smoke launch whose
+	 *  switches were not valid).
+	 */
+	scenario: SmokeScenario | null,
+	/**  The stream check's measurements; `null` for the chat scenarios. */
+	stream: StreamMeasures | null,
+	/**  Every check a chat scenario defines, in order; empty for the stream check. */
+	checks: SmokeCheck[],
 	errors: string[],
 };
+
+/**  Which scripted check a smoke launch runs. */
+export type SmokeScenario = 
+/**  A demo stream, a cancelled stream and a stress burst (`AURACODE_SMOKE=1`). */
+"stream" | 
+/**
+ *  The chat screens against the demo agent in a new data folder, ending with the quit flow
+ *  while a turn runs (`AURACODE_SMOKE=chat`).
+ */
+"chat" | 
+/**
+ *  The same data folder started again after `chat`: the stored history, the turn the quit
+ *  interrupted, the prompt it held, and Resume (`AURACODE_SMOKE=chat-reopen`).
+ */
+"chat_reopen" | 
+/**
+ *  One minimal chat with `AURACODE_SMOKE_AGENT`'s agent (`AURACODE_SMOKE=chat` with that set).
+ *  For local runs only: a real agent spends the user's quota.
+ */
+"agent";
 
 /**  Why a turn ended. */
 export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | 
@@ -763,6 +808,22 @@ export type StorageState = { state: "ok" } | { state: "paused"; reason: PauseRea
 export type StorageStatus = {
 	state: StorageState,
 	unsaved_bytes: number,
+};
+
+/**  What the stream check measured. */
+export type StreamMeasures = {
+	/**  Events applied across every stream of the run. */
+	events_received: number,
+	/**  Frames (`EventBatch`es) received across every stream of the run. */
+	frames_received: number,
+	/**  Sequence gaps the stream reducer detected. Any gap fails the run. */
+	seq_gaps: number,
+	/**  Characters of streamed answer text present in the rendered DOM. */
+	rendered_chars: number,
+	/**  Lowest frame rate over half-second windows of the stress burst. */
+	fps_min: number | null,
+	/**  Average frame rate over the stress burst. */
+	fps_avg: number | null,
 };
 
 /**

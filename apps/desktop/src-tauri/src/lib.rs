@@ -122,6 +122,17 @@ pub fn run() {
 /// screen (`boot`), and a window that cannot be created at all is logged and ends the app with
 /// [`STARTUP_FAILED`].
 fn setup(app: &mut tauri::App, launch: LaunchOptions) {
+    if let Some(Err(error)) = &launch.smoke {
+        // Automation is waiting for a result: say why no scenario runs, and with
+        // AURACODE_SMOKE_EXIT end here, before any data opens or any agent starts.
+        tracing::error!(%error, "the smoke switches cannot run a scenario");
+        let report = smoke::setup_failed(error.scenario, &error.message);
+        smoke::print(&report);
+        if launch.smoke_exit {
+            app.handle().exit(smoke::exit_code(&report));
+            return;
+        }
+    }
     let mut booted = boot::startup();
 
     let os = os::OsInfo::detect();
@@ -130,8 +141,9 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
         Ok(glass) => glass,
         Err(error) => {
             tracing::error!(%error, "auracode could not create its window");
-            if launch.smoke {
-                smoke::print(&smoke::finalize(smoke::no_window(&error.to_string())));
+            if let Some(smoke) = launch.smoke_plan() {
+                let report = smoke::no_window(smoke.scenario, &error.to_string());
+                smoke::print(&smoke::finalize(report, smoke.scenario));
             }
             // Queued for the event loop, which handles it right after this hook returns; the exit
             // hooks run as for any other exit. The store closes as `booted` drops here.
@@ -141,7 +153,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     };
     tracing::info!(os = os.os, version = %os.display, ?glass, "main window created");
 
-    let smoke = launch.smoke;
+    let smoke = launch.smoke_plan().map(|plan| plan.scenario);
     let smoke_exit = launch.smoke_exit;
     let version = app.package_info().version.to_string();
     // Tauri's setup hook runs outside any Tokio context, so everything that spawns gets the handle.
@@ -180,12 +192,13 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
         },
     ));
 
-    if smoke {
+    if let Some(scenario) = smoke {
         let handle = app.handle().clone();
+        let after = smoke::watchdog(scenario);
         tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(smoke::WATCHDOG).await;
+            tokio::time::sleep(after).await;
             if !reported.swap(true, Ordering::AcqRel) {
-                let report = smoke::finalize(smoke::timed_out(smoke::WATCHDOG));
+                let report = smoke::finalize(smoke::timed_out(scenario, after), scenario);
                 smoke::print(&report);
                 if smoke_exit {
                     handle.exit(smoke::exit_code(&report));
