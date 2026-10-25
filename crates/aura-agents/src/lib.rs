@@ -5,7 +5,8 @@
 //!   verified with auracode.
 //! - [`Detector`]: whether each agent can start here ([`Availability`]), probed with the resolved,
 //!   scrubbed env and cached; and the launch spec of one start, which installs an npm adapter the
-//!   first time ([`Detector::prepare_launch`]).
+//!   first time ([`Detector::prepare_launch`]). Other crates' tests use [`Detector::fixed`], whose
+//!   [`FixedAgent`]s answer as given.
 //!
 //! M1a knows Hermes, the Claude and Codex ACP adapters, and the built-in demo agent. Detection never
 //! installs and never runs an adapter; the install is its own step, with its own timeout and the
@@ -21,7 +22,7 @@ mod launch;
 use std::time::Duration;
 
 pub use catalog::{AgentSpec, Recipe, UserBinary, catalog, get, parse_version, version_at_least};
-pub use detect::{Detector, FixedAgent};
+pub use detect::{Detector, FixedAgent, Gate};
 pub use launch::LaunchError;
 
 /// A detection probe (`<program> --version`) is killed with its tree after this.

@@ -971,32 +971,73 @@ pub fn get(id: &str) -> Option<&'static AgentSpec>;
 pub fn parse_version(text: &str) -> Option<String>;        // first `\d+\.\d+\.\d+` (with optional `v`)
 pub fn version_at_least(found: &str, floor: &str) -> bool; // numeric x.y.z comparison
 
-pub struct Detector { /* env resolver, registry, specs, adapters dir, cache, in-flight installs */ }
+pub struct Detector { /* env resolver, registry, specs, adapters dir, cache, in-flight installs, forgotten */ }
 impl Detector {
     pub fn new(env: Arc<EnvResolver>, registry: Arc<LeftoverRegistry>, adapters_dir: PathBuf, rt: Handle) -> Arc<Detector>;
-    /// Tests: these specs with fixed availability and launch specs; no probes, no env, no installs.
+    /// Tests: these agents with fixed answers (`FixedAgent` below); no probes, no env, no installs.
     pub fn fixed(agents: Vec<FixedAgent>) -> Arc<Detector>;
     /// The session manager looks agents up here, never in `catalog()`, so tests can inject their own.
     pub fn spec(&self, id: &str) -> Option<AgentSpec>;
-    /// Cached; shares the in-flight env resolution and probe with every other caller.
+    /// Cached; waits for the env resolution and the probe in flight, shared with every other caller, so it answers
+    /// `Ready`, `Missing` or `Broken`, never `Checking`.
     pub async fn detect(&self, spec: &AgentSpec) -> aura_protocol::session::Availability;
+    /// `refresh: false` returns `cached()` at once and never waits (`agents_list`); detection runs in the background
+    /// from `new` on, once the env resolves. `refresh: true` resolves the env again, probes every agent and waits for
+    /// the results (`agents_refresh`).
     pub async fn detect_all(&self, refresh: bool) -> Vec<aura_protocol::session::AgentEntry>;
-    pub fn cached(&self) -> Vec<aura_protocol::session::AgentEntry>;    // Checking until the first run ends
+    pub fn cached(&self) -> Vec<aura_protocol::session::AgentEntry>;    // Checking until an agent's first detection ends
     /// Installs an npm adapter when it is not installed (one shared attempt per package; `progress` receives status
     /// details), then builds the launch spec. Dropping the future kills a running install.
     pub async fn prepare_launch(&self, spec: &AgentSpec, progress: mpsc::UnboundedSender<String>)
         -> Result<LaunchSpec, LaunchError>;
     /// Deletes an adapter's install marker, so the next start installs it again (a start failed on a missing module).
     pub fn forget_install(&self, spec: &AgentSpec);
+    /// Tests: the agent id of every `forget_install` so far, in order.
+    pub fn forgotten(&self) -> Vec<String>;
 }
 #[derive(Debug, thiserror::Error)]
 pub enum LaunchError { #[error("{reason}")] Missing { reason: String }, #[error("{reason}")] Broken { reason: String },
                        #[error("{reason}")] InstallFailed { reason: String } }
-pub struct FixedAgent { pub spec: AgentSpec, pub availability: Availability, pub launch: Option<LaunchSpec> }
+
+/// A test agent. `non_exhaustive`: built with `new` and the `with_*` methods, so a later field never breaks a test.
+#[non_exhaustive]
+pub struct FixedAgent {
+    pub spec: AgentSpec,
+    pub availability: Availability,          // cached() until a detect() ends; what detect() answers without `detected`
+    pub detected: Option<Availability>,      // what detect() answers, and cached() from then on (Checking, then Ready)
+    pub launch: Option<LaunchSpec>,          // None: a built-in agent, or prepare_launch fails with the reason
+    pub launch_error: Option<LaunchError>,   // prepare_launch fails with this (an InstallFailed download)
+    pub needs_download: bool,                // not installed: AgentEntry.needs_download, and the next prepare_launch
+                                             // sends `progress` first; a successful one installs, and forget_install
+                                             // makes an npm adapter's download needed again
+    pub progress: Vec<String>,               // the download's status details
+    pub detect_gate: Option<Gate>,           // holds every detect() until the gate opens
+    pub launch_gate: Option<Gate>,           // holds every prepare_launch(), after its progress, until it opens
+}
+impl FixedAgent {
+    pub fn new(spec: AgentSpec, availability: Availability, launch: Option<LaunchSpec>) -> FixedAgent;
+    pub fn with_detected(self, availability: Availability) -> FixedAgent;
+    pub fn with_download(self, progress: Vec<String>) -> FixedAgent;   // needs_download with its details
+    pub fn with_launch_error(self, error: LaunchError) -> FixedAgent;
+    pub fn with_detect_gate(self, gate: Gate) -> FixedAgent;
+    pub fn with_launch_gate(self, gate: Gate) -> FixedAgent;
+}
+/// Holds a fixed agent's detection or launch preparation until the test opens it. Clones share it; it stays open.
+#[derive(Clone, Default)] pub struct Gate { /* open flag, waiting count */ }
+impl Gate {
+    pub fn new() -> Gate;
+    pub fn open(&self);
+    pub fn waiting(&self) -> usize;                    // a call whose future was dropped no longer counts
+    pub async fn until_waiting(&self, count: usize);   // 1: a preparation reached it; 0: it passed or was dropped
+}
 ```
 
-`AgentSpec` and `Recipe` derive `Debug, Clone`. P0 implements `Detector::fixed`, `Detector::spec` and a functional
-`Detector::new` stub (9.1), which C and D need on day one.
+`AgentSpec` and `Recipe` derive `Debug, Clone`. P0 implements `Detector::fixed` with `FixedAgent` and `Gate`,
+`Detector::spec` and a functional `Detector::new` stub (9.1), which C and D need on day one. The fixed detector is how
+C's tests drive a start's preparation: P6's download detail (`with_download`, held at a launch gate so the detail
+shows), S32's Esc during an install or a probe (a gate's `waiting()` drops to 0 when the preparation is dropped), P42's
+forgotten install (`forgotten()`, and the next start downloads again), an `InstallFailed` start (`with_launch_error`),
+and a chat created while its agent reads `Checking` whose start waits for detection (`with_detected`, a detect gate).
 
 | id | Name | Recipe | Dialect | Start timeout | Survive | Daemons | Last verified |
 |---|---|---|---|---|---|---|---|
@@ -2009,6 +2050,7 @@ pub struct SinkGone;
 #[derive(Clone)] pub struct SessionManager { /* Arc<Inner> */ }
 impl SessionManager {
     pub fn new(deps: ManagerDeps) -> SessionManager;
+    /// `refresh: false`: the detector's cache at once, never waiting (`agents_list`); `true`: detects again and waits.
     pub async fn agents(&self, refresh: bool) -> Vec<AgentEntry>;
     pub fn env_status(&self) -> EnvStatus;
     pub fn env_refresh(&self) -> EnvStatus;
@@ -2721,7 +2763,7 @@ draft keep their numbers; new cases are appended to each table.
 | `Cargo.toml`, `Cargo.lock`, every crate's `Cargo.toml` (new crates `aura-process`, `aura-agents`; the desktop gains both) | the dependencies and features of 1.1, including tokio `signal` and aura-drivers' `replay` feature; nobody else touches manifests or the lock until phase 2 |
 | `crates/aura-protocol/src/{lib.rs,session.rs,lenient.rs}` | all of section 2, with round-trip, `is_stored`, `kind` and lenient-enum tests |
 | `crates/aura-process/**` | every public item of 3.1. Stub bodies return errors such as `SpawnError::Spawn { source: io::Error::other("not implemented in this build") }`, never `todo!()` (clippy and `-D warnings` reject it). **Implemented:** `testing.rs` (`FakeSpawner`, `FakeControl`), `EnvResolver::fixed`, `ProtocolLog::disabled`, `strip_launch_context`, `child_env`, `scrub`. **Functional stubs:** `EnvResolver::start` resolves at once to `process_env()` minus `strip_launch_context` as `Fallback`; `LeftoverRegistry::open` returns `disabled()`; `LogFactory::open` returns `ProtocolLog::disabled()`; `Redactor::standard()` redacts nothing yet. |
-| `crates/aura-agents/**` | the catalog data (complete), `Detector` signatures. **Implemented:** `Detector::fixed`, `Detector::spec`, `parse_version`, `version_at_least`. **Functional stub:** `Detector::new` reports the mock `Ready` and every other agent `Missing { "detection is not built in this build" }`; `prepare_launch` works for `Builtin` |
+| `crates/aura-agents/**` | the catalog data (complete), `Detector` signatures. **Implemented:** `Detector::fixed` (with `FixedAgent`, `Gate` and `forgotten`), `Detector::spec`, `parse_version`, `version_at_least`. **Functional stub:** `Detector::new` reports the mock `Ready` and every other agent `Missing { "detection is not built in this build" }`; `prepare_launch` works for `Builtin` |
 | `crates/aura-drivers/src/{lib.rs,driver.rs,testing.rs,batch.rs,mock.rs}`, plus empty module files with their declarations for B (`jsonrpc.rs`, `acp/{mod,wire,map,options,dialect,permissions}.rs`, `mock_driver.rs`, `factory.rs`, `replay/{mod,fixture,fake_agent,golden,curate}.rs`) | section 5.1 complete, `event_channel` included; `ScriptedDriver`, `ScriptHandle`, `ScriptedDriverFactory` and `DirectSpawner` implemented (5.7); the tagged push and flush in `batch.rs`; the rename fallout |
 | `crates/aura-core/{migrations/0002_sessions.sql,src/store.rs,src/store/salvage.rs,src/lib.rs,src/error.rs,src/owner.rs,src/chatstore/mod.rs,src/session/mod.rs}`, plus empty files for C's other modules | migration 0002 with its tests; `ProfileOwner` and `CoreError::ProfileInUse` implemented with a two-process test; the API skeletons of 6.1 and 6.4 |
 | `apps/desktop/src-tauri/src/{commands.rs,error.rs,bindings.rs,demo.rs,boot.rs}`, `apps/desktop/src/{bindings.ts,lib/stream.ts,lib/session.ts}` | the command signatures of 7.1 returning `internal`, the error codes, boot taking the owner lock, regenerated bindings, the M0 TypeScript fallout |
@@ -2743,7 +2785,8 @@ merge.
    5.7.
 3. aura-process public API (3.1), including `LaunchSpec`, `ProcessSpawner`, `ControlImpl`, `FakeSpawner`,
    `FakeAgentEnd`, `FakeControl`.
-4. aura-agents: `catalog`, `get`, `AgentSpec`, `Recipe`, `UserBinary`, `Detector`'s methods, `LaunchError`.
+4. aura-agents: `catalog`, `get`, `AgentSpec`, `Recipe`, `UserBinary`, `Detector`'s methods, `LaunchError`, and the
+   test double `FixedAgent` with `Gate`.
 5. aura-core: `ProfileOwner`, `ChatStore` and its records (6.1), `SessionManager`, `ManagerDeps`, `FrameSink`,
    `StatusSink`, `SessionError` (6.4).
 6. IPC command names, signatures and `AppErrorCode` values (7.1).

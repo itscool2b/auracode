@@ -10,14 +10,18 @@
 //!   when it names an executable file, else the one on `PATH`; `.exe` only on Windows) runs and
 //!   meets its floor; `npm` is needed only until the adapter is installed. `Ready` names the user's
 //!   binary, the one that will actually run.
+//!
+//! Other crates' tests use [`Detector::fixed`]: [`FixedAgent`]s answer as given, can read
+//! `Checking` until a detection ends, send download details, and hold detection or a launch
+//! preparation at a [`Gate`]; the detector records every [`Detector::forget_install`].
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use aura_process::{EnvResolver, LaunchSpec, LeftoverRegistry};
 use aura_protocol::session::{AgentEntry, Availability};
 use tokio::runtime::Handle;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 
 use crate::catalog::{AgentSpec, Recipe, catalog};
 use crate::launch::{self, LaunchError};
@@ -32,6 +36,8 @@ const BUILT_IN: &str = "built in";
 #[derive(Debug)]
 pub struct Detector {
     mode: Mode,
+    /// The agent of every `forget_install`, in order.
+    forgotten: Mutex<Vec<String>>,
 }
 
 #[derive(Debug)]
@@ -51,17 +57,250 @@ enum Mode {
         rt: Handle,
     },
     Fixed {
-        agents: Vec<FixedAgent>,
+        agents: Vec<Fixed>,
     },
 }
 
 /// An agent with fixed answers, for tests: no probes, no env, no installs.
+///
+/// Build one with [`FixedAgent::new`] and the `with_*` methods: the struct is `non_exhaustive`, so
+/// later fields never break a test. By default `detect` answers `availability` at once,
+/// `prepare_launch` answers `launch` at once, and nothing needs a download.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct FixedAgent {
     pub spec: AgentSpec,
+    /// What [`Detector::cached`] reports until a [`Detector::detect`] of this agent ends, and what
+    /// `detect` answers unless `detected` is set.
     pub availability: Availability,
+    /// What `detect` answers, and `cached` reports from then on: an agent that reads `Checking`
+    /// at first and that detection finds `Ready`, `Missing` or `Broken`.
+    pub detected: Option<Availability>,
     /// `None` for a built-in agent, or to make `prepare_launch` fail with the availability's reason.
     pub launch: Option<LaunchSpec>,
+    /// `prepare_launch` fails with this instead, after its download details and its gate (an
+    /// `InstallFailed` download, say).
+    pub launch_error: Option<LaunchError>,
+    /// The adapter is not installed yet: `AgentEntry::needs_download` reads true, and the next
+    /// `prepare_launch` sends `progress` before it answers. A successful `prepare_launch` installs
+    /// it, and `forget_install` on an npm adapter makes the download needed again.
+    pub needs_download: bool,
+    /// The status details a download sends through `prepare_launch`'s `progress`, in order.
+    pub progress: Vec<String>,
+    /// Holds every `detect` of this agent until the gate opens.
+    pub detect_gate: Option<Gate>,
+    /// Holds every `prepare_launch` of this agent, after its download details, until the gate
+    /// opens.
+    pub launch_gate: Option<Gate>,
+}
+
+impl FixedAgent {
+    /// An agent that reports `availability` and starts with `launch` (`None` for a built-in agent,
+    /// or to make `prepare_launch` fail with the availability's reason).
+    pub fn new(
+        spec: AgentSpec,
+        availability: Availability,
+        launch: Option<LaunchSpec>,
+    ) -> FixedAgent {
+        FixedAgent {
+            spec,
+            availability,
+            detected: None,
+            launch,
+            launch_error: None,
+            needs_download: false,
+            progress: Vec::new(),
+            detect_gate: None,
+            launch_gate: None,
+        }
+    }
+
+    /// `detect` answers `availability`, and `cached` reports it from then on.
+    pub fn with_detected(mut self, availability: Availability) -> FixedAgent {
+        self.detected = Some(availability);
+        self
+    }
+
+    /// The adapter is not installed: the next `prepare_launch` sends `progress` first.
+    pub fn with_download(mut self, progress: Vec<String>) -> FixedAgent {
+        self.needs_download = true;
+        self.progress = progress;
+        self
+    }
+
+    /// `prepare_launch` fails with `error`.
+    pub fn with_launch_error(mut self, error: LaunchError) -> FixedAgent {
+        self.launch_error = Some(error);
+        self
+    }
+
+    /// `detect` waits until `gate` opens.
+    pub fn with_detect_gate(mut self, gate: Gate) -> FixedAgent {
+        self.detect_gate = Some(gate);
+        self
+    }
+
+    /// `prepare_launch` waits until `gate` opens, after its download details.
+    pub fn with_launch_gate(mut self, gate: Gate) -> FixedAgent {
+        self.launch_gate = Some(gate);
+        self
+    }
+}
+
+/// Holds a fixed agent's detection or launch preparation until the test opens it, so a test can
+/// act while a start is still preparing (an Esc during a download, say). Clones share one gate, and
+/// it stays open once opened.
+#[derive(Debug, Clone)]
+pub struct Gate {
+    inner: Arc<GateInner>,
+}
+
+#[derive(Debug)]
+struct GateInner {
+    open: watch::Sender<bool>,
+    /// Calls waiting at the gate now.
+    waiting: watch::Sender<usize>,
+}
+
+impl Gate {
+    pub fn new() -> Gate {
+        Gate {
+            inner: Arc::new(GateInner {
+                open: watch::Sender::new(false),
+                waiting: watch::Sender::new(0),
+            }),
+        }
+    }
+
+    /// Lets every waiting call through, and every later one.
+    pub fn open(&self) {
+        self.inner.open.send_replace(true);
+    }
+
+    /// How many calls wait at the gate now. A call whose future was dropped while it waited (a
+    /// start that was interrupted) no longer counts.
+    pub fn waiting(&self) -> usize {
+        *self.inner.waiting.borrow()
+    }
+
+    /// Resolves once exactly `count` calls wait at the gate: 1 when a preparation reached it, 0 once
+    /// it passed or was dropped.
+    pub async fn until_waiting(&self, count: usize) {
+        let mut waiting = self.inner.waiting.subscribe();
+        // The gate holds the sender, so the channel stays open while `self` lives.
+        let _ = waiting.wait_for(|now| *now == count).await;
+    }
+
+    /// Waits until the gate is open, counted as waiting meanwhile.
+    async fn pass(&self) {
+        let mut open = self.inner.open.subscribe();
+        if *open.borrow() {
+            return;
+        }
+        self.inner.waiting.send_modify(|now| *now += 1);
+        let _leave = Leave(&self.inner.waiting);
+        let _ = open.wait_for(|open| *open).await;
+    }
+}
+
+impl Default for Gate {
+    fn default() -> Gate {
+        Gate::new()
+    }
+}
+
+/// Stops counting a call as waiting once it passes the gate or its future is dropped.
+struct Leave<'a>(&'a watch::Sender<usize>);
+
+impl Drop for Leave<'_> {
+    fn drop(&mut self) {
+        self.0.send_modify(|now| *now = now.saturating_sub(1));
+    }
+}
+
+/// A fixed agent and what its answers have done so far.
+#[derive(Debug)]
+struct Fixed {
+    agent: FixedAgent,
+    state: Mutex<FixedState>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FixedState {
+    /// A `detect` ended: `cached` reports the detected availability.
+    detected: bool,
+    needs_download: bool,
+}
+
+impl Fixed {
+    fn new(agent: FixedAgent) -> Fixed {
+        let state = FixedState {
+            detected: false,
+            needs_download: agent.needs_download,
+        };
+        Fixed {
+            agent,
+            state: Mutex::new(state),
+        }
+    }
+
+    /// The availability detection ends with.
+    fn detected(&self) -> &Availability {
+        self.agent
+            .detected
+            .as_ref()
+            .unwrap_or(&self.agent.availability)
+    }
+
+    fn entry(&self) -> AgentEntry {
+        let state = *lock(&self.state);
+        let availability = if state.detected {
+            self.detected()
+        } else {
+            &self.agent.availability
+        };
+        entry(&self.agent.spec, availability.clone(), state.needs_download)
+    }
+
+    async fn detect(&self) -> Availability {
+        if let Some(gate) = &self.agent.detect_gate {
+            gate.pass().await;
+        }
+        lock(&self.state).detected = true;
+        self.detected().clone()
+    }
+
+    async fn prepare_launch(
+        &self,
+        progress: mpsc::UnboundedSender<String>,
+    ) -> Result<LaunchSpec, LaunchError> {
+        let downloading = lock(&self.state).needs_download;
+        if downloading {
+            for detail in &self.agent.progress {
+                // A start that no longer listens drops this future next.
+                let _ = progress.send(detail.clone());
+            }
+        }
+        if let Some(gate) = &self.agent.launch_gate {
+            gate.pass().await;
+        }
+        let launch = self.launch()?;
+        if downloading {
+            lock(&self.state).needs_download = false;
+        }
+        Ok(launch)
+    }
+
+    fn launch(&self) -> Result<LaunchSpec, LaunchError> {
+        if let Some(error) = &self.agent.launch_error {
+            return Err(error.clone());
+        }
+        match (&self.agent.launch, &self.agent.spec.recipe) {
+            (Some(launch), _) => Ok(launch.clone()),
+            (None, Recipe::Builtin) => Ok(launch::builtin(&self.agent.spec)),
+            (None, _) => Err(unavailable(self.detected())),
+        }
+    }
 }
 
 impl Detector {
@@ -84,13 +323,18 @@ impl Detector {
                 adapters_dir,
                 rt,
             },
+            forgotten: Mutex::new(Vec::new()),
         })
     }
 
-    /// Tests: these agents with fixed availability and launch specs; no probes, no env, no installs.
+    /// Tests: these agents, in this order, with fixed answers (see [`FixedAgent`]); no probes, no
+    /// env, no installs.
     pub fn fixed(agents: Vec<FixedAgent>) -> Arc<Detector> {
         Arc::new(Detector {
-            mode: Mode::Fixed { agents },
+            mode: Mode::Fixed {
+                agents: agents.into_iter().map(Fixed::new).collect(),
+            },
+            forgotten: Mutex::new(Vec::new()),
         })
     }
 
@@ -99,30 +343,50 @@ impl Detector {
     pub fn spec(&self, id: &str) -> Option<AgentSpec> {
         match &self.mode {
             Mode::Live { specs, .. } => specs.iter().find(|spec| spec.id == id).cloned(),
-            Mode::Fixed { agents } => agents
-                .iter()
-                .find(|agent| agent.spec.id == id)
-                .map(|agent| agent.spec.clone()),
+            Mode::Fixed { agents } => find(agents, id).map(|fixed| fixed.agent.spec.clone()),
         }
     }
 
-    /// Whether `spec` can start here. Cached; shares the env resolution and the probe in flight
-    /// with every other caller.
+    /// Whether `spec` can start here. Cached; waits for the env resolution and the probe in flight,
+    /// which it shares with every other caller, so it answers `Ready`, `Missing` or `Broken`, never
+    /// `Checking`. A fixed agent answers its `detected` availability, or `availability` without one.
     pub async fn detect(&self, spec: &AgentSpec) -> Availability {
-        self.availability(spec)
+        match &self.mode {
+            Mode::Live { .. } => live_availability(spec),
+            Mode::Fixed { agents } => match find(agents, spec.id) {
+                Some(fixed) => fixed.detect().await,
+                None => Availability::Missing {
+                    reason: unknown(spec),
+                },
+            },
+        }
     }
 
-    /// Every agent, in catalog order. `refresh` re-resolves the env and probes again.
-    pub async fn detect_all(&self, _refresh: bool) -> Vec<AgentEntry> {
+    /// Every agent, in catalog order (a fixed detector's in the order given).
+    ///
+    /// `refresh: false` answers at once with [`cached`](Self::cached), never waiting: an agent whose
+    /// first detection has not ended reads `Checking`, and detection runs in the background from
+    /// [`new`](Self::new) on, once the env resolves. `refresh: true` resolves the env again, probes
+    /// every agent, and waits for the results; a fixed detector runs `detect` for each agent in
+    /// turn.
+    pub async fn detect_all(&self, refresh: bool) -> Vec<AgentEntry> {
+        if refresh && let Mode::Fixed { agents } = &self.mode {
+            for fixed in agents {
+                fixed.detect().await;
+            }
+        }
         self.cached()
     }
 
-    /// The last results, without waiting: `Checking` until the first detection ends.
+    /// The last results, without waiting: `Checking` until an agent's first detection ends.
     pub fn cached(&self) -> Vec<AgentEntry> {
-        self.specs()
-            .iter()
-            .map(|spec| entry(spec, self.availability(spec)))
-            .collect()
+        match &self.mode {
+            Mode::Live { specs, .. } => specs
+                .iter()
+                .map(|spec| entry(spec, live_availability(spec), false))
+                .collect(),
+            Mode::Fixed { agents } => agents.iter().map(Fixed::entry).collect(),
+        }
     }
 
     /// Installs an npm adapter when it is not installed (one shared attempt per package; `progress`
@@ -131,21 +395,15 @@ impl Detector {
     pub async fn prepare_launch(
         &self,
         spec: &AgentSpec,
-        _progress: mpsc::UnboundedSender<String>,
+        progress: mpsc::UnboundedSender<String>,
     ) -> Result<LaunchSpec, LaunchError> {
         match &self.mode {
-            Mode::Fixed { agents } => {
-                let Some(agent) = agents.iter().find(|agent| agent.spec.id == spec.id) else {
-                    return Err(LaunchError::Missing {
-                        reason: format!("auracode doesn't know an agent called \"{}\".", spec.id),
-                    });
-                };
-                match (&agent.launch, &agent.spec.recipe) {
-                    (Some(launch), _) => Ok(launch.clone()),
-                    (None, Recipe::Builtin) => Ok(launch::builtin(&agent.spec)),
-                    (None, _) => Err(unavailable(&agent.availability)),
-                }
-            }
+            Mode::Fixed { agents } => match find(agents, spec.id) {
+                Some(fixed) => fixed.prepare_launch(progress).await,
+                None => Err(LaunchError::Missing {
+                    reason: unknown(spec),
+                }),
+            },
             Mode::Live { .. } => match spec.recipe {
                 Recipe::Builtin => Ok(launch::builtin(spec)),
                 Recipe::Binary { .. } | Recipe::NpmAdapter { .. } => Err(LaunchError::Missing {
@@ -156,37 +414,43 @@ impl Detector {
     }
 
     /// Deletes an adapter's install marker, so the next start installs it again (a start failed on
-    /// a missing module).
-    pub fn forget_install(&self, _spec: &AgentSpec) {}
-
-    fn specs(&self) -> Vec<AgentSpec> {
-        match &self.mode {
-            Mode::Live { specs, .. } => specs.clone(),
-            Mode::Fixed { agents } => agents.iter().map(|agent| agent.spec.clone()).collect(),
+    /// a missing module). Every call is recorded ([`forgotten`](Self::forgotten)); a fixed npm
+    /// adapter needs its download again.
+    pub fn forget_install(&self, spec: &AgentSpec) {
+        lock(&self.forgotten).push(spec.id.to_owned());
+        if let Mode::Fixed { agents } = &self.mode
+            && let Some(fixed) = find(agents, spec.id)
+            && matches!(fixed.agent.spec.recipe, Recipe::NpmAdapter { .. })
+        {
+            lock(&fixed.state).needs_download = true;
         }
     }
 
-    fn availability(&self, spec: &AgentSpec) -> Availability {
-        match &self.mode {
-            Mode::Fixed { agents } => agents
-                .iter()
-                .find(|agent| agent.spec.id == spec.id)
-                .map_or_else(
-                    || Availability::Missing {
-                        reason: format!("auracode doesn't know an agent called \"{}\".", spec.id),
-                    },
-                    |agent| agent.availability.clone(),
-                ),
-            Mode::Live { .. } => match spec.recipe {
-                Recipe::Builtin => Availability::Ready {
-                    version: None,
-                    path: BUILT_IN.into(),
-                },
-                Recipe::Binary { .. } | Recipe::NpmAdapter { .. } => Availability::Missing {
-                    reason: NOT_BUILT.into(),
-                },
-            },
-        }
+    /// Tests: the agent of every [`forget_install`](Self::forget_install) so far, in order.
+    pub fn forgotten(&self) -> Vec<String> {
+        lock(&self.forgotten).clone()
+    }
+}
+
+fn find<'a>(agents: &'a [Fixed], id: &str) -> Option<&'a Fixed> {
+    agents.iter().find(|fixed| fixed.agent.spec.id == id)
+}
+
+/// The reason an agent the detector does not know cannot start.
+fn unknown(spec: &AgentSpec) -> String {
+    format!("auracode doesn't know an agent called \"{}\".", spec.id)
+}
+
+/// What this build's live detector reports.
+fn live_availability(spec: &AgentSpec) -> Availability {
+    match spec.recipe {
+        Recipe::Builtin => Availability::Ready {
+            version: None,
+            path: BUILT_IN.into(),
+        },
+        Recipe::Binary { .. } | Recipe::NpmAdapter { .. } => Availability::Missing {
+            reason: NOT_BUILT.into(),
+        },
     }
 }
 
@@ -206,14 +470,14 @@ fn unavailable(availability: &Availability) -> LaunchError {
 }
 
 /// An agent as the New chat screen lists it.
-fn entry(spec: &AgentSpec, availability: Availability) -> AgentEntry {
+fn entry(spec: &AgentSpec, availability: Availability, needs_download: bool) -> AgentEntry {
     AgentEntry {
         id: spec.id.to_owned(),
         name: spec.name.to_owned(),
         description: spec.description.to_owned(),
         availability,
         launch: launch_label(spec),
-        needs_download: false,
+        needs_download,
         last_verified: spec.last_verified.to_owned(),
     }
 }
@@ -233,6 +497,14 @@ fn launch_label(spec: &AgentSpec) -> String {
         } => format!("{package} {version} with your {}", user_binary.program),
         Recipe::Builtin => BUILT_IN.into(),
     }
+}
+
+/// Locks `mutex`, recovering the data of a thread that panicked while holding it: a test double
+/// must keep answering after a test's own panic.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 #[cfg(test)]
@@ -265,6 +537,35 @@ mod tests {
         mpsc::unbounded_channel().0
     }
 
+    fn ready(path: &str) -> Availability {
+        Availability::Ready {
+            version: Some("1.0.0".into()),
+            path: path.into(),
+        }
+    }
+
+    fn claude() -> AgentSpec {
+        get("claude-acp").expect("claude").clone()
+    }
+
+    fn claude_launch() -> LaunchSpec {
+        LaunchSpec {
+            label: "claude-agent-acp".into(),
+            program: PathBuf::from("/usr/local/bin/node"),
+            args: vec!["/data/adapters/claude/entry.js".into()],
+            cwd: ProcessCwd::Fixed(PathBuf::from("/data/adapters/claude")),
+            set_env: Vec::new(),
+            daemons: Vec::new(),
+            startup_timeout: Duration::from_secs(60),
+        }
+    }
+
+    const DOWNLOADING: &str = "Downloading the Claude adapter (@agentclientprotocol/claude-agent-acp 0.95.0). This happens once and can take a few minutes.";
+
+    fn needs_download(detector: &Detector) -> bool {
+        detector.cached()[0].needs_download
+    }
+
     #[tokio::test]
     async fn this_build_reports_the_demo_agent_ready_and_the_rest_missing() {
         let detector = live();
@@ -282,6 +583,7 @@ mod tests {
                     }
                 );
             }
+            assert!(!entry.needs_download);
         }
         assert_eq!(entries[0].launch, "hermes acp");
         assert_eq!(
@@ -289,6 +591,7 @@ mod tests {
             "@agentclientprotocol/claude-agent-acp 0.95.0 with your claude"
         );
         assert_eq!(detector.cached(), entries);
+        assert_eq!(detector.detect_all(true).await, entries);
 
         let mock = detector.spec("mock").expect("mock");
         let launch = detector
@@ -310,6 +613,8 @@ mod tests {
             Availability::Missing { .. }
         ));
         assert!(detector.spec("cursor").is_none());
+        detector.forget_install(&claude());
+        assert_eq!(detector.forgotten(), ["claude-acp"]);
     }
 
     #[tokio::test]
@@ -329,26 +634,26 @@ mod tests {
             ..get("codex-acp").expect("codex").clone()
         };
         let detector = Detector::fixed(vec![
-            FixedAgent {
-                spec: hermes.clone(),
-                availability: Availability::Ready {
+            FixedAgent::new(
+                hermes.clone(),
+                Availability::Ready {
                     version: Some("0.22.5".into()),
                     path: "/opt/bin/hermes".into(),
                 },
-                launch: Some(launch.clone()),
-            },
-            FixedAgent {
-                spec: broken.clone(),
-                availability: Availability::Broken {
+                Some(launch.clone()),
+            ),
+            FixedAgent::new(
+                broken.clone(),
+                Availability::Broken {
                     reason: "auracode needs Codex 0.160.1 or newer (found 0.1.0).".into(),
                 },
-                launch: None,
-            },
-            FixedAgent {
-                spec: get("mock").expect("mock").clone(),
-                availability: Availability::Checking,
-                launch: None,
-            },
+                None,
+            ),
+            FixedAgent::new(
+                get("mock").expect("mock").clone(),
+                Availability::Checking,
+                None,
+            ),
         ]);
         assert_eq!(detector.spec("hermes"), Some(hermes.clone()));
         assert!(
@@ -373,13 +678,10 @@ mod tests {
                 .map(|launch| launch.label),
             Ok("mock".to_owned())
         );
-        let ids: Vec<String> = detector
-            .detect_all(true)
-            .await
-            .into_iter()
-            .map(|entry| entry.id)
-            .collect();
+        let entries = detector.detect_all(true).await;
+        let ids: Vec<&str> = entries.iter().map(|entry| entry.id.as_str()).collect();
         assert_eq!(ids, ["hermes", "broken", "mock"]);
+        assert!(entries.iter().all(|entry| !entry.needs_download));
         assert_eq!(detector.detect(&mock).await, Availability::Checking);
         let stranger = AgentSpec {
             id: "stranger",
@@ -389,6 +691,184 @@ mod tests {
             detector.prepare_launch(&stranger, progress()).await,
             Err(LaunchError::Missing { .. })
         ));
+        assert!(matches!(
+            detector.detect(&stranger).await,
+            Availability::Missing { .. }
+        ));
         detector.forget_install(&broken);
+        detector.forget_install(&hermes);
+        assert_eq!(detector.forgotten(), ["broken", "hermes"]);
+        let downloads: Vec<(String, bool)> = detector
+            .cached()
+            .into_iter()
+            .map(|entry| (entry.id, entry.needs_download))
+            .collect();
+        assert_eq!(
+            downloads,
+            [
+                ("hermes".to_owned(), false),
+                ("broken".to_owned(), true),
+                ("mock".to_owned(), false)
+            ],
+            "only an npm adapter has an install to forget"
+        );
+    }
+
+    /// `Checking` proceeds at create time, and the start waits for detection, which may find the
+    /// agent ready or missing.
+    #[tokio::test]
+    async fn a_fixed_agent_reads_checking_until_detection_ends() {
+        let detector = Detector::fixed(vec![
+            FixedAgent::new(claude(), Availability::Checking, Some(claude_launch()))
+                .with_detected(ready("/usr/local/bin/claude")),
+        ]);
+        assert_eq!(detector.cached()[0].availability, Availability::Checking);
+        assert_eq!(detector.detect_all(false).await, detector.cached());
+        assert_eq!(
+            detector.detect(&claude()).await,
+            ready("/usr/local/bin/claude")
+        );
+        assert_eq!(
+            detector.cached()[0].availability,
+            ready("/usr/local/bin/claude")
+        );
+
+        let missing = Availability::Missing {
+            reason: "The Claude adapter drives your own Claude Code, and claude was not found on your PATH.".into(),
+        };
+        let detector = Detector::fixed(vec![
+            FixedAgent::new(claude(), Availability::Checking, None).with_detected(missing.clone()),
+        ]);
+        let entries = detector.detect_all(true).await;
+        assert_eq!(entries[0].availability, missing);
+        assert_eq!(
+            detector.prepare_launch(&claude(), progress()).await,
+            Err(LaunchError::Missing {
+                reason: "The Claude adapter drives your own Claude Code, and claude was not found on your PATH.".into()
+            }),
+            "a failed launch reports the detected reason"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_download_sends_its_details_once_and_forget_install_needs_it_again() {
+        let detector = Detector::fixed(vec![
+            FixedAgent::new(
+                claude(),
+                ready("/usr/local/bin/claude"),
+                Some(claude_launch()),
+            )
+            .with_download(vec![DOWNLOADING.into()]),
+        ]);
+        assert!(needs_download(&detector));
+
+        let (details, mut received) = mpsc::unbounded_channel();
+        assert_eq!(
+            detector.prepare_launch(&claude(), details.clone()).await,
+            Ok(claude_launch())
+        );
+        assert_eq!(received.try_recv().as_deref(), Ok(DOWNLOADING));
+        assert!(received.try_recv().is_err(), "one detail");
+        assert!(!needs_download(&detector), "installed");
+
+        assert_eq!(
+            detector.prepare_launch(&claude(), details.clone()).await,
+            Ok(claude_launch())
+        );
+        assert!(received.try_recv().is_err(), "no second download");
+
+        detector.forget_install(&claude());
+        assert_eq!(detector.forgotten(), ["claude-acp"]);
+        assert!(needs_download(&detector));
+        assert_eq!(
+            detector.prepare_launch(&claude(), details).await,
+            Ok(claude_launch())
+        );
+        assert_eq!(
+            received.try_recv().as_deref(),
+            Ok(DOWNLOADING),
+            "Retry downloads again"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_failed_download_installs_nothing() {
+        let failure = LaunchError::InstallFailed {
+            reason: "Could not download the Claude adapter: npm error code E404".into(),
+        };
+        let detector = Detector::fixed(vec![
+            FixedAgent::new(
+                claude(),
+                ready("/usr/local/bin/claude"),
+                Some(claude_launch()),
+            )
+            .with_download(vec![DOWNLOADING.into()])
+            .with_launch_error(failure.clone()),
+        ]);
+        let (details, mut received) = mpsc::unbounded_channel();
+        assert_eq!(
+            detector.prepare_launch(&claude(), details).await,
+            Err(failure)
+        );
+        assert_eq!(received.try_recv().as_deref(), Ok(DOWNLOADING));
+        assert!(needs_download(&detector), "still not installed");
+    }
+
+    #[tokio::test]
+    async fn gates_hold_detection_and_preparation_until_opened() {
+        let detect_gate = Gate::new();
+        let launch_gate = Gate::default();
+        let detector = Detector::fixed(vec![
+            FixedAgent::new(claude(), Availability::Checking, Some(claude_launch()))
+                .with_detected(ready("/usr/local/bin/claude"))
+                .with_download(vec![DOWNLOADING.into()])
+                .with_detect_gate(detect_gate.clone())
+                .with_launch_gate(launch_gate.clone()),
+        ]);
+
+        let detecting = tokio::spawn({
+            let detector = Arc::clone(&detector);
+            async move { detector.detect(&claude()).await }
+        });
+        detect_gate.until_waiting(1).await;
+        assert_eq!(detector.cached()[0].availability, Availability::Checking);
+        assert!(!detecting.is_finished());
+        detect_gate.open();
+        assert_eq!(
+            detecting.await.expect("join"),
+            ready("/usr/local/bin/claude")
+        );
+        assert_eq!(detect_gate.waiting(), 0);
+        assert_eq!(
+            detector.detect(&claude()).await,
+            ready("/usr/local/bin/claude"),
+            "an open gate stays open"
+        );
+
+        // An Esc during the download drops the preparation at the gate: nothing is installed.
+        let (details, mut received) = mpsc::unbounded_channel();
+        let preparing = tokio::spawn({
+            let detector = Arc::clone(&detector);
+            let details = details.clone();
+            async move { detector.prepare_launch(&claude(), details).await }
+        });
+        launch_gate.until_waiting(1).await;
+        assert_eq!(received.recv().await.as_deref(), Some(DOWNLOADING));
+        preparing.abort();
+        launch_gate.until_waiting(0).await;
+        assert!(preparing.await.expect_err("aborted").is_cancelled());
+        assert!(needs_download(&detector));
+
+        // Retry, released: the download runs again and completes.
+        let preparing = tokio::spawn({
+            let detector = Arc::clone(&detector);
+            async move { detector.prepare_launch(&claude(), details).await }
+        });
+        launch_gate.until_waiting(1).await;
+        assert_eq!(received.recv().await.as_deref(), Some(DOWNLOADING));
+        launch_gate.open();
+        assert_eq!(preparing.await.expect("join"), Ok(claude_launch()));
+        assert_eq!(launch_gate.waiting(), 0);
+        assert!(!needs_download(&detector));
     }
 }

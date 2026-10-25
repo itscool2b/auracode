@@ -179,7 +179,10 @@ impl SessionManager {
         &self.inner.deps
     }
 
-    /// Every agent with its availability; `refresh` re-resolves the env and probes again.
+    /// Every agent with its availability. `refresh: false` answers at once from the detector's cache
+    /// and never waits (`agents_list`): an agent whose first detection has not ended reads
+    /// `Checking`. `refresh: true` resolves the env again, probes every agent, and waits for the
+    /// results (`agents_refresh`).
     pub async fn agents(&self, refresh: bool) -> Vec<AgentEntry> {
         self.deps().detector.detect_all(refresh).await
     }
