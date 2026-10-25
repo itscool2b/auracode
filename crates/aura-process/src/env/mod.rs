@@ -496,7 +496,8 @@ async fn resolve(config: &EnvResolverConfig, registry: &LeftoverRegistry) -> Res
             .known_dirs
             .clone()
             .unwrap_or_else(|| standard_known_dirs(&home));
-        let mut env = match shell::login_shell(config, registry, &base, &home).await {
+        let default = shell::platform_default();
+        let mut env = match shell::login_shell(config, registry, &base, &home, &default).await {
             Ok(env) => env,
             Err((reason, warnings)) => fallback(base, reason, warnings),
         };

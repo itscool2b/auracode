@@ -117,14 +117,16 @@ pub(crate) fn pick_shell(
     platform_default()
 }
 
-/// Reads the env from the user's login shell: interactive first, then without `-i`. On failure,
-/// the reason (for the fallback) and the warnings so far.
+/// Reads the env from the user's login shell: interactive first, then without `-i`. A shell that
+/// speaks neither form is replaced by `default` ([`platform_default`]; tests pass a fake). On
+/// failure, the reason (for the fallback) and the warnings so far.
 #[cfg(unix)]
 pub(crate) async fn login_shell(
     config: &super::EnvResolverConfig,
     registry: &crate::registry::LeftoverRegistry,
     base: &EnvMap,
     home: &Path,
+    default: &Path,
 ) -> Result<super::ResolvedEnv, (String, Vec<String>)> {
     use std::sync::Arc;
 
@@ -139,7 +141,7 @@ pub(crate) async fn login_shell(
     });
     let (shell, family) = match family(&shell) {
         ShellFamily::Unsupported => {
-            let default = platform_default();
+            let default = default.to_path_buf();
             warnings.push(format!(
                 "auracode can't read the environment from {}; it used {} instead.",
                 shell.file_name().map_or_else(
@@ -444,5 +446,73 @@ mod tests {
             runs,
         );
         assert!(!asked);
+    }
+
+    /// A fake login shell in `sh` (the test child is only built for integration tests): it
+    /// records its argv, then runs the command it was given, which prints `env -0` between the
+    /// markers. Run as a script, `sh` reads no rc file.
+    #[cfg(unix)]
+    const FAKE_SHELL: &str = r##"#!/bin/sh
+printf '%s\n' "$*" >> "$AURA_FAKE_RECORD"
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = -c ]; then eval "$2"; exit; fi
+  shift
+done
+exit 64
+"##;
+
+    /// E5: a shell that speaks neither argv form is replaced by the platform default, run with
+    /// the first form, and a warning names the shell that was skipped.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn an_unsupported_shell_runs_the_default_with_a_warning() {
+        use std::os::unix::fs::PermissionsExt;
+
+        use crate::env::{EnvResolverConfig, EnvSource};
+        use crate::registry::LeftoverRegistry;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let default = dir.path().join("sh");
+        std::fs::write(&default, FAKE_SHELL).expect("write");
+        std::fs::set_permissions(&default, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        let record = dir.path().join("argv");
+        let base: EnvMap = [
+            ("PATH", "/usr/bin:/bin"),
+            ("AURA_FAKE_RECORD", record.to_str().expect("utf-8")),
+            ("FROM_BASE", "1"),
+        ]
+        .into_iter()
+        .map(|(name, value)| (EnvKey::from(name), OsString::from(value)))
+        .collect();
+        for unsupported in ["nu", "xonsh"] {
+            let config = EnvResolverConfig {
+                shell: Some(dir.path().join(unsupported)),
+                ..EnvResolverConfig::standard()
+            };
+            let registry = LeftoverRegistry::disabled();
+            let env = login_shell(&config, &registry, &base, dir.path(), &default)
+                .await
+                .expect("the default shell's env");
+            assert!(
+                matches!(&env.source, EnvSource::LoginShell { shell, interactive: true, .. } if *shell == default),
+                "{:?}",
+                env.source
+            );
+            assert_eq!(
+                env.warnings,
+                [format!(
+                    "auracode can't read the environment from {unsupported}; it used {} instead.",
+                    default.display()
+                )]
+            );
+            assert_eq!(value(&env.vars, "FROM_BASE"), Some("1"));
+        }
+        let runs = std::fs::read_to_string(&record).expect("the default ran");
+        let runs: Vec<&str> = runs.lines().collect();
+        assert_eq!(runs.len(), 2, "{runs:?}");
+        assert!(
+            runs.iter().all(|argv| argv.starts_with("-i -l -c printf")),
+            "the first form, once each: {runs:?}"
+        );
     }
 }
