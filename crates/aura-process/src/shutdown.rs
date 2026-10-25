@@ -81,6 +81,11 @@ pub enum ShutdownStep {
 #[cfg(unix)]
 const POLL: Duration = Duration::from_millis(50);
 
+/// How long `kill_tree` waits for its walk before it sends the stopped group SIGKILL itself. The
+/// walk takes a few milliseconds on Linux and some tens on macOS, where it runs `ps`.
+#[cfg(unix)]
+pub(crate) const KILL_WALK_LIMIT: Duration = Duration::from_secs(1);
+
 /// The shutdown chain of a real agent (see the module docs). Runs as a task of its own.
 pub(crate) async fn run(state: Arc<ControlState>, plan: ShutdownPlan) -> ShutdownReport {
     let started = tokio::time::Instant::now();
@@ -140,7 +145,7 @@ async fn chain(state: &Arc<ControlState>, plan: ShutdownPlan) -> ShutdownReport 
 #[cfg(unix)]
 use unix::chain;
 #[cfg(unix)]
-pub(crate) use unix::{kill_session_blocking, kill_tree, record_escaped};
+pub(crate) use unix::{kill_session_blocking, kill_tree, note_reaped, record_escaped};
 
 #[cfg(windows)]
 pub(crate) fn kill_tree(state: &Arc<ControlState>) {
@@ -155,6 +160,7 @@ pub(crate) fn record_escaped(_state: Arc<ControlState>) -> BoxFuture<'static, ()
 
 #[cfg(unix)]
 mod unix {
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex, MutexGuard};
     use std::time::Duration;
 
@@ -162,11 +168,11 @@ mod unix {
     use futures::future::BoxFuture;
     use nix::errno::Errno;
     use nix::sys::signal::{Signal, kill, killpg};
-    use nix::unistd::Pid;
+    use nix::unistd::{Pid, getpgid};
 
-    use super::{POLL, ShutdownPlan, ShutdownReport, ShutdownStep, wait_exit};
+    use super::{KILL_WALK_LIMIT, POLL, ShutdownPlan, ShutdownReport, ShutdownStep, wait_exit};
     use crate::control::ControlState;
-    use crate::ptable::{self, ProcInfo, descendants, spared_daemons};
+    use crate::ptable::{self, ProcInfo, StartTime, descendants, spared_daemons};
     use crate::registry::EscapedProc;
     use crate::spawn::DaemonMatch;
 
@@ -220,17 +226,73 @@ mod unix {
             .map(Pid::from_raw)
     }
 
+    /// Right after the waiter reaped the agent: a group that is empty now is empty for good, and
+    /// its id is free for a new process to take, so nothing may signal it again. macOS answers
+    /// `EPERM` for a group of zombies, which no signal reaches either.
+    pub(crate) fn note_reaped(pgid: u32, gone: &AtomicBool) {
+        let Some(group) = pid(pgid) else {
+            return;
+        };
+        if matches!(killpg(group, None), Err(Errno::ESRCH | Errno::EPERM)) {
+            gone.store(true, Ordering::Release);
+        }
+    }
+
+    /// Whether a signal to the agent's group reaches only the agent's own processes. The group's
+    /// id is the agent's pid, which nothing else can take while the agent is not reaped. After
+    /// that, the group is the agent's until it is seen empty, or until a new process holds that
+    /// pid: the kernel hands out a pid only while no group has it as its id, so the agent's group
+    /// had emptied first.
+    fn group_is_ours(state: &ControlState) -> bool {
+        if state.group_gone() {
+            return false;
+        }
+        if state.exited_now().is_none() {
+            return true;
+        }
+        let Some(leader) = pid(state.pgid) else {
+            return false;
+        };
+        if getpgid(Some(leader)) == Err(Errno::ESRCH) {
+            return true;
+        }
+        state.mark_group_gone();
+        false
+    }
+
+    /// Sends `signal` (`None` only probes) to the agent's group while it is still the agent's.
+    /// `ESRCH` means it is empty for good.
+    fn signal_group(state: &ControlState, signal: Option<Signal>) -> nix::Result<()> {
+        let group = match pid(state.pgid) {
+            Some(group) if group_is_ours(state) => group,
+            _ => return Err(Errno::ESRCH),
+        };
+        let sent = killpg(group, signal);
+        if sent == Err(Errno::ESRCH) {
+            state.mark_group_gone();
+        }
+        sent
+    }
+
     /// Whether the agent's group still has a live member. macOS answers `EPERM` for a group of
     /// zombies, which counts as gone once the agent exited.
     fn group_alive(state: &ControlState) -> bool {
-        let Some(group) = pid(state.pgid) else {
-            return false;
-        };
-        match killpg(group, None) {
+        let exited = state.exited_now().is_some();
+        match signal_group(state, None) {
             // Linux counts zombies as members until their new parent reaps them: ask /proc.
-            Ok(()) if cfg!(target_os = "linux") => ptable::group_has_live_member(state.pgid),
+            Ok(()) if cfg!(target_os = "linux") => {
+                let live = ptable::group_has_live_member(state.pgid);
+                if !live && exited {
+                    state.mark_group_gone();
+                }
+                live
+            }
             Ok(()) => true,
-            Err(Errno::EPERM) => state.exited_now().is_none(),
+            Err(Errno::EPERM) if !exited => true,
+            Err(Errno::EPERM) => {
+                state.mark_group_gone();
+                false
+            }
             Err(_) => false,
         }
     }
@@ -247,9 +309,7 @@ mod unix {
     /// Signals the group and the escaped processes still running as themselves; returns how many.
     fn signal_all(state: &ControlState, tree: &Tree, signal: Signal) -> u32 {
         let mut count = 0;
-        if let Some(group) = pid(state.pgid)
-            && killpg(group, signal).is_ok()
-        {
+        if signal_group(state, Some(signal)).is_ok() {
             count += u32::try_from(tree.members.len().max(1)).unwrap_or(u32::MAX);
         }
         for proc in alive_escaped(&tree.escaped) {
@@ -439,28 +499,74 @@ mod unix {
         }
     }
 
-    /// Immediate and callable from any thread, with or without a runtime: `killpg(SIGKILL)` runs
-    /// inline; the escaped descendants, as last recorded and as a fresh walk can still find them, are
-    /// killed on the blocking pool, best effort (the registry's record covers the next sweep).
+    /// Immediate and callable from any thread, with or without a runtime. The group is stopped
+    /// inline: a stopped process can neither exit nor fork, so the agent's children stay its
+    /// children (an orphan reparents to init, out of the walk's reach) until a walk on a thread of
+    /// its own has read them. That thread kills the escaped descendants it finds, the group, and
+    /// the descendants recorded after earlier turns that still run as themselves. This waits for
+    /// it up to [`KILL_WALK_LIMIT`], then sends the group SIGKILL itself, so the group is dead or
+    /// dying when this returns.
     pub(crate) fn kill_tree(state: &Arc<ControlState>) {
-        if let Some(group) = pid(state.pgid) {
-            let _ = killpg(group, Signal::SIGKILL);
+        let stopped = signal_group(state, Some(Signal::SIGSTOP)).is_ok();
+        if !stopped && lock(&state.escaped).is_empty() {
+            return;
         }
         let target = Arc::clone(state);
-        drop(state.rt.spawn_blocking(move || {
-            let mut escaped = lock(&target.escaped).clone();
+        let (done, finished) = std::sync::mpsc::channel::<()>();
+        let walker = std::thread::Builder::new()
+            .name("aura-kill-tree".into())
+            .spawn(move || {
+                kill_walked(&target, stopped);
+                let _ = done.send(());
+            });
+        let finished = match walker {
+            Ok(_) => finished.recv_timeout(KILL_WALK_LIMIT).is_ok(),
+            Err(error) => {
+                tracing::warn!(pid = state.pid, %error, "could not start the walk for an agent's escaped processes");
+                false
+            }
+        };
+        if stopped && !finished {
+            // Without the walk the escaped descendants it would find may survive; the group never
+            // does. A walk still running kills what it finds when it gets there.
+            let _ = signal_group(state, Some(Signal::SIGKILL));
+        }
+    }
+
+    /// [`kill_tree`]'s walk: the escaped descendants of the stopped agent (`stopped`), then its
+    /// group, then the recorded escaped descendants that still run as themselves.
+    fn kill_walked(state: &ControlState, stopped: bool) {
+        let mut found: Vec<EscapedProc> = Vec::new();
+        if stopped
+            && state.start != StartTime::Unknown
+            && let Ok(table) = ptable::tree_of(state.pid, state.pgid)
             // Only while the agent is still itself: a recycled pid's children are not ours.
-            if ptable::is_same_process(target.pid, &target.start)
-                && let Ok(table) = ptable::tree_of(target.pid, target.pgid)
-            {
-                escaped.extend(classify(&table, target.pid, target.pgid, &target.daemons).escaped);
+            && table
+                .iter()
+                .any(|info| info.pid == state.pid && info.start == state.start)
+        {
+            found = classify(&table, state.pid, state.pgid, &state.daemons).escaped;
+        }
+        // Read moments ago, so signalled as found: a start time read again now would leave the
+        // same gap before the signal.
+        for proc in &found {
+            if let Some(target) = pid(proc.pid) {
+                let _ = kill(target, Signal::SIGKILL);
             }
-            for proc in alive_escaped(&escaped) {
-                if let Some(target) = pid(proc.pid) {
-                    let _ = kill(target, Signal::SIGKILL);
-                }
+        }
+        if stopped {
+            let _ = signal_group(state, Some(Signal::SIGKILL));
+        }
+        let recorded: Vec<EscapedProc> = lock(&state.escaped)
+            .iter()
+            .filter(|proc| !found.iter().any(|known| known.pid == proc.pid))
+            .cloned()
+            .collect();
+        for proc in alive_escaped(&recorded) {
+            if let Some(target) = pid(proc.pid) {
+                let _ = kill(target, Signal::SIGKILL);
             }
-        }));
+        }
     }
 
     /// Records, in the leftover registry, the descendants that left the agent's group, minus
@@ -564,6 +670,104 @@ mod unix {
             assert_eq!(tree.spared, [503, 504, 505]);
             let vite = tree.escaped.iter().find(|proc| proc.pid == 502);
             assert_eq!(vite.map(|proc| &proc.start), Some(&table[2].start));
+        }
+
+        /// A control state for `pid`, as `spawn` builds one, and the sender of its exit.
+        fn state_for(
+            pid: u32,
+        ) -> (
+            Arc<ControlState>,
+            tokio::sync::watch::Sender<Option<crate::control::ExitInfo>>,
+        ) {
+            let (exit_tx, exit_rx) = tokio::sync::watch::channel(None);
+            let (stdin, _stdin_rx) = crate::io::LineSink::channel();
+            let state = ControlState::new(
+                pid,
+                StartTime::Unknown,
+                stdin,
+                exit_rx,
+                Arc::new(crate::stderr::StderrTail::default()),
+                crate::log::ProtocolLog::disabled(),
+                tokio::runtime::Handle::current(),
+                crate::registry::LeftoverRegistry::disabled().handle(),
+                Vec::new(),
+                Arc::new(AtomicBool::new(false)),
+            );
+            (Arc::new(state), exit_tx)
+        }
+
+        #[test]
+        fn the_waiter_marks_a_group_gone_only_when_it_is_empty() {
+            let gone = AtomicBool::new(false);
+            let own = u32::try_from(nix::unistd::getpgrp().as_raw()).expect("pgid");
+            note_reaped(own, &gone);
+            assert!(
+                !gone.load(Ordering::Acquire),
+                "this test's own group has members"
+            );
+            // No process can have this id: it is above every pid Linux or macOS hands out.
+            note_reaped(4_194_305, &gone);
+            assert!(gone.load(Ordering::Acquire));
+        }
+
+        /// A child killed and reaped when dropped, so a failed assertion leaves nothing behind (an
+        /// unreaped child's pid cannot be recycled, so the kill can only reach it).
+        struct Sleeper(std::process::Child);
+
+        impl Drop for Sleeper {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        /// The agent's group id is its pid: once the agent is reaped, that id is free, so the
+        /// group is signalled only while it is still the agent's.
+        #[tokio::test]
+        async fn a_reaped_agents_group_is_signalled_only_while_it_is_its_own() {
+            use std::os::unix::process::CommandExt;
+
+            // A process leading a group of its own, standing in for the agent.
+            let mut sleeper = Sleeper(
+                std::process::Command::new("/bin/sleep")
+                    .arg("30")
+                    .process_group(0)
+                    .spawn()
+                    .expect("sleep"),
+            );
+            let pid = sleeper.0.id();
+            let (state, exit) = state_for(pid);
+            assert!(
+                group_is_ours(&state),
+                "not reaped: nothing else can have its id"
+            );
+            assert_eq!(signal_group(&state, None), Ok(()));
+            assert!(group_alive(&state));
+            // The waiter published the agent's exit, so it was reaped, yet a process holds its
+            // pid: the agent's group had emptied first, and nothing signals this one.
+            exit.send_replace(Some(crate::control::ExitInfo::unknown()));
+            assert!(!group_is_ours(&state));
+            assert!(state.group_gone());
+            assert_eq!(
+                signal_group(&state, Some(Signal::SIGKILL)),
+                Err(Errno::ESRCH)
+            );
+            kill_tree(&state);
+            assert!(!group_alive(&state));
+            assert!(
+                sleeper.0.try_wait().expect("try_wait").is_none(),
+                "never signalled"
+            );
+            drop(sleeper);
+
+            // Reaped, and no process holds the pid: the group stays the agent's until it is seen
+            // empty, and from then on it is gone for good.
+            let (state, exit) = state_for(pid);
+            exit.send_replace(Some(crate::control::ExitInfo::unknown()));
+            assert!(group_is_ours(&state));
+            assert!(!group_alive(&state));
+            assert!(state.group_gone());
+            assert!(!group_is_ours(&state));
         }
     }
 }

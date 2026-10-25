@@ -467,12 +467,58 @@ async fn setsid_child_without_daemon_match_is_killed() {
     reaper.assert_gone().await;
     drop(process);
 
-    // By kill_tree: the session records the escaped descendants after every turn.
-    let sub = folder.path().join("again");
+    // By kill_tree, for a child started during the current turn, so nothing recorded it yet;
+    // from a thread with no runtime, as a run-event callback calls it.
+    let sub = folder.path().join("kill-tree");
     std::fs::create_dir(&sub).expect("mkdir");
     let (process, pids, reaper) =
         with_children(&spawner, &sub, "spawn-pty-child", &[], testbin_daemon()).await;
+    let control = process.control.clone();
+    std::thread::spawn(move || control.kill_tree())
+        .join()
+        .expect("join");
+    assert!(
+        wait_gone(pids[0], GONE_WITHIN).await,
+        "kill_tree walked to the escaped child before the agent died"
+    );
+    reaper.assert_gone().await;
+    drop(process);
+
+    // By the last control's drop, the same way.
+    let sub = folder.path().join("last-drop");
+    std::fs::create_dir(&sub).expect("mkdir");
+    let (process, pids, reaper) =
+        with_children(&spawner, &sub, "spawn-pty-child", &[], testbin_daemon()).await;
+    drop(process);
+    assert!(
+        wait_gone(pids[0], GONE_WITHIN).await,
+        "the last drop walked to the escaped child before the agent died"
+    );
+    reaper.assert_gone().await;
+}
+
+/// A child an earlier turn recorded is killed by kill_tree even after its parent exited, when no
+/// walk can reach it any more.
+#[cfg(unix)]
+#[tokio::test]
+async fn kill_tree_kills_recorded_escapees_whose_parent_is_gone() {
+    let folder = tempfile::tempdir().expect("tempdir");
+    let (process, pids, reaper) = with_children(
+        &spawner(),
+        folder.path(),
+        "spawn-pty-child",
+        &[],
+        Vec::new(),
+    )
+    .await;
     process.control.record_escaped().await;
+    // The agent leaves on EOF; its escaped child lives on, orphaned.
+    process.control.close_stdin();
+    let exit = tokio::time::timeout(STARTUP, process.control.exited())
+        .await
+        .expect("exited");
+    assert_eq!(exit.code, Some(0));
+    assert!(alive(pids[0]));
     process.control.kill_tree();
     assert!(
         wait_gone(pids[0], GONE_WITHIN).await,

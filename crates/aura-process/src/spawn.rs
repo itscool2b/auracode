@@ -224,10 +224,14 @@ async fn spawn_agent(
     let (exit_tx, exit_rx) = watch::channel(None);
     #[cfg(windows)]
     let (kill_tx, kill_rx) = tokio::sync::mpsc::unbounded_channel();
+    #[cfg(unix)]
+    let group_gone = Arc::new(std::sync::atomic::AtomicBool::new(false));
     rt.spawn(wait_child(
         child,
         exit_tx,
         log.clone(),
+        #[cfg(unix)]
+        (pid, Arc::clone(&group_gone)),
         #[cfg(windows)]
         kill_rx,
     ));
@@ -243,6 +247,8 @@ async fn spawn_agent(
         registry.handle(),
         #[cfg(unix)]
         launch.daemons,
+        #[cfg(unix)]
+        group_gone,
         #[cfg(windows)]
         kill_tx,
     );

@@ -222,12 +222,6 @@ pub(crate) fn group_has_live_member(pgid: u32) -> bool {
     }
 }
 
-/// Whether `pid` still runs with `start`: the same process, not a recycled pid.
-#[cfg(unix)]
-pub(crate) fn is_same_process(pid: u32, start: &StartTime) -> bool {
-    *start != StartTime::Unknown && running_start(pid).is_some_and(|now| now == *start)
-}
-
 /// The processes needed to apply the kill rule to an agent: the descendants of `root` and the
 /// members of group `pgid`, with full detail. Cheaper than [`snapshot`] on macOS, where reading
 /// every command line is slow.

@@ -9,6 +9,8 @@
 //! adapter whose descendant lingers must still look exited.
 
 use std::fmt;
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use futures::FutureExt;
@@ -31,8 +33,10 @@ pub trait ControlImpl: Send + Sync + 'static {
     fn pid(&self) -> u32;
     fn close_stdin(&self);
     /// Immediate and callable from any thread, with or without a runtime: a run-event callback at
-    /// quit has none. Unix: `killpg(SIGKILL)` inline plus a best-effort walk for escaped
-    /// descendants; Windows: a request to terminate the job.
+    /// quit has none. Unix: the group is stopped at once, the walk for escaped descendants runs on
+    /// a thread of its own, and the call returns once the group and those descendants got SIGKILL
+    /// (the group gets it after a second at most, walk or not); Windows: a request to terminate
+    /// the job.
     fn kill_tree(&self);
     /// The shutdown chain. Idempotent and shared: a second call joins the first chain.
     fn shutdown(&self, plan: ShutdownPlan) -> BoxFuture<'static, ShutdownReport>;
@@ -170,6 +174,11 @@ pub(crate) struct ControlState {
     /// Unix: descendants that left the group, as last recorded; kept while they still run.
     #[cfg(unix)]
     pub(crate) escaped: Mutex<Vec<crate::registry::EscapedProc>>,
+    /// Unix: set once the agent's group is known empty for good (shared with the waiter, which
+    /// looks right after it reaps the agent). Its id is free from then on, and another group may
+    /// take it, so nothing signals the group again.
+    #[cfg(unix)]
+    pub(crate) group_gone: Arc<AtomicBool>,
     /// Windows: kill requests to the waiter, which owns the job.
     #[cfg(windows)]
     pub(crate) kill: tokio::sync::mpsc::UnboundedSender<()>,
@@ -188,6 +197,7 @@ impl ControlState {
         rt: Handle,
         registry: RegistryHandle,
         #[cfg(unix)] daemons: Vec<DaemonMatch>,
+        #[cfg(unix)] group_gone: Arc<AtomicBool>,
         #[cfg(windows)] kill: tokio::sync::mpsc::UnboundedSender<()>,
     ) -> ControlState {
         ControlState {
@@ -206,6 +216,8 @@ impl ControlState {
             daemons,
             #[cfg(unix)]
             escaped: Mutex::new(Vec::new()),
+            #[cfg(unix)]
+            group_gone,
             #[cfg(windows)]
             kill,
             chain: Mutex::new(None),
@@ -214,6 +226,17 @@ impl ControlState {
 
     pub(crate) fn exited_now(&self) -> Option<ExitInfo> {
         *self.exit.borrow()
+    }
+
+    /// Unix: whether the agent's group is known empty for good.
+    #[cfg(unix)]
+    pub(crate) fn group_gone(&self) -> bool {
+        self.group_gone.load(Ordering::Acquire)
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn mark_group_gone(&self) {
+        self.group_gone.store(true, Ordering::Release);
     }
 }
 
@@ -322,11 +345,14 @@ enum Event {
 
 /// Waits for the direct child's exit and publishes it. On Windows it also serves kill requests,
 /// before and after the exit, because terminating the job needs the child it owns; it keeps the job
-/// until the control is gone, so a late kill still reaches lingering descendants.
+/// until the control is gone, so a late kill still reaches lingering descendants. On Unix, right
+/// after it reaps the agent (whose pid is its group's id), it notes whether the group emptied
+/// (`group`: the id and the flag the kill paths read), before that id can belong to anyone else.
 pub(crate) async fn wait_child(
     mut child: Box<dyn ChildWrapper>,
     exit: watch::Sender<Option<ExitInfo>>,
     log: ProtocolLog,
+    #[cfg(unix)] group: (u32, Arc<AtomicBool>),
     #[cfg(windows)] mut kills: tokio::sync::mpsc::UnboundedReceiver<()>,
 ) {
     #[cfg(not(windows))]
@@ -334,6 +360,8 @@ pub(crate) async fn wait_child(
         Some(native) => native.wait().await,
         None => child.wait().await,
     };
+    #[cfg(unix)]
+    crate::shutdown::note_reaped(group.0, &group.1);
     #[cfg(windows)]
     let mut kills_open = true;
     #[cfg(windows)]
