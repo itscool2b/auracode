@@ -946,11 +946,12 @@ Retention runs at boot (background) and when a session ends.
 1. JSON keys, compared ASCII-lowercase with `_` and `-` removed. Credential keys: equal to or ending with one of
    `token`, `secret`, `password`, `passwd`, `apikey`, `authorization`, `cookie`, `credential`, `credentials`,
    `privatekey`, `sessionkey` (so `accessToken` and `client_secret` match; `inputTokens` and `apiKeySource` do not).
-   Identity keys: containing `email`, or equal to one of `account`, `oauthaccount`, `organization`,
+   Identity keys: containing `email`, or equal to one of `account`, `authstatus`, `oauthaccount`, `organization`,
    `organizationname`, `organizationuuid`, `orgid`, `orgname`, `accountuuid`, `accountid`, `userid`, `username`,
    `fullname`. Every string at or under such a key becomes `"<REDACTED>"`; numbers and booleans are kept. This covers
-   Claude's `initialize` `account` object and claude-acp's `_auth/status_update` (`authStatus.account.{email,
-   organization}`), and leaves model names (`displayName`, `name`) readable.
+   Claude's `initialize` `account` object and the adapters' `_auth/status_update` (`authStatus.account.{email,
+   organization}`, and `authStatus.label`, which names the user's plan, as the real-agent probes showed), and leaves
+   model names (`displayName`, `name`) readable.
 2. Every value of an `env` object, and `value` of `{ "name", "value" }` entries under `env` or `headers` arrays.
 3. Every remaining string, every `raw` and stderr line: email addresses (the spike's `mask_emails` rules, so
    `react@18.3.1` and `@scope/pkg` stay) to `<EMAIL>`; `sk-ant-[A-Za-z0-9_-]{10,}`, `sk-[A-Za-z0-9_-]{20,}`,

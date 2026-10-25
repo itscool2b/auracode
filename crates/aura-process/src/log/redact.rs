@@ -3,7 +3,7 @@
 //! 1. JSON keys, compared ASCII-lowercase with `_` and `-` removed: every string at or under a
 //!    credential key (equal to or ending with `token`, `secret`, `password`, `passwd`, `apikey`,
 //!    `authorization`, `cookie`, `credential`, `credentials`, `privatekey`, `sessionkey`) or an
-//!    identity key (containing `email`, or one of `account`, `oauthaccount`, `organization`, ...)
+//!    identity key (containing `email`, or one of `account`, `authstatus`, `organization`, ...)
 //!    becomes `"<REDACTED>"`; numbers and booleans are kept, so `inputTokens` counts stay readable.
 //! 2. Every value of an `env` object, and the `value` of `{ "name", "value" }` entries under `env`
 //!    or `headers` arrays.
@@ -56,8 +56,10 @@ const CREDENTIAL_SUFFIXES: &[&str] = &[
 ];
 
 /// A key is an identity key when, normalized, it contains `email` or equals one of these.
+/// `authstatus` is claude-acp's and codex-acp's auth status, whose label names the user's plan.
 const IDENTITY_KEYS: &[&str] = &[
     "account",
+    "authstatus",
     "oauthaccount",
     "organization",
     "organizationname",
@@ -734,7 +736,8 @@ mod tests {
                 "account": {"email": "me@example.com", "organization": "Acme", "subscriptionType": "max", "uuid": "1-2"},
                 "models": [{"value": "opus", "displayName": "Opus 5", "name": "claude-opus"}],
             },
-            "params": {"authStatus": {"account": {"email": "me@example.com", "organization": "Acme"}}},
+            "params": {"authStatus": {"kind": "account", "label": "Claude Max",
+                                      "account": {"email": "me@example.com", "organization": "Acme"}}},
             "emailAddress": "x@y.zz",
             "user_email": "u@v.ww",
             "oauthAccount": {"accountUuid": "acc"},
@@ -756,7 +759,9 @@ mod tests {
                     "account": {"email": "<REDACTED>", "organization": "<REDACTED>", "subscriptionType": "<REDACTED>", "uuid": "<REDACTED>"},
                     "models": [{"value": "opus", "displayName": "Opus 5", "name": "claude-opus"}],
                 },
-                "params": {"authStatus": {"account": {"email": "<REDACTED>", "organization": "<REDACTED>"}}},
+                // The adapters' auth status names the plan in its label, beside the account.
+                "params": {"authStatus": {"kind": "<REDACTED>", "label": "<REDACTED>",
+                                          "account": {"email": "<REDACTED>", "organization": "<REDACTED>"}}},
                 "emailAddress": "<REDACTED>",
                 "user_email": "<REDACTED>",
                 "oauthAccount": {"accountUuid": "<REDACTED>"},

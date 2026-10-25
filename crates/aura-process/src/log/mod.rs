@@ -761,7 +761,7 @@ mod tests {
         let written = records(&path);
         assert_eq!(
             written[0]["msg"]["params"]["authStatus"],
-            json!({"status": "authenticated", "account": {"email": "<REDACTED>", "organization": "<REDACTED>"}})
+            json!({"status": "<REDACTED>", "account": {"email": "<REDACTED>", "organization": "<REDACTED>"}})
         );
         assert_eq!(
             written[1]["msg"]["result"]["agentInfo"]["name"],
