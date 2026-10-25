@@ -153,10 +153,9 @@ async fn answer_crossing_withdrawal() {
     )));
 }
 
-/// A33 and S11: two requests at once are two cards; two views see identical frames, and the
-/// first answer wins.
+/// A33: two requests at once are two independent cards: answering one leaves the other open.
 #[tokio::test(start_paused = true)]
-async fn concurrent_permissions_and_two_subscribers() {
+async fn concurrent_permissions() {
     let (driver, handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
@@ -165,6 +164,93 @@ async fn concurrent_permissions_and_two_subscribers() {
         Step::Expect(CommandMatch::RespondPermission {
             request_id: Some("p2".into()),
         }),
+        Step::Expect(CommandMatch::RespondPermission {
+            request_id: Some("p1".into()),
+        }),
+        end_turn(StopReason::EndTurn),
+    ]);
+    let h = Harness::new(vec![driver]);
+    let chat = h.chat().await;
+    let sink = Sink::new("main");
+    h.manager
+        .attach(&chat.id, sink.clone())
+        .await
+        .expect("attach");
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.send(&chat.id, "go".into()).await.expect("send");
+    let cards = sink.clone();
+    eventually("both cards show", || {
+        cards
+            .events()
+            .iter()
+            .filter(|(_, event)| matches!(event, AuraEvent::PermissionRequested(_)))
+            .count()
+            == 2
+    })
+    .await;
+    h.manager
+        .respond_permission(&chat.id, "p2", Some("no".into()))
+        .await
+        .expect("answer p2");
+    assert!(
+        resolution(&sink.events(), "p1").is_empty(),
+        "p1 is still open"
+    );
+    assert!(matches!(
+        h.manager
+            .respond_permission(&chat.id, "p1", Some("bogus".into()))
+            .await,
+        Err(SessionError::OptionInvalid(_))
+    ));
+    h.manager
+        .respond_permission(&chat.id, "p1", None)
+        .await
+        .expect("cancel p1");
+    sink.wait_for("the turn ends", |event| {
+        matches!(event, AuraEvent::TurnEnded { .. })
+    })
+    .await;
+    assert_eq!(
+        handle
+            .commands()
+            .iter()
+            .filter_map(|command| match command {
+                LoggedCommand::RespondPermission {
+                    request_id,
+                    option_id,
+                } => Some((request_id.clone(), option_id.clone())),
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        [
+            ("p2".to_owned(), Some("no".to_owned())),
+            ("p1".to_owned(), None)
+        ]
+    );
+    let events = sink.events();
+    assert_eq!(
+        resolution(&events, "p2"),
+        [(
+            PermissionDecision::Selected {
+                option_id: "no".into()
+            },
+            ResolvedBy::User
+        )]
+    );
+    assert_eq!(
+        resolution(&events, "p1"),
+        [(PermissionDecision::Cancelled, ResolvedBy::User)]
+    );
+}
+
+/// S11: two views get identical frames, and the first answer to a card wins.
+#[tokio::test(start_paused = true)]
+async fn two_subscribers() {
+    let (driver, _) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        in_turn(message("m1", "Shall I?")),
+        card("p1", Some(ToolKind::Edit)),
         Step::Expect(CommandMatch::RespondPermission {
             request_id: Some("p1".into()),
         }),
@@ -185,39 +271,24 @@ async fn concurrent_permissions_and_two_subscribers() {
         .expect("attach");
     h.status(&chat.id, SessionStatus::Ready).await;
     h.manager.send(&chat.id, "go".into()).await.expect("send");
-    let cards = first.clone();
-    eventually("both cards show", || {
-        cards
-            .events()
-            .iter()
-            .filter(|(_, event)| matches!(event, AuraEvent::PermissionRequested(_)))
-            .count()
-            == 2
-    })
-    .await;
+    second
+        .wait_for("the card", |event| {
+            matches!(event, AuraEvent::PermissionRequested(_))
+        })
+        .await;
     h.manager
-        .respond_permission(&chat.id, "p2", Some("no".into()))
+        .respond_permission(&chat.id, "p1", Some("once".into()))
         .await
-        .expect("answer p2");
+        .expect("the first answer");
     assert!(
         matches!(
             h.manager
-                .respond_permission(&chat.id, "p2", Some("once".into()))
+                .respond_permission(&chat.id, "p1", Some("no".into()))
                 .await,
             Err(SessionError::RequestNotPending)
         ),
-        "the first answer wins"
+        "the second view's answer comes too late"
     );
-    assert!(matches!(
-        h.manager
-            .respond_permission(&chat.id, "p1", Some("bogus".into()))
-            .await,
-        Err(SessionError::OptionInvalid(_))
-    ));
-    h.manager
-        .respond_permission(&chat.id, "p1", None)
-        .await
-        .expect("cancel p1");
     first
         .wait_for("the turn ends", |event| {
             matches!(event, AuraEvent::TurnEnded { .. })
@@ -239,26 +310,73 @@ async fn concurrent_permissions_and_two_subscribers() {
         "identical frames once both are attached"
     );
     assert_eq!(
-        handle
-            .commands()
-            .iter()
-            .filter_map(|command| match command {
-                LoggedCommand::RespondPermission {
-                    request_id,
-                    option_id,
-                } => Some((request_id.clone(), option_id.clone())),
-                _ => None,
-            })
-            .collect::<Vec<_>>(),
-        [
-            ("p2".to_owned(), Some("no".to_owned())),
-            ("p1".to_owned(), None)
-        ]
+        resolution(&second.events(), "p1"),
+        [(
+            PermissionDecision::Selected {
+                option_id: "once".into()
+            },
+            ResolvedBy::User
+        )]
     );
-    let events = first.events();
-    assert_eq!(
-        resolution(&events, "p1"),
-        [(PermissionDecision::Cancelled, ResolvedBy::User)]
+}
+
+/// A question that only notifies is never open, so nothing answers it; a stopped chat's autonomy
+/// change that the agent refused asks before every action.
+#[tokio::test(start_paused = true)]
+async fn notifications_are_never_open_and_a_refused_autonomy_asks() {
+    let (driver, handle) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Emit(DriverEvent::UiRequest {
+            turn: None,
+            request: UiRequest {
+                request_id: "n".into(),
+                prompt: UiPrompt::Notify {
+                    message: "FYI".into(),
+                },
+            },
+        }),
+        Step::Expect(CommandMatch::SetAutonomy),
+        Step::Hang,
+    ]);
+    handle.set_autonomy_result(Err(DriverError {
+        kind: ErrorKind::AgentError,
+        message: "mode not found".into(),
+        detail: None,
+    }));
+    let h = Harness::new(vec![driver]);
+    let chat = h.chat().await;
+    let sink = Sink::new("main");
+    h.manager
+        .attach(&chat.id, sink.clone())
+        .await
+        .expect("attach");
+    sink.wait_for("the notification", |event| {
+        matches!(event, AuraEvent::UiRequest(_))
+    })
+    .await;
+    assert!(matches!(
+        h.manager.respond_ui(&chat.id, "n", None).await,
+        Err(SessionError::RequestNotPending)
+    ));
+    assert!(
+        !h.statuses
+            .last(&chat.id)
+            .is_some_and(|update| update.needs_attention)
+    );
+    let lists = h
+        .manager
+        .set_autonomy(&chat.id, Autonomy::FullAuto)
+        .await
+        .expect("autonomy");
+    assert_eq!(lists.autonomy.auto_answer, AutoAnswer::Never);
+    assert!(
+        lists
+            .autonomy
+            .note
+            .as_deref()
+            .is_some_and(|note| note.contains("mode not found")),
+        "{:?}",
+        lists.autonomy.note
     );
 }
 

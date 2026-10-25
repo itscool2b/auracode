@@ -502,6 +502,122 @@ async fn quit_while_paused() {
     assert!(store.shutdown(Duration::from_secs(5)).await);
 }
 
+/// S34: an agent flooding while saving is paused never deadlocks with its actor: the actor
+/// stops reading but keeps answering, the driver keeps answering commands while it waits for room
+/// (an option change completes), and once saving resumes everything flows and is saved.
+#[tokio::test]
+async fn actor_and_driver_never_deadlock() {
+    let (config, knobs) = tight();
+    let option = aura_protocol::session::ConfigOption {
+        id: "model".into(),
+        name: "Model".into(),
+        description: None,
+        category: aura_protocol::session::ConfigCategory::Model,
+        kind: aura_protocol::session::ConfigKind::Select {
+            current: "fast".into(),
+            choices: vec![
+                aura_protocol::session::ConfigChoice {
+                    value: "fast".into(),
+                    name: "Fast".into(),
+                    description: None,
+                    group: None,
+                },
+                aura_protocol::session::ConfigChoice {
+                    value: "smart".into(),
+                    name: "Smart".into(),
+                    description: None,
+                    group: None,
+                },
+            ],
+        },
+        pending: None,
+    };
+    let mut steps = vec![
+        Step::Spawn(launch()),
+        Step::Emit(DriverEvent::Options(vec![option])),
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+    ];
+    for i in 0..300 {
+        steps.push(delta(&format!("{i:04}{}", "z".repeat(2000))));
+    }
+    steps.push(Step::EndTurn {
+        stop_reason: StopReason::EndTurn,
+        usage: None,
+        error: None,
+    });
+    // The option change arrived during the flood; then the prompt queued meanwhile.
+    steps.push(Step::Expect(CommandMatch::SetOption));
+    steps.push(Step::Expect(CommandMatch::Prompt));
+    steps.push(Step::EndTurn {
+        stop_reason: StopReason::EndTurn,
+        usage: None,
+        error: None,
+    });
+    let (driver, handle) = ScriptedDriver::new(steps);
+    let rig = rig(vec![driver], config, knobs);
+    let chat = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("create");
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    fill_disk(&rig.store);
+    rig.manager
+        .send(&chat.id, "write a lot".into())
+        .await
+        .expect("send");
+    paused(&rig).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(
+        rig.statuses.status(&chat.id),
+        Some(SessionStatus::Running),
+        "blocked, not done"
+    );
+    let lists = tokio::time::timeout(
+        Duration::from_secs(5),
+        rig.manager.set_option(
+            &chat.id,
+            "model",
+            aura_protocol::session::ConfigValue::Choice {
+                value: "smart".into(),
+            },
+        ),
+    )
+    .await
+    .expect("no deadlock")
+    .expect("the option change completes");
+    assert_eq!(lists.options.len(), 1);
+    assert!(handle.commands().iter().any(|command| matches!(
+        command,
+        aura_drivers::driver::LoggedCommand::SetOption { .. }
+    )));
+    let queued = rig
+        .manager
+        .send(&chat.id, "next".into())
+        .await
+        .expect("send while blocked");
+    assert!(queued.queued);
+    free_disk(&rig.store);
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let page = rig
+        .manager
+        .history(&chat.id, u32::MAX, Some(4 * 1024 * 1024))
+        .await
+        .expect("history");
+    let text: String = page
+        .items
+        .iter()
+        .filter_map(|item| match &item.event {
+            AuraEvent::MessageDelta { message_id, text } if message_id == "m1" => {
+                Some(text.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(text, flood_text());
+}
+
 /// S22: a chat actor that panics: its processes are killed, its views end, the chat reads
 /// `Stopped`, and the next call recreates it, which recovers the running turn.
 #[tokio::test]

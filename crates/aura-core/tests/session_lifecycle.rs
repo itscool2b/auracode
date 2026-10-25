@@ -1102,6 +1102,75 @@ async fn recovery_after_a_crash() {
     );
 }
 
+/// S15: queued prompts survive a restart, held; Send queued releases them.
+#[tokio::test(start_paused = true)]
+async fn queue_survives_a_restart_held() {
+    let (first, _) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Hang,
+    ]);
+    let h = Harness::new(vec![first]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.send(&chat.id, "work".into()).await.expect("send");
+    let later = h
+        .manager
+        .send(&chat.id, "later".into())
+        .await
+        .expect("send");
+    assert!(later.queued);
+    let (second, handle) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        end_turn(StopReason::EndTurn),
+    ]);
+    let h = h.restart(vec![second], Options::default()).await;
+    let queue = h.queue(&chat.id).await;
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue[0].prompt_id, later.prompt_id);
+    assert!(queue[0].held);
+    h.manager.resume_queue(&chat.id).await.expect("Send queued");
+    match command(&handle, CommandMatch::Prompt).await {
+        LoggedCommand::Prompt { parts, .. } => assert_eq!(
+            parts,
+            [aura_protocol::PromptPart::Text {
+                text: "later".into()
+            }]
+        ),
+        other => panic!("a prompt, got {other:?}"),
+    }
+}
+
+/// S36: quitting with no live session: `shutdown_all` does nothing, the store commits what is
+/// queued and closes, and the next launch reports a clean shutdown.
+#[tokio::test(start_paused = true)]
+async fn quit_without_sessions_commits_and_closes() {
+    let (driver, _) = ScriptedDriver::new(vec![ready_step("n1")]);
+    let h = Harness::new(vec![driver]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.stop(&chat.id).await.expect("stop");
+    h.status(&chat.id, SessionStatus::Stopped).await;
+    h.manager
+        .set_autonomy(&chat.id, aura_protocol::Autonomy::Ask)
+        .await
+        .expect("an op still queued at the quit");
+    assert!(!h.manager.has_live_sessions());
+    let summary = h.manager.shutdown_all(Duration::from_secs(8)).await;
+    assert_eq!(summary.forced, 0);
+    assert!(h.store.shutdown(Duration::from_secs(5)).await);
+    let wal = h.profile.db_path().with_extension("db-wal");
+    assert!(
+        std::fs::metadata(&wal).map_or(true, |meta| meta.len() == 0),
+        "the WAL was folded back"
+    );
+    let owner = ProfileOwner::acquire(&h.profile).expect("the owner lock was released");
+    let (_store, info) = aura_core::store::Store::open(&h.profile).expect("reopen");
+    assert!(!info.unclean_shutdown);
+    drop(owner);
+}
+
 /// S34: force stop reaches a wedged driver through its recorded process.
 #[tokio::test(start_paused = true)]
 async fn force_stop_bypasses_wedged_driver() {

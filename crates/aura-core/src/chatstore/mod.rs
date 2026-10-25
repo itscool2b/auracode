@@ -883,24 +883,47 @@ mod tests {
         let _ = release.send(());
     }
 
-    /// An op is atomic: a `BeginTurn` that fails leaves neither its turn nor its rows, and keeps the
-    /// queued prompt; the other ops of its batch commit.
+    fn queued_prompt(chat: &str) -> Op {
+        Op::QueuePut(QueuedRow {
+            id: "p1".into(),
+            chat_id: chat.into(),
+            text: "hello".into(),
+            held: false,
+            created_at: 1,
+        })
+    }
+
+    /// A `BeginTurn` whose second row reuses seq 0, so UNIQUE (chat_id, seq) fails inside the op.
+    fn failing_begin_turn(chat: &str) -> Op {
+        let started = AuraEvent::TurnStarted {
+            turn_id: "t1".into(),
+            prompt_id: Some("p1".into()),
+        };
+        Op::BeginTurn {
+            turn: TurnRow {
+                id: "t1".into(),
+                chat_id: chat.into(),
+                agent_session_id: None,
+                ordinal: 1,
+                prompt_id: "p1".into(),
+                first_event_seq: 1,
+                started_at: 2,
+            },
+            rows: vec![
+                event_row(1, Some("t1"), &started),
+                event_row(0, Some("t1"), &started),
+            ],
+        }
+    }
+
+    /// An op is atomic: a `BeginTurn` that fails inside its batch leaves neither its turn nor its
+    /// rows and keeps the queued prompt, while the ops around it commit.
     #[tokio::test]
-    async fn ops_are_atomic_and_a_poison_op_is_isolated() {
+    async fn ops_are_atomic() {
         let fixture = start(WriterConfig::STANDARD);
         let store = &fixture.store;
         let chat = new_chat(store).await;
-        send(
-            store,
-            Op::QueuePut(QueuedRow {
-                id: "p1".into(),
-                chat_id: chat.id.clone(),
-                text: "hello".into(),
-                held: false,
-                created_at: 1,
-            }),
-        )
-        .await;
+        send(store, queued_prompt(&chat.id)).await;
         store.with_store(|_| std::thread::sleep(Duration::from_millis(100)));
         send(
             store,
@@ -910,37 +933,44 @@ mod tests {
             },
         )
         .await;
-        // Its second row reuses seq 0: UNIQUE (chat_id, seq) fails inside the op.
+        send(store, failing_begin_turn(&chat.id)).await;
         send(
             store,
-            Op::BeginTurn {
-                turn: TurnRow {
-                    id: "t1".into(),
-                    chat_id: chat.id.clone(),
-                    agent_session_id: None,
-                    ordinal: 1,
-                    prompt_id: "p1".into(),
-                    first_event_seq: 1,
-                    started_at: 2,
-                },
-                rows: vec![
-                    event_row(
-                        1,
-                        Some("t1"),
-                        &AuraEvent::TurnStarted {
-                            turn_id: "t1".into(),
-                            prompt_id: Some("p1".into()),
-                        },
-                    ),
-                    event_row(
-                        0,
-                        Some("t1"),
-                        &AuraEvent::TurnStarted {
-                            turn_id: "t1".into(),
-                            prompt_id: Some("p1".into()),
-                        },
-                    ),
-                ],
+            Op::AppendEvents {
+                chat_id: chat.id.clone(),
+                rows: vec![notice(2, "last")],
+            },
+        )
+        .await;
+        assert!(store.barrier().await);
+        assert_eq!(page_seqs(&page(store, &chat.id, 10).await), [0, 2]);
+        let load = store.load_chat(&chat.id).await.expect("load");
+        assert_eq!(load.next_turn_ordinal, 1, "no turn row");
+        assert_eq!(load.queue.len(), 1, "the prompt is still queued");
+        let dead = dead_letters(&fixture.profile);
+        assert_eq!(dead.len(), 1);
+        assert_eq!(dead[0]["op"]["op"], "begin_turn");
+        assert!(
+            dead[0]["error"]
+                .as_str()
+                .is_some_and(|error| error.contains("UNIQUE")),
+            "{dead:?}"
+        );
+    }
+
+    /// S6: a poison op (rows for a chat that does not exist) goes to the dead-letter file as JSON;
+    /// the rest of its batch commits.
+    #[tokio::test]
+    async fn poison_op_is_isolated() {
+        let fixture = start(WriterConfig::STANDARD);
+        let store = &fixture.store;
+        let chat = new_chat(store).await;
+        store.with_store(|_| std::thread::sleep(Duration::from_millis(100)));
+        send(
+            store,
+            Op::AppendEvents {
+                chat_id: chat.id.clone(),
+                rows: vec![notice(0, "before")],
             },
         )
         .await;
@@ -956,27 +986,22 @@ mod tests {
             store,
             Op::AppendEvents {
                 chat_id: chat.id.clone(),
-                rows: vec![notice(2, "last")],
+                rows: vec![notice(1, "after")],
             },
         )
         .await;
         assert!(store.barrier().await);
-        assert_eq!(page_seqs(&page(store, &chat.id, 10).await), [0, 2]);
-        let load = store.load_chat(&chat.id).await.expect("load");
-        assert_eq!(load.next_turn_ordinal, 1, "no turn row");
-        assert_eq!(load.queue.len(), 1, "the prompt is still queued");
+        assert_eq!(page_seqs(&page(store, &chat.id, 10).await), [0, 1]);
         let dead = dead_letters(&fixture.profile);
-        let ops: Vec<&str> = dead
-            .iter()
-            .filter_map(|line| line["op"]["op"].as_str())
-            .collect();
-        assert_eq!(ops, ["begin_turn", "append_events"]);
-        assert_eq!(dead[1]["op"]["chat_id"], "missing");
-        assert!(
-            dead[0]["error"]
-                .as_str()
-                .is_some_and(|error| error.contains("UNIQUE")),
-            "{dead:?}"
+        assert_eq!(dead.len(), 1);
+        assert_eq!(dead[0]["op"]["op"], "append_events");
+        assert_eq!(dead[0]["op"]["chat_id"], "missing");
+        assert_eq!(dead[0]["op"]["rows"][0]["seq"], 0);
+        assert!(dead[0]["at"].as_i64().is_some_and(|at| at > 0));
+        assert_eq!(
+            *store.status().borrow(),
+            StorageStatus::default(),
+            "saving goes on"
         );
     }
 
@@ -1137,6 +1162,107 @@ mod tests {
         );
         let text = store.read_blob(&blob_id, 0, 100).await.expect("blob saved");
         assert_eq!(text.total, 40_000);
+    }
+
+    /// S8: reads never wait behind a paused writer: while a full disk pauses saving, chat lists,
+    /// saved pages (with the unsaved part marked) and blob reads answer at once; a read that was
+    /// already queued behind the failed batch gives up after its bound with `DiskFull`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn reads_never_wait_behind_a_paused_writer() {
+        let config = WriterConfig {
+            disk_full_retry: Duration::from_millis(50),
+            ..WriterConfig::STANDARD
+        };
+        let fixture = start(config);
+        let store = Arc::clone(&fixture.store);
+        let chat = new_chat(&store).await;
+        send(
+            &store,
+            Op::AppendEvents {
+                chat_id: chat.id.clone(),
+                rows: vec![notice(0, "saved")],
+            },
+        )
+        .await;
+        assert!(store.barrier().await);
+        store.with_store(|store| {
+            let pages: i64 = store
+                .conn()
+                .query_row("PRAGMA page_count", [], |row| row.get(0))
+                .expect("pages");
+            let _: i64 = store
+                .conn()
+                .query_row(
+                    &format!("PRAGMA max_page_count = {}", pages + 1),
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("cap");
+        });
+        // Hold the writer so the writes and the read behind them land in one batch.
+        store.with_store(|_| std::thread::sleep(Duration::from_millis(200)));
+        let big = "w".repeat(60_000);
+        let blob = Arc::<[u8]>::from(big.as_bytes());
+        let blob_id = sha(&blob);
+        send(
+            &store,
+            Op::PutBlob {
+                sha256: blob_id.clone(),
+                mime: "text/plain".into(),
+                bytes: blob,
+            },
+        )
+        .await;
+        for seq in 1..=3 {
+            send(
+                &store,
+                Op::AppendEvents {
+                    chat_id: chat.id.clone(),
+                    rows: vec![notice(seq, &big)],
+                },
+            )
+            .await;
+        }
+        let queued_read = tokio::spawn({
+            let store = Arc::clone(&store);
+            async move { store.chats().await }
+        });
+        status_until(&store, |status| {
+            matches!(status.state, StorageState::Paused { .. })
+        })
+        .await;
+
+        let started = std::time::Instant::now();
+        assert_eq!(store.chats().await.expect("chats").len(), 1);
+        let saved = store
+            .read_saved_page(&chat.id, 10, history::DEFAULT_PAGE_BYTES)
+            .await
+            .expect("page");
+        assert_eq!(page_seqs(&saved), [0]);
+        assert_eq!(saved.unsaved_from, Some(1));
+        assert_eq!(
+            store.read_blob(&blob_id, 0, 100).await,
+            Err(StoreError::BlobMissing(blobs::BLOB_UNSAVED.into()))
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            started.elapsed()
+        );
+
+        let queued = queued_read.await.expect("join");
+        assert_eq!(
+            queued,
+            Err(StoreError::DiskFull),
+            "queued before the pause: gives up after 5 s"
+        );
+        store.with_store(|store| {
+            let _: i64 = store
+                .conn()
+                .query_row("PRAGMA max_page_count = 1073741823", [], |row| row.get(0))
+                .expect("uncap");
+        });
+        status_until(&store, |status| status.state == StorageState::Ok).await;
     }
 
     /// S8: while paused, a chat with nothing unsaved loads from saved data, its queue held.

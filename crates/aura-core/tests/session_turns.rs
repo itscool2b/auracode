@@ -555,6 +555,49 @@ async fn driver_panic_kills_processes() {
     ));
 }
 
+/// S23: a driver task that panics (here while starting) is contained: `Panicked`, an error
+/// card, `Stopped`, and the next start works.
+#[tokio::test(start_paused = true)]
+async fn driver_panic_is_contained() {
+    let (first, _) = ScriptedDriver::new(vec![
+        Step::Spawn(launch()),
+        // The autonomy change below does not match: the driver task panics before `Ready`.
+        Step::Expect(CommandMatch::Prompt),
+    ]);
+    let (second, _) = ScriptedDriver::new(vec![Step::Spawn(launch()), ready_step("n1")]);
+    let options = Options {
+        agents: vec![aura_agents::FixedAgent::new(
+            mock_spec(),
+            ready(),
+            Some(launch()),
+        )],
+        ..Options::default()
+    };
+    let h = Harness::with(vec![first, second], options);
+    let chat = h.chat().await;
+    let probe = h.factory.clone();
+    eventually("the first driver runs", || probe.setups().len() == 1).await;
+    h.manager
+        .set_autonomy(&chat.id, aura_protocol::Autonomy::Ask)
+        .await
+        .expect("autonomy");
+    h.status(&chat.id, SessionStatus::Stopped).await;
+    let control = &h.spawner.controls()[0];
+    eventually("its process is force-stopped", || {
+        control
+            .calls()
+            .contains(&FakeCall::Shutdown(aura_process::ShutdownPlan::FORCE))
+    })
+    .await;
+    let stored = h.stored(&chat.id).await;
+    assert!(stored.iter().any(|event| matches!(
+        event,
+        AuraEvent::Error { kind: ErrorKind::AgentExited, message, .. } if message.contains("driver for it failed")
+    )));
+    h.manager.start(&chat.id, false).await.expect("start again");
+    h.status(&chat.id, SessionStatus::Ready).await;
+}
+
 /// S30: secrets in a crash's stderr tail are redacted before the error is stored or shown.
 #[tokio::test(start_paused = true)]
 async fn stderr_tail_redacted_before_persist() {

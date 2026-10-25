@@ -1104,7 +1104,10 @@ impl ChatActor {
             };
             self.force_wait = Some((Instant::now() + wait, generation));
             let detail = if self.turns_survive() {
-                format!("Stopping {}'s turn in its gateway", self.agent_label())
+                format!(
+                    "Stopping {} turn in its gateway",
+                    possessive(&self.agent_label())
+                )
             } else {
                 "Stopping".to_owned()
             };
@@ -3105,6 +3108,15 @@ fn crash_message(exit: Option<&ExitInfo>) -> String {
             ..
         }) => format!("The agent stopped unexpectedly (signal {signal})."),
         _ => "The agent stopped unexpectedly.".into(),
+    }
+}
+
+/// "Hermes'", "Codex's".
+fn possessive(name: &str) -> String {
+    if name.ends_with('s') {
+        format!("{name}'")
+    } else {
+        format!("{name}'s")
     }
 }
 
