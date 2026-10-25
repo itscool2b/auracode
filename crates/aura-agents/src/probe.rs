@@ -200,10 +200,7 @@ async fn probe(
     args: &[&str],
     cwd: &Path,
 ) -> Result<String, String> {
-    let name = program.file_name().map_or_else(
-        || program.display().to_string(),
-        |name| name.to_string_lossy().into_owned(),
-    );
+    let name = command_name(program);
     let command = std::iter::once(name.as_str())
         .chain(args.iter().copied())
         .collect::<Vec<_>>()
@@ -256,6 +253,23 @@ async fn probe(
         return Ok(output.stderr_tail);
     }
     Ok(stdout)
+}
+
+/// The program as a user types it in messages: its file name, without the `.exe` Windows adds.
+fn command_name(program: &Path) -> String {
+    let exe = cfg!(windows)
+        && program
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"));
+    let shown = if exe {
+        program.file_stem()
+    } else {
+        program.file_name()
+    };
+    shown.map_or_else(
+        || program.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
 }
 
 /// Detects one agent with `env`.
@@ -508,6 +522,13 @@ mod tests {
                 PathBuf::from("C:\\Tools")
             ]
         );
+    }
+
+    #[test]
+    fn messages_name_programs_as_typed() {
+        assert_eq!(command_name(Path::new("/opt/tools/hermes")), "hermes");
+        #[cfg(windows)]
+        assert_eq!(command_name(Path::new(r"C:\Tools\Hermes.EXE")), "Hermes");
     }
 
     #[test]
