@@ -260,6 +260,10 @@ impl Runner {
             match step {
                 Step::Emit(event) => self.emit(event).await,
                 Step::Wait(duration) => {
+                    // The channel may have closed while an earlier step waited for a permit.
+                    if !self.commands_open {
+                        return DriverExit::Closed;
+                    }
                     let deadline = Instant::now() + duration;
                     loop {
                         match self.next_input(Some(deadline)).await {
@@ -313,6 +317,9 @@ impl Runner {
                 if command == LoggedCommand::Shutdown {
                     return DriverExit::Closed;
                 }
+            }
+            if !self.commands_open {
+                return DriverExit::Closed;
             }
             match self.next_input(None).await {
                 Input::Handled | Input::Timeout => {}
@@ -574,7 +581,8 @@ mod tests {
 
     use super::*;
     use crate::driver::{
-        DriverTimings, EventReceiver, PermissionOutcome, StopPlan, TurnRef, event_channel,
+        DRIVER_EVENT_BYTES, DriverTimings, EventReceiver, PermissionOutcome, StopPlan, TurnRef,
+        event_channel,
     };
 
     fn launch() -> LaunchSpec {
@@ -904,6 +912,46 @@ mod tests {
         drop(session.commands);
         assert_eq!(session.events.recv().await, Some(notice("after the close")));
         assert_eq!(session.run.await.expect("join"), DriverExit::Closed);
+    }
+
+    /// The channel closes while an `Emit` waits for a permit (the session stopped reading): the next
+    /// wait, and the idle phase after the last step, both end the run with `Closed`.
+    #[tokio::test(start_paused = true)]
+    async fn a_channel_closed_during_an_emit_ends_the_next_wait() {
+        for steps in [
+            vec![
+                Step::Emit(notice("first")),
+                Step::Emit(notice("second")),
+                Step::Wait(Duration::from_secs(3_600)),
+                Step::Exit(DriverExit::Panicked),
+            ],
+            vec![Step::Emit(notice("first")), Step::Emit(notice("second"))],
+        ] {
+            let (driver, _handle) = ScriptedDriver::new(steps);
+            let (commands, receiver) = mpsc::unbounded_channel();
+            let (sender, mut events) = event_channel();
+            // Fill the channel so the first emit waits for a permit.
+            let filler = sender.reserve(DRIVER_EVENT_BYTES).await.expect("room");
+            let (spawner, _ends) = FakeSpawner::new();
+            let logs = LogFactory::new(
+                PathBuf::from("/logs"),
+                Arc::new(Redactor::standard()),
+                tokio::runtime::Handle::current(),
+            );
+            let run = tokio::spawn(Box::new(driver).run(DriverContext {
+                commands: receiver,
+                events: sender,
+                spawner: DirectSpawner::new(spawner, logs),
+                setup: setup(),
+            }));
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            drop(commands);
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            drop(filler);
+            assert_eq!(events.recv().await, Some(notice("first")));
+            assert_eq!(events.recv().await, Some(notice("second")));
+            assert_eq!(run.await.expect("join"), DriverExit::Closed);
+        }
     }
 
     #[tokio::test]
