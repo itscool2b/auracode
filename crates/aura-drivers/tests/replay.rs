@@ -238,6 +238,7 @@ mod replay {
             "question-kind-other",
             "updates-after-reply",
             "hand-picked-mode",
+            "hand-picked-mode-full-auto",
             "cancel",
             "agent-requests",
             "garbage",

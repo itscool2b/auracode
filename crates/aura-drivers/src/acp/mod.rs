@@ -88,6 +88,11 @@ pub const CANNOT_CONTINUE: &str = "this agent can't continue earlier sessions";
 /// The title of a permission request that names nothing.
 pub const UNTITLED_PERMISSION: &str = "The agent asks for permission";
 
+/// The answer to a `SetOption` that waited behind earlier changes for as long as an answer may
+/// take, so the session hears back inside its IPC budget.
+pub const OPTION_TOO_LATE: &str =
+    "The agent did not get to this change in time, so auracode did not send it.";
+
 /// The notice for an update over the line cap.
 pub const OVERSIZED_UPDATE_NOTICE: &str =
     "auracode skipped an update from the agent that was larger than 64 MiB.";
@@ -139,7 +144,7 @@ async fn run(ctx: DriverContext) -> DriverExit {
     process
         .log
         .note(LogNote::Start(setup.start_note(&process.spawn_id)));
-    for command in &held {
+    for (_, command) in &held {
         log_command(&process.log, command);
     }
     Session::new(process, commands, outbox, held, setup)
@@ -159,7 +164,7 @@ async fn spawn_phase(
     mut spawning: BoxFuture<'static, Result<SpawnedProcess, SpawnError>>,
     commands: &mut mpsc::UnboundedReceiver<DriverCommand>,
     outbox: &mut Outbox,
-    held: &mut VecDeque<DriverCommand>,
+    held: &mut VecDeque<(Instant, DriverCommand)>,
 ) -> Spawned {
     loop {
         let head = outbox.head_bytes();
@@ -168,7 +173,7 @@ async fn spawn_phase(
             command = commands.recv() => match command {
                 None | Some(DriverCommand::Shutdown { .. }) => return Spawned::Stopped,
                 Some(DriverCommand::Prompt { turn, .. }) => outbox.push(not_ready(turn.turn_id)),
-                Some(other) => held.push_back(other),
+                Some(other) => held.push_back((Instant::now(), other)),
             },
             permit = outbox.sender.reserve(head), if outbox.has_head() => outbox.deliver(permit),
             result = &mut spawning => {
@@ -349,10 +354,12 @@ enum Purpose {
     Open(OpenKind),
     Prompt,
     SetOption(SetOptionOp),
+    /// An autonomy candidate's mode change; `in_effect` when its policy already applies.
     Autonomy {
         op: AutonomyOp,
         candidate: AutonomyCandidate,
         mode: String,
+        in_effect: bool,
     },
 }
 
@@ -402,7 +409,9 @@ struct PromptState {
     cancelling: bool,
 }
 
-/// One change to options or autonomy; they run one at a time, in order.
+/// One change to options or autonomy; they run one at a time, in order. On a dialect that changes
+/// mode only while idle, a mode change that comes up during a turn is parked until the turn ends,
+/// then runs before anything queued behind it; a later mode change replaces a parked one.
 enum Op {
     SetOption(SetOptionOp),
     Autonomy(AutonomyOp),
@@ -415,6 +424,9 @@ struct SetOptionOp {
     value: ConfigValue,
     reply: Option<oneshot::Sender<Result<(), DriverError>>>,
     origin: Origin,
+    /// A `SetOption` is answered within one request timeout of its arrival, however long it
+    /// waited behind earlier changes, so the answer comes inside the session's IPC budget.
+    deadline: Option<Instant>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -427,14 +439,22 @@ enum Origin {
     Deferred,
 }
 
+/// One change of autonomy (spec 5.5.2). A `SetAutonomy` takes effect at once for the policy: each
+/// candidate's policy applies as soon as the candidate is chosen, the first in the command's reply
+/// and every fallback after it as `Autonomy`, while its mode change follows in order. The start
+/// applies the candidate whose mode change worked, and announces it once.
 struct AutonomyOp {
     requested: Autonomy,
     candidates: VecDeque<AutonomyCandidate>,
+    /// The candidate whose policy is in effect while its mode change is on its way.
+    in_effect: Option<AutonomyCandidate>,
     /// Why the last candidate did not apply, for the last resort's note.
     reason: Option<String>,
     reply: Option<oneshot::Sender<Result<AutonomyState, DriverError>>>,
-    /// Emit `Autonomy` when it applies (the start, a deferred change); a `SetAutonomy` replies.
-    announce: bool,
+    /// A policy applies when its candidate is chosen (`SetAutonomy`), not when its mode lands.
+    at_once: bool,
+    /// The count of `SetAutonomy` commands this op belongs to: a later one replaces it.
+    generation: u64,
 }
 
 impl AutonomyOp {
@@ -442,14 +462,17 @@ impl AutonomyOp {
         requested: Autonomy,
         dialect: &dyn AcpDialect,
         reply: Option<oneshot::Sender<Result<AutonomyState, DriverError>>>,
-        announce: bool,
+        at_once: bool,
+        generation: u64,
     ) -> AutonomyOp {
         AutonomyOp {
             requested,
             candidates: dialect.autonomy_candidates(requested).into(),
+            in_effect: None,
             reason: None,
             reply,
-            announce,
+            at_once,
+            generation,
         }
     }
 }
@@ -458,6 +481,9 @@ impl AutonomyOp {
 struct Applied {
     requested: Autonomy,
     candidate: AutonomyCandidate,
+    /// What a mode picked by hand is measured against: the candidate's mode, or for a candidate
+    /// that changes none, the agent's mode when it applied (`None` while the agent has no mode).
+    reference: Option<String>,
 }
 
 impl Applied {
@@ -576,14 +602,18 @@ struct Session {
     replay_summary: Option<ReplaySummary>,
     options: Option<OptionModel>,
     autonomy: Option<Applied>,
-    /// The mode an autonomy change is setting right now (its echo is not a hand pick).
-    autonomy_target: Option<String>,
+    /// An autonomy change is still on its way: its own mode change decides the mode, so a mode
+    /// reported or applied meanwhile (an echo, an earlier pick) is not a hand pick.
+    autonomy_settling: bool,
+    /// How many `SetAutonomy` commands arrived; an op of an older count was replaced.
+    autonomy_generation: u64,
     hand_picked: Option<String>,
     ops: VecDeque<Op>,
     op_busy: bool,
+    /// Mode changes parked until the turn ends (dialects that change mode only while idle).
     after_turn: Vec<Op>,
-    /// Commands that arrived before `Ready`.
-    held: VecDeque<DriverCommand>,
+    /// Commands that arrived before `Ready`, with when they arrived.
+    held: VecDeque<(Instant, DriverCommand)>,
     /// Transcript events of a start that ended without `Ready` (rule 1 forbids handing them over).
     dropped_before_ready: usize,
     mapper: Mapper,
@@ -612,7 +642,7 @@ impl Session {
         process: SpawnedProcess,
         commands: mpsc::UnboundedReceiver<DriverCommand>,
         outbox: Outbox,
-        held: VecDeque<DriverCommand>,
+        held: VecDeque<(Instant, DriverCommand)>,
         setup: SessionSetup,
     ) -> Session {
         let SpawnedProcess {
@@ -654,7 +684,8 @@ impl Session {
             replay_summary: None,
             options: None,
             autonomy: None,
-            autonomy_target: None,
+            autonomy_settling: false,
+            autonomy_generation: 0,
             hand_picked: None,
             ops: VecDeque::new(),
             op_busy: false,
@@ -842,9 +873,9 @@ impl Session {
             }
             command @ (DriverCommand::SetOption { .. } | DriverCommand::SetAutonomy { .. }) => {
                 if self.ready {
-                    self.queue_op(command);
+                    self.queue_op(command, Instant::now());
                 } else {
-                    self.held.push_back(command);
+                    self.held.push_back((Instant::now(), command));
                 }
             }
         }
@@ -1065,10 +1096,10 @@ impl Session {
                 op,
                 candidate,
                 mode,
+                in_effect,
             } => {
                 self.op_busy = false;
-                self.autonomy_target = None;
-                self.finish_autonomy(op, candidate, &mode, result);
+                self.finish_autonomy(op, candidate, &mode, in_effect, result);
                 self.pump_ops();
             }
         }
@@ -1263,14 +1294,17 @@ impl Session {
             self.setup.autonomy,
             self.dialect.as_ref(),
             None,
-            true,
+            false,
+            self.autonomy_generation,
         )));
+        self.autonomy_settling = true;
         for (option_id, value) in self.setup.desired.clone() {
             self.ops.push_back(Op::SetOption(SetOptionOp {
                 option_id,
                 value,
                 reply: None,
                 origin: Origin::Desired,
+                deadline: None,
             }));
         }
         self.ops.push_back(Op::Ready);
@@ -1295,10 +1329,10 @@ impl Session {
         };
         self.outbox.push(DriverEvent::Ready(info));
         self.outbox.release_held();
-        while let Some(command) = self.held.pop_front() {
+        while let Some((arrived, command)) = self.held.pop_front() {
             match command {
                 command @ (DriverCommand::SetOption { .. } | DriverCommand::SetAutonomy { .. }) => {
-                    self.queue_op(command);
+                    self.queue_op(command, arrived);
                 }
                 DriverCommand::RespondPermission {
                     request_id,
@@ -1680,7 +1714,10 @@ impl Session {
         match self.phase {
             Phase::Running => {
                 self.outbox.push(DriverEvent::Status(DriverStatus::Ready));
-                self.ops.extend(self.after_turn.drain(..));
+                // Parked changes came up before anything still queued, so they go first.
+                for op in self.after_turn.drain(..).rev() {
+                    self.ops.push_front(op);
+                }
                 self.pump_ops();
             }
             Phase::Closing if self.cancel_deadline.is_some() => self.close_process(),
@@ -1820,7 +1857,10 @@ impl Session {
 
     // ---- options and autonomy --------------------------------------------------------------
 
-    fn queue_op(&mut self, command: DriverCommand) {
+    /// Queues a change. A `SetAutonomy` puts its policy in effect at once (spec 5.5.2: "takes
+    /// effect at once for the policy") and queues only its mode change; a `SetOption` is answered
+    /// within one request timeout of `arrived`.
+    fn queue_op(&mut self, command: DriverCommand, arrived: Instant) {
         match command {
             DriverCommand::SetOption {
                 option_id,
@@ -1831,14 +1871,21 @@ impl Session {
                 value,
                 reply: Some(reply),
                 origin: Origin::User,
+                deadline: Some(arrived + self.setup.timings.request),
             })),
             DriverCommand::SetAutonomy { autonomy, reply } => {
-                self.ops.push_back(Op::Autonomy(AutonomyOp::new(
+                self.autonomy_generation = self.autonomy_generation.wrapping_add(1);
+                let mut op = AutonomyOp::new(
                     autonomy,
                     self.dialect.as_ref(),
                     Some(reply),
-                    false,
-                )));
+                    true,
+                    self.autonomy_generation,
+                );
+                let candidate = self.next_candidate(&mut op);
+                self.put_in_effect(&mut op, candidate.clone());
+                op.in_effect = Some(candidate);
+                self.ops.push_back(Op::Autonomy(op));
             }
             _ => return,
         }
@@ -1865,6 +1912,14 @@ impl Session {
             .map(|option| option.id.clone())
     }
 
+    /// The Mode option's current value.
+    fn current_mode(&self) -> Option<String> {
+        self.options
+            .as_ref()
+            .and_then(OptionModel::current_mode)
+            .map(str::to_owned)
+    }
+
     fn start_set_option(&mut self, op: SetOptionOp) {
         let Some(options) = &self.options else {
             send(op.reply, Err(internal("The agent isn't ready yet.")));
@@ -1887,30 +1942,42 @@ impl Session {
             }
             return;
         }
+        let already = options.is_current(&op.option_id, &op.value);
         let is_mode = self.mode_option_id().as_deref() == Some(op.option_id.as_str());
-        if is_mode
-            && op.origin == Origin::User
-            && self.dialect.mode_change_requires_idle()
-            && self.prompt.is_some()
-        {
-            self.defer_mode_change(op);
-            return;
-        }
-        let already = self
-            .options
-            .as_ref()
-            .is_some_and(|options| options.is_current(&op.option_id, &op.value));
         if already {
-            if op.origin == Origin::Deferred
-                && let Some(options) = &mut self.options
-            {
-                options.set_pending(&op.option_id, None);
-                self.push_options();
-            }
-            if is_mode && let ConfigValue::Choice { value } = &op.value {
-                self.check_hand_picked(value);
+            if is_mode {
+                // The latest pick wins: a mode change parked for the turn's end goes.
+                self.drop_parked_mode_changes();
+                self.set_pending_mode(None);
+                if let ConfigValue::Choice { value } = &op.value {
+                    self.check_hand_picked(value);
+                }
             }
             send(op.reply, Ok(()));
+            return;
+        }
+        if op
+            .deadline
+            .is_some_and(|deadline| deadline <= Instant::now())
+        {
+            // It waited behind earlier changes for as long as an answer may take.
+            send(
+                op.reply,
+                Err(DriverError {
+                    kind: ErrorKind::AgentError,
+                    message: OPTION_TOO_LATE.into(),
+                    detail: None,
+                }),
+            );
+            return;
+        }
+        if is_mode && self.dialect.mode_change_requires_idle() && self.prompt.is_some() {
+            match op.origin {
+                Origin::User => self.defer_mode_change(op),
+                // A parked change whose turn ended while another request was on its way, with a
+                // new turn begun meanwhile: it waits for this turn too.
+                Origin::Deferred | Origin::Desired => self.park(Op::SetOption(op)),
+            }
             return;
         }
         let session_id = self.session_id.clone().unwrap_or_default();
@@ -1924,7 +1991,9 @@ impl Session {
         };
         // A failed write means the agent is gone; the dropped reply says so.
         if let Ok(id) = self.rpc.request(method, params) {
-            let deadline = Instant::now() + self.setup.timings.request;
+            let deadline = op
+                .deadline
+                .unwrap_or_else(|| Instant::now() + self.setup.timings.request);
             self.pending.insert(
                 id,
                 Request {
@@ -1936,25 +2005,73 @@ impl Session {
         }
     }
 
-    /// Hermes changes mode only while idle: the change waits for the turn's end, shown as pending.
+    /// Hermes changes mode only while idle: a mode picked during a turn is parked until the turn
+    /// ends and shown as pending. The hand-picked rule applies at once: the policy is auracode's
+    /// own and never waits for the agent.
     fn defer_mode_change(&mut self, op: SetOptionOp) {
-        if let Some(options) = &mut self.options {
-            options.set_pending(&op.option_id, Some(op.value.clone()));
-        }
-        self.after_turn.retain(|queued| !changes_mode(queued));
-        self.after_turn.push(Op::SetOption(SetOptionOp {
+        let ConfigValue::Choice { value } = op.value.clone() else {
+            send(op.reply, Err(internal("This option can't be set.")));
+            return;
+        };
+        let repeated = self
+            .options
+            .as_ref()
+            .and_then(|options| options.pending(&op.option_id))
+            == Some(&op.value);
+        self.park(Op::SetOption(SetOptionOp {
             option_id: op.option_id,
             value: op.value,
             reply: None,
             origin: Origin::Deferred,
+            deadline: None,
         }));
-        self.push_options();
-        let notice = format!(
-            "{} changes mode when the current turn ends.",
-            self.agent_label()
-        );
-        self.push_notice(NoticeLevel::Info, notice);
+        self.set_pending_mode(Some(&value));
+        if !repeated {
+            let notice = format!(
+                "{} changes mode when the current turn ends.",
+                self.agent_label()
+            );
+            self.push_notice(NoticeLevel::Info, notice);
+        }
+        self.check_hand_picked(&value);
         send(op.reply, Ok(()));
+    }
+
+    /// Parks a mode change until the turn ends; it replaces whatever was parked before it.
+    fn park(&mut self, op: Op) {
+        self.drop_parked_mode_changes();
+        self.after_turn.push(op);
+    }
+
+    /// Drops the mode changes parked for the turn's end: a newer change supersedes them. When one
+    /// of them was the current `SetAutonomy`'s, that change no longer settles.
+    fn drop_parked_mode_changes(&mut self) {
+        let generation = self.autonomy_generation;
+        for parked in self.after_turn.drain(..) {
+            if let Op::Autonomy(op) = parked
+                && op.generation == generation
+            {
+                self.autonomy_settling = false;
+            }
+        }
+    }
+
+    /// Shows a mode change waiting for the turn's end on the Mode option, or clears it; the
+    /// options go out when that changes them.
+    fn set_pending_mode(&mut self, mode: Option<&str>) {
+        let Some(option_id) = self.mode_option_id() else {
+            return;
+        };
+        let Some(options) = &mut self.options else {
+            return;
+        };
+        let pending = mode.map(|mode| ConfigValue::Choice {
+            value: mode.to_owned(),
+        });
+        if options.pending(&option_id) != pending.as_ref() {
+            options.set_pending(&option_id, pending);
+            self.push_options();
+        }
     }
 
     fn finish_set_option(&mut self, op: SetOptionOp, result: Result<Value, Failure>) {
@@ -1969,13 +2086,7 @@ impl Session {
                     }
                 }
                 self.push_options();
-                if is_mode
-                    && let Some(mode) = self
-                        .options
-                        .as_ref()
-                        .and_then(OptionModel::current_mode)
-                        .map(str::to_owned)
-                {
+                if is_mode && let Some(mode) = self.current_mode() {
                     self.check_hand_picked(&mode);
                 }
                 send(op.reply, Ok(()));
@@ -2010,54 +2121,116 @@ impl Session {
                         let notice =
                             format!("{} did not change mode ({message}).", self.agent_label());
                         self.push_notice(NoticeLevel::Warning, notice);
+                        // The hand-picked rule applied when the mode was picked; the agent kept
+                        // its mode, so the state follows the mode it is really in.
+                        if let Some(mode) = self.current_mode() {
+                            self.check_hand_picked(&mode);
+                        }
                     }
                 }
             }
         }
     }
 
+    /// The next candidate worth trying (spec 5.5.2): its mode is offered, or it changes none.
+    /// Candidates whose mode is not offered are skipped without asking the agent; after the last
+    /// comes the last resort, which changes no mode and asks before every action.
+    fn next_candidate(&self, op: &mut AutonomyOp) -> AutonomyCandidate {
+        while let Some(candidate) = op.candidates.pop_front() {
+            let Some(mode) = &candidate.mode else {
+                return candidate;
+            };
+            match self
+                .options
+                .as_ref()
+                .filter(|options| options.mode().is_some())
+            {
+                Some(options) if options.offers_mode(mode) => return candidate,
+                Some(_) => op.reason = Some(format!("it offers no {mode} mode")),
+                None => op.reason = Some("it has no modes".into()),
+            }
+        }
+        let reason = op
+            .reason
+            .take()
+            .unwrap_or_else(|| "it offers no matching mode".into());
+        AutonomyCandidate {
+            mode: None,
+            auto_answer: AutoAnswer::Never,
+            note: Some(format!(
+                "auracode could not switch {} to a matching mode ({reason}), so it asks before every action.",
+                self.agent_label()
+            )),
+        }
+    }
+
+    /// Puts a candidate's policy in effect before its mode change lands. Mode changes meanwhile
+    /// are not hand picks: the op settles when its own change is done.
+    fn put_in_effect(&mut self, op: &mut AutonomyOp, candidate: AutonomyCandidate) {
+        let current = self.current_mode();
+        let applied = Applied {
+            requested: op.requested,
+            reference: candidate.mode.clone().or_else(|| current.clone()),
+            candidate,
+        };
+        let state = applied.state(current.as_deref());
+        self.autonomy = Some(applied);
+        self.hand_picked = None;
+        self.autonomy_settling = true;
+        self.reply_or_announce(op, state);
+    }
+
+    /// The op's reply, once; every later state goes out as `Autonomy`, and so does a reply the
+    /// session no longer waits for (it gave up), so its state follows the driver's.
+    fn reply_or_announce(&mut self, op: &mut AutonomyOp, state: AutonomyState) {
+        match op.reply.take() {
+            Some(reply) => {
+                if let Err(Ok(state)) = reply.send(Ok(state)) {
+                    self.outbox.push(DriverEvent::Autonomy(state));
+                }
+            }
+            None => self.outbox.push(DriverEvent::Autonomy(state)),
+        }
+    }
+
     /// Spec 5.5.2: the first candidate whose mode is offered (or that has none) and whose mode
-    /// change succeeds; the last resort asks before every action.
+    /// change succeeds; the last resort asks before every action. An op a later `SetAutonomy`
+    /// replaced does nothing more.
     fn step_autonomy(&mut self, mut op: AutonomyOp) {
+        if op.generation != self.autonomy_generation {
+            return;
+        }
         loop {
-            let Some(candidate) = op.candidates.pop_front() else {
-                let reason = op
-                    .reason
-                    .take()
-                    .unwrap_or_else(|| "it offers no matching mode".into());
-                let note = format!(
-                    "auracode could not switch {} to a matching mode ({reason}), so it asks before every action.",
-                    self.agent_label()
-                );
-                let last_resort = AutonomyCandidate {
-                    mode: None,
-                    auto_answer: AutoAnswer::Never,
-                    note: Some(note),
-                };
-                self.apply_autonomy(op, last_resort);
-                return;
+            let (candidate, in_effect) = match op.in_effect.take() {
+                Some(candidate) => (candidate, true),
+                None => (self.next_candidate(&mut op), false),
             };
             let Some(mode) = candidate.mode.clone() else {
-                self.apply_autonomy(op, candidate);
+                self.complete_autonomy(op, candidate, in_effect);
                 return;
             };
-            let Some(options) = &self.options else {
-                op.reason = Some("it has no modes".into());
-                continue;
-            };
-            if !options.offers_mode(&mode) {
-                op.reason = Some(match options.mode() {
-                    Some(_) => format!("it offers no {mode} mode"),
-                    None => "it has no modes".into(),
-                });
+            // The options may have changed while the op waited.
+            if !self
+                .options
+                .as_ref()
+                .is_some_and(|options| options.offers_mode(&mode))
+            {
+                op.reason = Some(format!("it offers no {mode} mode"));
                 continue;
             }
-            if options.current_mode() == Some(mode.as_str()) {
-                self.apply_autonomy(op, candidate);
+            if self.current_mode().as_deref() == Some(mode.as_str()) {
+                self.complete_autonomy(op, candidate, in_effect);
                 return;
             }
+            // A fallback of a `SetAutonomy` takes effect as soon as it is chosen, too.
+            let in_effect = if !in_effect && op.at_once {
+                self.put_in_effect(&mut op, candidate.clone());
+                true
+            } else {
+                in_effect
+            };
             if self.dialect.mode_change_requires_idle() && self.prompt.is_some() {
-                self.defer_autonomy(op, candidate, &mode);
+                self.defer_autonomy(op, candidate, &mode, in_effect);
                 return;
             }
             let Some(option_id) = self.mode_option_id() else {
@@ -2074,10 +2247,9 @@ impl Session {
             let Some((method, params)) = request else {
                 continue;
             };
-            // A failed write means the agent is gone: dropping the op's reply says so.
+            // A failed write means the agent is gone; its end follows.
             if let Ok(id) = self.rpc.request(method, params) {
                 let deadline = Instant::now() + self.setup.timings.request;
-                self.autonomy_target = Some(mode.clone());
                 self.pending.insert(
                     id,
                     Request {
@@ -2085,6 +2257,7 @@ impl Session {
                             op,
                             candidate,
                             mode,
+                            in_effect,
                         },
                         deadline: Some(deadline),
                     },
@@ -2095,34 +2268,22 @@ impl Session {
         }
     }
 
-    /// The policy takes effect at once; the mode change waits for the turn's end.
-    fn defer_autonomy(&mut self, mut op: AutonomyOp, candidate: AutonomyCandidate, mode: &str) {
-        let applied = Applied {
-            requested: op.requested,
-            candidate: candidate.clone(),
-        };
-        let state = applied.state(None);
-        send(op.reply.take(), Ok(state.clone()));
-        if op.announce {
-            self.outbox.push(DriverEvent::Autonomy(state));
+    /// Hermes changes mode only while idle: the mode change is parked until the turn ends and
+    /// shown as pending, while the policy already applies.
+    fn defer_autonomy(
+        &mut self,
+        mut op: AutonomyOp,
+        candidate: AutonomyCandidate,
+        mode: &str,
+        in_effect: bool,
+    ) {
+        if in_effect {
+            op.in_effect = Some(candidate);
+        } else {
+            op.candidates.push_front(candidate);
         }
-        self.autonomy = Some(applied);
-        self.hand_picked = None;
-        if let Some(option_id) = self.mode_option_id()
-            && let Some(options) = &mut self.options
-        {
-            options.set_pending(
-                &option_id,
-                Some(ConfigValue::Choice {
-                    value: mode.to_owned(),
-                }),
-            );
-        }
-        self.push_options();
-        op.candidates.push_front(candidate);
-        op.announce = true;
-        self.after_turn.retain(|queued| !changes_mode(queued));
-        self.after_turn.push(Op::Autonomy(op));
+        self.park(Op::Autonomy(op));
+        self.set_pending_mode(Some(mode));
     }
 
     fn finish_autonomy(
@@ -2130,8 +2291,10 @@ impl Session {
         mut op: AutonomyOp,
         candidate: AutonomyCandidate,
         mode: &str,
+        in_effect: bool,
         result: Result<Value, Failure>,
     ) {
+        let current = op.generation == self.autonomy_generation;
         match result {
             Ok(value) => {
                 let list = wire::config_options_reply(&value);
@@ -2147,8 +2310,12 @@ impl Session {
                     );
                 }
                 self.push_options();
-                self.apply_autonomy(op, candidate);
+                // A replaced op only tells the option model what the agent did.
+                if current {
+                    self.complete_autonomy(op, candidate, in_effect);
+                }
             }
+            Err(_) if !current => {}
             Err(failure) => {
                 op.reason = Some(failure_message(&failure, &self.setup));
                 self.step_autonomy(op);
@@ -2156,45 +2323,54 @@ impl Session {
         }
     }
 
-    fn apply_autonomy(&mut self, mut op: AutonomyOp, candidate: AutonomyCandidate) {
-        let applied = Applied {
-            requested: op.requested,
-            candidate,
-        };
-        let current = self
-            .options
-            .as_ref()
-            .and_then(OptionModel::current_mode)
-            .map(str::to_owned);
-        let state = applied.state(current.as_deref());
-        self.autonomy = Some(applied);
-        self.hand_picked = None;
-        if let Some(option_id) = self.mode_option_id()
-            && let Some(options) = &mut self.options
-            && options.pending(&option_id).is_some()
-        {
-            options.set_pending(&option_id, None);
-            self.push_options();
+    /// The op is done: its candidate applies (announced, unless its policy already was), the
+    /// mode changes parked before it go, and hand picks count again, measured from the mode now
+    /// in effect.
+    fn complete_autonomy(
+        &mut self,
+        mut op: AutonomyOp,
+        candidate: AutonomyCandidate,
+        in_effect: bool,
+    ) {
+        let current = self.current_mode();
+        let reference = candidate.mode.clone().or_else(|| current.clone());
+        if in_effect {
+            if let Some(applied) = &mut self.autonomy {
+                applied.reference = reference;
+            }
+        } else {
+            let applied = Applied {
+                requested: op.requested,
+                candidate,
+                reference,
+            };
+            let state = applied.state(current.as_deref());
+            self.autonomy = Some(applied);
+            self.hand_picked = None;
+            self.reply_or_announce(&mut op, state);
         }
-        send(op.reply.take(), Ok(state.clone()));
-        if op.announce {
-            self.outbox.push(DriverEvent::Autonomy(state));
-        }
+        self.drop_parked_mode_changes();
+        self.autonomy_settling = false;
+        self.set_pending_mode(None);
     }
 
     /// Spec 5.5.2: a mode picked by hand, or reported by the agent, that differs from the applied
-    /// candidate's mode turns auto-answers off; the candidate's mode again restores them.
+    /// candidate's mode turns auto-answers off; the candidate's mode again restores them. For a
+    /// candidate that changes no mode, the mode it applied in stands for its mode. While an
+    /// autonomy change settles, its own mode change decides, so nothing counts as a hand pick.
     fn check_hand_picked(&mut self, mode: &str) {
-        if self.autonomy_target.as_deref() == Some(mode) {
+        if self.autonomy_settling {
             return;
         }
-        let Some(applied) = &self.autonomy else {
+        let Some(applied) = &mut self.autonomy else {
             return;
         };
-        let Some(candidate_mode) = &applied.candidate.mode else {
+        let Some(reference) = applied.reference.clone() else {
+            // The agent had no mode when the candidate applied: this is the mode it runs in.
+            applied.reference = Some(mode.to_owned());
             return;
         };
-        if mode != candidate_mode {
+        if mode != reference {
             if self.hand_picked.as_deref() == Some(mode) {
                 return;
             }
@@ -2292,7 +2468,7 @@ impl Session {
         self.early.clear();
         self.early_bytes = 0;
         self.op_busy = false;
-        self.autonomy_target = None;
+        self.autonomy_settling = false;
         self.ops.clear();
         self.after_turn.clear();
         self.held.clear();
@@ -2300,15 +2476,6 @@ impl Session {
             let dropped = self.outbox.drop_held();
             self.dropped_before_ready = self.dropped_before_ready.saturating_add(dropped);
         }
-    }
-}
-
-/// Whether a queued op changes the mode (a later one replaces it).
-fn changes_mode(op: &Op) -> bool {
-    match op {
-        Op::Autonomy(_) => true,
-        Op::SetOption(op) => op.origin == Origin::Deferred,
-        Op::Ready => false,
     }
 }
 

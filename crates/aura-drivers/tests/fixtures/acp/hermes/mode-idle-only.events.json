@@ -270,6 +270,17 @@
       }
     },
     {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": "default",
+        "auto_answer": {
+          "type": "never"
+        },
+        "note": "You picked the Default mode by hand, so auracode asks before every action. Choose an autonomy level to hand control back."
+      }
+    },
+    {
       "type": "event",
       "data": {
         "turn": "019a0000-0001-7000-8000-000000000001",
@@ -363,17 +374,6 @@
           "pending": null
         }
       ]
-    },
-    {
-      "type": "autonomy",
-      "data": {
-        "requested": "full_auto",
-        "native_mode": "default",
-        "auto_answer": {
-          "type": "never"
-        },
-        "note": "You picked the Default mode by hand, so auracode asks before every action. Choose an autonomy level to hand control back."
-      }
     },
     {
       "type": "status",

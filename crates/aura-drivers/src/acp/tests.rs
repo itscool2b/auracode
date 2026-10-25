@@ -11,7 +11,7 @@ use aura_process::{
     EnvMap, EnvSource, ExitInfo, LaunchSpec, LogFactory, ProcessCwd, Redactor, ResolvedEnv,
     ShutdownPlan, SpawnError, TopKeys,
 };
-use aura_protocol::session::{ConfigKind, ConfigOption, ConfigValue};
+use aura_protocol::session::{ConfigKind, ConfigValue};
 use aura_protocol::{
     AuraEvent, AutoAnswer, Autonomy, AutonomyState, ErrorKind, NoticeLevel, PermissionOptionKind,
     PermissionRequest, PromptPart, StopReason, TokenUsage, ToolKind, UsageScope,
@@ -1324,64 +1324,597 @@ async fn empty_config_reply_ignored() {
     assert!(matches!(&policy.kind, ConfigKind::Select { current, .. } if current == "session"));
 }
 
-#[tokio::test(start_paused = true)]
-async fn a_mode_change_during_a_hermes_turn_waits_for_its_end() {
+// ---- hand-picked modes and autonomy changes ----------------------------------------------------
+
+/// Hermes' legacy modes with `current` in effect, and two models.
+fn hermes_open(current: &str) -> Value {
+    json!({"sessionId": SESSION,
+        "modes": {"currentModeId": current, "availableModes": [
+            {"id": "default", "name": "Default"}, {"id": "accept_edits", "name": "Accept Edits"},
+            {"id": "dont_ask", "name": "Don't Ask"}]},
+        "models": {"currentModelId": "p:a", "availableModels": [
+            {"modelId": "p:a", "name": "A"}, {"modelId": "p:b", "name": "B"}]}})
+}
+
+fn execute_only() -> AutoAnswer {
+    AutoAnswer::Kinds {
+        kinds: vec![ToolKind::Execute],
+    }
+}
+
+fn hand_picked_note(name: &str) -> Option<String> {
+    Some(format!(
+        "You picked the {name} mode by hand, so auracode asks before every action. Choose an autonomy level to hand control back."
+    ))
+}
+
+fn state(
+    requested: Autonomy,
+    native_mode: &str,
+    auto_answer: AutoAnswer,
+    note: Option<String>,
+) -> AutonomyState {
+    AutonomyState {
+        requested,
+        native_mode: Some(native_mode.into()),
+        auto_answer,
+        note,
+    }
+}
+
+/// Hermes in Full auto, already in `dont_ask`, so the start changes no mode: Kinds [execute].
+async fn ready_hermes_full_auto() -> Harness {
     let mut harness = Harness::start(setup("hermes")).await;
-    open_with(&mut harness, init_result(), json!({"sessionId": SESSION,
-        "modes": {"currentModeId": "dont_ask", "availableModes": [{"id": "default", "name": "Default"}, {"id": "dont_ask", "name": "Don't Ask"}]}})).await;
-    harness.prompt("T", "work");
-    let (prompt, _) = harness.request("session/prompt").await;
+    let events = open_with(&mut harness, init_result(), hermes_open("dont_ask")).await;
+    assert_eq!(
+        autonomy_of(&events),
+        [state(Autonomy::FullAuto, "dont_ask", execute_only(), None)]
+    );
+    harness.no_line();
+    harness
+}
+
+fn set_option(
+    harness: &Harness,
+    option_id: &str,
+    value: &str,
+) -> oneshot::Receiver<Result<(), DriverError>> {
     let (reply, answer) = oneshot::channel();
     harness.command(DriverCommand::SetOption {
-        option_id: "mode".into(),
+        option_id: option_id.into(),
         value: ConfigValue::Choice {
-            value: "default".into(),
+            value: value.into(),
         },
         reply,
     });
-    assert_eq!(answer.await.expect("answered"), Ok(()));
-    let events = harness
-        .events_until(|event| {
-            matches!(
-                event,
-                DriverEvent::Event {
-                    event: AuraEvent::Notice { .. },
-                    ..
-                }
-            )
-        })
-        .await;
-    let pending: Vec<&ConfigOption> = events
-        .iter()
-        .filter_map(|event| match event {
-            DriverEvent::Options(options) => options.iter().find(|option| option.id == "mode"),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(
-        pending.last().and_then(|option| option.pending.clone()),
-        Some(ConfigValue::Choice {
-            value: "default".into()
-        })
-    );
-    assert!(transcript(&events).iter().any(|(turn, event)| turn.as_deref() == Some("T")
-        && matches!(event, AuraEvent::Notice { message, .. } if message == "Hermes changes mode when the current turn ends.")));
-    harness.no_line();
-    harness.reply(&prompt, json!({"stopReason": "end_turn"}));
-    let (id, params) = harness.request("session/set_mode").await;
-    assert_eq!(params["modeId"], "default");
-    harness.reply(&id, json!({}));
+    answer
+}
+
+fn set_autonomy(
+    harness: &Harness,
+    autonomy: Autonomy,
+) -> oneshot::Receiver<Result<AutonomyState, DriverError>> {
+    let (reply, answer) = oneshot::channel();
+    harness.command(DriverCommand::SetAutonomy { autonomy, reply });
+    answer
+}
+
+/// The answer, which comes without the agent answering anything: within 1 ms of paused time.
+async fn answered_now<T>(answer: oneshot::Receiver<T>) -> T {
+    timeout(Duration::from_millis(1), answer)
+        .await
+        .expect("answered at once, without waiting for the agent")
+        .expect("the driver answers")
+}
+
+/// Events up to the next `Autonomy`, and its state.
+async fn next_autonomy(harness: &mut Harness) -> (Vec<DriverEvent>, AutonomyState) {
     let events = harness
         .events_until(|event| matches!(event, DriverEvent::Autonomy(_)))
         .await;
-    let modes: Vec<&ConfigOption> = events
-        .iter()
-        .filter_map(|event| match event {
-            DriverEvent::Options(options) => options.iter().find(|option| option.id == "mode"),
+    let state = autonomy_of(&events).pop().expect("an Autonomy event");
+    (events, state)
+}
+
+/// Every event up to a marker update sent now: what the driver emitted before it.
+async fn events_before_marker(harness: &mut Harness, marker: &str) -> Vec<DriverEvent> {
+    harness.update(json!({"sessionUpdate": "session_info_update", "title": marker}));
+    let mut events = harness
+        .events_until(|event| event == &DriverEvent::Title(Some(marker.into())))
+        .await;
+    events.pop();
+    events
+}
+
+/// The Mode option's pending value in the last `Options` among `events`.
+fn last_pending_mode(events: &[DriverEvent]) -> Option<Option<ConfigValue>> {
+    events.iter().rev().find_map(|event| match event {
+        DriverEvent::Options(options) => options
+            .iter()
+            .find(|option| option.id == "mode")
+            .map(|option| option.pending.clone()),
+        _ => None,
+    })
+}
+
+fn notices(events: &[DriverEvent]) -> Vec<String> {
+    transcript(events)
+        .into_iter()
+        .filter_map(|(_, event)| match event {
+            AuraEvent::Notice { message, .. } => Some(message),
             _ => None,
         })
-        .collect();
-    assert_eq!(modes.last().and_then(|option| option.pending.clone()), None);
+        .collect()
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_mode_picked_during_a_hermes_turn_turns_auto_answers_off_at_once() {
+    let mut harness = ready_hermes_full_auto().await;
+    harness.prompt("T", "work");
+    let (prompt, _) = harness.request("session/prompt").await;
+    assert_eq!(
+        answered_now(set_option(&harness, "mode", "default")).await,
+        Ok(())
+    );
+    // Before the turn ends: the change is pending with a notice, and Hermes' dangerous commands
+    // are no longer answered for the user.
+    let (events, picked) = next_autonomy(&mut harness).await;
+    assert_eq!(
+        last_pending_mode(&events),
+        Some(Some(ConfigValue::Choice {
+            value: "default".into()
+        }))
+    );
+    assert!(transcript(&events).iter().any(|(turn, event)| turn.as_deref() == Some("T")
+        && matches!(event, AuraEvent::Notice { message, .. } if message == "Hermes changes mode when the current turn ends.")));
+    assert_eq!(
+        picked,
+        state(
+            Autonomy::FullAuto,
+            "default",
+            AutoAnswer::Never,
+            hand_picked_note("Default")
+        )
+    );
+    assert!(!events.iter().any(is_turn_ended), "before TurnEnded");
+    harness.no_line();
+
+    // The change goes out after the turn; its success announces nothing new.
+    harness.reply(&prompt, json!({"stopReason": "end_turn"}));
+    let (id, params) = harness.request("session/set_mode").await;
+    assert_eq!(params, json!({"sessionId": SESSION, "modeId": "default"}));
+    harness.reply(&id, json!({}));
+    let events = events_before_marker(&mut harness, "after").await;
+    assert!(events.iter().any(is_turn_ended));
+    assert_eq!(last_pending_mode(&events), Some(None));
+    assert!(autonomy_of(&events).is_empty(), "{events:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn picking_the_candidates_mode_again_mid_turn_drops_the_parked_change_and_restores_auto_answers()
+ {
+    let mut harness = ready_hermes_full_auto().await;
+    harness.prompt("T", "work");
+    let (prompt, _) = harness.request("session/prompt").await;
+    assert_eq!(
+        answered_now(set_option(&harness, "mode", "default")).await,
+        Ok(())
+    );
+    let (_, picked) = next_autonomy(&mut harness).await;
+    assert_eq!(picked.auto_answer, AutoAnswer::Never);
+    // Don't Ask again, still during the turn: nothing waits for the turn's end any more.
+    assert_eq!(
+        answered_now(set_option(&harness, "mode", "dont_ask")).await,
+        Ok(())
+    );
+    let (events, restored) = next_autonomy(&mut harness).await;
+    assert_eq!(
+        restored,
+        state(Autonomy::FullAuto, "dont_ask", execute_only(), None)
+    );
+    assert_eq!(last_pending_mode(&events), Some(None));
+    assert!(notices(&events).is_empty(), "{events:?}");
+    harness.reply(&prompt, json!({"stopReason": "end_turn"}));
+    harness.events_until(is_turn_ended).await;
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    harness.no_line();
+}
+
+#[tokio::test(start_paused = true)]
+async fn repicking_the_current_mode_mid_turn_parks_nothing() {
+    let mut harness = ready_hermes_full_auto().await;
+    harness.prompt("T", "work");
+    let (prompt, _) = harness.request("session/prompt").await;
+    assert_eq!(
+        answered_now(set_option(&harness, "mode", "dont_ask")).await,
+        Ok(())
+    );
+    let events = events_before_marker(&mut harness, "marker").await;
+    assert!(
+        notices(&events).is_empty()
+            && autonomy_of(&events).is_empty()
+            && last_pending_mode(&events).is_none(),
+        "no notice, no pending change, no autonomy change: {events:?}"
+    );
+    harness.reply(&prompt, json!({"stopReason": "end_turn"}));
+    harness.events_until(is_turn_ended).await;
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    harness.no_line();
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_parked_mode_change_that_fails_leaves_the_state_of_the_mode_hermes_kept() {
+    let mut harness = ready_hermes_full_auto().await;
+    harness.prompt("T", "work");
+    let (prompt, _) = harness.request("session/prompt").await;
+    assert_eq!(
+        answered_now(set_option(&harness, "mode", "default")).await,
+        Ok(())
+    );
+    next_autonomy(&mut harness).await;
+    harness.reply(&prompt, json!({"stopReason": "end_turn"}));
+    let (id, _) = harness.request("session/set_mode").await;
+    harness.reply_error(&id, -32603, "Session is busy");
+    // Hermes stayed in Don't Ask, so auto-answers follow it back.
+    let (events, kept) = next_autonomy(&mut harness).await;
+    assert!(notices(&events).contains(&"Hermes did not change mode (Session is busy).".into()));
+    assert_eq!(last_pending_mode(&events), Some(None));
+    assert_eq!(
+        kept,
+        state(Autonomy::FullAuto, "dont_ask", execute_only(), None)
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_parked_mode_change_waits_for_a_turn_that_began_before_it_could_go_out() {
+    let mut harness = ready_hermes_full_auto().await;
+    harness.prompt("T1", "one");
+    let (first, _) = harness.request("session/prompt").await;
+    assert_eq!(
+        answered_now(set_option(&harness, "mode", "default")).await,
+        Ok(())
+    );
+    // A model change is no mode change, so it goes out at once; Hermes keeps it waiting on its
+    // guarded-model card.
+    let model = set_option(&harness, "model", "p:b");
+    let (set_model, _) = harness.request("session/set_model").await;
+    harness.reply(&first, json!({"stopReason": "end_turn"}));
+    harness.events_until(is_turn_ended).await;
+    // The next queued prompt starts before the model change is answered.
+    harness.prompt("T2", "two");
+    let (second, _) = harness.request("session/prompt").await;
+    harness.reply(&set_model, json!({}));
+    assert_eq!(model.await.expect("answered"), Ok(()));
+    // The parked mode change waits again: Hermes refuses mode changes mid-turn.
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    harness.no_line();
+    harness.reply(&second, json!({"stopReason": "end_turn"}));
+    let (_, params) = harness.request("session/set_mode").await;
+    assert_eq!(params["modeId"], "default");
+}
+
+#[tokio::test(start_paused = true)]
+async fn parked_changes_go_before_changes_queued_behind_them() {
+    let mut harness = ready_hermes_full_auto().await;
+    harness.prompt("T", "work");
+    let (prompt, _) = harness.request("session/prompt").await;
+    // First pick: parked for the turn's end.
+    assert_eq!(
+        answered_now(set_option(&harness, "mode", "accept_edits")).await,
+        Ok(())
+    );
+    // A model change goes out and stays unanswered; a second pick queues behind it.
+    let model = set_option(&harness, "model", "p:b");
+    let (set_model, _) = harness.request("session/set_model").await;
+    let later = set_option(&harness, "mode", "default");
+    harness.reply(&prompt, json!({"stopReason": "end_turn"}));
+    harness.events_until(is_turn_ended).await;
+    harness.reply(&set_model, json!({}));
+    assert_eq!(model.await.expect("answered"), Ok(()));
+    // The parked pick came first, so it goes first, and the later pick has the last word.
+    let (id, params) = harness.request("session/set_mode").await;
+    assert_eq!(params["modeId"], "accept_edits");
+    harness.reply(&id, json!({}));
+    let (id, params) = harness.request("session/set_mode").await;
+    assert_eq!(params["modeId"], "default");
+    harness.reply(&id, json!({}));
+    assert_eq!(later.await.expect("answered"), Ok(()));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_hand_pick_turns_hermes_full_auto_off_and_the_candidates_mode_or_an_autonomy_level_restores_it()
+ {
+    let mut harness = ready_hermes_full_auto().await;
+    // By hand, while idle: the mode changes, and auto-answers go off.
+    let answer = set_option(&harness, "mode", "accept_edits");
+    let (id, params) = harness.request("session/set_mode").await;
+    assert_eq!(params["modeId"], "accept_edits");
+    harness.reply(&id, json!({}));
+    assert_eq!(answer.await.expect("answered"), Ok(()));
+    let (_, picked) = next_autonomy(&mut harness).await;
+    assert_eq!(
+        picked,
+        state(
+            Autonomy::FullAuto,
+            "accept_edits",
+            AutoAnswer::Never,
+            hand_picked_note("Accept Edits")
+        )
+    );
+    // Don't Ask by hand: the candidate's mode, so Kinds [execute] again.
+    let answer = set_option(&harness, "mode", "dont_ask");
+    let (id, _) = harness.request("session/set_mode").await;
+    harness.reply(&id, json!({}));
+    assert_eq!(answer.await.expect("answered"), Ok(()));
+    let (_, restored) = next_autonomy(&mut harness).await;
+    assert_eq!(
+        restored,
+        state(Autonomy::FullAuto, "dont_ask", execute_only(), None)
+    );
+    // The agent reports another mode: off again. A SetAutonomy restores the candidate in its
+    // reply, before the mode change even goes out.
+    harness.update(json!({"sessionUpdate": "current_mode_update", "currentModeId": "default"}));
+    let (_, reported) = next_autonomy(&mut harness).await;
+    assert_eq!(reported.auto_answer, AutoAnswer::Never);
+    let reply = set_autonomy(&harness, Autonomy::FullAuto);
+    assert_eq!(
+        answered_now(reply).await,
+        Ok(state(Autonomy::FullAuto, "dont_ask", execute_only(), None))
+    );
+    let (id, params) = harness.request("session/set_mode").await;
+    assert_eq!(params["modeId"], "dont_ask");
+    // The agent's echo while the change is on its way is no hand pick.
+    harness.update(json!({"sessionUpdate": "current_mode_update", "currentModeId": "dont_ask"}));
+    harness.reply(&id, json!({}));
+    let events = events_before_marker(&mut harness, "after").await;
+    assert!(autonomy_of(&events).is_empty(), "{events:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_generic_dialect_turns_auto_answers_off_for_a_mode_picked_by_hand() {
+    let generic_mode = |current: &str| {
+        json!({"id": "mode", "name": "Mode", "category": "mode", "type": "select", "currentValue": current,
+               "options": [{"value": "default", "name": "Default"}, {"value": "plan", "name": "Plan Mode"}]})
+    };
+    let mut harness = Harness::start(setup("generic")).await;
+    let events = open_with(
+        &mut harness,
+        init_result(),
+        json!({"sessionId": SESSION, "configOptions": [generic_mode("default")]}),
+    )
+    .await;
+    // Full auto changes no mode and answers the eight tool kinds.
+    assert_eq!(
+        autonomy_of(&events),
+        [state(Autonomy::FullAuto, "default", AutoAnswer::All, None)]
+    );
+    // A mode picked by hand: auto-answers off.
+    let answer = set_option(&harness, "mode", "plan");
+    let (id, params) = harness.request("session/set_config_option").await;
+    assert_eq!(params["value"], "plan");
+    harness.reply(&id, json!({"configOptions": [generic_mode("plan")]}));
+    assert_eq!(answer.await.expect("answered"), Ok(()));
+    let (_, picked) = next_autonomy(&mut harness).await;
+    assert_eq!(
+        picked,
+        state(
+            Autonomy::FullAuto,
+            "plan",
+            AutoAnswer::Never,
+            hand_picked_note("Plan")
+        )
+    );
+    // Back in the mode autonomy found: All again.
+    harness.update(json!({"sessionUpdate": "current_mode_update", "currentModeId": "default"}));
+    let (_, restored) = next_autonomy(&mut harness).await;
+    assert_eq!(
+        restored,
+        state(Autonomy::FullAuto, "default", AutoAnswer::All, None)
+    );
+    // A mode the agent reports counts too; a SetAutonomy restores All, measured from that mode.
+    harness.update(json!({"sessionUpdate": "current_mode_update", "currentModeId": "plan"}));
+    let (_, reported) = next_autonomy(&mut harness).await;
+    assert_eq!(reported.auto_answer, AutoAnswer::Never);
+    assert_eq!(
+        answered_now(set_autonomy(&harness, Autonomy::FullAuto)).await,
+        Ok(state(Autonomy::FullAuto, "plan", AutoAnswer::All, None))
+    );
+    let events = events_before_marker(&mut harness, "settled").await;
+    assert!(autonomy_of(&events).is_empty(), "{events:?}");
+    harness.update(json!({"sessionUpdate": "current_mode_update", "currentModeId": "default"}));
+    let (_, moved) = next_autonomy(&mut harness).await;
+    assert_eq!(
+        moved,
+        state(
+            Autonomy::FullAuto,
+            "default",
+            AutoAnswer::Never,
+            hand_picked_note("Default")
+        )
+    );
+    harness.no_line();
+}
+
+#[tokio::test(start_paused = true)]
+async fn set_autonomy_takes_effect_at_once_and_its_mode_change_follows_in_order() {
+    let mut harness = ready_hermes_full_auto().await;
+    // A model change is on its way and unanswered.
+    let model = set_option(&harness, "model", "p:b");
+    let (set_model, _) = harness.request("session/set_model").await;
+    // Lowering to Ask: the policy changes now, in the reply; the mode change waits its turn.
+    assert_eq!(
+        answered_now(set_autonomy(&harness, Autonomy::Ask)).await,
+        Ok(state(Autonomy::Ask, "default", AutoAnswer::Never, None))
+    );
+    harness.no_line();
+    harness.reply(&set_model, json!({}));
+    assert_eq!(model.await.expect("answered"), Ok(()));
+    let (id, params) = harness.request("session/set_mode").await;
+    assert_eq!(params["modeId"], "default");
+    harness.reply(&id, json!({}));
+    let events = events_before_marker(&mut harness, "after").await;
+    assert!(autonomy_of(&events).is_empty(), "the reply said it all");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_set_autonomy_fallback_is_announced_as_soon_as_it_is_chosen() {
+    let mut ask = setup("claude-acp");
+    ask.autonomy = Autonomy::Ask;
+    let mut harness = Harness::start(ask).await;
+    let (id, _) = harness.request("initialize").await;
+    harness.reply(&id, init_result());
+    let (id, _) = harness.request("session/new").await;
+    harness.reply(
+        &id,
+        claude_new_reply(&["default", "acceptEdits", "bypassPermissions"]),
+    );
+    harness
+        .events_until(|event| matches!(event, DriverEvent::Ready(_)))
+        .await;
+    // Full auto: bypass at once, in the reply.
+    assert_eq!(
+        answered_now(set_autonomy(&harness, Autonomy::FullAuto)).await,
+        Ok(state(
+            Autonomy::FullAuto,
+            "bypassPermissions",
+            AutoAnswer::Never,
+            None
+        ))
+    );
+    let (id, params) = harness.request("session/set_config_option").await;
+    assert_eq!(params["value"], "bypassPermissions");
+    harness.reply_error(&id, -32602, "bypassPermissions is disabled by settings");
+    // The fallback takes effect as soon as it is chosen, announced since the reply went out.
+    let (_, fallback) = next_autonomy(&mut harness).await;
+    assert_eq!(
+        fallback,
+        state(
+            Autonomy::FullAuto,
+            "acceptEdits",
+            AutoAnswer::Never,
+            Some(dialect::CLAUDE_NO_BYPASS_NOTE.into())
+        )
+    );
+    let (id, params) = harness.request("session/set_config_option").await;
+    assert_eq!(params["value"], "acceptEdits");
+    // That one is refused too: the last resort.
+    harness.reply_error(&id, -32602, "no such mode");
+    let (_, last) = next_autonomy(&mut harness).await;
+    assert_eq!(
+        last,
+        state(
+            Autonomy::FullAuto,
+            "default",
+            AutoAnswer::Never,
+            Some("auracode could not switch Claude Code to a matching mode (no such mode), so it asks before every action.".into())
+        )
+    );
+    harness.no_line();
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_later_set_autonomy_replaces_one_still_on_its_way() {
+    let mut ask = setup("claude-acp");
+    ask.autonomy = Autonomy::Ask;
+    let mut harness = Harness::start(ask).await;
+    let (id, _) = harness.request("initialize").await;
+    harness.reply(&id, init_result());
+    let (id, _) = harness.request("session/new").await;
+    harness.reply(
+        &id,
+        claude_new_reply(&["default", "acceptEdits", "bypassPermissions"]),
+    );
+    harness
+        .events_until(|event| matches!(event, DriverEvent::Ready(_)))
+        .await;
+    assert!(
+        answered_now(set_autonomy(&harness, Autonomy::FullAuto))
+            .await
+            .is_ok()
+    );
+    let (bypass, _) = harness.request("session/set_config_option").await;
+    // The user changes their mind before the agent answers: the new level applies at once.
+    assert_eq!(
+        answered_now(set_autonomy(&harness, Autonomy::AutoEdit)).await,
+        Ok(state(
+            Autonomy::AutoEdit,
+            "acceptEdits",
+            AutoAnswer::Never,
+            None
+        ))
+    );
+    // The replaced change is refused: no fallback of it, no note about bypass.
+    harness.reply_error(&bypass, -32602, "bypassPermissions is disabled by settings");
+    let (id, params) = harness.request("session/set_config_option").await;
+    assert_eq!(params["value"], "acceptEdits");
+    harness.reply(&id, json!({}));
+    let events = events_before_marker(&mut harness, "after").await;
+    assert!(autonomy_of(&events).is_empty(), "{events:?}");
+    harness.no_line();
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_set_autonomy_nobody_waits_for_is_announced() {
+    let mut harness = ready_hermes_full_auto().await;
+    // The session gave up on the reply (its IPC budget ran out): the state still reaches it.
+    let (reply, answer) = oneshot::channel();
+    drop(answer);
+    harness.command(DriverCommand::SetAutonomy {
+        autonomy: Autonomy::Ask,
+        reply,
+    });
+    let (_, announced) = next_autonomy(&mut harness).await;
+    assert_eq!(
+        announced,
+        state(Autonomy::Ask, "default", AutoAnswer::Never, None)
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_set_option_is_answered_within_the_request_timeout_of_its_arrival() {
+    let mut harness = Harness::start(setup("generic")).await;
+    open_with(
+        &mut harness,
+        init_result(),
+        json!({"sessionId": SESSION, "configOptions": [
+            model_option("a"),
+            {"id": "fast", "name": "Fast", "type": "boolean", "currentValue": false},
+        ]}),
+    )
+    .await;
+    let start = tokio::time::Instant::now();
+    // The first change goes out and is never answered; the second arrives 10 s later.
+    let first = set_option(&harness, "model", "b");
+    harness.request("session/set_config_option").await;
+    tokio::time::sleep(Duration::from_secs(10)).await;
+    let (reply, second) = oneshot::channel();
+    harness.command(DriverCommand::SetOption {
+        option_id: "fast".into(),
+        value: ConfigValue::Toggle { value: true },
+        reply,
+    });
+    assert!(first.await.expect("answered").is_err());
+    assert_eq!(start.elapsed(), Duration::from_secs(30));
+    // The second goes out with what is left of its 30 s, and times out 30 s after it arrived.
+    harness.request("session/set_config_option").await;
+    assert!(second.await.expect("answered").is_err());
+    assert_eq!(start.elapsed(), Duration::from_secs(40));
+
+    // A change that waited its whole 30 s behind another is answered without being sent.
+    let first = set_option(&harness, "model", "b");
+    harness.request("session/set_config_option").await;
+    let second = set_option(&harness, "model", "b");
+    assert!(first.await.expect("answered").is_err());
+    assert_eq!(
+        second.await.expect("answered"),
+        Err(DriverError {
+            kind: ErrorKind::AgentError,
+            message: OPTION_TOO_LATE.into(),
+            detail: None,
+        })
+    );
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    harness.no_line();
 }
 
 // ---- turns -------------------------------------------------------------------------------------
