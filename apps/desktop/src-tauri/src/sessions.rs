@@ -28,7 +28,6 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Component, Path, PathBuf};
-use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -40,13 +39,14 @@ use aura_core::session::{
     FrameSink, ManagerDeps, ManagerLimits, SessionManager, SessionTimings, ShutdownSummary,
     SinkGone, StatusSink,
 };
-use aura_drivers::driver::{AgentDriver, DriverContext, DriverError, DriverExit, DriverFactory};
+use aura_drivers::driver::DriverFactory;
+use aura_drivers::factory::StandardDriverFactory;
 use aura_process::{
     EnvResolver, EnvResolverConfig, LeftoverRegistry, LogFactory, ProcessSpawner, Redactor,
     RetentionPolicy, Spawner, SweepReport, sweep_stale,
 };
+use aura_protocol::EventBatch;
 use aura_protocol::session::{ChatStatusUpdate, PauseReason, StorageState, StorageStatus};
-use aura_protocol::{DriverKind, ErrorKind, EventBatch};
 use tauri::ipc::Channel;
 use tauri::webview::PageLoadEvent;
 use tokio::runtime::Handle;
@@ -260,8 +260,8 @@ pub struct Outside {
 }
 
 impl Outside {
-    /// The real ones: the user's login shell (its secret literals go to `redactor`), the catalog's
-    /// agents with their adapters in `<data root>/adapters`, and processes registered in `registry`.
+    /// The real ones: the user's login shell (its secret literals go to `redactor`), then
+    /// everything [`Outside::over_env`] builds on it.
     pub fn real(
         registry: &Arc<LeftoverRegistry>,
         redactor: &Arc<Redactor>,
@@ -276,6 +276,20 @@ impl Outside {
             Arc::clone(registry),
             rt.clone(),
         );
+        Outside::over_env(env, registry, data_dir, rt)
+    }
+
+    /// The real detector, processes and drivers over `env`: the catalog's agents with their
+    /// adapters in `<data root>/adapters` (detection starts in the background once `env`
+    /// resolves), processes registered in `registry`, and the drivers auracode ships (the ACP
+    /// driver and the demo agent's). [`Outside::real`] passes the login shell's resolver; a test
+    /// passes a fixed env whose `PATH` finds no agent, so nothing it starts reaches a real one.
+    pub fn over_env(
+        env: Arc<EnvResolver>,
+        registry: &Arc<LeftoverRegistry>,
+        data_dir: &Path,
+        rt: &Handle,
+    ) -> Outside {
         let detector = Detector::new(
             Arc::clone(&env),
             Arc::clone(registry),
@@ -286,7 +300,7 @@ impl Outside {
             env,
             detector,
             spawner: Spawner::new(Arc::clone(registry), rt.clone()),
-            drivers: Arc::new(UnbuiltDrivers),
+            drivers: StandardDriverFactory::new(),
         }
     }
 }
@@ -423,39 +437,6 @@ pub fn sweep_notice(report: &SweepReport) -> Option<String> {
         n => Some(format!(
             "auracode stopped {n} agent processes left running by an earlier session that ended unexpectedly."
         )),
-    }
-}
-
-/// The driver factory the app starts agents with until package B's `StandardDriverFactory` (the
-/// ACP driver and the demo agent's driver) lands at the merge. Every start fails with a sentence
-/// that says why, as an error card in the chat (an `internal` one, which offers no Retry).
-///
-/// At B's merge, [`Outside::real`] must take `aura_drivers::factory::StandardDriverFactory::new()`
-/// and this type goes. No test fails if that is forgotten, since every test passes its own
-/// factory: the merge adds one that starts the demo agent through `Outside::real` to `Ready`.
-struct UnbuiltDrivers;
-
-impl DriverFactory for UnbuiltDrivers {
-    fn create(&self, _kind: DriverKind) -> Box<dyn AgentDriver> {
-        Box::new(UnbuiltDriver)
-    }
-}
-
-struct UnbuiltDriver;
-
-impl AgentDriver for UnbuiltDriver {
-    fn run(
-        self: Box<Self>,
-        _ctx: DriverContext,
-    ) -> Pin<Box<dyn Future<Output = DriverExit> + Send + 'static>> {
-        Box::pin(async {
-            DriverExit::StartFailed(DriverError {
-                kind: ErrorKind::Internal,
-                message: "This build of auracode can't start agents yet: its agent drivers aren't built in."
-                    .into(),
-                detail: None,
-            })
-        })
     }
 }
 
