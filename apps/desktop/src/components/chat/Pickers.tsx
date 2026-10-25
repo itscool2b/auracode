@@ -11,13 +11,17 @@ import { AUTONOMIES, autonomyLabel, orderedOptions, pendingLabel } from "../../l
 /**
  * Autonomy (always enabled: it applies when the agent starts), with its note, the agent mode in
  * effect, and the missing safety net while Full auto is chosen; then one select or checkbox per
- * option the agent offers, enabled while the agent is ready or working, pending values marked.
+ * option the agent offers, enabled while the agent is ready or working, pending values marked. A
+ * change on its way (up to 35 s) shows the value asked for, marked "saving", instead of snapping
+ * back to the old one.
  */
 export function Pickers({
   lists,
   autonomy,
   status,
   error,
+  optionsSaving = new Map(),
+  autonomySaving = null,
   onSetAutonomy,
   onSetOption,
 }: {
@@ -26,17 +30,23 @@ export function Pickers({
   readonly autonomy: Autonomy;
   readonly status: SessionStatus;
   readonly error: string | null;
+  /** Option changes on their way, by option id. */
+  readonly optionsSaving?: ReadonlyMap<string, ConfigValue>;
+  readonly autonomySaving?: Autonomy | null;
   readonly onSetAutonomy: (autonomy: Autonomy) => void;
   readonly onSetOption: (optionId: string, value: ConfigValue) => void;
 }) {
   const autonomyId = useId();
-  const chosen = lists?.autonomy.requested ?? autonomy;
+  const chosen = autonomySaving ?? lists?.autonomy.requested ?? autonomy;
   const optionsEnabled = status === "ready" || status === "running";
   const options = orderedOptions(lists?.options ?? []);
   return (
     <div className="chat-pickers">
       <div className="ui-field">
-        <label htmlFor={autonomyId}>Autonomy</label>
+        <label htmlFor={autonomyId}>
+          Autonomy
+          {autonomySaving !== null ? <span className="ui-muted"> (saving…)</span> : null}
+        </label>
         <select
           id={autonomyId}
           className="ui-select"
@@ -54,6 +64,7 @@ export function Pickers({
         <OptionPicker
           key={option.id}
           option={option}
+          saving={optionsSaving.get(option.id) ?? null}
           enabled={optionsEnabled}
           onSet={onSetOption}
         />
@@ -74,10 +85,13 @@ export function Pickers({
 
 function OptionPicker({
   option,
+  saving,
   enabled,
   onSet,
 }: {
   readonly option: ConfigOption;
+  /** The value a change on its way asked for. */
+  readonly saving: ConfigValue | null;
   readonly enabled: boolean;
   readonly onSet: (optionId: string, value: ConfigValue) => void;
 }) {
@@ -86,7 +100,11 @@ function OptionPicker({
   const label = (
     <>
       {option.name}
-      {pending !== null ? <span className="ui-muted"> (pending: {pending})</span> : null}
+      {saving !== null ? (
+        <span className="ui-muted"> (saving…)</span>
+      ) : pending !== null ? (
+        <span className="ui-muted"> (pending: {pending})</span>
+      ) : null}
     </>
   );
   if (option.kind.type === "toggle") {
@@ -96,7 +114,7 @@ function OptionPicker({
           <input
             id={id}
             type="checkbox"
-            checked={option.kind.current}
+            checked={saving?.type === "toggle" ? saving.value : option.kind.current}
             disabled={!enabled}
             onChange={(event) =>
               onSet(option.id, { type: "toggle", value: event.currentTarget.checked })
@@ -125,7 +143,7 @@ function OptionPicker({
       <select
         id={id}
         className="ui-select"
-        value={current}
+        value={saving?.type === "choice" ? saving.value : current}
         disabled={!enabled}
         onChange={(event) => onSet(option.id, { type: "choice", value: event.currentTarget.value })}
       >

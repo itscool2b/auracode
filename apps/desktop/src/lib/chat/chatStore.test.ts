@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChatSnapshot, HistoryPage } from "../../bindings";
+import type { ChatSnapshot, HistoryPage, SessionLists } from "../../bindings";
 import { CommandError } from "../ipc";
 import { BLOB_PAGE, ChatStore, LISTS_DEBOUNCE_MS, STILL_WORKING_MS } from "./chatStore";
 import {
   attachResult,
+  autonomyState,
   ev,
   FakeTransport,
   frame,
@@ -520,6 +521,52 @@ describe("the pickers", () => {
       ["setOption", CHAT, "bad", { type: "toggle", value: true }],
       ["setAutonomy", CHAT, "ask"],
     ]);
+  });
+
+  it("keep the newest change's lists when an older answer arrives last, and show what is on its way", async () => {
+    const answers = new Map<string, (answer: SessionLists) => void>();
+    const fake = new FakeTransport({
+      setOption: (_chat, _option, value) =>
+        new Promise((resolve) => {
+          answers.set(value.type === "choice" ? value.value : String(value.value), resolve);
+        }),
+      setAutonomy: (_chat, autonomy) => new Promise((resolve) => answers.set(autonomy, resolve)),
+    });
+    const store = await opened(fake);
+    const fast = store.setOption("model", { type: "choice", value: "fast" });
+    const smart = store.setOption("model", { type: "choice", value: "smart" });
+    // The picker shows the newest value asked for while the calls run.
+    expect(store.getSnapshot().optionsSaving.get("model")).toEqual({
+      type: "choice",
+      value: "smart",
+    });
+    answers.get("smart")?.(lists(11));
+    await smart;
+    expect(store.getSnapshot().lists?.revision).toBe(11);
+    expect(store.getSnapshot().optionsSaving.size).toBe(0);
+    // The first change answers last: its lists are older, so they are ignored.
+    answers.get("fast")?.(lists(10));
+    await fast;
+    expect(store.getSnapshot().lists?.revision).toBe(11);
+    expect(store.getSnapshot().optionsSaving.size).toBe(0);
+
+    // The same for the autonomy; a refusal clears what was on its way and says why.
+    const ask = store.setAutonomy("ask");
+    expect(store.getSnapshot().autonomySaving).toBe("ask");
+    answers.get("ask")?.(lists(12, { autonomy: autonomyState("ask") }));
+    await ask;
+    expect(store.getSnapshot()).toMatchObject({ autonomySaving: null, listsError: null });
+    expect(store.getSnapshot().lists?.autonomy.requested).toBe("ask");
+    fake.handlers.setOption = () =>
+      Promise.reject(
+        new CommandError("session_not_ready", "The agent isn't running in this chat."),
+      );
+    await store.setOption("model", { type: "choice", value: "fast" });
+    expect(store.getSnapshot()).toMatchObject({
+      listsError: "The agent isn't running in this chat.",
+    });
+    expect(store.getSnapshot().optionsSaving.size).toBe(0);
+    expect(store.getSnapshot().lists?.revision).toBe(12);
   });
 
   it("keep the newest lists when an older refetch answers late", async () => {

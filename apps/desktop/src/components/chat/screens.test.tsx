@@ -318,6 +318,44 @@ describe("the pickers", () => {
     expect(ready).not.toMatch(/disabled/);
   });
 
+  it("show the value a change on its way asked for, marked, instead of the old one", () => {
+    const html = renderToStaticMarkup(
+      <Pickers
+        lists={lists(1, { options: [toggle, { ...model, pending: null }] })}
+        autonomy="full_auto"
+        status="ready"
+        error={null}
+        optionsSaving={
+          new Map([
+            ["model", { type: "choice" as const, value: "smart" }],
+            ["fast", { type: "toggle" as const, value: false }],
+          ])
+        }
+        autonomySaving="ask"
+        onSetAutonomy={noop}
+        onSetOption={noop}
+      />,
+    );
+    expect(html).toContain('<option value="ask" selected="">Ask</option>');
+    expect(html).toContain('<option value="smart" selected="">Smart</option>');
+    expect(html).not.toMatch(/<input[^>]*checked/);
+    expect(html.match(/\(saving…\)/g)).toHaveLength(3);
+    // Nothing on its way: the lists' own values.
+    const settledHtml = renderToStaticMarkup(
+      <Pickers
+        lists={lists(1, { options: [toggle, { ...model, pending: null }] })}
+        autonomy="full_auto"
+        status="ready"
+        error={null}
+        onSetAutonomy={noop}
+        onSetOption={noop}
+      />,
+    );
+    expect(settledHtml).toContain('<option value="fast" selected="">Fast</option>');
+    expect(settledHtml).toMatch(/<input[^>]*checked/);
+    expect(settledHtml).not.toContain("saving");
+  });
+
   it("show the autonomy note and the agent mode in effect", () => {
     const html = renderToStaticMarkup(
       <Pickers

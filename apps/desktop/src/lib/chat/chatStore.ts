@@ -87,6 +87,10 @@ export interface ChatState {
   readonly unsavedFrom: number | null;
   readonly lists: SessionLists | null;
   readonly listsError: string | null;
+  /** Option changes on their way (up to 35 s), by option id: the pickers show the value asked for. */
+  readonly optionsSaving: ReadonlyMap<string, ConfigValue>;
+  /** An autonomy change on its way. */
+  readonly autonomySaving: Autonomy | null;
   readonly requests: ReadonlyMap<string, RequestState>;
   readonly blobs: ReadonlyMap<string, BlobState>;
   /** The last failed send, shown under the composer. */
@@ -132,6 +136,8 @@ function initialState(chatId: string): ChatState {
     unsavedFrom: null,
     lists: null,
     listsError: null,
+    optionsSaving: new Map(),
+    autonomySaving: null,
     requests: new Map(),
     blobs: new Map(),
     sendError: null,
@@ -189,7 +195,15 @@ export class ChatStore {
   #closed = false;
 
   #listsTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Every request that answers with the lists (a refetch, an option or autonomy change) gets a
+   * number, and only the newest one's answer replaces them: an older answer arriving late holds
+   * an older state.
+   */
   #listsRequest = 0;
+  /** The number of each option's newest change, and of the newest autonomy change. */
+  #optionRequests = new Map<string, number>();
+  #autonomyRequest = 0;
   #stillTimer: ReturnType<typeof setTimeout> | null = null;
   /** When the last frame arrived or the running turn started. */
   #lastActivity = 0;
@@ -572,24 +586,61 @@ export class ChatStore {
     );
   }
 
+  /**
+   * Changes an option. Its picker shows the value asked for until the answer arrives; a newer
+   * change supersedes it, and the lists come from the newest request's answer only.
+   */
   async setOption(optionId: string, value: ConfigValue): Promise<void> {
+    const request = ++this.#listsRequest;
+    this.#optionRequests.set(optionId, request);
+    const saving = new Map(this.#state.optionsSaving);
+    saving.set(optionId, value);
+    this.#set({ ...this.#state, optionsSaving: saving });
+    const answer = await this.#listsAnswer(() =>
+      this.#transport.setOption(this.chatId, optionId, value),
+    );
+    if (this.#closed) return;
+    let state = this.#state;
+    if (this.#optionRequests.get(optionId) === request) {
+      this.#optionRequests.delete(optionId);
+      state = { ...state, optionsSaving: without(state.optionsSaving, optionId) };
+    }
+    this.#set(this.#withAnswer(state, request, answer));
+  }
+
+  /** Changes the autonomy, the same way as an option. */
+  async setAutonomy(autonomy: Autonomy): Promise<void> {
+    const request = ++this.#listsRequest;
+    this.#autonomyRequest = request;
+    this.#set({ ...this.#state, autonomySaving: autonomy });
+    const answer = await this.#listsAnswer(() =>
+      this.#transport.setAutonomy(this.chatId, autonomy),
+    );
+    if (this.#closed) return;
+    let state = this.#state;
+    if (this.#autonomyRequest === request) state = { ...state, autonomySaving: null };
+    this.#set(this.#withAnswer(state, request, answer));
+  }
+
+  async #listsAnswer(
+    call: () => Promise<SessionLists>,
+  ): Promise<{ lists: SessionLists } | { error: string }> {
     try {
-      const lists = await this.#transport.setOption(this.chatId, optionId, value);
-      this.#listsRequest += 1;
-      this.#set({ ...this.#state, lists, listsError: null });
+      return { lists: await call() };
     } catch (error) {
-      this.#set({ ...this.#state, listsError: errorMessage(error) });
+      return { error: errorMessage(error) };
     }
   }
 
-  async setAutonomy(autonomy: Autonomy): Promise<void> {
-    try {
-      const lists = await this.#transport.setAutonomy(this.chatId, autonomy);
-      this.#listsRequest += 1;
-      this.#set({ ...this.#state, lists, listsError: null });
-    } catch (error) {
-      this.#set({ ...this.#state, listsError: errorMessage(error) });
-    }
+  /** The lists of request `request`'s answer, unless a newer request was made; a refusal always shows. */
+  #withAnswer(
+    state: ChatState,
+    request: number,
+    answer: { lists: SessionLists } | { error: string },
+  ): ChatState {
+    if ("error" in answer) return { ...state, listsError: answer.error };
+    if (request !== this.#listsRequest) return state;
+    return { ...state, lists: answer.lists, listsError: null };
   }
 
   // ---------- prompts and the session ----------

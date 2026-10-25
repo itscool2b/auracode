@@ -113,6 +113,8 @@ export function ChatView({
         autonomy={state.session?.autonomy ?? "full_auto"}
         status={status}
         error={state.listsError}
+        optionsSaving={state.optionsSaving}
+        autonomySaving={state.autonomySaving}
         onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
         onSetOption={(optionId, value) => void store.setOption(optionId, value)}
       />
