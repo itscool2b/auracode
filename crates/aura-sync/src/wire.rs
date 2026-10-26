@@ -61,6 +61,13 @@ pub struct RegisteredDevice {
     pub approved: bool,
 }
 #[derive(Debug, Clone, Deserialize)]
+pub struct RebindChallenge {
+    pub challenge_id: String,
+    pub device_id: String,
+    pub envelope: KeyEnvelope,
+    pub expires_in: u32,
+}
+#[derive(Debug, Clone, Deserialize)]
 pub struct Device {
     pub id: String,
     pub name: String,

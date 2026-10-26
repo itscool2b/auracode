@@ -220,3 +220,38 @@ async fn sync_accepts_authoritative_stale_heads_but_rejects_wrong_device_clocks_
         Err(ApiError::InvalidInput)
     ));
 }
+#[tokio::test]
+async fn rebind_wire_binds_the_expected_device_and_accepts_only_a_positive_consumption_reply() {
+    let challenge_id = crypto::encode(&[3; 32]);
+    let body = serde_json::json!({
+        "challenge_id":challenge_id,"device_id":"device","expires_in":300,
+        "envelope":{"algorithm":crypto::REBIND_ALGORITHM,"nonce":crypto::encode(&[4;24]),"ciphertext":crypto::encode(&[5;48]),"ephemeral_public_key":crypto::encode(&[6;32])},
+    });
+    let (client, request) = server("200 OK", "", &body.to_string());
+    let challenge = client.begin_rebind(&token(), "device").await.unwrap();
+    let request = String::from_utf8(request.recv_timeout(Duration::from_secs(3)).unwrap()).unwrap();
+    assert!(request.starts_with("POST /api/v1/devices/rebind/challenges "));
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(request.split_once("\r\n\r\n").unwrap().1)
+            .unwrap(),
+        serde_json::json!({"device_id":"device"})
+    );
+    let (client, request) = server("200 OK", "", "{\"device_id\":\"device\",\"rebound\":true}");
+    let proof = crypto::encode(&[7; 32]);
+    client
+        .verify_rebind(&token(), &challenge, &proof)
+        .await
+        .unwrap();
+    let request = String::from_utf8(request.recv_timeout(Duration::from_secs(3)).unwrap()).unwrap();
+    assert!(request.starts_with("POST /api/v1/devices/rebind/verify "));
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(request.split_once("\r\n\r\n").unwrap().1)
+            .unwrap(),
+        serde_json::json!({"challenge_id":challenge_id,"proof":proof})
+    );
+    let (client, _) = server("200 OK", "", "{\"device_id\":\"wrong\",\"rebound\":true}");
+    assert!(matches!(
+        client.verify_rebind(&token(), &challenge, &proof).await,
+        Err(ApiError::Protocol)
+    ));
+}

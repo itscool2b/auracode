@@ -12,6 +12,7 @@ use zeroize::Zeroizing;
 
 pub const DEVICE_ALGORITHM: &str = "x25519-hkdf-sha256-xchacha20poly1305-v1";
 pub const RECOVERY_ALGORITHM: &str = "recovery-xchacha20poly1305-v1";
+pub const REBIND_ALGORITHM: &str = "x25519-hkdf-sha256-xchacha20poly1305-rebind-v1";
 const KDF_SALT: &[u8] = b"auracode-hkdf-sha256-v1";
 const RECOVERY_PREFIX: &str = "aura-recovery-v1-";
 pub const MAX_RECORD_PLAINTEXT: usize = 64 * 1024 - 16;
@@ -52,10 +53,49 @@ impl AccountKey {
     pub fn generate() -> Result<Self> {
         Ok(Self(random()?))
     }
+    pub(crate) fn restore(secret: &[u8]) -> Result<Self> {
+        if secret.len() != 32 {
+            return Err(CryptoError::Invalid);
+        }
+        let mut key = Zeroizing::new([0; 32]);
+        key.copy_from_slice(secret);
+        Ok(Self(key))
+    }
+    pub(crate) fn secret(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+    /// Compare on two trusted screens when accepting a remote approval for the first time. This
+    /// public 128-bit fingerprint never substitutes for the encryption key or its recovery proof.
+    pub fn fingerprint(&self, account: &str, version: u32) -> Result<String> {
+        key_context(account, version)?;
+        let mut hash = Sha256::new();
+        hash.update(json_context(&(
+            "auracode-account-key-fingerprint-v1",
+            account,
+            version,
+        ))?);
+        hash.update(self.0.as_ref());
+        Ok(hash.finalize()[..16]
+            .chunks(2)
+            .map(|pair| format!("{:02X}{:02X}", pair[0], pair[1]))
+            .collect::<Vec<_>>()
+            .join(" "))
+    }
 }
 impl DeviceKey {
     pub fn generate() -> Result<Self> {
         Ok(Self(StaticSecret::from(*random::<32>()?)))
+    }
+    pub(crate) fn restore(secret: &[u8]) -> Result<Self> {
+        if secret.len() != 32 {
+            return Err(CryptoError::Invalid);
+        }
+        let mut key = Zeroizing::new([0; 32]);
+        key.copy_from_slice(secret);
+        Ok(Self(StaticSecret::from(*key)))
+    }
+    pub(crate) fn secret(&self) -> &[u8] {
+        self.0.as_bytes()
     }
     pub fn public_key(&self) -> String {
         encode(PublicKey::from(&self.0).as_bytes())
@@ -217,6 +257,51 @@ pub fn unwrap_device(
         32,
     )?;
     account_key(plain)
+}
+
+/// Prove possession of a retained private device key to a fresh sign-in session. The distinct
+/// algorithm and context prevent a key envelope from being used as a server-visible proof.
+pub fn open_rebind(
+    envelope: &KeyEnvelope,
+    key: &DeviceKey,
+    account: &str,
+    device: &str,
+    challenge: &str,
+) -> Result<Zeroizing<String>> {
+    identifier(account)?;
+    identifier(device)?;
+    identifier(challenge)?;
+    if envelope.algorithm != REBIND_ALGORITHM {
+        return Err(CryptoError::Version);
+    }
+    let ephemeral = envelope
+        .ephemeral_public_key
+        .as_deref()
+        .ok_or(CryptoError::Invalid)?;
+    let public = PublicKey::from(*decode_array::<32>(ephemeral)?);
+    let shared = key.0.diffie_hellman(&public);
+    if !shared.was_contributory() {
+        return Err(CryptoError::Invalid);
+    }
+    let context = json_context(&(
+        "auracode-device-rebind-v1",
+        account,
+        device,
+        challenge,
+        key.public_key(),
+        ephemeral,
+    ))?;
+    let plain = open(
+        derive(shared.as_bytes(), &context)?.as_ref(),
+        &context,
+        &envelope.nonce,
+        &envelope.ciphertext,
+        32,
+    )?;
+    if plain.len() != 32 {
+        return Err(CryptoError::Invalid);
+    }
+    Ok(Zeroizing::new(encode(&plain)))
 }
 
 pub fn wrap_recovery(

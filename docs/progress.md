@@ -949,3 +949,20 @@ read/write was performed.
   was read or changed. Native macOS execution, account state/IPC, SQLCipher profile integration and
   durable sync/config adapters remain pending.
 
+# M7 account state and device trust foundation (2026-10-26)
+
+- Added the Rust account owner with persisted private-key/session bundles, session verification,
+  retained-device proof, explicit registration/recovery/approval, and a Ready-only sync gate. Expiry,
+  revocation and sign-out halt live sync while retaining local keys. Cancelled queued vault writes
+  cannot overwrite newer session removal, and replacement owners invalidate older network access.
+- Found and fixed an active-service key-substitution gap: the recipient code alone cannot authenticate
+  the origin of a sealed account key. New remote approvals require explicit full-fingerprint
+  comparison with the trusted device. Initialization/recovery and later reconnects pin known keys.
+- Twenty-five focused tests now cover crypto/server vectors, local HTTP, vaults, key substitution,
+  lost registration replies, recovery, first-device setup, stale owners, sign-out storage failure,
+  cancellation, expiry and revocation. All-target Clippy passes. One fake-server test bug on Windows
+  was corrected by resetting accepted sockets to blocking mode; production HTTP code was unaffected.
+- `docs/desktop-account-client.md` defines the root UI/actor seam and remaining integration gates.
+  SQLCipher profiles, account IPC/UI, durable sync/merge/config adapters and macOS execution remain
+  pending. No real sign-in, credential access, cloud mutation, deployment or paid prompt was run.
+

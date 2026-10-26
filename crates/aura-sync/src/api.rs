@@ -54,8 +54,15 @@ pub struct ApiClient {
     origin: Url,
 }
 impl ApiClient {
+    pub fn origin(&self) -> &str {
+        self.origin.as_str()
+    }
     pub fn new(origin: &str) -> Result<Self> {
         Self::build(origin, false)
+    }
+    #[cfg(test)]
+    pub(crate) fn local_test(origin: &str) -> Self {
+        Self::build(origin, true).expect("local test origin")
     }
     fn build(origin: &str, allow_local_test: bool) -> Result<Self> {
         let origin = Url::parse(origin).map_err(|_| ApiError::Origin)?;
@@ -294,19 +301,86 @@ impl ApiClient {
         let reply: Reply = self.get("devices", token).await?;
         let mut ids = std::collections::HashSet::new();
         if reply.devices.len() > 100
-            || reply.devices.iter().any(|device| {
-                id(&device.id).is_err()
-                    || !ids.insert(&device.id)
-                    || !code(&device.verification_code)
-                    || !binary(&device.public_key, 32, 32)
-                    || device.name.len() > 80
-                    || device.name.chars().any(char::is_control)
-                    || !matches!(device.platform.as_str(), "windows" | "macos")
-            })
+            || reply
+                .devices
+                .iter()
+                .any(|device| !valid_device(device) || !ids.insert(&device.id))
         {
             return Err(ApiError::Protocol);
         }
         Ok(reply.devices)
+    }
+    pub async fn device(&self, token: &SessionToken, device: &str) -> Result<Device> {
+        id(device)?;
+        #[derive(Deserialize)]
+        struct Reply {
+            device: Device,
+        }
+        let reply: Reply = self.get(&format!("devices/{device}"), token).await?;
+        if reply.device.id != device || !valid_device(&reply.device) {
+            return Err(ApiError::Protocol);
+        }
+        Ok(reply.device)
+    }
+    pub async fn begin_rebind(
+        &self,
+        token: &SessionToken,
+        device_id: &str,
+    ) -> Result<RebindChallenge> {
+        id(device_id)?;
+        #[derive(Serialize)]
+        struct Begin<'a> {
+            device_id: &'a str,
+        }
+        let reply: RebindChallenge = self
+            .post(
+                "devices/rebind/challenges",
+                Some(token),
+                &Begin { device_id },
+            )
+            .await?;
+        if reply.device_id != device_id
+            || !(1..=300).contains(&reply.expires_in)
+            || !binary(&reply.challenge_id, 32, 32)
+            || reply.envelope.algorithm != crypto::REBIND_ALGORITHM
+        {
+            return Err(ApiError::Protocol);
+        }
+        Ok(reply)
+    }
+    pub async fn verify_rebind(
+        &self,
+        token: &SessionToken,
+        challenge: &RebindChallenge,
+        proof: &str,
+    ) -> Result<()> {
+        if !binary(&challenge.challenge_id, 32, 32) || !binary(proof, 32, 32) {
+            return Err(ApiError::InvalidInput);
+        }
+        #[derive(Serialize)]
+        struct Verify<'a> {
+            challenge_id: &'a str,
+            proof: &'a str,
+        }
+        #[derive(Deserialize)]
+        struct Reply {
+            device_id: String,
+            rebound: bool,
+        }
+        let reply: Reply = self
+            .post(
+                "devices/rebind/verify",
+                Some(token),
+                &Verify {
+                    challenge_id: &challenge.challenge_id,
+                    proof,
+                },
+            )
+            .await?;
+        if !reply.rebound || reply.device_id != challenge.device_id {
+            return Err(ApiError::Protocol);
+        }
+        Ok(())
     }
     pub async fn keys(&self, token: &SessionToken) -> Result<Keys> {
         self.get("keys", token).await
@@ -492,6 +566,15 @@ fn id(value: &str) -> Result<()> {
 }
 fn code(value: &str) -> bool {
     value.len() == 6 && value.bytes().all(|byte| byte.is_ascii_digit())
+}
+fn valid_device(device: &Device) -> bool {
+    id(&device.id).is_ok()
+        && code(&device.verification_code)
+        && binary(&device.public_key, 32, 32)
+        && !device.name.trim().is_empty()
+        && device.name.len() <= 80
+        && !device.name.chars().any(char::is_control)
+        && matches!(device.platform.as_str(), "windows" | "macos")
 }
 fn binary(value: &str, min: usize, max: usize) -> bool {
     crypto::decode(value, max).is_ok_and(|bytes| bytes.len() >= min)

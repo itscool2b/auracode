@@ -32,6 +32,38 @@ Each client computes this from the actual key it displays or approves. The new d
 the server's returned display code. Approval requires an explicit user comparison and expires after
 600 seconds. Device names do not authenticate a public key.
 
+The six-digit code authenticates the recipient public key, not the origin of a returned account-key
+envelope. A malicious service knows that public key and could seal a different account key to it.
+The first remotely approved device must therefore compare a second, locally computed account-key
+fingerprint with the trusted approving device before its first sync. The server's `approved_at`
+alone does not enable sync. The fingerprint is the first 16 bytes of:
+
+`SHA256(compact_json(["auracode-account-key-fingerprint-v1", account_id, key_version]) || account_key_bytes)`
+
+Display these 128 bits as eight groups of four uppercase hex digits. Compare all groups on the two
+devices, then explicitly confirm locally. The trusted device derives this value from its retained
+key, never an API-provided fingerprint. Initialization and recovery already know the key locally and
+pin the returned envelope to that key. Reconnects reject any replacement of a confirmed key. Unknown
+key-version changes require a future explicit rotation protocol and are currently refused.
+
+This protects key acceptance from an active service substituting an envelope. It does not guarantee
+availability: a malicious service can withhold ciphertext or approvals. Compromised endpoints or
+someone confirming a mismatched fingerprint remain outside this protection.
+
+## Retained-device session rebind
+
+A fresh desktop sign-in does not inherit device approval from a matching public key. The server
+issues a random 32-byte possession proof, sealed with algorithm
+`x25519-hkdf-sha256-xchacha20poly1305-rebind-v1`. HKDF uses the same fixed salt; both info and AAD are:
+
+`["auracode-device-rebind-v1", account_id, device_id, challenge_id, recipient_public_key, ephemeral_public_key]`
+
+The client opens it with its retained private key and sends only the base64url proof to the verify
+endpoint. This envelope has a distinct algorithm and purpose from account keys; the client refuses
+to reveal an account-key envelope as a possession proof. The server consumes the challenge atomically
+into that fresh desktop session, within five minutes, and checks expiry and revocation. Account keys
+are neither sent to nor rewrapped by the server during rebind.
+
 ## Recovery envelope
 
 The recovery key is 32 random bytes, displayed once as `aura-recovery-v1-` followed by base64url.
@@ -80,7 +112,7 @@ within the application process.
 
 An explicit passphrase fallback is a separate store, never selected automatically after keychain
 failure. Its file is in an existing auracode-owned private profile directory. Version 1 uses the
-11-byte prefix `AURA-VAULT` followed by byte `01`, a 16-byte random salt, a 24-byte random nonce and
+10-byte ASCII prefix `AURA-VAULT` followed by byte `01`, a 16-byte random salt, a 24-byte random nonce and
 XChaCha20-Poly1305 ciphertext. Argon2id version 19 derives a 32-byte key with 65536 KiB, three passes
 and one lane. Parameters are fixed by the format version, so files cannot request excessive KDF work.
 AAD is compact JSON `["auracode-passphrase-vault-v1", entry_identity]`. Plaintext is byte `00` for an

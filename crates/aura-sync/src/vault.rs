@@ -37,7 +37,7 @@ pub type Result<T> = std::result::Result<T, VaultError>;
 
 /// Opaque identity bound to a canonical HTTPS service origin and account. Callers cannot select
 /// arbitrary keychain services or vendor entries. Names do not contain email addresses.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VaultEntry(String);
 impl VaultEntry {
     pub fn new(origin: &str, account: &str) -> Result<Self> {

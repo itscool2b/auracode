@@ -222,3 +222,30 @@ fn deterministic_wire_vector() {
         account.0
     );
 }
+#[test]
+fn server_rebind_vector_opens_only_for_its_original_context_and_purpose() {
+    // Independently emitted by the cloud API's production Rust seal_with implementation.
+    let mut envelope = KeyEnvelope {
+        algorithm: REBIND_ALGORITHM.into(),
+        nonce: "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ".into(),
+        ephemeral_public_key: Some("UKYUCbHd0DJemxa3AOcZ6XcsBwALG9d4bpB8ZT0gSV0".into()),
+        ciphertext: "mNgCeLn249w8yCPoZAwkYJcOiFZ3cdMrhAyIMXuDa8zPpp5vvS6UFGDZ5ApNF0oK".into(),
+    };
+    let key = DeviceKey(StaticSecret::from([3; 32]));
+    assert_eq!(
+        open_rebind(&envelope, &key, "account", "device", "challenge")
+            .unwrap()
+            .as_str(),
+        encode(&[7; 32])
+    );
+    for (account, device, challenge) in [
+        ("other", "device", "challenge"),
+        ("account", "other", "challenge"),
+        ("account", "device", "other"),
+    ] {
+        assert!(open_rebind(&envelope, &key, account, device, challenge).is_err());
+    }
+    assert!(unwrap_device(&envelope, &key, "account", "device", 1).is_err());
+    envelope.algorithm = DEVICE_ALGORITHM.into();
+    assert!(open_rebind(&envelope, &key, "account", "device", "challenge").is_err());
+}
