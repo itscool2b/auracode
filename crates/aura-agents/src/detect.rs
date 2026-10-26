@@ -1074,7 +1074,7 @@ mod tests {
             .filter(|entry| {
                 matches!(
                     entry.id.as_str(),
-                    "hermes" | "claude" | "claude-acp" | "codex" | "codex-acp" | "mock"
+                    "hermes" | "claude" | "claude-acp" | "codex" | "codex-acp" | "pi" | "mock"
                 )
             })
             .map(|entry| entry.availability.clone())
@@ -1096,6 +1096,9 @@ mod tests {
                 },
                 Availability::Missing {
                     reason: "Node.js 22 or newer is required (found none).".into()
+                },
+                Availability::Missing {
+                    reason: "pi was not found on your PATH.".into()
                 },
                 Availability::Ready {
                     version: None,

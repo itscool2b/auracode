@@ -36,7 +36,16 @@ Context occupancy comes only from `contextUsage`. Null occupancy after compactio
 Turn token totals sum completed assistant messages; session cost comes from `get_session_stats`.
 No transcript scanning or full message-history requests are used for telemetry.
 
-Verification remains pending. The first two ordinary Cargo test attempts were blocked before
-compiling the driver by Windows Application Control (OS error 4551 on dependency build scripts).
-The code and protocol-derived tests need successful Rust tests, Clippy, replay and real-agent
-acceptance in an allowed environment before M1d can be marked complete.
+Pi's pinned `AgentSession.setModel` and `setThinkingLevel` persist global defaults only when
+`options.persist` is explicitly true. RPC calls them without that option, so the model and thinking
+pickers change the session and its transcript only. `setAutoCompactionEnabled` always writes the
+settings manager; the adapter deliberately offers no writable auto-compaction option. The Pi free
+probe reads metadata and verifies capabilities without invoking any setters. It skips prompted
+resume recall, which belongs to a separately authorized acceptance run.
+
+The first two ordinary local Cargo attempts were blocked before compilation by Windows Application
+Control (OS error 4551 on dependency build scripts). Linux CI for checkpoint `f316b59` passed all
+19 Pi tests, including the protocol replay, workspace Clippy and binding regeneration. Its full
+test step exposed catalog assertions that still expected five agents and a known CLI readiness
+race from the base branch. The follow-up fixes and complete Linux/Windows gates remain pending,
+as do expanded replay evidence and authorized real-agent acceptance. M1d is not complete.

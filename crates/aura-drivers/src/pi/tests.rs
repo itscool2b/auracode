@@ -386,6 +386,99 @@ async fn fresh_starts_in_the_same_chat_have_distinct_native_ids() {
     second.stop().await;
 }
 
+#[tokio::test(start_paused = true)]
+async fn exhausted_retries_end_as_error_even_without_an_assistant_snapshot() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.prompt();
+    let prompt = h.wire().await;
+    h.reply(&prompt, json!({"disposition":"started"}));
+    h.send(json!({"type":"agent_start"}));
+    h.send(json!({"type":"auto_retry_end","success":false,"attempt":3,"finalError":"provider unavailable"}));
+    h.send(json!({"type":"agent_settled","aborted":false}));
+    loop {
+        if let DriverEvent::TurnEnded {
+            stop_reason, error, ..
+        } = h.event().await
+        {
+            assert_eq!(stop_reason, StopReason::Error);
+            assert_eq!(
+                error.unwrap().detail.as_deref(),
+                Some("provider unavailable")
+            );
+            break;
+        }
+    }
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_dropped_setting_receiver_never_mutates_native_state() {
+    use aura_protocol::session::ConfigValue;
+    let mut h = Harness::start().await;
+    h.ready().await;
+    let (reply, receive) = tokio::sync::oneshot::channel();
+    drop(receive);
+    h.tx.send(DriverCommand::SetOption {
+        option_id: "effort".into(),
+        value: ConfigValue::Choice {
+            value: "high".into(),
+        },
+        reply,
+    })
+    .unwrap();
+    h.prompt();
+    assert_eq!(h.wire().await["type"], "prompt");
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn process_exit_drains_buffered_transcript_under_event_backpressure() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.prompt();
+    let prompt = h.wire().await;
+    h.reply(&prompt, json!({"disposition":"started"}));
+    h.send(json!({"type":"agent_start"}));
+    h.send(json!({"type":"message_start","message":{"role":"assistant","content":[]}}));
+    let chunk = "x".repeat(256);
+    for _ in 0..500 {
+        h.send(json!({"type":"message_update","assistantMessageEvent":{
+        "type":"text_delta","contentIndex":0,"delta":chunk}}));
+    }
+    h.send(json!({"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":chunk.repeat(500)}],
+        "stopReason":"stop","usage":{"input":1,"output":2}}}));
+    h.send(json!({"type":"agent_settled","aborted":false}));
+    h.end.to_client.send(FakeLine::Eof).unwrap();
+    let (placeholder, _) = tokio::sync::oneshot::channel();
+    let exit = std::mem::replace(&mut h.end.exit, placeholder);
+    exit.send(aura_process::ExitInfo {
+        code: Some(0),
+        signal: None,
+        at_ms: 0,
+    })
+    .unwrap();
+    for _ in 0..500 {
+        tokio::task::yield_now().await;
+    }
+    tokio::time::advance(Duration::from_secs(10)).await;
+    let mut text = String::new();
+    let mut ended = 0;
+    while let Some(event) = h.events.recv().await {
+        match event {
+            DriverEvent::Event {
+                event: aura_protocol::AuraEvent::MessageDelta { text: delta, .. },
+                ..
+            } => text.push_str(&delta),
+            DriverEvent::TurnEnded { .. } => ended += 1,
+            _ => {}
+        }
+    }
+    assert_eq!(text, chunk.repeat(500));
+    assert_eq!(ended, 1);
+    assert!(matches!(h.run.await.unwrap(), DriverExit::Crashed { .. }));
+}
+
 #[cfg(feature = "replay")]
 #[tokio::test(start_paused = true)]
 async fn pinned_protocol_fixture_replays_without_envelope_or_contract_mismatches() {

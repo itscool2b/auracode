@@ -249,11 +249,18 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   capabilities remain false, with typed native fork startup available for later UI work.
 - Added pure tests, fake-process lifecycle/failure tests, a protocol-derived replay fixture and
   native Pi correlation/redaction support. Rustfmt parsing and instruction-file synchronization
-  pass. Rust tests and Clippy have not run: two ordinary Cargo attempts were blocked before driver
-  compilation by Windows Application Control, error 4551 on dependency build scripts. No policy
-  changes or alternate execution paths were attempted. Successful CI, binding regeneration,
-  expanded replay evidence and authorized real-agent acceptance remain required.
+  pass. Two ordinary local Cargo attempts were blocked before driver compilation by Windows
+  Application Control, error 4551 on dependency build scripts. No policy changes or alternate
+  execution paths were attempted. Linux CI for `f316b59` passed all 19 Pi tests, workspace Clippy
+  and binding regeneration. Full test failures identified five stale catalog assertions and the
+  base branch's CLI readiness race. Follow-up CI, expanded replay evidence and authorized
+  real-agent acceptance remain required.
 - Remaining M1d ACP dialect integrations are separate work and are not implemented by this checkpoint.
+- Follow-up review confirms Pi's model/thinking RPC setters are session-local unless the SDK caller
+  explicitly requests persistence. Removed the auto-compaction toggle because its setter always
+  persists user settings. The Pi free probe uses native read-only state checks and leaves settings
+  unchanged. New regressions cover resource bounds, exhausted retries, dropped setting receivers
+  and buffered process output under event backpressure. Final Windows and follow-up CI are pending.
 
 ## Decisions and constraints
 

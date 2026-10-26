@@ -182,6 +182,7 @@ struct Session {
     stats_dirty: bool,
     usage: UsageInfo,
     last_error: Option<String>,
+    run_failed: bool,
 }
 impl Session {
     fn send(&mut self, frame: Value) {
@@ -314,7 +315,7 @@ impl Session {
             .push_back(DriverEvent::RunState { idle: self.idle });
         self.ready = true;
         self.outbox.push_back(DriverEvent::Ready(ReadyInfo {
-            native_session_id: self.native_id.clone(),
+            native_session_id: Some(self.native_id.clone()),
             agent_name: Some("Pi".into()),
             agent_version: None,
             spawn_id: self.spawn_id.clone(),
@@ -655,6 +656,12 @@ impl Session {
         for event in self.translator.ingest(&frame) {
             self.emit(event);
         }
+        if self.translator.is_exhausted() {
+            self.failure = Some(error(
+                "Pi exceeded the transcript tracking limit. Partial output was preserved; restart to continue.",
+            ));
+            return;
+        }
         match wire::text(&frame, "type") {
             Some("agent_start" | "compaction_start" | "auto_retry_start") => {
                 self.run_active = true;
@@ -668,6 +675,8 @@ impl Session {
                 };
                 let reason = if aborted {
                     StopReason::Cancelled
+                } else if self.run_failed {
+                    StopReason::Error
                 } else {
                     self.translator.reason()
                 };
@@ -707,9 +716,16 @@ impl Session {
                     turn: None,
                     event: AuraEvent::UsageUpdated(self.usage.clone()),
                 });
+                if !self.stopping {
+                    self.stats();
+                }
             }
-            Some("auto_retry_end") if frame["success"] == false => {
-                self.notice("Pi exhausted its automatic retries.")
+            Some("auto_retry_end") => {
+                self.run_failed = frame["success"] == false;
+                if self.run_failed {
+                    self.last_error = frame["finalError"].as_str().map(str::to_owned);
+                    self.notice("Pi exhausted its automatic retries.");
+                }
             }
             Some("extension_error") => self.notice("A Pi extension reported an error."),
             _ => {}
@@ -763,6 +779,7 @@ impl Session {
                 };
                 self.translator.begin_turn();
                 self.last_error = None;
+                self.run_failed = false;
                 self.turn = Some(turn.turn_id);
                 self.interrupted = false;
                 self.idle(false);
@@ -972,6 +989,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         stats_dirty: false,
         usage: UsageInfo::default(),
         last_error: None,
+        run_failed: false,
     };
     s.outbox
         .push_back(DriverEvent::Status(DriverStatus::Initializing));

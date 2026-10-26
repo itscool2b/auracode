@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
 const MAX_MODELS: usize = 500;
-const LEVELS: &[&str] = &["off", "minimal", "low", "medium", "high", "xhigh"];
+const LEVELS: &[&str] = &["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Model {
@@ -48,7 +48,6 @@ pub struct Metadata {
     pub model: Option<Model>,
     pub level: Option<String>,
     pub levels: Vec<String>,
-    pub auto_compaction: Option<bool>,
 }
 impl Metadata {
     pub fn models(&mut self, data: &Value) -> bool {
@@ -79,7 +78,6 @@ impl Metadata {
         self.level = text(state, "thinkingLevel")
             .filter(|s| LEVELS.contains(s))
             .map(str::to_owned);
-        self.auto_compaction = state["autoCompactionEnabled"].as_bool();
     }
     pub fn options(&self) -> Vec<ConfigOption> {
         let mut options = Vec::new();
@@ -123,16 +121,6 @@ impl Metadata {
                     .collect(),
             ));
         }
-        if let Some(current) = self.auto_compaction {
-            options.push(ConfigOption {
-                id: "auto_compaction".into(),
-                name: "Auto compaction".into(),
-                description: Some("Automatically compact context when needed.".into()),
-                category: ConfigCategory::ModelConfig,
-                kind: ConfigKind::Toggle { current },
-                pending: None,
-            });
-        }
         options
     }
     pub fn request(&self, id: &str, value: &ConfigValue) -> Option<Value> {
@@ -146,11 +134,6 @@ impl Metadata {
             }
             ("effort", ConfigValue::Choice { value }) if self.levels.contains(value) => {
                 Some(json!({"type":"set_thinking_level","level":value}))
-            }
-            ("auto_compaction", ConfigValue::Toggle { value })
-                if self.auto_compaction.is_some() =>
-            {
-                Some(json!({"type":"set_auto_compaction","enabled":value}))
             }
             _ => None,
         }
@@ -257,6 +240,33 @@ mod tests {
         assert_eq!(
             tokens(&data["tokens"], UsageScope::Session).unwrap().scope,
             UsageScope::Session
+        );
+    }
+
+    #[test]
+    fn max_thinking_is_valid_but_global_compaction_settings_are_never_offered() {
+        let mut metadata = Metadata::default();
+        metadata.state(&json!({"thinkingLevel":"max","autoCompactionEnabled":true}));
+        metadata.levels(&json!({"levels":["off","high","max"]}));
+        assert_eq!(
+            metadata.request(
+                "effort",
+                &ConfigValue::Choice {
+                    value: "max".into()
+                }
+            ),
+            Some(json!({"type":"set_thinking_level","level":"max"}))
+        );
+        assert!(
+            metadata
+                .options()
+                .iter()
+                .all(|option| option.id != "auto_compaction")
+        );
+        assert!(
+            metadata
+                .request("auto_compaction", &ConfigValue::Toggle { value: false })
+                .is_none()
         );
     }
 }
