@@ -340,7 +340,7 @@ signed out or token expired mid-turn (sign-in sheet, then resume); rate limit or
 time, one click hands the chat to another agent); version too old (update required) or untested-new (badge,
 lenient parsing); crash mid-turn (error card with stderr tail + "Restart and resume"); silent for minutes
 (soft "still working" with Interrupt, never auto-killed); folder-trust prompts that need a TTY (handled via
-flags/config or surfaced in the UI); model removed upstream (fall back to default with a notice); proxies
+flags/config or surfaced in the UI); model removed upstream (qualified fallback or explicit recovery with a notice); proxies
 (`HTTPS_PROXY` passed through).
 **Sessions + streaming.** Huge transcripts (virtualized, paged from SQLite); huge or binary or invalid-UTF-8
 output (capped, lossy decode, raw on disk); oversized or unsupported images (resized/converted, per-agent
@@ -377,8 +377,8 @@ problem; all platforms always listed); unsigned builds (clear Gatekeeper/SmartSc
 signing is set up); "Open auracode" when not installed (Download sits next to it); cookies or JS disabled
 (download page still works); update signature mismatch (refused); interrupted download (retry); update while
 chats run (waits for idle); WebView2 missing on Windows (installer bootstraps it); Windows 10 (no Mica:
-fallback theme); Linux without a keyring (encrypted file fallback with a warning), Wayland transparency
-quirks, AppImage needing FUSE (deb alternative).
+fallback theme). Linux, Wayland, AppImage and Debian package qualification are deferred. Explicit
+passphrase storage remains available for supported-platform secure-store recovery.
 **Onboarding.** No agents found (install suggestions + demo chat); slow detection (cached/skeleton orbs that
 reconcile); everything skipped (lands in a usable app); quit halfway (resumes where it left off); no WebGL2
 or reduced motion (static, still beautiful); tiny windows and multiple monitors (responsive, minimum size).

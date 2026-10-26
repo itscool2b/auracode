@@ -138,6 +138,8 @@ jobs:
           pnpm --filter @auracode/desktop exec node scripts/check-account-reset.mjs
           pnpm --filter @auracode/desktop exec node scripts/check-folder-resolution.mjs
           pnpm --filter @auracode/desktop exec node scripts/check-repository-publication.mjs
+          pnpm --filter @auracode/desktop exec node scripts/check-workspace-removal.mjs
+          pnpm --filter @auracode/desktop exec node scripts/check-agent-installations.mjs
 
       - name: Check website accounts and verified release downloads
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
@@ -157,6 +159,8 @@ jobs:
             target/account-reset-browser
             target/folder-resolution-browser
             target/repository-publication-browser
+            target/workspace-removal-browser
+            target/agent-installations-browser
             target/web-checks
             target/release-preview-*/*.png
           retention-days: 7

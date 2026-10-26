@@ -51,6 +51,7 @@ const api: WorkspaceRemovalApi = {
     calls.push("apply");
     if (scenario === "stale")
       throw new Error("The project or its chats changed. Review removal again.");
+    return null;
   },
 };
 Object.assign(window, { workspaceRemovalFixture: { calls: () => [...calls] } });

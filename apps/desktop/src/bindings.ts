@@ -18,6 +18,7 @@ export const commands = {
 	accountResetStatus: () => typedError<AccountResetStatus, AccountFailure>(__TAURI_INVOKE("account_reset_status")),
 	accountResetReview: () => typedError<AccountResetReview, AccountFailure>(__TAURI_INVOKE("account_reset_review")),
 	accountResetConfirm: (reviewId: string, confirmation: string, retained: boolean) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_confirm", { reviewId, confirmation, retained })),
+	accountRebindProfile: (profileId: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_rebind_profile", { profileId })),
 	accountResetRetry: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_retry")),
 	accountResetCancel: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_cancel")),
 	accountRequestCode: (email: string, turnstileToken: string) => typedError<SignInChallenge, AccountFailure>(__TAURI_INVOKE("account_request_code", { email, turnstileToken })),
@@ -199,6 +200,9 @@ export const commands = {
 	/**  Every chat, newest activity first. */
 	chatsList: () => typedError<ChatSummary[], AppError>(__TAURI_INVOKE("chats_list")),
 	workspaceSnapshot: (filter: WorkspaceFilter) => typedError<WorkspaceSnapshot, AppError>(__TAURI_INVOKE("workspace_snapshot", { filter })),
+	workspaceRemoved: () => typedError<RemovedWorkspace[], AppError>(__TAURI_INVOKE("workspace_removed")),
+	workspaceRemovalPreview: (target: WorkspaceRemovalTarget, action: WorkspaceRemovalAction) => typedError<WorkspaceRemovalPreview, AppError>(__TAURI_INVOKE("workspace_removal_preview", { target, action })),
+	workspaceRemovalApply: (token: string) => typedError<null, AppError>(__TAURI_INVOKE("workspace_removal_apply", { token })),
 	projectCreate: (request: ProjectCreate) => typedError<ProjectSummary, AppError>(__TAURI_INVOKE("project_create", { request })),
 	projectUpdate: (projectId: string, input: ProjectInput) => typedError<ProjectSummary, AppError>(__TAURI_INVOKE("project_update", { projectId, input })),
 	projectAddFolder: (projectId: string, path: string) => typedError<ProjectFolder, AppError>(__TAURI_INVOKE("project_add_folder", { projectId, path })),
@@ -1516,6 +1520,16 @@ export type RecoverySetup = {
 	recovery_key: string,
 };
 
+export type RemovedWorkspace = {
+	target: WorkspaceRemovalTarget,
+	name: string,
+	project_name: string,
+	chat_count: number,
+	removed_at: number,
+	/**  A folder in a removed project is restored after its project is restored. */
+	restore_unavailable: string | null,
+};
+
 export type RepositoryPublicationDraft = {
 	input: RepositoryPublicationInput,
 	unfinished: boolean,
@@ -2005,6 +2019,20 @@ export type WorkspaceFilter = {
 	/**  Filters chats only; projects remain available as move destinations. */
 	project_id: string | null,
 };
+
+export type WorkspaceRemovalAction = "remove" | "restore";
+
+export type WorkspaceRemovalPreview = {
+	token: string,
+	target: WorkspaceRemovalTarget,
+	action: WorkspaceRemovalAction,
+	name: string,
+	chat_count: number,
+	folders: string[],
+	notices: string[],
+};
+
+export type WorkspaceRemovalTarget = { kind: "project"; id: string } | { kind: "folder"; id: string };
 
 export type WorkspaceSnapshot = {
 	projects: ProjectSummary[],

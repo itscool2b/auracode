@@ -53,9 +53,10 @@ A separate managed Turnstile widget permits only `preview.auracode.si`; its publ
 Live preview checks pass: health and public configuration return 200 with `no-store`, an unauthenticated
 account request returns 401, and a foreign browser Origin returns 403. Actual email delivery, browser
 challenge completion, signed-in device sync and live revocation/cleanup acceptance remain pending.
-The compiled Rust API passes thirteen local runtime cases, including failed email binding,
+The compiled Rust API passes fourteen local runtime cases, including failed email binding,
 Turnstile rejection/replay, cookies, revocation, reset/cancel arbitration, retained deletion receipts
-and scheduled ciphertext cleanup. Live health/configuration and access rejection checks passed again
+and scheduled ciphertext cleanup. A real Rust client also completes synthetic two-device key approval,
+encrypted record/blob exchange and revocation against the compiled Worker. Live health/configuration and access rejection checks passed again
 after the deployment. No email was sent.
 
 The website's fresh production build is ready (48 static assets). Its Cloudflare upload-session

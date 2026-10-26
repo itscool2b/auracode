@@ -2407,3 +2407,17 @@ checks passed. The combined core all-target check exposed unrelated private key-
 the existing Account fixtures; the lifecycle owner supplied their separate correction. Native macOS qualification and
 final integrated acceptance remain pending. No real agent, login, paid prompt, remote mutation,
 push or CI dispatch was performed.
+
+### Combined native and browser verification
+
+The combined native command export and desktop TypeScript pass with executable selection, workspace
+removal and recovered Account binding together. The removal fixture now returns the native command's
+actual null result. Chromium and WebKit pass all three screens' review/retry/cancel/accessibility
+checks. Their standalone gates and screenshots are included in the final manual CI batch.
+
+The integrated SQLCipher core library suite executed all 492 tests: 490 passed, and two recovery
+fixtures still assumed an old schema version/page layout. The unknown-version fixture now always uses
+the current schema plus one, and damaged-schema checks include every table from current migrations.
+All 25 focused salvage tests pass after those fixture corrections. Production salvage behavior was
+unchanged. This broad run also exercised the new removal and Account rebind tests successfully; the
+reviewed held-prompt acknowledgement follow-up and remaining lifecycle work still require integration.
