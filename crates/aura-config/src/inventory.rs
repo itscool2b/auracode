@@ -67,6 +67,29 @@ impl Library {
         let mut notices = Vec::new();
         if entry.item.item.kind == Kind::Skill {
             notices.push("Skills and their supporting files are untrusted content. The Library does not execute them.".into());
+            let peers = self
+                .inspect()
+                .items
+                .into_iter()
+                .filter(|item| {
+                    item.item.kind == Kind::Skill
+                        && item.item != entry.item.item
+                        && item.item.key.rsplit('/').next()
+                            == entry.item.item.key.rsplit('/').next()
+                        && (item.provider == entry.item.provider
+                            || item.provider == Provider::Shared
+                            || entry.item.provider == Provider::Shared)
+                })
+                .collect::<Vec<_>>();
+            if !peers.is_empty() {
+                notices.push(format!("Other copies with this directory name: {}. Each copy remains separate; copying does not change the agent's discovery or trust rules.", peers.iter().map(|item| format!("{}: {}", item.item.source_id, item.relative_path)).collect::<Vec<_>>().join(", ")));
+                notices.push(match entry.item.provider {
+                    Provider::Claude => "Claude's personal skill takes precedence over a same-named project skill. Nested project skills have directory-qualified names; managed policy can override both.",
+                    Provider::Codex => "Codex can show multiple same-named skills. This Library does not merge them or select an active winner.",
+                    Provider::Pi => "Pi keeps the first discovered same-named skill and reports a warning. Its runtime discovery order determines which one loads.",
+                    Provider::Shared => "Shared skills can be discovered by several agents. Each agent applies its own duplicate and project-trust rules.",
+                }.into());
+            }
         }
         if entry.item.item.kind == Kind::Plugin || entry.item.item.kind == Kind::Package {
             notices.push("This is an installation declaration, not proof that its package is installed or active.".into());
@@ -252,34 +275,56 @@ fn skills(source: &Source, root: &Dir, base: &str, entries: &mut Vec<Entry>) -> 
     {
         return Ok(());
     }
-    let children = safe_fs::children(root, base)?;
-    for name in children {
-        let folder = if base.is_empty() {
-            name.clone()
-        } else {
-            format!("{base}/{name}")
-        };
-        // Files, links, and folders without SKILL.md are not portable skills.
-        if safe_fs::directory(root, &folder).is_err() {
-            continue;
-        }
-        let path = format!("{folder}/SKILL.md");
-        let Some(bytes) = safe_fs::read(root, &path)? else {
-            continue;
-        };
-        let mut entry = text_entry(source, Kind::Skill, &name, &folder, bytes)?;
-        match safe_fs::tree(root, &folder) {
-            Ok(files) => {
-                entry.item.revision = safe_fs::tree_hash(&files);
-                entry.item.bytes = files.iter().map(|file| file.bytes.len() as u32).sum();
-                entry.files = files;
+    let recursive = matches!(source.provider, Provider::Pi | Provider::Shared);
+    let mut pending = vec![(base.to_owned(), 0)];
+    let mut visited = 0;
+    while let Some((parent, depth)) = pending.pop() {
+        for name in safe_fs::children(root, &parent)? {
+            visited += 1;
+            if visited > safe_fs::ITEM_COUNT {
+                return Err(Error::Limit);
             }
-            Err(error) => {
-                entry.item.copy_blocked =
-                    Some(format!("The complete skill cannot be copied: {error}"))
+            let folder = if parent.is_empty() {
+                name.clone()
+            } else {
+                format!("{parent}/{name}")
+            };
+            // Files, links, and folders without SKILL.md are not portable skills.
+            if safe_fs::directory(root, &folder).is_err() {
+                continue;
             }
+            let path = format!("{folder}/SKILL.md");
+            let Some(bytes) = safe_fs::read(root, &path)? else {
+                if recursive {
+                    if depth >= 7 {
+                        return Err(Error::Limit);
+                    }
+                    pending.push((folder, depth + 1));
+                }
+                continue;
+            };
+            let key = if base.is_empty() {
+                folder.as_str()
+            } else {
+                folder
+                    .strip_prefix(base)
+                    .and_then(|path| path.strip_prefix('/'))
+                    .ok_or(Error::UnsafePath)?
+            };
+            let mut entry = text_entry(source, Kind::Skill, key, &folder, bytes)?;
+            match safe_fs::tree(root, &folder) {
+                Ok(files) => {
+                    entry.item.revision = safe_fs::tree_hash(&files);
+                    entry.item.bytes = files.iter().map(|file| file.bytes.len() as u32).sum();
+                    entry.files = files;
+                }
+                Err(error) => {
+                    entry.item.copy_blocked =
+                        Some(format!("The complete skill cannot be copied: {error}"))
+                }
+            }
+            bounded_push(entries, entry)?;
         }
-        bounded_push(entries, entry)?;
     }
     Ok(())
 }

@@ -31,6 +31,68 @@ fn library(a: &Path, b: &Path) -> Library {
 }
 
 #[test]
+fn nested_skill_copy_reviews_the_direct_target_and_preserves_rollback() {
+    let target = tempfile::tempdir().expect("target");
+    let source = tempfile::tempdir().expect("source");
+    write(
+        source.path(),
+        "skills/team/review/SKILL.md",
+        b"Nested portable instructions.\n",
+    );
+    write(
+        source.path(),
+        "skills/team/review/references/check.md",
+        b"Supporting context.\n",
+    );
+    write(
+        target.path(),
+        "skills/review/SKILL.md",
+        b"Existing instructions.\n",
+    );
+    let library = library(target.path(), source.path());
+    let item = library
+        .inspect()
+        .items
+        .into_iter()
+        .find(|item| item.item.key == "team/review")
+        .expect("nested item");
+    let prepared = library
+        .prepare_copy(&item.item, &item.revision, "claude")
+        .expect("review");
+    assert_eq!(
+        prepared.preview().before_text.as_deref(),
+        Some("Existing instructions.\n")
+    );
+    assert!(
+        prepared
+            .preview()
+            .files
+            .iter()
+            .all(|file| file.path.starts_with("skills/review/"))
+    );
+    let result = library.apply_copy(prepared).expect("copy");
+    assert!(!result.recovery_required);
+    assert_eq!(
+        fs::read(target.path().join("skills/review/SKILL.md")).expect("copied"),
+        b"Nested portable instructions.\n"
+    );
+    assert!(!target.path().join("skills/team").exists());
+    library
+        .rollback_copy("claude", &result.id)
+        .expect("rollback");
+    assert_eq!(
+        fs::read(target.path().join("skills/review/SKILL.md")).expect("restored"),
+        b"Existing instructions.\n"
+    );
+    assert!(
+        !target
+            .path()
+            .join("skills/review/references/check.md")
+            .exists()
+    );
+}
+
+#[test]
 fn instruction_copy_has_explicit_preview_and_persistent_idempotent_rollback() {
     let a = tempfile::tempdir().expect("source fixture");
     let b = tempfile::tempdir().expect("target fixture");

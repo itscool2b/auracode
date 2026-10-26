@@ -1949,3 +1949,11 @@ This run also passed both scheduler clock/revocation tests previously blocked by
 The schema/index regression and core all-target Clippy passed. No policy workaround, vendor prompt or
 real account request was used. Remote turn publication, open-view reconciliation, concurrent fork
 markers, explicit Local import, folder resolution and Continue-here integration remain pending M7 work.
+
+### Nested Library skills and duplicate provenance
+Pi and shared portable skill collections now use bounded recursive discovery. Nested logical keys
+remain distinct, duplicate previews explain the other sources and vendor-specific precedence, and
+copying a nested skill reviews its normal direct target with the existing recovery journal. Fifteen
+focused inventory/copy tests passed, including private-subtree exclusion, depth failure, duplicate
+provenance and nested-copy rollback. Tests used temporary synthetic files only. No native vendor
+configuration, credentials, network requests or CI jobs were involved in this verification.

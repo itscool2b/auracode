@@ -587,9 +587,9 @@ fn destination(target: &Source, kind: Kind, key: &str, from: Provider) -> Result
     safe_fs::validate(key)?;
     match kind {
         Kind::Skill => {
-            if key.contains('/') {
-                return Err(Error::UnsafePath);
-            }
+            // The source key may identify a nested Pi/shared collection. Install the reviewed
+            // bundle at the target's standard direct skill location, with normal overwrite review.
+            let key = key.rsplit('/').next().ok_or(Error::UnsafePath)?;
             let base = match (target.provider, target.scope) {
                 (Provider::Shared, _) => "",
                 (_, Scope::User) => "skills/",

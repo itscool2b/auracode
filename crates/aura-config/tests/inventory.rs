@@ -21,6 +21,136 @@ fn write(root: &std::path::Path, path: &str, value: &str) {
 }
 
 #[test]
+fn nested_portable_skills_keep_distinct_source_keys_and_exclude_private_subtrees() {
+    let fixture = tempfile::tempdir().expect("fixture");
+    write(
+        fixture.path(),
+        "skills/team-one/review/SKILL.md",
+        "First instructions.",
+    );
+    write(
+        fixture.path(),
+        "skills/team-one/review/references/input.md",
+        "First support.",
+    );
+    write(
+        fixture.path(),
+        "skills/team-two/review/SKILL.md",
+        "Second instructions.",
+    );
+    write(
+        fixture.path(),
+        "skills/sessions/hidden/SKILL.md",
+        "SYNTHETIC_UNREAD",
+    );
+    write(
+        fixture.path(),
+        "skills/cache/hidden/SKILL.md",
+        "SYNTHETIC_UNREAD",
+    );
+    let library = Library::new(vec![source("pi", Provider::Pi, fixture.path())]).expect("library");
+    let inventory = library.inspect();
+    assert!(inventory.notices.is_empty(), "{:?}", inventory.notices);
+    assert_eq!(inventory.items.len(), 2);
+    let first = inventory
+        .items
+        .iter()
+        .find(|item| item.item.key == "team-one/review")
+        .expect("nested skill");
+    let preview = library
+        .preview(&first.item, &first.revision)
+        .expect("preview");
+    assert_eq!(preview.files, ["SKILL.md", "references/input.md"]);
+    assert!(
+        preview
+            .notices
+            .iter()
+            .any(|notice| notice.contains("team-two/review"))
+    );
+    assert!(
+        preview
+            .notices
+            .iter()
+            .any(|notice| notice.contains("first discovered"))
+    );
+    assert!(
+        !serde_json::to_string(&preview)
+            .expect("json")
+            .contains("SYNTHETIC_UNREAD")
+    );
+    // Shared locations use the same bounded recursive portable discovery, without pretending
+    // that the Library's order establishes a vendor's active skill.
+    let shared = Library::new(vec![source(
+        "shared",
+        Provider::Shared,
+        &fixture.path().join("skills"),
+    )])
+    .expect("shared");
+    assert_eq!(shared.inspect().items.len(), 2);
+}
+
+#[test]
+fn duplicate_personal_and_project_skills_are_separate_with_precedence_explained() {
+    let personal = tempfile::tempdir().expect("personal");
+    let project = tempfile::tempdir().expect("project");
+    write(
+        personal.path(),
+        "skills/review/SKILL.md",
+        "Personal instructions.",
+    );
+    write(
+        project.path(),
+        ".claude/skills/review/SKILL.md",
+        "Project instructions.",
+    );
+    let mut project_source = source("project", Provider::Claude, project.path());
+    project_source.scope = Scope::Project;
+    let library = Library::new(vec![
+        source("personal", Provider::Claude, personal.path()),
+        project_source,
+    ])
+    .expect("library");
+    let inventory = library.inspect();
+    assert_eq!(inventory.items.len(), 2);
+    let project_item = inventory
+        .items
+        .iter()
+        .find(|item| item.scope == Scope::Project)
+        .expect("project item");
+    let preview = library
+        .preview(&project_item.item, &project_item.revision)
+        .expect("preview");
+    assert_eq!(preview.text, "Project instructions.");
+    assert!(
+        preview
+            .notices
+            .iter()
+            .any(|notice| notice.contains("personal: skills/review"))
+    );
+    assert!(
+        preview
+            .notices
+            .iter()
+            .any(|notice| notice.contains("personal skill takes precedence"))
+    );
+}
+
+#[test]
+fn recursive_discovery_reports_its_depth_limit_without_hiding_a_partial_result() {
+    let fixture = tempfile::tempdir().expect("fixture");
+    write(
+        fixture.path(),
+        "skills/one/two/three/four/five/six/seven/eight/nine/SKILL.md",
+        "Too deep.",
+    );
+    let library = Library::new(vec![source("pi", Provider::Pi, fixture.path())]).expect("library");
+    let inventory = library.inspect();
+    assert!(inventory.items.is_empty());
+    assert_eq!(inventory.notices.len(), 1);
+    assert!(inventory.notices[0].contains("bounded"));
+}
+
+#[test]
 fn allowlisted_inventory_never_opens_auth_sessions_or_vendor_synced_content() {
     let fixture = tempfile::tempdir().expect("fixture");
     write(fixture.path(), "CLAUDE.md", "Be precise.");

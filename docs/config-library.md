@@ -64,9 +64,9 @@ commands serialize changes and retain maintenance admission until the blocking j
 finishes, including after its webview caller leaves. Copy history reads validated metadata after
 restart and distinguishes completed, interrupted and rolled-back operations.
 
-Library DTOs also have an independent pure-crate Specta exporter, checked for drift in CI. The full
-desktop command compilation/export is pending: Windows Application Control blocked an existing
-Tauri plugin build script locally. No policy or blocked executable was changed.
+Library DTOs also have an independent pure-crate Specta exporter, checked for drift in CI. The
+combined Windows desktop command export passed at d000c29. Later native verification remains
+subject to the final integrated checks and the recorded Application Control limitations.
 
 The dark Library screen supports source/agent/category filters, literal previews, a before/after
 copy review, explicit apply and restart recovery. Unsupported MCP fields and plugin/package copies explain
@@ -86,6 +86,17 @@ entry change to the current document, preserving unrelated edits made after the 
 edited selected entry or a later whole-file deletion is refused. Agent enable/approval state remains
 vendor-owned and is not copied between providers.
 
-Cross-provider executable plugin/package installation, duplicate precedence, nested skill discovery
-and macOS native execution checks remain pending. M8 and M9 are not complete. No real agent
-configuration was read or changed.
+Pi and shared portable skill collections are discovered recursively with eight-level and 2,048-entry
+bounds. Nested keys retain their collection path so same-named directories stay distinct. Copying
+uses the destination's direct skill folder, previews any existing target and retains the normal
+rollback journal. Private/excluded folders and links are never traversed. A selected duplicate shows
+the other relative locations and the relevant vendor precedence rule; the Library never picks an
+active runtime winner. The current [Claude skill rules](https://code.claude.com/docs/en/skills) and
+[pinned Pi skill rules](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/skills.md)
+were checked on 2026-10-26. Claude monorepo subdirectories are inspected through the explicitly
+selected project folder, rather than an unrestricted repository crawl.
+
+Reviewed official install/remove/update commands are available through Manage integrations where
+the installed vendor supports them. Executable packages cannot be blindly copied between providers.
+macOS native execution and the final integrated acceptance remain pending. M8 and M9 are not marked
+complete. No real agent configuration was read or changed during these checks.
