@@ -16,6 +16,7 @@ const INFO: AppInfo = {
   profile: null,
   profile_locked: false,
   profile_switching: false,
+  config_profile_recovery: null,
   db: null,
   glass: "liquid_glass",
   launch: { type: "smoke", plan: { scenario: "stream", agent_id: null, folder: null } },

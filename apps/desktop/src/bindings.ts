@@ -29,6 +29,7 @@ export const commands = {
 	profilesList: () => typedError<ProfileMeta[], AppError>(__TAURI_INVOKE("profiles_list")),
 	accountActivate: () => typedError<AppInfo, AppError>(__TAURI_INVOKE("account_activate")),
 	profileActivate: (profileId: string) => typedError<AppInfo, AppError>(__TAURI_INVOKE("profile_activate", { profileId })),
+	configProfileRecover: () => typedError<AppInfo, AppError>(__TAURI_INVOKE("config_profile_recover")),
 	appUpdateStatus: () => __TAURI_INVOKE<UpdateStatus>("app_update_status"),
 	appUpdateCheck: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_check")),
 	appUpdateDownload: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_download")),
@@ -468,6 +469,8 @@ export type AppInfo = {
 	profile_locked: boolean,
 	/**  Profile commands are temporarily unavailable while a reviewed switch is prepared. */
 	profile_switching: boolean,
+	/**  Managed configuration is blocked until this explicit recovery is confirmed. */
+	config_profile_recovery: ConfigProfileRecovery | null,
 	/**  The profile database; `null` when startup failed before opening it. */
 	db: DbInfo | null,
 	/**  The native material behind the window. `none` means the UI must paint an opaque background. */
@@ -781,6 +784,17 @@ export type ConfigOption = {
 	/**  A change waiting for the turn to end (Hermes changes mode only while idle). */
 	pending: ConfigValue | null,
 };
+
+export type ConfigProfileRecovery = {
+	transaction: string | null,
+	owner_profile: string | null,
+	from_profile: string | null,
+	to_profile: string | null,
+	phase: ConfigProfileRecoveryPhase,
+	detail: string,
+};
+
+export type ConfigProfileRecoveryPhase = "restore_previous" | "finish_switch" | "unavailable";
 
 export type ConfigReceiptStatus = "applied" | "recovery_required" | "rolled_back";
 

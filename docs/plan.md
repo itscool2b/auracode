@@ -10,12 +10,12 @@ reserved for a few deliberate integration checkpoints and the final verification
 fixes rerun as needed. Visual implementation must be checked against the exact original Mobbin
 and official-site references, including SpaceXAI/Grok Bot, X Money, Harvey and Aside.
 The product is dark only, as explicitly directed on 2026-10-26. No light mode, system theme
-switching or appearance selector ships in the app, onboarding or website. Older theme provisions
-below are historical and superseded.
+switching or appearance selector ships in the app, onboarding or website. Retained historical design
+studies do not change these product requirements.
 
 ## Context
 The user runs many coding agents (Claude Code, Codex, Antigravity, Pi / oh-my-pi, Cursor, Grok Build,
-OpenCode, Hermes...) and hates toggling between apps. auracode is one desktop app (macOS, Windows, Linux)
+OpenCode, Hermes...) and hates toggling between apps. auracode is one desktop app (macOS and Windows)
 with a ChatGPT-style interface: projects on the left, chats inside projects, any installed agent driving a
 chat through its real harness (headless, rendered in our UI, never a terminal). The base app needs no login.
 A website at auracode.si lets people create an account and download the app; the same account signs into
@@ -28,7 +28,7 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
   Cloudflare Workers via workers-rs and WebAssembly. Non-Rust backend exceptions need a documented
   platform constraint; platform configuration and SQL stay in their native formats.
 - **Agents:** one generic ACP client (most agents) plus native Rust drivers for Claude Code, Codex, Pi.
-- **Platforms:** macOS, Windows, Linux; agents auto-detected wherever it runs, including WSL on Windows.
+- **Platforms:** macOS and Windows; agents auto-detected on the native host. Linux and WSL are deferred.
 - **Default autonomy: Full auto**, with per-turn checkpoints, isolation, and a visible badge as safety net.
 - **Data:** local SQLite per profile, offline with no login. Cloudflare D1 stores accounts, sessions,
   devices and encrypted sync envelopes. R2 stores releases and encrypted blobs. Cloudflare Workers
@@ -392,9 +392,9 @@ to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The z
 **Foundation (the app)**
 - **M0 Scaffold + spikes.** Private repo, pnpm (Homebrew), Cargo + pnpm workspaces, fmt/clippy/Biome,
   Tauri app with the glass window, typed command + Channel round trip, profile layout + SQLite schema,
-  stable self-signed signing identity (created locally with the user's OK), CI on macOS/Windows/
-  Ubuntu (fmt, clippy, tests, typecheck, lint, and a smoke run of the real app; installer builds only on
-  main pushes, nightly, on demand, and milestone-branch pushes that ask for them). Spikes:
+  stable self-signed signing identity (created locally with the user's OK), batched CI on macOS/Windows
+  (fmt, clippy, tests, typecheck, lint, and a smoke run of the real app; installer builds only when
+  explicitly dispatched for qualification). Spikes:
   worst-case render (animated aura + orbs + fast stream) on WebKit and WebView2 with idle power; Windows
   spawning (hidden console, git child); Claude control round trip incl. resume after a cwd change; Windows
   titlebar.
@@ -416,9 +416,9 @@ to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The z
 - **M1d Pi + the rest.** With the user's OK, install pi, oh-my-pi, OpenCode, Cursor CLI, Grok Build via their
   official installers (Cursor/Grok need the user's sign-in), then Pi native driver and the ACP dialects
   (Antigravity, Cursor, Grok, oh-my-pi, OpenCode) + agy/grok fallbacks.
-- **M1e Catalog.** Detection on macOS/Windows/Linux + WSL, channels, versions, vendor updates,
+- **M1e Catalog.** Detection on macOS/Windows, channels, versions, vendor updates,
   last-verified badges, auth status. Done when `aura-cli smoke <agent>` passes for every installed agent.
-- **M2a Design system + transcript.** Orbit tokens, both themes, fonts, state-driven SVG marks,
+- **M2a Design system + transcript.** Dark-only Orbit tokens, fonts, state-driven SVG marks,
   transcript components and accessibility against live protocol fixtures. Retire legacy shader/serif
   dependencies only when no retained Design Lab direction uses them.
 - **M2b App shell with real agents.** Sidebar, projects, chats, persistence, titles, edit/retry/fork,
@@ -437,12 +437,12 @@ to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The z
   Agents page (install, update, sign-in sheet, verified badges).
 - **M4 Parallel work.** Worktrees per the rules above, merge/PR/discard, concurrent chats polish,
   multi-folder handling, open in editor/terminal, general terminal panel.
-- **M5 Packaging + releases.** DMG (universal) / NSIS (x64, arm64) / AppImage + deb; `tauri-plugin-updater`
-  (Tauri signing key generated and backed up; losing it ends updates); CI on tag builds every platform,
-  uploads installers + `latest.json` + checksums to R2 (`download.auracode.si`, on the zone active since
-  Day 1); app updates wait for idle. Distributed binaries are built with `--remap-path-prefix` (a local
-  release build embeds about 500 build-machine paths, from panic locations in dependencies). Windows/Linux
-  artifacts come from CI every milestone so the user can test.
+- **M5 Packaging + releases.** DMG (universal) / NSIS (x64, arm64); `tauri-plugin-updater`
+  (Tauri signing key generated and backed up; losing it ends updates). Deliberately dispatched CI builds
+  acceptance artifacts. Qualified signed installers, `latest.json` and checksums are prepared and verified
+  before publication to R2 (`download.auracode.si`); a tag alone does not authorize publication.
+  App updates wait for idle. Distributed binaries use `--remap-path-prefix` to remove build-machine
+  paths. Signing, installation and old-build update qualification follow `docs/releases.md`.
 
 **Then (order is the user's call)**
 - **M6 Website + accounts.** Rust API on Cloudflare Workers, D1 account/session schema, Cloudflare
@@ -544,9 +544,9 @@ Settings Sync's model).
   named after its milestone (`m0-scaffold`, `m1a-core-acp`, ..., `m6-website`), merged through one PR when
   finished and tested. No drafts, review fixes pushed to the same PR, no co-author or generated-by lines.
   PRs via the GitHub MCP, falling back to `gh` (logged in as itscool2b).
-- Deploys are separate even though the repo is shared: CI path filters run only what changed; the website
-  and API deploy to Cloudflare on merge to `main` (preview deploys on PRs); the app releases only when a
-  version tag (`v0.1.0`) is pushed, which builds every platform and publishes to `download.auracode.si`.
+- Deploys are separate even though the repo is shared. Batch source validation before the final
+  Windows/macOS CI checkpoint. Use isolated Cloudflare preview resources for web and API acceptance.
+  A merge or version tag does not publish an unqualified desktop release; follow `docs/releases.md`.
 - Cloud changes stay within the owner's authorized scope. The auracode database/storage creation and
   exact mijonion-media deletion were authorized on 2026-10-26; do not request that permission again.
   New consequential actions outside that scope are confirmed before execution; secrets live in Wrangler/Cloudflare secrets and GitHub Actions secrets, never in git.
@@ -571,4 +571,4 @@ Settings Sync's model).
 - **Manual:** I run the real app on this Mac with every installed agent and review screenshots for polish;
   the user tests Windows builds as they land. Budgets: 60fps while streaming and scrolling, near-zero idle
   CPU with orbs paused, warm launch interactive in under 300ms, landing page LCP under 2s.
-- **CI:** macOS, Windows (with a WSL distro for detection tests), Ubuntu.
+- **CI:** macOS and Windows, at deliberate integration checkpoints and final verification only.

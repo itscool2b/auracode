@@ -27,6 +27,7 @@ function info(fatal: string | null = null): AppInfo {
     profile: null,
     profile_locked: false,
     profile_switching: false,
+    config_profile_recovery: null,
     db: null,
     glass: "none",
     launch: { type: "smoke", plan: PLAN },
