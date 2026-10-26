@@ -16,6 +16,7 @@
 
 pub mod acp;
 pub mod batch;
+pub mod claude;
 pub mod driver;
 pub mod factory;
 pub mod jsonrpc;
