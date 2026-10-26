@@ -298,3 +298,28 @@
     font-size: 11px;
   }
 }
+.settings-notices[open] {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 48px));
+  height: calc(100vh - 64px);
+}
+.settings-notices-text {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--o-well);
+}
+.settings-notices-text:focus-visible {
+  outline: 2px solid var(--o-text-1);
+  outline-offset: 2px;
+}
+.settings-notices pre {
+  margin: 0;
+  color: var(--o-text-2);
+  font: 11px / 18px var(--o-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

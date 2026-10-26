@@ -245,7 +245,7 @@ export function renderText(catalogue, distribution) {
   const lines = [
     "Third-party software notices",
     "",
-    "These notices apply to the listed third-party components. They do not grant a license to Auracode itself.",
+    "These notices apply to the listed third-party components. They do not grant a license to auracode itself.",
     "",
     "Component source archives are linked below, including the unmodified source for MPL-covered components.",
     "",
@@ -282,15 +282,28 @@ export function renderHtml(text) {
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Third-party notices | auracode</title><style>html{color-scheme:dark;background:#121416;color:#e5e7eb;font:14px/1.6 system-ui}body{max-width:76rem;margin:2rem auto;padding:0 1rem}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><body><h1>Third-party notices</h1><pre>${safe}</pre></body></html>`;
 }
 
+const virtualNotices = "virtual:third-party-notices";
+
 export function noticesPlugin(distribution) {
   return {
     name: "auracode-third-party-notices",
+    // The desktop CSP has no same-origin connect-src, so the app lazily imports the same text
+    // as a script chunk instead of fetching the emitted file.
+    resolveId(id) {
+      return id === virtualNotices ? `\0${virtualNotices}` : null;
+    },
+    load(id) {
+      if (id !== `\0${virtualNotices}`) return null;
+      return `export default ${JSON.stringify(renderText(verifiedCatalogue(), distribution))};`;
+    },
     generateBundle() {
       const text = renderText(verifiedCatalogue(), distribution);
       this.emitFile({ type: "asset", fileName: "third-party-notices.txt", source: text });
       this.emitFile({
         type: "asset",
-        fileName: "third-party-notices.html",
+        // A directory index gives the website Worker a clean route. It serves HTML only as
+        // prerendered index pages.
+        fileName: "third-party-notices/index.html",
         source: renderHtml(text),
       });
     },

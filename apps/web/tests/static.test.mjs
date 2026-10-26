@@ -68,3 +68,18 @@ test("cloud entry pages explain invitation access while Local remains free", asy
     assert.doesNotMatch(html, /open.source|Choose a plan|Subscribe now/i);
   }
 });
+test("third-party notices are emitted and linked from every page footer", async () => {
+  const text = await readFile(new URL("third-party-notices.txt", root), "utf8");
+  assert.match(text, /react-router/);
+  assert.doesNotMatch(text, /SQLCipher|openssl-src/);
+  const page = await readFile(new URL("third-party-notices/index.html", root), "utf8");
+  assert.match(page, /color-scheme:dark/);
+  assert.doesNotMatch(page, /<script/);
+  const home = await readFile(new URL("index.html", root), "utf8");
+  assert.match(home, /<a href="\/third-party-notices">Notices<\/a>/);
+  const headers = await readFile(new URL("_headers", root), "utf8");
+  assert.match(
+    headers,
+    /\/third-party-notices\*\n {2}Content-Security-Policy: frame-ancestors 'none'/,
+  );
+});

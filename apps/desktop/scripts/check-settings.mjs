@@ -13,6 +13,7 @@ import { checkAccountVerification } from "./check-account-verification.mjs";
 import { checkConfigSync } from "./check-config-sync.mjs";
 import { checkDataTransfer } from "./check-data-transfer.mjs";
 import { checkGitReview } from "./check-git-review.mjs";
+import { checkNotices } from "./check-notices.mjs";
 import { checkProfiles } from "./check-profiles.mjs";
 import { checkProjectTools } from "./check-project-tools.mjs";
 import { checkQuestions } from "./check-questions.mjs";
@@ -143,6 +144,7 @@ try {
           exact: true,
         })
         .waitFor();
+      await checkNotices(page, out, engine);
       await checkGitReview(page, url, out, engine);
       await checkProjectTools(page, url, out, engine);
       await checkDataTransfer(page, url, out, engine);

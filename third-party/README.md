@@ -36,15 +36,17 @@ node --test .github/scripts/third-party-notices.test.mjs
 
 Review changed dependencies and original texts before committing a refresh. An absent license or
 changed upstream revision fails closed. Both Vite builds verify the recorded lockfile/manifest
-hashes and emit `third-party-notices.txt` and a dark, script-free `third-party-notices.html` alongside
-their frontend assets. No dependency resolution or download runs from the Vite hook.
+hashes and emit `third-party-notices.txt` and a dark, script-free `third-party-notices/index.html`
+alongside their frontend assets. No dependency resolution or download runs from the Vite hook.
+
+The website footer links to `/third-party-notices`. The desktop app shows the same text from
+Settings, About, Third-party notices. It loads `virtual:third-party-notices` as a lazy script chunk
+because the desktop CSP allows no same-origin fetches.
 
 ## Remaining release qualification
 
-- The new hooks have focused tests, but their final desktop installer and deployed website outputs
-  have not yet been built or inspected with this checkpoint.
-- Add a user-facing About/footer entry to the notices. The emitted files alone do not establish
-  that desktop users can discover the notices through the app.
+- The frontend builds emit and link the notices, but the final desktop installers and deployed
+  website outputs have not yet been inspected with this checkpoint.
 - Verify WebView2Loader's Microsoft SDK redistribution terms and exact bundled loader version.
   The Rust `webview2-com` wrapper's MIT text does not substitute for those terms. The independently
   downloaded WebView2 runtime/bootstrapper also needs its installer review.

@@ -80,11 +80,21 @@ test("packaging emits readable plain text and escaped script-free HTML", () => {
   noticesPlugin("desktop").generateBundle.call({ emitFile: (asset) => assets.push(asset) });
   assert.deepEqual(
     assets.map((asset) => asset.fileName),
-    ["third-party-notices.txt", "third-party-notices.html"],
+    ["third-party-notices.txt", "third-party-notices/index.html"],
   );
   assert.match(assets[0].source, /SQLCipher/);
   const html = renderHtml('<script>alert("bad")</script>&');
   assert.doesNotMatch(html, /<script>/);
   assert.match(html, /&lt;script&gt;/);
   assert.match(html, /color-scheme:dark/);
+});
+
+test("desktop imports the notice text as a virtual module without fetching", () => {
+  const plugin = noticesPlugin("desktop");
+  const id = plugin.resolveId("virtual:third-party-notices");
+  assert.equal(plugin.resolveId("react"), null);
+  assert.equal(plugin.load("react"), null);
+  const source = plugin.load(id);
+  assert.match(source, /^export default "Third-party software notices/);
+  assert.match(source, /SQLCipher/);
 });

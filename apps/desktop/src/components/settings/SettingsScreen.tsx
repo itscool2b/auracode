@@ -9,6 +9,7 @@ import { type UpdatesApi, updatesApi } from "../../lib/updates";
 import { AccountPanel } from "./AccountPanel";
 import { ConfigSyncPanel } from "./ConfigSyncPanel";
 import { LocalImportPanel } from "./LocalImportPanel";
+import { NoticesDialog } from "./NoticesDialog";
 import { ProfilePicker } from "./ProfilePicker";
 import { UpdatePanel } from "./UpdatePanel";
 import "./settings.css";
@@ -199,6 +200,7 @@ export function SettingsScreen({
   readonly backLabel?: string;
 }) {
   const [page, setPage] = useState<Page>(initialPage);
+  const [notices, setNotices] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     void navigationId;
@@ -349,8 +351,17 @@ export function SettingsScreen({
                       Open
                     </button>
                   </Row>
+                  <Row
+                    title="Third-party notices"
+                    detail="Licenses for the open source software included in auracode."
+                  >
+                    <button className="ui-button" type="button" onClick={() => setNotices(true)}>
+                      View
+                    </button>
+                  </Row>
                 </div>
               </section>
+              {notices ? <NoticesDialog onClose={() => setNotices(false)} /> : null}
               <UpdatePanel api={updates} />
               <p className="settings-footnote">
                 Your installed agents keep their own accounts and credentials.

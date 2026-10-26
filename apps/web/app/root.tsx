@@ -53,6 +53,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <a href="/account">Account</a>
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>
+            <a href="/third-party-notices">Notices</a>
           </nav>
           <span className="mono">LOCAL BY DEFAULT</span>
         </footer>
