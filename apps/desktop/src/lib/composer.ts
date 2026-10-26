@@ -1,5 +1,6 @@
 import {
   type ComposerAttachment,
+  type ComposerDraft,
   type ComposerInput,
   commands,
   type FileMention,
@@ -11,6 +12,8 @@ export type ComposerContext = Pick<ComposerInput, "attachments" | "mentions">;
 
 /** UI orchestration only. Rust validates, stores, normalizes and resolves every context item. */
 export interface ComposerTransport {
+  draft(chatId: string): Promise<ComposerDraft>;
+  saveDraft(chatId: string, input: ComposerInput): Promise<void>;
   pick(chatId: string): Promise<ComposerAttachment | null>;
   import(chatId: string, path: string): Promise<ComposerAttachment>;
   paste(chatId: string, bytes: number[]): Promise<ComposerAttachment>;
@@ -19,6 +22,8 @@ export interface ComposerTransport {
 }
 
 export const composerApi: ComposerTransport = {
+  draft: async (id) => settle(await commands.composerDraft(id)),
+  saveDraft: async (id, input) => settle(await commands.composerSaveDraft(id, input)),
   pick: async (id) => settle(await commands.composerPick(id)),
   import: async (id, path) => settle(await commands.composerImport(id, path)),
   paste: async (id, bytes) => settle(await commands.composerPaste(id, bytes)),

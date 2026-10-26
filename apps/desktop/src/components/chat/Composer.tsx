@@ -37,12 +37,12 @@ export function Composer({
   readonly chatId?: string;
   readonly contextApi?: ComposerTransport;
 }) {
-  const [text, setText] = useState("");
   const [active, setActive] = useState(0);
   const [menuClosed, setMenuClosed] = useState(false);
   const [sending, setSending] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const context = useComposerContext(chatId, contextApi);
+  const { text, setText } = context;
   const [mentionItems, setMentionItems] = useState<FileMention[]>([]);
   const [mentionError, setMentionError] = useState<string | null>(null);
   const mentionQuery =
@@ -86,16 +86,17 @@ export function Composer({
     if (sending || context.busy || empty) return;
     setSending(true);
     try {
+      const sent = {
+        text,
+        attachments: context.attachments.map((item) => item.id),
+        mentions: [...context.mentions],
+      };
       const accepted =
         context.attachments.length || context.mentions.length
-          ? await onSend(text, {
-              attachments: context.attachments.map((item) => item.id),
-              mentions: context.mentions,
-            })
+          ? await onSend(text, sent)
           : await onSend(text);
       if (accepted) {
-        setText((current) => (current === text ? "" : current));
-        context.clear();
+        context.consume(sent);
       }
     } finally {
       setSending(false);
@@ -142,6 +143,8 @@ export function Composer({
         className="ui-textarea"
         data-testid="composer-input"
         value={text}
+        disabled={!context.ready}
+        onBlur={() => void context.flush()}
         placeholder={`Message ${agentName}`}
         title="Enter sends, Shift+Enter adds a line, / lists commands"
         aria-controls={mentionOpen ? mentionId : menuOpen ? menuId : undefined}
@@ -260,6 +263,11 @@ export function Composer({
         <span role="alert" className="ui-error" data-testid="composer-error">
           {context.error ?? mentionError ?? error}
         </span>
+      ) : null}
+      {context.saveError ? (
+        <button type="button" className="ui-button" onClick={() => void context.retrySave()}>
+          Retry draft save
+        </button>
       ) : null}
     </div>
   );

@@ -552,6 +552,10 @@ impl Quit {
 /// What the quit flow acts on: the window, the dialog, the sessions, the store, the registry and
 /// the app. The app's host is [`AppQuitHost`]; tests record calls.
 pub trait QuitHost: Send + Sync {
+    /// Save editor state while the database and webview are still available.
+    fn flush_drafts(&self) -> impl Future<Output = bool> + Send {
+        async { true }
+    }
     fn hide_window(&self);
     fn show_window(&self);
     fn storage(&self) -> StorageStatus;
@@ -645,8 +649,26 @@ pub enum QuitOutcome {
 /// its deadline by [`QUIT_STEP_MARGIN`] is left behind and the flow carries on: `RunEvent::Exit`
 /// then kills whatever runs, and closes the store if it did not close here.
 pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutcome {
+    let drafts_saved = tokio::time::timeout(Duration::from_secs(3), host.flush_drafts())
+        .await
+        .unwrap_or(false);
     host.hide_window();
-    if let Some(question) = quit_question_with_work(&host.storage(), host.active_work_count())
+    let mut question = quit_question_with_work(&host.storage(), host.active_work_count());
+    if !drafts_saved {
+        let message =
+            "An unsent draft could not be confirmed saved. Quitting may discard its latest edits.";
+        match &mut question {
+            Some(question) => question.message = format!("{message}\n\n{}", question.message),
+            None => {
+                question = Some(QuitQuestion {
+                    message: message.into(),
+                    quit: "Quit anyway".into(),
+                    keep: "Keep auracode open".into(),
+                })
+            }
+        }
+    }
+    if let Some(question) = question
         && !host.ask_to_quit_unsaved(question).await
     {
         host.show_window();
@@ -705,6 +727,39 @@ pub struct AppQuitHost<'a> {
 }
 
 impl QuitHost for AppQuitHost<'_> {
+    async fn flush_drafts(&self) -> bool {
+        use tauri::{Emitter as _, Listener as _};
+        let token = aura_core::ids::new_id();
+        let expected = token.clone();
+        let (reply, answer) = tokio::sync::oneshot::channel();
+        let reply = Mutex::new(Some(reply));
+        let listener = self.app.listen("auracode-drafts-flushed", move |event| {
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(event.payload()) else {
+                return;
+            };
+            if value["token"].as_str() == Some(expected.as_str())
+                && let Some(reply) = lock(&reply).take()
+            {
+                let _ = reply.send(value["saved"].as_bool().unwrap_or(false));
+            }
+        });
+        let sent = self
+            .app
+            .emit_to(crate::window::MAIN_WINDOW, "auracode-flush-drafts", token)
+            .is_ok();
+        let saved = if sent {
+            tokio::time::timeout(Duration::from_secs(2), answer)
+                .await
+                .ok()
+                .and_then(Result::ok)
+                .unwrap_or(false)
+        } else {
+            false
+        };
+        self.app.unlisten(listener);
+        saved
+    }
+
     fn hide_window(&self) {
         use tauri::Manager as _;
         if let Some(window) = self.app.get_webview_window(crate::window::MAIN_WINDOW)
@@ -1392,6 +1447,7 @@ mod tests {
     /// Records every call; the store and the sessions are real when given, and either can be
     /// made to never finish.
     struct FakeHost {
+        drafts_saved: bool,
         calls: Mutex<Vec<Call>>,
         storage: StorageStatus,
         quit_anyway: bool,
@@ -1404,6 +1460,7 @@ mod tests {
     impl FakeHost {
         fn new(storage: StorageStatus, quit_anyway: bool) -> FakeHost {
             FakeHost {
+                drafts_saved: true,
                 calls: Mutex::new(Vec::new()),
                 storage,
                 quit_anyway,
@@ -1424,6 +1481,9 @@ mod tests {
     }
 
     impl QuitHost for FakeHost {
+        async fn flush_drafts(&self) -> bool {
+            self.drafts_saved
+        }
         fn hide_window(&self) {
             self.record(Call::Hide);
         }
@@ -1489,6 +1549,19 @@ mod tests {
             state: StorageState::Paused { reason, since: 1 },
             unsaved_bytes,
         }
+    }
+
+    #[tokio::test]
+    async fn a_failed_editor_flush_keeps_the_app_open_without_stopping_agents() {
+        let quit = Quit::default();
+        quit.on_exit_requested();
+        let mut host = FakeHost::new(StorageStatus::default(), false);
+        host.drafts_saved = false;
+        assert_eq!(run_quit(&quit, &host, 0).await, QuitOutcome::Kept);
+        assert!(
+            matches!(host.calls().as_slice(), [Call::Hide, Call::Ask(message), Call::Show] if message.contains("unsent draft"))
+        );
+        assert!(!quit.is_quitting());
     }
 
     #[tokio::test]

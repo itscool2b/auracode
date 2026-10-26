@@ -757,3 +757,12 @@ The local draft backend now stores text, selected attachment IDs and mentions in
 using the existing backed-up migration path and bounded writer. Restore resolves attachment metadata
 within the chat. Core compilation passes after checkpoint integration; a profile-reopen regression
 is staged for the integration test batch. UI draft lifetime/write ordering is being wired separately.
+
+Draft UI now reuses the same editor state across chat views and serializes persistence so a slow save
+cannot overwrite newer input. Successful sends consume only their own text/context and preserve
+edits made while sending. Load/save failures keep the draft in place with retry. Native quit now
+requests an acknowledged draft flush before stopping agents or closing SQLite, and offers to keep
+the app open if that flush fails. Required Tauri event permissions also enable existing notification
+navigation and native file-drop listeners. Ordering/failure/quit regressions are staged for the final
+integration batch; Biome and rustfmt pass. Native compilation/binding generation remain pending the
+planned platform check. This checkpoint does not mark M2c or the product complete.

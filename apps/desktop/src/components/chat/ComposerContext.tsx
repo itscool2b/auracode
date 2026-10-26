@@ -1,14 +1,16 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { File as FileIcon, Folder, ImageIcon, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ComposerAttachment, FileMention } from "../../bindings";
 import type { ComposerTransport } from "../../lib/composer";
+import { composerDraft } from "../../lib/composerDraft";
 import { errorMessage } from "../../lib/errors";
 
 export function useComposerContext(chatId: string | undefined, api: ComposerTransport | undefined) {
-  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
-  const [mentions, setMentions] = useState<string[]>([]);
+  const [draft] = useState(() => composerDraft(chatId, api));
+  const saved = useSyncExternalStore(draft.subscribe, draft.getSnapshot, draft.getSnapshot);
+  const { attachments, mentions } = saved;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -23,7 +25,7 @@ export function useComposerContext(chatId: string | undefined, api: ComposerTran
   }, []);
 
   const run = async (action: () => Promise<ComposerAttachment | null>): Promise<void> => {
-    if (inFlight.current || !api || !chatId) return;
+    if (inFlight.current || !api || !chatId || !draft.getSnapshot().ready) return;
     if (current.current.length >= 8) {
       setError("Send up to eight attachments at a time.");
       return;
@@ -33,10 +35,12 @@ export function useComposerContext(chatId: string | undefined, api: ComposerTran
     setError(null);
     try {
       const item = await action();
-      if (item && active.current)
-        setAttachments((items) =>
-          items.some((value) => value.id === item.id) ? items : [...items, item],
-        );
+      if (item) {
+        const items = draft.getSnapshot().attachments;
+        draft.update({
+          attachments: items.some((value) => value.id === item.id) ? items : [...items, item],
+        });
+      }
     } catch (error) {
       if (active.current) setError(errorMessage(error));
     } finally {
@@ -76,22 +80,31 @@ export function useComposerContext(chatId: string | undefined, api: ComposerTran
   return {
     attachments,
     mentions,
-    busy,
-    error,
-    clear: () => {
-      setAttachments([]);
-      setMentions([]);
+    text: saved.text,
+    ready: saved.ready,
+    busy: busy || !saved.ready,
+    error: error ?? saved.error,
+    saveError: saved.error,
+    retrySave: () => (saved.ready ? draft.flush() : draft.load()),
+    flush: () => draft.flush(),
+    setText: (value: string | ((current: string) => string)) =>
+      draft.update({ text: typeof value === "function" ? value(draft.getSnapshot().text) : value }),
+    consume: (sent: import("../../bindings").ComposerInput) => {
+      draft.consume(sent);
       setError(null);
     },
     removeAttachment: (id: string) =>
-      setAttachments((items) => items.filter((item) => item.id !== id)),
-    removeMention: (path: string) => setMentions((items) => items.filter((item) => item !== path)),
+      draft.update({
+        attachments: draft.getSnapshot().attachments.filter((item) => item.id !== id),
+      }),
+    removeMention: (path: string) =>
+      draft.update({ mentions: draft.getSnapshot().mentions.filter((item) => item !== path) }),
     addMention: (path: string) => {
       if (mentions.length >= 32 && !mentions.includes(path)) {
         setError("Send up to 32 file mentions at a time.");
         return;
       }
-      setMentions((items) => (items.includes(path) ? items : [...items, path]));
+      draft.update({ mentions: mentions.includes(path) ? mentions : [...mentions, path] });
     },
     pick: () => (api && chatId ? run(() => api.pick(chatId)) : Promise.resolve()),
     paste: (file: File) =>
@@ -143,7 +156,11 @@ export function ContextChips({
       ))}
       {context.busy ? (
         <span className="composer-context-pending" role="status">
-          Preparing attachment…
+          {context.ready
+            ? "Preparing attachment…"
+            : context.saveError
+              ? "Draft unavailable"
+              : "Opening draft…"}
         </span>
       ) : null}
     </section>

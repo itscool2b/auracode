@@ -8,6 +8,7 @@ import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppStore } from "./lib/chat/appStore";
 import { tauriTransport } from "./lib/chat/transport";
+import { installDraftQuit } from "./lib/draftQuit";
 import { cancelDemoStream, startDemoStream } from "./lib/ipc";
 import { StreamStore } from "./lib/session";
 import { WorkspaceStore, workspaceApi } from "./lib/workspace";
@@ -15,6 +16,7 @@ import { WorkspaceStore, workspaceApi } from "./lib/workspace";
 const store = new StreamStore({ start: startDemoStream, cancel: cancelDemoStream });
 const chats = new AppStore(tauriTransport);
 const workspace = new WorkspaceStore(workspaceApi);
+installDraftQuit();
 
 const container = document.getElementById("root");
 if (container) {
