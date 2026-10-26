@@ -221,6 +221,29 @@ async fn a_force_stop_skips_end_of_file() {
     reaper.assert_gone().await;
 }
 
+/// A kill that lands after shutdown's first look leaves its later steps nothing to signal. The
+/// exit still has to be reported, or a caller treats a finished cleanup as unconfirmed.
+#[tokio::test]
+async fn an_exit_during_shutdown_is_still_reported() {
+    let folder = tempfile::tempdir().expect("tempdir");
+    for _ in 0..5 {
+        let process = spawner()
+            .spawn(
+                spec(launch(&["hang"]), folder.path()),
+                ProtocolLog::disabled(),
+            )
+            .await
+            .expect("spawn");
+        let mut reaper = Reaper::new();
+        reaper.hold(process.control.pid());
+        process.control.kill_tree();
+        let report = process.control.shutdown(ShutdownPlan::FORCE).await;
+        assert!(report.exit.is_some(), "{report:?}");
+        assert!(report.leftovers.is_empty(), "{report:?}");
+        reaper.assert_gone().await;
+    }
+}
+
 #[tokio::test]
 async fn kill_tree_after_exit() {
     let folder = tempfile::tempdir().expect("tempdir");

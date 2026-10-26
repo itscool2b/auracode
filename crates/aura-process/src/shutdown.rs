@@ -462,6 +462,9 @@ mod unix {
                 None => wait_exit(state, Duration::ZERO).await,
             };
         }
+        // The agent can end on its own, or from an earlier kill, after the first read above.
+        // The later steps then find nothing to signal and never read the exit again.
+        exit = exit.or_else(|| state.exited_now());
         // 7. Remove recovery metadata only after cleanup is confirmed. A failed process-table
         // read or a surviving descendant must remain recoverable after this instance exits.
         state.retain_registry.store(true, Ordering::Release);
