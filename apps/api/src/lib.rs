@@ -3,6 +3,7 @@
 pub mod crypto;
 pub mod policy;
 pub mod possession;
+pub mod reset_sql;
 pub mod sql;
 pub mod types;
 

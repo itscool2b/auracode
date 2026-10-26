@@ -39,6 +39,19 @@ checks account/session expiry and revocation. Sync also requires its bound appro
 
 ## Devices and key envelopes
 
+Lost-key reset uses POST `/api/v1/sync/reset/review` from a pending desktop device whose session was
+email-verified within five minutes. It returns `review:{id,key_version,expires_at,records,blobs,other_devices}`;
+the version is the next key generation and expiry is Unix seconds. The review describes permanent
+removal of all existing encrypted cloud data and revocation of every other device and session.
+Confirmation POST `/api/v1/sync/reset` carries `review_id`, exact `confirmation:"RESET SYNC"`,
+`wrapped_key`, `recovery_envelope` and `recovery_verifier`. Both envelopes and the verifier bind the
+review's next key version using the existing crypto contract. Confirmation rechecks fresh verification,
+pending-device state and the prior generation inside the atomic write. It returns the ordinary keys
+response. The same exact request may be retried after a lost response for up to one day without repeating
+deletion; a changed request conflicts. Ciphertext R2 objects remain tracked until scheduled collection,
+so blob quota may temporarily include pending cleanup. Existing offline encrypted profiles are retained.
+This endpoint does not recover the old plaintext or require its lost key.
+
 | Method and route | Request | Response |
 | --- | --- | --- |
 | GET `/api/v1/devices` | authentication | `devices:[{id,name,platform,public_key,verification_code,created_at,last_seen,approved_at,revoked_at}]` |

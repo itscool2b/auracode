@@ -119,6 +119,27 @@ pub struct InitializeKeys {
     pub recovery_envelope: KeyEnvelope,
     pub recovery_verifier: String,
 }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResetSync {
+    pub review_id: String,
+    pub confirmation: String,
+    pub wrapped_key: KeyEnvelope,
+    pub recovery_envelope: KeyEnvelope,
+    pub recovery_verifier: String,
+}
+impl ResetSync {
+    pub fn validate(&self) -> Result<()> {
+        policy::identifier(&self.review_id)?;
+        if self.confirmation != "RESET SYNC" {
+            return Err(ApiError::InvalidRequest);
+        }
+        self.wrapped_key.validate(false)?;
+        self.recovery_envelope.validate(true)?;
+        crypto::decode(&self.recovery_verifier, 32, 32)?;
+        Ok(())
+    }
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ApproveDevice {

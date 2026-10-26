@@ -6,6 +6,7 @@ mod db;
 mod devices;
 mod export;
 mod rebind;
+mod reset;
 mod sync;
 
 use crate::{
@@ -162,6 +163,8 @@ impl Api {
             }
             (Method::Post, "/api/v1/keys") => self.initialize_keys(request, &identity).await,
             (Method::Get, "/api/v1/keys") => self.get_keys(&identity).await,
+            (Method::Post, "/api/v1/sync/reset/review") => self.review_reset(&identity).await,
+            (Method::Post, "/api/v1/sync/reset") => self.reset_sync(request, &identity).await,
             (Method::Get, "/api/v1/sync") => self.pull(request, &identity).await,
             (Method::Post, "/api/v1/sync") => self.push(request, &identity).await,
             (Method::Delete, path) if path.starts_with("/api/v1/devices/") => {

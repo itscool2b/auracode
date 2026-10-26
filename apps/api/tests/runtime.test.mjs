@@ -105,6 +105,82 @@ const request = (path, method = "GET", body, headers = {}) =>
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 
+test("lost-key reset consumes a fresh review once and preserves uploads after a lost response", async () => {
+  const fresh = Buffer.alloc(32, 22).toString("base64url");
+  const old = Buffer.alloc(32, 23).toString("base64url");
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO users(id,email_key,email,created_at) VALUES('reset-account','reset-email','reset@example.invalid',?)",
+      )
+      .bind(now),
+    db
+      .prepare(
+        "INSERT INTO sessions VALUES(?,'reset-account','desktop','csrf','reset-old',?,?,NULL),(?,'reset-account','desktop','csrf','reset-device',?,?,NULL)",
+      )
+      .bind(hash(old), now, now + 1000, hash(fresh), now, now + 1000),
+    db
+      .prepare(
+        "INSERT INTO devices(id,user_id,name,platform,public_key,verification_code,created_at,last_seen,approved_at,wrapped_key,key_version) VALUES('reset-old','reset-account','Old','windows','old','123456',?,?,?,'old',7),('reset-device','reset-account','New','macos','new','654321',?,?,NULL,NULL,NULL)",
+      )
+      .bind(now, now, now, now, now),
+    db
+      .prepare("INSERT INTO user_keys VALUES('reset-account',7,'verifier','{}',?,'reset-old')")
+      .bind(now),
+  ]);
+  const call = (path, body) => request(path, "POST", body, { Authorization: `Bearer ${fresh}` });
+  const reviewed = await call("/sync/reset/review", {});
+  assert.equal(reviewed.status, 200, await reviewed.clone().text());
+  const { review } = await reviewed.json();
+  assert.equal(review.key_version, 8);
+  assert.equal(review.other_devices, 1);
+  const wrap = (recovery) => ({
+    algorithm: recovery
+      ? "recovery-xchacha20poly1305-v1"
+      : "x25519-hkdf-sha256-xchacha20poly1305-v1",
+    ciphertext: Buffer.alloc(48, 4).toString("base64url"),
+    nonce: Buffer.alloc(24, 5).toString("base64url"),
+    ephemeral_public_key: recovery ? null : Buffer.alloc(32, 6).toString("base64url"),
+  });
+  const input = {
+    review_id: review.id,
+    confirmation: "RESET SYNC",
+    wrapped_key: wrap(false),
+    recovery_envelope: wrap(true),
+    recovery_verifier: Buffer.alloc(32, 7).toString("base64url"),
+  };
+  assert.equal((await call("/sync/reset", { ...input, confirmation: "" })).status, 400);
+  const reset = await call("/sync/reset", input);
+  assert.equal(reset.status, 200, await reset.clone().text());
+  assert.equal((await reset.json()).key_version, 8);
+  assert.equal(
+    (await request("/sync", "GET", undefined, { Authorization: `Bearer ${old}` })).status,
+    401,
+  );
+  const record = {
+    collection: "chats",
+    id: "after-reset",
+    hlc: `${now * 1000}:0000000001:reset-device`,
+    deleted: false,
+    nonce: Buffer.alloc(24).toString("base64url"),
+    ciphertext: Buffer.alloc(16, 9).toString("base64url"),
+    key_version: 8,
+  };
+  assert.equal((await call("/sync", { records: [record] })).status, 200);
+  assert.equal((await call("/sync/reset", input)).status, 200);
+  assert.equal(
+    (
+      await call("/sync/reset", {
+        ...input,
+        recovery_verifier: Buffer.alloc(32, 8).toString("base64url"),
+      })
+    ).status,
+    409,
+  );
+  const pulled = await request("/sync", "GET", undefined, { Authorization: `Bearer ${fresh}` });
+  assert.equal((await pulled.json()).records.length, 1);
+});
+
 test("compiled Worker serializes sync booleans, preserves cursors and rejects cross-origin writes", async () => {
   const record = {
     collection: "chats",

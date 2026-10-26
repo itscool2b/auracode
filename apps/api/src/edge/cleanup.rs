@@ -44,6 +44,7 @@ async fn cleanup(env: Env) -> Result<()> {
                 "blobs",
                 "blob_objects",
                 "user_keys",
+                "sync_reset_reviews",
                 "devices",
                 "sessions",
             ] {
@@ -53,6 +54,7 @@ async fn cleanup(env: Env) -> Result<()> {
                     "blobs" => "DELETE FROM blobs WHERE user_id=?1",
                     "blob_objects" => "DELETE FROM blob_objects WHERE user_id=?1",
                     "user_keys" => "DELETE FROM user_keys WHERE user_id=?1",
+                    "sync_reset_reviews" => "DELETE FROM sync_reset_reviews WHERE user_id=?1",
                     "devices" => "DELETE FROM devices WHERE user_id=?1",
                     _ => "DELETE FROM sessions WHERE user_id=?1",
                 };
@@ -83,6 +85,10 @@ async fn cleanup(env: Env) -> Result<()> {
         db.run("DELETE FROM blob_objects WHERE object_key=?1 AND NOT EXISTS(SELECT 1 FROM blobs b WHERE b.object_key=?1)",vec![json!(key)]).await?;
     }
     db.batch(vec![
+        (
+            "DELETE FROM sync_reset_reviews WHERE expires_at<?1",
+            vec![json!(now - 86400)],
+        ),
         (
             "DELETE FROM email_changes WHERE expires_at<?1",
             vec![json!(now)],

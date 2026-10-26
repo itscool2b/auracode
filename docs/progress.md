@@ -2096,6 +2096,23 @@ Desktop TypeScript, Biome, all three native account-admission tests and both rec
 passed. The dark recovery screen was visually inspected. Earlier integrated profile checks passed all
 13 cases. Final combined tests, native platform acceptance and real account recovery remain pending.
 
+### Lost-key reset server checkpoint
+
+The Rust API now has a reviewed reset for a freshly email-verified pending desktop device. Its
+one-use receipt binds the session, device and previous key generation. Atomic confirmation increments
+the generation, installs new opaque envelopes, revokes other access and removes prior cloud sync
+references. R2 ciphertext remains tracked for existing garbage collection. Exact lost-response retries
+cannot repeat deletion after the new generation has received data. This is destructive reset, not
+recovery of plaintext whose key is lost; existing encrypted device profiles remain untouched.
+
+Native and Wasm library checks and Clippy passed. Exact checked-in SQL executed successfully in
+temporary Node SQLite databases for reset, other-account and R2 tracking preservation, stale admission,
+retry safety and rollback. Five Rust regressions were added but their run was blocked by host Application
+Control 4551 on the libsqlite3-sys build script. The compiled Worker runtime regression is added and
+syntax-checked; it still needs execution with the next coherent Worker build. No service or migration
+was deployed. Desktop reset UI, durable retry, passphrase vault selection and device-local removal
+remain in progress; this does not complete account lifecycle acceptance.
+
 ### Review pending work before sign-out
 Desktop sign-out now opens an explicit review with the last reported pending-change count, or an
 honest unknown-count explanation. It states that encrypted local data stays and sync pauses. Cancel
