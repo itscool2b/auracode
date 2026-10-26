@@ -1047,3 +1047,15 @@ its focused accessibility rerun reports zero violations. The full browser run re
 before that correction; remaining combined checks continue in the planned integration run. Core
 all-target compilation passes with integrated onboarding, encrypted-profile seams and M4 service.
 Windows/macOS generated bindings and native checks remain pending. No paid-agent prompt ran.
+
+### Deliberate binding bootstrap and native CI coverage, 2026-10-26
+
+- Added an explicit, default-off `refresh_bindings` workflow input. macOS generates exact bindings
+  before frontend checks; Windows exports independently and a parity job compares the bytes.
+  Normal and final runs still enforce committed binding drift. No binding types are handwritten.
+- Enabled the existing mock-agent native stream/chat/reopen smoke on macOS as well as Windows,
+  retained native smoke evidence, and enabled safe Claude spike unit tests on both current targets.
+  Setup browser fixtures now run beside the Orbit fixtures. No workflow was dispatched.
+- Seven isolated exporter-script cases, the actual Windows exporter in normal mode, Bash syntax,
+  workflow pin/runner checks and instruction parity pass locally. Hosted macOS/Windows workflow
+  execution and ShellCheck remain for the planned integration run. See docs/verification.md.

@@ -4,6 +4,12 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      refresh_bindings:
+        description: Generate bindings on macOS before frontend checks and publish parity artifacts
+        type: boolean
+        default: false
+        required: false
 
 permissions:
   contents: read
@@ -23,8 +29,37 @@ defaults:
     shell: bash
 
 jobs:
+  bindings:
+    name: bootstrap bindings (macOS)
+    if: inputs.refresh_bindings
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+      - name: Export exact bindings
+        run: bash .github/scripts/export-bindings.sh refresh "$RUNNER_TEMP/bindings-bootstrap"
+      - name: Publish exact generated bindings
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bindings-bootstrap-${{ github.sha }}
+          path: ${{ runner.temp }}/bindings-bootstrap/bindings.ts
+          if-no-files-found: error
+          retention-days: 7
   lint:
     name: lint
+    needs: bindings
+    if: ${{ !cancelled() && (needs.bindings.result == 'success' || needs.bindings.result == 'skipped') }}
     runs-on: macos-26
     timeout-minutes: 15
     steps:
@@ -32,6 +67,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Use generated bindings for this explicit refresh run
+        if: inputs.refresh_bindings
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bindings-bootstrap-${{ github.sha }}
+          path: apps/desktop/src
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
@@ -79,6 +120,17 @@ jobs:
           path: target/orbit-browser
           retention-days: 7
 
+      - name: Check setup in Chromium and WebKit
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        run: pnpm --filter @auracode/desktop check:setup
+      - name: Keep setup browser evidence
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: setup-browser
+          path: target/setup-browser
+          retention-days: 7
+
       - name: Check Rust formatting
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: cargo fmt --all --check
@@ -98,7 +150,9 @@ jobs:
 
       - name: Test the CI scripts
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
-        run: bash .github/scripts/test.sh
+        run: |
+          bash .github/scripts/test.sh
+          bash .github/scripts/test-export-bindings.sh
   powershell:
     name: powershell (windows-2025)
     runs-on: windows-2025
@@ -165,22 +219,19 @@ jobs:
         if: ${{ !cancelled() && steps.full.outcome == 'success' }}
         run: cargo test --workspace --locked --no-fail-fast
       - name: Check generated TypeScript bindings
+        id: bindings
         if: ${{ !cancelled() && steps.full.outcome == 'success' }}
-        run: |
-          log="$(mktemp)"
-          cargo test --locked -p auracode-desktop export_bindings -- --color never | tee "$log"
-          if ! grep -Eq '^test [^ ]*export_bindings[^ ]* \.\.\. ok' "$log"; then
-            echo "::error::No passing test matching 'export_bindings' ran in auracode-desktop, so bindings.ts was not regenerated."
-            exit 1
-          fi
-          if ! git ls-files --error-unmatch apps/desktop/src/bindings.ts > /dev/null; then
-            echo "::error file=apps/desktop/src/bindings.ts::bindings.ts is not committed. Run 'cargo test -p auracode-desktop export_bindings' and commit it."
-            exit 1
-          fi
-          if ! git diff --exit-code -- apps/desktop/src/bindings.ts; then
-            echo "::error file=apps/desktop/src/bindings.ts::bindings.ts is out of date. Run 'cargo test -p auracode-desktop export_bindings' and commit the result."
-            exit 1
-          fi
+        env:
+          BINDINGS_MODE: ${{ inputs.refresh_bindings && 'refresh' || 'check' }}
+        run: bash .github/scripts/export-bindings.sh "$BINDINGS_MODE" "$RUNNER_TEMP/bindings-$RUNNER_OS"
+      - name: Publish independently generated bindings
+        if: ${{ !cancelled() && steps.bindings.outputs.generated == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bindings-${{ runner.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/bindings-${{ runner.os }}/bindings.ts
+          if-no-files-found: error
+          retention-days: 7
       - name: Build the Windows spawning spike
         id: spawn-build
         if: ${{ !cancelled() && steps.full.outcome == 'success' && runner.os != 'macOS' }}
@@ -223,11 +274,11 @@ jobs:
         if: ${{ !cancelled() && steps.full.outcome == 'success' }}
         run: cargo build --manifest-path docs/spikes/claude-control/Cargo.toml --locked
       - name: Test the Claude control spike (unit tests)
-        if: ${{ !cancelled() && steps.full.outcome == 'success' && runner.os == 'Linux' }}
+        if: ${{ !cancelled() && steps.full.outcome == 'success' }}
         run: cargo test --manifest-path docs/spikes/claude-control/Cargo.toml --locked
       - name: Set up pnpm (smoke)
         id: pnpm
-        if: ${{ !cancelled() && steps.full.outcome == 'success' && runner.os != 'macOS' }}
+        if: ${{ !cancelled() && steps.bindings.outcome == 'success' }}
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node.js (smoke)
@@ -246,6 +297,8 @@ jobs:
         id: smoke-build
         if: ${{ !cancelled() && steps.js.outcome == 'success' }}
         timeout-minutes: 30
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
         run: pnpm --filter @auracode/desktop tauri build --debug --no-bundle
       - name: Smoke test the app (streams)
         if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' }}
@@ -261,6 +314,33 @@ jobs:
           binary=target/debug/auracode
           if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
           bash .github/scripts/run-smoke.sh "$binary" chat
+      - name: Keep native smoke evidence
+        if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-smoke-${{ runner.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/auracode-smoke*.stdout
+          if-no-files-found: warn
+          retention-days: 7
       - name: Keep a cancelled build out of the cache
         if: cancelled()
         run: echo "CACHE_ON_FAILURE=false" >> "$GITHUB_ENV"
+  bindings-parity:
+    name: generated binding parity
+    needs: [bindings, rust]
+    if: ${{ !cancelled() && inputs.refresh_bindings && needs.bindings.result == 'success' }}
+    runs-on: macos-26
+    timeout-minutes: 5
+    steps:
+      - name: Read macOS bootstrap bindings
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bindings-bootstrap-${{ github.sha }}
+          path: bootstrap
+      - name: Read independently generated Windows bindings
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bindings-Windows-${{ github.sha }}
+          path: windows
+      - name: Compare exact output across platforms
+        run: cmp bootstrap/bindings.ts windows/bindings.ts
