@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AuraEvent, EventBatch } from "../bindings";
+import type { AuraEvent, EventBatch, ToolContent, ToolUpdate } from "../bindings";
 import {
   activityOf,
   applyBatch,
@@ -14,7 +14,7 @@ import {
 const SESSION = "019a0000-0000-7000-8000-000000000001";
 
 function frame(seqStart: number, events: AuraEvent[], sessionId = SESSION): EventBatch {
-  return { session_id: sessionId, seq_start: seqStart, events };
+  return { chat_id: sessionId, seq_start: seqStart, events };
 }
 
 const delta = (text: string, id = "m1"): AuraEvent => ({
@@ -26,6 +26,34 @@ const thought = (text: string, id = "t1"): AuraEvent => ({
   type: "thought_delta",
   thought_id: id,
   text,
+});
+
+/** A tool update that changes only the fields in `fields`. */
+const update = (id: string, fields: Partial<Omit<ToolUpdate, "tool_call_id">>): AuraEvent => ({
+  type: "tool_update",
+  tool_call_id: id,
+  status: null,
+  title: null,
+  kind: null,
+  locations: null,
+  raw_input: null,
+  tool_name: null,
+  content: null,
+  truncated: null,
+  ...fields,
+});
+
+const permission = (id: string, title: string): AuraEvent => ({
+  type: "permission_requested",
+  request_id: id,
+  tool_call_id: null,
+  title,
+  kind: null,
+  raw_input: null,
+  content: [],
+  locations: [],
+  options: [],
+  truncated: null,
 });
 
 /** Frames numbered back to back from `start`, like the batcher produces. */
@@ -47,7 +75,7 @@ describe("applyBatch", () => {
     const state = applyBatches(
       initialStreamState(),
       numbered([
-        [{ type: "turn_started", turn_id: "turn-1" }, thought("Let me ")],
+        [{ type: "turn_started", turn_id: "turn-1", prompt_id: null }, thought("Let me ")],
         [thought("look."), { type: "thought_completed", thought_id: "t1", duration_ms: 1200 }],
         [
           {
@@ -58,6 +86,9 @@ describe("applyBatch", () => {
             status: "in_progress",
             locations: [{ path: "src/main.rs", line: null }],
             raw_input: null,
+            tool_name: null,
+            content: [],
+            truncated: null,
           },
         ],
         [delta("Hello, "), delta("world")],
@@ -180,8 +211,15 @@ describe("applyBatch", () => {
     expect({ text: textOf(before), items: before.items.length }).toEqual(snapshot);
   });
 
-  it("records tool updates, replacing content only when an update brings some", () => {
-    const state = applyBatches(
+  it("records tool updates: null content keeps it, a list replaces it, [] clears it", () => {
+    const diff: ToolContent = {
+      type: "diff",
+      path: "src/main.rs",
+      old_text: "a",
+      new_text: "b",
+      truncated: null,
+    };
+    const updated = applyBatches(
       initialStreamState(),
       numbered([
         [
@@ -193,48 +231,33 @@ describe("applyBatch", () => {
             status: "in_progress",
             locations: [],
             raw_input: null,
-          },
-        ],
-        [
-          {
-            type: "tool_update",
-            tool_call_id: "edit",
-            status: null,
-            title: null,
-            content: [{ type: "diff", path: "src/main.rs", old_text: "a", new_text: "b" }],
-          },
-        ],
-        [
-          {
-            type: "tool_update",
-            tool_call_id: "edit",
-            status: "completed",
-            title: "Edited src/main.rs",
+            tool_name: null,
             content: [],
+            truncated: null,
           },
         ],
+        [update("edit", { content: [diff] })],
+        [update("edit", { status: "completed", title: "Edited src/main.rs" })],
       ]),
     );
-    const tool = state.tools.get("edit");
+    const tool = updated.tools.get("edit");
     expect(tool?.status).toBe("completed");
     expect(tool?.title).toBe("Edited src/main.rs");
     expect(tool?.kind).toBe("edit");
-    expect(tool?.content).toEqual([
-      { type: "diff", path: "src/main.rs", old_text: "a", new_text: "b" },
-    ]);
+    expect(tool?.content).toEqual([diff]);
+
+    const cleared = applyBatch(updated, frame(updated.nextSeq, [update("edit", { content: [] })]));
+    expect(cleared.tools.get("edit")?.content).toEqual([]);
   });
 
   it("shows an update for a tool it never saw announced", () => {
     const state = applyBatch(
       initialStreamState(),
       frame(0, [
-        {
-          type: "tool_update",
-          tool_call_id: "ghost",
+        update("ghost", {
           status: "failed",
-          title: null,
-          content: [{ type: "text", text: "boom" }],
-        },
+          content: [{ type: "text", text: "boom", truncated: null }],
+        }),
       ]),
     );
     expect(state.items).toEqual([{ kind: "tool", id: "ghost" }]);
@@ -266,28 +289,27 @@ describe("applyBatch", () => {
           },
           {
             type: "session_updated",
+            status: "running",
+            detail: null,
             native_session_id: null,
+            agent_name: null,
+            agent_version: null,
             title: "Demo",
             model: "demo",
             effort: null,
             mode: null,
-            commands: [],
+            autonomy: "full_auto",
+            queue_held: false,
+            revision: 0,
           },
+          permission("p1", "Run rm?"),
+          permission("p2", "Run ls?"),
           {
-            type: "permission_requested",
+            type: "permission_resolved",
             request_id: "p1",
-            tool_call_id: null,
-            title: "Run rm?",
-            options: [],
+            decision: { type: "cancelled" },
+            by: "user",
           },
-          {
-            type: "permission_requested",
-            request_id: "p2",
-            tool_call_id: null,
-            title: "Run ls?",
-            options: [],
-          },
-          { type: "permission_resolved", request_id: "p1", decision: { type: "cancelled" } },
         ],
       ]),
     );
@@ -307,7 +329,13 @@ describe("applyBatch", () => {
       level: "info",
       message: `n${i}`,
     }));
-    notices.push({ type: "error", message: "boom", recoverable: false });
+    notices.push({
+      type: "error",
+      kind: "agent_error",
+      message: "boom",
+      detail: null,
+      recoverable: false,
+    });
     const state = applyBatch(initialStreamState(), frame(0, notices));
     expect(state.notices).toHaveLength(MAX_NOTICES);
     expect(state.notices.at(-1)).toEqual({ level: "error", message: "boom" });
@@ -316,7 +344,7 @@ describe("applyBatch", () => {
   it("tracks the turn from start to its stop reason", () => {
     const started = applyBatch(
       initialStreamState(),
-      frame(0, [{ type: "turn_started", turn_id: "turn-1" }]),
+      frame(0, [{ type: "turn_started", turn_id: "turn-1", prompt_id: null }]),
     );
     expect(started.turn).toEqual({ id: "turn-1", ended: false, stopReason: null, usage: null });
     const ended = applyBatch(
@@ -327,6 +355,8 @@ describe("applyBatch", () => {
           turn_id: "turn-1",
           stop_reason: "cancelled",
           usage: null,
+          duration_ms: null,
+          recovered: false,
         },
       ]),
     );
@@ -339,7 +369,7 @@ describe("activityOf and lastMessage", () => {
   it("follows the turn through its blocks", () => {
     let state = initialStreamState();
     expect(activityOf(state)).toBe("idle");
-    state = applyBatch(state, frame(0, [{ type: "turn_started", turn_id: "t" }]));
+    state = applyBatch(state, frame(0, [{ type: "turn_started", turn_id: "t", prompt_id: null }]));
     expect(activityOf(state)).toBe("thinking");
     state = applyBatch(
       state,
@@ -352,6 +382,9 @@ describe("activityOf and lastMessage", () => {
           status: "in_progress",
           locations: [],
           raw_input: null,
+          tool_name: null,
+          content: [],
+          truncated: null,
         },
       ]),
     );
@@ -361,7 +394,16 @@ describe("activityOf and lastMessage", () => {
     expect(lastMessage(state)?.text).toBe("Done");
     state = applyBatch(
       state,
-      frame(3, [{ type: "turn_ended", turn_id: "t", stop_reason: "end_turn", usage: null }]),
+      frame(3, [
+        {
+          type: "turn_ended",
+          turn_id: "t",
+          stop_reason: "end_turn",
+          usage: null,
+          duration_ms: null,
+          recovered: false,
+        },
+      ]),
     );
     expect(activityOf(state)).toBe("done");
   });
@@ -370,8 +412,15 @@ describe("activityOf and lastMessage", () => {
     const state = applyBatch(
       initialStreamState(),
       frame(0, [
-        { type: "turn_started", turn_id: "t" },
-        { type: "turn_ended", turn_id: "t", stop_reason: "error", usage: null },
+        { type: "turn_started", turn_id: "t", prompt_id: null },
+        {
+          type: "turn_ended",
+          turn_id: "t",
+          stop_reason: "error",
+          usage: null,
+          duration_ms: null,
+          recovered: false,
+        },
       ]),
     );
     expect(activityOf(state)).toBe("error");

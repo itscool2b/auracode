@@ -9,16 +9,21 @@ import {
 import { MotionConfig } from "motion/react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import type { AppInfo, StressConfig } from "./bindings";
+import { ChatsScreen } from "./components/chat/ChatsScreen";
 import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
 import { Sidebar } from "./components/Sidebar";
 import { StressView } from "./components/StressView";
+import type { AppStore } from "./lib/chat/appStore";
+import type { Transport } from "./lib/chat/transport";
 import { errorMessage } from "./lib/errors";
 import { useStream } from "./lib/hooks";
 import { getAppInfo, inTauri, sendSmokeReport, windowReady } from "./lib/ipc";
+import { LATE_NOTICE_CHECKS_MS, withLateNotices } from "./lib/notices";
 import { afterPaint, whenPainted } from "./lib/ready";
 import { isRunning, type StreamStore } from "./lib/session";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
+import { runChatSmoke } from "./lib/smokeChat";
 import { activityOf } from "./lib/stream";
 import { DEFAULT_STRESS } from "./lib/stress";
 
@@ -28,7 +33,8 @@ type Boot =
   | { readonly status: "outside" }
   | { readonly status: "failed"; readonly message: string };
 
-type View = "home" | "stress";
+/** The chats (the default), the M0 home (the info card and the demo stream), or the stress view. */
+type View = "chats" | "diagnostics" | "stress";
 
 /**
  * Switching views ends the current stream: the shell stops it (so it does not keep streaming into
@@ -40,9 +46,17 @@ function leaveStream(store: StreamStore): void {
     .catch((error: unknown) => console.error("auracode: could not stop the stream", error));
 }
 
-export function App({ store }: { readonly store: StreamStore }) {
+export function App({
+  store,
+  chats,
+  transport,
+}: {
+  readonly store: StreamStore;
+  readonly chats: AppStore;
+  readonly transport: Transport;
+}) {
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>("chats");
   const [stressConfig, setStressConfig] = useState<StressConfig>(DEFAULT_STRESS);
   const [stressAutoStart, setStressAutoStart] = useState(false);
   const [brandId, setBrandId] = useState<AgentBrandId>("claude-code");
@@ -68,8 +82,24 @@ export function App({ store }: { readonly store: StreamStore }) {
         if (live) setBoot({ status: "failed", message: errorMessage(error) });
       },
     );
+    const timers = LATE_NOTICE_CHECKS_MS.map((delay) =>
+      setTimeout(() => {
+        getAppInfo().then(
+          (later) => {
+            if (!live) return;
+            setBoot((current) =>
+              current.status === "ready"
+                ? { status: "ready", info: withLateNotices(current.info, later) }
+                : current,
+            );
+          },
+          () => undefined,
+        );
+      }, delay),
+    );
     return () => {
       live = false;
+      for (const timer of timers) clearTimeout(timer);
     };
   }, []);
 
@@ -94,10 +124,11 @@ export function App({ store }: { readonly store: StreamStore }) {
         console.error("auracode: window_ready failed", error);
       }
       if (boot.status === "ready" && boot.info.launch.type === "smoke") {
+        const { plan } = boot.info.launch;
         const hooks: SmokeHooks = {
           store,
           showHome: async () => {
-            setView("home");
+            setView("diagnostics");
             await afterPaint(500);
           },
           showStress: async (config) => {
@@ -112,7 +143,15 @@ export function App({ store }: { readonly store: StreamStore }) {
           },
           settle: () => afterPaint(500),
         };
-        const report = await runSmoke(boot.info, hooks);
+        const report =
+          plan.scenario === "stream"
+            ? await runSmoke(boot.info, hooks)
+            : await runChatSmoke(boot.info, plan, {
+                showChats: async () => {
+                  setView("chats");
+                  await afterPaint(500);
+                },
+              });
         try {
           await sendSmokeReport(report);
         } catch (error) {
@@ -168,19 +207,40 @@ export function App({ store }: { readonly store: StreamStore }) {
   const activity = snapshot.phase === "idle" ? "idle" : activityOf(snapshot.stream);
   const orbState: OrbState = activity;
   const intensity: AuraIntensity = running && activity !== "idle" ? "active" : "calm";
-  const showAura = view === "home" || stressConfig.aura;
+  const showAura = view === "diagnostics" || stressConfig.aura;
   // The field drifts only while something streams; idle, it holds still and costs nothing.
-  const auraPaused = !running && view === "home";
+  const auraPaused = !running && view === "diagnostics";
+
+  if (view === "chats") {
+    return (
+      <ChatsScreen
+        app={chats}
+        transport={transport}
+        info={info}
+        onRecoveryDismissed={onRecoveryDismissed}
+        onDiagnostics={() => setView("diagnostics")}
+      />
+    );
+  }
 
   return (
     <MotionConfig reducedMotion="user">
       <div className="app" style={brandCssVariables(brand) as CSSProperties}>
-        <Sidebar brandId={brandId} onBrandChange={setBrandId} orbState={orbState} />
+        <Sidebar
+          brandId={brandId}
+          onBrandChange={setBrandId}
+          orbState={orbState}
+          onChats={() => {
+            leaveStream(store);
+            setStressAutoStart(false);
+            setView("chats");
+          }}
+        />
         <main className="main">
           {showAura ? <AuraField brand={brand} intensity={intensity} paused={auraPaused} /> : null}
           <div className="drag-strip" data-tauri-drag-region="" />
           <div className="main-scroll">
-            {view === "home" ? (
+            {view === "diagnostics" ? (
               <Home
                 info={info}
                 store={store}
@@ -200,7 +260,7 @@ export function App({ store }: { readonly store: StreamStore }) {
                 onExit={() => {
                   leaveStream(store);
                   setStressAutoStart(false);
-                  setView("home");
+                  setView("diagnostics");
                 }}
               />
             )}

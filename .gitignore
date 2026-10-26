@@ -42,3 +42,6 @@ npm-debug.log*
 pnpm-debug.log*
 playwright-report/
 test-results/
+
+# Local git worktrees for parallel milestone tracks
+.worktrees/

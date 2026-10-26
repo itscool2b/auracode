@@ -5,11 +5,17 @@
 //! Startup ([`run`]): logging, launch switches from the environment, the plugins (single-instance
 //! first, unless the launch runs on its own: [`LaunchOptions::single_instance`]), then `setup` runs
 //! aura-core's startup sequence on the data root aura-core resolves (failures become an error
-//! screen, never a crash), picks the window glass for this OS, creates the main window hidden, and
-//! arms the fallback that shows it if the page never reports its first paint. If no window can be
-//! created at all, `setup` logs why and the app exits with [`STARTUP_FAILED`]. Once the window is
-//! on screen, a session that did not close the database is followed by a background integrity
-//! check ([`integrity`]). At exit the check is closed, then the store.
+//! screen, never a crash), picks the window glass for this OS, creates the main window hidden,
+//! starts the chat store and the session manager ([`sessions::start_chats`]), and arms the fallback
+//! that shows the window if the page never reports its first paint. If no window can be created at
+//! all, `setup` logs why and the app exits with [`STARTUP_FAILED`]. Once the window is on screen, a
+//! session that did not close the database is followed by a background integrity check
+//! ([`integrity`]).
+//!
+//! Quitting ([`sessions::run_quit`]): the first exit request of any kind (the last window closing,
+//! Quit in the menu, a signal, a smoke run's verdict) is prevented while every agent stops, the
+//! store commits and closes, and the registry file goes; then the app exits with the code it was
+//! asked for. `RunEvent::Exit` is the synchronous last resort ([`state::AppState::at_exit`]).
 
 pub mod bindings;
 pub mod boot;
@@ -21,6 +27,7 @@ pub mod integrity;
 pub mod launch;
 pub mod os;
 pub mod reveal;
+pub mod sessions;
 pub mod smoke;
 pub mod state;
 mod sync;
@@ -34,10 +41,12 @@ mod test_support;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use tauri::{Manager, RunEvent};
+use tauri::webview::PageLoadPayload;
+use tauri::{Manager, RunEvent, Webview, WindowEvent};
 
 use crate::glass::{GlassEffect, GlassPlan};
 use crate::launch::LaunchOptions;
+use crate::sessions::{AppQuitHost, ExitRequest};
 use crate::state::AppState;
 
 /// Log filter when `RUST_LOG` is unset.
@@ -72,6 +81,12 @@ pub fn run() {
             window::focus_main(app);
         }));
     }
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .menu(macos::app_menu)
+            .on_menu_event(macos::on_menu_event);
+    }
     let app = builder
         .plugin(
             tauri_plugin_window_state::Builder::new()
@@ -79,6 +94,10 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        // The folder picker and the quit question, called from Rust only: the page has no dialog
+        // permission (capabilities/default.json).
+        .plugin(tauri_plugin_dialog::init())
+        .on_page_load(on_page_load)
         .invoke_handler(commands.invoke_handler())
         .setup(move |app| {
             setup(app, launch);
@@ -103,32 +122,63 @@ pub fn run() {
 /// screen (`boot`), and a window that cannot be created at all is logged and ends the app with
 /// [`STARTUP_FAILED`].
 fn setup(app: &mut tauri::App, launch: LaunchOptions) {
-    let booted = boot::startup();
+    if let Some(Err(error)) = &launch.smoke {
+        // Automation is waiting for a result: say why no scenario runs, and with
+        // AURACODE_SMOKE_EXIT end here, before any data opens or any agent starts.
+        tracing::error!(%error, "the smoke switches cannot run a scenario");
+        let report = smoke::setup_failed(error.scenario, &error.message);
+        smoke::print(&report);
+        if launch.smoke_exit {
+            app.handle().exit(smoke::exit_code(&report));
+            return;
+        }
+    }
+    let mut booted = boot::startup();
 
     let os = os::OsInfo::detect();
     let plan = glass::plan(os.os, os.version, launch.no_glass);
-    let glass = match create_window(app, &plan) {
+    let glass = match create_window(app, &plan, launch.is_smoke()) {
         Ok(glass) => glass,
         Err(error) => {
             tracing::error!(%error, "auracode could not create its window");
-            if launch.smoke {
-                smoke::print(&smoke::finalize(smoke::no_window(&error.to_string())));
+            if let Some(smoke) = launch.smoke_plan() {
+                let report = smoke::no_window(smoke.scenario, &error.to_string());
+                smoke::print(&smoke::finalize(report, smoke.scenario));
             }
             // Queued for the event loop, which handles it right after this hook returns; the exit
-            // hooks run as for any other exit.
+            // hooks run as for any other exit. The store closes as `booted` drops here.
             app.handle().exit(STARTUP_FAILED);
             return;
         }
     };
     tracing::info!(os = os.os, version = %os.display, ?glass, "main window created");
 
-    let smoke = launch.smoke;
+    let smoke = launch.smoke_plan().map(|plan| plan.scenario);
     let smoke_exit = launch.smoke_exit;
     let version = app.package_info().version.to_string();
-    let state = AppState::new(booted, &os, glass, launch, version);
+    // Tauri's setup hook runs outside any Tokio context, so everything that spawns gets the handle.
+    let rt = tauri::async_runtime::handle().inner().clone();
+    let chats = sessions::start_chats(&mut booted, &version, &rt, sessions::Outside::real);
+    let state = AppState::new(booted, chats, &os, glass, launch, version);
     let shown = Arc::clone(&state.window_shown);
     let reported = Arc::clone(&state.smoke_reported);
+    let quit = Arc::clone(&state.quit);
     app.manage(state);
+
+    #[cfg(unix)]
+    {
+        let host = sessions::AppSignals {
+            app: app.handle().clone(),
+        };
+        rt.spawn(async move {
+            match sessions::SignalListener::new() {
+                Ok(listener) => listener.run(quit, host).await,
+                Err(error) => tracing::warn!(%error, "could not listen for quit signals"),
+            }
+        });
+    }
+    #[cfg(not(unix))]
+    drop(quit);
 
     let handle = app.handle().clone();
     tauri::async_runtime::spawn(window::show_after(
@@ -142,12 +192,13 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
         },
     ));
 
-    if smoke {
+    if let Some(scenario) = smoke {
         let handle = app.handle().clone();
+        let after = smoke::watchdog(scenario);
         tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(smoke::WATCHDOG).await;
+            tokio::time::sleep(after).await;
             if !reported.swap(true, Ordering::AcqRel) {
-                let report = smoke::finalize(smoke::timed_out(smoke::WATCHDOG));
+                let report = smoke::finalize(smoke::timed_out(scenario, after), scenario);
                 smoke::print(&report);
                 if smoke_exit {
                     handle.exit(smoke::exit_code(&report));
@@ -159,12 +210,14 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
 
 /// Creates the main window with `plan`'s glass. If the platform refuses it, retries with an opaque
 /// window when that could work ([`GlassPlan::opaque_fallback`]) rather than failing to start.
-/// Returns the glass actually applied.
+/// Returns the glass actually applied. A smoke run's page keeps running while the window is hidden
+/// ([`window::create_main`]).
 fn create_window(
     app: &tauri::App,
     plan: &GlassPlan,
+    smoke: bool,
 ) -> Result<GlassEffect, Box<dyn std::error::Error>> {
-    let error = match window::create_main(app, plan) {
+    let error = match window::create_main(app, plan, smoke) {
         Ok(_) => return Ok(plan.effect),
         Err(error) => error,
     };
@@ -172,7 +225,7 @@ fn create_window(
     match plan.opaque_fallback(webview_runtime.is_ok()) {
         Some(opaque) => {
             tracing::error!(%error, "could not create the window with glass; retrying opaque");
-            window::create_main(app, &opaque)?;
+            window::create_main(app, &opaque, smoke)?;
             Ok(opaque.effect)
         }
         None => {
@@ -184,17 +237,130 @@ fn create_window(
     }
 }
 
-fn on_event(app: &tauri::AppHandle, event: RunEvent) {
-    if matches!(event, RunEvent::Exit)
-        && let Some(state) = app.try_state::<AppState>()
-    {
-        // Before the store closes, so a check that has not begun never starts after it. A running
-        // one is not waited for: it reads through its own connection and ends with the process.
-        if state.integrity.close() {
-            tracing::info!("the integrity check is still running; it ends with the process");
+/// A page that starts loading has new channel callbacks: every subscription of its webview goes,
+/// or the frames for the old callbacks would be lost.
+fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
+    let Some(state) = webview.try_state::<AppState>() else {
+        return;
+    };
+    let chats = state.chats();
+    sessions::page_load(&state.pages, webview.label(), payload.event(), |owner| {
+        if let Some(chats) = chats {
+            chats.manager.drop_owner(owner);
         }
-        state.demos.cancel_all();
-        state.close_store();
+    });
+}
+
+fn on_event(app: &tauri::AppHandle, event: RunEvent) {
+    match event {
+        RunEvent::ExitRequested { code, api, .. } => on_exit_requested(app, code, &api),
+        // Closing the window quits (M1a has no tray), through the quit flow while the window
+        // still exists, so keeping auracode open can show it again.
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::CloseRequested { api, .. },
+            ..
+        } if label == window::MAIN_WINDOW => {
+            if let Some(state) = app.try_state::<AppState>()
+                && state.chats().is_some()
+                && !state.quit.is_done()
+            {
+                api.prevent_close();
+                app.exit(0);
+            }
+        }
+        RunEvent::Exit => {
+            if let Some(state) = app.try_state::<AppState>() {
+                state.at_exit();
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Every first exit request, whatever its code or cause, runs the quit flow on a Tauri task; the
+/// flow's own exit request passes.
+fn on_exit_requested(app: &tauri::AppHandle, code: Option<i32>, api: &tauri::ExitRequestApi) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    if state.chats().is_none() {
+        // Startup failed before the chats started: there is nothing to stop.
+        return;
+    }
+    match state.quit.on_exit_requested() {
+        ExitRequest::Allow => {}
+        ExitRequest::Wait => api.prevent_exit(),
+        ExitRequest::StartQuit => {
+            api.prevent_exit();
+            // The last window closing asks without a code; that is a normal quit.
+            let code = code.unwrap_or(0);
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let flow = tauri::async_runtime::spawn(quit(app.clone(), code));
+                if let Err(error) = flow.await {
+                    // Without this the app could never exit: every later request would wait for
+                    // a flow that is gone. `RunEvent::Exit` still kills and closes what is left.
+                    tracing::error!(%error, "the quit flow failed; exiting anyway");
+                    if let Some(state) = app.try_state::<AppState>() {
+                        state.quit.abandon();
+                    }
+                    app.exit(code);
+                }
+            });
+        }
+    }
+}
+
+/// The quit flow with the app's window, dialog and chat runtime.
+async fn quit(app: tauri::AppHandle, code: i32) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    if let Some(chats) = state.chats() {
+        let host = AppQuitHost { app: &app, chats };
+        sessions::run_quit(&state.quit, &host, code).await;
+    }
+}
+
+/// macOS ends an app whose menu's Quit item is the predefined one without an exit request
+/// (`terminate:` goes straight to `RunEvent::Exit`), which would skip the quit flow. The default
+/// menu stays, except that Quit is our own item asking for the exit.
+#[cfg(target_os = "macos")]
+mod macos {
+    use tauri::menu::{Menu, MenuEvent, MenuItem, MenuItemKind};
+    use tauri::{AppHandle, Wry};
+
+    pub const QUIT_MENU_ID: &str = "auracode-quit";
+
+    pub fn app_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
+        let menu = Menu::default(app)?;
+        let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() else {
+            return Ok(menu);
+        };
+        let items = app_menu.items()?;
+        let quit = items.iter().find_map(|item| {
+            item.as_predefined_menuitem()
+                .filter(|item| item.text().is_ok_and(|text| text.starts_with("Quit")))
+        });
+        if let Some(quit) = quit {
+            app_menu.remove(quit)?;
+            let name = &app.package_info().name;
+            app_menu.append(&MenuItem::with_id(
+                app,
+                QUIT_MENU_ID,
+                format!("Quit {name}"),
+                true,
+                Some("CmdOrCtrl+Q"),
+            )?)?;
+        }
+        Ok(menu)
+    }
+
+    pub fn on_menu_event(app: &AppHandle, event: MenuEvent) {
+        if event.id() == QUIT_MENU_ID {
+            app.exit(0);
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 # Continuous integration: lint, typecheck and tests for the TypeScript packages; fmt, clippy and
 # tests for the Rust workspace; the generated-bindings check; the M0 spikes and the check of their
-# docs; and a smoke run of the real app in WebKitGTK and WebView2.
+# docs; and smoke runs of the real app in WebKitGTK and WebView2: the stream check, and the chat
+# screens against the demo agent.
 #
 # What runs when. The repo is private, so runner minutes come out of the Free plan's 2,000 included
 # minutes a month, billed with multipliers (Linux 1x, Windows 2x, macOS 10x).
@@ -397,9 +398,9 @@ jobs:
         if: ${{ !cancelled() && steps.full.outcome == 'success' && runner.os == 'Linux' }}
         run: cargo test --manifest-path docs/spikes/claude-control/Cargo.toml --locked
 
-      # The smoke run, on Windows and Linux: the app with its frontend embedded streams through the
-      # typed command + Channel path into a real webview (WebView2; WebKitGTK under Xvfb) and
-      # reports the result (.github/scripts/run-smoke.sh). It has its own JS setup down here, so a
+      # The smoke runs, on Windows and Linux: the app with its frontend embedded drives a real
+      # webview (WebView2; WebKitGTK under Xvfb) through the typed commands and channels and reports
+      # the result (.github/scripts/run-smoke.sh). They have their own JS setup down here, so a
       # TypeScript error (the lint job reports those) cannot skip the Rust checks above.
       - name: Set up pnpm (smoke)
         id: pnpm
@@ -428,19 +429,37 @@ jobs:
         timeout-minutes: 30
         run: pnpm --filter @auracode/desktop tauri build --debug --no-bundle
 
-      # Xvfb has no GPU and no DRM device for WebKitGTK's DMA-BUF renderer, so the variable keeps
-      # WebKitGTK on its shared-memory path instead of relying on its detection. The screen fits
-      # the window's default size. The app's own watchdog ends a stuck run after 120 s.
-      - name: Smoke test the app
+      # The stream check: a demo turn, a cancelled turn and a stress burst. Xvfb has no GPU and no
+      # DRM device for WebKitGTK's DMA-BUF renderer, so the variable keeps WebKitGTK on its
+      # shared-memory path instead of relying on its detection. The screen fits the window's
+      # default size. The app's own watchdog ends a stuck run after 120 s.
+      - name: Smoke test the app (streams)
         if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' }}
         timeout-minutes: 5
         env:
           WEBKIT_DISABLE_DMABUF_RENDERER: "1"
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
-            xvfb-run -a -s "-screen 0 1920x1080x24" bash .github/scripts/run-smoke.sh target/debug/auracode
+            xvfb-run -a -s "-screen 0 1920x1080x24" bash .github/scripts/run-smoke.sh target/debug/auracode stream
           else
-            bash .github/scripts/run-smoke.sh target/debug/auracode.exe
+            bash .github/scripts/run-smoke.sh target/debug/auracode.exe stream
+          fi
+
+      # The chat screens against the demo agent (apps/desktop/src/lib/smokeChat.ts), in two launches
+      # on one data folder with the quit flow between them: every check is printed. It runs after a
+      # failed stream check too. The app's watchdogs end a stuck launch after 300 s and 120 s, so
+      # the timeout covers both with room for startup. CI never sets AURACODE_SMOKE_AGENT, which
+      # runs a real agent; run-smoke.sh refuses it here anyway.
+      - name: Smoke test the chat UI
+        if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' }}
+        timeout-minutes: 10
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a -s "-screen 0 1920x1080x24" bash .github/scripts/run-smoke.sh target/debug/auracode chat
+          else
+            bash .github/scripts/run-smoke.sh target/debug/auracode.exe chat
           fi
 
       # A cancelled job (superseded by a newer push, or out of time) stops half-built. rust-cache's

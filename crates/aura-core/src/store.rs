@@ -64,7 +64,7 @@ use lock::OpenLock;
 use recovery::Recovery;
 
 /// The schema version this build reads and writes; equals the number of migrations.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Pre-migration backups kept per database. Enough to step back through several upgrades without
 /// letting a long-lived install fill the disk with copies.
@@ -81,8 +81,10 @@ const DEFAULT_DB_NAME: &str = "aura.db";
 /// Every schema change, in order: entry `i` takes the database from version `i` to `i + 1`. The array
 /// length is [`SCHEMA_VERSION`], so adding a migration without bumping the version fails to compile.
 /// Each migration ends with a foreign key check, because migrations run with enforcement off.
-static MIGRATIONS: [M<'static>; SCHEMA_VERSION as usize] =
-    [M::up(include_str!("../migrations/0001_initial.sql")).foreign_key_check()];
+static MIGRATIONS: [M<'static>; SCHEMA_VERSION as usize] = [
+    M::up(include_str!("../migrations/0001_initial.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0002_sessions.sql")).foreign_key_check(),
+];
 
 fn migrations() -> &'static [M<'static>] {
     &MIGRATIONS
@@ -902,7 +904,7 @@ mod tests {
     use super::*;
     use std::collections::{BTreeSet, HashSet};
 
-    const TABLES: [&str; 10] = [
+    const TABLES: [&str; 11] = [
         "settings",
         "projects",
         "project_folders",
@@ -913,7 +915,14 @@ mod tests {
         "events",
         "attachments",
         "agent_cache",
+        "queued_prompts",
     ];
+
+    /// The current schema version as SQLite reports it.
+    const CURRENT: i64 = SCHEMA_VERSION as i64;
+
+    /// The version a test's extra migration takes the database to.
+    const NEXT: u32 = SCHEMA_VERSION + 1;
 
     struct Paths {
         _dir: tempfile::TempDir,
@@ -1068,8 +1077,8 @@ mod tests {
         .expect("leak the pages of a dropped table");
     }
 
-    /// The real v1 migration followed by `extra`, as tests define later schema versions.
-    fn with_v1<'a>(extra: &[M<'a>]) -> Vec<M<'a>> {
+    /// The real migrations followed by `extra`, as tests define later schema versions.
+    fn with_current<'a>(extra: &[M<'a>]) -> Vec<M<'a>> {
         let mut all: Vec<M<'a>> = migrations().to_vec();
         all.extend_from_slice(extra);
         all
@@ -1100,7 +1109,7 @@ mod tests {
         assert!(!info.unclean_shutdown);
         assert_eq!(store.path(), p.db);
         assert_eq!(store.backups_dir(), p.backups);
-        assert_eq!(store.schema_version().expect("version"), 1);
+        assert_eq!(store.schema_version().expect("version"), SCHEMA_VERSION);
 
         let conn = store.conn();
         let journal: String = conn
@@ -1282,7 +1291,7 @@ mod tests {
                 checked += 1;
             }
         }
-        assert_eq!(checked, 9, "every foreign key in the schema was checked");
+        assert_eq!(checked, 10, "every foreign key in the schema was checked");
     }
 
     #[test]
@@ -1294,7 +1303,7 @@ mod tests {
         }
         let (store, info) = open(&p);
         assert_eq!(info.outcome, OpenOutcome::Opened);
-        assert_eq!(info.schema_version, 1);
+        assert_eq!(info.schema_version, SCHEMA_VERSION);
         assert!(!info.unclean_shutdown, "the last store closed cleanly");
         assert_eq!(project_names(store.conn()), vec!["Alpha"]);
         assert!(
@@ -1359,7 +1368,7 @@ mod tests {
         assert!(fsutil::with_suffix(&quarantined, "-shm").is_file());
 
         // The replacement works.
-        assert_eq!(info.schema_version, 1);
+        assert_eq!(info.schema_version, SCHEMA_VERSION);
         insert_project(store.conn(), "p1", "Fresh");
         assert_eq!(project_names(store.conn()), vec!["Fresh"]);
         drop(store);
@@ -1513,7 +1522,7 @@ mod tests {
             (2800..3000).contains(&events),
             "{events} of 3000 events kept"
         );
-        assert_eq!(info.schema_version, 1);
+        assert_eq!(info.schema_version, SCHEMA_VERSION);
         drop(store);
         assert_eq!(check_integrity(&p.db).expect("check"), Integrity::Ok);
     }
@@ -1651,7 +1660,7 @@ mod tests {
                     info.outcome
                 );
             };
-            assert_eq!(info.schema_version, 1);
+            assert_eq!(info.schema_version, SCHEMA_VERSION);
             let conn = store.conn();
             for table in TABLES.iter().chain(["message_fts"].iter()) {
                 // Fails with "no such table" if the repaired database lacks it.
@@ -1933,7 +1942,7 @@ mod tests {
                 result,
                 Err(CoreError::SchemaTooNew {
                     found: 99,
-                    supported: 1
+                    supported: SCHEMA_VERSION
                 })
             ),
             "{:?}",
@@ -1994,7 +2003,7 @@ mod tests {
                 result,
                 Err(CoreError::SchemaTooNew {
                     found: 7,
-                    supported: 1
+                    supported: SCHEMA_VERSION
                 })
             ),
             "{:?}",
@@ -2032,7 +2041,7 @@ mod tests {
         let p = paths();
         fs::create_dir_all(p.db.parent().expect("parent")).expect("mkdir");
         fs::write(&p.db, noise(16 * 1024)).expect("garbage");
-        let broken = with_v1(&[M::up("INSERT INTO no_such_table VALUES (1);")]);
+        let broken = with_current(&[M::up("INSERT INTO no_such_table VALUES (1);")]);
         let result = open_with(&p.db, &p.backups, &broken);
         let Err(error) = &result else {
             panic!("expected an error, got {:?}", result.map(|(_, info)| info));
@@ -2102,23 +2111,27 @@ mod tests {
             repaired.outcome,
             OpenOutcome::RecoveredFromCorruption { .. }
         ));
-        let v2 = with_v1(&[M::up("CREATE TABLE later (x);")]);
-        let (_, migrated) = open_with(&p.db, &p.backups, &v2).expect("migrate");
+        let later = with_current(&[M::up("CREATE TABLE later (x);")]);
+        let (_, migrated) = open_with(&p.db, &p.backups, &later).expect("migrate");
         assert!(
             matches!(
                 migrated.outcome,
-                OpenOutcome::Migrated { from: 1, to: 2, .. }
+                OpenOutcome::Migrated {
+                    from: SCHEMA_VERSION,
+                    to: NEXT,
+                    ..
+                }
             ),
             "{:?}",
             migrated.outcome
         );
-        let (_, next) = open_with(&p.db, &p.backups, &v2).expect("reopen");
+        let (_, next) = open_with(&p.db, &p.backups, &later).expect("reopen");
         assert_eq!(next.outcome, repaired.outcome);
     }
 
-    /// v2 rebuilds `projects` (create, copy, drop, rename) while `chats` references it: the procedure
-    /// SQLite documents for schema changes ALTER TABLE can't express.
-    const V2_REBUILD_PROJECTS: &str = "
+    /// A later version that rebuilds `projects` (create, copy, drop, rename) while `chats` references
+    /// it: the procedure SQLite documents for schema changes ALTER TABLE can't express.
+    const REBUILD_PROJECTS: &str = "
         CREATE TABLE projects_new (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -2144,26 +2157,26 @@ mod tests {
     fn a_migration_backs_up_first_and_keeps_data() {
         let p = paths();
         {
-            let (store, info) = open_with(&p.db, &p.backups, migrations()).expect("v1");
+            let (store, info) = open_with(&p.db, &p.backups, migrations()).expect("current");
             assert_eq!(info.outcome, OpenOutcome::Created);
             insert_project(store.conn(), "p1", "Alpha");
             insert_chat(store.conn(), "c1", "p1");
         }
 
-        let v2 = with_v1(&[M::up(V2_REBUILD_PROJECTS).foreign_key_check()]);
-        let (store, info) = open_with(&p.db, &p.backups, &v2).expect("v1 to v2");
+        let later = with_current(&[M::up(REBUILD_PROJECTS).foreign_key_check()]);
+        let (store, info) = open_with(&p.db, &p.backups, &later).expect("one version up");
         let OpenOutcome::Migrated {
-            from: 1,
-            to: 2,
+            from: SCHEMA_VERSION,
+            to: NEXT,
             backup: Some(backup),
         } = &info.outcome
         else {
             panic!(
-                "expected Migrated {{ from: 1, to: 2, backup: Some }}, got {:?}",
+                "expected Migrated {{ from: {SCHEMA_VERSION}, to: {NEXT}, backup: Some }}, got {:?}",
                 info.outcome
             );
         };
-        assert_eq!(info.schema_version, 2);
+        assert_eq!(info.schema_version, NEXT);
         let conn = store.conn();
         assert_eq!(project_names(conn), vec!["Alpha"]);
         let archived: i64 = conn
@@ -2183,20 +2196,142 @@ mod tests {
             .expect("fk");
         assert_eq!(foreign_keys, 1, "enforcement is back on after migrating");
 
-        // The backup is a complete v1 database with the old data.
+        // The backup is a complete database at the version before, with the old data.
         let backup = PathBuf::from(backup);
         assert_eq!(backup.parent(), Some(p.backups.as_path()));
         let name = fsutil::file_name_lossy(&backup);
         assert!(
-            name.starts_with("aura.db.v1-") && name.ends_with(".bak"),
+            name.starts_with(&format!("aura.db.v{SCHEMA_VERSION}-")) && name.ends_with(".bak"),
             "{name}"
         );
         assert!(!fsutil::with_suffix(&backup, PARTIAL_SUFFIX).exists());
         let old = Connection::open(&backup).expect("open backup");
-        assert_eq!(read_user_version(&old).expect("version"), 1);
+        assert_eq!(read_user_version(&old).expect("version"), CURRENT);
         assert_eq!(project_names(&old), vec!["Alpha"]);
         let old_columns = names(&old, "SELECT name FROM pragma_table_info('projects')");
         assert!(!old_columns.contains("archived"));
+    }
+
+    /// Migration 0002 on a v1 database with data in every table it touches: a backup first, every
+    /// row kept, the new columns `NULL`, the new table and indexes in place, and the foreign key
+    /// check clean.
+    #[test]
+    fn upgrading_a_populated_v1_database_to_v2_keeps_every_row() {
+        let p = paths();
+        {
+            let (store, info) = open_with(&p.db, &p.backups, &migrations()[..1]).expect("v1");
+            assert_eq!(info.schema_version, 1);
+            store
+                .conn()
+                .execute_batch(
+                    "INSERT INTO projects (id, name, created_at, updated_at, device_id) \
+                         VALUES ('p1', 'Alpha', 1, 1, 'dev'); \
+                     INSERT INTO project_folders (id, project_id, display_name, kind, created_at, updated_at, device_id) \
+                         VALUES ('f1', 'p1', 'repo', 'local', 1, 1, 'dev'); \
+                     INSERT INTO folder_locations (folder_id, device_id, path) VALUES ('f1', 'dev', '/work/repo'); \
+                     INSERT INTO chats (id, project_id, folder_id, title, title_source, active_agent, created_at, updated_at, device_id) \
+                         VALUES ('c1', 'p1', 'f1', 'Fix the build', 'first_line', 'hermes', 1, 2, 'dev'); \
+                     INSERT INTO agent_sessions (id, chat_id, agent_id, native_session_id, model, autonomy, cwd, created_at, updated_at, device_id) \
+                         VALUES ('a1', 'c1', 'hermes', 'native-1', 'gpt', 'full_auto', '/work/repo', 1, 1, 'dev'); \
+                     INSERT INTO turns (id, chat_id, agent_session_id, seq, status, stop_reason, started_at, ended_at, device_id) \
+                         VALUES ('t1', 'c1', 'a1', 1, 'completed', 'end_turn', 1, 2, 'dev'); \
+                     INSERT INTO events (id, chat_id, turn_id, seq, kind, payload, created_at, device_id) \
+                         VALUES ('e1', 'c1', 't1', 0, 'turn_started', '{}', 1, 'dev'), \
+                                ('e2', 'c1', 't1', 1, 'permission_requested', '{}', 1, 'dev');",
+                )
+                .expect("v1 rows");
+        }
+
+        let (store, info) = Store::open_at(&p.db, &p.backups).expect("upgrade");
+        let OpenOutcome::Migrated {
+            from: 1,
+            to: 2,
+            backup: Some(backup),
+        } = &info.outcome
+        else {
+            panic!("expected a migration from v1, got {:?}", info.outcome);
+        };
+        assert_eq!(info.schema_version, 2);
+        let old = Connection::open(backup).expect("backup");
+        assert_eq!(read_user_version(&old).expect("version"), 1);
+        assert_eq!(count(&old, "events"), 2, "the backup holds the v1 data");
+        drop(old);
+
+        let conn = store.conn();
+        for table in [
+            "projects",
+            "project_folders",
+            "folder_locations",
+            "chats",
+            "agent_sessions",
+            "turns",
+        ] {
+            assert_eq!(count(conn, table), 1, "{table}");
+        }
+        assert_eq!(count(conn, "events"), 2);
+        let (native, model, config): (String, String, Option<String>) = conn
+            .query_row(
+                "SELECT native_session_id, model, config_json FROM agent_sessions WHERE id = 'a1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("agent session");
+        assert_eq!(
+            (native.as_str(), model.as_str(), config),
+            ("native-1", "gpt", None)
+        );
+        let turn: (String, Option<String>, Option<i64>, Option<i64>, Option<i64>) = conn
+            .query_row(
+                "SELECT status, prompt_id, first_event_seq, last_event_seq, compacted_at FROM turns WHERE id = 't1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            )
+            .expect("turn");
+        assert_eq!(turn, ("completed".to_owned(), None, None, None, None));
+        let violations: i64 = conn
+            .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
+                row.get(0)
+            })
+            .expect("foreign key check");
+        assert_eq!(violations, 0);
+
+        let indexes = names(
+            conn,
+            "SELECT name FROM sqlite_schema WHERE type = 'index' AND sql IS NOT NULL",
+        );
+        for index in [
+            "turns_chat_first_event_seq",
+            "turns_running",
+            "turns_uncompacted",
+            "events_requests",
+            "queued_prompts_chat_id",
+        ] {
+            assert!(indexes.contains(index), "{index}: {indexes:?}");
+        }
+
+        // The new queue: rows default to not held, and the chat must exist.
+        conn.execute(
+            "INSERT INTO queued_prompts (id, chat_id, text, created_at, device_id) VALUES ('q1', 'c1', 'next', 3, 'dev')",
+            [],
+        )
+        .expect("queue a prompt");
+        let held: i64 = conn
+            .query_row(
+                "SELECT held FROM queued_prompts WHERE id = 'q1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("held");
+        assert_eq!(held, 0);
+        let orphan = conn.execute(
+            "INSERT INTO queued_prompts (id, chat_id, text, created_at, device_id) VALUES ('q2', 'gone', 'x', 3, 'dev')",
+            [],
+        );
+        assert!(orphan.is_err(), "a queued prompt needs its chat");
+        drop(store);
+
+        let (_, again) = open(&p);
+        assert_eq!(again.outcome, OpenOutcome::Opened, "migrated once");
     }
 
     #[test]
@@ -2208,7 +2343,7 @@ mod tests {
         let conn = store.conn();
         insert_project(conn, "p1", "Alpha");
         insert_chat(conn, "c1", "p1");
-        let result = conn.execute_batch(&format!("BEGIN; {V2_REBUILD_PROJECTS} COMMIT;"));
+        let result = conn.execute_batch(&format!("BEGIN; {REBUILD_PROJECTS} COMMIT;"));
         assert!(
             result.is_err(),
             "dropping a referenced table with foreign keys on must fail"
@@ -2223,7 +2358,7 @@ mod tests {
             let (store, _) = open(&p);
             insert_project(store.conn(), "p1", "Alpha");
         }
-        let broken = with_v1(&[M::up(
+        let broken = with_current(&[M::up(
             "CREATE TABLE half_done (x); INSERT INTO no_such_table VALUES (1);",
         )]);
         let result = open_with(&p.db, &p.backups, &broken);
@@ -2239,7 +2374,7 @@ mod tests {
             "the UI message leaves the SQL out: {message}"
         );
 
-        assert_eq!(user_version(&p.db), 1);
+        assert_eq!(user_version(&p.db), CURRENT);
         let (store, info) = open(&p);
         assert_eq!(info.outcome, OpenOutcome::Opened);
         assert_eq!(project_names(store.conn()), vec!["Alpha"]);
@@ -2260,7 +2395,7 @@ mod tests {
             let (store, _) = open(&p);
             insert_project(store.conn(), "p1", "Alpha");
         }
-        let dangling = with_v1(&[M::up(
+        let dangling = with_current(&[M::up(
             "INSERT INTO chats (id, project_id, created_at, updated_at, device_id) VALUES ('orphan', 'gone', 1, 1, 'd');",
         )
         .foreign_key_check()]);
@@ -2270,7 +2405,7 @@ mod tests {
             "{:?}",
             result.map(|(_, i)| i)
         );
-        assert_eq!(user_version(&p.db), 1);
+        assert_eq!(user_version(&p.db), CURRENT);
         let (store, _) = open(&p);
         let chats: i64 = store
             .conn()
@@ -2282,28 +2417,29 @@ mod tests {
     #[test]
     fn backup_retention_keeps_the_five_newest() {
         let p = paths();
-        drop(open_with(&p.db, &p.backups, migrations()).expect("v1"));
-        let sql: Vec<String> = (2..=8)
-            .map(|v| format!("CREATE TABLE extra_v{v} (x);"))
+        drop(open_with(&p.db, &p.backups, migrations()).expect("current"));
+        let sql: Vec<String> = (1..=7)
+            .map(|n| format!("CREATE TABLE extra_{n} (x);"))
             .collect();
         let mut set = migrations().to_vec();
         for (index, statement) in sql.iter().enumerate() {
             set.push(M::up(statement));
             let (_, info) = open_with(&p.db, &p.backups, &set).expect("migrate");
-            let from = u32::try_from(index + 1).expect("small");
+            let from = SCHEMA_VERSION + u32::try_from(index).expect("small");
             assert!(
                 matches!(info.outcome, OpenOutcome::Migrated { from: f, .. } if f == from),
                 "{:?}",
                 info.outcome
             );
         }
-        // Seven migrations made seven backups (from v1 to v7); the two oldest were pruned.
+        // Seven migrations made seven backups (from the current version up); the two oldest were
+        // pruned.
         let kept: BTreeSet<u32> = files_in(&p.backups)
             .iter()
             .filter_map(|name| parse_backup_name(name, "aura.db"))
             .map(|key| key.from)
             .collect();
-        assert_eq!(kept, BTreeSet::from([3, 4, 5, 6, 7]));
+        assert_eq!(kept, (SCHEMA_VERSION + 2..SCHEMA_VERSION + 7).collect());
         let bak_files = files_in(&p.backups)
             .iter()
             .filter(|name| name.ends_with(".bak"))
@@ -2330,8 +2466,8 @@ mod tests {
             )
             .expect("future backup");
         }
-        let v2 = with_v1(&[M::up("CREATE TABLE later (x);")]);
-        let (_, info) = open_with(&p.db, &p.backups, &v2).expect("migrate");
+        let later = with_current(&[M::up("CREATE TABLE later (x);")]);
+        let (_, info) = open_with(&p.db, &p.backups, &later).expect("migrate");
         let OpenOutcome::Migrated {
             backup: Some(backup),
             ..
@@ -2466,8 +2602,8 @@ mod tests {
             assert_eq!(info.outcome, OpenOutcome::Created);
             insert_project(store.conn(), "p1", "Ünïcödé");
         }
-        let v2 = with_v1(&[M::up("CREATE TABLE later (x);")]);
-        let (store, info) = open_with(&db, &backups, &v2).expect("migrate");
+        let later = with_current(&[M::up("CREATE TABLE later (x);")]);
+        let (store, info) = open_with(&db, &backups, &later).expect("migrate");
         let OpenOutcome::Migrated {
             backup: Some(backup),
             ..
@@ -2480,7 +2616,7 @@ mod tests {
         drop(store);
         // A repair through the same odd path (VACUUM INTO gets the path as text).
         recovery::mark_damaged(&db, "test").expect("mark");
-        let (store, info) = open_with(&db, &backups, &v2).expect("repair");
+        let (store, info) = open_with(&db, &backups, &later).expect("repair");
         assert!(matches!(
             info.outcome,
             OpenOutcome::RecoveredFromCorruption {
@@ -2626,7 +2762,7 @@ mod tests {
                     "trial {trial}: {result:?}"
                 );
             }
-            assert_eq!(user_version(&p.db), 1, "trial {trial}");
+            assert_eq!(user_version(&p.db), CURRENT, "trial {trial}");
         }
     }
 
@@ -2670,8 +2806,8 @@ mod tests {
         let (first, _) = open(&p);
         insert_project(first.conn(), "p1", "Alpha");
 
-        let v2 = with_v1(&[M::up("CREATE TABLE later (x);")]);
-        let result = open_with(&p.db, &p.backups, &v2);
+        let later = with_current(&[M::up("CREATE TABLE later (x);")]);
+        let result = open_with(&p.db, &p.backups, &later);
         assert!(
             matches!(
                 result,
@@ -2683,7 +2819,7 @@ mod tests {
             "{:?}",
             result.map(|(_, info)| info)
         );
-        assert_eq!(user_version(&p.db), 1);
+        assert_eq!(user_version(&p.db), CURRENT);
 
         let (second, info) = open(&p);
         assert_eq!(
@@ -2731,10 +2867,14 @@ mod tests {
         ));
         assert_eq!(project_names(store.conn()), vec!["Alpha"]);
         drop(store);
-        let (_, migrated) = open_with(&p.db, &p.backups, &v2).expect("migrate once alone");
+        let (_, migrated) = open_with(&p.db, &p.backups, &later).expect("migrate once alone");
         assert!(matches!(
             migrated.outcome,
-            OpenOutcome::Migrated { from: 1, to: 2, .. }
+            OpenOutcome::Migrated {
+                from: SCHEMA_VERSION,
+                to: NEXT,
+                ..
+            }
         ));
     }
 

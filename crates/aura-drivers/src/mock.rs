@@ -4,14 +4,17 @@
 //! the clock forward, and the stream steps hand out text one token every `1 / tokens_per_sec` seconds.
 //! [`run_script`] plays that timeline against Tokio's clock and sends everything through a
 //! [`FrameBatcher`], so the UI receives what a real driver produces: coalesced deltas in frames under
-//! the size limit, flushed at most once per frame interval. Because pacing follows Tokio's clock, tests
-//! play whole turns instantly and deterministically with paused time.
+//! the size limit, flushed at most once per frame interval. [`play`] is the same timeline one level
+//! down, event by event, for the demo agent's driver, whose session does its own batching. Because
+//! pacing follows Tokio's clock, tests play whole turns instantly and deterministically with paused
+//! time.
 
 use std::time::Duration;
 
 use aura_protocol::{
     AuraEvent, Cost, EventBatch, PlanEntry, PlanPriority, PlanStatus, SessionInfo, StopReason,
     TokenUsage, ToolCall, ToolContent, ToolKind, ToolLocation, ToolStatus, ToolUpdate, UsageInfo,
+    UsageScope,
 };
 use serde_json::json;
 use tokio::time::Instant;
@@ -35,6 +38,9 @@ const MIN_FRAME_INTERVAL: Duration = Duration::from_millis(1);
 const FAR_FUTURE: Duration = Duration::from_secs(30 * 365 * 24 * 60 * 60);
 
 /// One step of a [`MockScript`].
+// `Emit` holds a whole event inline. A script is a short list built once per turn, so boxing it
+// would only make scripts clumsier to write.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum MockStep {
     /// Emits one event at the current point of the timeline. Takes no time.
@@ -92,6 +98,7 @@ impl MockScript {
         let steps = vec![
             MockStep::Emit(AuraEvent::TurnStarted {
                 turn_id: turn_id.to_owned(),
+                prompt_id: None,
             }),
             // Time to first token.
             MockStep::Sleep(Duration::from_millis(250)),
@@ -114,16 +121,18 @@ impl MockScript {
                     line: None,
                 }],
                 raw_input: Some(json!({ "path": path })),
+                tool_name: Some("Read".to_owned()),
+                content: Vec::new(),
+                truncated: None,
             })),
             MockStep::Sleep(Duration::from_millis(350)),
-            MockStep::Emit(AuraEvent::ToolUpdate(ToolUpdate {
-                tool_call_id: read_id,
-                status: Some(ToolStatus::Completed),
-                title: None,
-                content: vec![ToolContent::Text {
+            MockStep::Emit(AuraEvent::ToolUpdate(completed(
+                read_id,
+                ToolContent::Text {
                     text: DEMO_MAIN_BEFORE.to_owned(),
-                }],
-            })),
+                    truncated: None,
+                },
+            ))),
             MockStep::Emit(AuraEvent::ToolCall(ToolCall {
                 tool_call_id: edit_id.clone(),
                 kind: ToolKind::Edit,
@@ -138,18 +147,20 @@ impl MockScript {
                     "old_string": DEMO_MAIN_BEFORE,
                     "new_string": DEMO_MAIN_AFTER,
                 })),
+                tool_name: Some("Edit".to_owned()),
+                content: Vec::new(),
+                truncated: None,
             })),
             MockStep::Sleep(Duration::from_millis(600)),
-            MockStep::Emit(AuraEvent::ToolUpdate(ToolUpdate {
-                tool_call_id: edit_id,
-                status: Some(ToolStatus::Completed),
-                title: None,
-                content: vec![ToolContent::Diff {
+            MockStep::Emit(AuraEvent::ToolUpdate(completed(
+                edit_id,
+                ToolContent::Diff {
                     path: path.to_owned(),
                     old_text: Some(DEMO_MAIN_BEFORE.to_owned()),
                     new_text: DEMO_MAIN_AFTER.to_owned(),
-                }],
-            })),
+                    truncated: None,
+                },
+            ))),
             MockStep::Emit(AuraEvent::PlanUpdated {
                 entries: vec![
                     plan_entry(
@@ -178,7 +189,7 @@ impl MockScript {
             MockStep::Emit(AuraEvent::MessageCompleted { message_id }),
             MockStep::Emit(AuraEvent::UsageUpdated(UsageInfo {
                 context_used: Some(
-                    DEMO_PROMPT_TOKENS.saturating_add(to_u32(thought_tokens + answer_tokens)),
+                    DEMO_PROMPT_TOKENS.saturating_add(to_u64(thought_tokens + answer_tokens)),
                 ),
                 context_size: Some(CONTEXT_SIZE),
                 cost: Some(Cost {
@@ -196,10 +207,14 @@ impl MockScript {
                 stop_reason: StopReason::EndTurn,
                 usage: Some(TokenUsage {
                     input_tokens: DEMO_PROMPT_TOKENS,
-                    output_tokens: to_u32(thought_tokens + answer_tokens),
-                    cached_input_tokens: Some(DEMO_CACHED_TOKENS),
-                    reasoning_tokens: Some(to_u32(thought_tokens)),
+                    output_tokens: to_u64(thought_tokens + answer_tokens),
+                    cache_read_tokens: Some(DEMO_CACHED_TOKENS),
+                    cache_write_tokens: None,
+                    reasoning_tokens: Some(to_u64(thought_tokens)),
+                    scope: UsageScope::Turn,
                 }),
+                duration_ms: None,
+                recovered: false,
             }),
         ];
         MockScript { steps }
@@ -217,6 +232,7 @@ impl MockScript {
 
         let mut steps = vec![MockStep::Emit(AuraEvent::TurnStarted {
             turn_id: turn_id.to_owned(),
+            prompt_id: None,
         })];
         if thought_tokens > 0 {
             let thought_id = format!("{turn_id}-thought");
@@ -240,7 +256,7 @@ impl MockScript {
             steps.push(MockStep::Emit(AuraEvent::MessageCompleted { message_id }));
         }
         steps.push(MockStep::Emit(AuraEvent::UsageUpdated(UsageInfo {
-            context_used: Some(STRESS_PROMPT_TOKENS.saturating_add(total_tokens)),
+            context_used: Some(STRESS_PROMPT_TOKENS.saturating_add(u64::from(total_tokens))),
             context_size: Some(CONTEXT_SIZE),
             cost: None,
         })));
@@ -249,10 +265,14 @@ impl MockScript {
             stop_reason: StopReason::EndTurn,
             usage: Some(TokenUsage {
                 input_tokens: STRESS_PROMPT_TOKENS,
-                output_tokens: total_tokens,
-                cached_input_tokens: None,
-                reasoning_tokens: Some(to_u32(thought_tokens)),
+                output_tokens: u64::from(total_tokens),
+                cache_read_tokens: None,
+                cache_write_tokens: None,
+                reasoning_tokens: Some(to_u64(thought_tokens)),
+                scope: UsageScope::Turn,
             }),
+            duration_ms: None,
+            recovered: false,
         }));
         MockScript { steps }
     }
@@ -262,7 +282,7 @@ impl MockScript {
     pub fn turn_id(&self) -> Option<&str> {
         self.steps.iter().find_map(|step| match step {
             MockStep::Emit(
-                AuraEvent::TurnStarted { turn_id } | AuraEvent::TurnEnded { turn_id, .. },
+                AuraEvent::TurnStarted { turn_id, .. } | AuraEvent::TurnEnded { turn_id, .. },
             ) => Some(turn_id.as_str()),
             _ => None,
         })
@@ -282,7 +302,7 @@ impl MockScript {
     }
 }
 
-/// Plays `script` on Tokio's clock, sending `session_id`'s frames to `sink`.
+/// Plays `script` on Tokio's clock, sending `chat_id`'s frames to `sink`.
 ///
 /// Events go through a [`FrameBatcher`] at their scripted times, and `sink` receives the flushed frames
 /// at most once per `frame_interval` (clamped to at least 1 ms), plus one final flush when the script
@@ -300,7 +320,7 @@ impl MockScript {
 /// flush. Must run on a Tokio runtime with the time driver enabled.
 pub async fn run_script<F>(
     script: MockScript,
-    session_id: &str,
+    chat_id: &str,
     frame_interval: Duration,
     cancel: CancellationToken,
     mut sink: F,
@@ -310,14 +330,14 @@ where
 {
     let frame_interval = frame_interval.max(MIN_FRAME_INTERVAL);
     let script_turn = script.turn_id().map(str::to_owned);
-    let mut batcher = FrameBatcher::new(session_id);
+    let mut batcher = FrameBatcher::new(chat_id);
     let mut turns = TurnTracker::default();
     let mut timeline = Timeline::new(script.steps, Instant::now());
     let mut last_flush: Option<Instant> = None;
 
     loop {
         if cancel.is_cancelled() {
-            tracing::debug!(session_id, "mock run cancelled");
+            tracing::debug!(chat_id, "mock run cancelled");
             for event in turns.closing_events(script_turn.as_deref()) {
                 batcher.push(event);
             }
@@ -343,7 +363,7 @@ where
         if !batcher.is_empty() && flush_at.is_none_or(|at| at <= now) {
             last_flush = Some(now);
             if deliver(&mut batcher, &mut sink).is_err() {
-                tracing::debug!(session_id, "mock run stopped: receiver gone");
+                tracing::debug!(chat_id, "mock run stopped: receiver gone");
                 return RunOutcome::ReceiverGone;
             }
         }
@@ -359,6 +379,44 @@ where
             biased;
             () = cancel.cancelled() => {}
             () = tokio::time::sleep_until(wake) => {}
+        }
+    }
+}
+
+/// Plays `script` on Tokio's clock, handing every event to `emit` at its scripted time, without
+/// batching: the event level beneath [`run_script`], for a driver whose session batches frames.
+///
+/// Tokens that fall due together (after a stall, or while `emit` was slow) arrive as one delta per
+/// stream, exactly as [`run_script`] coalesces them. `emit` returning `false` means its receiver is
+/// gone: the run stops with [`RunOutcome::ReceiverGone`] and `emit` is not called again. When
+/// `cancel` fires, the run stops at once with [`RunOutcome::Cancelled`] and adds nothing: unlike
+/// [`run_script`] it does not close the turn, because the driver ends turns itself. Must run on a
+/// Tokio runtime with the time driver enabled.
+pub async fn play<F>(script: MockScript, cancel: CancellationToken, mut emit: F) -> RunOutcome
+where
+    F: FnMut(AuraEvent) -> bool,
+{
+    let mut timeline = Timeline::new(script.steps, Instant::now());
+    loop {
+        if cancel.is_cancelled() {
+            return RunOutcome::Cancelled;
+        }
+        let mut gone = false;
+        let due = timeline.advance(Instant::now(), &mut |event| {
+            if !gone && !emit(event) {
+                gone = true;
+            }
+        });
+        if gone {
+            return RunOutcome::ReceiverGone;
+        }
+        let Some(due) = due else {
+            return RunOutcome::Completed;
+        };
+        tokio::select! {
+            biased;
+            () = cancel.cancelled() => {}
+            () = tokio::time::sleep_until(due.next) => {}
         }
     }
 }
@@ -391,7 +449,7 @@ struct TurnTracker {
 impl TurnTracker {
     fn observe(&mut self, event: &AuraEvent) {
         match event {
-            AuraEvent::TurnStarted { turn_id } => {
+            AuraEvent::TurnStarted { turn_id, .. } => {
                 self.open = Some(turn_id.clone());
                 self.seen = true;
             }
@@ -413,6 +471,8 @@ impl TurnTracker {
             turn_id,
             stop_reason: StopReason::Cancelled,
             usage: None,
+            duration_ms: None,
+            recovered: false,
         };
         match (&self.open, script_turn) {
             (Some(open), _) => vec![cancelled(open.clone())],
@@ -420,6 +480,7 @@ impl TurnTracker {
                 vec![
                     AuraEvent::TurnStarted {
                         turn_id: turn.to_owned(),
+                        prompt_id: None,
                     },
                     cancelled(turn.to_owned()),
                 ]
@@ -579,8 +640,23 @@ fn stream_millis(tokens: usize, rate: u32) -> u32 {
     u32::try_from(token_offset(tokens as u64, clamp_rate(rate)).as_millis()).unwrap_or(u32::MAX)
 }
 
-fn to_u32(n: usize) -> u32 {
-    u32::try_from(n).unwrap_or(u32::MAX)
+fn to_u64(n: usize) -> u64 {
+    u64::try_from(n).unwrap_or(u64::MAX)
+}
+
+/// A tool update that completes the tool with `content`, leaving every other field as it was.
+fn completed(tool_call_id: String, content: ToolContent) -> ToolUpdate {
+    ToolUpdate {
+        tool_call_id,
+        status: Some(ToolStatus::Completed),
+        title: None,
+        kind: None,
+        locations: None,
+        raw_input: None,
+        tool_name: None,
+        content: Some(vec![content]),
+        truncated: None,
+    }
 }
 
 /// Byte offset where the token starting at `from` ends. A token is a word plus the whitespace after it,
@@ -670,10 +746,10 @@ fn plan_entry(content: &str, status: PlanStatus, priority: PlanPriority) -> Plan
     }
 }
 
-const CONTEXT_SIZE: u32 = 200_000;
-const DEMO_PROMPT_TOKENS: u32 = 12_480;
-const DEMO_CACHED_TOKENS: u32 = 9_216;
-const STRESS_PROMPT_TOKENS: u32 = 4_096;
+const CONTEXT_SIZE: u64 = 200_000;
+const DEMO_PROMPT_TOKENS: u64 = 12_480;
+const DEMO_CACHED_TOKENS: u64 = 9_216;
+const STRESS_PROMPT_TOKENS: u64 = 4_096;
 
 const DEMO_THOUGHT: &str = "The user wants the greeting pulled out of `main` so it can be reused. I'll read \
 `src/main.rs` first to see how it is printed today, then extract a `greet` function and keep the output \
@@ -896,7 +972,7 @@ mod tests {
         fn assert_frames_valid(&self) {
             let mut next = 0u32;
             for (_, frame) in &self.frames {
-                assert_eq!(frame.session_id, "session-1");
+                assert_eq!(frame.chat_id, "session-1");
                 assert_eq!(frame.seq_start, next, "sequence numbers must not skip");
                 assert!(
                     frame.encoded_len() < MAX_FRAME_BYTES,
@@ -987,6 +1063,15 @@ mod tests {
             turn_id: turn_id.into(),
             stop_reason,
             usage: None,
+            duration_ms: None,
+            recovered: false,
+        }
+    }
+
+    fn turn_started(turn_id: &str) -> AuraEvent {
+        AuraEvent::TurnStarted {
+            turn_id: turn_id.into(),
+            prompt_id: None,
         }
     }
 
@@ -1001,11 +1086,11 @@ mod tests {
         assert_eq!(run.outcome, RunOutcome::Completed);
         let events = run.events();
         assert!(
-            matches!(events.first(), Some(AuraEvent::TurnStarted { turn_id }) if turn_id == "turn-1")
+            matches!(events.first(), Some(AuraEvent::TurnStarted { turn_id, .. }) if turn_id == "turn-1")
         );
         assert!(matches!(
             events.last(),
-            Some(AuraEvent::TurnEnded { turn_id, stop_reason: StopReason::EndTurn, usage: Some(_) }) if turn_id == "turn-1"
+            Some(AuraEvent::TurnEnded { turn_id, stop_reason: StopReason::EndTurn, usage: Some(_), .. }) if turn_id == "turn-1"
         ));
         let mut announced = HashSet::new();
         let mut updates = 0;
@@ -1045,7 +1130,7 @@ mod tests {
         )));
         assert!(events.iter().any(|event| matches!(
             event,
-            AuraEvent::ToolUpdate(ToolUpdate { status: Some(ToolStatus::Completed), content, .. })
+            AuraEvent::ToolUpdate(ToolUpdate { status: Some(ToolStatus::Completed), content: Some(content), .. })
                 if matches!(content.as_slice(), [ToolContent::Text { .. }])
         )));
         assert!(events.iter().any(
@@ -1053,7 +1138,7 @@ mod tests {
         ));
         assert!(events.iter().any(|event| matches!(
             event,
-            AuraEvent::ToolUpdate(ToolUpdate { content, .. })
+            AuraEvent::ToolUpdate(ToolUpdate { content: Some(content), .. })
                 if matches!(content.as_slice(), [ToolContent::Diff { old_text: Some(_), .. }])
         )));
         assert!(events.iter().any(
@@ -1185,9 +1270,7 @@ mod tests {
     async fn first_token_after_a_pause_is_flushed_at_once() {
         let script = MockScript {
             steps: vec![
-                MockStep::Emit(AuraEvent::TurnStarted {
-                    turn_id: "t".into(),
-                }),
+                MockStep::Emit(turn_started("t")),
                 MockStep::Sleep(Duration::from_secs(1)),
                 MockStep::StreamText {
                     message_id: "m".into(),
@@ -1209,12 +1292,7 @@ mod tests {
         assert_eq!(
             deliveries,
             vec![
-                (
-                    Duration::ZERO,
-                    vec![AuraEvent::TurnStarted {
-                        turn_id: "t".into()
-                    }]
-                ),
+                (Duration::ZERO, vec![turn_started("t")]),
                 (Duration::from_secs(1), vec![delta("one ")]),
                 (Duration::from_secs(2), vec![delta("two ")]),
                 (Duration::from_secs(3), vec![delta("three")]),
@@ -1338,9 +1416,7 @@ mod tests {
         assert_eq!(
             run.events(),
             vec![
-                AuraEvent::TurnStarted {
-                    turn_id: "turn-0".into()
-                },
+                turn_started("turn-0"),
                 turn_ended("turn-0", StopReason::Cancelled)
             ]
         );
@@ -1349,16 +1425,10 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn cancel_after_the_turn_ended_adds_nothing() {
-        let ended = AuraEvent::TurnEnded {
-            turn_id: "t".into(),
-            stop_reason: StopReason::EndTurn,
-            usage: None,
-        };
+        let ended = turn_ended("t", StopReason::EndTurn);
         let script = MockScript {
             steps: vec![
-                MockStep::Emit(AuraEvent::TurnStarted {
-                    turn_id: "t".into(),
-                }),
+                MockStep::Emit(turn_started("t")),
                 MockStep::Emit(ended.clone()),
                 MockStep::Sleep(Duration::from_secs(10)),
                 MockStep::Emit(AuraEvent::Notice {
@@ -1369,15 +1439,7 @@ mod tests {
         };
         let run = play(script, FRAME, cancel_after(Duration::from_secs(1))).await;
         assert_eq!(run.outcome, RunOutcome::Cancelled);
-        assert_eq!(
-            run.events(),
-            vec![
-                AuraEvent::TurnStarted {
-                    turn_id: "t".into()
-                },
-                ended
-            ]
-        );
+        assert_eq!(run.events(), vec![turn_started("t"), ended]);
         assert_eq!(run.elapsed, Duration::from_secs(1));
     }
 
@@ -1498,9 +1560,7 @@ mod tests {
     async fn absurd_sleeps_do_not_overflow() {
         let script = MockScript {
             steps: vec![
-                MockStep::Emit(AuraEvent::TurnStarted {
-                    turn_id: "t".into(),
-                }),
+                MockStep::Emit(turn_started("t")),
                 MockStep::Sleep(Duration::MAX),
                 MockStep::Sleep(Duration::MAX),
                 MockStep::Emit(AuraEvent::Notice {
@@ -1513,12 +1573,7 @@ mod tests {
         assert_eq!(run.outcome, RunOutcome::Cancelled);
         assert_eq!(
             run.events(),
-            vec![
-                AuraEvent::TurnStarted {
-                    turn_id: "t".into()
-                },
-                turn_ended("t", StopReason::Cancelled)
-            ]
+            vec![turn_started("t"), turn_ended("t", StopReason::Cancelled)]
         );
     }
 
@@ -1644,6 +1699,126 @@ mod tests {
         }
         assert_eq!(cycle_tokens("a b ", 5), "a b a b a ");
         assert_eq!(cycle_tokens("", 5), "");
+    }
+
+    /// What `play` emitted, each event with the (paused) time since the run started.
+    async fn play_events(
+        script: MockScript,
+        cancel: CancellationToken,
+    ) -> (RunOutcome, Vec<(Duration, AuraEvent)>) {
+        let start = Instant::now();
+        let mut events = Vec::new();
+        let outcome = super::play(script, cancel, |event| {
+            events.push((start.elapsed(), event));
+            true
+        })
+        .await;
+        (outcome, events)
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn play_emits_each_event_at_its_time() {
+        let script = MockScript {
+            steps: vec![
+                MockStep::Emit(turn_started("t")),
+                MockStep::Sleep(Duration::from_secs(1)),
+                MockStep::StreamText {
+                    message_id: "m".into(),
+                    text: "one two three".into(),
+                    tokens_per_sec: 2,
+                },
+                MockStep::Emit(turn_ended("t", StopReason::EndTurn)),
+            ],
+        };
+        let (outcome, events) = play_events(script, CancellationToken::new()).await;
+        assert_eq!(outcome, RunOutcome::Completed);
+        let delta = |text: &str| AuraEvent::MessageDelta {
+            message_id: "m".into(),
+            text: text.into(),
+        };
+        assert_eq!(
+            events,
+            vec![
+                (Duration::ZERO, turn_started("t")),
+                (Duration::from_secs(1), delta("one ")),
+                (Duration::from_millis(1_500), delta("two ")),
+                (Duration::from_secs(2), delta("three")),
+                (
+                    Duration::from_millis(2_500),
+                    turn_ended("t", StopReason::EndTurn)
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn play_stops_on_cancel_without_closing_the_turn() {
+        let script = MockScript::stress("t", 100, 2_000);
+        let (outcome, events) = play_events(script, cancel_after(Duration::from_millis(500))).await;
+        assert_eq!(outcome, RunOutcome::Cancelled);
+        assert!(matches!(
+            events.first(),
+            Some((_, AuraEvent::TurnStarted { .. }))
+        ));
+        assert!(
+            !events
+                .iter()
+                .any(|(_, event)| matches!(event, AuraEvent::TurnEnded { .. })),
+            "the driver ends the turn, not play"
+        );
+        assert!(
+            events
+                .iter()
+                .all(|(at, _)| *at <= Duration::from_millis(500))
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn play_stops_when_the_receiver_is_gone() {
+        let mut calls = 0;
+        let outcome = super::play(
+            MockScript::demo_turn("t", 200),
+            CancellationToken::new(),
+            |_| {
+                calls += 1;
+                calls < 2
+            },
+        )
+        .await;
+        assert_eq!(outcome, RunOutcome::ReceiverGone);
+        assert_eq!(calls, 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn play_coalesces_what_fell_due_together() {
+        // Everything of a long turn is due at once when the clock jumps an hour ahead.
+        let script = MockScript::stress("t", MAX_TOKENS_PER_SEC, 50_000);
+        let cancel = CancellationToken::new();
+        let mut events = Vec::new();
+        let outcome = {
+            let run = super::play(script, cancel, |event| {
+                events.push(event);
+                true
+            });
+            tokio::pin!(run);
+            // The first poll emits what is due at the start and parks on the next token.
+            let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+            assert!(run.as_mut().poll(&mut context).is_pending());
+            tokio::time::advance(Duration::from_secs(3_600)).await;
+            run.await
+        };
+        assert_eq!(outcome, RunOutcome::Completed);
+        // TurnStarted, thought, ThoughtCompleted, answer (two deltas: the first token at once, the
+        // rest after the jump), MessageCompleted, UsageUpdated, TurnEnded.
+        assert!(events.len() <= 9, "{} events", events.len());
+        assert!(matches!(events.last(), Some(AuraEvent::TurnEnded { .. })));
+    }
+
+    #[test]
+    fn play_future_is_send() {
+        fn assert_send<T: Send>(_: &T) {}
+        let future = super::play(MockScript::default(), CancellationToken::new(), |_| true);
+        assert_send(&future);
     }
 
     #[test]

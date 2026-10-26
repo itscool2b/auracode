@@ -6,7 +6,8 @@ import { lastMessage } from "./stream";
 import { stressTurnTokens } from "./stress";
 
 /**
- * Smoke mode (`AURACODE_SMOKE=1`): a scripted check of the real shell, through the real UI.
+ * The stream check of smoke mode (`AURACODE_SMOKE=1`): a scripted check of the real shell, through
+ * the real UI. The chat scenarios are in `smokeChat.ts`.
  *
  * 1. A full demo turn: every block arrives complete, in order, and the answer renders.
  * 2. A cancelled turn: stopping mid-stream ends the turn as "cancelled".
@@ -115,12 +116,16 @@ export async function runSmoke(info: AppInfo, hooks: SmokeHooks): Promise<SmokeR
   if (totals.duplicates > 0) errors.push(`${totals.duplicates} events arrived twice`);
   return {
     ok: errors.length === 0 && totals.gaps === 0,
-    events_received: totals.events,
-    frames_received: totals.frames,
-    seq_gaps: totals.gaps,
-    rendered_chars: renderedChars,
-    fps_min: Math.round(fpsMin * 10) / 10,
-    fps_avg: Math.round(fpsAvg * 10) / 10,
+    scenario: "stream",
+    stream: {
+      events_received: totals.events,
+      frames_received: totals.frames,
+      seq_gaps: totals.gaps,
+      rendered_chars: renderedChars,
+      fps_min: Math.round(fpsMin * 10) / 10,
+      fps_avg: Math.round(fpsAvg * 10) / 10,
+    },
+    checks: [],
     errors,
   };
 }

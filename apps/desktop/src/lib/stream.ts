@@ -135,7 +135,7 @@ export function seqDistance(a: number, b: number): number {
 
 /** Applies one frame. Returns `state` itself when the frame changes nothing visible. */
 export function applyBatch(state: StreamState, batch: EventBatch): StreamState {
-  if (state.sessionId !== null && batch.session_id !== state.sessionId) {
+  if (state.sessionId !== null && batch.chat_id !== state.sessionId) {
     return { ...state, foreign: state.foreign + 1 };
   }
   const count = batch.events.length;
@@ -145,7 +145,7 @@ export function applyBatch(state: StreamState, batch: EventBatch): StreamState {
   const ahead = seqDistance(batch.seq_start, state.nextSeq);
   const skip = ahead < 0 ? Math.min(-ahead, count) : 0;
   if (skip === count) {
-    return { ...state, sessionId: batch.session_id, duplicates: state.duplicates + count };
+    return { ...state, sessionId: batch.chat_id, duplicates: state.duplicates + count };
   }
 
   const draft = new Draft(state);
@@ -154,7 +154,7 @@ export function applyBatch(state: StreamState, batch: EventBatch): StreamState {
     if (event) draft.apply(event);
   }
   return draft.finish({
-    sessionId: batch.session_id,
+    sessionId: batch.chat_id,
     nextSeq: (batch.seq_start + count) % U32,
     frames: state.frames + 1,
     events: state.events + (count - skip),
@@ -269,7 +269,7 @@ class Draft {
           title: event.title,
           status: event.status,
           locations: event.locations,
-          content: previous?.content ?? [],
+          content: event.content,
         });
         break;
       }
@@ -280,12 +280,12 @@ class Draft {
         if (!previous) this.addItem("tool", event.tool_call_id);
         tools.set(event.tool_call_id, {
           id: event.tool_call_id,
-          kind: previous?.kind ?? "other",
+          kind: event.kind ?? previous?.kind ?? "other",
           title: event.title ?? previous?.title ?? "Tool",
           status: event.status ?? previous?.status ?? "in_progress",
-          locations: previous?.locations ?? [],
-          // ACP semantics: content in an update replaces the previous content; none keeps it.
-          content: event.content.length > 0 ? event.content : (previous?.content ?? []),
+          locations: event.locations ?? previous?.locations ?? [],
+          // ACP semantics: `null` keeps the previous content, a list replaces it (`[]` clears it).
+          content: event.content ?? previous?.content ?? [],
         });
         break;
       }
@@ -301,7 +301,12 @@ class Draft {
         this.#permissions = this.#permissions.filter((p) => p.request_id !== event.request_id);
         break;
       case "ui_request":
-        // M0 has no UI for agent questions; the demo agent never asks.
+      case "ui_resolved":
+        // The demo stream has no UI for agent questions; the demo agent never asks.
+        break;
+      case "user_message_delta":
+      case "prompt_lifecycle":
+        // The demo stream plays agent turns only: no user messages, no prompt queue.
         break;
       case "plan_updated":
         this.#plan = event.entries;
@@ -325,6 +330,11 @@ class Draft {
       case "error":
         this.addNotice({ level: "error", message: event.message });
         break;
+      default: {
+        // Exhaustive: a new event type fails to compile here until it is handled.
+        const unreachable: never = event;
+        throw new Error(`unhandled event: ${JSON.stringify(unreachable)}`);
+      }
     }
   }
 

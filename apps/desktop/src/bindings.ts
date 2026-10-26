@@ -42,13 +42,127 @@ export const commands = {
 	acknowledgeRecovery: () => typedError<null, AppError>(__TAURI_INVOKE("acknowledge_recovery")),
 	/**
 	 *  Smoke mode only: prints `AURACODE_SMOKE_RESULT <json>` on stdout and, with
-	 *  `AURACODE_SMOKE_EXIT=1`, exits with 0 when the run passed and 1 otherwise. Only the first report
-	 *  counts.
+	 *  `AURACODE_SMOKE_EXIT=1`, exits with 0 when the run passed and 1 otherwise, through the quit
+	 *  flow like any other exit. Only the first report counts.
 	 */
 	smokeReport: (report: SmokeReport) => typedError<null, AppError>(__TAURI_INVOKE("smoke_report", { report })),
+	/**
+	 *  Every agent auracode knows, with its cached availability. Never waits: detection runs in the
+	 *  background, and an agent still being checked reads `checking`.
+	 */
+	agentsList: () => __TAURI_INVOKE<AgentEntry[]>("agents_list"),
+	/**
+	 *  Resolves the environment again and probes every agent, in parallel, within 15 s; agents whose
+	 *  probe has not ended by then keep their last known availability.
+	 */
+	agentsRefresh: () => __TAURI_INVOKE<AgentEntry[]>("agents_refresh"),
+	/**
+	 *  The environment agents start with: resolving, resolved (and how), or a fallback, with the
+	 *  names of the variables no agent inherits. Never waits.
+	 */
+	envStatus: () => __TAURI_INVOKE<EnvStatus>("env_status"),
+	/**  Starts resolving the environment again and returns the status at once. */
+	envRefresh: () => __TAURI_INVOKE<EnvStatus>("env_refresh"),
+	/**
+	 *  Shows the system folder picker and returns the chosen folder, or `null` when the user cancelled.
+	 *  Resolves when the dialog closes. A chat smoke run's picker answers its folder
+	 *  (`AURACODE_SMOKE_FOLDER`) at once: automation cannot click through a system dialog.
+	 */
+	pickFolder: () => typedError<string | null, AppError>(__TAURI_INVOKE("pick_folder")),
+	/**  Every chat, newest activity first. */
+	chatsList: () => typedError<ChatSummary[], AppError>(__TAURI_INVOKE("chats_list")),
+	/**
+	 *  Creates a chat with `agent_id` in `folder` (an absolute path) and starts its agent. Creating a
+	 *  chat whose agent `needs_download` is the consent to download its adapter.
+	 */
+	chatCreate: (agentId: string, folder: string) => typedError<ChatSummary, AppError>(__TAURI_INVOKE("chat_create", { agentId, folder })),
+	/**
+	 *  Opens a view of a chat: the snapshot and the newest history page, consistent with the frames
+	 *  `channel` carries from `next_seq` on. Opening a chat never starts its agent. A webview has one
+	 *  view per chat; attaching again replaces the earlier one.
+	 */
+	chatAttach: (chatId: string, channel: Channel<EventBatch>) => typedError<ChatAttach, AppError>(__TAURI_INVOKE("chat_attach", { chatId, channel })),
+	/**  Closes a view: its channel ends. Unknown ids are ignored. */
+	chatDetach: (subscriptionId: string) => __TAURI_INVOKE<void>("chat_detach", { subscriptionId }),
+	/**
+	 *  The history page before `before_seq` (the page's own `before_seq` from the last call), at most
+	 *  about `max_bytes` (default 512 KiB).
+	 */
+	chatHistory: (chatId: string, beforeSeq: number, maxBytes: number | null) => typedError<HistoryPage, AppError>(__TAURI_INVOKE("chat_history", { chatId, beforeSeq, maxBytes })),
+	/**
+	 *  The chat's options, slash commands, capabilities and autonomy state. Fetch again whenever the
+	 *  session's `revision` changes.
+	 */
+	chatLists: (chatId: string) => typedError<SessionLists, AppError>(__TAURI_INVOKE("chat_lists", { chatId })),
+	/**
+	 *  Sends `text` as typed, or queues it behind the running turn (or the start). A stopped chat starts
+	 *  its agent.
+	 */
+	chatSend: (chatId: string, text: string) => typedError<PromptAck, AppError>(__TAURI_INVOKE("chat_send", { chatId, text })),
+	/**  Removes a queued prompt. */
+	chatCancelQueued: (chatId: string, promptId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_cancel_queued", { chatId, promptId })),
+	/**  Releases the held prompts ("Send queued"), starting the agent when it is stopped. */
+	chatResumeQueue: (chatId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_resume_queue", { chatId })),
+	/**  Asks the agent to stop the running turn (Esc). While it is already cancelling, this force-stops. */
+	chatInterrupt: (chatId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_interrupt", { chatId })),
+	/**  Ends the agent's processes at once (the second Esc). */
+	chatForceStop: (chatId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_force_stop", { chatId })),
+	/**  Starts the chat's agent, continuing its native session unless `fresh`. Failures arrive as cards. */
+	chatStart: (chatId: string, fresh: boolean) => typedError<null, AppError>(__TAURI_INVOKE("chat_start", { chatId, fresh })),
+	/**  Stops the chat's agent gracefully. */
+	chatStop: (chatId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_stop", { chatId })),
+	/**  Answers a permission card with one of its options; `null` cancels it. */
+	chatRespondPermission: (chatId: string, requestId: string, optionId: string | null) => typedError<null, AppError>(__TAURI_INVOKE("chat_respond_permission", { chatId, requestId, optionId })),
+	/**  Answers a question card; `null` dismisses it. */
+	chatRespondUi: (chatId: string, requestId: string, answer: UiAnswer | null) => typedError<null, AppError>(__TAURI_INVOKE("chat_respond_ui", { chatId, requestId, answer })),
+	/**  Changes one of the agent's options and returns the lists after the change (35 s at most). */
+	chatSetOption: (chatId: string, optionId: string, value: ConfigValue) => typedError<SessionLists, AppError>(__TAURI_INVOKE("chat_set_option", { chatId, optionId, value })),
+	/**
+	 *  Changes the chat's autonomy and returns the lists after the change (35 s at most). Works while
+	 *  the agent is stopped: it applies when the agent starts.
+	 */
+	chatSetAutonomy: (chatId: string, autonomy: Autonomy) => typedError<SessionLists, AppError>(__TAURI_INVOKE("chat_set_autonomy", { chatId, autonomy })),
+	/**
+	 *  One page of a full output: at most `len` bytes (up to 256 KiB) from `offset`, ending on a
+	 *  character boundary; continue from `next_offset`. `sha256` is the 64 lowercase hex digits of a
+	 *  truncation's blob.
+	 */
+	chatBlob: (chatId: string, sha256: string, offset: number, len: number) => typedError<BlobText, AppError>(__TAURI_INVOKE("chat_blob", { chatId, sha256, offset, len })),
+	/**
+	 *  Shows the chat's newest protocol log in the system file manager. Takes no path: the shell
+	 *  chooses the file.
+	 */
+	chatRevealLog: (chatId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_reveal_log", { chatId })),
+	/**
+	 *  Subscribes the calling webview to chat-list updates (status, attention, title) over `channel`,
+	 *  replacing its earlier subscription. Returns the subscription id.
+	 */
+	statusSubscribe: (channel: Channel<ChatStatusUpdate>) => typedError<string, AppError>(__TAURI_INVOKE("status_subscribe", { channel })),
+	/**  Whether the profile database is saving, paused (with how much is unsaved), or failed. */
+	storageStatus: () => __TAURI_INVOKE<StorageStatus>("storage_status"),
 };
 
+/* Constants */
+export const SMOKE_AGENT_CHECKS = ["agent-available","agent-starts","agent-replies"] as const;
+
+export const SMOKE_CHAT_CHECKS = ["chats-screen","pick-folder","create-chat","pickers","slash-menu","echo-turn","demo-turn","option-change","auto-approved","autonomy-ask","permission-allow","permission-reject","permission-withdrawn","question-answer","question-dismiss","big-output","background-output","cancel-turn","queue-after-turn","queue-held-at-stop","error-card","queue-held-at-error","crash-card","queue-held-at-crash","auth-card","auth-retry","force-stop","send-starts-agent","transcript","quit-with-turn"] as const;
+
+export const SMOKE_CHAT_REOPEN_CHECKS = ["reopen-list","reopen-no-start","reopen-history","reopen-interrupted","reopen-held","reopen-blob","reopen-resume","reopen-send-queued"] as const;
+
 /* Types */
+/**  An agent auracode can start, as the New chat screen shows it. */
+export type AgentEntry = {
+	id: string,
+	name: string,
+	description: string,
+	availability: Availability,
+	/**  How auracode starts it, for display. */
+	launch: string,
+	/**  The first start downloads the agent's adapter. */
+	needs_download: boolean,
+	last_verified: string,
+};
+
 /**  A command failure, serialized as `{ code, message }`. */
 export type AppError = {
 	code: AppErrorCode,
@@ -63,7 +177,7 @@ export type AppErrorCode =
 "too_many_streams" | 
 /**  The main window does not exist (it was closed, or creating it failed). */
 "window_unavailable" | 
-/**  A command that only works in smoke mode (`AURACODE_SMOKE=1`) was called outside it. */
+/**  A command that only works in smoke mode (`AURACODE_SMOKE`) was called outside it. */
 "not_in_smoke_mode" | 
 /**  Startup could not determine a data folder at all, so there is nothing to show. */
 "data_dir_unknown" | 
@@ -73,7 +187,44 @@ export type AppErrorCode =
  *  The database repair notice could not be dismissed: the database is closed, or the record of
  *  the repair could not be removed. The notice stays, and shows again on the next launch.
  */
-"acknowledge_failed";
+"acknowledge_failed" | 
+/**  No chat has this id. */
+"chat_not_found" | 
+/**  No agent has this id. */
+"unknown_agent" | 
+/**  The agent is missing or broken here; the message says why. */
+"agent_unavailable" | 
+/**  The folder can't be used for a chat; the message says why. */
+"invalid_folder" | 
+/**  The message is empty. */
+"prompt_empty" | 
+/**  The message is longer than the limit. */
+"prompt_too_large" | 
+/**  The chat's queue is full. */
+"queue_full" | 
+/**  The permission request or question was already answered, withdrawn or closed. */
+"request_not_pending" | 
+/**  The option, its value, or the answer is not one the request offers. */
+"option_invalid" | 
+/**  The agent isn't running in the chat. */
+"session_not_ready" | 
+/**  The most agents that may run at once already run. */
+"too_many_agents" | 
+/**  Too many views are open for the chat, or the webview. */
+"too_many_subscriptions" | 
+/**  The profile database can't be reached right now. */
+"storage_unavailable" | 
+/**
+ *  The full output is not available: no longer kept, or not saved yet while the disk is full.
+ *  The message says which.
+ */
+"blob_missing" | 
+/**  auracode is quitting. */
+"shutting_down" | 
+/**  Something went wrong inside auracode. */
+"internal" | 
+/**  The folder picker could not be shown. */
+"dialog_failed";
 
 /**  Everything the UI needs to know about this launch, from `app_info`. */
 export type AppInfo = {
@@ -113,20 +264,185 @@ export type AppInfo = {
 	fatal: string | null,
 };
 
-/**  One normalized event in a chat turn. */
-export type AuraEvent = ({ type: "turn_started"; turn_id: string }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message?: never; message_id?: never; recoverable?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; usage?: never; windows?: never } | ({ type: "turn_ended"; turn_id: string; stop_reason: StopReason; usage: TokenUsage | null }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message?: never; message_id?: never; recoverable?: never; request_id?: never; text?: never; thought_id?: never; windows?: never } | ({ type: "message_delta"; message_id: string; text: string }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message?: never; recoverable?: never; request_id?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_completed"; message_id: string }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message?: never; recoverable?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_delta"; thought_id: string; text: string }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message?: never; message_id?: never; recoverable?: never; request_id?: never; stop_reason?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_completed"; thought_id: string; duration_ms: number | null }) & { decision?: never; entries?: never; level?: never; message?: never; message_id?: never; recoverable?: never; request_id?: never; stop_reason?: never; text?: never; turn_id?: never; usage?: never; windows?: never } | {
+/**  One normalized event in a chat. */
+export type AuraEvent = 
+/**  The session actor started a turn for the queued prompt `prompt_id`. */
+({ type: "turn_started"; turn_id: string; prompt_id: string | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; usage?: never; windows?: never } | ({ type: "turn_ended"; turn_id: string; stop_reason: StopReason; usage: TokenUsage | null; duration_ms: number | null; 
+/**  Ended by recovery at startup: auracode quit or crashed while the turn ran. */
+recovered: boolean }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; request_id?: never; state?: never; text?: never; thought_id?: never; windows?: never } | 
+/**  The user's prompt text, as sent. The session actor emits it; drivers never do. */
+({ type: "user_message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_completed"; message_id: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_delta"; thought_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_completed"; thought_id: string; duration_ms: number | null }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; turn_id?: never; usage?: never; windows?: never } | {
 	type: "tool_call",
 } & ToolCall | {
 	type: "tool_update",
 } & ToolUpdate | {
 	type: "permission_requested",
-} & PermissionRequest | ({ type: "permission_resolved"; request_id: string; decision: PermissionDecision }) & { duration_ms?: never; entries?: never; level?: never; message?: never; message_id?: never; recoverable?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
+} & PermissionRequest | ({ type: "permission_resolved"; request_id: string; decision: PermissionDecision; by: ResolvedBy }) & { answer?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
 	type: "ui_request",
-} & UiRequest | ({ type: "plan_updated"; entries: PlanEntry[] }) & { decision?: never; duration_ms?: never; level?: never; message?: never; message_id?: never; recoverable?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
+} & UiRequest | 
+/**  The answer to a [`UiRequest`]; `None` when it was dismissed, withdrawn or closed. */
+({ type: "ui_resolved"; request_id: string; answer: UiAnswer | null; by: ResolvedBy }) & { decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "plan_updated"; entries: PlanEntry[] }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
 	type: "usage_updated",
-} & UsageInfo | ({ type: "limits_updated"; windows: LimitWindow[] }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message?: never; message_id?: never; recoverable?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never } | {
+} & UsageInfo | ({ type: "limits_updated"; windows: LimitWindow[] }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never } | 
+/**  Live header state; never stored. */
+{
 	type: "session_updated",
-} & SessionInfo | ({ type: "notice"; level: NoticeLevel; message: string }) & { decision?: never; duration_ms?: never; entries?: never; message_id?: never; recoverable?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "error"; message: string; recoverable: boolean }) & { decision?: never; duration_ms?: never; entries?: never; level?: never; message_id?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never };
+} & SessionInfo | 
+/**  What happened to a queued prompt (the composer's queue); never stored. */
+({ type: "prompt_lifecycle"; prompt_id: string; state: PromptState; 
+/**  The prompt's first 256 characters, sent with `Queued`. */
+preview: string | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; recoverable?: never; recovered?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "notice"; level: NoticeLevel; message: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "error"; kind: ErrorKind; message: string; 
+/**  More context, such as the agent's redacted stderr tail. */
+detail: string | null; recoverable: boolean }) & { answer?: never; by?: never; decision?: never; duration_ms?: never; entries?: never; level?: never; message_id?: never; preview?: never; prompt_id?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never };
+
+/**  A sign-in command the user runs in a terminal with their own binary. */
+export type AuthCommand = {
+	label: string,
+	argv: string[],
+	/**  Variables the method sets (ACP `AuthMethodTerminal.env`). */
+	env: ([string, string])[],
+};
+
+/**  The agent needs the user to sign in with its own command. */
+export type AuthPrompt = {
+	message: string,
+	commands: AuthCommand[],
+};
+
+/**  Which permission requests the session answers on the user's behalf. */
+export type AutoAnswer = { type: "never" } | 
+/**  Requests of the eight tool kinds; never `switch_mode`, `other` or a request without a kind. */
+{ type: "all" } | { type: "kinds"; kinds: ToolKind[] };
+
+/**  How much an agent may do without asking. */
+export type Autonomy = "full_auto" | "auto_edit" | "ask";
+
+/**
+ *  What the agent's dialect made of the requested autonomy. The session's permission policy reads
+ *  `auto_answer`.
+ */
+export type AutonomyState = {
+	requested: Autonomy,
+	/**  The agent mode in effect, when auracode knows it. */
+	native_mode: string | null,
+	auto_answer: AutoAnswer,
+	/**  Shown next to the autonomy picker. */
+	note: string | null,
+};
+
+/**  Whether an agent can start here. */
+export type Availability = 
+/**  Detection has not finished yet. */
+{ state: "checking" } | 
+/**  `path` is the binary that will actually run (the user's own CLI behind an adapter). */
+{ state: "ready"; version: string | null; path: string } | { state: "missing"; reason: string } | { state: "broken"; reason: string };
+
+/**  One page of a blob's text, for "Load full output". */
+export type BlobText = {
+	sha256: string,
+	offset: number,
+	/**  Where the next page starts (a character boundary). */
+	next_offset: number,
+	total: number,
+	text: string,
+	eof: boolean,
+};
+
+/**  What a driver supports. The UI shows or hides features from this, never from agent names. */
+export type Capabilities = {
+	images: boolean,
+	steer: boolean,
+	interrupt: boolean,
+	resume: boolean,
+	fork: boolean,
+	rewind: boolean,
+	set_model: boolean,
+	set_effort: boolean,
+	permissions: boolean,
+	plans: boolean,
+	usage: boolean,
+	limits: boolean,
+	slash_commands: boolean,
+	add_dirs: boolean,
+	autonomy_levels: Autonomy[],
+};
+
+/**
+ *  What `chat_attach` returns: the snapshot and the newest history page, consistent with the frames
+ *  the subscription carries from `next_seq` on.
+ */
+export type ChatAttach = {
+	subscription_id: string,
+	next_seq: number,
+	snapshot: ChatSnapshot,
+	history: HistoryPage,
+};
+
+/**  Everything about a chat that is not in its history. */
+export type ChatSnapshot = {
+	chat: ChatSummary,
+	session: SessionInfo,
+	queue: QueuedPrompt[],
+	open_turn_id: string | null,
+	usage: UsageInfo | null,
+	/**  The last `LimitsUpdated` (never stored). */
+	limits: LimitWindow[] | null,
+	last_error: ErrorInfo | null,
+	auth: AuthPrompt | null,
+	storage: StorageStatus,
+};
+
+/**  A change to one chat's row in the list, sent over the status channel. */
+export type ChatStatusUpdate = {
+	chat_id: string,
+	status: SessionStatus,
+	needs_attention: boolean,
+	title: string | null,
+	updated_at: number,
+};
+
+/**  A chat as the chat list shows it. */
+export type ChatSummary = {
+	id: string,
+	title: string | null,
+	agent_id: string,
+	agent_name: string,
+	folder: string,
+	folder_state: FolderState,
+	status: SessionStatus,
+	/**  A permission card or question waits for the user. */
+	needs_attention: boolean,
+	created_at: number,
+	updated_at: number,
+};
+
+/**  What an option controls, which decides where the UI shows it. */
+export type ConfigCategory = "model" | "effort" | "mode" | "model_config" | "other";
+
+export type ConfigChoice = {
+	value: string,
+	name: string,
+	description: string | null,
+	/**  The group the agent listed it under, when its choices were grouped. */
+	group: string | null,
+};
+
+export type ConfigKind = { type: "select"; current: string; choices: ConfigChoice[] } | { type: "toggle"; current: boolean };
+
+/**  One session option the agent offers (or the driver synthesized from its legacy lists). */
+export type ConfigOption = {
+	/**  Opaque to the UI; the driver maps it back to the wire. */
+	id: string,
+	name: string,
+	description: string | null,
+	category: ConfigCategory,
+	kind: ConfigKind,
+	/**  A change waiting for the turn to end (Hermes changes mode only while idle). */
+	pending: ConfigValue | null,
+};
+
+/**  A value for a [`ConfigOption`]: a choice for a select, a flag for a toggle. */
+export type ConfigValue = { type: "choice"; value: string } | { type: "toggle"; value: boolean };
 
 export type Cost = {
 	amount: number | null,
@@ -162,17 +478,41 @@ export type DeviceIdentity = {
 	created_at: number,
 };
 
+export type EnvState = { state: "resolving" } | { state: "ready"; source: string; took_ms: number; vars: number } | { state: "fallback"; reason: string };
+
+/**  The environment agents start with, as the banner shows it. */
+export type EnvStatus = {
+	state: EnvState,
+	/**  Names the scrub removed; never values. */
+	removed: string[],
+};
+
+/**  The error a chat last showed, for the snapshot. */
+export type ErrorInfo = {
+	kind: ErrorKind,
+	message: string,
+	detail: string | null,
+};
+
+/**  What kind of failure an [`AuraEvent::Error`] reports, which decides the error card's actions. */
+export type ErrorKind = "agent_unavailable" | "folder_missing" | "folder_not_allowed" | "spawn_failed" | "start_timeout" | "protocol_mismatch" | "auth_required" | "agent_error" | "agent_exited" | "protocol_error" | "storage" | "internal" | "other";
+
 /**
- *  A frame of events for one session, sent from the core to the UI over a Tauri channel.
+ *  A frame of events for one chat, sent from the core to the UI over a Tauri channel.
  * 
- *  `seq_start` is the session-wide sequence number of the first event, so the UI can detect gaps and
- *  drop duplicates after a reconnect.
+ *  `seq_start` is the chat-wide sequence number of the first event, so the UI can detect gaps and
+ *  drop duplicates after a reconnect. Stored rows carry the same numbers.
  */
 export type EventBatch = {
-	session_id: string,
+	chat_id: string,
 	seq_start: number,
 	events: AuraEvent[],
 };
+
+/**  Whether a chat's folder can be used on this machine. */
+export type FolderState = "ok" | "missing" | 
+/**  The OS refused access (macOS privacy). */
+"not_allowed";
 
 /**
  *  The material the window got, reported to the UI in `app_info`. `none` tells the UI to paint
@@ -180,11 +520,37 @@ export type EventBatch = {
  */
 export type GlassEffect = "liquid_glass" | "vibrancy" | "mica" | "none";
 
+/**  One stored event and where it sits. */
+export type HistoryItem = {
+	seq: number,
+	turn_id: string | null,
+	at: number,
+	event: AuraEvent,
+};
+
+/**  One page of a chat's stored history, oldest first. */
+export type HistoryPage = {
+	chat_id: string,
+	items: HistoryItem[],
+	has_more: boolean,
+	/**  Pass to `chat_history` for the next older page. */
+	before_seq: number | null,
+	/**  The oldest items belong to this turn, whose earlier part is in the next older page. */
+	cut_turn_id: string | null,
+	/**
+	 *  Saving is paused: rows from this seq up to the page's cursor are not saved yet and not in
+	 *  the page.
+	 */
+	unsaved_from: number | null,
+	/**  Rows that did not parse (written by a newer build). */
+	skipped: number,
+};
+
 /**
  *  What the UI should open into. Smoke mode wins over the stress view, since it is the one that
  *  exits by itself and a CI job is waiting on it.
  */
-export type LaunchMode = { type: "normal" } | { type: "smoke" } | { type: "stress"; config: StressConfig };
+export type LaunchMode = { type: "normal" } | { type: "smoke"; plan: SmokePlan } | { type: "stress"; config: StressConfig };
 
 /**  One account rate-limit window (Claude's five-hour/weekly windows, Codex's primary/secondary). */
 export type LimitWindow = {
@@ -193,7 +559,7 @@ export type LimitWindow = {
 	resets_at: number | null,
 };
 
-export type NoticeLevel = "info" | "warning";
+export type NoticeLevel = "info" | "warning" | "error";
 
 /**  What [`Store::open`] had to do. Paths are strings so the UI can show them as they are. */
 export type OpenOutcome = 
@@ -211,6 +577,8 @@ export type OpenOutcome =
  */
 { type: "recovered_from_corruption"; quarantined: string; salvage: Salvage };
 
+export type PauseReason = "disk_full" | "busy";
+
 export type PermissionDecision = { type: "selected"; option_id: string } | { type: "cancelled" };
 
 export type PermissionOption = {
@@ -219,14 +587,25 @@ export type PermissionOption = {
 	label: string,
 };
 
-export type PermissionOptionKind = "allow_once" | "allow_always" | "reject_once" | "reject_always";
+export type PermissionOptionKind = "allow_once" | "allow_always" | "reject_once" | "reject_always" | 
+/**  Shown, never auto-selected. */
+"other";
 
-/**  The agent asks the user before running a tool (only outside Full auto). */
+/**  The agent asks before running a tool, or asks the user a question through a permission request. */
 export type PermissionRequest = {
 	request_id: string,
+	/**  Set only when it names a tool block already shown. */
 	tool_call_id: string | null,
 	title: string,
+	/**  What the permission policy decides on; `None` is never auto-answered. */
+	kind: ToolKind | null,
+	/**  Some agents' permission requests never become tool blocks, so the card shows the input. */
+	raw_input: Value | null,
+	content: ToolContent[],
+	locations: ToolLocation[],
 	options: PermissionOption[],
+	/**  As on [`ToolCall`]. */
+	truncated: Truncation | null,
 };
 
 export type PlanEntry = {
@@ -254,6 +633,35 @@ export type ProfileMeta = {
 	created_at: number,
 };
 
+/**  What `chat_send` did with the prompt: sent at once, or queued behind a turn or a start. */
+export type PromptAck = {
+	prompt_id: string,
+	queued: boolean,
+};
+
+/**  What happened to a queued prompt. */
+export type PromptState = "queued" | "started" | "completed" | "cancelled" | "failed";
+
+export type QueuedPrompt = {
+	prompt_id: string,
+	/**  The prompt's first 256 characters. */
+	preview: string,
+	/**  Queued before a stop, error, crash or restart: sent only after the user says so. */
+	held: boolean,
+	created_at: number,
+};
+
+/**  Who answered a permission request or a question. */
+export type ResolvedBy = "user" | 
+/**  The permission policy, under the chat's autonomy. */
+"auto" | 
+/**  The agent withdrew it. */
+"agent" | 
+/**  Its turn ended or was cancelled. */
+"turn" | 
+/**  Recovery, or the agent's process ended. */
+"system" | "other";
+
 /**  How much of a damaged database made it into the database that replaced it. */
 export type Salvage = 
 /**
@@ -273,15 +681,56 @@ export type Salvage =
 /**  Nothing could be read, so the new database started out empty. */
 { type: "nothing" };
 
-/**  What the agent currently reports about the session. */
+/**  Live header state of a chat. Never stored; coalesced to at most one per frame. */
 export type SessionInfo = {
+	status: SessionStatus,
+	/**  What is happening now: "Starting Hermes", "Stopping the turn; press Esc again to force stop". */
+	detail: string | null,
 	native_session_id: string | null,
+	agent_name: string | null,
+	agent_version: string | null,
 	title: string | null,
+	/**  Display labels of the current Model, Effort and Mode choices. */
 	model: string | null,
 	effort: string | null,
 	mode: string | null,
-	commands: SlashCommand[],
+	autonomy: Autonomy,
+	/**  Some queued prompts are held ("Send queued" shows). */
+	queue_held: boolean,
+	/**
+	 *  Increments when capabilities, options, slash commands or the autonomy state change: the UI
+	 *  refetches `chat_lists`.
+	 */
+	revision: number,
 };
+
+/**
+ *  What the header's pickers and the slash menu show, fetched with `chat_lists` whenever
+ *  [`SessionInfo::revision`] changes.
+ */
+export type SessionLists = {
+	revision: number,
+	/**  `None` until the agent has started once. */
+	capabilities: Capabilities | null,
+	options: ConfigOption[],
+	commands: SlashCommand[],
+	autonomy: AutonomyState,
+};
+
+/**  Where a chat's agent is in its life. */
+export type SessionStatus = 
+/**  No process. */
+"stopped" | "starting" | 
+/**  The process is up and no turn runs. */
+"ready" | 
+/**  Exactly one turn is in flight. */
+"running" | 
+/**  The agent was asked to cancel; waiting for its reply. */
+"cancelling" | "stopping" | 
+/**  Could not start; no process. */
+"failed" | 
+/**  The agent needs its own sign-in; never a live process. */
+"auth_required";
 
 export type SlashCommand = {
 	name: string,
@@ -289,9 +738,80 @@ export type SlashCommand = {
 	input_hint: string | null,
 };
 
-/**  What the UI's smoke run measured. */
+/**  One check a chat scenario made: its name, whether it held, and what was seen. */
+export type SmokeCheck = {
+	name: string,
+	ok: boolean,
+	/**  What the check saw, or why it failed (or did not run). */
+	detail: string,
+};
+
+/**  What a smoke launch runs: its scenario, with the agent and folder the chat scenarios use. */
+export type SmokePlan = {
+	scenario: SmokeScenario,
+	/**
+	 *  The agent the chat scenarios create their chat with: the demo agent for `chat` and
+	 *  `chat_reopen`, `AURACODE_SMOKE_AGENT`'s for `agent`; `null` for `stream`.
+	 */
+	agent_id: string | null,
+	/**  `AURACODE_SMOKE_FOLDER`, which the folder picker answers; `null` for `stream`. */
+	folder: string | null,
+};
+
+/**  What the UI's smoke run found. */
 export type SmokeReport = {
 	ok: boolean,
+	/**
+	 *  The scenario that ran; `null` only in a report made before any could (a smoke launch whose
+	 *  switches were not valid).
+	 */
+	scenario: SmokeScenario | null,
+	/**  The stream check's measurements; `null` for the chat scenarios. */
+	stream: StreamMeasures | null,
+	/**  Every check a chat scenario defines, in order; empty for the stream check. */
+	checks: SmokeCheck[],
+	errors: string[],
+};
+
+/**  Which scripted check a smoke launch runs. */
+export type SmokeScenario = 
+/**  A demo stream, a cancelled stream and a stress burst (`AURACODE_SMOKE=1`). */
+"stream" | 
+/**
+ *  The chat screens against the demo agent in a new data folder, ending with the quit flow
+ *  while a turn runs (`AURACODE_SMOKE=chat`).
+ */
+"chat" | 
+/**
+ *  The same data folder started again after `chat`: the stored history, the turn the quit
+ *  interrupted, the prompt it held, and Resume (`AURACODE_SMOKE=chat-reopen`).
+ */
+"chat_reopen" | 
+/**
+ *  One minimal chat with `AURACODE_SMOKE_AGENT`'s agent (`AURACODE_SMOKE=chat` with that set).
+ *  For local runs only: a real agent spends the user's quota.
+ */
+"agent";
+
+/**  Why a turn ended. */
+export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | 
+/**  The agent confirmed a cancel. */
+"cancelled" | 
+/**  auracode ended the turn without the agent: a force stop, a crash, a quit. */
+"interrupted" | "error" | 
+/**  A reason auracode does not know (an agent's, or a newer build's). */
+"other";
+
+export type StorageState = { state: "ok" } | { state: "paused"; reason: PauseReason; since: number } | { state: "failed"; message: string };
+
+/**  Whether the profile database is saving. */
+export type StorageStatus = {
+	state: StorageState,
+	unsaved_bytes: number,
+};
+
+/**  What the stream check measured. */
+export type StreamMeasures = {
 	/**  Events applied across every stream of the run. */
 	events_received: number,
 	/**  Frames (`EventBatch`es) received across every stream of the run. */
@@ -304,11 +824,7 @@ export type SmokeReport = {
 	fps_min: number | null,
 	/**  Average frame rate over the stress burst. */
 	fps_avg: number | null,
-	errors: string[],
 };
-
-/**  Why a turn ended. */
-export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled" | "error";
 
 /**
  *  Settings for the stress view: `orbs` live orbs, a stream at `rate` tokens per second, the aura
@@ -325,8 +841,16 @@ export type StressConfig = {
 export type TokenUsage = {
 	input_tokens: number,
 	output_tokens: number,
-	cached_input_tokens: number | null,
+	/**  Tokens read from the prompt cache (ACP `cachedReadTokens`, Claude `cache_read_input_tokens`). */
+	cache_read_tokens: number | null,
+	/**
+	 *  Tokens written to the prompt cache (ACP `cachedWriteTokens`, Claude
+	 *  `cache_creation_input_tokens`).
+	 */
+	cache_write_tokens: number | null,
+	/**  ACP `thoughtTokens`. */
 	reasoning_tokens: number | null,
+	scope: UsageScope,
 };
 
 /**  A tool invocation started by the agent. */
@@ -338,14 +862,18 @@ export type ToolCall = {
 	locations: ToolLocation[],
 	/**  The tool's raw input as the agent sent it, for the expanded view. */
 	raw_input: Value | null,
+	/**  The tool's own name (ACP `ToolCall.name`). */
+	tool_name: string | null,
+	/**  ACP tool calls carry content from the start. */
+	content: ToolContent[],
+	/**  More than entry text was cut to fit the event budget; `blob` holds the original event's JSON. */
+	truncated: Truncation | null,
 };
 
-/**  Rich content attached to a tool update. */
-export type ToolContent = { type: "text"; text: string } | { type: "diff"; path: string; 
+/**  Rich content attached to a tool call or update. */
+export type ToolContent = { type: "text"; text: string; truncated: Truncation | null } | { type: "diff"; path: string; 
 /**  `None` when the file is new. */
-old_text: string | null; new_text: string } | { type: "terminal"; output: string; exit_code: number | null; 
-/**  Set when `output` was cut for the UI; the full output lives on disk. */
-truncated: boolean };
+old_text: string | null; new_text: string; truncated: Truncation | null } | { type: "terminal"; output: string; exit_code: number | null; truncated: Truncation | null };
 
 export type ToolKind = "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "switch_mode" | "other";
 
@@ -356,19 +884,38 @@ export type ToolLocation = {
 
 export type ToolStatus = "pending" | "in_progress" | "completed" | "failed";
 
-/**  Progress or result for a previously announced [`ToolCall`]. */
+/**
+ *  Progress or result for a previously announced [`ToolCall`]. Mirrors ACP's update: `None` keeps a
+ *  field; `content: Some(v)` replaces the content, and `Some([])` clears it.
+ */
 export type ToolUpdate = {
 	tool_call_id: string,
 	status: ToolStatus | null,
 	title: string | null,
-	content: ToolContent[],
+	kind: ToolKind | null,
+	locations: ToolLocation[] | null,
+	raw_input: Value | null,
+	/**  ACP `ToolCallUpdateFields.name`. */
+	tool_name: string | null,
+	content: ToolContent[] | null,
+	/**  As on [`ToolCall`]. */
+	truncated: Truncation | null,
 };
+
+/**  Inline content was cut; `blob` is the sha256 of the full content in the profile's attachments. */
+export type Truncation = {
+	total_bytes: number,
+	blob: string | null,
+};
+
+/**  The answer to a [`UiRequest`], matching its [`UiPrompt`] (`Notify` takes none). */
+export type UiAnswer = { type: "confirm"; yes: boolean } | { type: "select"; index: number } | { type: "input"; text: string };
 
 export type UiPrompt = { type: "confirm"; message: string } | { type: "select"; message: string; options: string[] } | { type: "input"; message: string; placeholder: string | null } | { type: "notify"; message: string };
 
 /**
  *  An agent asks the UI for input that isn't a tool permission (Pi extension UI, Cursor questions,
- *  ACP elicitation).
+ *  ACP elicitation). Never auto-answered.
  */
 export type UiRequest = {
 	request_id: string,
@@ -379,8 +926,16 @@ export type UiRequest = {
 export type UsageInfo = {
 	context_used: number | null,
 	context_size: number | null,
+	/**  The session's cumulative cost. */
 	cost: Cost | null,
 };
+
+/**  What a [`TokenUsage`] counts. */
+export type UsageScope = 
+/**  This turn alone. */
+"turn" | 
+/**  The whole native session so far ("this session" in the UI). */
+"session";
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };
 

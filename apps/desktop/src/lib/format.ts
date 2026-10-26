@@ -72,8 +72,12 @@ export function stopReasonLabel(reason: StopReason): string {
       return "Hit the request limit";
     case "refusal":
       return "Refused";
+    case "interrupted":
+      return "Interrupted";
     case "error":
       return "Failed";
+    case "other":
+      return "Ended";
   }
 }
 

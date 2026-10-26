@@ -9,6 +9,7 @@
       "!**/node_modules",
       "!**/src-tauri/gen",
       "!**/bindings.ts",
+      "!crates/aura-drivers/tests/fixtures",
       "!**/pnpm-lock.yaml",
       "!docs/spikes/**/target"
     ]

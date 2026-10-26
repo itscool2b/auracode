@@ -1,0 +1,631 @@
+[
+  {
+    "turn": null,
+    "event": {
+      "type": "session_updated",
+      "status": "starting",
+      "detail": "Starting Demo agent",
+      "native_session_id": "mock-019a",
+      "agent_name": "Demo agent",
+      "agent_version": "0.1.0",
+      "title": null,
+      "model": "mock-fast",
+      "effort": "medium",
+      "mode": "full_auto",
+      "autonomy": "full_auto",
+      "queue_held": false,
+      "revision": 1
+    }
+  },
+  {
+    "turn": null,
+    "event": {
+      "type": "notice",
+      "level": "info",
+      "message": "The demo agent is scripted; no AI is involved."
+    }
+  },
+  {
+    "turn": null,
+    "event": {
+      "type": "session_updated",
+      "status": "ready",
+      "detail": null,
+      "native_session_id": "mock-019a",
+      "agent_name": "Demo agent",
+      "agent_version": "0.1.0",
+      "title": null,
+      "model": "mock-fast",
+      "effort": "medium",
+      "mode": "full_auto",
+      "autonomy": "full_auto",
+      "queue_held": false,
+      "revision": 1
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "turn_started",
+      "turn_id": "t1",
+      "prompt_id": "p1"
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "user_message_delta",
+      "message_id": "t1.u",
+      "text": "Fix the failing test"
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "prompt_lifecycle",
+      "prompt_id": "p1",
+      "state": "started",
+      "preview": null
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "session_updated",
+      "status": "running",
+      "detail": null,
+      "native_session_id": "mock-019a",
+      "agent_name": "Demo agent",
+      "agent_version": "0.1.0",
+      "title": null,
+      "model": "mock-fast",
+      "effort": "medium",
+      "mode": "full_auto",
+      "autonomy": "full_auto",
+      "queue_held": false,
+      "revision": 1
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "thought_delta",
+      "thought_id": "t1.th1",
+      "text": "Looking at "
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "thought_delta",
+      "thought_id": "t1.th1",
+      "text": "the test output."
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "thought_completed",
+      "thought_id": "t1.th1",
+      "duration_ms": 1200
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "tool_call",
+      "tool_call_id": "t1.t1",
+      "kind": "read",
+      "title": "Read src/lib.rs",
+      "status": "in_progress",
+      "locations": [
+        {
+          "path": "src/lib.rs",
+          "line": null
+        }
+      ],
+      "raw_input": null,
+      "tool_name": null,
+      "content": [],
+      "truncated": null
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "tool_update",
+      "tool_call_id": "t1.t1",
+      "status": "completed",
+      "title": null,
+      "kind": null,
+      "locations": null,
+      "raw_input": null,
+      "tool_name": null,
+      "content": [
+        {
+          "type": "text",
+          "text": "fn mian() {}",
+          "truncated": null
+        }
+      ],
+      "truncated": null
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "plan_updated",
+      "entries": [
+        {
+          "content": "Read the failing test",
+          "status": "completed",
+          "priority": null
+        },
+        {
+          "content": "Fix the typo",
+          "status": "pending",
+          "priority": null
+        }
+      ]
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "tool_call",
+      "tool_call_id": "t1.t2",
+      "kind": "edit",
+      "title": "Edit src/lib.rs",
+      "status": "pending",
+      "locations": [
+        {
+          "path": "src/lib.rs",
+          "line": 1
+        }
+      ],
+      "raw_input": null,
+      "tool_name": null,
+      "content": [
+        {
+          "type": "diff",
+          "path": "src/lib.rs",
+          "old_text": "fn mian() {}\n",
+          "new_text": "fn main() {}\n",
+          "truncated": null
+        }
+      ],
+      "truncated": null
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "permission_requested",
+      "request_id": "t1.p1",
+      "tool_call_id": "t1.t2",
+      "title": "Edit src/lib.rs",
+      "kind": "edit",
+      "raw_input": null,
+      "content": [],
+      "locations": [],
+      "options": [
+        {
+          "option_id": "allow",
+          "kind": "allow_once",
+          "label": "Allow once"
+        },
+        {
+          "option_id": "reject",
+          "kind": "reject_once",
+          "label": "Reject"
+        }
+      ],
+      "truncated": null
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "permission_resolved",
+      "request_id": "t1.p1",
+      "decision": {
+        "type": "selected",
+        "option_id": "allow"
+      },
+      "by": "user"
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "tool_update",
+      "tool_call_id": "t1.t2",
+      "status": "completed",
+      "title": null,
+      "kind": null,
+      "locations": null,
+      "raw_input": null,
+      "tool_name": null,
+      "content": null,
+      "truncated": null
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "tool_call",
+      "tool_call_id": "t1.t3",
+      "kind": "execute",
+      "title": "Run cargo test",
+      "status": "in_progress",
+      "locations": [],
+      "raw_input": null,
+      "tool_name": null,
+      "content": [],
+      "truncated": null
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "tool_update",
+      "tool_call_id": "t1.t3",
+      "status": null,
+      "title": null,
+      "kind": null,
+      "locations": null,
+      "raw_input": null,
+      "tool_name": null,
+      "content": [
+        {
+          "type": "terminal",
+          "output": "running 3 tests",
+          "exit_code": null,
+          "truncated": null
+        }
+      ],
+      "truncated": null
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "plan_updated",
+      "entries": [
+        {
+          "content": "Read the failing test",
+          "status": "completed",
+          "priority": null
+        },
+        {
+          "content": "Fix the typo",
+          "status": "completed",
+          "priority": null
+        }
+      ]
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "message_delta",
+      "message_id": "t1.m1",
+      "text": "The test failed because "
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "usage_updated",
+      "context_used": 12000,
+      "context_size": 200000,
+      "cost": {
+        "amount": 0.0123,
+        "currency": "USD"
+      }
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "message_delta",
+      "message_id": "t1.m1",
+      "text": "of a typo. **Fixed.**"
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "message_completed",
+      "message_id": "t1.m1"
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "turn_ended",
+      "turn_id": "t1",
+      "stop_reason": "end_turn",
+      "usage": {
+        "input_tokens": 1200,
+        "output_tokens": 300,
+        "cache_read_tokens": 800,
+        "cache_write_tokens": null,
+        "reasoning_tokens": null,
+        "scope": "turn"
+      },
+      "duration_ms": 8200,
+      "recovered": false
+    }
+  },
+  {
+    "turn": "t1",
+    "event": {
+      "type": "prompt_lifecycle",
+      "prompt_id": "p1",
+      "state": "completed",
+      "preview": null
+    }
+  },
+  {
+    "turn": null,
+    "event": {
+      "type": "session_updated",
+      "status": "ready",
+      "detail": null,
+      "native_session_id": "mock-019a",
+      "agent_name": "Demo agent",
+      "agent_version": "0.1.0",
+      "title": null,
+      "model": "mock-fast",
+      "effort": "medium",
+      "mode": "full_auto",
+      "autonomy": "full_auto",
+      "queue_held": false,
+      "revision": 1
+    }
+  },
+  {
+    "turn": null,
+    "event": {
+      "type": "tool_update",
+      "tool_call_id": "t1.t3",
+      "status": "completed",
+      "title": null,
+      "kind": null,
+      "locations": null,
+      "raw_input": null,
+      "tool_name": null,
+      "content": [
+        {
+          "type": "terminal",
+          "output": "running 3 tests\ntest result: ok",
+          "exit_code": 0,
+          "truncated": null
+        }
+      ],
+      "truncated": null
+    }
+  },
+  {
+    "turn": null,
+    "event": {
+      "type": "notice",
+      "level": "info",
+      "message": "The background test run finished."
+    }
+  },
+  {
+    "turn": null,
+    "event": {
+      "type": "prompt_lifecycle",
+      "prompt_id": "p2",
+      "state": "queued",
+      "preview": null
+    }
+  },
+  {
+    "turn": "t2",
+    "event": {
+      "type": "turn_started",
+      "turn_id": "t2",
+      "prompt_id": "p2"
+    }
+  },
+  {
+    "turn": "t2",
+    "event": {
+      "type": "user_message_delta",
+      "message_id": "t2.u",
+      "text": "/ask"
+    }
+  },
+  {
+    "turn": "t2",
+    "event": {
+      "type": "ui_request",
+      "request_id": "t2.q1",
+      "prompt": {
+        "type": "select",
+        "message": "Which color?",
+        "options": ["Red", "Green", "Blue"]
+      }
+    }
+  },
+  {
+    "turn": "t2",
+    "event": {
+      "type": "ui_resolved",
+      "request_id": "t2.q1",
+      "answer": {
+        "type": "select",
+        "index": 1
+      },
+      "by": "user"
+    }
+  },
+  {
+    "turn": "t2",
+    "event": {
+      "type": "message_delta",
+      "message_id": "t2.m1",
+      "text": "You picked Green."
+    }
+  },
+  {
+    "turn": "t2",
+    "event": {
+      "type": "tool_update",
+      "tool_call_id": "t1.t1",
+      "status": null,
+      "title": "Read src/lib.rs again",
+      "kind": null,
+      "locations": null,
+      "raw_input": null,
+      "tool_name": null,
+      "content": [],
+      "truncated": null
+    }
+  },
+  {
+    "turn": null,
+    "event": {
+      "type": "message_delta",
+      "message_id": "t1.m1",
+      "text": " (one more thing, sent late)"
+    }
+  },
+  {
+    "turn": "t2",
+    "event": {
+      "type": "tool_call",
+      "tool_call_id": "t2.t1",
+      "kind": "search",
+      "title": "Search for TODO",
+      "status": "in_progress",
+      "locations": [],
+      "raw_input": null,
+      "tool_name": null,
+      "content": [],
+      "truncated": null
+    }
+  },
+  {
+    "turn": null,
+    "event": {
+      "type": "permission_requested",
+      "request_id": "bg.p1",
+      "tool_call_id": null,
+      "title": "Run the nightly job",
+      "kind": "execute",
+      "raw_input": {
+        "command": "make nightly"
+      },
+      "content": [],
+      "locations": [],
+      "options": [
+        {
+          "option_id": "ok",
+          "kind": "allow_once",
+          "label": "Allow once"
+        }
+      ],
+      "truncated": null
+    }
+  },
+  {
+    "turn": "t2",
+    "event": {
+      "type": "usage_updated",
+      "context_used": 12000,
+      "context_size": 200000,
+      "cost": {
+        "amount": 0.0201,
+        "currency": "USD"
+      }
+    }
+  },
+  {
+    "turn": null,
+    "event": {
+      "type": "limits_updated",
+      "windows": []
+    }
+  },
+  {
+    "turn": "t2",
+    "event": {
+      "type": "turn_ended",
+      "turn_id": "t2",
+      "stop_reason": "cancelled",
+      "usage": null,
+      "duration_ms": 2100,
+      "recovered": false
+    }
+  },
+  {
+    "turn": "t3",
+    "event": {
+      "type": "turn_started",
+      "turn_id": "t3",
+      "prompt_id": "p3"
+    }
+  },
+  {
+    "turn": "t3",
+    "event": {
+      "type": "user_message_delta",
+      "message_id": "t3.u",
+      "text": "/fail"
+    }
+  },
+  {
+    "turn": "t3",
+    "event": {
+      "type": "error",
+      "kind": "agent_error",
+      "message": "The demo agent failed this turn on purpose.",
+      "detail": null,
+      "recoverable": false
+    }
+  },
+  {
+    "turn": "t3",
+    "event": {
+      "type": "turn_ended",
+      "turn_id": "t3",
+      "stop_reason": "error",
+      "usage": null,
+      "duration_ms": 40,
+      "recovered": false
+    }
+  },
+  {
+    "turn": null,
+    "event": {
+      "type": "error",
+      "kind": "agent_exited",
+      "message": "The agent stopped unexpectedly (exit code 1).",
+      "detail": "panicked at src/main.rs:3",
+      "recoverable": false
+    }
+  },
+  {
+    "turn": null,
+    "event": {
+      "type": "session_updated",
+      "status": "stopped",
+      "detail": null,
+      "native_session_id": "mock-019a",
+      "agent_name": "Demo agent",
+      "agent_version": "0.1.0",
+      "title": null,
+      "model": "mock-fast",
+      "effort": "medium",
+      "mode": "full_auto",
+      "autonomy": "full_auto",
+      "queue_held": false,
+      "revision": 1
+    }
+  }
+]

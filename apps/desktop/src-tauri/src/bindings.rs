@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use specta_typescript::Typescript;
 
-use crate::commands;
+use crate::{commands, smoke};
 
 /// Where the bindings live: `apps/desktop/src/bindings.ts`.
 pub const BINDINGS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../src/bindings.ts");
@@ -31,10 +31,41 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::reveal_data_dir,
             commands::acknowledge_recovery,
             commands::smoke_report,
+            commands::agents_list,
+            commands::agents_refresh,
+            commands::env_status,
+            commands::env_refresh,
+            commands::pick_folder,
+            commands::chats_list,
+            commands::chat_create,
+            commands::chat_attach,
+            commands::chat_detach,
+            commands::chat_history,
+            commands::chat_lists,
+            commands::chat_send,
+            commands::chat_cancel_queued,
+            commands::chat_resume_queue,
+            commands::chat_interrupt,
+            commands::chat_force_stop,
+            commands::chat_start,
+            commands::chat_stop,
+            commands::chat_respond_permission,
+            commands::chat_respond_ui,
+            commands::chat_set_option,
+            commands::chat_set_autonomy,
+            commands::chat_blob,
+            commands::chat_reveal_log,
+            commands::status_subscribe,
+            commands::storage_status,
         ])
-        // aura-protocol's timestamps (`Millis`) are i64 Unix milliseconds, sent by serde_json as
-        // plain JSON numbers and exact in a JS number until 2^53 ms. Typing them as `bigint` would
-        // not match what arrives; every other integer crossing IPC is u32.
+        // aura-protocol's timestamps (`Millis`) are i64 Unix milliseconds and its token counts,
+        // byte counts and offsets are u64, all sent by serde_json as plain JSON numbers and exact
+        // in a JS number until 2^53. Typing them as `bigint` would not match what arrives.
+        // The checks each chat smoke scenario must report: the UI names them from these, and the
+        // shell holds its report to the same lists (`smoke::finalize`).
+        .constant("SMOKE_CHAT_CHECKS", smoke::CHAT_CHECKS)
+        .constant("SMOKE_CHAT_REOPEN_CHECKS", smoke::CHAT_REOPEN_CHECKS)
+        .constant("SMOKE_AGENT_CHECKS", smoke::AGENT_CHECKS)
         .dangerously_cast_bigints_to_number()
         // One TypeScript type per Rust type. With serde phases on, tauri-specta treats a `Channel`
         // argument as input and types the frames with the deserialize shape (`EventBatch_Deserialize`,
@@ -165,6 +196,32 @@ mod tests {
             "revealDataDir",
             "acknowledgeRecovery",
             "smokeReport",
+            "agentsList",
+            "agentsRefresh",
+            "envStatus",
+            "envRefresh",
+            "pickFolder",
+            "chatsList",
+            "chatCreate",
+            "chatAttach",
+            "chatDetach",
+            "chatHistory",
+            "chatLists",
+            "chatSend",
+            "chatCancelQueued",
+            "chatResumeQueue",
+            "chatInterrupt",
+            "chatForceStop",
+            "chatStart",
+            "chatStop",
+            "chatRespondPermission",
+            "chatRespondUi",
+            "chatSetOption",
+            "chatSetAutonomy",
+            "chatBlob",
+            "chatRevealLog",
+            "statusSubscribe",
+            "storageStatus",
         ] {
             assert!(
                 first.contains(&format!("\t{accessor}: (")),
@@ -185,24 +242,398 @@ mod tests {
             first.contains("\trecovery_notice: string | null,"),
             "the UI can tell the dismissible notice from the others"
         );
+        // The chat log is revealed by chat id: the page names no path.
+        assert!(
+            first.contains("\tchatRevealLog: (chatId: string) =>"),
+            "chatRevealLog must take only the chat id"
+        );
+        // The webview a view or a status subscription belongs to is injected, never passed.
+        assert!(
+            first.contains("\tchatAttach: (chatId: string, channel: Channel<EventBatch>) =>"),
+            "chatAttach takes the chat and its channel only"
+        );
+        assert!(
+            first.contains("\tstatusSubscribe: (channel: Channel<ChatStatusUpdate>) =>"),
+            "statusSubscribe takes its channel only"
+        );
+        // Lenient enums stay closed unions with their fallback: the UI's switches are exhaustive.
+        for union in [
+            "export type StopReason = ",
+            "export type ToolKind = ",
+            "export type ErrorKind = ",
+            "export type ResolvedBy = ",
+            "export type ConfigCategory = ",
+        ] {
+            let start = first
+                .find(union)
+                .unwrap_or_else(|| panic!("{union} is missing"));
+            let end = first[start..]
+                .find(';')
+                .map_or(first.len(), |end| start + end);
+            let definition = &first[start..end];
+            assert!(definition.contains("\"other\""), "{definition}");
+            assert!(!definition.contains("string"), "{definition}");
+        }
+        // The other lenient enums fall back to one of their own values: closed unions too.
+        for (name, values) in [
+            (
+                "ToolStatus",
+                &["pending", "in_progress", "completed", "failed"][..],
+            ),
+            (
+                "PermissionOptionKind",
+                &[
+                    "allow_once",
+                    "allow_always",
+                    "reject_once",
+                    "reject_always",
+                    "other",
+                ][..],
+            ),
+            ("PlanStatus", &["pending", "in_progress", "completed"][..]),
+            ("PlanPriority", &["high", "medium", "low"][..]),
+            ("NoticeLevel", &["info", "warning", "error"][..]),
+            ("UsageScope", &["turn", "session"][..]),
+        ] {
+            let definition = definition(&first, name);
+            assert!(!definition.contains("string"), "{definition}");
+            for value in values {
+                assert!(definition.contains(&format!("\"{value}\"")), "{definition}");
+            }
+        }
+        // Every chat command as the UI calls it: names, arguments and results are frozen for M1a,
+        // so a Rust change that moved one fails here before it breaks the UI.
+        for (accessor, signature) in CHAT_COMMANDS {
+            let line = format!("\t{accessor}: {signature}");
+            assert!(first.contains(&line), "{line} is missing");
+        }
+        // The protocol types the UI's reducers read, in the shapes they expect.
+        for (name, fields) in [
+            (
+                "EventBatch",
+                &[
+                    "chat_id: string",
+                    "seq_start: number",
+                    "events: AuraEvent[]",
+                ][..],
+            ),
+            (
+                "HistoryItem",
+                &[
+                    "seq: number",
+                    "turn_id: string | null",
+                    "at: number",
+                    "event: AuraEvent",
+                ][..],
+            ),
+            (
+                "HistoryPage",
+                &[
+                    "items: HistoryItem[]",
+                    "has_more: boolean",
+                    "before_seq: number | null",
+                    "cut_turn_id: string | null",
+                    "unsaved_from: number | null",
+                    "skipped: number",
+                ][..],
+            ),
+            (
+                "ChatAttach",
+                &[
+                    "subscription_id: string",
+                    "next_seq: number",
+                    "snapshot: ChatSnapshot",
+                    "history: HistoryPage",
+                ][..],
+            ),
+            (
+                "ChatSnapshot",
+                &[
+                    "session: SessionInfo",
+                    "queue: QueuedPrompt[]",
+                    "auth: AuthPrompt | null",
+                    "storage: StorageStatus",
+                ][..],
+            ),
+            (
+                "ToolUpdate",
+                &["content: ToolContent[] | null", "status: ToolStatus | null"][..],
+            ),
+            (
+                "ToolCall",
+                &["content: ToolContent[]", "status: ToolStatus"][..],
+            ),
+            (
+                "TokenUsage",
+                &[
+                    "input_tokens: number",
+                    "cache_read_tokens: number | null",
+                    "scope: UsageScope",
+                ][..],
+            ),
+            (
+                "BlobText",
+                &[
+                    "offset: number",
+                    "next_offset: number",
+                    "total: number",
+                    "eof: boolean",
+                ][..],
+            ),
+            (
+                "Availability",
+                &[
+                    "{ state: \"checking\" }",
+                    "{ state: \"ready\"; version: string | null; path: string }",
+                    "{ state: \"missing\"; reason: string }",
+                    "{ state: \"broken\"; reason: string }",
+                ][..],
+            ),
+            (
+                "SessionInfo",
+                &[
+                    "status: SessionStatus",
+                    "queue_held: boolean",
+                    "revision: number",
+                ][..],
+            ),
+            (
+                "UiAnswer",
+                &[
+                    "{ type: \"confirm\"; yes: boolean }",
+                    "{ type: \"select\"; index: number }",
+                    "{ type: \"input\"; text: string }",
+                ][..],
+            ),
+            (
+                "ConfigValue",
+                &[
+                    "{ type: \"choice\"; value: string }",
+                    "{ type: \"toggle\"; value: boolean }",
+                ][..],
+            ),
+        ] {
+            let definition = definition(&first, name);
+            for field in fields {
+                assert!(
+                    definition.contains(field),
+                    "{name} lacks {field}: {definition}"
+                );
+            }
+        }
+        let statuses = definition(&first, "SessionStatus");
+        for status in [
+            "stopped",
+            "starting",
+            "ready",
+            "running",
+            "cancelling",
+            "stopping",
+            "failed",
+            "auth_required",
+        ] {
+            assert!(statuses.contains(&format!("\"{status}\"")), "{statuses}");
+        }
+        let events = definition(&first, "AuraEvent");
+        for tag in [
+            "turn_started",
+            "turn_ended",
+            "user_message_delta",
+            "message_delta",
+            "message_completed",
+            "thought_delta",
+            "thought_completed",
+            "tool_call",
+            "tool_update",
+            "permission_requested",
+            "permission_resolved",
+            "ui_request",
+            "ui_resolved",
+            "plan_updated",
+            "usage_updated",
+            "limits_updated",
+            "session_updated",
+            "prompt_lifecycle",
+            "notice",
+            "error",
+        ] {
+            assert!(
+                events.contains(&format!("type: \"{tag}\"")),
+                "AuraEvent lacks {tag}"
+            );
+        }
         for name in [
             "AppInfo",
             "AppError",
+            "AppErrorCode",
             "AuraEvent",
             "DemoKind",
             "EventBatch",
             "GlassEffect",
             "LaunchMode",
             "SmokeReport",
+            "SmokeScenario",
+            "SmokePlan",
+            "SmokeCheck",
+            "StreamMeasures",
             "StressConfig",
+            "AgentEntry",
+            "Availability",
+            "BlobText",
+            "ChatAttach",
+            "ChatSnapshot",
+            "ChatStatusUpdate",
+            "ChatSummary",
+            "ConfigOption",
+            "ConfigValue",
+            "EnvStatus",
+            "HistoryPage",
+            "PromptAck",
+            "SessionLists",
+            "StorageStatus",
+            "UiAnswer",
+            "PromptState",
+            "Truncation",
+            "TokenUsage",
         ] {
             assert!(
                 first.contains(&format!("export type {name} =")),
                 "{name} is missing"
             );
         }
+        for name in [
+            "SMOKE_CHAT_CHECKS",
+            "SMOKE_CHAT_REOPEN_CHECKS",
+            "SMOKE_AGENT_CHECKS",
+        ] {
+            assert!(
+                first.contains(&format!("export const {name} = [")),
+                "{name} is missing"
+            );
+        }
         assert!(!first.contains("bigint"), "every integer is a number");
         assert!(!first.contains('\r'), "LF line endings on every OS");
+    }
+
+    /// The chat commands of M1a (spec 7.1) exactly as the generated bindings declare them.
+    const CHAT_COMMANDS: [(&str, &str); 26] = [
+        (
+            "agentsList",
+            "() => __TAURI_INVOKE<AgentEntry[]>(\"agents_list\")",
+        ),
+        (
+            "agentsRefresh",
+            "() => __TAURI_INVOKE<AgentEntry[]>(\"agents_refresh\")",
+        ),
+        (
+            "envStatus",
+            "() => __TAURI_INVOKE<EnvStatus>(\"env_status\")",
+        ),
+        (
+            "envRefresh",
+            "() => __TAURI_INVOKE<EnvStatus>(\"env_refresh\")",
+        ),
+        (
+            "pickFolder",
+            "() => typedError<string | null, AppError>(__TAURI_INVOKE(\"pick_folder\"))",
+        ),
+        (
+            "chatsList",
+            "() => typedError<ChatSummary[], AppError>(__TAURI_INVOKE(\"chats_list\"))",
+        ),
+        (
+            "chatCreate",
+            "(agentId: string, folder: string) => typedError<ChatSummary, AppError>(__TAURI_INVOKE(\"chat_create\", { agentId, folder }))",
+        ),
+        (
+            "chatAttach",
+            "(chatId: string, channel: Channel<EventBatch>) => typedError<ChatAttach, AppError>(__TAURI_INVOKE(\"chat_attach\", { chatId, channel }))",
+        ),
+        (
+            "chatDetach",
+            "(subscriptionId: string) => __TAURI_INVOKE<void>(\"chat_detach\", { subscriptionId })",
+        ),
+        (
+            "chatHistory",
+            "(chatId: string, beforeSeq: number, maxBytes: number | null) => typedError<HistoryPage, AppError>(__TAURI_INVOKE(\"chat_history\", { chatId, beforeSeq, maxBytes }))",
+        ),
+        (
+            "chatLists",
+            "(chatId: string) => typedError<SessionLists, AppError>(__TAURI_INVOKE(\"chat_lists\", { chatId }))",
+        ),
+        (
+            "chatSend",
+            "(chatId: string, text: string) => typedError<PromptAck, AppError>(__TAURI_INVOKE(\"chat_send\", { chatId, text }))",
+        ),
+        (
+            "chatCancelQueued",
+            "(chatId: string, promptId: string) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_cancel_queued\", { chatId, promptId }))",
+        ),
+        (
+            "chatResumeQueue",
+            "(chatId: string) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_resume_queue\", { chatId }))",
+        ),
+        (
+            "chatInterrupt",
+            "(chatId: string) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_interrupt\", { chatId }))",
+        ),
+        (
+            "chatForceStop",
+            "(chatId: string) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_force_stop\", { chatId }))",
+        ),
+        (
+            "chatStart",
+            "(chatId: string, fresh: boolean) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_start\", { chatId, fresh }))",
+        ),
+        (
+            "chatStop",
+            "(chatId: string) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_stop\", { chatId }))",
+        ),
+        (
+            "chatRespondPermission",
+            "(chatId: string, requestId: string, optionId: string | null) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_respond_permission\", { chatId, requestId, optionId }))",
+        ),
+        (
+            "chatRespondUi",
+            "(chatId: string, requestId: string, answer: UiAnswer | null) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_respond_ui\", { chatId, requestId, answer }))",
+        ),
+        (
+            "chatSetOption",
+            "(chatId: string, optionId: string, value: ConfigValue) => typedError<SessionLists, AppError>(__TAURI_INVOKE(\"chat_set_option\", { chatId, optionId, value }))",
+        ),
+        (
+            "chatSetAutonomy",
+            "(chatId: string, autonomy: Autonomy) => typedError<SessionLists, AppError>(__TAURI_INVOKE(\"chat_set_autonomy\", { chatId, autonomy }))",
+        ),
+        (
+            "chatBlob",
+            "(chatId: string, sha256: string, offset: number, len: number) => typedError<BlobText, AppError>(__TAURI_INVOKE(\"chat_blob\", { chatId, sha256, offset, len }))",
+        ),
+        (
+            "chatRevealLog",
+            "(chatId: string) => typedError<null, AppError>(__TAURI_INVOKE(\"chat_reveal_log\", { chatId }))",
+        ),
+        (
+            "statusSubscribe",
+            "(channel: Channel<ChatStatusUpdate>) => typedError<string, AppError>(__TAURI_INVOKE(\"status_subscribe\", { channel }))",
+        ),
+        (
+            "storageStatus",
+            "() => __TAURI_INVOKE<StorageStatus>(\"storage_status\")",
+        ),
+    ];
+
+    /// The definition of the exported type `name`: from its `export type` line to the blank line
+    /// that ends it.
+    fn definition<'a>(text: &'a str, name: &str) -> &'a str {
+        let head = format!("export type {name} =");
+        let start = text
+            .find(&head)
+            .unwrap_or_else(|| panic!("{name} is missing"));
+        let end = text[start..]
+            .find("\n\n")
+            .map_or(text.len(), |end| start + end);
+        &text[start..end]
     }
 
     /// Every file in `dir` other than `keep`.

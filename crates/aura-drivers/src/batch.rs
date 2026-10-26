@@ -9,40 +9,49 @@
 //!
 //! Sequence numbers are assigned at flush time, after merging and splitting, because those are the
 //! events the UI actually receives: its gap detection only works if every delivered event has exactly
-//! one number and the numbers never skip.
+//! one number and the numbers never skip. Stored rows carry the same numbers.
+//!
+//! The session actor also needs to know which turn each delivered event belongs to, to store it
+//! under that turn. [`FrameBatcher::push_tagged`] carries a turn tag with each event and
+//! [`FrameBatcher::flush_tagged`] returns the tags beside the frames: only adjacent deltas with equal
+//! tags merge, and the pieces of a split delta keep its tag.
 
 use std::io;
+use std::sync::Arc;
 
 use aura_protocol::{AuraEvent, EventBatch, MAX_FRAME_BYTES};
 use unicode_segmentation::GraphemeCursor;
 
-/// Buffers one session's events between flushes and packs them into size-limited frames.
+/// The turn an event belongs to, or `None` for an event outside any turn.
+pub type TurnTag = Option<Arc<str>>;
+
+/// Buffers one chat's events between flushes and packs them into size-limited frames.
 #[derive(Debug, Clone)]
 pub struct FrameBatcher {
-    session_id: String,
+    chat_id: String,
     max_bytes: usize,
     next_seq: u32,
-    pending: Vec<AuraEvent>,
+    pending: Vec<(AuraEvent, TurnTag)>,
 }
 
 impl FrameBatcher {
-    /// A batcher for `session_id` whose frames stay below [`MAX_FRAME_BYTES`].
-    pub fn new(session_id: impl Into<String>) -> Self {
-        Self::with_max_bytes(session_id, MAX_FRAME_BYTES)
+    /// A batcher for `chat_id` whose frames stay below [`MAX_FRAME_BYTES`].
+    pub fn new(chat_id: impl Into<String>) -> Self {
+        Self::with_max_bytes(chat_id, MAX_FRAME_BYTES)
     }
 
     /// A batcher whose frames stay below `max_bytes` instead (tests use small limits to exercise
     /// splitting without megabytes of input).
-    pub fn with_max_bytes(session_id: impl Into<String>, max_bytes: usize) -> Self {
+    pub fn with_max_bytes(chat_id: impl Into<String>, max_bytes: usize) -> Self {
         Self {
-            session_id: session_id.into(),
+            chat_id: chat_id.into(),
             max_bytes,
             next_seq: 0,
             pending: Vec::new(),
         }
     }
 
-    /// Continues numbering at `next_seq`, for a session resumed from storage, so the UI's gap
+    /// Continues numbering at `next_seq`, for a chat resumed from storage, so the UI's gap
     /// detection keeps working across app restarts.
     #[must_use]
     pub fn starting_at(mut self, next_seq: u32) -> Self {
@@ -52,36 +61,28 @@ impl FrameBatcher {
 
     /// Queues `event` for the next flush.
     ///
-    /// A text delta that directly follows a delta for the same message (or the same thought) is
-    /// appended to it instead, which keeps a fast stream down to one event per frame. Any other event
-    /// in between starts a new run, so the order the agent produced is preserved exactly.
+    /// A text delta that directly follows a delta for the same message (or the same thought, or the
+    /// same user message) is appended to it instead, which keeps a fast stream down to one event per
+    /// frame. Any other event in between starts a new run, so the order the agent produced is
+    /// preserved exactly.
     pub fn push(&mut self, event: AuraEvent) {
-        if let Some(last) = self.pending.last_mut() {
-            match (last, &event) {
-                (
-                    AuraEvent::MessageDelta {
-                        message_id: open,
-                        text: buffer,
-                    },
-                    AuraEvent::MessageDelta { message_id, text },
-                ) if open == message_id => {
-                    buffer.push_str(text);
-                    return;
-                }
-                (
-                    AuraEvent::ThoughtDelta {
-                        thought_id: open,
-                        text: buffer,
-                    },
-                    AuraEvent::ThoughtDelta { thought_id, text },
-                ) if open == thought_id => {
-                    buffer.push_str(text);
-                    return;
-                }
-                _ => {}
-            }
+        self.push_tagged(event, None);
+    }
+
+    /// [`push`](Self::push) with the turn the event belongs to. Deltas merge only when their tags are
+    /// equal too, so an untagged late update never joins a tagged run.
+    pub fn push_tagged(&mut self, event: AuraEvent, turn: TurnTag) {
+        if let Some((last, last_turn)) = self.pending.last_mut()
+            && *last_turn == turn
+            && let Some((open_kind, open_id, buffer)) = delta_mut(last)
+            && let Some((kind, id, text)) = delta_ref(&event)
+            && open_kind == kind
+            && open_id == id
+        {
+            buffer.push_str(text);
+            return;
         }
-        self.pending.push(event);
+        self.pending.push((event, turn));
     }
 
     /// Drains everything queued into frames, in order, each one's [`EventBatch::encoded_len`] below
@@ -95,12 +96,22 @@ impl FrameBatcher {
     /// is queued.
     #[must_use = "flushed events are no longer in the batcher; dropping the frames loses them"]
     pub fn flush(&mut self) -> Vec<EventBatch> {
+        self.flush_tagged()
+            .into_iter()
+            .map(|(frame, _)| frame)
+            .collect()
+    }
+
+    /// [`flush`](Self::flush), with each frame's turn tags: `tags[i]` belongs to `events[i]`. The
+    /// pieces of a split delta keep its tag.
+    #[must_use = "flushed events are no longer in the batcher; dropping the frames loses them"]
+    pub fn flush_tagged(&mut self) -> Vec<(EventBatch, Vec<TurnTag>)> {
         if self.pending.is_empty() {
             return Vec::new();
         }
-        let mut packer = Packer::new(&self.session_id, self.max_bytes, self.next_seq);
-        for event in self.pending.drain(..) {
-            packer.add(event);
+        let mut packer = Packer::new(&self.chat_id, self.max_bytes, self.next_seq);
+        for (event, turn) in self.pending.drain(..) {
+            packer.add(event, turn);
         }
         let (frames, next_seq) = packer.finish();
         self.next_seq = next_seq;
@@ -124,11 +135,12 @@ impl FrameBatcher {
     }
 }
 
-/// Which kind of streamed text a delta carries. Both kinds coalesce and split the same way.
+/// Which kind of streamed text a delta carries. Every kind coalesces and splits the same way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DeltaKind {
     Message,
     Thought,
+    User,
 }
 
 impl DeltaKind {
@@ -142,57 +154,99 @@ impl DeltaKind {
                 thought_id: id,
                 text,
             },
+            Self::User => AuraEvent::UserMessageDelta {
+                message_id: id,
+                text,
+            },
         }
+    }
+}
+
+/// A delta's kind, id and text, or `None` for any other event.
+fn delta_ref(event: &AuraEvent) -> Option<(DeltaKind, &str, &str)> {
+    match event {
+        AuraEvent::MessageDelta { message_id, text } => {
+            Some((DeltaKind::Message, message_id, text))
+        }
+        AuraEvent::ThoughtDelta { thought_id, text } => {
+            Some((DeltaKind::Thought, thought_id, text))
+        }
+        AuraEvent::UserMessageDelta { message_id, text } => {
+            Some((DeltaKind::User, message_id, text))
+        }
+        _ => None,
+    }
+}
+
+/// [`delta_ref`] with the text open for appending.
+fn delta_mut(event: &mut AuraEvent) -> Option<(DeltaKind, &str, &mut String)> {
+    match event {
+        AuraEvent::MessageDelta { message_id, text } => {
+            Some((DeltaKind::Message, message_id, text))
+        }
+        AuraEvent::ThoughtDelta { thought_id, text } => {
+            Some((DeltaKind::Thought, thought_id, text))
+        }
+        AuraEvent::UserMessageDelta { message_id, text } => {
+            Some((DeltaKind::User, message_id, text))
+        }
+        _ => None,
     }
 }
 
 /// Builds one flush's frames in order while tracking the open frame's exact JSON length, so packing is
 /// linear in the bytes flushed instead of re-serializing the frame for every event added.
 struct Packer<'a> {
-    session_id: &'a str,
+    chat_id: &'a str,
     /// Largest encoded length a frame may have: frames must stay strictly below `max_bytes`.
     limit: usize,
     /// Encoded length of a frame with no events, minus the digits of its `seq_start`.
     overhead: usize,
     next_seq: u32,
-    frames: Vec<EventBatch>,
+    frames: Vec<(EventBatch, Vec<TurnTag>)>,
     /// Events of the open frame.
     events: Vec<AuraEvent>,
+    /// Their turn tags.
+    tags: Vec<TurnTag>,
     seq_start: u32,
     /// Encoded length of the open frame with its current events.
     len: usize,
 }
 
 impl<'a> Packer<'a> {
-    fn new(session_id: &'a str, max_bytes: usize, next_seq: u32) -> Self {
+    fn new(chat_id: &'a str, max_bytes: usize, next_seq: u32) -> Self {
         let empty = EventBatch {
-            session_id: session_id.to_owned(),
+            chat_id: chat_id.to_owned(),
             seq_start: 0,
             events: Vec::new(),
         };
         // `seq_start: 0` contributes one digit; each frame adds the digits of its real `seq_start`.
         let overhead = empty.encoded_len().saturating_sub(1);
         Self {
-            session_id,
+            chat_id,
             limit: max_bytes.saturating_sub(1),
             overhead,
             next_seq,
             frames: Vec::new(),
             events: Vec::new(),
+            tags: Vec::new(),
             seq_start: next_seq,
             len: overhead.saturating_add(decimal_digits(next_seq)),
         }
     }
 
-    fn add(&mut self, event: AuraEvent) {
+    fn add(&mut self, event: AuraEvent, tag: TurnTag) {
         match event {
             AuraEvent::MessageDelta { message_id, text } => {
-                self.add_delta(DeltaKind::Message, message_id, text)
+                self.add_delta(DeltaKind::Message, message_id, text, tag)
             }
             AuraEvent::ThoughtDelta { thought_id, text } => {
-                self.add_delta(DeltaKind::Thought, thought_id, text)
+                self.add_delta(DeltaKind::Thought, thought_id, text, tag)
             }
-            other => self.add_whole(other),
+            AuraEvent::UserMessageDelta { message_id, text } => {
+                self.add_delta(DeltaKind::User, message_id, text, tag)
+            }
+            other => self.add_whole(other, tag),
         }
     }
 
@@ -213,14 +267,15 @@ impl<'a> Packer<'a> {
             .is_some_and(|budget| fit_prefix(text, budget).0 == text.len())
     }
 
-    fn push_event(&mut self, event: AuraEvent, size: usize) {
+    fn push_event(&mut self, event: AuraEvent, size: usize, tag: TurnTag) {
         let separator = usize::from(!self.events.is_empty());
         if self.events.is_empty() {
             self.seq_start = self.next_seq;
         }
         self.len = self.len.saturating_add(separator).saturating_add(size);
         self.events.push(event);
-        // Wrapping instead of overflowing: four billion events in one session is out of reach, and an
+        self.tags.push(tag);
+        // Wrapping instead of overflowing: four billion events in one chat is out of reach, and an
         // overflow panic would take the whole session down with it.
         self.next_seq = self.next_seq.wrapping_add(1);
     }
@@ -230,21 +285,25 @@ impl<'a> Packer<'a> {
             return;
         }
         let events = std::mem::take(&mut self.events);
-        self.frames.push(EventBatch {
-            session_id: self.session_id.to_owned(),
-            seq_start: self.seq_start,
-            events,
-        });
+        let tags = std::mem::take(&mut self.tags);
+        self.frames.push((
+            EventBatch {
+                chat_id: self.chat_id.to_owned(),
+                seq_start: self.seq_start,
+                events,
+            },
+            tags,
+        ));
         self.len = self.overhead.saturating_add(decimal_digits(self.next_seq));
     }
 
-    fn finish(mut self) -> (Vec<EventBatch>, u32) {
+    fn finish(mut self) -> (Vec<(EventBatch, Vec<TurnTag>)>, u32) {
         self.close_frame();
         (self.frames, self.next_seq)
     }
 
     /// Adds an event that cannot be split.
-    fn add_whole(&mut self, event: AuraEvent) {
+    fn add_whole(&mut self, event: AuraEvent, tag: TurnTag) {
         let size = event_len(&event);
         if size > self.room() && !self.events.is_empty() {
             self.close_frame();
@@ -256,15 +315,16 @@ impl<'a> Packer<'a> {
                 max_bytes = self.limit.saturating_add(1),
                 "event is larger than a frame on its own; sending it alone"
             );
-            self.push_event(event, size);
+            self.push_event(event, size, tag);
             self.close_frame();
         } else {
-            self.push_event(event, size);
+            self.push_event(event, size, tag);
         }
     }
 
-    /// Adds a text delta, splitting its text across as many frames as it needs.
-    fn add_delta(&mut self, kind: DeltaKind, id: String, mut text: String) {
+    /// Adds a text delta, splitting its text across as many frames as it needs. Every piece keeps
+    /// `tag`.
+    fn add_delta(&mut self, kind: DeltaKind, id: String, mut text: String, tag: TurnTag) {
         // The JSON length of this delta with empty text. A piece of text adds exactly its escaped length
         // on top, so pieces can be sized without serializing them.
         let base = event_len(&kind.event(id.clone(), String::new()));
@@ -289,7 +349,7 @@ impl<'a> Packer<'a> {
                     "delta id alone exceeds the frame limit; sending the text unsplit"
                 );
                 let piece = take_from(&mut text, start);
-                self.push_event(kind.event(id, piece), size);
+                self.push_event(kind.event(id, piece), size, tag);
                 self.close_frame();
                 return;
             };
@@ -297,7 +357,7 @@ impl<'a> Packer<'a> {
             if end == rest.len() {
                 let size = base.saturating_add(escaped);
                 let piece = take_from(&mut text, start);
-                self.push_event(kind.event(id, piece), size);
+                self.push_event(kind.event(id, piece), size, tag);
                 return;
             }
             // A delta that fits in a frame of its own is never split: it moves to the next frame whole, so
@@ -314,7 +374,7 @@ impl<'a> Packer<'a> {
                 let dropped = escaped_str_len(rest.get(cut..end).unwrap_or_default());
                 let size = base.saturating_add(escaped.saturating_sub(dropped));
                 let piece = rest.get(..cut).unwrap_or_default().to_owned();
-                self.push_event(kind.event(id.clone(), piece), size);
+                self.push_event(kind.event(id.clone(), piece), size, tag.clone());
                 self.close_frame();
                 start += cut;
                 continue;
@@ -342,7 +402,7 @@ impl<'a> Packer<'a> {
                 );
             }
             let piece = piece.to_owned();
-            self.push_event(kind.event(id.clone(), piece), size);
+            self.push_event(kind.event(id.clone(), piece), size, tag.clone());
             self.close_frame();
             start += cut;
         }
@@ -694,7 +754,7 @@ mod tests {
         let max_bytes = 512;
         let frame_with = |text: &str| {
             let frame = EventBatch {
-                session_id: "s".into(),
+                chat_id: "s".into(),
                 seq_start: 1,
                 events: vec![delta("m", text)],
             };
@@ -801,7 +861,7 @@ mod tests {
         let family = "👨‍👩‍👧‍👦";
         let max_bytes = 400;
         let empty = EventBatch {
-            session_id: "s".into(),
+            chat_id: "s".into(),
             seq_start: 0,
             events: vec![delta("m", "")],
         };
@@ -842,9 +902,15 @@ mod tests {
             tool_call_id: "tool-1".into(),
             status: Some(ToolStatus::Completed),
             title: None,
-            content: vec![ToolContent::Text {
+            kind: None,
+            locations: None,
+            raw_input: None,
+            tool_name: None,
+            content: Some(vec![ToolContent::Text {
                 text: "x".repeat(2_000),
-            }],
+                truncated: None,
+            }]),
+            truncated: None,
         });
         let mut batcher = FrameBatcher::with_max_bytes("s", 512);
         batcher.push(delta("m", "before"));
@@ -915,6 +981,115 @@ mod tests {
         assert_eq!(grapheme_floor("🇸🇮🇺🇸", 4), 0);
         assert_eq!(grapheme_floor("🇸🇮🇺🇸", 8), 8);
         assert_eq!(grapheme_floor("🇸🇮🇺🇸", 12), 8);
+    }
+
+    fn user(id: &str, text: &str) -> AuraEvent {
+        AuraEvent::UserMessageDelta {
+            message_id: id.into(),
+            text: text.into(),
+        }
+    }
+
+    fn tag(turn: &str) -> TurnTag {
+        Some(Arc::from(turn))
+    }
+
+    /// Every event of `frames` with its tag, checking that each frame has one tag per event.
+    fn tagged_events(frames: &[(EventBatch, Vec<TurnTag>)]) -> Vec<(AuraEvent, TurnTag)> {
+        let mut all = Vec::new();
+        for (frame, tags) in frames {
+            assert_eq!(frame.events.len(), tags.len(), "one tag per event");
+            all.extend(frame.events.iter().cloned().zip(tags.iter().cloned()));
+        }
+        all
+    }
+
+    #[test]
+    fn user_message_deltas_coalesce_and_split_like_the_others() {
+        let mut batcher = FrameBatcher::with_max_bytes("c", 300);
+        batcher.push(user("t.u", "Fix "));
+        batcher.push(user("t.u", "the build"));
+        batcher.push(delta("t.u", " not merged: another kind"));
+        assert_eq!(batcher.pending_len(), 2);
+        batcher.push(user("t2.u", &"y".repeat(1_000)));
+        let frames = batcher.flush();
+        let events = all_events(&frames);
+        assert_eq!(events[0], user("t.u", "Fix the build"));
+        let rebuilt: String = events
+            .iter()
+            .filter_map(|event| match event {
+                AuraEvent::UserMessageDelta { message_id, text } if message_id == "t2.u" => {
+                    Some(text.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(rebuilt, "y".repeat(1_000));
+        assert!(frames.iter().all(|frame| frame.encoded_len() < 300));
+        assert_contiguous(&frames, 0);
+    }
+
+    #[test]
+    fn only_adjacent_deltas_with_equal_tags_merge() {
+        let mut batcher = FrameBatcher::new("c");
+        batcher.push_tagged(delta("m", "a"), tag("t1"));
+        batcher.push_tagged(delta("m", "b"), tag("t1"));
+        batcher.push_tagged(delta("m", "c"), None);
+        batcher.push_tagged(delta("m", "d"), None);
+        batcher.push_tagged(delta("m", "e"), tag("t2"));
+        batcher.push_tagged(thought("th", "f"), tag("t2"));
+        let frames = batcher.flush_tagged();
+        assert_eq!(
+            tagged_events(&frames),
+            vec![
+                (delta("m", "ab"), tag("t1")),
+                (delta("m", "cd"), None),
+                (delta("m", "e"), tag("t2")),
+                (thought("th", "f"), tag("t2")),
+            ]
+        );
+        assert_eq!(batcher.next_seq(), 4);
+    }
+
+    #[test]
+    fn split_pieces_keep_their_tag() {
+        let mut batcher = FrameBatcher::with_max_bytes("c", 300);
+        batcher.push_tagged(notice("before"), None);
+        batcher.push_tagged(delta("m", &"x".repeat(2_000)), tag("t"));
+        batcher.push_tagged(notice("after"), tag("t"));
+        let frames = batcher.flush_tagged();
+        assert!(frames.len() > 5, "the delta was split");
+        let all = tagged_events(&frames);
+        assert_eq!(all.first(), Some(&(notice("before"), None)));
+        assert_eq!(all.last(), Some(&(notice("after"), tag("t"))));
+        for (event, turn) in &all[1..] {
+            assert_eq!(turn, &tag("t"), "{event:?}");
+        }
+        let plain: Vec<EventBatch> = frames.iter().map(|(frame, _)| frame.clone()).collect();
+        assert_eq!(delta_text(&plain, "m").0, "x".repeat(2_000));
+        assert_contiguous(&plain, 0);
+    }
+
+    #[test]
+    fn untagged_flushes_match_tagged_ones() {
+        let fill = |batcher: &mut FrameBatcher| {
+            batcher.push(notice("one"));
+            batcher.push_tagged(delta("m", &"z".repeat(900)), tag("t"));
+            batcher.push(user("u", "hi"));
+        };
+        let mut plain = FrameBatcher::with_max_bytes("c", 400).starting_at(7);
+        let mut tagged = plain.clone();
+        fill(&mut plain);
+        fill(&mut tagged);
+        let frames = plain.flush();
+        let with_tags: Vec<EventBatch> = tagged
+            .flush_tagged()
+            .into_iter()
+            .map(|(frame, _)| frame)
+            .collect();
+        assert_eq!(frames, with_tags);
+        assert_eq!(plain.next_seq(), tagged.next_seq());
+        assert!(plain.flush_tagged().is_empty());
     }
 
     #[test]

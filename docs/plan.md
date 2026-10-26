@@ -167,9 +167,11 @@ Same Aura design language and `packages/ui` components (the orb is the hero), fa
 auracode/                        Cargo workspace + pnpm workspace
   crates/
     aura-protocol/               AuraEvent, commands, capabilities, sync/API types (serde + specta -> TS)
-    aura-agents/                 data-driven catalog, env resolution, detection, channels, versions, auth
+    aura-process/                process lifecycle (spawn, framing, shutdown, leftovers), env resolution +
+                                 scrub, protocol logs
+    aura-agents/                 data-driven catalog, detection, adapter install, channels, versions, auth
     aura-drivers/                protocol drivers: acp, claude, codex, pi; stream fallbacks; mock
-    aura-core/                   sessions + process lifecycle, store, git/checkpoints/worktrees, search, handoff
+    aura-core/                   sessions, store, git/checkpoints/worktrees, search, handoff
     aura-config/                 (M8) per-agent config adapters (read into items, apply changes)
     aura-sync/                   (M6/M7/M9) API client, token manager, merge engines, crypto
     aura-cli/                    dev CLI: detect, smoke-test agents, record fixtures, replay
@@ -188,12 +190,14 @@ auracode/                        Cargo workspace + pnpm workspace
   (never `acrylic`/`blur`). Overlay titlebar + `trafficLightPosition` on macOS; Windows titlebar decided by
   an M0 spike (custom controls lose Snap Layouts, so native caption buttons are the default). Plugins:
   single-instance, deep-link (`auracode://`), notification, window-state, updater, dialog, opener.
-- **Crates (exact versions pinned at M0):** tokio 1.54, serde, tauri-specta 2.0.0-rc.26 (pinned `=`; ts-rs
-  fallback), `agent-client-protocol` 3.5 (pin), process-wrap 10, portable-pty 0.9 (login terminal),
-  rusqlite 0.40 + rusqlite_migration + tokio-rusqlite (one writer + read pool, FTS5; SQLCipher from M7), the
-  `git` CLI for all git work (`GIT_OPTIONAL_LOCKS=0` when polling), ignore + nucleo-matcher, notify,
-  reqwest 0.13, semver, similar/diffy, toml_edit + jsonc-parser, keepawake, keyring, tracing. Our own
-  login-shell env resolver.
+- **Crates (exact versions pinned at M0):** tokio 1.54, serde, `serde_json` with `preserve_order` (agents'
+  key order survives into logs and fixtures), tauri-specta 2.0.0-rc.26 (pinned `=`; ts-rs fallback), our own
+  JSON-RPC peer for ACP with no runtime `agent-client-protocol` (`agent-client-protocol-schema` =1.12.0 is a
+  dev-dependency, for conformance tests only), process-wrap 10, portable-pty 0.9 (login terminal),
+  rusqlite 0.40 + rusqlite_migration (one writer thread owns the store in M1a, with no tokio-rusqlite; a read
+  pool can come later behind the same API; FTS5; SQLCipher from M7), the `git` CLI for all git work
+  (`GIT_OPTIONAL_LOCKS=0` when polling), ignore + nucleo-matcher, notify, reqwest 0.13, semver,
+  similar/diffy, toml_edit + jsonc-parser, keepawake, keyring, tracing. Our own login-shell env resolver.
 - **IPC.** Commands for request/response; `Channel` for streams; token deltas batched per frame into frames
   under 8 KiB; tool output capped (full output on disk).
 - **App UI stack.** React 19.3, Vite, TypeScript, Tailwind 4.3, Motion 14, shadcn on Base UI (fully
@@ -220,13 +224,21 @@ auracode/                        Cargo workspace + pnpm workspace
   brand, last-verified version). Drivers are per protocol: ACP, Claude stream-json, Codex app-server, Pi RPC
   (+ stream fallbacks, mock). Agents launch through their stable symlink/shim; real paths only identify the
   install channel. Copies bundled inside other apps are read-only channels.
-- **Driver trait.** `create_session({cwd, add_dirs, model, effort, autonomy, resume_id})` returning a
-  session with `send`, `steer?`, `interrupt`, `set_model`, `set_effort`, `set_autonomy`, `fork?`, `rewind?`,
-  `respond(request_id, decision)`, an event stream, `close`. The UI reads `capabilities`, never agent names.
-- **AuraEvent** (ACP vocabulary): turn.started/ended, message.delta/completed, thought.delta/completed,
-  tool.call, tool.update (text | diff | terminal), permission.requested/resolved, ui.request, plan.updated,
-  usage.updated, limits.updated, session.updated (native id, title, model, effort, mode; the slash
-  commands move out of it in M1a), a command lifecycle event (M1a), notice, error.
+- **Driver contract.** A driver is an actor: `AgentDriver::run(ctx)` takes commands in (prompt, interrupt,
+  permission and question answers, option and autonomy changes, shutdown) and hands events out over a
+  channel bounded by count and bytes, every event tagged with the turn it belongs to, and spawns through
+  the session's spawner, which records every process. Prompts are a list of parts (text in M1a; images and
+  mentions in M2c). Questions have an answer path (`RespondUi` in, `UiResolved` out), like permissions.
+  Turns, the prompt queue and persistence belong to the session manager, not the drivers. The UI reads
+  `capabilities`, never agent names.
+- **AuraEvent** (ACP vocabulary): turn.started/ended, user_message.delta, message.delta/completed,
+  thought.delta/completed, tool.call, tool.update (text | diff | terminal), permission.requested/resolved,
+  ui.request/resolved, plan.updated, usage.updated, limits.updated, session.updated (status, native id,
+  title, model, effort, mode; no slash commands, which the UI fetches on request), prompt_lifecycle (the
+  command lifecycle event: queued, started, completed, cancelled, failed), notice, error. `TokenUsage`
+  splits cache reads from cache writes and says whether it counts a turn or the session; `StopReason`
+  adds `interrupted` (auracode ended the turn) and `other`. Stored enums read a value they don't know as a
+  fallback, so rows from a newer build still load.
 - **Profiles from day one.** All local data under `<app data>/profiles/<profile_id>/` (database,
   attachments, checkpoints, logs). M0 ships one "Local" profile; M6/M7 add one per account.
 - **Storage.** UUIDv7 ids, `device_id`, tombstones (no hard deletes), portable folder identity from M0; the
@@ -236,25 +248,32 @@ auracode/                        Cargo workspace + pnpm workspace
 ## Agent integration (researched 2026-10-24)
 | Agent | Path | Notes |
 |---|---|---|
-| Claude Code | Native: own Rust control loop over stream-json; user's `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio`, always with `--permission-mode`, with `--session-id=<uuid>` (new session) or `--resume=<id>`, and with `--allow-dangerously-skip-permissions` where the user's settings allow bypass | Contract and fixtures in the [M0 spike](spikes/claude-control.md) (2.1.310). Own lenient serde types; `claude-codes` crate and the official Python Agent SDK are references, diffed each release. Control: `initialize`, `interrupt`, `set_model`, `set_permission_mode`, `apply_flag_settings` (effort), `get_usage`, `get_context_usage`, `list_models`, `rewind_files`; we answer `can_use_tool`; fork via `--fork-session` (with our `--session-id`) or resume-at. `--permission-mode` is never left out: without it every spawn, resumes included, takes `permissions.defaultMode` from the user's settings, which can be `auto`. `--session-id` gives a new session's native id before its first turn. `bypassPermissions` can be switched on mid-chat only in a process launched with `--allow-dangerously-skip-permissions`. Resume works after a cwd change (the transcript keeps appending under the original folder's project dir), and `--fork-session` with `--session-id` writes the fork under the new folder's. The user's own hooks run inside these sessions (`SessionStart` context, `PermissionRequest` hooks that can answer or delay a prompt), so a tool call may never reach us as `can_use_tool`; principle 3 still holds, since auracode itself adds nothing. `rate_limit_event` feeds the limits meter. Unknown messages logged, never fatal; capabilities from `system/init`; compatibility smoke per new version. Day-one fallback (M1a): ACP via `claude-agent-acp`. |
-| Codex | Native: `codex app-server --listen stdio://`, own process | Own serde subset with `#[serde(other)]`, tested against the JSON Schema from `codex app-server generate-json-schema` per supported version. `thread/start/resume/fork/list`, `turn/start` (model, effort, cwd, approvalPolicy, sandboxPolicy, images, mentions), `turn/steer`, `turn/interrupt`, `turn/diff/updated`, approvals, `model/list`, `account/rateLimits/read`, plugin/skill/config APIs (reused by Library + Sync). Never the shared daemon (opt-in later). Day-one fallback: `codex-acp`. |
+| Claude Code | Native: own Rust control loop over stream-json; user's `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio`, always with `--permission-mode`, with `--session-id=<uuid>` (new session) or `--resume=<id>`, and with `--allow-dangerously-skip-permissions` where the user's settings allow bypass | Contract and fixtures in the [M0 spike](spikes/claude-control.md) (2.1.310). Own lenient serde types; `claude-codes` crate and the official Python Agent SDK are references, diffed each release. Control: `initialize`, `interrupt`, `set_model`, `set_permission_mode`, `apply_flag_settings` (effort), `get_usage`, `get_context_usage`, `list_models`, `rewind_files`; we answer `can_use_tool`; fork via `--fork-session` (with our `--session-id`) or resume-at. `--permission-mode` is never left out: without it every spawn, resumes included, takes `permissions.defaultMode` from the user's settings, which can be `auto`. `--session-id` gives a new session's native id before its first turn. `bypassPermissions` can be switched on mid-chat only in a process launched with `--allow-dangerously-skip-permissions`. Resume works after a cwd change (the transcript keeps appending under the original folder's project dir), and `--fork-session` with `--session-id` writes the fork under the new folder's. The user's own hooks run inside these sessions (`SessionStart` context, `PermissionRequest` hooks that can answer or delay a prompt), so a tool call may never reach us as `can_use_tool`; principle 3 still holds, since auracode itself adds nothing. `rate_limit_event` feeds the limits meter. Unknown messages logged, never fatal; capabilities from `system/init`; compatibility smoke per new version. Day-one fallback (M1a): ACP via the `claude-agent-acp` npm adapter, installed once per version into `<data root>/adapters` with `npm ci --omit=optional --ignore-scripts` from a lockfile committed for that version, launched as `node <entry>` from there, with the user's `claude` forced through `CLAUDE_CODE_EXECUTABLE`; never `npx` in the chat folder. |
+| Codex | Native: `codex app-server --listen stdio://`, own process | Own serde subset with `#[serde(other)]`, tested against the JSON Schema from `codex app-server generate-json-schema` per supported version. `thread/start/resume/fork/list`, `turn/start` (model, effort, cwd, approvalPolicy, sandboxPolicy, images, mentions), `turn/steer`, `turn/interrupt`, `turn/diff/updated`, approvals, `model/list`, `account/rateLimits/read`, plugin/skill/config APIs (reused by Library + Sync). Never the shared daemon (opt-in later). Day-one fallback (M1a): the `codex-acp` npm adapter, installed and launched like Claude's, with the user's `codex` forced through `CODEX_PATH`. |
 | Pi | Native RPC `pi --mode rpc` | `prompt`/`steer`/`follow_up`/`abort`, `set_model`, `get_available_models`, `set_thinking_level`, `fork`, `get_session_stats`, `extension_ui_request` (rendered as confirm/select/input). Turn ends on `agent_settled`; split on LF only. |
 | Antigravity | ACP via Google's `agy_acp_server` (registry `antigravity-acp`) | Fallback `agy -p --input-format stream-json --output-format stream-json` (text only, no approvals, interrupt = kill). |
 | oh-my-pi | ACP `omp acp` | Never set `PI_CODING_AGENT_DIR` globally. |
 | Cursor | ACP `agent acp` | Dialect: answer `cursor/ask_question` / `cursor/create_plan`; model switch = restart with `--model`. Never detect by the name `agent`. |
 | Grok Build | ACP `grok agent stdio` | Fallback `grok -p --output-format streaming-json`. |
-| Hermes | ACP `hermes acp` | Dialect: `session/set_model`. Not in the registry; hard-coded. |
+| Hermes | ACP `hermes acp` | A viewer of its gateway daemon, where turns run: cancel before kill, with time for the cancel to land. Dialect: legacy `modes` (`default`, `accept_edits`, `dont_ask`) and `models` lists, the untyped `session/set_model`, mode changes only while idle; Full auto = `dont_ask` plus auto-answers for command approvals. Not in the registry; hard-coded. |
 | OpenCode | ACP `opencode acp` | Detect V1 (1.19.x) vs V2 (2.1.x). |
 | Gemini CLI + registry agents | Generic ACP (registry `cdn.agentclientprotocol.com/registry/v1/latest/registry.json`) | Shown with an "unverified" badge until tested. |
 
-ACP client advertises `fs` and `terminal` as false (agents use their own file I/O and shells). Model/effort
-via session config options; `session/list|load|resume`; `usage_update`; `auth.terminal` login. Unknown
-agent-to-client requests get JSON-RPC "method not found" so agents never hang.
+ACP client advertises `fs` and `terminal` as false (agents use their own file I/O and shells), and
+`auth.terminal`, `session.notices` and `session.configOptions.boolean`. Model and effort are session config
+options, told apart by category; `session/set_model` is gone from the schema and survives only in the
+legacy dialect, for agents that still send a `models` list (Hermes). `session/load|resume`; `usage_update`;
+sign-in through the agent's own terminal command. Unknown agent-to-client requests get JSON-RPC "method not
+found" so agents never hang.
 
 **Detection + updates.**
 - Env: resolve the login-shell env asynchronously (`$SHELL -ilc` with stdin `/dev/null`, markers, 10s
   timeout), cache it, never block boot on it; plus known dirs (`~/.local/bin`, `~/.opencode/bin`,
-  `~/.grok/bin`, `~/.pi/agent/bin`, `~/.bun/bin`, `~/.volta/bin`, `/opt/homebrew/bin`, npm prefix, shims).
+  `~/.grok/bin`, `~/.pi/agent/bin`, `~/.bun/bin`, `~/.volta/bin`, the asdf and mise shims,
+  `/opt/homebrew/bin`, and the `prefix=` of `~/.npmrc`, read rather than by running npm). nvm stays with
+  the login shell: its shell function can't be resolved reliably without one. The variables that describe
+  how auracode itself was launched (terminal session, npm, pnpm, Tauri dev) are stripped from the
+  resolver shell's input.
 - A binary counts only if `--version` runs. Channel from the real path; updates run the vendor's own update
   command for that channel (agents also self-update; we don't fight it). Each driver records a
   last-verified version; newer, untested versions get a small badge.
@@ -283,8 +302,12 @@ consumer-grade polish. MIT/Apache code may be read for reference; never AGPL (To
 ## Engineering rules
 - **Processes:** drain stdout and stderr continuously; bounded large-line framing (base64 images); shutdown
   = protocol interrupt, close stdin, wait, SIGTERM, walk descendants by parent pid, SIGKILL last; record pid
-  + start time and kill only our own leftovers at startup; never kill vendor daemons; treat agent state dirs
-  as shared with vendor apps.
+  + start time and kill only our own leftovers at startup; treat agent state dirs as shared with vendor
+  apps. The descendant walk kills every descendant, whatever its group or session, except the vendor
+  daemons the agent's catalog entry declares (Hermes' gateway, Claude's daemon), which are spared with their
+  subtrees, on every OS. On Windows every agent runs in a kill-on-close job; job breakaway for agents that
+  declare daemons arrives in M1e, so M1a's Hermes on Windows needs its gateway already running. One
+  auracode process owns a profile's sessions (`<profile>/owner.lock`); a second one refuses to start them.
 - **Env scrub:** children inherit the resolved login-shell env minus an explicit denylist. Everything
   else passes through, including documented user configuration (`CLAUDE_CODE_USE_BEDROCK`,
   `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, `CLAUDE_CODE_GIT_BASH_PATH`, `CODEX_HOME`, and
@@ -319,11 +342,11 @@ consumer-grade polish. MIT/Apache code may be read for reference; never AGPL (To
 - **Tooling:** rustfmt and clippy for Rust (`-D warnings` in CI; no `dbg!`, no `unwrap()` or `expect()`
   outside tests). No `unsafe` except SAFETY-commented calls into Windows APIs that std does not wrap, each
   item opting out of the denied `unsafe_code` lint on its own; in the app that is only aura-core's
-  `fsutil::win_acl`, which makes the profiles folder private to the user. Biome alone lints and formats
-  TypeScript, CSS, JSON, and YAML: one fast tool and one config instead of ESLint + Prettier. It does not
-  format Markdown (its formatter re-pads hand-wrapped tables) and leaves `pnpm-lock.yaml` to pnpm. pnpm
-  settings live in `pnpm-workspace.yaml` (pnpm 12 ignores them in `.npmrc`); `engineStrict` holds installs
-  to the Node range in `engines`.
+  `fsutil::win_acl`, which makes the profiles folder private to the user (M1a adds no `unsafe` module).
+  Biome alone lints and formats TypeScript, CSS, JSON, and YAML: one fast tool and one config instead of
+  ESLint + Prettier. It does not format Markdown (its formatter re-pads hand-wrapped tables) and leaves
+  `pnpm-lock.yaml` to pnpm. pnpm settings live in `pnpm-workspace.yaml` (pnpm 12 ignores them in
+  `.npmrc`); `engineStrict` holds installs to the Node range in `engines`.
 
 ## Edge cases (each one has a defined behaviour and a test)
 **Agents.** Not installed; installed but broken (`--version` fails: shown as broken with the error); several
@@ -401,10 +424,11 @@ to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The z
   completed, cancelled) feeds the composer queue.
 - **M1b Claude native driver** to the contract in the
   [Claude control spike](spikes/claude-control.md#recommended-driver-contract-m1b), including its side of
-  the M1a follow-ups: `command_lifecycle` drives the lifecycle event, `cache_read_input_tokens` and
-  `cache_creation_input_tokens` fill `TokenUsage` separately, and the command list (from `initialize`,
-  then debounced `commands_changed`) is reduced in Rust and reaches the UI by M1a's new route. **M1c
-  Codex native driver.**
+  the M1a follow-ups: the session actor owns the lifecycle event, so the driver logs `command_lifecycle`
+  instead of mapping it; `cache_read_input_tokens` and `cache_creation_input_tokens` fill `TokenUsage`
+  separately; and the command list (from `initialize`, then debounced `commands_changed`) is reduced in
+  Rust and reaches the UI by M1a's new route. Every spawn sets `CLAUDE_CODE_SDK_READS_SESSION_STATE=1`
+  through `LaunchSpec.set_env`. **M1c Codex native driver.**
 - **M1d Pi + the rest.** With the user's OK, install pi, oh-my-pi, OpenCode, Cursor CLI, Grok Build via their
   official installers (Cursor/Grok need the user's sign-in), then Pi native driver and the ACP dialects
   (Antigravity, Cursor, Grok, oh-my-pi, OpenCode) + agy/grok fallbacks.

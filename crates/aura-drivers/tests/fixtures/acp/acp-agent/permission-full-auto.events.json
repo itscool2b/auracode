@@ -1,0 +1,175 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    },
+    {
+      "type": "status",
+      "data": "configuring"
+    },
+    {
+      "type": "options",
+      "data": []
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": null,
+        "auto_answer": {
+          "type": "all"
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "<SESSION_1>",
+        "agent_name": "ACP Agent",
+        "agent_version": "1.0.0",
+        "capabilities": {
+          "images": true,
+          "steer": false,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": false,
+          "set_effort": false,
+          "permissions": true,
+          "plans": true,
+          "usage": true,
+          "limits": false,
+          "slash_commands": true,
+          "add_dirs": false,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "new"
+        },
+        "spawn_id": "019a0000-0000-7000-8000-0000000000a1",
+        "replay": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "prompting"
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "tool_call",
+          "tool_call_id": "019a0000-0001-7000-8000-000000000001.call_t",
+          "kind": "execute",
+          "title": "Run cargo test",
+          "status": "pending",
+          "locations": [],
+          "raw_input": {
+            "command": "cargo test"
+          },
+          "tool_name": null,
+          "content": [],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "permission",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "request": {
+          "request_id": "019a0000-0001-7000-8000-000000000001.p1",
+          "tool_call_id": "019a0000-0001-7000-8000-000000000001.call_t",
+          "title": "Run cargo test",
+          "kind": "execute",
+          "raw_input": null,
+          "content": [],
+          "locations": [],
+          "options": [
+            {
+              "option_id": "allow_once",
+              "kind": "allow_once",
+              "label": "Allow once"
+            },
+            {
+              "option_id": "allow_always",
+              "kind": "allow_always",
+              "label": "Always allow"
+            },
+            {
+              "option_id": "reject_once",
+              "kind": "reject_once",
+              "label": "Reject"
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "019a0000-0001-7000-8000-000000000001",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "019a0000-0001-7000-8000-000000000001.call_t",
+          "status": "completed",
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": null,
+          "tool_name": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "test result: ok. 12 passed",
+              "truncated": null
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "019a0000-0001-7000-8000-000000000001",
+        "stop_reason": "end_turn",
+        "usage": null,
+        "error": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    }
+  ],
+  "replies": [],
+  "exit": {
+    "type": "closed"
+  }
+}

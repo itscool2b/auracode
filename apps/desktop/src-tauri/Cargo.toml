@@ -1,6 +1,6 @@
 [package]
 name = "auracode-desktop"
-description = "The auracode desktop shell: Tauri window, typed commands and channels over aura-core"
+description = "The auracode desktop shell: Tauri window, typed commands and channels over aura-core's sessions"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -28,14 +28,17 @@ embed-resource = "3.0.12"
 tauri-build.workspace = true
 
 [dependencies]
+aura-agents.workspace = true
 aura-core.workspace = true
 aura-drivers.workspace = true
+aura-process.workspace = true
 aura-protocol.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 specta.workspace = true
 specta-typescript.workspace = true
 tauri.workspace = true
+tauri-plugin-dialog.workspace = true
 tauri-plugin-opener.workspace = true
 tauri-plugin-single-instance.workspace = true
 tauri-plugin-window-state.workspace = true
@@ -53,6 +56,9 @@ tracing-subscriber.workspace = true
 windows-version = "0.1.7"
 
 [dev-dependencies]
+# The quit, page-load and signal tests run the session manager on fake processes and scripted drivers.
+aura-drivers = { workspace = true, features = ["testing"] }
+aura-process = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
 # Paused time makes the window fallback and the demo stream tests instant and deterministic.
 tokio = { workspace = true, features = ["test-util"] }

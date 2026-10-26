@@ -97,6 +97,14 @@ pub enum CoreError {
         problem: LinkProblem,
     },
 
+    /// Another auracode process (a second launch with the same data folder, or the CLI) owns this
+    /// profile's sessions ([`crate::owner::ProfileOwner`]). `path` is the profile's folder.
+    #[error(
+        "auracode is already running with the profile in {}. Quit it first, or start this copy with its own AURACODE_DATA_DIR.",
+        path.display()
+    )]
+    ProfileInUse { path: PathBuf },
+
     #[error("\"{0}\" is not a valid profile id")]
     InvalidProfileId(String),
 

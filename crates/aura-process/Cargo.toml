@@ -1,0 +1,53 @@
+[package]
+name = "aura-process"
+description = "Agent processes for auracode: spawning, line framing, shutdown, leftover cleanup, the environment agents start with, and protocol logs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# `testing`: FakeSpawner and FakeControl, in-memory agent processes for other crates' tests.
+testing = []
+
+[dependencies]
+futures.workspace = true
+# Process groups, sessions and Windows job objects around tokio's Command. Default features off:
+# its `tracing` feature is not needed, and `tokio1` is the only runtime used.
+process-wrap = { version = "=10.0.1", default-features = false, features = [
+    "tokio1",
+    "creation-flags",
+    "job-object",
+    "kill-on-drop",
+    "process-group",
+    "process-session",
+    "reset-sigmask",
+] }
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+# killpg for process groups, getsid for the leftover registry, the passwd entry's shell.
+nix = { version = "0.31.3", features = ["signal", "process", "user"] }
+
+[target.'cfg(windows)'.dependencies]
+# Only for the CREATE_NO_WINDOW constant that process-wrap's CreationFlags takes; no unsafe code.
+windows = { version = "0.62.2", features = ["Win32_System_Threading"] }
+# The machine and user environment from the registry, through its safe API.
+winreg = "0.56.0"
+
+[dev-dependencies]
+tempfile.workspace = true
+# Paused time makes the shutdown chain and resolver timeouts deterministic.
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

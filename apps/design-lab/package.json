@@ -1,0 +1,33 @@
+{
+  "name": "@auracode/design-lab",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The M1a Design Lab: visual directions for the auracode UI, each rendering the same recorded-style chat.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p . && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run",
+    "shoot": "node scripts/shoot.mjs"
+  },
+  "dependencies": {
+    "@auracode/ui": "workspace:*",
+    "lucide-react": "1.55.0",
+    "motion": "14.6.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "playwright": "1.63.0",
+    "tailwindcss": "4.3.3",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}
