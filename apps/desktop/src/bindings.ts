@@ -157,6 +157,8 @@ export const commands = {
 	worktreeSetupApply: (chatId: string, token: string) => typedError<WorktreeSetupResult, AppError>(__TAURI_INVOKE("worktree_setup_apply", { chatId, token })),
 	worktreeSetupStart: (chatId: string, token: string, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("worktree_setup_start", { chatId, token, terminalId, rows, cols })),
 	gitWorkspace: (chatId: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_workspace", { chatId })),
+	gitInitializePreview: (chatId: string, initialBranch: string) => typedError<GitInitializePreview, AppError>(__TAURI_INVOKE("git_initialize_preview", { chatId, initialBranch })),
+	gitInitializeApply: (chatId: string, token: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_initialize_apply", { chatId, token })),
 	managedWorktrees: (chatId: string) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("managed_worktrees", { chatId })),
 	isolationPreview: (chatId: string, input: IsolationInput) => typedError<IsolationPreview, AppError>(__TAURI_INVOKE("isolation_preview", { chatId, input })),
 	isolationApply: (chatId: string, token: string) => typedError<IsolationResult, AppError>(__TAURI_INVOKE("isolation_apply", { chatId, token })),
@@ -984,6 +986,14 @@ export type GitFileState = {
 	index: string,
 	worktree: string,
 	original_path: string | null,
+};
+
+export type GitInitializePreview = {
+	token: string,
+	folder: string,
+	initial_branch: string,
+	warnings: string[],
+	expires_at: number,
 };
 
 export type GitWorkspace = {

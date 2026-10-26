@@ -147,6 +147,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::worktree_setup_commands::worktree_setup_apply,
             crate::worktree_setup_commands::worktree_setup_start,
             crate::git_commands::git_workspace,
+            crate::project_tools::git_initialize_preview,
+            crate::project_tools::git_initialize_apply,
             crate::git_commands::managed_worktrees,
             crate::git_commands::isolation_preview,
             crate::git_commands::isolation_apply,

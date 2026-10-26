@@ -25,6 +25,15 @@ pub struct GitWorkspace {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct GitInitializePreview {
+    pub token: String,
+    pub folder: String,
+    pub initial_branch: String,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct IsolationInput {
     pub slug: String,
     pub bring_changes: bool,

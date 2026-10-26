@@ -20,6 +20,7 @@ let worktrees: ManagedWorktree[] = [];
 let preview: WorktreeActionPreview | null = null;
 let sequence = 0;
 let currentFolder = workspace.root;
+let initialized = !params.has("non-git");
 let relocationTarget = "";
 const makeWorktree = (): ManagedWorktree => ({
   id: "worktree-one",
@@ -34,7 +35,36 @@ const makeWorktree = (): ManagedWorktree => ({
   created_at: 1,
 });
 const api: GitWorkspaceApi = {
-  inspect: async () => ({ ...structuredClone(workspace), root: currentFolder }),
+  inspect: async () => {
+    if (!initialized)
+      throw new Error(
+        "This folder is not a Git working tree. Initialize it explicitly before creating isolation.",
+      );
+    return { ...structuredClone(workspace), root: currentFolder };
+  },
+  initializePreview: async (_chat, branch) => {
+    calls.push("review-initialize");
+    return {
+      token: "initialize-once",
+      folder: workspace.root,
+      initial_branch: branch,
+      expires_at: Date.now() + 600000,
+      warnings: [
+        "Creates only a new .git directory. Existing working files remain unchanged; nothing is staged or committed.",
+      ],
+    };
+  },
+  initializeApply: async (_chat, token) => {
+    calls.push(`apply-initialize:${token}`);
+    if (params.has("stale-init"))
+      throw new Error("The folder changed since review. Review Git initialization again.");
+    initialized = true;
+    workspace.head = null;
+    workspace.blockers = [
+      "This repository has no commit yet. Create its first commit before isolation.",
+    ];
+    return structuredClone(workspace);
+  },
   list: async () => structuredClone(worktrees),
   isolationPreview: async (_chat, input) => {
     calls.push("review-isolation");

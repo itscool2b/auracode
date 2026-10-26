@@ -4,6 +4,7 @@ mod actions;
 mod create;
 mod git;
 mod identity;
+mod initialize;
 mod inspect;
 mod publish;
 mod records;
@@ -46,6 +47,7 @@ pub struct GitWorkspaces {
     recoveries: std::sync::Mutex<HashMap<String, recovery::PreparedRecovery>>,
     pull_requests: std::sync::Mutex<HashMap<String, publish::PreparedPullRequest>>,
     setups: std::sync::Mutex<HashMap<String, setup::Prepared>>,
+    initializations: std::sync::Mutex<HashMap<String, initialize::Prepared>>,
 }
 
 impl GitWorkspaces {
@@ -111,6 +113,7 @@ impl GitWorkspaces {
             recoveries: std::sync::Mutex::new(HashMap::new()),
             pull_requests: std::sync::Mutex::new(HashMap::new()),
             setups: std::sync::Mutex::new(HashMap::new()),
+            initializations: std::sync::Mutex::new(HashMap::new()),
         })
     }
 

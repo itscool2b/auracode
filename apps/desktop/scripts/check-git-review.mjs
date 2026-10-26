@@ -5,6 +5,50 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 
 export async function checkGitReview(page, url, out, engine) {
+  await page.goto(`${url}/?preview=git&non-git&live`);
+  const initialize = page.getByRole("button", { name: "Review Git initialization", exact: true });
+  await initialize.waitFor();
+  assert.equal(await initialize.isDisabled(), true);
+  assert.deepEqual(await page.evaluate(() => window.gitFixture.calls()), []);
+  await page.getByRole("button", { name: "Stop session", exact: true }).click();
+  await initialize.click();
+  await page.getByRole("heading", { name: "Review Git initialization", exact: true }).waitFor();
+  assert.deepEqual(await page.evaluate(() => window.gitFixture.calls()), [
+    "stop",
+    "review-initialize",
+  ]);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await initialize.click();
+  assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+  await page.screenshot({ path: resolve(out, `${engine}-git-initialize-review.png`) });
+  await page.getByRole("button", { name: "Initialize reviewed folder", exact: true }).click();
+  await page
+    .getByText(
+      "Git is initialized. Existing files remain unstaged. Create the first commit before isolation.",
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(
+    await page.getByRole("button", { name: "Review isolation", exact: true }).isDisabled(),
+    true,
+  );
+  assert.deepEqual(await page.evaluate(() => window.gitFixture.calls()), [
+    "stop",
+    "review-initialize",
+    "review-initialize",
+    "apply-initialize:initialize-once",
+    "refresh-chat",
+  ]);
+  await page.goto(`${url}/?preview=git&non-git&stale-init`);
+  await initialize.click();
+  await page.getByRole("button", { name: "Initialize reviewed folder", exact: true }).click();
+  await page
+    .getByText("The folder changed since review. Review Git initialization again.", { exact: true })
+    .waitFor();
+  assert.equal(
+    await page.getByRole("button", { name: "Initialize reviewed folder", exact: true }).count(),
+    0,
+  );
   await page.goto(`${url}/?preview=git&live`);
   const isolate = page.getByRole("button", { name: "Review isolation", exact: true });
   await isolate.waitFor();

@@ -1,6 +1,7 @@
 import { GitBranch, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type {
+  GitInitializePreview,
   GitWorkspace,
   IsolationPreview,
   ManagedWorktree,
@@ -21,6 +22,7 @@ import { WorktreeSetupPanel } from "./WorktreeSetupPanel";
 import "./git-dialog.css";
 
 type Preview =
+  | { type: "initialize"; value: GitInitializePreview }
   | { type: "isolate"; value: IsolationPreview }
   | { type: "action"; value: WorktreeActionPreview }
   | { type: "recovery"; value: WorktreeRecoveryPreview }
@@ -101,6 +103,8 @@ export function GitDialog({
   readonly setupApi?: WorktreeSetupApi;
 }) {
   const [workspace, setWorkspace] = useState<GitWorkspace | null>(null);
+  const [initialBranch, setInitialBranch] = useState("main");
+  const [initialized, setInitialized] = useState(false);
   const [worktrees, setWorktrees] = useState<ManagedWorktree[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -142,10 +146,10 @@ export function GitDialog({
       if (inspection.status === "fulfilled") setWorkspace(inspection.value);
       else {
         setWorkspace(null);
-        setError(errorMessage(inspection.reason));
+        setError((current) => current ?? errorMessage(inspection.reason));
       }
       if (owned.status === "fulfilled") setWorktrees(owned.value);
-      else setError(errorMessage(owned.reason));
+      else setError((current) => current ?? errorMessage(owned.reason));
       setLoading(false);
     });
   }, [api, chatId, revision]);
@@ -177,6 +181,11 @@ export function GitDialog({
         setPreview({ type: "isolate", value });
         setResult(null);
       }
+    });
+  const reviewInitialize = () =>
+    run(async () => {
+      const value = await api.initializePreview(chatId, initialBranch);
+      if (alive.current) setPreview({ type: "initialize", value });
     });
   const reviewAction = (tree: ManagedWorktree, type: "merge" | "discard") =>
     run(async () => {
@@ -216,6 +225,12 @@ export function GitDialog({
                   ? null
                   : (value.warning ?? "Review this worktree's recovery state."),
             });
+        } else if (chosen.type === "initialize") {
+          const value = await api.initializeApply(chatId, chosen.value.token);
+          if (alive.current) {
+            setWorkspace(value);
+            setInitialized(true);
+          }
         } else if (chosen.type === "relocate") {
           await api.relocationApply(chatId, chosen.value.token);
           if (alive.current)
@@ -309,6 +324,12 @@ export function GitDialog({
         ) : null}
         {loading ? <p role="status">Reading repository state…</p> : null}
         {workspace ? <Repository workspace={workspace} /> : null}
+        {initialized ? (
+          <p role="status" className="git-note">
+            Git is initialized. Existing files remain unstaged. Create the first commit before
+            isolation.
+          </p>
+        ) : null}
         {setupTree ? (
           <WorktreeSetupPanel
             chatId={chatId}
@@ -320,21 +341,32 @@ export function GitDialog({
         ) : preview ? (
           <section className="git-review" aria-label="Review Git operation">
             <h3>
-              {preview.type === "isolate"
-                ? "Review isolation"
-                : preview.type === "pull_request"
-                  ? "Review pull request"
-                  : preview.type === "relocate"
-                    ? "Review moving this chat"
-                    : preview.type === "recovery"
-                      ? preview.value.action === "restore"
-                        ? "Review restoration"
-                        : "Review recovery"
-                      : preview.value.action.type === "merge"
-                        ? "Review merge"
-                        : "Review retirement"}
+              {preview.type === "initialize"
+                ? "Review Git initialization"
+                : preview.type === "isolate"
+                  ? "Review isolation"
+                  : preview.type === "pull_request"
+                    ? "Review pull request"
+                    : preview.type === "relocate"
+                      ? "Review moving this chat"
+                      : preview.type === "recovery"
+                        ? preview.value.action === "restore"
+                          ? "Review restoration"
+                          : "Review recovery"
+                        : preview.value.action.type === "merge"
+                          ? "Review merge"
+                          : "Review retirement"}
             </h3>
-            {preview.type === "pull_request" ? (
+            {preview.type === "initialize" ? (
+              <dl>
+                <dt>Folder</dt>
+                <dd>{preview.value.folder}</dd>
+                <dt>Initial branch</dt>
+                <dd>{preview.value.initial_branch}</dd>
+                <dt>Changes</dt>
+                <dd>Create a new .git directory only</dd>
+              </dl>
+            ) : preview.type === "pull_request" ? (
               <>
                 <dl>
                   <dt>Repository</dt>
@@ -463,26 +495,55 @@ export function GitDialog({
                 disabled={blocked || conflict}
                 onClick={() => void apply()}
               >
-                {preview.type === "isolate"
-                  ? "Create isolated workspace"
-                  : preview.type === "pull_request"
-                    ? preview.value.existing_url
-                      ? "Use existing pull request"
-                      : "Publish reviewed pull request"
-                    : preview.type === "relocate"
-                      ? "Move chat to reviewed folder"
-                      : preview.type === "recovery"
-                        ? preview.value.action === "restore"
-                          ? "Restore retained worktree"
-                          : "Reconcile reviewed state"
-                        : preview.value.action.type === "merge"
-                          ? "Merge reviewed changes"
-                          : "Retire and keep files"}
+                {preview.type === "initialize"
+                  ? "Initialize reviewed folder"
+                  : preview.type === "isolate"
+                    ? "Create isolated workspace"
+                    : preview.type === "pull_request"
+                      ? preview.value.existing_url
+                        ? "Use existing pull request"
+                        : "Publish reviewed pull request"
+                      : preview.type === "relocate"
+                        ? "Move chat to reviewed folder"
+                        : preview.type === "recovery"
+                          ? preview.value.action === "restore"
+                            ? "Restore retained worktree"
+                            : "Reconcile reviewed state"
+                          : preview.value.action.type === "merge"
+                            ? "Merge reviewed changes"
+                            : "Retire and keep files"}
               </button>
             </div>
           </section>
         ) : (
           <>
+            {!workspace && !loading ? (
+              <section className="git-section">
+                <h3>Initialize a repository</h3>
+                <p>
+                  For a folder without Git, review creating its repository metadata. Existing files
+                  are not staged or committed.
+                </p>
+                <label className="ui-field">
+                  Initial branch
+                  <input
+                    className="ui-input"
+                    value={initialBranch}
+                    maxLength={128}
+                    disabled={busy}
+                    onChange={(event) => setInitialBranch(event.currentTarget.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="ui-button"
+                  disabled={blocked || !initialBranch.trim()}
+                  onClick={() => void reviewInitialize()}
+                >
+                  Review Git initialization
+                </button>
+              </section>
+            ) : null}
             {allowIsolation && workspace ? (
               <section className="git-section">
                 <h3>Create an isolated workspace</h3>

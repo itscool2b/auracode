@@ -11,6 +11,10 @@ import { settle } from "./ipc";
 /** Rust binds every mutation to a single-use preview and rechecks Git and session state. */
 export const gitWorkspaceApi = {
   inspect: (chatId: string) => settle(commands.gitWorkspace(chatId)),
+  initializePreview: (chatId: string, branch: string) =>
+    settle(commands.gitInitializePreview(chatId, branch)),
+  initializeApply: (chatId: string, token: string) =>
+    settle(commands.gitInitializeApply(chatId, token)),
   list: (chatId: string) => settle(commands.managedWorktrees(chatId)),
   isolationPreview: (chatId: string, input: IsolationInput) =>
     settle(commands.isolationPreview(chatId, input)),

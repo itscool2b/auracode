@@ -24,6 +24,7 @@ mod live;
 mod login;
 mod normalize;
 mod policy;
+mod project_tools;
 mod search;
 mod spawner;
 #[cfg(feature = "account-sync")]
