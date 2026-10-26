@@ -246,6 +246,14 @@ integration are still pending; no host capability is advertised by these standal
 agent tests, protocol host regression, all-target agent/protocol Clippy, and bindings export pass on
 Windows. No real agent configuration or credentials were read or changed.
 
+The next M1e checkpoint integrates the shared ACP catalog and optional native identity, preserving
+Codex's authoritative ID. Successful version probes now populate installation metadata and the New
+chat screen shows channel ownership and exact verification scope. Windows appends known install
+directories after the resolved PATH; npm prefix input is bounded to 64 KiB. Agent detection tests
+(20), agent unit tests (31), combined driver unit tests (362), environment tests (66), desktop tests
+(287 with 19 existing skips), typecheck, bindings export and targeted all-target Clippy pass locally.
+WSL launch/cleanup, update/auth helpers, remote version caching and milestone acceptance remain open.
+
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
   no-form plan auto-approval path and exposes only its enforceable Full auto autonomy. See

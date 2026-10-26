@@ -96,6 +96,7 @@ mod tests {
             launch: format!("{id} acp"),
             needs_download,
             last_verified: "1.0.0".into(),
+            installation: None,
         };
         let lines = render(
             &env,

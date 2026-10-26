@@ -173,7 +173,11 @@ impl Live {
             );
         }
         match self.cached(spec) {
-            Some(detection) => entry(spec, detection.availability, detection.needs_download),
+            Some(detection) => {
+                let mut entry = entry(spec, detection.availability, detection.needs_download);
+                entry.installation = detection.installation;
+                entry
+            }
             None => entry(spec, Availability::Checking, false),
         }
     }
@@ -722,6 +726,7 @@ fn entry(spec: &AgentSpec, availability: Availability, needs_download: bool) -> 
         launch: launch_label(spec),
         needs_download,
         last_verified: spec.last_verified.to_owned(),
+        installation: None,
     }
 }
 
@@ -840,7 +845,7 @@ mod tests {
             .filter(|entry| {
                 matches!(
                     entry.id.as_str(),
-                    "hermes" | "claude" | "claude-acp" | "codex-acp" | "mock"
+                    "hermes" | "claude" | "claude-acp" | "codex" | "codex-acp" | "mock"
                 )
             })
             .map(|entry| entry.availability.clone())

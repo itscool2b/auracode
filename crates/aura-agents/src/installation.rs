@@ -1,5 +1,41 @@
 //! Installation classification uses paths as evidence, never as shell commands.
-use aura_protocol::agents::{InstallChannel, VersionVerification};
+use aura_protocol::agents::{AgentHost, AgentInstallation, InstallChannel, VersionVerification};
+
+/// Metadata-only resolution follows symlinks without reading agent configuration or credentials.
+/// Failure to resolve never changes the working launch path or invents an update channel.
+pub(crate) fn native(
+    agent_id: &str,
+    printed_version: &str,
+    launch_path: &str,
+) -> Option<AgentInstallation> {
+    let version = crate::catalog::parse_version(printed_version)?;
+    let resolved_path = std::fs::canonicalize(launch_path)
+        .ok()
+        .and_then(|path| path.into_os_string().into_string().ok());
+    let channel = resolved_path
+        .as_deref()
+        .map(|path| classify_channel(agent_id, path))
+        .unwrap_or_default();
+    let verified = match agent_id {
+        "claude" => Some(("2.1.310", "Windows native smoke and protocol fixtures")),
+        "claude-acp" => Some(("2.1.310", "ACP adapter 0.95.0 compatibility fixtures")),
+        "codex" => Some((
+            "0.162.1",
+            "Windows free controls and protocol fixtures; tool smoke pending",
+        )),
+        _ => None,
+    };
+    Some(AgentInstallation {
+        agent_id: agent_id.into(),
+        provider: provider_namespace(agent_id).into(),
+        host: AgentHost::Native,
+        launch_path: launch_path.into(),
+        resolved_path,
+        verification: verification(&version, verified),
+        version,
+        channel,
+    })
+}
 
 /// Native and alternate transports of the same vendor share one transcript namespace.
 pub fn provider_namespace(agent_id: &str) -> &str {

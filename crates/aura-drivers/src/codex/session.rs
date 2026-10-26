@@ -237,7 +237,7 @@ impl Session {
                 self.setup.autonomy,
             )));
         self.outbox.push_back(DriverEvent::Ready(ReadyInfo {
-            native_session_id: self.thread.clone().unwrap_or_default(),
+            native_session_id: self.thread.clone(),
             agent_name: Some("Codex".into()),
             agent_version: self.version.clone(),
             spawn_id: self.spawn_id.clone(),

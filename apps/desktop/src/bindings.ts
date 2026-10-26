@@ -161,6 +161,23 @@ export type AgentEntry = {
 	/**  The first start downloads the agent's adapter. */
 	needs_download: boolean,
 	last_verified: string,
+	/**  Present only after a successful version probe of the user's installation. */
+	installation?: AgentInstallation | null,
+};
+
+/**  Where the user's agent runs. Unknown future hosts must never fall back to a local launch. */
+export type AgentHost = { type: "native" } | { type: "wsl"; distro: string } | { type: "unsupported" };
+
+/**  A successful version probe of one installation. `launch_path` remains the stable user entry. */
+export type AgentInstallation = {
+	agent_id: string,
+	provider: string,
+	host: AgentHost,
+	launch_path: string,
+	resolved_path: string | null,
+	version: string,
+	channel: InstallChannel,
+	verification: VersionVerification,
 };
 
 /**  A command failure, serialized as `{ code, message }`. */
@@ -545,6 +562,9 @@ export type HistoryPage = {
 	/**  Rows that did not parse (written by a newer build). */
 	skipped: number,
 };
+
+/**  How the installed binary is managed. Unknown and bundled installations cannot be updated here. */
+export type InstallChannel = { type: "vendor_standalone" } | { type: "npm"; package: string } | { type: "homebrew"; formula: string } | { type: "bundled"; application: string } | { type: "unknown" };
 
 /**
  *  What the UI should open into. Smoke mode wins over the stress view, since it is the one that
@@ -969,6 +989,9 @@ export type UsageScope =
 "session";
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };
+
+/**  Evidence about this exact installed version, independent of whether its binary can start. */
+export type VersionVerification = { state: "verified"; version: string; scope: string } | { state: "untested"; last_verified: string | null } | { state: "unknown" };
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

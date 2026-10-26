@@ -174,7 +174,7 @@ impl Harness {
 async fn handshake_uses_thread_identity_and_advertises_only_implemented_capabilities() {
     let mut h = Harness::start().await;
     let ready = h.ready().await;
-    assert_eq!(ready.native_session_id, "thread-1");
+    assert_eq!(ready.native_session_id.as_deref(), Some("thread-1"));
     assert_eq!(ready.agent_version.as_deref(), Some("0.162.1"));
     assert!(
         !ready.capabilities.steer

@@ -222,6 +222,9 @@ pub struct AgentEntry {
     /// The first start downloads the agent's adapter.
     pub needs_download: bool,
     pub last_verified: String,
+    /// Present only after a successful version probe of the user's installation.
+    #[serde(default)]
+    pub installation: Option<crate::agents::AgentInstallation>,
 }
 
 /// Whether an agent can start here.
@@ -521,6 +524,7 @@ mod tests {
             launch: "built in".into(),
             needs_download: false,
             last_verified: "auracode".into(),
+            installation: None,
         };
         assert_eq!(round_trip(&entry), entry);
         let env = EnvStatus {

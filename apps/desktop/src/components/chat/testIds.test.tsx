@@ -104,6 +104,7 @@ describe("the automation attributes of the chat screens", () => {
         launch: "built in",
         needs_download: false,
         last_verified: "",
+        installation: null,
       },
     ]);
     expect(marked(after, "new-chat-folder")).toEqual([{ tag: "span", folder: "/work/app" }]);

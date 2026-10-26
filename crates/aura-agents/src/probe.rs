@@ -22,6 +22,7 @@ pub(crate) const BUILT_IN: &str = "built in";
 /// One detection's result, with the programs a launch needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Detection {
+    pub(crate) installation: Option<aura_protocol::agents::AgentInstallation>,
     pub(crate) availability: Availability,
     /// An npm adapter that is not installed yet.
     pub(crate) needs_download: bool,
@@ -41,6 +42,7 @@ pub(crate) struct Located {
 impl Detection {
     pub(crate) fn missing(reason: String) -> Detection {
         Detection {
+            installation: None,
             availability: Availability::Missing { reason },
             needs_download: false,
             located: None,
@@ -49,6 +51,7 @@ impl Detection {
 
     fn broken(reason: String) -> Detection {
         Detection {
+            installation: None,
             availability: Availability::Broken { reason },
             needs_download: false,
             located: None,
@@ -298,8 +301,34 @@ pub(crate) async fn detect(
     registry: &LeftoverRegistry,
     adapters_dir: &Path,
 ) -> Detection {
+    let mut detected = detect_inner(spec, env, registry, adapters_dir).await;
+    if let Availability::Ready {
+        version: Some(version),
+        path,
+    } = &detected.availability
+    {
+        let agent_id = spec.id.to_owned();
+        let version = version.clone();
+        let path = path.clone();
+        detected.installation = tokio::task::spawn_blocking(move || {
+            crate::installation::native(&agent_id, &version, &path)
+        })
+        .await
+        .ok()
+        .flatten();
+    }
+    detected
+}
+
+async fn detect_inner(
+    spec: &AgentSpec,
+    env: &Arc<ResolvedEnv>,
+    registry: &LeftoverRegistry,
+    adapters_dir: &Path,
+) -> Detection {
     match &spec.recipe {
         Recipe::Builtin => Detection {
+            installation: None,
             availability: Availability::Ready {
                 version: None,
                 path: BUILT_IN.into(),
@@ -346,6 +375,7 @@ pub(crate) async fn detect(
                 |version| format!("{} {version}", spec.name),
             );
             Detection {
+                installation: None,
                 availability: Availability::Ready {
                     version: (!shown.is_empty()).then_some(shown),
                     path: path.display().to_string(),
@@ -380,6 +410,7 @@ pub(crate) async fn detect(
                 ));
             }
             Detection {
+                installation: None,
                 availability: Availability::Ready {
                     version: Some(format!(
                         "{} {}",
@@ -417,6 +448,7 @@ pub(crate) async fn detect(
                 Err(reason) => return Detection::broken(format!("{}: {reason}", spec.name)),
             };
             Detection {
+                installation: None,
                 availability: Availability::Ready {
                     version: Some(format!("{} {version} (unverified)", spec.name)),
                     path: path.display().to_string(),
@@ -489,6 +521,7 @@ pub(crate) async fn detect(
                 );
             }
             Detection {
+                installation: None,
                 availability: Availability::Ready {
                     version: Some(format!(
                         "{} {} via {bin} {version}",

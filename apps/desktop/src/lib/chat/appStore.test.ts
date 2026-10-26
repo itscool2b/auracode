@@ -21,6 +21,7 @@ function agent(id: string, availability: AgentEntry["availability"]): AgentEntry
     launch: id,
     needs_download: false,
     last_verified: "",
+    installation: null,
   };
 }
 

@@ -20,7 +20,7 @@ import { ChatList, projectName, projectsOf } from "./ChatList";
 import { StillWorking } from "./ChatView";
 import { StopButton } from "./Composer";
 import { Header } from "./Header";
-import { downloadNote, NewChat } from "./NewChat";
+import { downloadNote, InstallationStatus, NewChat } from "./NewChat";
 import { Pickers } from "./Pickers";
 import { QueueList } from "./QueueList";
 import { Transcript } from "./Transcript";
@@ -48,6 +48,7 @@ function agent(
     launch: id,
     needs_download: false,
     last_verified: "",
+    installation: null,
     ...extra,
   };
 }
@@ -142,6 +143,27 @@ describe("New chat", () => {
     );
     expect(html).toContain("Claude Code 2.1.310 via claude-agent-acp 0.95.0");
     expect(buttons(html).find((b) => b.label === "Refreshing…")?.disabled).toBe(true);
+  });
+
+  it("shows untested version and bundle ownership without claiming compatibility", () => {
+    const html = renderToStaticMarkup(
+      <InstallationStatus
+        installation={{
+          agent_id: "codex",
+          provider: "codex",
+          host: { type: "wsl", distro: "Ubuntu" },
+          launch_path: "/bin/codex",
+          resolved_path: null,
+          version: "0.170.0",
+          channel: { type: "bundled", application: "Editor" },
+          verification: { state: "untested", last_verified: "0.162.1" },
+        }}
+      />,
+    );
+    expect(html).toContain("Managed by Editor");
+    expect(html).toContain("WSL Ubuntu");
+    expect(html).toContain("Untested version");
+    expect(html).toContain("Last verified: 0.162.1");
   });
 });
 

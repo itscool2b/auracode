@@ -126,6 +126,15 @@ async fn detect_broken_binary() {
         detector.prepare_launch(&spec("hermes"), progress()).await,
         Err(LaunchError::Broken { .. })
     ));
+    assert!(
+        detector
+            .cached()
+            .iter()
+            .find(|entry| entry.id == "hermes")
+            .unwrap()
+            .installation
+            .is_none()
+    );
 }
 
 /// Real time: the probe limit is 10 s, and a paused clock would fire it before the probe started.
@@ -202,6 +211,23 @@ async fn native_claude_launches_the_user_binary_without_node_or_npm() {
         .prepare_launch(&claude, progress())
         .await
         .expect("launch");
+    let entry = detector
+        .cached()
+        .into_iter()
+        .find(|entry| entry.id == "claude")
+        .unwrap();
+    let installation = entry.installation.expect("successful probe metadata");
+    assert_eq!(
+        installation.launch_path,
+        machine.tool("claude").display().to_string()
+    );
+    assert_eq!(installation.version, "2.1.310");
+    assert_eq!(installation.host, aura_protocol::agents::AgentHost::Native);
+    assert_eq!(
+        installation.channel,
+        aura_protocol::agents::InstallChannel::Unknown
+    );
+    assert!(installation.resolved_path.is_some());
     assert_eq!(launch.program, machine.tool("claude"));
     assert_eq!(launch.cwd, ProcessCwd::ChatFolder);
     assert_eq!(
