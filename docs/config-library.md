@@ -57,6 +57,16 @@ its replacement. Completed-copy markers distinguish interruption from a later us
 edits are retained, and unrelated target files are neither copied into the journal nor removed.
 Windows file contents are flushed before mutation; macOS also flushes containing directories.
 
-MCP/plugin apply, the desktop root resolver, Library commands/UI, duplicate precedence, nested skill
-discovery and macOS execution checks remain pending. M8 and M9 are not complete. No real agent
-configuration was read or changed.
+The desktop root resolver uses only named configuration path variables and registered local project
+folders. It never exports the login environment. Relative overrides need a selected project; a custom
+Claude home omits user MCP inventory until the corresponding state-file mapping is verified. Rust
+commands serialize changes and retain maintenance admission until the blocking journal operation
+finishes, including after its webview caller leaves. Copy history reads validated metadata after
+restart and distinguishes completed, interrupted and rolled-back operations.
+
+Library DTOs also have an independent pure-crate Specta exporter, checked for drift in CI. The full
+desktop command compilation/export is pending: Windows Application Control blocked an existing
+Tauri plugin build script locally. No policy or blocked executable was changed.
+
+MCP/plugin apply, Library UI, duplicate precedence, nested skill discovery and macOS execution checks
+remain pending. M8 and M9 are not complete. No real agent configuration was read or changed.

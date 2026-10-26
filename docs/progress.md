@@ -1420,3 +1420,14 @@ concurrent bounded output draining and timeout/cancellation behavior. Successful
 not prove the helper consumed the bytes; the caller still validates its result. All eleven Windows
 helper tests and process all-target Clippy pass, including complete multiline input, blocked input,
 size rejection and existing descendant cleanup. No real GitHub or repository mutation ran.
+
+### M8 owned Library command layer, 2026-10-26
+
+- Added approved environment/project root resolution, serialized one-use copy commands and durable
+  recovery history. Changes retain core maintenance ownership through journal completion even if
+  the webview caller disappears. At most four preparations retain source bytes and directory handles.
+- Sixteen pure configuration tests and the root-resolution fixture pass, with core/config all-target
+  Clippy. The independent Specta DTO export is deterministic and requires no desktop runtime.
+- Full desktop compilation/export remains pending because Application Control blocked an existing
+  Tauri plugin build script. No bypass, real agent configuration read, native prompt or CI run occurred.
+  Library presentation and broader MCP/config conversion acceptance remain in progress.

@@ -17,6 +17,7 @@ pub use inventory::Library;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
+#[serde(rename = "LibraryProvider")]
 pub enum Provider {
     Claude,
     Codex,
@@ -26,6 +27,7 @@ pub enum Provider {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
+#[serde(rename = "LibraryScope")]
 pub enum Scope {
     User,
     Project,
@@ -34,7 +36,7 @@ pub enum Scope {
 /// Backend-only input. For Project, root is the project folder; for User, the provider's config
 /// folder. Shared roots are the `skills` directory itself. Claude user MCP needs a separate,
 /// explicit state-file source because `.claude.json` lives outside the usual `.claude` folder.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Source {
     pub id: String,
     pub provider: Provider,
@@ -45,6 +47,7 @@ pub struct Source {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
+#[serde(rename = "LibraryItemKind")]
 pub enum Kind {
     Skill,
     Instructions,
@@ -54,6 +57,7 @@ pub enum Kind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename = "LibraryItemRef")]
 pub struct ItemRef {
     pub source_id: String,
     pub kind: Kind,
@@ -62,6 +66,7 @@ pub struct ItemRef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename = "LibraryItem")]
 pub struct Item {
     pub item: ItemRef,
     pub provider: Provider,
@@ -74,6 +79,7 @@ pub struct Item {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename = "LibrarySourceStatus")]
 pub struct SourceStatus {
     pub id: String,
     pub provider: Provider,
@@ -83,6 +89,7 @@ pub struct SourceStatus {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
+#[serde(rename = "LibraryInventory")]
 pub struct Inventory {
     pub sources: Vec<SourceStatus>,
     pub items: Vec<Item>,
@@ -90,6 +97,7 @@ pub struct Inventory {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename = "LibraryItemPreview")]
 pub struct ItemPreview {
     pub item: Item,
     pub text: String,
@@ -98,6 +106,7 @@ pub struct ItemPreview {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename = "LibraryCopyFile")]
 pub struct CopyFile {
     pub path: String,
     pub before_revision: Option<String>,
@@ -106,6 +115,7 @@ pub struct CopyFile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename = "LibraryCopyPreview")]
 pub struct CopyPreview {
     pub id: String,
     pub from: ItemRef,
@@ -117,12 +127,31 @@ pub struct CopyPreview {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename = "LibraryCopyResult")]
 pub struct CopyResult {
     pub id: String,
     pub source_id: String,
     pub applied: Vec<String>,
     pub recovery_required: bool,
     pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename = "LibraryCopyReceipt")]
+pub struct CopyReceipt {
+    pub id: String,
+    pub source_id: String,
+    pub kind: Kind,
+    pub files: Vec<String>,
+    pub state: CopyState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case", rename = "LibraryCopyState")]
+pub enum CopyState {
+    Complete,
+    RecoveryRequired,
+    RolledBack,
 }
 
 #[derive(Debug, thiserror::Error)]

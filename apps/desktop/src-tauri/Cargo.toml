@@ -30,6 +30,7 @@ tauri-build.workspace = true
 [dependencies]
 aura-agents.workspace = true
 aura-core.workspace = true
+aura-config.workspace = true
 aura-drivers.workspace = true
 aura-process.workspace = true
 aura-protocol.workspace = true

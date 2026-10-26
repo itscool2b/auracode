@@ -23,6 +23,8 @@ url = "2.5.8"
 
 [dev-dependencies]
 tempfile.workspace = true
+specta-typescript.workspace = true
+specta-serde = "=0.0.13"
 
 [lints]
 workspace = true

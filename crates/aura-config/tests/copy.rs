@@ -60,11 +60,20 @@ fn instruction_copy_has_explicit_preview_and_persistent_idempotent_rollback() {
     );
     drop(library);
     let restarted = self::library(a.path(), b.path());
+    let receipts = restarted.copy_history().expect("history after restart");
+    assert_eq!(receipts.len(), 1);
+    assert_eq!(receipts[0].id, result.id);
+    assert_eq!(receipts[0].files, ["AGENTS.md"]);
+    assert_eq!(receipts[0].state, aura_config::CopyState::Complete);
     assert!(
         !restarted
             .rollback_copy("pi", &result.id)
             .expect("rollback after restart")
             .recovery_required
+    );
+    assert_eq!(
+        restarted.copy_history().expect("restored history")[0].state,
+        aura_config::CopyState::RolledBack
     );
     assert!(
         !restarted

@@ -12,8 +12,8 @@ use cap_std::fs::{Dir, OpenOptions};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CopyFile, CopyPreview, CopyResult, Error, ItemRef, Kind, Library, Provider, Result, Scope,
-    Source, inventory,
+    CopyFile, CopyPreview, CopyReceipt, CopyResult, CopyState, Error, ItemRef, Kind, Library,
+    Provider, Result, Scope, Source, inventory,
     safe_fs::{self, FileData},
 };
 
@@ -34,6 +34,10 @@ pub struct PreparedCopy {
 impl PreparedCopy {
     pub fn preview(&self) -> &CopyPreview {
         &self.preview
+    }
+
+    pub fn is_expired(&self) -> bool {
+        Instant::now() > self.expires
     }
 }
 
@@ -67,6 +71,60 @@ fn fingerprint(file: &FileData) -> String {
 }
 
 impl Library {
+    /// Read only bounded, validated journal metadata. Never exposes retained file contents.
+    pub fn copy_history(&self) -> Result<Vec<CopyReceipt>> {
+        let mut receipts = Vec::new();
+        for source in &self.sources {
+            let Ok(root) = inventory::open(source) else {
+                continue;
+            };
+            match root.symlink_metadata(JOURNALS) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(_) => return Err(Error::Io),
+                Ok(_) => {}
+            }
+            for id in safe_fs::children(&root, JOURNALS)? {
+                if uuid::Uuid::parse_str(&id)
+                    .ok()
+                    .is_none_or(|uuid| uuid.to_string() != id)
+                {
+                    continue;
+                }
+                let backup = safe_fs::directory(&root, &format!("{JOURNALS}/{id}"))?;
+                let Some(bytes) = safe_fs::read(&backup, "journal.json")? else {
+                    continue;
+                };
+                let journal: Journal = serde_json::from_slice(&bytes).map_err(|_| Error::Format)?;
+                // Several project providers share a folder. Only its original source owns a receipt.
+                if journal.source_id != source.id {
+                    continue;
+                }
+                validate_journal(source, &journal)?;
+                let state = if has_marker(&backup, "rolled-back")? {
+                    CopyState::RolledBack
+                } else if has_marker(&backup, "complete")?
+                    && !has_marker(&backup, "rollback-started")?
+                {
+                    CopyState::Complete
+                } else {
+                    CopyState::RecoveryRequired
+                };
+                receipts.push(CopyReceipt {
+                    id,
+                    source_id: source.id.clone(),
+                    kind: journal.kind,
+                    files: journal.files.into_iter().map(|file| file.path).collect(),
+                    state,
+                });
+                if receipts.len() > safe_fs::ITEM_COUNT {
+                    return Err(Error::Limit);
+                }
+            }
+        }
+        receipts.sort_by(|a, b| b.id.cmp(&a.id));
+        Ok(receipts)
+    }
+
     pub fn prepare_copy(
         &self,
         from: &ItemRef,
@@ -310,6 +368,10 @@ impl Library {
                     break;
                 }
             }
+        }
+        if !result.recovery_required && marker(&backup, "rolled-back").is_err() {
+            result.recovery_required = true;
+            result.message = Some("Files were restored, but the recovery status could not be saved. Retained files remain available.".into());
         }
         Ok(result)
     }

@@ -22,6 +22,7 @@ pub mod boot;
 pub mod changes_commands;
 pub mod commands;
 pub mod composer_commands;
+pub mod config_library;
 pub mod conversation_commands;
 pub mod demo;
 pub mod error;
@@ -184,6 +185,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     app.manage(state);
     #[cfg(windows)]
     app.manage(window::WebviewVisibility::default());
+    app.manage(Arc::new(config_library::LibraryService::default()));
     native_shell::setup(app.handle());
 
     #[cfg(unix)]

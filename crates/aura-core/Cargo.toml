@@ -14,6 +14,7 @@ account-sync = ["dep:aura-sync", "aura-sync/sqlcipher"]
 
 [dependencies]
 aura-agents.workspace = true
+aura-config.workspace = true
 aura-drivers.workspace = true
 aura-process.workspace = true
 aura-protocol.workspace = true

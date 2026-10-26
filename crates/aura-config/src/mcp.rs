@@ -79,9 +79,13 @@ pub(crate) fn portable(value: &Value, from: Provider, to: Provider) -> Result<Va
                 .get("type")
                 .map(|value| value.as_str().ok_or(Error::Format))
                 .transpose()?;
-            if kind.is_some_and(|kind| {
-                kind != "http" && !(from == Provider::Pi && kind == "streamable-http")
-            }) {
+            if (from == Provider::Claude && kind.is_none())
+                || kind.is_some_and(|kind| {
+                    kind != "http"
+                        && !(matches!(from, Provider::Pi | Provider::Claude)
+                            && kind == "streamable-http")
+                })
+            {
                 return Err(Error::Unsupported(
                     "This transport cannot be converted without changing its behavior.".into(),
                 ));
@@ -161,4 +165,36 @@ fn value_json(value: &toml_edit::Value) -> Result<Value> {
         ),
         toml_edit::Value::Datetime(_) => return Err(Error::Format),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn claude_http_requires_its_native_discriminator_but_supports_the_documented_alias() {
+        assert!(
+            portable(
+                &json!({"url":"https://example.test/mcp"}),
+                Provider::Claude,
+                Provider::Pi
+            )
+            .is_err()
+        );
+        let converted = portable(
+            &json!({"type":"streamable-http", "url":"https://example.test/mcp"}),
+            Provider::Claude,
+            Provider::Codex,
+        )
+        .unwrap();
+        assert_eq!(converted, json!({"url":"https://example.test/mcp"}));
+        assert!(
+            portable(
+                &json!({"type":"sse", "url":"https://example.test/sse"}),
+                Provider::Claude,
+                Provider::Pi
+            )
+            .is_err()
+        );
+    }
 }

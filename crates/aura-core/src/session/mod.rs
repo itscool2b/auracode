@@ -14,6 +14,7 @@
 mod actor;
 mod changes;
 mod composer;
+mod config_library;
 mod conversation;
 mod gitworkspaces;
 mod live;
@@ -25,6 +26,8 @@ mod spawner;
 #[cfg(test)]
 mod tests;
 mod workspace;
+
+pub use config_library::LibraryRoots;
 
 use std::collections::HashMap;
 use std::fmt;
