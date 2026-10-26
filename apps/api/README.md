@@ -35,6 +35,7 @@ backend. Miniflare disposes its owned runtime after the suite. These tests creat
 - Create the Turnstile widget for `auracode.si`, action `signin`. Set `TURNSTILE_SECRET` and a new
   cryptographically random 32-byte base64url `AUTH_HMAC_KEY` through Cloudflare's secret store.
   Neither belongs in Wrangler vars, source, logs, GitHub output or command arguments.
+  Set its public `TURNSTILE_SITE_KEY` as an environment variable for the website config endpoint.
 - Export/back up D1 and apply the versioned migration to the intended production database. Verify the
   schema with local and preview runtime tests first. Existing D1/R2 IDs are documented in infra/README.
 - Install the same-origin `/api/*` route and scheduled trigger. Keep the blobs bucket private with

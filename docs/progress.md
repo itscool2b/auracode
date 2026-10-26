@@ -55,10 +55,18 @@ planned Windows/macOS integration gate. This is a saved implementation checkpoin
   replay, wrong-session, expiry and revocation regressions pass. No account key enters this proof.
 
 - Account summary, session-wide sign-out, verified email changes and bounded streaming encrypted
-  exports are implemented in Rust. Seven actual compiled-Worker tests pass, including email proof
+  exports are implemented in Rust. Eight actual compiled-Worker tests pass, including email proof
   isolation/replay, preservation of account identity and export completion without session secrets.
   Native and wasm Clippy pass. The new native SQL unit rerun is blocked by Windows Application
   Control (4551); its compiled-Wasm runtime path passes. No policy or executable was changed.
+
+- M6 website checkpoint: dark-only landing, download, email-code auth, account, privacy, terms and
+  changelog routes prerender to static HTML. Account views call the Rust API; browser code handles
+  presentation/transport only. The hero uses the actual dark desktop fixture. Build/typecheck,
+  static/CSP checks, an assets-only Wrangler production dry run, Chromium and WebKit UI flows,
+  and home/account Axe checks pass. Tests block
+  external requests and use synthetic responses. Real Turnstile/email/preview integration, macOS
+  browser acceptance, installer publication and legal review remain pending. No deploy or CI ran.
 
 Current owner correction: Windows and macOS are the supported targets. Linux and WSL work and
 acceptance are deferred. Implementation checkpoints are committed locally with focused checks;

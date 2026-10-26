@@ -41,9 +41,8 @@ checks account/session expiry and revocation. Sync also requires its bound appro
 
 | Method and route | Request | Response |
 | --- | --- | --- |
-| GET `/api/v1/devices/:id` returns `{device:Device}` for a single device owned by the authenticated account, independent of the listing cap. Unknown or other-account IDs return 404.
-
-GET `/api/v1/devices` | authentication | `devices:[{id,name,platform,public_key,verification_code,created_at,last_seen,approved_at,revoked_at}]` |
+| GET `/api/v1/devices` | authentication | `devices:[{id,name,platform,public_key,verification_code,created_at,last_seen,approved_at,revoked_at}]` |
+| GET `/api/v1/devices/:id` | authentication | `device:Device`, independent of the listing cap; 404 for unknown or other-account IDs |
 | POST `/api/v1/devices` | `name`, `platform` (`windows`/`macos`), `public_key` (32 bytes) | `device_id`, `verification_code`, `approved:false` |
 | DELETE `/api/v1/devices/:id` | authentication | `revoked:true` |
 | POST `/api/v1/keys` | `wrapped_key`, `recovery_envelope`, `recovery_verifier` | same as GET keys |
