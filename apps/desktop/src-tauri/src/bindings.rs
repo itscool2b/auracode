@@ -23,6 +23,12 @@ const HEADER: &str = "// Regenerate with `cargo test -p auracode-desktop export_
 /// come from this one list, so they cannot drift apart.
 pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new()
+        .typ::<aura_protocol::workspace::WorkspaceSnapshot>()
+        .typ::<aura_protocol::workspace::WorkspaceFilter>()
+        .typ::<aura_protocol::workspace::ProjectCreate>()
+        .typ::<aura_protocol::workspace::ChatCreatePreview>()
+        .typ::<aura_protocol::workspace::ProjectChatCreate>()
+        .typ::<aura_protocol::workspace::ChatMove>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
             commands::start_demo_stream,
@@ -33,11 +39,15 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::smoke_report,
             commands::agents_list,
             commands::agents_refresh,
+            commands::agent_maintenance,
+            commands::agent_auth_status,
+            commands::agent_update,
             commands::env_status,
             commands::env_refresh,
             commands::pick_folder,
             commands::chats_list,
             commands::chat_create,
+            commands::chat_create_on_host,
             commands::chat_attach,
             commands::chat_detach,
             commands::chat_history,
@@ -198,11 +208,15 @@ mod tests {
             "smokeReport",
             "agentsList",
             "agentsRefresh",
+            "agentMaintenance",
+            "agentAuthStatus",
+            "agentUpdate",
             "envStatus",
             "envRefresh",
             "pickFolder",
             "chatsList",
             "chatCreate",
+            "chatCreateOnHost",
             "chatAttach",
             "chatDetach",
             "chatHistory",

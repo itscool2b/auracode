@@ -17,6 +17,9 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+reqwest.workspace = true
+uuid.workspace = true
+futures.workspace = true
 
 [dev-dependencies]
 aura-process = { workspace = true, features = ["testing"] }

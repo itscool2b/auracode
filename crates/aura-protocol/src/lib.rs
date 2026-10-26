@@ -13,8 +13,10 @@
 //! an `Option` with `#[serde(default)]`, and the enums that reach storage or come from agents read a
 //! name they do not know as their fallback (`lenient.rs`).
 
+pub mod agents;
 mod lenient;
 pub mod session;
+pub mod workspace;
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -661,6 +663,9 @@ pub enum AutoAnswer {
 pub enum DriverKind {
     Acp,
     Claude,
+    Codex,
+    Headless,
+    Pi,
     Mock,
 }
 

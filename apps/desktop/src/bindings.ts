@@ -56,6 +56,12 @@ export const commands = {
 	 *  probe has not ended by then keep their last known availability.
 	 */
 	agentsRefresh: () => __TAURI_INVOKE<AgentEntry[]>("agents_refresh"),
+	/**  Reviewed capabilities for the detected install, without running authentication or updates. */
+	agentMaintenance: (agentId: string) => typedError<AgentMaintenance, AppError>(__TAURI_INVOKE("agent_maintenance", { agentId })),
+	/**  Ask the vendor CLI for local auth status, retaining no account details or raw output. */
+	agentAuthStatus: (agentId: string) => typedError<AgentAuthStatus, AppError>(__TAURI_INVOKE("agent_auth_status", { agentId })),
+	/**  Explicit update action. No updates run as part of detection or release checks. */
+	agentUpdate: (agentId: string) => typedError<null, AppError>(__TAURI_INVOKE("agent_update", { agentId })),
 	/**
 	 *  The environment agents start with: resolving, resolved (and how), or a fallback, with the
 	 *  names of the variables no agent inherits. Never waits.
@@ -76,6 +82,11 @@ export const commands = {
 	 *  chat whose agent `needs_download` is the consent to download its adapter.
 	 */
 	chatCreate: (agentId: string, folder: string) => typedError<ChatSummary, AppError>(__TAURI_INVOKE("chat_create", { agentId, folder })),
+	/**
+	 *  Creates a chat on an explicitly selected execution host. Unsupported hosts are refused before
+	 *  writing the chat or starting any native process.
+	 */
+	chatCreateOnHost: (agentId: string, agentHost: AgentHost, folder: string) => typedError<ChatSummary, AppError>(__TAURI_INVOKE("chat_create_on_host", { agentId, agentHost, folder })),
 	/**
 	 *  Opens a view of a chat: the snapshot and the newest history page, consistent with the frames
 	 *  `channel` carries from `next_seq` on. Opening a chat never starts its agent. A webview has one
@@ -150,6 +161,9 @@ export const SMOKE_CHAT_CHECKS = ["chats-screen","pick-folder","create-chat","pi
 export const SMOKE_CHAT_REOPEN_CHECKS = ["reopen-list","reopen-no-start","reopen-history","reopen-interrupted","reopen-held","reopen-blob","reopen-resume","reopen-send-queued"] as const;
 
 /* Types */
+/**  The vendor's own local authentication check. This does not promise a successful paid request. */
+export type AgentAuthStatus = { state: "credentials_present" } | { state: "sign_in_required" } | { state: "unknown"; reason: string } | { state: "unsupported" };
+
 /**  An agent auracode can start, as the New chat screen shows it. */
 export type AgentEntry = {
 	id: string,
@@ -161,6 +175,34 @@ export type AgentEntry = {
 	/**  The first start downloads the agent's adapter. */
 	needs_download: boolean,
 	last_verified: string,
+	/**  Present only after a successful version probe of the user's installation. */
+	installation?: AgentInstallation | null,
+	latest_release?: LatestRelease | null,
+};
+
+/**  Where the user's agent runs. Unknown future hosts must never fall back to a local launch. */
+export type AgentHost = { type: "native" } | { type: "wsl"; distro: string } | { type: "unsupported" };
+
+/**  A successful version probe of one installation. `launch_path` remains the stable user entry. */
+export type AgentInstallation = {
+	agent_id: string,
+	provider: string,
+	host: AgentHost,
+	launch_path: string,
+	resolved_path: string | null,
+	version: string,
+	channel: InstallChannel,
+	verification: VersionVerification,
+};
+
+/**  Actions this exact detected installation can perform through reviewed vendor commands. */
+export type AgentMaintenance = {
+	auth_status: boolean,
+	/**
+	 *  `None` enables the explicit update action. Otherwise this explains the owning channel or
+	 *  missing helper; the UI must not offer an update for that installation.
+	 */
+	update_unavailable: string | null,
 };
 
 /**  A command failure, serialized as `{ code, message }`. */
@@ -378,6 +420,22 @@ export type ChatAttach = {
 	history: HistoryPage,
 };
 
+export type ChatCreatePreview = {
+	folder: ProjectFolder,
+	/**  Sessions holding this canonical folder, including preparation and shutdown. */
+	busy_chats: ChatSummary[],
+};
+
+export type ChatMove = {
+	project_id: string,
+	/**
+	 *  Must belong to the destination project. `None` preserves the current primary path by
+	 *  attaching a matching folder to that project, never by moving files on disk.
+	 */
+	folder_id: string | null,
+	allow_busy_folder: boolean,
+};
+
 /**  Everything about a chat that is not in its history. */
 export type ChatSnapshot = {
 	chat: ChatSummary,
@@ -406,6 +464,7 @@ export type ChatSummary = {
 	id: string,
 	title: string | null,
 	agent_id: string,
+	agent_host?: AgentHost,
 	agent_name: string,
 	folder: string,
 	folder_state: FolderState,
@@ -509,6 +568,8 @@ export type EventBatch = {
 	events: AuraEvent[],
 };
 
+export type FolderKind = "local" | "git";
+
 /**  Whether a chat's folder can be used on this machine. */
 export type FolderState = "ok" | "missing" | 
 /**  The OS refused access (macOS privacy). */
@@ -544,6 +605,17 @@ export type HistoryPage = {
 	unsaved_from: number | null,
 	/**  Rows that did not parse (written by a newer build). */
 	skipped: number,
+};
+
+/**  How the installed binary is managed. Unknown and bundled installations cannot be updated here. */
+export type InstallChannel = { type: "vendor_standalone" } | { type: "npm"; package: string } | { type: "homebrew"; formula: string } | { type: "bundled"; application: string } | { type: "unknown" };
+
+/**  Public release metadata. Stale cached data remains visible during offline use. */
+export type LatestRelease = {
+	version: string | null,
+	source: string,
+	checked_at: number | null,
+	stale: boolean,
 };
 
 /**
@@ -631,6 +703,50 @@ export type ProfileMeta = {
 	display_name: string,
 	/**  Unix ms, exported to TypeScript as `number` (see `DeviceIdentity::created_at`). */
 	created_at: number,
+};
+
+export type ProjectChatCreate = {
+	agent_id: string,
+	folder_id: string,
+	/**  Explicit acknowledgment of the busy-folder warning. The server rechecks before creation. */
+	allow_busy_folder: boolean,
+};
+
+export type ProjectCreate = {
+	project: ProjectInput,
+	folder: string,
+};
+
+export type ProjectFolder = {
+	id: string,
+	project_id: string,
+	display_name: string,
+	/**  This device's path only. An unavailable device mapping is never borrowed from another. */
+	path: string | null,
+	folder_state: FolderState,
+	unavailable_reason: string | null,
+	kind: FolderKind,
+	git_remote_url: string | null,
+	git_default_branch: string | null,
+};
+
+/**  Complete editable project values. `None` clears an optional field on update. */
+export type ProjectInput = {
+	name: string,
+	color: string | null,
+	default_agent: string | null,
+	default_model: string | null,
+};
+
+export type ProjectSummary = {
+	id: string,
+	name: string,
+	color: string | null,
+	default_agent: string | null,
+	default_model: string | null,
+	folders: ProjectFolder[],
+	created_at: number,
+	updated_at: number,
 };
 
 /**  What `chat_send` did with the prompt: sent at once, or queued behind a turn or a start. */
@@ -969,6 +1085,29 @@ export type UsageScope =
 "session";
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };
+
+/**  Evidence about this exact installed version, independent of whether its binary can start. */
+export type VersionVerification = { state: "verified"; version: string; scope: string } | { state: "untested"; last_verified: string | null } | { state: "unknown" };
+
+export type WorkspaceChat = {
+	chat: ChatSummary,
+	project_id: string,
+	folder_id: string | null,
+	pinned: boolean,
+	archived: boolean,
+};
+
+export type WorkspaceFilter = {
+	/**  Archived chats are excluded unless the caller explicitly asks to include them. */
+	include_archived: boolean,
+	/**  Filters chats only; projects remain available as move destinations. */
+	project_id: string | null,
+};
+
+export type WorkspaceSnapshot = {
+	projects: ProjectSummary[],
+	chats: WorkspaceChat[],
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

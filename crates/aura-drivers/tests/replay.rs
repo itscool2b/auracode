@@ -73,7 +73,14 @@ mod replay {
         if readies > 1 {
             violations.push(format!("{readies} Ready events"));
         }
-        if (readies == 0) != (exit_type == "start_failed") {
+        let cancelled_start = readies == 0
+            && exit_type == "closed"
+            && prompts.is_empty()
+            && fixture
+                .records
+                .iter()
+                .any(|record| matches!(record, FixtureRecord::Cmd(LoggedCommand::Shutdown)));
+        if (readies == 0) != (exit_type == "start_failed" || cancelled_start) {
             violations.push(format!("{readies} Ready events and the exit {exit_type}"));
         }
 
@@ -160,6 +167,40 @@ mod replay {
             .is_some_and(|start| start["agent_id"] == "claude")
         {
             violations.extend(native_contract_violations(fixture, &events, report));
+        }
+        if fixture
+            .start()
+            .is_some_and(|start| start["agent_id"] == "codex")
+        {
+            if fixture.name == "approval-available-decisions" {
+                for event in &events {
+                    if let DriverEvent::Permission { request, .. } = event
+                        && request
+                            .options
+                            .iter()
+                            .map(|option| option.option_id.as_str())
+                            .collect::<Vec<_>>()
+                            != ["accept", "cancel"]
+                    {
+                        violations.push("Codex approval offered an unadvertised decision".into());
+                    }
+                }
+            }
+            if fixture.name == "recorded-basic" {
+                let text: String = events
+                    .iter()
+                    .filter_map(|event| match event {
+                        DriverEvent::Event {
+                            event: AuraEvent::MessageDelta { text, .. },
+                            ..
+                        } => Some(text.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                if text != "ok" || !events.iter().any(|event| matches!(event, DriverEvent::TurnEnded { usage: Some(usage), .. } if usage.scope == aura_protocol::UsageScope::Turn && usage.input_tokens == 25745 && usage.output_tokens == 5)) {
+                    violations.push("recorded Codex basic content or native turn usage changed".into());
+                }
+            }
         }
         violations
     }

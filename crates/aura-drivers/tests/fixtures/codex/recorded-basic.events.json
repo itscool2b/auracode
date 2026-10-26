@@ -1,0 +1,550 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": true
+      }
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": "Model for the next turn.",
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "gpt-6-astra",
+            "choices": [
+              {
+                "value": "gpt-6.1-sol",
+                "name": "GPT-6.1-Sol",
+                "description": "Latest workhorse model for coding and everyday work.",
+                "group": null
+              },
+              {
+                "value": "gpt-6-astra",
+                "name": "GPT-6-Astra",
+                "description": "Frontier intelligence for the most demanding work.",
+                "group": null
+              },
+              {
+                "value": "gpt-6-sol",
+                "name": "GPT-6-Sol",
+                "description": "Previous generation workhorse model.",
+                "group": null
+              },
+              {
+                "value": "gpt-6-luna",
+                "name": "GPT-6-Luna",
+                "description": "Fast and affordable model for easier tasks.",
+                "group": null
+              },
+              {
+                "value": "gpt-5.6-sol",
+                "name": "GPT-5.6-Sol",
+                "description": "Older generation workhorse model.",
+                "group": null
+              },
+              {
+                "value": "gpt-5.6-terra",
+                "name": "GPT-5.6-Terra",
+                "description": "Older balanced model for straightforward work.",
+                "group": null
+              },
+              {
+                "value": "gpt-5.6-luna",
+                "name": "GPT-5.6-Luna",
+                "description": "Older fast and efficient model.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": "Reasoning effort for the next turn.",
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "ultra",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": "Use medium",
+                "group": null
+              },
+              {
+                "value": "low",
+                "name": "low",
+                "description": "Fast responses with lighter reasoning",
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "medium",
+                "description": "Balances speed and reasoning depth for everyday tasks",
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "high",
+                "description": "Greater reasoning depth for complex problems",
+                "group": null
+              },
+              {
+                "value": "xhigh",
+                "name": "xhigh",
+                "description": "Extra high reasoning depth for complex problems",
+                "group": null
+              },
+              {
+                "value": "max",
+                "name": "max",
+                "description": "Maximum reasoning depth for the hardest problems",
+                "group": null
+              },
+              {
+                "value": "ultra",
+                "name": "ultra",
+                "description": "Maximum reasoning with automatic task delegation",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": "never",
+        "auto_answer": {
+          "type": "never"
+        },
+        "note": "Applied to each new turn; Codex restrictions still apply."
+      }
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "<SESSION_1>",
+        "agent_name": "Codex",
+        "agent_version": "0.162.1",
+        "capabilities": {
+          "images": false,
+          "steer": false,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": true,
+          "set_effort": true,
+          "permissions": true,
+          "plans": true,
+          "usage": true,
+          "limits": true,
+          "slash_commands": false,
+          "add_dirs": false,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "new"
+        },
+        "spawn_id": "019a0000-0000-7000-8000-000000000011",
+        "replay": null
+      }
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": "Model for the next turn.",
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "gpt-6-luna",
+            "choices": [
+              {
+                "value": "gpt-6.1-sol",
+                "name": "GPT-6.1-Sol",
+                "description": "Latest workhorse model for coding and everyday work.",
+                "group": null
+              },
+              {
+                "value": "gpt-6-astra",
+                "name": "GPT-6-Astra",
+                "description": "Frontier intelligence for the most demanding work.",
+                "group": null
+              },
+              {
+                "value": "gpt-6-sol",
+                "name": "GPT-6-Sol",
+                "description": "Previous generation workhorse model.",
+                "group": null
+              },
+              {
+                "value": "gpt-6-luna",
+                "name": "GPT-6-Luna",
+                "description": "Fast and affordable model for easier tasks.",
+                "group": null
+              },
+              {
+                "value": "gpt-5.6-sol",
+                "name": "GPT-5.6-Sol",
+                "description": "Older generation workhorse model.",
+                "group": null
+              },
+              {
+                "value": "gpt-5.6-terra",
+                "name": "GPT-5.6-Terra",
+                "description": "Older balanced model for straightforward work.",
+                "group": null
+              },
+              {
+                "value": "gpt-5.6-luna",
+                "name": "GPT-5.6-Luna",
+                "description": "Older fast and efficient model.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": "Reasoning effort for the next turn.",
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "default",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": "Use medium",
+                "group": null
+              },
+              {
+                "value": "low",
+                "name": "low",
+                "description": "Fast responses with lighter reasoning",
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "medium",
+                "description": "Balances speed and reasoning depth for everyday tasks",
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "high",
+                "description": "Greater reasoning depth for complex problems",
+                "group": null
+              },
+              {
+                "value": "xhigh",
+                "name": "xhigh",
+                "description": "Extra high reasoning depth for complex problems",
+                "group": null
+              },
+              {
+                "value": "max",
+                "name": "max",
+                "description": "Maximum reasoning depth for the hardest problems",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": "Model for the next turn.",
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "gpt-6-luna",
+            "choices": [
+              {
+                "value": "gpt-6.1-sol",
+                "name": "GPT-6.1-Sol",
+                "description": "Latest workhorse model for coding and everyday work.",
+                "group": null
+              },
+              {
+                "value": "gpt-6-astra",
+                "name": "GPT-6-Astra",
+                "description": "Frontier intelligence for the most demanding work.",
+                "group": null
+              },
+              {
+                "value": "gpt-6-sol",
+                "name": "GPT-6-Sol",
+                "description": "Previous generation workhorse model.",
+                "group": null
+              },
+              {
+                "value": "gpt-6-luna",
+                "name": "GPT-6-Luna",
+                "description": "Fast and affordable model for easier tasks.",
+                "group": null
+              },
+              {
+                "value": "gpt-5.6-sol",
+                "name": "GPT-5.6-Sol",
+                "description": "Older generation workhorse model.",
+                "group": null
+              },
+              {
+                "value": "gpt-5.6-terra",
+                "name": "GPT-5.6-Terra",
+                "description": "Older balanced model for straightforward work.",
+                "group": null
+              },
+              {
+                "value": "gpt-5.6-luna",
+                "name": "GPT-5.6-Luna",
+                "description": "Older fast and efficient model.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": "Reasoning effort for the next turn.",
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "low",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": "Use medium",
+                "group": null
+              },
+              {
+                "value": "low",
+                "name": "low",
+                "description": "Fast responses with lighter reasoning",
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "medium",
+                "description": "Balances speed and reasoning depth for everyday tasks",
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "high",
+                "description": "Greater reasoning depth for complex problems",
+                "group": null
+              },
+              {
+                "value": "xhigh",
+                "name": "xhigh",
+                "description": "Extra high reasoning depth for complex problems",
+                "group": null
+              },
+              {
+                "value": "max",
+                "name": "max",
+                "description": "Maximum reasoning depth for the hardest problems",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": "never",
+        "auto_answer": {
+          "type": "never"
+        },
+        "note": "Applied to each new turn; Codex restrictions still apply."
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "limits_updated",
+          "windows": [
+            {
+              "label": "codex (10080 min)",
+              "used_percent": 25.0,
+              "resets_at": 1800000000000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176c9-fa0b-7364-a9e3-94b323dbe383",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_01cd68a6235aaee9016adeec0c5dec8192b8f02036c97e9db8",
+          "text": "ok"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176c9-fa0b-7364-a9e3-94b323dbe383",
+        "event": {
+          "type": "message_completed",
+          "message_id": "msg_01cd68a6235aaee9016adeec0c5dec8192b8f02036c97e9db8"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176c9-fa0b-7364-a9e3-94b323dbe383",
+        "event": {
+          "type": "usage_updated",
+          "context_used": 25750,
+          "context_size": 258400,
+          "cost": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "limits_updated",
+          "windows": [
+            {
+              "label": "codex (10080 min)",
+              "used_percent": 23.0,
+              "resets_at": 1793582174000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": true
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "01a176c9-fa0b-7364-a9e3-94b323dbe383",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 25745,
+          "output_tokens": 5,
+          "cache_read_tokens": 9216,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0,
+          "scope": "turn"
+        },
+        "error": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    }
+  ],
+  "replies": [
+    {
+      "set_option": "model",
+      "reply": {
+        "ok": null
+      }
+    },
+    {
+      "set_option": "effort",
+      "reply": {
+        "ok": null
+      }
+    },
+    {
+      "set_autonomy": "full_auto",
+      "reply": {
+        "ok": {
+          "requested": "full_auto",
+          "native_mode": "never",
+          "auto_answer": {
+            "type": "never"
+          },
+          "note": "Applied to each new turn; Codex restrictions still apply."
+        }
+      }
+    }
+  ],
+  "exit": {
+    "type": "closed"
+  }
+}

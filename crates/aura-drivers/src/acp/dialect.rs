@@ -17,6 +17,7 @@ use aura_process::{EnvMap, LaunchSpec};
 use aura_protocol::session::AuthCommand;
 use aura_protocol::{AutoAnswer, Autonomy, ToolKind, UsageScope};
 
+use super::callbacks::{self, UiCall};
 use super::wire;
 use crate::driver::DriverEvent;
 use crate::jsonrpc::{RpcError, codes};
@@ -28,6 +29,15 @@ pub trait AcpDialect: Send + Sync + 'static {
     /// appends a last resort itself.
     fn autonomy_candidates(&self, requested: Autonomy) -> Vec<AutonomyCandidate>;
     fn prompt_usage_scope(&self) -> UsageScope;
+    fn prompt_usage(&self, result: &serde_json::Value) -> Option<wire::WireUsage> {
+        result.get("usage").and_then(wire::WireUsage::parse)
+    }
+    fn form_elicitation(&self) -> bool {
+        false
+    }
+    fn autonomy_levels(&self) -> Vec<Autonomy> {
+        vec![Autonomy::FullAuto, Autonomy::AutoEdit, Autonomy::Ask]
+    }
     fn mode_change_requires_idle(&self) -> bool {
         false
     }
@@ -87,6 +97,7 @@ pub enum DialectReply {
     NotMine,
     Respond(serde_json::Value),
     Error { code: i64, message: String },
+    Deferred(Box<UiCall>),
 }
 
 /// The dialect for `id`; unknown ids get the generic dialect.
@@ -95,7 +106,112 @@ pub fn dialect_for(id: &str) -> Box<dyn AcpDialect> {
         "hermes" => Box::new(Hermes),
         "claude-acp" => Box::new(ClaudeAcp),
         "codex-acp" => Box::new(CodexAcp),
+        "cursor" => Box::new(Vendor("cursor")),
+        "omp" => Box::new(Vendor("omp")),
+        "antigravity" => Box::new(Vendor("antigravity")),
+        "grok" => Box::new(Vendor("grok")),
+        "opencode" | "opencode-v2" => Box::new(Vendor("opencode")),
         _ => Box::new(Generic),
+    }
+}
+
+/// ACP v1 families whose protocol remains the generic client's, with explicit UI extensions.
+#[derive(Debug, Clone, Copy)]
+pub struct Vendor(&'static str);
+
+impl AcpDialect for Vendor {
+    fn id(&self) -> &'static str {
+        self.0
+    }
+    fn autonomy_candidates(&self, requested: Autonomy) -> Vec<AutonomyCandidate> {
+        if self.0 == "omp" {
+            return vec![candidate(
+                None,
+                AutoAnswer::All,
+                Some(
+                    "oh-my-pi controls tool execution. Its ACP interface does not provide a general Ask or Auto-edit boundary; extension questions and plan approval always wait for you.",
+                ),
+            )];
+        }
+        Generic.autonomy_candidates(requested)
+    }
+    fn autonomy_levels(&self) -> Vec<Autonomy> {
+        if self.0 == "omp" {
+            vec![Autonomy::FullAuto]
+        } else {
+            Generic.autonomy_levels()
+        }
+    }
+    fn prompt_usage_scope(&self) -> UsageScope {
+        if matches!(self.0, "omp" | "grok") {
+            UsageScope::Turn
+        } else {
+            UsageScope::Session
+        }
+    }
+    fn form_elicitation(&self) -> bool {
+        self.0 == "omp"
+    }
+    fn prompt_usage(&self, result: &serde_json::Value) -> Option<wire::WireUsage> {
+        if self.0 != "grok" {
+            return result.get("usage").and_then(wire::WireUsage::parse);
+        }
+        // Grok's pinned PromptUsage is a prompt-wide ledger under _meta.usage. Its input
+        // includes both cache buckets; sibling _meta token fields describe only the last call.
+        let value = result.pointer("/_meta/usage")?;
+        let read = value
+            .get("cachedReadTokens")
+            .map(serde_json::Value::as_u64)
+            .unwrap_or(Some(0))?;
+        let write = value
+            .get("cacheCreationTokens")
+            .map(serde_json::Value::as_u64)
+            .unwrap_or(Some(0))?;
+        Some(wire::WireUsage {
+            input: value
+                .get("inputTokens")?
+                .as_u64()?
+                .checked_sub(read.checked_add(write)?)?,
+            output: value.get("outputTokens")?.as_u64()?,
+            cached_read: Some(read),
+            cached_write: Some(write),
+            thought: value
+                .get("reasoningTokens")
+                .and_then(serde_json::Value::as_u64),
+        })
+    }
+    fn on_request(&self, method: &str, params: &serde_json::Value) -> DialectReply {
+        match self.0 {
+            "cursor" => callbacks::request(method, params, true),
+            "omp" => callbacks::request(method, params, false),
+            _ => DialectReply::NotMine,
+        }
+    }
+    fn auth_command(
+        &self,
+        method: &wire::AuthMethod,
+        launch: &LaunchSpec,
+        env: &EnvMap,
+    ) -> Option<AuthCommand> {
+        if self.0 == "cursor" && method.id == "cursor_login" {
+            return Some(command(
+                method,
+                vec![
+                    launch.program.to_string_lossy().into_owned(),
+                    "login".into(),
+                ],
+            ));
+        }
+        Generic.auth_command(method, launch, env)
+    }
+    fn agent_label(&self) -> Option<&'static str> {
+        Some(match self.0 {
+            "cursor" => "Cursor",
+            "omp" => "oh-my-pi",
+            "antigravity" => "Antigravity",
+            "grok" => "Grok Build",
+            _ => "OpenCode",
+        })
     }
 }
 
@@ -531,6 +647,11 @@ mod tests {
             ("hermes", UsageScope::Session, true, true),
             ("claude-acp", UsageScope::Turn, false, false),
             ("codex-acp", UsageScope::Turn, false, false),
+            ("omp", UsageScope::Turn, false, false),
+            ("grok", UsageScope::Turn, false, false),
+            ("cursor", UsageScope::Session, false, false),
+            ("antigravity", UsageScope::Session, false, false),
+            ("opencode-v2", UsageScope::Session, false, false),
             ("generic", UsageScope::Session, false, false),
             ("some-new-agent", UsageScope::Session, false, false),
         ] {
@@ -541,6 +662,24 @@ mod tests {
         }
         assert_eq!(dialect_for("some-new-agent").id(), "generic");
         assert_eq!(dialect_for("mock").id(), "generic");
+    }
+
+    #[test]
+    fn grok_usage_ignores_last_call_fields_and_rejects_invalid_cache_totals() {
+        let grok = dialect_for("grok");
+        assert!(
+            grok.prompt_usage(&serde_json::json!({"_meta":{"inputTokens":99,"outputTokens":4}}))
+                .is_none()
+        );
+        for usage in [
+            serde_json::json!({"inputTokens":1,"outputTokens":4,"cachedReadTokens":2}),
+            serde_json::json!({"inputTokens":10,"outputTokens":4,"cacheCreationTokens":"bad"}),
+        ] {
+            assert!(
+                grok.prompt_usage(&serde_json::json!({"_meta":{"usage":usage}}))
+                    .is_none()
+            );
+        }
     }
 
     #[test]

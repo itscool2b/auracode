@@ -2,7 +2,7 @@
 mod support;
 
 use aura_drivers::driver::{DriverEvent, LoggedCommand};
-use aura_drivers::testing::ScriptedDriver;
+use aura_drivers::testing::{ScriptedDriver, Step};
 use aura_protocol::{AuraEvent, ErrorKind, SessionStatus, StopReason};
 use std::time::Duration;
 use support::*;
@@ -23,7 +23,71 @@ fn prompt_ids(commands: &[LoggedCommand]) -> Vec<String> {
 // A real clock lets the SQLite writer's busy wait coexist with the held write transaction.
 #[tokio::test]
 async fn native_identity_is_committed_in_the_same_row_before_dispatch_resumes() {
-    let (driver, handle) = ScriptedDriver::new(vec![ready_step(SOURCE)]);
+    assert_identity_commit_gate(Some(SOURCE)).await;
+}
+
+#[tokio::test]
+async fn initially_absent_identity_is_committed_before_dispatch_resumes() {
+    assert_identity_commit_gate(None).await;
+}
+
+fn ready_with_identity(native: Option<&str>) -> Step {
+    let mut info = ready_info("unused");
+    info.native_session_id = native.map(str::to_owned);
+    Step::Emit(DriverEvent::Ready(info))
+}
+
+#[tokio::test]
+async fn absent_id_is_not_claimed_or_used_to_resume_an_uncreated_transcript() {
+    let (first, handle) = ScriptedDriver::new(vec![ready_with_identity(None)]);
+    let (second, _) = ScriptedDriver::new(vec![ready_with_identity(None)]);
+    let h = Harness::new(vec![first, second]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    let another = h.chat().await;
+    h.status(&another.id, SessionStatus::Ready).await;
+    h.manager
+        .send(&chat.id, "fails before creation".into())
+        .await
+        .unwrap();
+    eventually("first visible prompt", || {
+        prompt_ids(&handle.commands()).len() == 1
+    })
+    .await;
+    handle.emit(DriverEvent::TurnEnded {
+        turn_id: prompt_ids(&handle.commands())[0].clone(),
+        stop_reason: StopReason::Error,
+        usage: None,
+        error: None,
+    });
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.stop(&chat.id).await.unwrap();
+    h.status(&chat.id, SessionStatus::Stopped).await;
+    h.stored(&chat.id).await;
+    let conn = rusqlite::Connection::open(h.profile.db_path()).unwrap();
+    let count: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM agent_sessions WHERE native_session_id IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 0, "no placeholder identity was saved");
+    let (next, _) = ScriptedDriver::new(vec![ready_with_identity(None)]);
+    h.factory.push(next);
+    h.manager.start(&chat.id, false).await.unwrap();
+    eventually("restarted driver", || h.factory.setups().len() == 3).await;
+    assert_eq!(h.factory.setups()[2].resume, None);
+    h.status(&chat.id, SessionStatus::Ready).await;
+}
+
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "assertions shared by the two database regression tests"
+)]
+async fn assert_identity_commit_gate(native: Option<&str>) {
+    let (driver, handle) = ScriptedDriver::new(vec![ready_with_identity(native)]);
     let h = Harness::new(vec![driver]);
     let chat = h.chat().await;
     h.status(&chat.id, SessionStatus::Ready).await;
@@ -41,6 +105,14 @@ async fn native_identity_is_committed_in_the_same_row_before_dispatch_resumes() 
             |row| row.get(0),
         )
         .expect("session row");
+    let before: Option<String> = conn
+        .query_row(
+            "SELECT native_session_id FROM agent_sessions WHERE id = ?1",
+            [&row_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(before.as_deref(), native);
     conn.execute_batch("BEGIN IMMEDIATE").expect("hold writes");
     h.manager
         .send(&chat.id, "queued".into())

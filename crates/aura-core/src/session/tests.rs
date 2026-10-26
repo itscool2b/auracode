@@ -1,6 +1,8 @@
 //! The session manager's tests that need the crate's internals: a store whose FIFO and retry are
 //! shrunk (saving pauses within a test), a small actor outbox, and the actor's panic hook.
 
+mod workspace;
+
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -49,7 +51,7 @@ fn launch() -> LaunchSpec {
 
 fn ready_step(native: &str) -> Step {
     Step::Emit(DriverEvent::Ready(ReadyInfo {
-        native_session_id: native.into(),
+        native_session_id: Some(native.into()),
         agent_name: Some("Demo".into()),
         agent_version: Some("1.0.0".into()),
         capabilities: Capabilities::default(),
@@ -894,7 +896,7 @@ impl AgentDriver for DropsItsEvents {
                 commands, events, ..
             } = ctx;
             let ready = DriverEvent::Ready(ReadyInfo {
-                native_session_id: "n1".into(),
+                native_session_id: Some("n1".into()),
                 agent_name: None,
                 agent_version: None,
                 capabilities: Capabilities::default(),

@@ -623,7 +623,9 @@ async fn sleep_until(deadline: Option<Instant>) {
 /// How a driver reports a failed spawn.
 fn spawn_failure(error: &SpawnError) -> DriverError {
     let kind = match error {
-        SpawnError::ProgramNotFound { .. } => ErrorKind::AgentUnavailable,
+        SpawnError::ProgramNotFound { .. } | SpawnError::HostUnavailable { .. } => {
+            ErrorKind::AgentUnavailable
+        }
         SpawnError::InvalidCwd { .. } => ErrorKind::FolderMissing,
         SpawnError::CwdNotAllowed { .. } => ErrorKind::FolderNotAllowed,
         SpawnError::PermissionDenied { .. } | SpawnError::NoRuntime | SpawnError::Spawn { .. } => {

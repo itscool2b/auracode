@@ -16,9 +16,14 @@
 
 pub mod catalog;
 mod detect;
+pub mod hosts;
 mod install;
+pub mod installation;
 mod launch;
+pub mod maintenance;
+mod npm_entry;
 mod probe;
+pub mod releases;
 mod shared;
 
 use std::time::Duration;

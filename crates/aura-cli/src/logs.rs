@@ -12,7 +12,14 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 /// The methods that open a session: their `params.cwd` is the chat folder.
-pub const OPEN_METHODS: [&str; 3] = ["session/new", "session/load", "session/resume"];
+pub const OPEN_METHODS: [&str; 6] = [
+    "session/new",
+    "session/load",
+    "session/resume",
+    "thread/start",
+    "thread/resume",
+    "thread/fork",
+];
 
 /// The current log files in a chat's log folder, oldest spawn first: logs are named after UUIDv7
 /// spawn ids, which sort by time. Rotated parts are left out ([`read`] reads them with their log).
@@ -135,6 +142,24 @@ pub fn request_method(message: &Value) -> Option<&str> {
         Some(method)
     } else if message["type"] == "control_request" && message["request_id"].is_string() {
         message.pointer("/request/subtype").and_then(Value::as_str)
+    } else if message["id"].is_string()
+        && matches!(
+            message["type"].as_str(),
+            Some(
+                "prompt"
+                    | "abort"
+                    | "clear_queue"
+                    | "get_state"
+                    | "get_available_models"
+                    | "get_available_thinking_levels"
+                    | "get_session_stats"
+                    | "get_commands"
+                    | "set_model"
+                    | "set_thinking_level"
+            )
+        )
+    {
+        message["type"].as_str()
     } else {
         None
     }
@@ -167,6 +192,9 @@ pub fn reply<'a>(records: &'a [Value], id: &Value) -> Option<&'a Value> {
                             msg.pointer("/response/subtype").and_then(Value::as_str),
                             Some("success" | "error")
                         ))
+                    || (msg["type"] == "response"
+                        && msg.get("id") == Some(id)
+                        && msg["success"].is_boolean())
             })
     })
 }
@@ -199,9 +227,10 @@ pub fn session_cwd(records: &[Value]) -> Option<&str> {
         .or_else(|| {
             // Native Claude opens its session through launch arguments, in the process cwd.
             let start = note(records, "start")?;
-            (start["agent_id"] == "claude" || start["dialect"] == "claude")
-                .then(|| note(records, "spawn")?.get("cwd")?.as_str())
-                .flatten()
+            (matches!(start["agent_id"].as_str(), Some("claude" | "pi"))
+                || matches!(start["dialect"].as_str(), Some("claude" | "pi")))
+            .then(|| note(records, "spawn")?.get("cwd")?.as_str())
+            .flatten()
         })
 }
 
@@ -249,8 +278,13 @@ pub fn has_prompt(records: &[Value]) -> bool {
     commands(records).any(|command| command["type"] == "prompt")
         || records.iter().any(|record| {
             direction(record) == Some("out")
-                && message(record)
-                    .is_some_and(|msg| msg["type"] == "user" || msg["method"] == "session/prompt")
+                && message(record).is_some_and(|msg| {
+                    msg["type"] == "user"
+                        || matches!(
+                            msg["method"].as_str(),
+                            Some("session/prompt" | "turn/start" | "turn/steer")
+                        )
+                })
         })
 }
 

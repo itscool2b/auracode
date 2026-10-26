@@ -16,6 +16,8 @@
 //!
 //! Step 10 (a Finder launch of a built app) stays manual. Each spawn leaves a protocol log, and the
 //! probe ends by naming each log with the `probe-*` fixture it can become.
+//! Restricted text fallbacks expose no control RPC; their free probe checks executable detection
+//! only and explicitly leaves native startup, auth, output and resume to an authorized smoke run.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -190,6 +192,14 @@ impl Probe<'_> {
         self.spec.kind == DriverKind::Claude
     }
 
+    fn native_codex(&self) -> bool {
+        self.spec.kind == DriverKind::Codex
+    }
+
+    fn native_pi(&self) -> bool {
+        self.spec.kind == DriverKind::Pi
+    }
+
     /// Cards the agent showed while a setting changed, and how the probe answered them.
     fn report_cards(&mut self, step: &str, cards: &[aura_protocol::PermissionRequest]) {
         for card in cards {
@@ -257,6 +267,13 @@ impl Probe<'_> {
                 self.report.fail("detect", "detection did not finish");
                 return;
             }
+        }
+        if spec.kind == DriverKind::Headless {
+            self.report.skip(
+                "1-9 controls",
+                "This text fallback has no control RPC. Only executable detection was checked; native startup, authentication, output and resume remain unverified. No chat or prompt was started.",
+            );
+            return;
         }
         if !args.env.is_empty() {
             self.report.info(
@@ -566,13 +583,18 @@ impl Probe<'_> {
             self.report.fail(step, "the start left no protocol log");
             return;
         };
+        let initialize = if self.native_pi() {
+            "get_state"
+        } else {
+            "initialize"
+        };
         let records = self
             .log_records(&log, |records| {
-                logs::exchange(records, "initialize").is_some()
+                logs::exchange(records, initialize).is_some()
             })
             .await;
         self.note_pid(&log);
-        let Some((sent, answer)) = logs::exchange(&records, "initialize") else {
+        let Some((sent, answer)) = logs::exchange(&records, initialize) else {
             self.report
                 .fail(step, format!("no reply to initialize in {}", log.display()));
             return;
@@ -582,6 +604,24 @@ impl Probe<'_> {
             (Some(sent), Some(answered)) => format!(" in {} ms", answered - sent),
             _ => String::new(),
         };
+        if self.native_codex() {
+            match codex_initialize(&records) {
+                Ok(()) => self.report.pass(step, format!("Codex answered initialize{took}; initialized was sent before opening the thread")),
+                Err(reason) => self.report.fail(step, reason),
+            }
+            self.hostile_check(&records);
+            return;
+        }
+        if self.native_pi() {
+            match pi_state_result(&msg) {
+                Ok(_) => self
+                    .report
+                    .pass(step, format!("Pi answered native get_state{took}")),
+                Err(reason) => self.report.fail(step, reason),
+            }
+            self.hostile_check(&records);
+            return;
+        }
         if self.native_claude() {
             match native_initialize_result(&msg) {
                 Ok(result) => {
@@ -679,7 +719,10 @@ impl Probe<'_> {
                     ),
                 );
             }
-            Recipe::Binary { .. } | Recipe::NativeBinary { .. } | Recipe::Builtin => self
+            Recipe::Binary { .. }
+            | Recipe::QualifiedBinary { .. }
+            | Recipe::NativeBinary { .. }
+            | Recipe::Builtin => self
                 .report
                 .pass(step, "nothing ran the hostile chat folder's fake adapters"),
         }
@@ -757,7 +800,23 @@ impl Probe<'_> {
         if !self.demo()
             && let Some(log) = self.session_log(chat)
         {
-            if self.native_claude() {
+            if self.native_codex() {
+                let records = self.log_records(&log, open_settled).await;
+                match codex_open(&records, &native) {
+                    Ok(description) => self.report.pass(step, description),
+                    Err(reason) => self.report.fail(step, reason),
+                }
+            } else if self.native_pi() {
+                let records = self
+                    .log_records(&log, |records| {
+                        logs::exchange(records, "get_state").is_some()
+                    })
+                    .await;
+                match pi_open(&records, &native) {
+                    Ok(description) => self.report.pass(step, description),
+                    Err(reason) => self.report.fail(step, reason),
+                }
+            } else if self.native_claude() {
                 let records = self
                     .log_records(&log, |records| {
                         logs::exchange(records, "initialize").is_some()
@@ -829,6 +888,13 @@ impl Probe<'_> {
 
     async fn commands_step(&mut self, chat: &ChatRun<'_>) {
         let step = "3 commands";
+        if self.native_codex() {
+            self.report.skip(
+                step,
+                "the native Codex driver does not advertise slash commands",
+            );
+            return;
+        }
         tokio::time::sleep(self.timings.commands).await;
         let count = match chat.lists().await {
             Ok(lists) => lists.commands.len(),
@@ -869,10 +935,28 @@ impl Probe<'_> {
         watch: &std::sync::Arc<Watch>,
     ) -> Option<SessionLists> {
         let step = "4 options";
+        if self.native_codex() {
+            self.report.info(step, "Codex model and effort changes are staged for the next turn; this free probe verifies local choices only");
+        }
         let Some(lists) = lists else {
             self.report.skip(step, "no options to set");
             return None;
         };
+        if self.native_pi() {
+            let valid = lists.options.iter().all(|option| match &option.kind {
+                ConfigKind::Select { current, choices } => {
+                    choices.iter().any(|choice| choice.value == *current)
+                }
+                ConfigKind::Toggle { .. } => false,
+            });
+            self.report.check(
+                valid,
+                step,
+                "Pi model and thinking metadata contain their current choices",
+            );
+            self.report.skip(step,"Pi development probes leave settings unchanged; live setter behavior is covered by protocol tests");
+            return Some(lists.clone());
+        }
         let mut failed = false;
         for option in &lists.options {
             let value = current_value(option);
@@ -1125,6 +1209,25 @@ impl Probe<'_> {
     /// Full auto, Auto-edit, Ask and back, each against the dialect's candidates (spec 5.5.2).
     async fn autonomy_step(&mut self, chat: &ChatRun<'_>) {
         let step = "4 autonomy";
+        if self.native_codex() {
+            self.report.info(step, "Codex permission settings are sent on the next turn; this free probe verifies local policy staging only");
+        }
+        if self.native_pi() {
+            match chat.lists().await {
+                Ok(lists) => self.report.check(
+                    lists.autonomy.requested == Autonomy::FullAuto
+                        && lists.autonomy.auto_answer == AutoAnswer::Never
+                        && lists
+                            .capabilities
+                            .as_ref()
+                            .is_some_and(|c| c.autonomy_levels == [Autonomy::FullAuto]),
+                    step,
+                    "Pi offers Full auto and never auto-answers extension dialogs",
+                ),
+                Err(error) => self.report.fail(step, error),
+            }
+            return;
+        }
         let original = match chat.lists().await {
             Ok(lists) => lists.autonomy.requested,
             Err(error) => {
@@ -1197,7 +1300,9 @@ impl Probe<'_> {
         let deadline = Instant::now() + MODE_CHANGE_LIMIT;
         loop {
             let lists = chat.lists().await.map_err(|error| error.to_string())?;
-            let landed = if self.native_claude() {
+            let landed = if self.native_codex() {
+                lists.autonomy == state
+            } else if self.native_claude() {
                 self.session_log(chat)
                     .and_then(|log| logs::read(&log).ok())
                     .is_some_and(|read| native_effective_mode(&read.records) == Some(mode.as_str()))
@@ -1233,7 +1338,11 @@ impl Probe<'_> {
         }
         tokio::time::sleep(self.timings.settle).await;
         let status = chat.status();
-        let method = if self.native_claude() {
+        let method = if self.native_codex() {
+            "turn/interrupt"
+        } else if self.native_pi() {
+            "abort"
+        } else if self.native_claude() {
             "interrupt"
         } else {
             "session/cancel"
@@ -1423,10 +1532,14 @@ impl Probe<'_> {
         native: Option<&str>,
     ) {
         let step = "7 resume";
-        if self.native_claude() {
+        if self.native_pi() {
+            self.report.skip(step,"Pi resume recall requires a prompted transcript and is not exercised by this read-only probe");
+            return;
+        }
+        if self.native_claude() || self.native_codex() {
             self.report.skip(
                 step,
-                "native resume was not exercised: this free probe sent no prompt, so there is no persisted transcript to resume; a prompted smoke test must verify resume and restored settings",
+                "native resume was not exercised: this free probe sent no prompt; a prompted smoke test must verify persisted transcript resume and restored settings",
             );
             return;
         }
@@ -1607,7 +1720,7 @@ impl Probe<'_> {
         let logs_before = chat.logs();
         // Native Claude has no persisted transcript before a prompt. Fresh starts still exercise
         // startup interruption without claiming that an unprompted native session can resume.
-        let fresh = self.native_claude();
+        let fresh = self.native_claude() || self.native_codex() || self.native_pi();
         if fresh {
             self.report.info(
                 step,
@@ -1701,7 +1814,17 @@ impl Probe<'_> {
                 .into_iter()
                 .filter(|log| !logs_before.contains(log))
                 .filter_map(|log| logs::read(&log).ok())
-                .any(|read| logs::exchange(&read.records, "initialize").is_some());
+                .any(|read| {
+                    logs::exchange(
+                        &read.records,
+                        if self.native_pi() {
+                            "get_state"
+                        } else {
+                            "initialize"
+                        },
+                    )
+                    .is_some()
+                });
             if answered {
                 return;
             }
@@ -1758,7 +1881,11 @@ impl Probe<'_> {
             return;
         }
         let mut lines = vec!["Protocol logs, and the fixture each can become:".to_owned()];
-        let fixture_dir = if self.native_claude() {
+        let fixture_dir = if self.native_codex() {
+            "codex".into()
+        } else if self.native_pi() {
+            "pi".into()
+        } else if self.native_claude() {
             "claude".into()
         } else {
             format!("acp/{}", self.spec.id)
@@ -1783,7 +1910,10 @@ pub fn adapter_folder(headless: &Headless, spec: &AgentSpec) -> Option<PathBuf> 
             "{}-{version}",
             package.trim_start_matches('@').replace('/', "-")
         ))),
-        Recipe::Binary { .. } | Recipe::NativeBinary { .. } | Recipe::Builtin => None,
+        Recipe::Binary { .. }
+        | Recipe::QualifiedBinary { .. }
+        | Recipe::NativeBinary { .. }
+        | Recipe::Builtin => None,
     }
 }
 
@@ -1977,8 +2107,139 @@ fn auth_method_ids(result: &Value) -> String {
     }
 }
 
+/// Check the app-server handshake without reporting its home, account or host metadata.
+fn codex_initialize(records: &[Value]) -> Result<(), String> {
+    let (request, response) =
+        logs::exchange(records, "initialize").ok_or("Codex did not answer initialize")?;
+    if logs::message(response)
+        .and_then(|message| message.pointer("/result/userAgent"))
+        .and_then(Value::as_str)
+        .is_none_or(str::is_empty)
+    {
+        return Err("Codex initialize did not return its user agent".into());
+    }
+    let position = |record: &Value| {
+        records
+            .iter()
+            .position(|candidate| std::ptr::eq(candidate, record))
+    };
+    let initialized = records
+        .iter()
+        .position(|record| {
+            logs::direction(record) == Some("out")
+                && logs::message(record).is_some_and(|message| {
+                    message["method"] == "initialized" && message.get("id").is_none()
+                })
+        })
+        .ok_or("Codex was not sent the initialized notification")?;
+    let request_pos = position(request).ok_or("Codex initialize request is missing")?;
+    let response_pos = position(response).ok_or("Codex initialize reply is missing")?;
+    if request_pos >= response_pos
+        || response_pos >= initialized
+        || logs::first_open(records)
+            .and_then(position)
+            .is_some_and(|open| open <= initialized)
+    {
+        return Err("Codex initialize, initialized and thread open are out of order".into());
+    }
+    Ok(())
+}
+
+fn codex_open(records: &[Value], native_id: &str) -> Result<String, String> {
+    codex_initialize(records)?;
+    let args = logs::note(records, "spawn")
+        .and_then(|spawn| spawn["args"].as_array())
+        .ok_or("Codex has no logged launch arguments")?;
+    if args
+        != &vec![
+            Value::from("app-server"),
+            Value::from("--listen"),
+            Value::from("stdio://"),
+        ]
+    {
+        return Err("Codex did not use the expected owned stdio app-server launch".into());
+    }
+    let request = logs::first_open(records)
+        .and_then(logs::message)
+        .ok_or("Codex sent no thread open")?;
+    if request["method"] != "thread/start"
+        || request
+            .pointer("/params/cwd")
+            .and_then(Value::as_str)
+            .is_none_or(str::is_empty)
+    {
+        return Err("Codex did not start a fresh thread in the selected folder".into());
+    }
+    let result = open_result(records).ok_or("Codex thread start did not succeed")?;
+    if native_id.is_empty()
+        || result.pointer("/thread/id").and_then(Value::as_str) != Some(native_id)
+    {
+        return Err("Codex persisted identity is not the returned thread ID".into());
+    }
+    let policy = result
+        .get("approvalPolicy")
+        .filter(|value| value.is_string() || value.is_object())
+        .ok_or("Codex returned no effective approval policy")?;
+    let sandbox = result
+        .pointer("/sandbox/type")
+        .and_then(Value::as_str)
+        .ok_or("Codex returned no effective sandbox policy")?;
+    if logs::exchange(records, "model/list")
+        .and_then(|(_, answer)| logs::message(answer))
+        .and_then(|message| message.pointer("/result/data"))
+        .and_then(Value::as_array)
+        .is_none()
+    {
+        return Err("Codex did not return its native model catalog".into());
+    }
+    Ok(format!(
+        "owned stdio app-server opened thread {native_id}; effective approval policy {policy}, sandbox {sandbox}; native model catalog received"
+    ))
+}
+
 /// Native initialize is a control response, not JSON-RPC. Inspect only fields needed by the
 /// probe; its account and other opaque payloads never belong in the report.
+fn pi_state_result(message: &Value) -> Result<&Value, String> {
+    if message["type"] != "response"
+        || message["command"] != "get_state"
+        || message["success"] != true
+    {
+        return Err("Pi did not acknowledge get_state successfully".into());
+    }
+    let state = &message["data"];
+    if state["sessionId"].as_str().is_none_or(str::is_empty)
+        || !state["isStreaming"].is_boolean()
+        || !state["isCompacting"].is_boolean()
+        || !state["pendingMessageCount"].is_u64()
+    {
+        return Err("Pi get_state omitted required session/run-state fields".into());
+    }
+    Ok(state)
+}
+
+fn pi_open(records: &[Value], native_id: &str) -> Result<String, String> {
+    let reply = logs::exchange(records, "get_state")
+        .and_then(|(_, answer)| logs::message(answer))
+        .ok_or("Pi session has no get_state response")?;
+    let state = pi_state_result(reply)?;
+    if state["sessionId"] != native_id {
+        return Err("Pi state and Ready session ids differ".into());
+    }
+    let args = logs::note(records, "spawn")
+        .and_then(|spawn| spawn["args"].as_array())
+        .ok_or("Pi spawn args missing")?;
+    if !args
+        .windows(2)
+        .any(|pair| pair[0] == "--mode" && pair[1] == "rpc")
+        || !args
+            .windows(2)
+            .any(|pair| pair[0] == "--session-id" && pair[1] == native_id)
+    {
+        return Err("Pi did not start in RPC mode with its requested fresh session id".into());
+    }
+    Ok("Pi opened the requested native session through RPC".into())
+}
+
 fn native_initialize_result(message: &Value) -> Result<&Value, String> {
     if message["type"] != "control_response" || message["response"]["subtype"] != "success" {
         return Err(format!(
@@ -2319,6 +2580,19 @@ fn cheapest_of<'a>(choices: &[&'a ConfigChoice]) -> Option<&'a ConfigChoice> {
 /// The native modes an autonomy level may land on: the dialect's candidates (spec 5.5.2), the
 /// demo agent's own table for the demo agent.
 pub fn expected_modes(spec: &AgentSpec, level: Autonomy) -> Vec<Option<String>> {
+    if spec.kind == DriverKind::Codex {
+        return vec![Some(
+            match level {
+                Autonomy::FullAuto => "never",
+                Autonomy::AutoEdit => "on-request",
+                Autonomy::Ask => "untrusted",
+            }
+            .into(),
+        )];
+    }
+    if spec.kind == DriverKind::Pi {
+        return vec![None];
+    }
     if spec.kind == DriverKind::Claude {
         return match level {
             Autonomy::FullAuto => {
@@ -2727,5 +3001,58 @@ mod tests {
         let records = vec![native, acp];
         assert_eq!(largest_commands_update(&records, true), Some(native_size));
         assert_eq!(largest_commands_update(&records, false), Some(acp_size));
+    }
+
+    #[test]
+    fn codex_probe_checks_handshake_identity_and_owned_transport() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../aura-drivers/tests/fixtures/codex/basic.jsonl");
+        let mut records = logs::read(&path).expect("fixture").records;
+        records.insert(0, serde_json::json!({"d":"note","note":{"spawn":{"args":["app-server","--listen","stdio://"]}}}));
+        assert!(codex_open(&records, "thread-1").is_ok());
+        assert!(
+            codex_open(&records, "tree-1").is_err(),
+            "session tree IDs are not native thread IDs"
+        );
+        assert_eq!(logs::session_cwd(&records), Some("<CWD>"));
+        let init = records
+            .iter()
+            .position(|record| record["msg"]["method"] == "initialized")
+            .expect("initialized");
+        let mut early_open = records.clone();
+        early_open.swap(init, init + 1);
+        assert!(codex_initialize(&early_open).is_err());
+        records[0]["note"]["spawn"]["args"] =
+            serde_json::json!(["app-server", "--listen", "ws://localhost:1234"]);
+        assert!(codex_open(&records, "thread-1").is_err());
+    }
+
+    #[test]
+    fn codex_turn_start_and_steer_cannot_be_reported_as_free() {
+        for method in ["turn/start", "turn/steer"] {
+            assert!(logs::has_prompt(&[
+                serde_json::json!({"d":"out","msg":{"id":3,"method":method,"params":{"input":[]}}})
+            ]));
+        }
+        assert!(!logs::has_prompt(&[
+            serde_json::json!({"d":"out","msg":{"id":3,"method":"thread/start","params":{}}})
+        ]));
+    }
+
+    #[test]
+    fn pi_open_checks_native_state_and_launch_without_exposing_model_internals() {
+        let records = vec![
+            serde_json::json!({"d":"note","note":{"spawn":{"args":["--mode","rpc","--session-id","session"]}}}),
+            serde_json::json!({"d":"out","msg":{"type":"get_state","id":"s"}}),
+            serde_json::json!({"d":"in","msg":{"type":"response","command":"get_state","id":"s","success":true,"data":{
+                "sessionId":"session","isStreaming":false,"isCompacting":false,"pendingMessageCount":0,
+                "model":{"id":"model","provider":"test","baseUrl":"private"}}}}),
+        ];
+        assert!(pi_open(&records, "session").unwrap().contains("RPC"));
+        assert!(pi_open(&records, "other").is_err());
+        assert!(!pi_open(&records, "session").unwrap().contains("private"));
+        let mut malformed = records[2]["msg"].clone();
+        malformed["data"]["isStreaming"] = Value::Null;
+        assert!(pi_state_result(&malformed).is_err());
     }
 }

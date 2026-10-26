@@ -27,6 +27,34 @@ mod process {
         ..ProbeTimings::STANDARD
     };
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_text_fallback_free_probe_checks_detection_without_creating_a_chat() {
+        let machine = Machine::new();
+        let name = if cfg!(windows) { "grok.exe" } else { "grok" };
+        std::fs::copy(crate::common::fake_agent(), machine.bin.join(name))
+            .expect("install the fake version helper");
+        let headless = machine.headless(&[("AURA_FAKE_VERSION", "1.0.70")]).await;
+        let (out, captured) = Out::capture();
+        let result = probe::run(
+            &headless,
+            &ProbeArgs {
+                agent: "grok-stream".into(),
+                env: vec![],
+                folder: None,
+            },
+            &machine.path("unused-folder"),
+            false,
+            PROBE,
+            &out,
+        )
+        .await
+        .expect("probe");
+        assert_eq!(result, Outcome::Passed, "{}", captured.text());
+        assert!(captured.text().contains("No chat or prompt was started."));
+        assert!(headless.manager.chats().await.expect("chats").is_empty());
+        assert!(headless.shutdown().await.saved);
+    }
+
     /// Curates `log` into a fixture named `name` and checks that it replays as recorded. The
     /// replay runs as `aura-cli fixture` runs it: on a thread of its own, on paused time.
     fn curates_and_replays(machine: &Machine, log: &Path, name: &str) {

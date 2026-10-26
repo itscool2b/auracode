@@ -18,6 +18,7 @@
 //! preparation at a [`Gate`]; the detector records every [`Detector::forget_install`].
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -68,11 +69,51 @@ struct Live {
 
 #[derive(Default)]
 struct LiveState {
+    release_checks_enabled: bool,
+    releases: HashMap<String, aura_protocol::agents::LatestRelease>,
+    maintenance: HashSet<String>,
+    minimum_generation: HashMap<String, u64>,
     /// Each agent's latest detection, with the generation of the probe that made it.
     results: HashMap<String, (u64, Detection)>,
     probes: HashMap<String, Probe>,
     installs: HashMap<String, Install>,
     generation: u64,
+}
+
+struct MaintenanceGuard {
+    live: Arc<Live>,
+    provider: String,
+    active: bool,
+}
+impl MaintenanceGuard {
+    fn complete(mut self, spec: &AgentSpec, detection: Detection) {
+        let mut state = lock(&self.live.state);
+        state.generation += 1;
+        let generation = state.generation;
+        state
+            .minimum_generation
+            .insert(self.provider.clone(), generation);
+        state
+            .probes
+            .retain(|id, _| crate::installation::provider_namespace(id) != self.provider);
+        state
+            .results
+            .insert(spec.id.to_owned(), (generation, detection));
+        state.maintenance.remove(&self.provider);
+        self.active = false;
+    }
+}
+impl Drop for MaintenanceGuard {
+    fn drop(&mut self) {
+        if !self.active {
+            return;
+        }
+        let mut state = lock(&self.live.state);
+        state.maintenance.remove(&self.provider);
+        state
+            .probes
+            .retain(|id, _| crate::installation::provider_namespace(id) != self.provider);
+    }
 }
 
 impl std::fmt::Debug for Live {
@@ -106,7 +147,13 @@ impl Live {
                 .results
                 .get(spec.id)
                 .is_some_and(|(known, _)| *known > generation);
-            if !newer {
+            let provider = crate::installation::provider_namespace(spec.id);
+            let invalidated = state
+                .minimum_generation
+                .get(provider)
+                .is_some_and(|minimum| generation < *minimum)
+                || state.maintenance.contains(provider);
+            if !newer && !invalidated {
                 state
                     .results
                     .insert(spec.id.to_owned(), (generation, detection.clone()));
@@ -173,7 +220,12 @@ impl Live {
             );
         }
         match self.cached(spec) {
-            Some(detection) => entry(spec, detection.availability, detection.needs_download),
+            Some(detection) => {
+                let mut entry = entry(spec, detection.availability, detection.needs_download);
+                entry.installation = detection.installation;
+                entry.latest_release = lock(&self.state).releases.get(spec.id).cloned();
+                entry
+            }
             None => entry(spec, Availability::Checking, false),
         }
     }
@@ -190,11 +242,14 @@ impl Live {
         };
         match &spec.recipe {
             Recipe::Builtin => Ok(launch::builtin(spec)),
-            Recipe::Binary { program, args, .. } => {
+            Recipe::Binary { program, args, .. }
+            | Recipe::QualifiedBinary { program, args, .. } => {
                 let located = located.ok_or_else(|| LaunchError::Missing {
                     reason: format!("{program} was not found on your PATH."),
                 })?;
-                Ok(launch::binary(spec, &located.program, program, args))
+                let mut launch = launch::binary(spec, &located.program, program, args);
+                launch.args.splice(0..0, located.prefix_args);
+                Ok(launch)
             }
             Recipe::NativeBinary { user_binary, args } => {
                 let located = located.ok_or_else(|| LaunchError::Missing {
@@ -554,6 +609,186 @@ impl Fixed {
 }
 
 impl Detector {
+    /// Desktop opt-in at real startup. Fixed detectors and test machines never start network work.
+    /// Release checks are independent of launch readiness and never install anything.
+    pub fn enable_release_checks(&self, cache_path: PathBuf) {
+        let Mode::Live(live) = &self.mode else {
+            return;
+        };
+        let Ok(cache) = crate::releases::ReleaseCache::new(cache_path) else {
+            return;
+        };
+        {
+            let mut state = lock(&live.state);
+            if state.release_checks_enabled {
+                return;
+            }
+            state.release_checks_enabled = true;
+        }
+        let weak = Arc::downgrade(live);
+        live.rt.spawn(async move {
+            cache.load().await;
+            loop {
+                {
+                    let Some(live) = weak.upgrade() else {
+                        break;
+                    };
+                    live.detect_every(false).await;
+                    let installations: Vec<_> = lock(&live.state)
+                        .results
+                        .iter()
+                        .filter_map(|(id, (_, detection))| {
+                            Some((id.clone(), detection.installation.clone()?))
+                        })
+                        .collect();
+                    for (id, installation) in installations {
+                        let Some(source) =
+                            crate::releases::ReleaseSource::for_installation(&installation)
+                        else {
+                            continue;
+                        };
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_or(0, |time| {
+                                i64::try_from(time.as_millis()).unwrap_or(i64::MAX)
+                            });
+                        let latest = cache.refresh(&source, now).await;
+                        lock(&live.state).releases.insert(id, latest);
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(15 * 60)).await;
+            }
+        });
+    }
+    /// Reviewed actions for the currently detected installation, without running those actions.
+    pub async fn maintenance(&self, id: &str) -> aura_protocol::agents::AgentMaintenance {
+        use aura_protocol::agents::AgentMaintenance;
+        let unavailable = |reason: String| AgentMaintenance {
+            auth_status: false,
+            update_unavailable: Some(reason),
+        };
+        let Mode::Live(live) = &self.mode else {
+            return unavailable("This agent has no vendor maintenance commands.".into());
+        };
+        let Some(spec) = self.spec(id) else {
+            return unavailable("This agent is not in the catalog.".into());
+        };
+        let Some(installation) = live.detect(&spec).await.installation else {
+            return unavailable("The agent installation is not ready.".into());
+        };
+        let env = live.env.get().await;
+        let update_unavailable = if lock(&live.state)
+            .maintenance
+            .contains(&installation.provider)
+        {
+            Some(crate::maintenance::MaintenanceError::AlreadyRunning.to_string())
+        } else {
+            crate::maintenance::update_command(&installation, &env.vars)
+                .err()
+                .map(|error| error.to_string())
+        };
+        AgentMaintenance {
+            auth_status: crate::maintenance::auth_command(&installation).is_ok(),
+            update_unavailable,
+        }
+    }
+
+    /// Runs the vendor's local status command and retains only a coarse status, never account data.
+    pub async fn auth_status(&self, id: &str) -> aura_protocol::agents::AgentAuthStatus {
+        use aura_protocol::agents::AgentAuthStatus;
+        let Mode::Live(live) = &self.mode else {
+            return AgentAuthStatus::Unsupported;
+        };
+        let Some(spec) = self.spec(id) else {
+            return AgentAuthStatus::Unsupported;
+        };
+        let Some(installation) = live.detect(&spec).await.installation else {
+            return AgentAuthStatus::Unknown {
+                reason: "The agent installation is not ready.".into(),
+            };
+        };
+        let command = match crate::maintenance::auth_command(&installation) {
+            Ok(command) => command,
+            Err(_) => return AgentAuthStatus::Unsupported,
+        };
+        if crate::maintenance::check_unchanged(&installation).is_err() {
+            return AgentAuthStatus::Unknown {
+                reason: "The installation changed. Refresh agents.".into(),
+            };
+        }
+        match crate::maintenance::run(
+            command,
+            live.env.get().await,
+            &live.registry,
+            crate::PROBE_TIMEOUT,
+        )
+        .await
+        {
+            Ok(output) => crate::maintenance::auth_status(&installation.provider, &output),
+            Err(error) => AgentAuthStatus::Unknown {
+                reason: error.to_string(),
+            },
+        }
+    }
+
+    /// Explicit user action only. Serialize aliases of one provider and invalidate detection even
+    /// on failure, because a vendor installer may have partially changed its files.
+    pub async fn update(&self, id: &str) -> Result<(), crate::maintenance::MaintenanceError> {
+        use crate::maintenance::{self, MaintenanceError};
+        let Mode::Live(live) = &self.mode else {
+            return Err(MaintenanceError::Unsupported);
+        };
+        let spec = self.spec(id).ok_or(MaintenanceError::Unsupported)?;
+        let provider = crate::installation::provider_namespace(id).to_owned();
+        if !lock(&live.state).maintenance.insert(provider.clone()) {
+            return Err(MaintenanceError::AlreadyRunning);
+        }
+        let guard = MaintenanceGuard {
+            live: Arc::clone(live),
+            provider: provider.clone(),
+            active: true,
+        };
+        let installation = live
+            .probe(&spec, true)
+            .wait()
+            .await
+            .and_then(|detected| detected.installation)
+            .ok_or(MaintenanceError::Changed)?;
+        let env = live.env.get().await;
+        let command = maintenance::update_command(&installation, &env.vars)?;
+        maintenance::check_unchanged(&installation)?;
+        // Drop cached aliases before starting so cancellation cannot leave stale metadata.
+        {
+            let mut state = lock(&live.state);
+            state.generation += 1;
+            let floor = state.generation;
+            state.minimum_generation.insert(provider.clone(), floor);
+            state
+                .results
+                .retain(|id, _| crate::installation::provider_namespace(id) != provider);
+            state
+                .probes
+                .retain(|id, _| crate::installation::provider_namespace(id) != provider);
+        }
+        let output = maintenance::run(command, env, &live.registry, crate::INSTALL_TIMEOUT).await?;
+        if output.timed_out {
+            return Err(MaintenanceError::TimedOut);
+        }
+        let code = output.exit.and_then(|exit| exit.code);
+        if code != Some(0) {
+            return Err(MaintenanceError::Failed(code));
+        }
+        // Keep the provider lock through verification. Releasing it first would let another
+        // updater replace the binary while this check is still deciding whether it succeeded.
+        let detection = live.probe(&spec, true).wait().await;
+        let Some(detection) = detection
+            .filter(|detected| matches!(detected.availability, Availability::Ready { .. }))
+        else {
+            return Err(MaintenanceError::VerificationFailed);
+        };
+        guard.complete(&spec, detection);
+        Ok(())
+    }
     /// Detects the catalog's agents. Detection starts in the background on `rt` at once and probes
     /// once the env resolves; `adapters_dir` is `<data root>/adapters`.
     pub fn new(
@@ -721,16 +956,20 @@ fn entry(spec: &AgentSpec, availability: Availability, needs_download: bool) -> 
         launch: launch_label(spec),
         needs_download,
         last_verified: spec.last_verified.to_owned(),
+        installation: None,
+        latest_release: None,
     }
 }
 
 /// How the agent starts, for display.
 fn launch_label(spec: &AgentSpec) -> String {
     match &spec.recipe {
-        Recipe::Binary { program, args, .. } => std::iter::once(*program)
-            .chain(args.iter().copied())
-            .collect::<Vec<_>>()
-            .join(" "),
+        Recipe::Binary { program, args, .. } | Recipe::QualifiedBinary { program, args, .. } => {
+            std::iter::once(*program)
+                .chain(args.iter().copied())
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
         Recipe::NativeBinary { user_binary, args } => std::iter::once(user_binary.program)
             .chain(args.iter().copied())
             .collect::<Vec<_>>()
@@ -818,9 +1057,28 @@ mod tests {
         let detector = live();
         let entries = detector.detect_all(true).await;
         let ids: Vec<&str> = entries.iter().map(|entry| entry.id.as_str()).collect();
-        assert_eq!(ids, ["hermes", "claude", "claude-acp", "codex-acp", "mock"]);
+        assert_eq!(
+            ids,
+            catalog().iter().map(|spec| spec.id).collect::<Vec<_>>()
+        );
+        for entry in entries.iter().filter(|entry| {
+            matches!(
+                entry.id.as_str(),
+                "antigravity" | "cursor" | "grok" | "omp" | "opencode" | "opencode-v2"
+            )
+        }) {
+            assert!(
+                matches!(&entry.availability, Availability::Missing { reason } if reason.contains("official"))
+            );
+        }
         let reasons: Vec<Availability> = entries
             .iter()
+            .filter(|entry| {
+                matches!(
+                    entry.id.as_str(),
+                    "hermes" | "claude" | "claude-acp" | "codex" | "codex-acp" | "pi" | "mock"
+                )
+            })
             .map(|entry| entry.availability.clone())
             .collect();
         assert_eq!(
@@ -836,7 +1094,13 @@ mod tests {
                     reason: "Node.js 22 or newer is required (found none).".into()
                 },
                 Availability::Missing {
+                    reason: "codex was not found on your PATH.".into()
+                },
+                Availability::Missing {
                     reason: "Node.js 22 or newer is required (found none).".into()
+                },
+                Availability::Missing {
+                    reason: "pi was not found on your PATH.".into()
                 },
                 Availability::Ready {
                     version: None,
@@ -873,7 +1137,8 @@ mod tests {
             detector.detect(&hermes).await,
             Availability::Missing { .. }
         ));
-        assert!(detector.spec("cursor").is_none());
+        assert!(detector.spec("cursor").is_some());
+        assert!(detector.spec("agent").is_none());
         detector.forget_install(&claude());
         assert_eq!(detector.forgotten(), ["claude-acp"]);
     }

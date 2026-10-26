@@ -27,6 +27,152 @@ fn ready_path(availability: &Availability) -> PathBuf {
     }
 }
 
+#[cfg(windows)]
+#[tokio::test]
+async fn reviewed_npm_bins_launch_through_node_without_running_shell_shims() {
+    use aura_protocol::agents::InstallChannel;
+
+    for (id, package, version) in [
+        ("pi", "@earendil-works/pi-coding-agent", "1.0.2"),
+        ("omp", "@oh-my-pi/pi-coding-agent", "18.12.6"),
+        ("grok", "@xai-official/grok", "1.0.70"),
+    ] {
+        let machine = Machine::with_tools(&["node", "npm"]);
+        let shim = machine.bin.join(format!("{id}.cmd"));
+        std::fs::write(&shim, "@exit /b 99\r\n").unwrap();
+        let root = machine.bin.join("node_modules").join(package);
+        std::fs::create_dir_all(root.join("dist")).unwrap();
+        let entry = root.join("dist/cli.js");
+        std::fs::write(&entry, format!("FAKE_ADAPTER_VERSION={version}\n")).unwrap();
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::json!({
+                "name":package,"bin":{id:"dist/cli.js"}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let env = machine.env(&[]);
+        let detector = machine.detector(env.clone());
+        let agent = spec(id);
+        assert_eq!(ready_path(&detector.detect(&agent).await), shim);
+        let launch = detector.prepare_launch(&agent, progress()).await.unwrap();
+        assert_eq!(launch.program, machine.tool("node"));
+        assert_eq!(
+            launch.args[0],
+            std::fs::canonicalize(&entry).unwrap().into_os_string()
+        );
+        let installed = detector
+            .detect_all(false)
+            .await
+            .into_iter()
+            .find(|agent| agent.id == id)
+            .unwrap()
+            .installation
+            .unwrap();
+        assert_eq!(
+            installed.channel,
+            InstallChannel::Npm {
+                package: package.into()
+            }
+        );
+        aura_agents::maintenance::check_unchanged(&installed).unwrap();
+        let update = aura_agents::maintenance::update_command(&installed, &env.vars).unwrap();
+        assert_eq!(update.program, machine.tool("npm"));
+        assert!(
+            update
+                .args
+                .iter()
+                .any(|arg| arg == std::ffi::OsStr::new(&format!("{package}@latest")))
+        );
+        assert!(machine.runs("node").iter().any(|run| {
+            run["argv"] == serde_json::json!([std::fs::canonicalize(&entry).unwrap(), "--version"])
+        }));
+        std::fs::write(root.join("dist/other.js"), "replacement").unwrap();
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::json!({
+                "name":package,"bin":{id:"dist/other.js"}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            aura_agents::maintenance::check_unchanged(&installed),
+            Err(aura_agents::maintenance::MaintenanceError::Changed)
+        );
+    }
+}
+
+#[tokio::test]
+async fn cursor_never_probes_an_unrelated_agent_executable() {
+    let machine = Machine::with_tools(&["agent"]);
+    machine.version("agent", "Cursor 2026.10.22-27dcf5f");
+    let detector = machine.detector(machine.env(&[]));
+    assert!(matches!(
+        detector.detect(&spec("cursor")).await,
+        Availability::Missing { .. }
+    ));
+    assert!(machine.runs("agent").is_empty());
+}
+
+#[tokio::test]
+async fn vendor_acp_recipes_probe_only_versions_and_keep_transport_arguments() {
+    for (id, program, version, args) in [
+        ("cursor", "cursor-agent", "2026.10.22-27dcf5f", vec!["acp"]),
+        ("omp", "omp", "18.12.6", vec!["acp"]),
+        ("grok", "grok", "1.0.70", vec!["agent", "stdio"]),
+    ] {
+        let machine = Machine::with_tools(&[program]);
+        machine.version(program, version);
+        let detector = machine.detector(machine.env(&[]));
+        let agent = spec(id);
+        assert!(
+            matches!(detector.detect(&agent).await, Availability::Ready { version:Some(version), .. } if version.contains("unverified"))
+        );
+        let launch = detector.prepare_launch(&agent, progress()).await.unwrap();
+        assert_eq!(launch.program, machine.tool(program));
+        assert_eq!(launch.args, args);
+        assert!(launch.set_env.is_empty());
+        // Catalog aliases may independently probe the same binary in the background.
+        // Every observed invocation must still be a read-only version check.
+        let runs = machine.runs(program);
+        assert!(!runs.is_empty(), "{id} was not checked");
+        for run in runs {
+            assert_eq!(run["argv"], serde_json::json!(["--version"]), "{id}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn opencode_major_lines_and_omp_form_baseline_are_qualified_separately() {
+    for (version, accepted, rejected) in [
+        ("1.19.4", "opencode", "opencode-v2"),
+        ("2.1.4", "opencode-v2", "opencode"),
+    ] {
+        let machine = Machine::with_tools(&["opencode"]);
+        machine.version("opencode", version);
+        let detector = machine.detector(machine.env(&[]));
+        assert!(matches!(
+            detector.detect(&spec(accepted)).await,
+            Availability::Ready { .. }
+        ));
+        assert!(matches!(
+            detector.detect(&spec(rejected)).await,
+            Availability::Broken { .. }
+        ));
+    }
+    let machine = Machine::with_tools(&["omp"]);
+    machine.version("omp", "18.12.5");
+    assert!(matches!(
+        machine
+            .detector(machine.env(&[]))
+            .detect(&spec("omp"))
+            .await,
+        Availability::Broken { .. }
+    ));
+}
+
 #[tokio::test]
 async fn detect_missing_binary() {
     let machine = Machine::with_tools(&["node", "npm"]);
@@ -59,6 +205,15 @@ async fn detect_broken_binary() {
         detector.prepare_launch(&spec("hermes"), progress()).await,
         Err(LaunchError::Broken { .. })
     ));
+    assert!(
+        detector
+            .cached()
+            .iter()
+            .find(|entry| entry.id == "hermes")
+            .unwrap()
+            .installation
+            .is_none()
+    );
 }
 
 /// Real time: the probe limit is 10 s, and a paused clock would fire it before the probe started.
@@ -135,6 +290,23 @@ async fn native_claude_launches_the_user_binary_without_node_or_npm() {
         .prepare_launch(&claude, progress())
         .await
         .expect("launch");
+    let entry = detector
+        .cached()
+        .into_iter()
+        .find(|entry| entry.id == "claude")
+        .unwrap();
+    let installation = entry.installation.expect("successful probe metadata");
+    assert_eq!(
+        installation.launch_path,
+        machine.tool("claude").display().to_string()
+    );
+    assert_eq!(installation.version, "2.1.310");
+    assert_eq!(installation.host, aura_protocol::agents::AgentHost::Native);
+    assert_eq!(
+        installation.channel,
+        aura_protocol::agents::InstallChannel::Unknown
+    );
+    assert!(installation.resolved_path.is_some());
     assert_eq!(launch.program, machine.tool("claude"));
     assert_eq!(launch.cwd, ProcessCwd::ChatFolder);
     assert_eq!(

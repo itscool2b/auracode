@@ -1,5 +1,7 @@
 import type {
+  AgentAuthStatus,
   AgentEntry,
+  AgentMaintenance,
   AuraEvent,
   Autonomy,
   AutonomyState,
@@ -56,6 +58,7 @@ export function chatSummary(id: string, overrides: Partial<ChatSummary> = {}): C
     id,
     title: null,
     agent_id: "mock",
+    agent_host: { type: "native" },
     agent_name: "Demo agent",
     folder: "/Users/me/code/app",
     folder_state: "ok",
@@ -539,6 +542,24 @@ export class FakeTransport implements Transport {
   agentsRefresh(): Promise<AgentEntry[]> {
     this.#record("agentsRefresh", []);
     return this.handlers.agentsRefresh?.() ?? Promise.resolve([]);
+  }
+
+  agentMaintenance(agentId: string): Promise<AgentMaintenance> {
+    this.#record("agentMaintenance", [agentId]);
+    return (
+      this.handlers.agentMaintenance?.(agentId) ??
+      Promise.resolve({ auth_status: false, update_unavailable: "No vendor commands." })
+    );
+  }
+
+  agentAuthStatus(agentId: string): Promise<AgentAuthStatus> {
+    this.#record("agentAuthStatus", [agentId]);
+    return this.handlers.agentAuthStatus?.(agentId) ?? Promise.resolve({ state: "unsupported" });
+  }
+
+  agentUpdate(agentId: string): Promise<void> {
+    this.#record("agentUpdate", [agentId]);
+    return this.handlers.agentUpdate?.(agentId) ?? Promise.resolve();
   }
 
   envStatus(): Promise<EnvStatus> {

@@ -315,7 +315,7 @@ async fn exercise(
         reject_request(commands, &event)?;
         match event {
             DriverEvent::RunState { idle: state } => idle = state,
-            DriverEvent::Ready(info) => native = Some(info.native_session_id),
+            DriverEvent::Ready(info) => native = info.native_session_id,
             _ => {}
         }
     }

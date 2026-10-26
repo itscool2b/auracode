@@ -53,6 +53,7 @@ pub(crate) struct FakeAgent {
     /// Recorded request id (as JSON text) to the live id the driver used.
     ids: HashMap<String, Value>,
     native: NativeCorrelation,
+    strict_jsonrpc: bool,
     /// The agent's requests by id (as JSON text), in the order made.
     requests: Vec<(String, AgentRequest)>,
     pub(crate) mismatches: Vec<String>,
@@ -68,6 +69,7 @@ impl FakeAgent {
             eof_sent: false,
             ids: HashMap::new(),
             native: NativeCorrelation::default(),
+            strict_jsonrpc: false,
             requests: Vec::new(),
             mismatches: Vec::new(),
         }
@@ -77,6 +79,10 @@ impl FakeAgent {
         self.native
             .sessions
             .insert(recorded.into(), Value::String(live.into()));
+    }
+
+    pub(crate) fn strict_jsonrpc(&mut self, enabled: bool) {
+        self.strict_jsonrpc = enabled;
     }
 
     fn mismatch(&mut self, record: usize, what: String) {
@@ -91,6 +97,25 @@ impl FakeAgent {
         if message.get("type").is_some() && message.get("jsonrpc").is_none() {
             self.native.rewrite_in(&mut message);
             match message["type"].as_str() {
+                Some("extension_ui_request")
+                    if matches!(
+                        message["method"].as_str(),
+                        Some("select" | "confirm" | "input" | "editor")
+                    ) =>
+                {
+                    if let (Some(id), Some(method)) =
+                        (message["id"].as_str(), message["method"].as_str())
+                    {
+                        self.requests.push((
+                            Value::String(id.into()).to_string(),
+                            AgentRequest {
+                                method: method.into(),
+                                answered: false,
+                                orphaned: false,
+                            },
+                        ));
+                    }
+                }
                 Some("control_request") => {
                     if let (Some(id), Some(method)) = (
                         message["request_id"].as_str(),
@@ -124,6 +149,7 @@ impl FakeAgent {
             let recorded = message.get("id").map(Value::to_string).unwrap_or_default();
             match self.ids.get(&recorded) {
                 Some(live) => message["id"] = live.clone(),
+                None if self.strict_jsonrpc => {}
                 None => self.mismatch(
                     record,
                     format!("a reply to request {recorded}, which the driver never sent"),
@@ -141,6 +167,12 @@ impl FakeAgent {
                     orphaned: false,
                 },
             ));
+        }
+        if self.strict_jsonrpc
+            && message["method"] == "serverRequest/resolved"
+            && let Some(id) = message.pointer("/params/requestId")
+        {
+            self.answer_request(id);
         }
         self.line(FakeLine::Line(message.to_string()));
     }
@@ -259,6 +291,11 @@ impl FakeAgent {
 
     /// Notes a reply the driver wrote to one of the agent's requests.
     fn observe(&mut self, actual: &Value) {
+        if actual["type"] == "extension_ui_response"
+            && let Some(id) = actual.get("id")
+        {
+            self.answer_request(id);
+        }
         if actual["type"] == "control_response" {
             if let Some(id) = actual.pointer("/response/request_id") {
                 self.answer_request(id);
@@ -364,7 +401,17 @@ impl FakeAgent {
             }
             _ => {}
         }
-        if let Some(method) = method
+        if self.strict_jsonrpc {
+            let mut normalized = expected.clone();
+            if expected_kind == "request" {
+                normalized["id"] = actual["id"].clone();
+            }
+            if normalized != *actual {
+                found.push(format!(
+                    "Codex payload differs: expected {normalized}, received {actual}"
+                ));
+            }
+        } else if let Some(method) = method
             && COMPARED_PARAMS.contains(&method)
             && expected.get("params") != actual.get("params")
         {
@@ -450,6 +497,27 @@ impl NativeCorrelation {
         let mut normalized = expected.clone();
         let mut errors = Vec::new();
         match expected["type"].as_str() {
+            Some(
+                "prompt"
+                | "steer"
+                | "follow_up"
+                | "abort"
+                | "clear_queue"
+                | "get_state"
+                | "get_available_models"
+                | "get_available_thinking_levels"
+                | "get_session_stats"
+                | "get_commands"
+                | "set_model"
+                | "set_thinking_level"
+                | "set_auto_compaction",
+            ) => Self::map_out(
+                &mut self.controls,
+                "/id",
+                &mut normalized,
+                actual,
+                &mut errors,
+            ),
             Some("control_request") => Self::map_out(
                 &mut self.controls,
                 "/request_id",
@@ -520,6 +588,12 @@ impl NativeCorrelation {
 
     fn rewrite_in(&self, message: &mut Value) {
         match message["type"].as_str() {
+            Some("response") => {
+                Self::replace(&self.controls, message.get_mut("id"));
+                if message["command"] == "get_state" || message["command"] == "get_session_stats" {
+                    Self::replace(&self.sessions, message.pointer_mut("/data/sessionId"));
+                }
+            }
             Some("control_response") => {
                 // Unknown and late responses are deliberately allowed so fixtures can verify
                 // the driver's behavior without replay inventing a request for them.

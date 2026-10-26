@@ -276,7 +276,11 @@ impl Outside {
             Arc::clone(registry),
             rt.clone(),
         );
-        Outside::over_env(env, registry, data_dir, rt)
+        let outside = Outside::over_env(env, registry, data_dir, rt);
+        outside
+            .detector
+            .enable_release_checks(data_dir.join("catalog-releases.json"));
+        outside
     }
 
     /// The real detector, processes and drivers over `env`: the catalog's agents with their

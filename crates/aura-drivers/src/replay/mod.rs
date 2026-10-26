@@ -41,6 +41,7 @@ pub use golden::{assert_golden, golden_path};
 
 use crate::acp::AcpDriver;
 use crate::claude::ClaudeDriver;
+use crate::codex::CodexDriver;
 use crate::driver::{
     AgentDriver, AgentSpawner, DriverCommand, DriverContext, DriverEvent, DriverTimings,
     EventReceiver, LoggedCommand, NativeStartOptions, PermissionOutcome, SessionSetup, StopPlan,
@@ -107,6 +108,12 @@ impl AgentSpawner for ReplaySpawner {
 fn replay_launch(agent_id: &str) -> LaunchSpec {
     let (program, args, set_env): (&str, &[&str], &[(&str, &str)]) = match agent_id {
         "claude" => ("/opt/agents/bin/claude", &[], &[]),
+        "codex" => (
+            "/opt/agents/bin/codex",
+            &["app-server", "--listen", "stdio://"],
+            &[],
+        ),
+        "pi" => ("/opt/agents/bin/pi", &[], &[]),
         "hermes" => ("/opt/agents/bin/hermes", &["acp"], &[]),
         "claude-acp" => (
             "/opt/agents/bin/node",
@@ -144,7 +151,8 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
             .ok_or_else(|| format!("the start note has no \"{key}\""))
     };
     let agent_id = text("agent_id")?;
-    let native = agent_id == "claude" || start["dialect"] == "claude";
+    let pi = agent_id == "pi" || start["dialect"] == "pi";
+    let native = pi || agent_id == "claude" || start["dialect"] == "claude";
     let autonomy: Autonomy = match start.get("autonomy") {
         Some(value) => {
             serde_json::from_value(value.clone()).map_err(|error| format!("autonomy: {error}"))?
@@ -193,7 +201,13 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
     }
     Ok(SessionSetup {
         chat_id: "replay".into(),
-        launch: replay_launch(if native { "claude" } else { &agent_id }),
+        launch: replay_launch(if pi {
+            "pi"
+        } else if native {
+            "claude"
+        } else {
+            &agent_id
+        }),
         dialect: text("dialect")?,
         agent_id,
         folder: PathBuf::from(REPLAY_FOLDER),
@@ -243,13 +257,24 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
             .push("the fixture has no start note".into());
         return report;
     };
-    let setup = match setup_from_start(start) {
+    let mut setup = match setup_from_start(start) {
         Ok(setup) => setup,
         Err(reason) => {
             report.mismatches.push(reason);
             return report;
         }
     };
+    if setup.agent_id == "codex" || setup.dialect == "codex" {
+        // Keep strict native payload comparison while reproducing the recorded client identity.
+        if let Some(version) = fixture.records.iter().find_map(|record| match record {
+            FixtureRecord::Out(message) if message["method"] == "initialize" => message
+                .pointer("/params/clientInfo/version")
+                .and_then(Value::as_str),
+            _ => None,
+        }) {
+            setup.client_version = version.into();
+        }
+    }
     let spawn_id = start
         .get("spawn_id")
         .and_then(Value::as_str)
@@ -258,7 +283,8 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
     let (spawner, mut ends) = FakeSpawner::new();
     let (commands, receiver) = mpsc::unbounded_channel();
     let (sender, events) = event_channel();
-    let native = setup.agent_id == "claude" || setup.dialect == "claude";
+    let pi = setup.agent_id == "pi" || setup.dialect == "pi";
+    let native = pi || setup.agent_id == "claude" || setup.dialect == "claude";
     let native_session = setup
         .native_start
         .new_session_id
@@ -275,7 +301,12 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
         }),
         setup,
     };
-    let driver: Box<dyn AgentDriver> = if native {
+    let codex = ctx.setup.agent_id == "codex" || ctx.setup.dialect == "codex";
+    let driver: Box<dyn AgentDriver> = if codex {
+        Box::new(CodexDriver::new())
+    } else if pi {
+        Box::new(crate::pi::PiDriver::new())
+    } else if native {
         Box::new(ClaudeDriver::new())
     } else {
         Box::new(AcpDriver::new())
@@ -294,6 +325,7 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
         }
     };
     let mut agent = FakeAgent::new(end);
+    agent.strict_jsonrpc(codex);
     if native && let Some(recorded) = start["native_session_id"].as_str() {
         agent.native_session(recorded, &native_session);
     }
@@ -632,7 +664,7 @@ mod tests {
         assert_eq!(first.events, second.events);
         assert_eq!(first.exit, second.exit);
         assert!(first.events.iter().any(|event| matches!(serde_json::from_value::<DriverEvent>(event.clone()),
-            Ok(DriverEvent::Ready(info)) if info.native_session_id == REPLAY_NATIVE_SESSION_ID && info.resumed == crate::driver::ResumeOutcome::New)));
+            Ok(DriverEvent::Ready(info)) if info.native_session_id.as_deref() == Some(REPLAY_NATIVE_SESSION_ID) && info.resumed == crate::driver::ResumeOutcome::New)));
     }
 
     #[tokio::test(start_paused = true)]

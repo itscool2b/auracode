@@ -119,6 +119,9 @@ fn ps(args: &[&str]) -> io::Result<String> {
         .stdin(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .output()?;
+    if !output.status.success() && !(output.status.code() == Some(1) && args.contains(&"-p")) {
+        return Err(io::Error::other("ps could not inspect the process table"));
+    }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
@@ -215,6 +218,54 @@ pub(super) fn running_start(pid: u32) -> Option<StartTime> {
     let lstart = normalize_lstart(lstart);
     lstart_epoch(&lstart)?;
     Some(StartTime::MacLstart(lstart))
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+pub(super) fn checked_running_start(pid: u32) -> io::Result<Option<StartTime>> {
+    let text = ps(&["-o", "stat=,lstart=", "-p", &pid.to_string()])?;
+    if text.trim().is_empty() {
+        return super::confirm_absent(pid);
+    }
+    let (stat, lstart) = text
+        .trim()
+        .split_once(char::is_whitespace)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "unreadable process identity"))?;
+    if stat.starts_with('Z') {
+        return Ok(None);
+    }
+    let lstart = normalize_lstart(lstart);
+    if lstart_epoch(&lstart).is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "unreadable process identity",
+        ));
+    }
+    Ok(Some(StartTime::MacLstart(lstart)))
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+pub(super) fn checked_group_members(pgid: u32) -> io::Result<Vec<u32>> {
+    let text = ps(&["-axo", "pid=,stat=,pgid="])?;
+    let mut found = Vec::new();
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let fields: Vec<_> = line.split_whitespace().collect();
+        let [pid, stat, group] = fields.as_slice() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "unreadable process group",
+            ));
+        };
+        let pid = pid
+            .parse::<u32>()
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "unreadable process id"))?;
+        let group = group
+            .parse::<u32>()
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "unreadable process group"))?;
+        if group == pgid && !stat.starts_with('Z') {
+            found.push(pid);
+        }
+    }
+    Ok(found)
 }
 
 /// The start time of each of `pids` that runs (not a zombie), from one `ps` call.

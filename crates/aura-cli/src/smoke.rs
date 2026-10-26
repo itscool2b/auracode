@@ -433,6 +433,28 @@ impl Smoke<'_> {
     }
 
     async fn scenario(&mut self, scenario: Scenario) {
+        if scenario == Scenario::Permission {
+            match self.chat.lists().await {
+                Ok(lists)
+                    if lists.capabilities.as_ref().is_some_and(|capabilities| {
+                        !capabilities.permissions
+                            || !capabilities.autonomy_levels.contains(&Autonomy::Ask)
+                    }) =>
+                {
+                    self.report.skip(
+                        scenario.name(),
+                        "The agent does not offer an enforceable Ask permission mode; no permission prompts were sent.",
+                    );
+                    return;
+                }
+                Err(error) => {
+                    self.report
+                        .fail(scenario.name(), format!("capabilities: {error}"));
+                    return;
+                }
+                _ => {}
+            }
+        }
         let autonomy = if scenario == Scenario::Permission {
             Autonomy::Ask
         } else {
@@ -998,9 +1020,23 @@ impl Smoke<'_> {
             }
             return;
         }
+        if self.spec.kind == DriverKind::Headless {
+            let mut lines =
+                vec!["Protocol logs (text fallback replay is not supported yet):".to_owned()];
+            lines.extend(
+                self.logs
+                    .iter()
+                    .map(|(log, name)| format!("  {name}: {}", log.display())),
+            );
+            self.report.note(lines.join("\n"));
+            return;
+        }
         let mut lines = vec!["Protocol logs, and the fixture each can become:".to_owned()];
-        let fixture_folder = if self.spec.kind == DriverKind::Claude {
-            "claude".to_owned()
+        let fixture_folder = if matches!(
+            self.spec.kind,
+            DriverKind::Claude | DriverKind::Codex | DriverKind::Pi
+        ) {
+            self.spec.id.to_owned()
         } else {
             format!("acp/{}", self.spec.id)
         };
@@ -1058,7 +1094,13 @@ impl Answer {
 /// session-scope ones (Hermes), the session total on a spawn's first turn and deltas after it
 /// (spec 5.5.4).
 pub fn expected_scope(spec: &AgentSpec, first_of_spawn: bool) -> UsageScope {
-    if matches!(spec.kind, DriverKind::Mock | DriverKind::Claude) {
+    if spec.kind == DriverKind::Headless && spec.dialect == "grok-stream" {
+        return UsageScope::Turn;
+    }
+    if matches!(
+        spec.kind,
+        DriverKind::Mock | DriverKind::Claude | DriverKind::Codex | DriverKind::Pi
+    ) {
         return UsageScope::Turn;
     }
     match dialect_for(spec.dialect).prompt_usage_scope() {
@@ -1133,6 +1175,16 @@ mod tests {
         assert_eq!(expected_scope(&codex, true), UsageScope::Turn);
         let mock = aura_agents::get("mock").expect("mock").clone();
         assert_eq!(expected_scope(&mock, true), UsageScope::Turn);
+        for first in [true, false] {
+            assert_eq!(
+                expected_scope(aura_agents::get("grok-stream").unwrap(), first),
+                UsageScope::Turn
+            );
+        }
+        assert_eq!(
+            expected_scope(aura_agents::get("agy-stream").unwrap(), true),
+            UsageScope::Session
+        );
     }
 
     #[test]

@@ -1,6 +1,8 @@
 import { Channel } from "@tauri-apps/api/core";
 import {
+  type AgentAuthStatus,
   type AgentEntry,
+  type AgentMaintenance,
   type AppError,
   type AppErrorCode,
   type AppInfo,
@@ -180,6 +182,18 @@ export function agentsList(): Promise<AgentEntry[]> {
 /** Resolves the environment again and probes every agent (15 s at most). */
 export function agentsRefresh(): Promise<AgentEntry[]> {
   return infallible(commands.agentsRefresh());
+}
+
+export function agentMaintenance(agentId: string): Promise<AgentMaintenance> {
+  return settle(commands.agentMaintenance(agentId));
+}
+
+export function agentAuthStatus(agentId: string): Promise<AgentAuthStatus> {
+  return settle(commands.agentAuthStatus(agentId));
+}
+
+export async function agentUpdate(agentId: string): Promise<void> {
+  await settle(commands.agentUpdate(agentId));
 }
 
 export function envStatus(): Promise<EnvStatus> {

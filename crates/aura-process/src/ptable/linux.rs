@@ -5,7 +5,7 @@
 //! hold spaces and parentheses, so the fields are counted from the last `)`. The start time
 //! (field 22) is in clock ticks since boot, so it is kept with the boot id it counts from.
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", test))]
 use std::io;
 #[cfg(target_os = "linux")]
 use std::sync::OnceLock;
@@ -122,26 +122,66 @@ pub(super) fn snapshot() -> io::Result<Vec<ProcInfo>> {
     Ok(table)
 }
 
-/// Whether any process that is not a zombie has group `pgid`, from each `/proc/<pid>/stat`.
+/// Enumerates group membership without treating a permissions or parsing failure as absence.
 #[cfg(target_os = "linux")]
-pub(super) fn group_has_live_member(pgid: u32) -> bool {
-    let Ok(listing) = std::fs::read_dir("/proc") else {
-        return true;
-    };
-    listing.flatten().any(|entry| {
+pub(super) fn checked_group_members(pgid: u32) -> io::Result<Vec<u32>> {
+    let mut observed = Vec::new();
+    for entry in std::fs::read_dir("/proc")? {
+        let entry = entry?;
         let Some(pid) = entry
             .file_name()
             .to_str()
             .and_then(|name| name.parse::<u32>().ok())
         else {
-            return false;
+            continue;
         };
-        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
-            return false;
+        let stat = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+            Ok(stat) => stat,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                super::confirm_absent(pid)?;
+                continue;
+            }
+            Err(error) => return Err(error),
         };
-        stat_state(&stat) != Some('Z')
-            && parse_proc_stat(pid, &stat, &[], "").is_some_and(|info| info.pgid == pgid)
-    })
+        observed.push((pid, Ok(stat)));
+    }
+    group_members_from_stats(pgid, observed)
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn group_members_from_stats(
+    pgid: u32,
+    stats: impl IntoIterator<Item = (u32, io::Result<String>)>,
+) -> io::Result<Vec<u32>> {
+    let mut members = Vec::new();
+    for (pid, stat) in stats {
+        let stat = stat?;
+        if stat_state(&stat) == Some('Z') {
+            continue;
+        }
+        let info = parse_proc_stat(pid, &stat, &[], "")
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "unreadable /proc stat"))?;
+        if info.pgid == pgid {
+            members.push(pid);
+        }
+    }
+    Ok(members)
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn checked_running_start(pid: u32) -> io::Result<Option<StartTime>> {
+    let stat = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+        Ok(stat) => stat,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return super::confirm_absent(pid),
+        Err(error) => return Err(error),
+    };
+    if stat_state(&stat) == Some('Z') {
+        return Ok(None);
+    }
+    let boot = boot_id().ok_or_else(|| io::Error::other("boot identity is unavailable"))?;
+    parse_proc_stat(pid, &stat, &[], &boot)
+        .map(|info| Some(info.start))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "unreadable /proc stat"))
 }
 
 #[cfg(target_os = "linux")]
@@ -187,6 +227,30 @@ pub(super) fn ticks_epoch(_ticks: u64, _boot: &str) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unreadable_group_rows_are_unknown_instead_of_an_empty_group() {
+        assert!(
+            group_members_from_stats(
+                5001,
+                [(
+                    5121,
+                    Err(io::Error::new(io::ErrorKind::PermissionDenied, "stat"))
+                )]
+            )
+            .is_err()
+        );
+        assert!(group_members_from_stats(5001, [(5121, Ok("broken".into()))]).is_err());
+        assert_eq!(
+            group_members_from_stats(5001, [(5121, Ok(STAT.into()))]).expect("group"),
+            [5121]
+        );
+        assert!(
+            group_members_from_stats(5001, [(5121, Ok(STAT.replacen(") S ", ") Z ", 1)))])
+                .expect("zombie")
+                .is_empty()
+        );
+    }
 
     /// Captured from Linux 6.8 (`/proc/<pid>/stat`), with a `comm` holding spaces and parentheses.
     const STAT: &str = "5121 (tmux: (server)) S 5001 5001 4242 34816 5001 4194560 1076 0 0 0 3 1 0 0 20 0 1 0 98765 9850880 1024 18446744073709551615 1 1 0 0 0 0 0 4096 65536 0 0 0 17 3 0 0 0 0 0";

@@ -24,6 +24,9 @@ impl DriverFactory for StandardDriverFactory {
         match kind {
             DriverKind::Acp => Box::new(AcpDriver::new()),
             DriverKind::Claude => Box::new(crate::claude::ClaudeDriver::new()),
+            DriverKind::Codex => Box::new(crate::codex::CodexDriver::new()),
+            DriverKind::Headless => Box::new(crate::headless::HeadlessDriver),
+            DriverKind::Pi => Box::new(crate::pi::PiDriver::new()),
             DriverKind::Mock => Box::new(MockDriver::new(MockBehavior::default())),
         }
     }

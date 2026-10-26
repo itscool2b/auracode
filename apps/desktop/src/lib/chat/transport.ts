@@ -1,5 +1,7 @@
 import type {
+  AgentAuthStatus,
   AgentEntry,
+  AgentMaintenance,
   Autonomy,
   BlobText,
   ChatAttach,
@@ -15,8 +17,11 @@ import type {
   UiAnswer,
 } from "../../bindings";
 import {
+  agentAuthStatus,
+  agentMaintenance,
   agentsList,
   agentsRefresh,
+  agentUpdate,
   chatAttach,
   chatBlob,
   chatCancelQueued,
@@ -49,6 +54,9 @@ import {
  * wrappers throw `CommandError`s with the shell's codes.
  */
 export interface Transport {
+  agentMaintenance(agentId: string): Promise<AgentMaintenance>;
+  agentAuthStatus(agentId: string): Promise<AgentAuthStatus>;
+  agentUpdate(agentId: string): Promise<void>;
   agentsList(): Promise<AgentEntry[]>;
   agentsRefresh(): Promise<AgentEntry[]>;
   envStatus(): Promise<EnvStatus>;
@@ -85,6 +93,9 @@ export interface Transport {
 
 /** The shell, through the typed command wrappers. */
 export const tauriTransport: Transport = {
+  agentMaintenance,
+  agentAuthStatus,
+  agentUpdate,
   agentsList,
   agentsRefresh,
   envStatus,

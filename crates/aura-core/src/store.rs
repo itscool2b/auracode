@@ -64,7 +64,7 @@ use lock::OpenLock;
 use recovery::Recovery;
 
 /// The schema version this build reads and writes; equals the number of migrations.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// Pre-migration backups kept per database. Enough to step back through several upgrades without
 /// letting a long-lived install fill the disk with copies.
@@ -84,6 +84,7 @@ const DEFAULT_DB_NAME: &str = "aura.db";
 static MIGRATIONS: [M<'static>; SCHEMA_VERSION as usize] = [
     M::up(include_str!("../migrations/0001_initial.sql")).foreign_key_check(),
     M::up(include_str!("../migrations/0002_sessions.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0003_agent_hosts.sql")).foreign_key_check(),
 ];
 
 fn migrations() -> &'static [M<'static>] {
@@ -2212,11 +2213,11 @@ mod tests {
         assert!(!old_columns.contains("archived"));
     }
 
-    /// Migration 0002 on a v1 database with data in every table it touches: a backup first, every
+    /// Migrations on a v1 database with data in every table they touch: a backup first, every
     /// row kept, the new columns `NULL`, the new table and indexes in place, and the foreign key
     /// check clean.
     #[test]
-    fn upgrading_a_populated_v1_database_to_v2_keeps_every_row() {
+    fn upgrading_a_populated_v1_database_keeps_every_row() {
         let p = paths();
         {
             let (store, info) = open_with(&p.db, &p.backups, &migrations()[..1]).expect("v1");
@@ -2245,13 +2246,13 @@ mod tests {
         let (store, info) = Store::open_at(&p.db, &p.backups).expect("upgrade");
         let OpenOutcome::Migrated {
             from: 1,
-            to: 2,
+            to: SCHEMA_VERSION,
             backup: Some(backup),
         } = &info.outcome
         else {
             panic!("expected a migration from v1, got {:?}", info.outcome);
         };
-        assert_eq!(info.schema_version, 2);
+        assert_eq!(info.schema_version, SCHEMA_VERSION);
         let old = Connection::open(backup).expect("backup");
         assert_eq!(read_user_version(&old).expect("version"), 1);
         assert_eq!(count(&old, "events"), 2, "the backup holds the v1 data");
@@ -2269,6 +2270,20 @@ mod tests {
             assert_eq!(count(conn, table), 1, "{table}");
         }
         assert_eq!(count(conn, "events"), 2);
+        let host: String = conn
+            .query_row("SELECT agent_host FROM chats WHERE id = 'c1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(host, r#"{"type":"native"}"#);
+        let host: String = conn
+            .query_row(
+                "SELECT host FROM agent_sessions WHERE id = 'a1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(host, r#"{"type":"native"}"#);
         let (native, model, config): (String, String, Option<String>) = conn
             .query_row(
                 "SELECT native_session_id, model, config_json FROM agent_sessions WHERE id = 'a1'",
@@ -2332,6 +2347,49 @@ mod tests {
 
         let (_, again) = open(&p);
         assert_eq!(again.outcome, OpenOutcome::Opened, "migrated once");
+    }
+
+    #[test]
+    fn host_migration_backs_up_v2_and_preserves_native_chats() {
+        let p = paths();
+        {
+            let (store, _) = open_with(&p.db, &p.backups, &migrations()[..2]).unwrap();
+            store.conn().execute_batch(
+                "INSERT INTO projects (id, name, created_at, updated_at, device_id) VALUES ('p', 'Work', 1, 1, 'dev');
+                 INSERT INTO chats (id, project_id, active_agent, title, created_at, updated_at, device_id) VALUES ('c', 'p', 'codex', 'Keep this chat', 1, 2, 'dev');"
+            ).unwrap();
+        }
+        let (store, info) = Store::open_at(&p.db, &p.backups).unwrap();
+        let OpenOutcome::Migrated {
+            from: 2,
+            to: 3,
+            backup: Some(backup),
+        } = info.outcome
+        else {
+            panic!("expected a backed-up host migration");
+        };
+        let original = Connection::open(backup).unwrap();
+        assert_eq!(read_user_version(&original).unwrap(), 2);
+        assert_eq!(count(&original, "chats"), 1);
+        assert!(
+            !names(&original, "SELECT name FROM pragma_table_info('chats')").contains("agent_host")
+        );
+        let preserved: (String, String, String) = store
+            .conn()
+            .query_row(
+                "SELECT active_agent, title, agent_host FROM chats WHERE id = 'c'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            preserved,
+            (
+                "codex".into(),
+                "Keep this chat".into(),
+                r#"{"type":"native"}"#.into()
+            )
+        );
     }
 
     #[test]

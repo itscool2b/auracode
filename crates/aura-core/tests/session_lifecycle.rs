@@ -42,6 +42,94 @@ fn errors(events: &[AuraEvent]) -> Vec<(ErrorKind, String)> {
         .collect()
 }
 
+#[tokio::test(start_paused = true)]
+async fn unavailable_hosts_survive_restart_without_starting_a_native_driver() {
+    use aura_core::chatstore::NewChat;
+    use aura_protocol::agents::AgentHost;
+    let h = Harness::new(Vec::new());
+    for host in [
+        AgentHost::Wsl {
+            distro: "Ubuntu".into(),
+        },
+        AgentHost::Unsupported,
+    ] {
+        assert!(matches!(
+            h.manager
+                .create_chat_on_host(MOCK, host.clone(), &h.folder)
+                .await,
+            Err(SessionError::AgentUnavailable(_))
+        ));
+        let saved = h
+            .store
+            .create_chat(NewChat {
+                agent_id: MOCK.into(),
+                agent_host: host.clone(),
+                folder: h.folder.clone(),
+                device_id: "device".into(),
+                now: 1,
+            })
+            .await
+            .unwrap();
+        h.manager.start(&saved.id, false).await.unwrap();
+        h.status(&saved.id, SessionStatus::Failed).await;
+        assert!(h.factory.setups().is_empty());
+        let listed = h.manager.chats().await.unwrap();
+        assert_eq!(
+            listed
+                .iter()
+                .find(|chat| chat.id == saved.id)
+                .unwrap()
+                .agent_host,
+            host
+        );
+    }
+    let h = h.restart(Vec::new(), Options::default()).await;
+    for chat in h.manager.chats().await.unwrap() {
+        assert_ne!(chat.agent_host, AgentHost::Native);
+        h.manager.start(&chat.id, false).await.unwrap();
+        h.status(&chat.id, SessionStatus::Failed).await;
+    }
+    assert!(h.factory.setups().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_saved_native_id_from_another_host_is_never_resumed_locally() {
+    let h = Harness::new(Vec::new());
+    let record = h
+        .store
+        .create_chat(aura_core::chatstore::NewChat {
+            agent_id: MOCK.into(),
+            agent_host: Default::default(),
+            folder: h.folder.clone(),
+            device_id: "device".into(),
+            now: 1,
+        })
+        .await
+        .unwrap();
+    let conn = rusqlite::Connection::open(h.profile.db_path()).unwrap();
+    conn.execute(
+        "INSERT INTO agent_sessions (id, chat_id, agent_id, native_session_id, cwd, created_at, updated_at, device_id, host) VALUES ('s', ?1, ?2, 'remote-id', '/work', 1, 1, 'device', ?3)",
+        rusqlite::params![record.id, MOCK, r#"{"type":"wsl","distro":"Ubuntu"}"#],
+    ).unwrap();
+    drop(conn);
+    h.manager.start(&record.id, false).await.unwrap();
+    h.status(&record.id, SessionStatus::Failed).await;
+    assert!(h.factory.setups().is_empty());
+    let snapshot = h
+        .manager
+        .attach(&record.id, Sink::new("main"))
+        .await
+        .unwrap()
+        .snapshot;
+    assert!(
+        snapshot
+            .last_error
+            .unwrap()
+            .message
+            .contains("different execution host")
+    );
+}
+
 fn details(sink: &Sink) -> Vec<String> {
     sink.events()
         .into_iter()
@@ -959,6 +1047,7 @@ async fn newer_rows_load_leniently() {
     let record = h
         .store
         .create_chat(aura_core::chatstore::NewChat {
+            agent_host: Default::default(),
             agent_id: MOCK.into(),
             folder: h.folder.clone(),
             device_id: "device".into(),

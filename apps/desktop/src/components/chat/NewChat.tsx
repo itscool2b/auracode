@@ -1,6 +1,6 @@
 import { OrbitMark } from "@auracode/ui/orbit";
 import { useId, useSyncExternalStore } from "react";
-import type { AgentEntry, ChatSummary } from "../../bindings";
+import type { AgentAuthStatus, AgentEntry, AgentInstallation, ChatSummary } from "../../bindings";
 import { agentChoice, type NewChatDraft } from "../../lib/chat/appStore";
 
 /** The download consent sentence of an agent whose first start downloads its adapter. */
@@ -9,6 +9,57 @@ export function downloadNote(agent: AgentEntry): string | null {
   // `launch` reads "<package> <version> with your <binary>" for npm adapters.
   const what = agent.launch.split(" with your ")[0] || agent.launch;
   return `Creating this chat downloads ${what} from npm (one time).`;
+}
+
+/** Installation evidence is separate from whether the version command succeeds. */
+export function InstallationStatus({ installation }: { readonly installation: AgentInstallation }) {
+  const channel = installation.channel;
+  const label =
+    channel.type === "npm"
+      ? "npm"
+      : channel.type === "homebrew"
+        ? "Homebrew"
+        : channel.type === "vendor_standalone"
+          ? "Standalone"
+          : channel.type === "bundled"
+            ? `Managed by ${channel.application}`
+            : "Install channel unknown";
+  const evidence = installation.verification;
+  return (
+    <span className="ui-muted" data-testid="agent-installation">
+      {label}
+      {installation.host.type === "wsl" ? ` · WSL ${installation.host.distro}` : null}
+      {evidence.state === "untested" ? (
+        <small
+          title={
+            evidence.last_verified === null
+              ? "No verified baseline"
+              : `Last verified: ${evidence.last_verified}`
+          }
+        >
+          {" "}
+          · Untested version
+        </small>
+      ) : null}
+      {evidence.state === "verified" ? (
+        <small title={evidence.scope}> · {evidence.scope}</small>
+      ) : null}
+      {evidence.state === "unknown" ? <small> · Compatibility unverified</small> : null}
+    </span>
+  );
+}
+
+export function authStatusText(status: AgentAuthStatus): string {
+  switch (status.state) {
+    case "credentials_present":
+      return "The agent reports local sign-in credentials. Access is confirmed by the agent when it runs.";
+    case "sign_in_required":
+      return "Sign in using the agent's own terminal login command.";
+    case "unknown":
+      return status.reason;
+    case "unsupported":
+      return "This agent has no supported sign-in status command.";
+  }
 }
 
 /** What the selected agent will run, once detection found it. */
@@ -51,7 +102,11 @@ export function NewChat({
   const note = selected ? downloadNote(selected) : null;
   const ready = selected ? readyLine(selected) : null;
   const canCreate =
-    selected !== null && agentChoice(selected).enabled && state.folder !== null && !state.creating;
+    selected !== null &&
+    agentChoice(selected).enabled &&
+    state.folder !== null &&
+    !state.creating &&
+    state.maintenanceBusy !== "update";
   return (
     <form
       className="chat-new-form"
@@ -107,6 +162,60 @@ export function NewChat({
         </div>
         {selected ? <span className="ui-muted">{selected.description}</span> : null}
         {ready !== null ? <span className="ui-muted ui-mono">{ready}</span> : null}
+        {selected?.installation ? (
+          <InstallationStatus installation={selected.installation} />
+        ) : null}
+        {selected?.latest_release?.version ? (
+          <small className="ui-muted">
+            Latest on {selected.latest_release.source}: {selected.latest_release.version}
+            {selected.latest_release.stale ? " (cached; refresh unavailable)" : null}
+          </small>
+        ) : null}
+        {selected?.installation ? (
+          <section className="ui-field" aria-label="Agent maintenance">
+            {state.maintenanceBusy === "checking" ? (
+              <small className="ui-muted">Checking available actions…</small>
+            ) : null}
+            <div className="ui-row">
+              {state.maintenance?.auth_status ? (
+                <button
+                  type="button"
+                  className="ui-button"
+                  disabled={state.maintenanceBusy !== null}
+                  onClick={() => void draft.checkAuth()}
+                >
+                  {state.maintenanceBusy === "auth" ? "Checking sign-in…" : "Check sign-in"}
+                </button>
+              ) : null}
+              {state.maintenance?.update_unavailable === null ? (
+                <button
+                  type="button"
+                  className="ui-button"
+                  disabled={state.maintenanceBusy !== null || state.creating}
+                  onClick={() => void draft.updateAgent().then(() => onRefreshAgents())}
+                >
+                  {state.maintenanceBusy === "update" ? "Updating agent…" : "Update agent"}
+                </button>
+              ) : null}
+            </div>
+            {state.maintenance?.update_unavailable ? (
+              <small className="ui-muted">{state.maintenance.update_unavailable}</small>
+            ) : null}
+            {state.auth ? (
+              <span role="status" className="ui-muted">
+                {authStatusText(state.auth)}
+              </span>
+            ) : null}
+            {state.maintenanceMessage ? (
+              <span role="status">{state.maintenanceMessage}</span>
+            ) : null}
+            {state.maintenanceError ? (
+              <span role="alert" className="ui-error">
+                {state.maintenanceError}
+              </span>
+            ) : null}
+          </section>
+        ) : null}
         {note !== null ? <span>{note}</span> : null}
       </div>
       {unavailable.length > 0 ? (

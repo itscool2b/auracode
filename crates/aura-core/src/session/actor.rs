@@ -82,6 +82,10 @@ const ANSWERED_REMEMBERED: usize = 64;
 
 /// A message for a chat's actor. Every reply is a oneshot.
 pub(crate) enum ChatMsg {
+    Organize {
+        command: crate::chatstore::organization::OrganizationCommand,
+        reply: oneshot::Sender<Result<crate::chatstore::organization::Organization, SessionError>>,
+    },
     Attach {
         sink: Arc<dyn FrameSink>,
         subscription_id: String,
@@ -167,6 +171,7 @@ impl ChatMsg {
     /// Answers the message with `error` (a chat that does not exist, a store that is gone).
     fn refuse(self, error: SessionError) {
         match self {
+            ChatMsg::Organize { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Attach { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::History { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Lists { reply } => drop(reply.send(Err(error))),
@@ -328,6 +333,10 @@ struct NativeIdentitySave {
 
 /// What an `in_flight` future completes.
 enum Done {
+    Organized {
+        result: Result<crate::chatstore::organization::Organization, SessionError>,
+        reply: oneshot::Sender<Result<crate::chatstore::organization::Organization, SessionError>>,
+    },
     NativeIdentitySaved {
         generation: u64,
         native_id: String,
@@ -404,6 +413,7 @@ pub(crate) struct ChatActor {
     preparing: Option<Preparing>,
     progress: Option<mpsc::UnboundedReceiver<String>>,
     in_flight: FuturesUnordered<BoxFuture<'static, Done>>,
+    organizing: bool,
     generation: u64,
     /// Generations force-stopped or crashed whose processes or task still wind down, with how many
     /// FORCE chains and joins each still waits for. They keep the chat's live slot and native
@@ -504,6 +514,7 @@ impl ChatActor {
             preparing: None,
             progress: None,
             in_flight: FuturesUnordered::new(),
+            organizing: false,
             generation: 0,
             retiring: Vec::new(),
             winding_down: watch::Sender::new(0),
@@ -610,6 +621,7 @@ impl ChatActor {
 
     fn on_msg(&mut self, msg: ChatMsg) {
         match msg {
+            ChatMsg::Organize { command, reply } => self.organize(command, reply),
             ChatMsg::Attach {
                 sink,
                 subscription_id,
@@ -843,6 +855,64 @@ impl ChatActor {
             .min()
     }
 
+    fn organize(
+        &mut self,
+        command: crate::chatstore::organization::OrganizationCommand,
+        reply: oneshot::Sender<Result<crate::chatstore::organization::Organization, SessionError>>,
+    ) {
+        use crate::chatstore::organization::OrganizationCommand;
+        let moving = matches!(command, OrganizationCommand::MoveChat { .. });
+        if self.organizing || self.quitting || self.shared.is_shutting_down() {
+            let _ = reply.send(Err(SessionError::Organization(
+                "Wait for the current chat change to finish.".into(),
+            )));
+            return;
+        }
+        if moving
+            && (self.driver.is_some()
+                || self.preparing.is_some()
+                || !self.retiring.is_empty()
+                || self.turn.is_some()
+                || !self.queue.is_empty()
+                || self.native_identity_pending.is_some()
+                || self.pending_start.is_some())
+        {
+            let _ = reply.send(Err(SessionError::Organization(
+                "Stop the chat and clear queued prompts before moving it.".into(),
+            )));
+            return;
+        }
+        if self.store.is_paused() {
+            let _ = reply.send(Err(SessionError::StorageUnavailable(
+                "Wait for chat saving to resume before changing this chat.".into(),
+            )));
+            return;
+        }
+        self.organizing = true;
+        self.flush();
+        let (saved, barrier) = oneshot::channel();
+        self.queue_op(Op::Barrier(saved));
+        let store = Arc::clone(&self.store);
+        let rt = self.shared.deps.rt.clone();
+        self.in_flight.push(
+            async move {
+                // A timeout before enqueueing the mutation is safe. Once queued, only the actual
+                // transaction result unlocks the actor, so a delayed folder move cannot race start.
+                let result = match await_reply(&rt, barrier, Duration::from_secs(5)).await {
+                    Ok(()) => store
+                        .organize(command)
+                        .await
+                        .map_err(|error| storage_error(&error)),
+                    Err(_) => Err(SessionError::StorageUnavailable(
+                        "Earlier chat changes have not finished saving.".into(),
+                    )),
+                };
+                Done::Organized { result, reply }
+            }
+            .boxed(),
+        );
+    }
+
     fn lists(&self) -> SessionLists {
         SessionLists {
             revision: self.revision,
@@ -854,6 +924,11 @@ impl ChatActor {
     }
 
     fn send(&mut self, text: String) -> Result<PromptAck, SessionError> {
+        if self.organizing {
+            return Err(SessionError::Organization(
+                "Wait for the chat change to finish.".into(),
+            ));
+        }
         if self.quitting || self.shared.is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
@@ -923,7 +998,8 @@ impl ChatActor {
 
     /// `Ready` with no turn: a prompt goes out now.
     fn can_dispatch(&self) -> bool {
-        self.status == SessionStatus::Ready
+        !self.organizing
+            && self.status == SessionStatus::Ready
             && self.turn.is_none()
             && self.native_identity_pending.is_none()
             && self.driver.as_ref().is_some_and(|driver| {
@@ -1089,6 +1165,9 @@ impl ChatActor {
     }
 
     fn set_title(&mut self, title: String, source: TitleSource) {
+        if self.chat.title_source == Some(TitleSource::Manual) && source != TitleSource::Manual {
+            return;
+        }
         if self.chat.title.as_deref() == Some(title.as_str()) {
             return;
         }
@@ -1336,13 +1415,20 @@ impl ChatActor {
     }
 
     fn agent_label(&self) -> String {
-        self.spec
+        let name = self
+            .spec
             .as_ref()
-            .map_or_else(|| self.chat.agent_id.clone(), |spec| spec.name.to_owned())
+            .map_or_else(|| self.chat.agent_id.clone(), |spec| spec.name.to_owned());
+        aura_agents::hosts::display_name(&name, &self.chat.agent_host)
     }
 
     /// Starts the agent. `explicit` (`chat_start`): a full slot is an error; otherwise a card.
     fn start(&mut self, fresh: bool, explicit: bool) -> Result<(), SessionError> {
+        if self.organizing {
+            return Err(SessionError::Organization(
+                "Wait for the chat change to finish.".into(),
+            ));
+        }
         if self.quitting || self.shared.is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
@@ -1381,6 +1467,15 @@ impl ChatActor {
             self.start_failed(ErrorKind::AgentUnavailable, reason, None, false);
             return Ok(());
         };
+        if !fresh
+            && self
+                .agent_session
+                .as_ref()
+                .is_some_and(|session| session.host != self.chat.agent_host)
+        {
+            self.start_failed(ErrorKind::AgentUnavailable, "The saved session belongs to a different execution host. Start a fresh session to use this host.".into(), None, false);
+            return Ok(());
+        }
         if !self.shared.live.acquire(&self.chat_id) {
             let error = SessionError::TooManyAgents(self.shared.live.max());
             if explicit {
@@ -1401,6 +1496,7 @@ impl ChatActor {
         let deps = &self.shared.deps;
         let task = deps.rt.spawn(prepare(
             folder,
+            self.chat.agent_host.clone(),
             spec.clone(),
             Arc::clone(&deps.detector),
             Arc::clone(&deps.env),
@@ -1499,7 +1595,10 @@ impl ChatActor {
         let (commands, command_rx) = mpsc::unbounded_channel();
         let (events, event_rx) = event_channel();
         let spawner = Arc::new(SessionSpawner::new(
-            Arc::clone(&deps.spawner),
+            aura_process::HostSpawner::new(
+                Arc::clone(&deps.spawner),
+                aura_agents::hosts::execution(&self.chat.agent_host),
+            ),
             deps.logs.clone(),
             self.chat_id.clone(),
             Arc::clone(&self.book),
@@ -1813,6 +1912,7 @@ impl ChatActor {
     /// Replies to a quit once the driver ended and everything was handed to the store.
     fn finish_shutdown(&mut self) {
         if self.shutdown_reply.is_none()
+            || self.organizing
             || self.driver.is_some()
             || self.preparing.is_some()
             || !self.outbox.is_empty()
@@ -1834,6 +1934,29 @@ impl ChatActor {
 
     fn on_done(&mut self, done: Done) {
         match done {
+            Done::Organized { result, reply } => {
+                self.organizing = false;
+                if let Ok(organization) = &result
+                    && let Some(record) = organization
+                        .chats
+                        .iter()
+                        .find(|record| record.chat.id == self.chat_id)
+                {
+                    self.chat.folder = record.chat.folder.clone();
+                    // A live automatic title can arrive while the transaction is in flight.
+                    // Only the manual title is authoritative over that newer live state.
+                    if record.chat.title_source == Some(TitleSource::Manual) {
+                        self.chat.title = record.chat.title.clone();
+                        self.chat.title_source = record.chat.title_source;
+                    }
+                    self.chat.updated_at = self.chat.updated_at.max(record.chat.updated_at);
+                    self.info_dirty = true;
+                    self.schedule_flush();
+                    self.publish();
+                }
+                let _ = reply.send(result);
+                self.dispatch_next();
+            }
             Done::NativeIdentitySaved {
                 generation,
                 native_id,
@@ -2092,9 +2215,13 @@ impl ChatActor {
         session.updated_at = now;
         let row_id = session.id.clone();
         self.native_session_id = Some(native_id.clone());
-        if let Some(check) = &mut self.replay_check {
-            check.native_session_id = native_id.clone();
-        }
+        self.replay_check
+            .get_or_insert_with(|| ReplayCheck {
+                native_session_id: native_id.clone(),
+                turns: 0,
+                last_reply_sha256: None,
+            })
+            .native_session_id = native_id.clone();
         let (saved, acknowledgement) = oneshot::channel();
         self.queue_op(Op::SaveNativeIdentity {
             id: row_id,
@@ -2206,11 +2333,12 @@ impl ChatActor {
         if driver.ready || driver.stop != Stop::None {
             return;
         }
-        if !self
-            .shared
-            .live
-            .claim(&driver.native_scope, &info.native_session_id, &self.chat_id)
-        {
+        if info.native_session_id.as_ref().is_some_and(|native_id| {
+            !self
+                .shared
+                .live
+                .claim(&driver.native_scope, native_id, &self.chat_id)
+        }) {
             // Two processes on one native session would interleave one transcript.
             let message =
                 SessionError::Internal("this session is already open in another chat".into())
@@ -2242,9 +2370,10 @@ impl ChatActor {
         driver.ready = true;
         driver.spawn_id = Some(info.spawn_id.clone());
         let now = now_millis();
-        let same_session = self.agent_session.as_ref().is_some_and(|session| {
-            session.native_session_id.as_deref() == Some(info.native_session_id.as_str())
-        });
+        let same_session = self
+            .agent_session
+            .as_ref()
+            .is_some_and(|session| session.native_session_id == info.native_session_id);
         let config_json = serde_json::to_string(&self.desired).ok();
         let (model, effort) = (
             self.option_value(ConfigCategory::Model),
@@ -2270,10 +2399,11 @@ impl ChatActor {
             }
             _ => {
                 let row = AgentSessionRow {
+                    host: self.chat.agent_host.clone(),
                     id: new_id(),
                     chat_id: self.chat_id.clone(),
                     agent_id: spec.id.to_owned(),
-                    native_session_id: Some(info.native_session_id.clone()),
+                    native_session_id: info.native_session_id.clone(),
                     model,
                     effort,
                     autonomy: self.autonomy,
@@ -2298,18 +2428,23 @@ impl ChatActor {
             );
         }
         self.compare_replay(&info);
-        if self
-            .replay_check
-            .as_ref()
-            .is_none_or(|check| check.native_session_id != info.native_session_id)
-        {
-            self.replay_check = Some(ReplayCheck {
-                native_session_id: info.native_session_id.clone(),
-                turns: 0,
-                last_reply_sha256: None,
-            });
+        match info.native_session_id.as_ref() {
+            Some(native_id)
+                if self
+                    .replay_check
+                    .as_ref()
+                    .is_none_or(|check| &check.native_session_id != native_id) =>
+            {
+                self.replay_check = Some(ReplayCheck {
+                    native_session_id: native_id.clone(),
+                    turns: 0,
+                    last_reply_sha256: None,
+                });
+            }
+            None => self.replay_check = None,
+            _ => {}
         }
-        self.native_session_id = Some(info.native_session_id);
+        self.native_session_id = info.native_session_id;
         self.agent_name = info.agent_name;
         self.agent_version = info.agent_version;
         self.capabilities = Some(info.capabilities);
@@ -2334,7 +2469,7 @@ impl ChatActor {
         let Some(check) = &self.replay_check else {
             return;
         };
-        if check.native_session_id != info.native_session_id {
+        if Some(check.native_session_id.as_str()) != info.native_session_id.as_deref() {
             return;
         }
         let Some(reply) = &summary.last_reply else {
@@ -3296,6 +3431,7 @@ impl ChatActor {
             id: self.chat_id.clone(),
             title: self.chat.title.clone(),
             agent_id: self.chat.agent_id.clone(),
+            agent_host: self.chat.agent_host.clone(),
             agent_name: self.agent_label(),
             folder: self.chat.folder.to_string_lossy().into_owned(),
             folder_state: self.folder_state,
@@ -3566,6 +3702,7 @@ async fn next_progress(progress: &mut Option<mpsc::UnboundedReceiver<String>>) -
 /// session, which this start may resume.
 async fn prepare(
     folder: PathBuf,
+    agent_host: aura_protocol::agents::AgentHost,
     spec: AgentSpec,
     detector: Arc<aura_agents::Detector>,
     env: Arc<aura_process::EnvResolver>,
@@ -3574,6 +3711,15 @@ async fn prepare(
 ) -> Result<Prepared, StartFailure> {
     // The actor holds the sender for as long as this task can matter.
     let _ = winding_down.wait_for(|retiring| *retiring == 0).await;
+    if let aura_process::HostAvailability::Unavailable { reason } =
+        aura_agents::hosts::execution(&agent_host).availability()
+    {
+        return Err(StartFailure {
+            kind: ErrorKind::AgentUnavailable,
+            message: reason,
+            folder: None,
+        });
+    }
     check_folder(folder).await?;
     match detector.detect(&spec).await {
         Availability::Missing { reason } | Availability::Broken { reason } => {

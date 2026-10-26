@@ -593,6 +593,8 @@ pub struct SpawnedProcess {
 /// Why a spawn failed. Every message is a sentence the UI can show.
 #[derive(Debug, thiserror::Error)]
 pub enum SpawnError {
+    #[error("{host} can't run agents: {reason}")]
+    HostUnavailable { host: String, reason: String },
     #[error("{program} was not found")]
     ProgramNotFound { program: String },
     #[error("{program} can't be run: permission denied")]

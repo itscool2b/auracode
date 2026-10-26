@@ -470,7 +470,7 @@ async fn resolve(config: &EnvResolverConfig, registry: &LeftoverRegistry) -> Res
         let _ = registry;
         let input = base.clone();
         let read = tokio::task::spawn_blocking(move || windows::registry_env(&input)).await;
-        match read {
+        let mut env = match read {
             Ok(Ok(vars)) => ResolvedEnv {
                 vars,
                 source: EnvSource::WindowsRegistry,
@@ -487,7 +487,37 @@ async fn resolve(config: &EnvResolverConfig, registry: &LeftoverRegistry) -> Res
                 format!("the registry could not be read: {error}"),
                 Vec::new(),
             ),
-        }
+        };
+        let known = config.known_dirs.clone().unwrap_or_else(|| {
+            let mut known = config
+                .home
+                .clone()
+                .or_else(|| {
+                    env.vars
+                        .get(&EnvKey::from("USERPROFILE"))
+                        .map(PathBuf::from)
+                })
+                .filter(|home| home.is_absolute())
+                .map(|home| standard_known_dirs(&home))
+                .unwrap_or_default();
+            for (variable, relative) in [
+                ("APPDATA", "npm"),
+                ("LOCALAPPDATA", "Microsoft/WinGet/Links"),
+                ("LOCALAPPDATA", "Programs/OpenAI/Codex/bin"),
+            ] {
+                if let Some(base) = env
+                    .vars
+                    .get(&EnvKey::from(variable))
+                    .map(PathBuf::from)
+                    .filter(|base| base.is_absolute())
+                {
+                    known.push(base.join(relative));
+                }
+            }
+            known
+        });
+        append_known_dirs(&mut env.vars, &known);
+        env
     }
     #[cfg(unix)]
     {
@@ -538,7 +568,6 @@ fn home_dir(config: &EnvResolverConfig, base: &EnvMap) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/"))
 }
 
-#[cfg(unix)]
 /// The folders agents install into, whose absence from a launchd `PATH` would hide them:
 /// `~/.local/bin`, the opencode, grok, pi, bun and volta bins, the asdf and mise shims, the
 /// `prefix=` of `~/.npmrc` (read, never by running npm) plus `/bin`, Homebrew's and `/usr/local/bin`.
@@ -557,19 +586,36 @@ pub(crate) fn standard_known_dirs(home: &std::path::Path) -> Vec<PathBuf> {
     .iter()
     .map(|relative| home.join(relative))
     .collect();
-    if let Some(prefix) = std::fs::read_to_string(home.join(".npmrc"))
-        .ok()
-        .and_then(|npmrc| npmrc_prefix(&npmrc, home))
-    {
+    if let Some(prefix) = read_npmrc_prefix(home) {
+        #[cfg(unix)]
         dirs.push(prefix.join("bin"));
+        #[cfg(windows)]
+        dirs.push(prefix);
     }
-    dirs.push(PathBuf::from("/opt/homebrew/bin"));
-    dirs.push(PathBuf::from("/usr/local/bin"));
+    #[cfg(unix)]
+    {
+        dirs.push(PathBuf::from("/opt/homebrew/bin"));
+        dirs.push(PathBuf::from("/usr/local/bin"));
+    }
     dirs
 }
 
+/// Read only a bounded configuration input for its prefix. Other fields are never exposed.
+fn read_npmrc_prefix(home: &std::path::Path) -> Option<PathBuf> {
+    use std::io::Read;
+    const LIMIT: u64 = 64 * 1024;
+    let file = std::fs::File::open(home.join(".npmrc")).ok()?;
+    if !file.metadata().ok()?.is_file() {
+        return None;
+    }
+    let mut input = String::new();
+    file.take(LIMIT + 1).read_to_string(&mut input).ok()?;
+    (input.len() as u64 <= LIMIT)
+        .then(|| npmrc_prefix(&input, home))
+        .flatten()
+}
+
 /// The `prefix` of an `.npmrc`: `prefix=/path` or `prefix = "~/path"`; a relative prefix is ignored.
-#[cfg(unix)]
 pub(crate) fn npmrc_prefix(npmrc: &str, home: &std::path::Path) -> Option<PathBuf> {
     let value = npmrc.lines().rev().find_map(|line| {
         let line = line.trim();
@@ -579,6 +625,9 @@ pub(crate) fn npmrc_prefix(npmrc: &str, home: &std::path::Path) -> Option<PathBu
         let (key, value) = line.split_once('=')?;
         (key.trim() == "prefix").then(|| value.trim().trim_matches(|c| c == '"' || c == '\''))
     })?;
+    if value.chars().any(char::is_control) {
+        return None;
+    }
     let path = match value.strip_prefix("~/") {
         Some(rest) => home.join(rest),
         None => PathBuf::from(value),
@@ -587,7 +636,6 @@ pub(crate) fn npmrc_prefix(npmrc: &str, home: &std::path::Path) -> Option<PathBu
 }
 
 /// Appends each existing dir that `PATH` lacks, in order.
-#[cfg(unix)]
 pub(crate) fn append_known_dirs(vars: &mut EnvMap, known: &[PathBuf]) {
     let key = EnvKey::from("PATH");
     let mut dirs: Vec<PathBuf> = vars
@@ -596,7 +644,14 @@ pub(crate) fn append_known_dirs(vars: &mut EnvMap, known: &[PathBuf]) {
         .unwrap_or_default();
     let mut changed = false;
     for dir in known {
-        if !dirs.contains(dir) && dir.is_dir() {
+        let exists = dirs.iter().any(|present| {
+            if cfg!(windows) {
+                present.as_os_str().eq_ignore_ascii_case(dir.as_os_str())
+            } else {
+                present == dir
+            }
+        });
+        if !exists && dir.is_absolute() && dir.is_dir() {
             dirs.push(dir.clone());
             changed = true;
         }
@@ -1054,6 +1109,53 @@ mod tests {
         ] {
             assert!(dirs.contains(&PathBuf::from(expected)), "{expected}");
         }
+    }
+
+    #[test]
+    fn npm_prefix_reads_are_bounded_and_other_fields_never_become_paths() {
+        let root = tempfile::tempdir().expect("temp");
+        let prefix = root.path().join("global");
+        let config = root.path().join(".npmrc");
+        std::fs::write(
+            &config,
+            format!(
+                "//registry.example/:_authToken=private\nprefix={}\n",
+                prefix.display()
+            ),
+        )
+        .unwrap();
+        assert_eq!(read_npmrc_prefix(root.path()), Some(prefix));
+        std::fs::write(&config, "x".repeat(64 * 1024 + 1)).unwrap();
+        assert_eq!(read_npmrc_prefix(root.path()), None);
+        assert_eq!(npmrc_prefix("prefix=relative\n", root.path()), None);
+        assert_eq!(npmrc_prefix("prefix=~/bad\0path\n", root.path()), None);
+    }
+
+    #[test]
+    fn known_dirs_preserve_path_priority_and_ignore_missing_or_relative_entries() {
+        let root = tempfile::tempdir().unwrap();
+        let first = root.path().join("first");
+        let second = root.path().join("second");
+        std::fs::create_dir(&first).unwrap();
+        std::fs::create_dir(&second).unwrap();
+        let mut vars = EnvMap::new();
+        vars.insert(
+            EnvKey::from("PATH"),
+            std::env::join_paths([&first]).unwrap(),
+        );
+        append_known_dirs(
+            &mut vars,
+            &[
+                second.clone(),
+                first.clone(),
+                root.path().join("missing"),
+                PathBuf::from("."),
+            ],
+        );
+        assert_eq!(
+            std::env::split_paths(&vars[&EnvKey::from("PATH")]).collect::<Vec<_>>(),
+            [first, second]
+        );
     }
 
     #[cfg(unix)]

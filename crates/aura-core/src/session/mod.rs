@@ -18,6 +18,7 @@ mod policy;
 mod spawner;
 #[cfg(test)]
 mod tests;
+mod workspace;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -220,6 +221,8 @@ pub(crate) struct Shared {
     shutting_down: AtomicBool,
     /// The chat list's folder checks, by folder.
     folders: Mutex<HashMap<PathBuf, FolderCheck>>,
+    /// Serializes busy-folder preflight and project chat creation/moves.
+    organization: tokio::sync::Mutex<()>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
     #[cfg(test)]
     slow_folder: Mutex<Option<(PathBuf, Duration, Arc<AtomicU64>)>>,
@@ -332,6 +335,7 @@ impl SessionManager {
                     subscriptions: Mutex::new(HashMap::new()),
                     shutting_down: AtomicBool::new(false),
                     folders: Mutex::new(HashMap::new()),
+                    organization: tokio::sync::Mutex::new(()),
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
                 }),
@@ -421,6 +425,33 @@ impl SessionManager {
     /// results (`agents_refresh`).
     pub async fn agents(&self, refresh: bool) -> Vec<AgentEntry> {
         self.deps().detector.detect_all(refresh).await
+    }
+
+    pub async fn agent_maintenance(
+        &self,
+        agent_id: &str,
+    ) -> aura_protocol::agents::AgentMaintenance {
+        self.deps().detector.maintenance(agent_id).await
+    }
+
+    pub async fn agent_auth_status(
+        &self,
+        agent_id: &str,
+    ) -> aura_protocol::agents::AgentAuthStatus {
+        self.deps().detector.auth_status(agent_id).await
+    }
+
+    /// Only an explicit user action invokes the vendor's updater. The detector revalidates the
+    /// binary/channel, serializes aliases and verifies the resulting installation.
+    pub async fn update_agent(&self, agent_id: &str) -> Result<(), SessionError> {
+        if self.shared().is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
+        self.deps()
+            .detector
+            .update(agent_id)
+            .await
+            .map_err(|error| SessionError::AgentUnavailable(error.to_string()))
     }
 
     /// The env agents start with: how it was resolved, and the names the scrub removes.
@@ -526,6 +557,7 @@ impl SessionManager {
             .detector
             .spec(&record.agent_id)
             .map_or_else(|| record.agent_id.clone(), |spec| spec.name.to_owned());
+        let agent_name = aura_agents::hosts::display_name(&agent_name, &record.agent_host);
         // The list never reads a folder (that is what a macOS privacy prompt guards), so a refusal
         // is the one the last start met; whether the folder exists is current, or what the last
         // start found when the check did not answer.
@@ -541,6 +573,7 @@ impl SessionManager {
                 .and_then(|state| state.title.clone())
                 .or(record.title),
             agent_id: record.agent_id,
+            agent_host: record.agent_host,
             agent_name,
             folder: record.folder.to_string_lossy().into_owned(),
             folder_state,
@@ -561,8 +594,25 @@ impl SessionManager {
         agent_id: &str,
         folder: &Path,
     ) -> Result<ChatSummary, SessionError> {
+        self.create_chat_on_host(agent_id, aura_protocol::agents::AgentHost::Native, folder)
+            .await
+    }
+
+    /// Creates a chat on the explicitly selected host. The folder is this device's local path;
+    /// a qualified host bridge must translate it before the driver or Linux process receives it.
+    pub async fn create_chat_on_host(
+        &self,
+        agent_id: &str,
+        agent_host: aura_protocol::agents::AgentHost,
+        folder: &Path,
+    ) -> Result<ChatSummary, SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
+        }
+        if let aura_process::HostAvailability::Unavailable { reason } =
+            aura_agents::hosts::execution(&agent_host).availability()
+        {
+            return Err(SessionError::AgentUnavailable(reason));
         }
         let detector = &self.deps().detector;
         if detector.spec(agent_id).is_none() {
@@ -586,6 +636,7 @@ impl SessionManager {
             .map_err(|_| SessionError::Internal("checking the folder failed".into()))?;
         checked?;
         let new = NewChat {
+            agent_host,
             agent_id: agent_id.to_owned(),
             folder: folder.to_path_buf(),
             device_id: self.deps().device_id.clone(),
@@ -1121,6 +1172,8 @@ pub struct ShutdownSummary {
 /// the UI shows.
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {
+    #[error("{0}")]
+    Organization(String),
     #[error("There is no chat with id {0}.")]
     ChatNotFound(String),
     #[error("auracode doesn't know an agent called \"{0}\".")]

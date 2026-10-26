@@ -20,12 +20,14 @@
 
 pub mod control;
 pub mod env;
+pub mod host;
 pub mod io;
 pub mod log;
 pub mod ptable;
 pub mod registry;
 pub mod shutdown;
 pub mod spawn;
+pub mod supervisor;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 
@@ -42,6 +44,7 @@ pub use env::{
     find_program, merge_windows_path, node_options_has_debugger_hook, parse_env0, process_env,
     scrub, secret_values, strip_launch_context,
 };
+pub use host::{HostAvailability, HostExecution, HostSpawner};
 pub use io::{AgentIo, LineSink, LineSource, StdinClosed, StdoutItem, TopKeys};
 pub use log::{
     Direction, LogFactory, LogLimits, LogNote, ProtocolLog, Redactor, RetentionPolicy,
