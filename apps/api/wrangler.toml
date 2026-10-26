@@ -1,4 +1,6 @@
 # Default bindings are local-only. Production requires explicit --env production and its secrets.
+# Required secret CLOUD_ACCOUNT_ALLOWLIST is a nonempty JSON array of reviewed email addresses.
+# Keep membership in each environment's secret store, never in this file. No billing is enabled.
 name = "auracode-api-local"
 main = "build/index.js"
 compatibility_date = "2026-10-26"

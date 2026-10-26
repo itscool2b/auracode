@@ -21,6 +21,8 @@ pub enum ApiError {
     AccountDeleted,
     #[error("This operation is not allowed")]
     Forbidden,
+    #[error("Cloud accounts and sync are invite-only during private preview")]
+    InviteRequired,
     #[error("The code is invalid or expired")]
     InvalidCode,
     #[error("Too many requests; try again later")]
@@ -42,7 +44,7 @@ impl ApiError {
         match self {
             Self::InvalidRequest | Self::InvalidCode => 400,
             Self::Unauthorized => 401,
-            Self::Forbidden => 403,
+            Self::Forbidden | Self::InviteRequired => 403,
             Self::NotFound => 404,
             Self::Conflict => 409,
             Self::AccountDeleted => 410,

@@ -4,7 +4,7 @@
   "scripts": {
     "worker:build": "worker-build --release",
     "worker:dev": "wrangler dev --local",
-    "worker:test": "node --test tests/runtime.test.mjs",
+    "worker:test": "node --test tests/runtime.test.mjs tests/invites.test.mjs",
     "worker:check": "wrangler deploy --dry-run --env production --outdir ../../target/api-dry-run"
   },
   "devDependencies": {

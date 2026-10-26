@@ -1,7 +1,37 @@
 # auracode API
 
 Rust Worker using `worker` 0.8.7, D1, private R2 and Cloudflare Email Service. This is application
-source, not a deployed service. All account encryption and merge logic stays on clients.
+source. All account encryption and merge logic stays on clients.
+
+## Invite-only cloud access
+
+Cloud accounts and sync are a private preview without billing or a paywall. Every environment must
+set `CLOUD_ACCOUNT_ALLOWLIST` in its Cloudflare secret store. Its value is a JSON array of exact
+email addresses, for example `["invited@example.invalid"]` in an isolated fixture. Do not put real
+membership in Wrangler vars, source, test fixtures, command arguments or logs. Local development
+can use an ignored local secret file with synthetic addresses.
+
+The complete configuration must be valid: a nonempty array of at most 256 addresses and 16 KiB.
+Each address uses the same trimmed, ASCII-lowercased email contract as sign-in. There are no domain
+wildcards, alias expansion or public membership APIs. Missing, empty or malformed configuration
+returns `503 unavailable` for authentication and cloud-feature access. Public `/api/v1/config`
+returns `private_preview: true` without exposing addresses or configuration contents.
+
+An excluded address without a nondeleted account receives `403 invite_required` before Turnstile,
+email delivery, challenge creation or account creation. Verification rechecks the current list.
+Existing accounts may still authenticate after invitation removal for account/session details,
+encrypted export, logout, logout-all and fresh-verified deletion. Their verification transaction
+never creates or recreates an account: session creation joins only an existing nondeleted account
+inside the same atomic D1 batch. Removing an invitation does not delete data or revoke its sessions.
+This preserves self-service exit while every device, key, reset, sync and blob route independently
+requires current eligibility. Existing valid sessions retain those safe account-management routes
+even if the allowlist configuration becomes unavailable. Session expiry/revocation, device
+revocation, CSRF and deletion's five-minute verification requirement still apply.
+
+Email changes require both the current account email and destination email to be invited. The
+destination is checked before sending and again before consuming its proof. List changes take
+effect on subsequent requests; restoring eligibility preserves the existing account and data.
+The `invite_required` error is an access pause, not account deletion or a reason to erase local keys.
 
 ## Build and checks
 
@@ -28,8 +58,12 @@ Miniflare with isolated D1/R2, fixed synthetic secrets and a synthetic Turnstile
 outbound subrequests fail and no request reaches the network. The
 JavaScript file supplies platform bindings and test assertions, not another implementation of the
 backend. Miniflare disposes its owned runtime after the suite. These tests create no real accounts.
-The twelve cases include delivery failure and cooldown, wrong-site/action and replayed Turnstile
-proofs, browser cookie protections, immediate revocation and scheduled private-object cleanup.
+The cases include delivery failure and cooldown, wrong-site/action and replayed Turnstile proofs,
+browser cookie protections, immediate revocation and scheduled private-object cleanup. The invite
+suite uses Miniflare's local-only email capture, changes the secret configuration between requests,
+and checks blocked creation, stale-session cloud access, existing-account exit and deletion races.
+Successful local delivery also verifies the Rust-composed raw MIME, including Date and a random
+Message-ID required by the binding. It does not establish actual external email delivery.
 
 ## Production prerequisites
 
@@ -39,6 +73,9 @@ proofs, browser cookie protections, immediate revocation and scheduled private-o
   cryptographically random 32-byte base64url `AUTH_HMAC_KEY` through Cloudflare's secret store.
   Neither belongs in Wrangler vars, source, logs, GitHub output or command arguments.
   Set its public `TURNSTILE_SITE_KEY` as an environment variable for the website config endpoint.
+- Set the reviewed `CLOUD_ACCOUNT_ALLOWLIST` through the intended environment's secret store before
+  enabling its API route. Keep preview and production membership separate; never deploy test
+  membership or an empty permissive fallback.
 - Export/back up D1 and apply the versioned migration to the intended production database. Verify the
   schema with local and preview runtime tests first. Existing D1/R2 IDs are documented in infra/README.
 - Install the same-origin `/api/*` route and scheduled trigger. Keep the blobs bucket private with

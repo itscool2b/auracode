@@ -15,6 +15,7 @@ use worker::{
 
 #[derive(Deserialize)]
 struct Challenge {
+    email: String,
     email_key: String,
     client_kind: ClientKind,
 }
@@ -58,8 +59,7 @@ impl Api {
         Ok(value)
     }
     pub(super) async fn begin_auth(&self, request: &mut Request) -> Result<Response> {
-        let ip = self.ip(request)?;
-        self.rate("send-ip", &ip, 3600, 20).await?;
+        let allowlist = self.allowlist()?;
         let input: BeginAuth = body(request).await?;
         if input.client_kind == ClientKind::Browser {
             policy::browser_origin(
@@ -72,6 +72,11 @@ impl Api {
             )?;
         }
         let email = policy::email(&input.email)?;
+        if !allowlist.contains(&email) && !self.existing_account(&email).await? {
+            return Err(ApiError::InviteRequired);
+        }
+        let ip = self.ip(request)?;
+        self.rate("send-ip", &ip, 3600, 20).await?;
         if input.turnstile_token.is_empty() || input.turnstile_token.len() > 2048 {
             return Err(ApiError::InvalidRequest);
         }
@@ -163,8 +168,11 @@ impl Api {
     pub(super) async fn deliver(&self, email: &str, code: &str) -> Result<()> {
         let sender = policy::email(&self.env.var("EMAIL_FROM").map_err(unavailable)?.to_string())
             .map_err(|_| ApiError::Unavailable)?;
+        let domain = sender.rsplit_once('@').ok_or(ApiError::Unavailable)?.1;
+        let message_id = crypto::random_token()?;
+        let date = js_sys::Date::new_0().to_utc_string();
         let raw = format!(
-            "From: auracode <{sender}>\r\nTo: {email}\r\nSubject: Your auracode sign-in code\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nYour auracode code is {code}.\r\nIt expires in 10 minutes. If you did not request it, ignore this email.\r\n"
+            "From: auracode <{sender}>\r\nTo: {email}\r\nDate: {date}\r\nMessage-ID: <{message_id}@{domain}>\r\nSubject: Your auracode sign-in code\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nYour auracode code is {code}.\r\nIt expires in 10 minutes. If you did not request it, ignore this email.\r\n"
         );
         let message = EmailMessage::new(&sender, email, &raw).map_err(unavailable)?;
         let binding = self.env.send_email("EMAIL").map_err(unavailable)?;
@@ -181,6 +189,7 @@ impl Api {
         }
     }
     pub(super) async fn verify_auth(&self, request: &mut Request) -> Result<Response> {
+        let allowlist = self.allowlist()?;
         self.rate("verify-ip", &self.ip(request)?, 600, 50).await?;
         let input: VerifyAuth = body(request).await?;
         crypto::decode(&input.challenge_id, 32, 32)?;
@@ -190,11 +199,15 @@ impl Api {
         let challenge: Challenge = self
             .db
             .first(
-                "SELECT email_key,client_kind FROM auth_challenges WHERE id=?1",
+                "SELECT email,email_key,client_kind FROM auth_challenges WHERE id=?1",
                 vec![json!(input.challenge_id)],
             )
             .await?
             .ok_or(ApiError::InvalidCode)?;
+        let invited = allowlist.contains(&challenge.email);
+        if !invited && !self.existing_account(&challenge.email).await? {
+            return Err(ApiError::InviteRequired);
+        }
         if challenge.client_kind == ClientKind::Browser {
             policy::browser_origin(
                 request
@@ -217,33 +230,34 @@ impl Api {
         let csrf = self.csrf(&token)?;
         let user = crypto::random_token()?;
         let claim = crypto::random_token()?;
-        self.db
-            .batch(vec![
-                (
-                    sql::CONSUME_CODE,
-                    vec![
-                        json!(input.challenge_id),
-                        json!(verifier),
-                        json!(claim),
-                        json!(self.now),
-                    ],
-                ),
-                (
-                    sql::CREATE_USER,
-                    vec![json!(user), json!(claim), json!(self.now)],
-                ),
-                (
-                    sql::CREATE_SESSION,
-                    vec![
-                        json!(hash),
-                        json!(claim),
-                        json!(crypto::hash(&csrf)),
-                        json!(self.now),
-                        json!(self.now + policy::SESSION_TTL),
-                    ],
-                ),
-            ])
-            .await?;
+        let mut statements = vec![(
+            sql::CONSUME_CODE,
+            vec![
+                json!(input.challenge_id),
+                json!(verifier),
+                json!(claim),
+                json!(self.now),
+            ],
+        )];
+        if invited {
+            statements.push((
+                sql::CREATE_USER,
+                vec![json!(user), json!(claim), json!(self.now)],
+            ));
+        }
+        // An uninvited account is never created or recreated. CREATE_SESSION joins a nondeleted
+        // existing account inside the same atomic batch, even if deletion raced the earlier read.
+        statements.push((
+            sql::CREATE_SESSION,
+            vec![
+                json!(hash),
+                json!(claim),
+                json!(crypto::hash(&csrf)),
+                json!(self.now),
+                json!(self.now + policy::SESSION_TTL),
+            ],
+        ));
+        self.db.batch(statements).await?;
         let session: Option<Value> = self
             .db
             .first(sql::AUTHENTICATE, vec![json!(hash), json!(self.now)])

@@ -41,6 +41,7 @@ impl Api {
             .await?;
         let input: ChangeEmail = body(request).await?;
         let email = policy::email(&input.email)?;
+        self.allowlist()?.require(&email)?;
         if input.turnstile_token.is_empty() || input.turnstile_token.len() > 2048 {
             return Err(ApiError::InvalidRequest);
         }
@@ -100,11 +101,13 @@ impl Api {
         let row: Value = self
             .db
             .first(
-                "SELECT email_key FROM email_changes WHERE id=?1 AND session_hash=?2",
+                "SELECT email,email_key FROM email_changes WHERE id=?1 AND session_hash=?2",
                 vec![json!(input.challenge_id), json!(identity.hash)],
             )
             .await?
             .ok_or(ApiError::InvalidCode)?;
+        self.allowlist()?
+            .require(row["email"].as_str().ok_or(ApiError::Unavailable)?)?;
         let key = row["email_key"].as_str().ok_or(ApiError::Unavailable)?;
         let verifier = crypto::verifier(
             &self.key,

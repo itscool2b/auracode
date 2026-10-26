@@ -106,13 +106,38 @@ impl Api {
                     .ok()
                     .map(|v| v.to_string())
                     .filter(|v| !v.is_empty());
-                return json_response(json!({"turnstile_site_key":site_key,"protocol":1}));
+                return json_response(
+                    json!({"turnstile_site_key":site_key,"protocol":1,"private_preview":true}),
+                );
             }
             (Method::Post, "/api/v1/auth/challenges") => return self.begin_auth(request).await,
             (Method::Post, "/api/v1/auth/verify") => return self.verify_auth(request).await,
             _ => {}
         }
         let identity = self.authenticate(request).await?;
+        // Invitation removal pauses cloud features, not an existing account's safe exit. Request
+        // kind, session/device revocation, CSRF and deletion freshness still apply to these routes.
+        if !matches!(
+            (method.clone(), path.as_str()),
+            (
+                Method::Get,
+                "/api/v1/account" | "/api/v1/account/export" | "/api/v1/auth/session"
+            ) | (
+                Method::Post,
+                "/api/v1/auth/logout" | "/api/v1/auth/logout-all"
+            ) | (Method::Delete, "/api/v1/account")
+        ) {
+            let email: Value = self
+                .db
+                .first(
+                    "SELECT email FROM users WHERE id=?1 AND deletion_requested_at IS NULL",
+                    vec![json!(identity.session.user_id)],
+                )
+                .await?
+                .ok_or(ApiError::Unauthorized)?;
+            self.allowlist()?
+                .require(email["email"].as_str().ok_or(ApiError::Unavailable)?)?;
+        }
         match (method, path.as_str()) {
             (Method::Get, "/api/v1/account") => self.account(&identity).await,
             (Method::Get, "/api/v1/account/export") => self.export(&identity).await,
@@ -186,6 +211,26 @@ impl Api {
             }
             _ => Err(ApiError::NotFound),
         }
+    }
+
+    fn allowlist(&self) -> Result<crate::invites::Allowlist> {
+        let value = self
+            .env
+            .secret(crate::invites::SECRET)
+            .map_err(unavailable)?
+            .to_string();
+        crate::invites::Allowlist::parse(&value)
+    }
+
+    async fn existing_account(&self, email: &str) -> Result<bool> {
+        let row: Option<Value> = self
+            .db
+            .first(
+                "SELECT id FROM users WHERE email=?1 AND deletion_requested_at IS NULL",
+                vec![json!(email)],
+            )
+            .await?;
+        Ok(row.is_some())
     }
 
     async fn authenticate(&self, request: &Request) -> Result<Identity> {

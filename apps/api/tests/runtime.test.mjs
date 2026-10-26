@@ -41,6 +41,19 @@ before(async () => {
         AUTH_HMAC_KEY: key.toString("base64url"),
         TURNSTILE_SECRET: "synthetic-unused",
         EMAIL_FROM: "signin@auracode.test",
+        CLOUD_ACCOUNT_ALLOWLIST: JSON.stringify([
+          "test@example.invalid",
+          "synthetic-client@example.invalid",
+          "reset@example.invalid",
+          "second@example.invalid",
+          "foreign@example.invalid",
+          "old@example.invalid",
+          "changed@example.invalid",
+          "provider-check@example.invalid",
+          "delivery-check@example.invalid",
+          "cookie-check@example.invalid",
+          "cleanup@example.invalid",
+        ]),
       },
       // Only this synthetic provider response is allowed. No request reaches the network.
       async outboundService(request) {
