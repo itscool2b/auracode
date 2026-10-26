@@ -1310,3 +1310,18 @@ pass. The profile-wide audit identified M4's worktree registry as another conten
 needs encryption before Account activation. The sync writer projection, scheduler and account UI
 are still pending.
 
+
+## M8 bounded configuration inventory
+
+The new Rust aura-config crate inventories approved Claude/Codex/Pi roots and one shared skills
+source. It selects only instruction, skill, MCP and plugin/package declarations. Credential files,
+vendor synced content, caches, sessions and trust/account sections stay outside the inventory.
+Capability-relative no-follow reads bound file size, tree depth, file count and aggregate size;
+skill revisions include companion files. Malformed content reports a sanitized error without a
+parser excerpt. MCP entries with authentication, unknown options or incompatible transport remain
+visible with values hidden and an explicit copy restriction. Plugin declarations expose no userConfig.
+
+This is the first M8 checkpoint, with source evidence and remaining work in docs/config-library.md.
+Copy/apply/rollback and the desktop Library are still being implemented. Development uses only
+temporary synthetic configuration fixtures, with no real credential/config reads, agent processes,
+pushes or CI dispatches.
