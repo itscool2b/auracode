@@ -1471,4 +1471,7 @@ locally; the full shell suite needs jq, which this local shell does not have. Na
 is shared by encrypted, ordinary desktop and installer builds now that account storage is enabled.
 The exact second-batch binding artifact is recorded; subsequent Library/account commands still need
 the final combined native export. Remaining native/platform gates are not marked complete.
+The pure aura-protocol Account DTO exporter now passes and generated TypeScript is committed for
+the Account UI's thin invoke transport. It retains the Rust serde names and bounds timestamps to
+JSON numbers. This does not change or substitute for the blocked full Tauri command export gate.
 

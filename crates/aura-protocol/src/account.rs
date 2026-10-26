@@ -54,6 +54,8 @@ pub enum AccountSyncState {
 pub struct AccountSyncStatus {
     pub state: AccountSyncState,
     pub pending_changes: Option<u32>,
+    // The wire is JSON number; the runtime bounds account timestamps to the exact JS range.
+    #[specta(type = Option<specta_typescript::Number>)]
     pub last_sync_at: Option<Millis>,
     pub message: Option<String>,
 }
@@ -88,9 +90,13 @@ pub struct AccountDevice {
     pub platform: String,
     pub verification_code: String,
     pub current: bool,
+    #[specta(type = specta_typescript::Number)]
     pub created_at: Millis,
+    #[specta(type = specta_typescript::Number)]
     pub last_seen: Millis,
+    #[specta(type = Option<specta_typescript::Number>)]
     pub approved_at: Option<Millis>,
+    #[specta(type = Option<specta_typescript::Number>)]
     pub revoked_at: Option<Millis>,
 }
 

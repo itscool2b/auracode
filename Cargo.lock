@@ -447,6 +447,8 @@ dependencies = [
  "serde",
  "serde_json",
  "specta",
+ "specta-serde",
+ "specta-typescript",
 ]
 
 [[package]]

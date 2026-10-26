@@ -11,6 +11,10 @@ Rust owns sign-in, vault access, device keys and account keys. Each command retu
 The server's arbitrary error bodies never become UI messages or logs. Request arguments use Tauri's
 generated camelCase call syntax; response fields use snake_case.
 
+Account DTOs are also generated independently into `apps/desktop/src/lib/account/bindings.ts` by
+`cargo test -p aura-protocol export_account_bindings`. This pure exporter requires no desktop runtime
+or native webview; CI checks its exact output. The full native command export remains a separate gate.
+
 | Command | Arguments | Success |
 | --- | --- | --- |
 | `account_config` | none | `AccountConfiguration` |
