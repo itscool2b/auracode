@@ -9,7 +9,7 @@
     "build": "tsc --noEmit -p . && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p .",
-    "test": "vitest run",
+    "test": "node --test scripts/build-env.test.mjs && vitest run",
     "check:orbit": "node scripts/check-orbit.mjs",
     "check:setup": "node scripts/check-setup.mjs",
     "tauri": "tauri",

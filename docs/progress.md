@@ -1123,3 +1123,13 @@ guard. Core/CLI all-target Clippy passes. Generated desktop bindings cover actio
 integration and independent merge-race review remain pending, as do relocation, native cwd handoff,
 bringing uncommitted files, explicit setup, PR creation, recovery controls and macOS execution. This
 is a backend checkpoint, not M4 completion. No real-repository mutation, paid prompt, push or CI ran.
+### M5 installer targets and build-path privacy, 2026-10-26
+
+- The manual unsigned Build workflow now names universal macOS DMG and Windows x64/arm64 NSIS
+  targets, installs their Rust targets, checks committed bindings first, and labels artifacts as
+  unsigned acceptance builds. It neither publishes a release nor changes platform security policy.
+- The bundle wrapper remaps checkout, home, Cargo and toolchain paths using encoded Rust arguments.
+  Three focused build-environment tests cover Windows spaces, existing flags and malformed roots;
+  they pass alongside Biome, workflow pin checks and instruction parity.
+- Cross-platform bundling, native installer acceptance, signing, update service and release
+  publication remain pending. No build or CI dispatch was started. See docs/releases.md.
