@@ -47,7 +47,15 @@ fn rig_with_nested_data(depth: usize) -> Rig {
 #[cfg(windows)]
 #[tokio::test]
 async fn checkpoint_refs_work_beyond_the_legacy_windows_path_limit() {
-    let rig = rig_with_nested_data(4);
+    // The deepest profile whose repository Git still accepts. Temporary folder lengths differ
+    // between machines, so the depth is measured rather than fixed.
+    let rig = (0..8)
+        .map(rig_with_nested_data)
+        .take_while(|rig| {
+            !beyond_git_dir_limit(&rig.service.root.join(format!("{}.git", rig.folder)))
+        })
+        .last()
+        .expect("a profile path within Git's limit");
     std::fs::write(rig.work.join("long-profile.txt"), "before\n").expect("fixture");
     let checkpoint = rig
         .service
@@ -78,6 +86,33 @@ async fn checkpoint_refs_work_beyond_the_legacy_windows_path_limit() {
     assert_eq!(diff.before.as_deref(), Some("before\n"));
     assert_eq!(diff.after.as_deref(), Some("after\n"));
     assert!(!rig.work.join(".git").exists());
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn a_repository_beyond_git_dir_limit_fails_clearly_without_touching_the_folder() {
+    let rig = (0..12)
+        .map(rig_with_nested_data)
+        .find(|rig| beyond_git_dir_limit(&rig.service.root.join(format!("{}.git", rig.folder))))
+        .expect("a profile path beyond Git's limit");
+    std::fs::write(rig.work.join("kept.txt"), "kept\n").expect("fixture");
+    let error = rig
+        .service
+        .capture(&rig.chat, &rig.folder, &rig.work, &crate::ids::new_id())
+        .await
+        .expect_err("Git cannot open this repository");
+    assert_eq!(error.to_string(), GIT_DIR_TOO_LONG);
+    assert!(
+        !rig.service
+            .root
+            .join(format!("{}.git", rig.folder))
+            .exists()
+    );
+    assert!(!rig.work.join(".git").exists());
+    assert_eq!(
+        std::fs::read_to_string(rig.work.join("kept.txt")).expect("kept"),
+        "kept\n"
+    );
 }
 
 #[tokio::test]

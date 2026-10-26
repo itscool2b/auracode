@@ -429,6 +429,10 @@ impl Checkpoints {
             Storage::Encrypted(_) => scratch.path().join("empty.git"),
             _ => self.root.join(format!("{folder_id}.git")),
         };
+        #[cfg(windows)]
+        if beyond_git_dir_limit(&repo) {
+            return Err(CheckpointError::Message(GIT_DIR_TOO_LONG.into()));
+        }
         if !repo.exists() {
             if !create && matches!(self.storage, Storage::Local) {
                 return Err(CheckpointError::Message(
@@ -676,6 +680,17 @@ fn valid_id(id: &str) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+#[cfg(windows)]
+const GIT_DIR_TOO_LONG: &str = "Checkpoints are unavailable because auracode's data folder path is too long for Git on Windows. Set AURACODE_DATA_DIR to a shorter folder, then restart auracode.";
+
+/// Git refuses a `GIT_DIR` whose UTF-8 length exceeds `PATH_MAX - 40`, and Git for Windows
+/// defines `PATH_MAX` as 260. That also keeps `git init`'s change into the new repository within
+/// the current-directory limit. Refs and objects inside the repository may still exceed 260.
+#[cfg(windows)]
+fn beyond_git_dir_limit(repo: &Path) -> bool {
+    repo.to_string_lossy().len() > 220
 }
 
 fn changes(
