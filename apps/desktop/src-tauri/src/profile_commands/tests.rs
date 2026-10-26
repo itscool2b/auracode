@@ -56,6 +56,125 @@ async fn close(state: &AppState) {
 }
 
 #[tokio::test]
+async fn failed_second_account_phase_publishes_local_and_keeps_account_data_separate() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = DataRoot::at(temp.path().join("data"));
+    let state = state(&root);
+    let profiles = Profiles::new(root.clone());
+    let a = profiles.create(ProfileKind::Account, "Account A").unwrap();
+    let b = profiles.create(ProfileKind::Account, "Account B").unwrap();
+    let key_a = Arc::new(AccountKey::generate().unwrap());
+    let key_b = Arc::new(AccountKey::generate().unwrap());
+    activate(
+        &state,
+        Resolved {
+            profile: b.clone(),
+            key: Some(sync_context(key_b)),
+        },
+        sessions::testing::outside,
+    )
+    .await
+    .unwrap();
+    activate(
+        &state,
+        Resolved {
+            profile: a.clone(),
+            key: Some(sync_context(key_a)),
+        },
+        sessions::testing::outside,
+    )
+    .await
+    .unwrap();
+    let preserved = std::fs::read(b.db_path()).unwrap();
+    assert!(
+        activate(
+            &state,
+            Resolved {
+                profile: b.clone(),
+                key: Some(sync_context(Arc::new(AccountKey::generate().unwrap())))
+            },
+            sessions::testing::outside
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(state.app_info().profile.unwrap().id, "local");
+    assert_eq!(profiles.open_active().unwrap().meta.id, "local");
+    assert!(
+        state
+            .app_info()
+            .notices
+            .iter()
+            .any(|notice| notice.contains("Local is now selected"))
+    );
+    assert_eq!(std::fs::read(b.db_path()).unwrap(), preserved);
+    assert!(state.sessions().is_ok());
+    close(&state).await;
+}
+
+#[tokio::test]
+async fn pending_configuration_recovery_blocks_desktop_and_direct_native_agent_admission() {
+    use aura_core::config_transition::{TransitionLease, TransitionLocator};
+    let temp = tempfile::tempdir().unwrap();
+    let root = DataRoot::at(temp.path().join("data"));
+    let state = state(&root);
+    let chat = add_chat(&state, temp.path()).await;
+    let owner = uuid::Uuid::now_v7().to_string();
+    let locator = TransitionLocator {
+        schema: 1,
+        transaction: uuid::Uuid::now_v7().to_string(),
+        owner_profile: owner.clone(),
+        from_profile: "local".into(),
+        to_profile: owner,
+    };
+    let lease = TransitionLease::acquire(root.root()).unwrap();
+    lease.create(&locator).unwrap();
+    assert!(state.app_info().config_profile_recovery.is_some());
+    assert!(state.sessions().is_err());
+    assert!(state.onboarding().is_err());
+    let result = state.chats().unwrap().manager.start(&chat, false).await;
+    assert!(result.is_err_and(|error| error.to_string().contains("Recover the interrupted")));
+    lease.clear(&locator).unwrap();
+    assert!(state.sessions().is_ok());
+    close(&state).await;
+}
+
+#[tokio::test]
+async fn pending_transition_never_repairs_an_ambiguous_profile_pointer_to_local() {
+    use aura_core::config_transition::{TransitionLease, TransitionLocator};
+    let temp = tempfile::tempdir().unwrap();
+    let root = DataRoot::at(temp.path().join("data"));
+    let state = state(&root);
+    let owner = uuid::Uuid::now_v7().to_string();
+    let locator = TransitionLocator {
+        schema: 1,
+        transaction: uuid::Uuid::now_v7().to_string(),
+        owner_profile: owner.clone(),
+        from_profile: "local".into(),
+        to_profile: owner,
+    };
+    TransitionLease::acquire(root.root())
+        .unwrap()
+        .create(&locator)
+        .unwrap();
+    std::fs::write(root.root().join("state.json"), b"{interrupted").unwrap();
+    let booted = boot::boot(Ok(root.clone()));
+    assert!(booted.profile.is_none());
+    assert!(booted.fatal.is_none());
+    assert_eq!(
+        std::fs::read(root.root().join("state.json")).unwrap(),
+        b"{interrupted"
+    );
+    assert_eq!(
+        crate::profile_config::status(root.root(), None)
+            .unwrap()
+            .phase,
+        crate::profile_config::ConfigProfileRecoveryPhase::Unavailable
+    );
+    close(&state).await;
+}
+
+#[tokio::test]
 async fn switching_keeps_datasets_separate_flushes_and_invalidates_old_channels() {
     let temp = tempfile::tempdir().unwrap();
     let root = DataRoot::at(temp.path().join("data"));

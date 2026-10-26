@@ -96,6 +96,20 @@ impl fmt::Debug for ChatStore {
 }
 
 impl ChatStore {
+    /// The app's fixed profile layout supplies this authority, never a renderer path. Legacy test
+    /// stores outside that layout have no shared-home transition coordinator.
+    pub(crate) fn config_recovery_pending(&self) -> bool {
+        let Some(profiles) = self.db_path.parent().and_then(std::path::Path::parent) else {
+            return false;
+        };
+        if profiles.file_name() != Some(std::ffi::OsStr::new("profiles")) {
+            return false;
+        }
+        profiles
+            .parent()
+            .is_some_and(|root| !matches!(crate::config_transition::pending(root), Ok(None)))
+    }
+
     pub(crate) async fn search(
         &self,
         query: String,

@@ -88,6 +88,127 @@ pub async fn profile_activate(
     run(app, Target::Id(profile_id)).await
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn config_profile_recover(app: tauri::AppHandle) -> Result<AppInfo, AppError> {
+    tokio::spawn(async move {
+        let state = app.state::<AppState>();
+        let serial = state
+            .transition
+            .clone()
+            .try_lock_owned()
+            .map_err(|_| unavailable("Another profile transition is in progress."))?;
+        if state.quit.is_quitting() {
+            return Err(unavailable("auracode is closing."));
+        }
+        let data_root = root(&state)?;
+        let locator = aura_core::config_transition::pending(data_root.root())
+            .map_err(|_| crate::profile_config::error())?
+            .ok_or_else(crate::profile_config::error)?;
+        let current = aura_core::config_transition::active_profile(data_root.root())
+            .map_err(|_| crate::profile_config::error())?;
+        if state
+            .app_info()
+            .profile
+            .as_ref()
+            .map(|profile| profile.id.as_str())
+            != Some(current.as_str())
+        {
+            return Err(crate::profile_config::error());
+        }
+        let chats = state.chats().ok_or_else(|| {
+            unavailable("Unlock the selected Account profile before recovering its configuration.")
+        })?;
+        lock(&state.runtime).info.profile_switching = true;
+        let _switching = Switching {
+            state: &state,
+            _serial: serial,
+        };
+        tokio::time::timeout(Duration::from_secs(5), state.wait_profile_commands())
+            .await
+            .map_err(|_| {
+                unavailable("Wait for current profile commands to finish before recovery.")
+            })?;
+        let _sessions = chats.manager.try_quiesce_when_idle().ok_or_else(|| {
+            unavailable("Stop agents and wait for folder operations before configuration recovery.")
+        })?;
+        let _terminals = state
+            .terminals
+            .try_quiesce_when_idle()
+            .ok_or_else(|| unavailable("Close terminals before configuration recovery."))?;
+        let library = app.state::<Arc<crate::config_library::LibraryService>>();
+        let _mutation = library.mutation.clone().lock_owned().await;
+        let engine = chats.sync_engine.get().cloned();
+        if let Some(engine) = &engine
+            && !engine.suspend(Duration::from_secs(5)).await
+        {
+            return Err(unavailable(
+                "Account sync could not pause for configuration recovery.",
+            ));
+        }
+        let selected = resolve(&state, Target::Id(locator.owner_profile.clone())).await?;
+        let context = selected.key.ok_or_else(crate::profile_config::error)?;
+        let key = Arc::new(
+            context
+                .key
+                .profile_file_key(&context.identity.account, &selected.profile.meta.id)
+                .map_err(|_| crate::profile_config::error())?,
+        );
+        let (scanner, _) = chats.manager.config_sync_scanner().await?;
+        let current_owner = if current == locator.owner_profile {
+            chats
+                .account_config
+                .as_ref()
+                .map(|service| service.transitions.clone())
+        } else {
+            None
+        };
+        let result = tokio::task::spawn_blocking(move || {
+            let _owner = if current != locator.owner_profile {
+                Some(
+                    aura_core::owner::ProfileOwner::acquire(&selected.profile)
+                        .map_err(|_| crate::profile_config::error())?,
+                )
+            } else {
+                None
+            };
+            let newly_opened = current_owner.is_none();
+            let transitions = match current_owner {
+                Some(service) => service,
+                None => Arc::new(
+                    aura_core::sync::config_transition::AccountConfigTransitions::open(
+                        &selected.profile.dir,
+                        key,
+                    )
+                    .map_err(|_| crate::profile_config::error())?,
+                ),
+            };
+            let result =
+                crate::profile_config::recover(data_root.root(), &current, scanner, &transitions);
+            if newly_opened {
+                transitions.close();
+            }
+            result
+        })
+        .await
+        .map_err(|_| crate::profile_config::error())?;
+        if result.is_ok()
+            && let Some(engine) = engine
+        {
+            engine.resume();
+        }
+        let mut info = state.app_info();
+        info.profile_switching = false;
+        if result.is_ok() {
+            let _ = app.emit(PROFILE_CHANGED, &info);
+        }
+        result?;
+        Ok(info)
+    })
+    .await
+    .map_err(|_| crate::profile_config::error())?
+}
+
 async fn resolve(state: &AppState, target: Target) -> Result<Resolved, AppError> {
     if let Target::Id(id) = target {
         let profiles = Profiles::new(root(state)?);
@@ -123,6 +244,7 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
     // active pointer while leaving the old runtime in memory.
     tokio::spawn(async move {
         let state = app.state::<AppState>();
+        let before = state.app_info();
         let previous_engine = state
             .chats()
             .and_then(|chats| chats.sync_engine.get().cloned());
@@ -135,14 +257,27 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
         }
         let result = async {
             let resolved = resolve(&state, target).await?;
-            activate(&state, resolved, Outside::real).await
+            let mutation = app
+                .state::<Arc<crate::config_library::LibraryService>>()
+                .mutation
+                .clone();
+            activate_serial(&state, resolved, Outside::real, mutation).await
         }
         .await;
         let result = match result {
             Ok(info) => info,
             Err(error) => {
-                if let Some(engine) = previous_engine {
+                let current = state.app_info();
+                if let Some(engine) = previous_engine
+                    && current.config_profile_recovery.is_none()
+                    && current.profile == before.profile
+                {
                     engine.resume();
+                }
+                if current.profile != before.profile
+                    || current.config_profile_recovery != before.config_profile_recovery
+                {
+                    let _ = app.emit(PROFILE_CHANGED, current);
                 }
                 return Err(error);
             }
@@ -170,17 +305,27 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
     })?
 }
 
+type OutsideFactory = fn(
+    &Arc<aura_process::LeftoverRegistry>,
+    &Arc<aura_process::Redactor>,
+    &std::path::Path,
+    &tokio::runtime::Handle,
+) -> Outside;
+
+#[cfg(test)]
 async fn activate(
     state: &AppState,
     selected: Resolved,
-    outside: impl FnOnce(
-        &Arc<aura_process::LeftoverRegistry>,
-        &Arc<aura_process::Redactor>,
-        &std::path::Path,
-        &tokio::runtime::Handle,
-    ) -> Outside
-    + Send
-    + 'static,
+    outside: OutsideFactory,
+) -> Result<AppInfo, AppError> {
+    activate_serial(state, selected, outside, Arc::default()).await
+}
+
+async fn activate_serial(
+    state: &AppState,
+    selected: Resolved,
+    outside: OutsideFactory,
+    mutation: Arc<tokio::sync::Mutex<()>>,
 ) -> Result<AppInfo, AppError> {
     let serial = state
         .transition
@@ -193,7 +338,18 @@ async fn activate(
             "auracode is closing.",
         ));
     }
-    let old = {
+    let before = state.app_info();
+    let from_profile = before
+        .profile
+        .as_ref()
+        .map(|profile| profile.id.clone())
+        .ok_or_else(|| unavailable("The current profile is unavailable."))?;
+    if before.config_profile_recovery.is_some()
+        && !(before.profile_locked && from_profile == selected.profile.meta.id)
+    {
+        return Err(crate::profile_config::error());
+    }
+    {
         let mut runtime = lock(&state.runtime);
         if runtime.info.profile.as_ref().map(|profile| &profile.id)
             == Some(&selected.profile.meta.id)
@@ -202,8 +358,7 @@ async fn activate(
             return Ok(runtime.info.clone());
         }
         runtime.info.profile_switching = true;
-        runtime.chats.clone()
-    };
+    }
     let _switching = Switching {
         state,
         _serial: serial,
@@ -213,14 +368,59 @@ async fn activate(
         .map_err(|_| {
             unavailable("Wait for current profile commands to finish, then retry switching.")
         })?;
-    let _sessions = match &old {
-        Some(old) => Some(old.manager.try_quiesce_when_idle().ok_or_else(|| unavailable("Stop all agents and wait for folder operations to finish before switching profiles."))?),
-        None => None,
-    };
+    let _mutation = mutation.lock_owned().await;
     let _terminals = state
         .terminals
         .try_quiesce_when_idle()
         .ok_or_else(|| unavailable("Close all terminals before switching profiles."))?;
+    let split = before
+        .profile
+        .as_ref()
+        .is_some_and(|profile| profile.kind == ProfileKind::Account)
+        && selected.profile.meta.kind == ProfileKind::Account
+        && from_profile != selected.profile.meta.id;
+    if split {
+        // Each Account encrypts only its own settings. Local stays behind the same command,
+        // terminal, Library and transition gates through both phases.
+        let local = Profiles::new(root(state)?)
+            .get("local")
+            .map_err(|_| unavailable("The Local profile is unavailable. Nothing was switched."))?;
+        let info = activate_one(
+            state,
+            Resolved {
+                profile: local,
+                key: None,
+            },
+            outside,
+        )
+        .await?;
+        if info.config_profile_recovery.is_some() {
+            return Err(crate::profile_config::error());
+        }
+    }
+    let result = activate_one(state, selected, outside).await;
+    if split && result.is_err() {
+        lock(&state.runtime).info.notices.push("The previous Account's managed settings were preserved. Local is now selected because the destination Account could not finish opening. Resolve any configuration recovery, then retry the destination Account.".into());
+    }
+    result
+}
+
+async fn activate_one(
+    state: &AppState,
+    selected: Resolved,
+    outside: OutsideFactory,
+) -> Result<AppInfo, AppError> {
+    let before = state.app_info();
+    let from_profile = before
+        .profile
+        .as_ref()
+        .map(|profile| profile.id.clone())
+        .ok_or_else(crate::profile_config::error)?;
+    let old = state.chats();
+    let _sessions = match &old {
+        Some(old) => Some(old.manager.try_quiesce_when_idle().ok_or_else(|| unavailable("Stop all agents and wait for folder operations to finish before switching profiles."))?),
+        None => None,
+    };
     if let Some(old) = &old {
         if !matches!(
             old.manager.storage_status().state,
@@ -311,13 +511,53 @@ async fn activate(
             "The account sync ledger could not be authenticated. Nothing was switched.",
         ));
     }
-    let profiles = Profiles::new(root(state)?);
-    let published = tokio::task::spawn_blocking(move || profiles.set_active(&profile_id)).await;
-    if !matches!(published, Ok(Ok(_))) {
+    let staged = match crate::profile_config::prepare(
+        root(state)?.root(),
+        &from_profile,
+        &profile_id,
+        old.as_ref(),
+        &next,
+    )
+    .await
+    {
+        Ok(staged) => staged,
+        Err(error) => {
+            discard(&next).await;
+            return Err(error);
+        }
+    };
+    if state.quit.is_quitting() {
+        if let Some(staged) = staged {
+            let _ = tokio::task::spawn_blocking(move || staged.rollback()).await;
+        }
         discard(&next).await;
         return Err(unavailable(
-            "The active profile could not be saved. The current profile remains open.",
+            "auracode is closing. Configuration recovery was retained if rollback could not finish.",
         ));
+    }
+    let data_root = root(state)?;
+    let profiles = Profiles::new(data_root.clone());
+    let target = profile_id.clone();
+    let published = tokio::task::spawn_blocking(move || profiles.set_active(&target)).await;
+    let actual = aura_core::config_transition::active_profile(data_root.root());
+    if !matches!(published, Ok(Ok(_))) && !actual.as_ref().is_ok_and(|id| id == &profile_id) {
+        if actual.as_ref().is_ok_and(|id| id == &from_profile)
+            && let Some(staged) = staged
+        {
+            let _ = tokio::task::spawn_blocking(move || staged.rollback()).await;
+        }
+        discard(&next).await;
+        return Err(unavailable(
+            "The active profile could not be confirmed. Existing data and any pending configuration recovery were preserved.",
+        ));
+    }
+    if let Some(staged) = staged {
+        if !matches!(
+            tokio::task::spawn_blocking(move || staged.finish()).await,
+            Ok(Ok(()))
+        ) {
+            prepared.notices.push("The profile pointer was saved, but configuration verification remains pending. Use configuration recovery before continuing.".into());
+        }
     }
     // No fallible preparation remains after publication. Old data was flushed before this point;
     // a close failure is reported honestly while retaining its WAL/recovery files.
@@ -368,7 +608,6 @@ pub(crate) fn restore_selected(app: tauri::AppHandle) {
         if let Err(error) = run(app.clone(), Target::Id(profile.id)).await {
             let state = app.state::<AppState>();
             lock(&state.runtime).info.notices.push(error.message);
-            let _ = app.emit(PROFILE_CHANGED, state.app_info());
         }
     });
 }

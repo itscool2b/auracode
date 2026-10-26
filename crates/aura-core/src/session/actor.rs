@@ -1960,6 +1960,9 @@ impl ChatActor {
 
     /// Starts the agent. `explicit` (`chat_start`): a full slot is an error; otherwise a card.
     fn start(&mut self, fresh: bool, explicit: bool) -> Result<(), SessionError> {
+        if self.shared.deps.store.config_recovery_pending() {
+            return Err(SessionError::Organization("Recover the interrupted profile configuration switch before starting agents.".into()));
+        }
         if self.steering_pending {
             return Err(SessionError::OptionInvalid(
                 "Wait for steering delivery to finish before restarting.".into(),

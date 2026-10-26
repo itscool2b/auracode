@@ -69,6 +69,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::profile_commands::profiles_list,
             crate::profile_commands::account_activate,
             crate::profile_commands::profile_activate,
+            crate::profile_commands::config_profile_recover,
             crate::updater::app_update_status,
             crate::updater::app_update_check,
             crate::updater::app_update_download,

@@ -78,6 +78,33 @@ pub fn pending(root: &Path) -> io::Result<Option<TransitionLocator>> {
     read(&open(root)?)
 }
 
+/// Inspect publication without repairing or falling back to Local. Recovery must not infer a
+/// successful pointer write from a repaired startup snapshot.
+pub fn active_profile(root: &Path) -> io::Result<String> {
+    let dir = open(root)?;
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    let file = dir.open_with("state.json", &options)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.len() > 64 * 1024 {
+        return Err(invalid());
+    }
+    let mut bytes = Vec::new();
+    file.take(64 * 1024 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > 64 * 1024 {
+        return Err(invalid());
+    }
+    #[derive(Deserialize)]
+    struct Pointer {
+        active_profile: String,
+    }
+    let value: Pointer = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    if !profile(&value.active_profile) {
+        return Err(invalid());
+    }
+    Ok(value.active_profile)
+}
+
 /// Serializes this app data root only. Normal desktop execution also uses its single-instance
 /// gate. Isolated custom data roots are not mutually coordinated by this lease.
 pub struct TransitionLease {

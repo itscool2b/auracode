@@ -2013,3 +2013,13 @@ LiveAgents refuses a drain while an idle barrier is held. This prevents closing 
 profile switch or update preparation. The existing quiesce regression now asserts drain refusal;
 native execution remains blocked by the dependency build-script policy failure described above.
 
+The native profile coordinator now captures outgoing managed settings, restores baselines and
+applies incoming settings before pointer publication. A to B switches pass through a quiescent
+Local phase, keeping each transaction encrypted only by its owning Account. Failure in phase two
+publishes the actual Local selection and an explanatory notice. Typed startup recovery blocks both
+desktop commands and direct native agent starts. Explicit recovery verifies the strict locator and
+encrypted transaction before rollback or finish verification. Ambiguous pointers are preserved,
+not silently repaired to Local. Five additional native regression cases are present but not yet
+executed under the local build-script policy block. Exact Tauri bindings and recovery UI integration
+remain pending; the M9 transition feature is not claimed complete.
+

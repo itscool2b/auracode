@@ -48,7 +48,7 @@ snapshots. A size-limit failure occurs before replacement or vendor mutation. Mi
 is an error, never an empty manifest. Profile close invalidates the service. Snapshot values and
 pending tokens never enter IPC, logs or plaintext sidecars.
 
-## Remaining transition coordinator
+## Transition coordinator and recovery
 
 The pure transition planner and executor now snapshot outgoing managed content, restore its
 baselines and apply the incoming Account snapshots using encrypted-store and apply-journal ports.
@@ -63,8 +63,23 @@ launches and expose a typed recovery action until completion or rollback. Profil
 only after successful file and encrypted-state acknowledgments. No isolated agent home or implicit
 re-login is introduced.
 
-The desktop coordinator and startup/recovery gate are still pending. Five pure transaction tests
-cover outgoing edits, unmanaged conflicts, overlapping identities, complete apply/rollback and a
-lost step acknowledgment followed by rollback that preserves a concurrent unmanaged edit.
-The native locator and encrypted-store regression tests are present, but local execution is blocked
-by Windows Application Control refusing dependency build scripts (4551). No policy workaround was used.
+The desktop coordinator retains profile, terminal and Library admission through preparation,
+publication and cleanup. Normal quit takes the same profile-transition mutex. Account A to Account B
+uses A to Local followed by Local to B under that boundary; Local is not actionable between phases.
+Each retained transaction contains only the owning Account's settings. If phase two fails, Local
+remains selected, the actual profile change is emitted, and the failure notice explains the result.
+
+`AppInfo.config_profile_recovery` exposes `restore_previous`, `finish_switch` or `unavailable` with
+strict optional IDs and fixed explanatory text. Ordinary desktop profile commands and native agent
+starts refuse admission while the locator exists or cannot be read. Boot never repairs an ambiguous
+active pointer to Local during recovery. The explicit `config_profile_recover` command unlocks only
+auracode's own Account key, authenticates the bound transaction and either restores the original side
+or verifies the already published side. Failed recovery retains the locator and visible error.
+
+Five pure transaction tests pass, covering outgoing edits, unmanaged conflicts, overlapping
+identities, complete apply/rollback and a lost step acknowledgment preserving an unmanaged edit.
+Native regressions additionally cover encrypted recovery, strict locator ownership, both recovery
+directions, changed-content refusal, failed second-phase Account opening, native admission and an
+ambiguous startup pointer. Their local execution and exact Tauri binding export are pending because
+Windows Application Control refused dependency build scripts (4551). No policy workaround was used.
+The separate recovery presentation still needs its App integration before the feature is complete.

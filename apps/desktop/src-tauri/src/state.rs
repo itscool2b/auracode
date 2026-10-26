@@ -44,6 +44,8 @@ pub struct AppInfo {
     pub profile_locked: bool,
     /// Profile commands are temporarily unavailable while a reviewed switch is prepared.
     pub profile_switching: bool,
+    /// Managed configuration is blocked until this explicit recovery is confirmed.
+    pub config_profile_recovery: Option<crate::profile_config::ConfigProfileRecovery>,
     /// The profile database; `null` when startup failed before opening it.
     pub db: Option<DbInfo>,
     /// The native material behind the window. `none` means the UI must paint an opaque background.
@@ -188,6 +190,7 @@ impl AppState {
                 && chats.is_none()
                 && booted.fatal.is_none(),
             profile_switching: false,
+            config_profile_recovery: None,
             profile: booted.profile,
             db: booted.db,
             glass,
@@ -225,6 +228,12 @@ impl AppState {
     pub fn app_info(&self) -> AppInfo {
         let runtime = lock(&self.runtime);
         let mut info = runtime.info.clone();
+        info.config_profile_recovery = self.data_dir.as_ref().and_then(|root| {
+            crate::profile_config::status(
+                root,
+                info.profile.as_ref().map(|profile| profile.id.as_str()),
+            )
+        });
         if let Some(chats) = &runtime.chats {
             info.notices
                 .extend(lock(&chats.late_notices).iter().cloned());
@@ -300,7 +309,19 @@ impl AppState {
         Ok(self.lease(service))
     }
     fn check_profile_access(&self, runtime: &ProfileRuntime) -> Result<(), AppError> {
-        if runtime.info.profile_switching {
+        if self.data_dir.as_ref().is_some_and(|root| {
+            crate::profile_config::status(
+                root,
+                runtime
+                    .info
+                    .profile
+                    .as_ref()
+                    .map(|profile| profile.id.as_str()),
+            )
+            .is_some()
+        }) {
+            Err(crate::profile_config::error())
+        } else if runtime.info.profile_switching {
             Err(AppError::new(
                 AppErrorCode::StorageUnavailable,
                 "Wait for the profile switch to finish.",

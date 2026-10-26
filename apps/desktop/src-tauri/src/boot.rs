@@ -141,6 +141,25 @@ fn boot_selected(
         Err(error) => return booted.fail("load this device's identity", &error),
     }
 
+    let selected = if selected.is_none()
+        && !matches!(aura_core::config_transition::pending(root.root()), Ok(None))
+    {
+        // Never repair an ambiguous active pointer to Local while managed files belong to a
+        // pending switch. The typed recovery state keeps the shell accessible and launches closed.
+        let Ok(id) = aura_core::config_transition::active_profile(root.root()) else {
+            booted.notices.push("The pending configuration switch requires its original profile pointer. Existing state was preserved.".into());
+            return booted;
+        };
+        match Profiles::new(root.clone()).get(&id) {
+            Ok(profile) => Some(profile),
+            Err(_) => {
+                booted.notices.push("The pending configuration switch's profile is unavailable. Existing state was preserved.".into());
+                return booted;
+            }
+        }
+    } else {
+        selected
+    };
     let profile = match selected
         .map(Ok)
         .unwrap_or_else(|| Profiles::new(root).open_active())

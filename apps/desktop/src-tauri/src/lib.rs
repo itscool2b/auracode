@@ -40,6 +40,7 @@ pub mod native_shell;
 pub mod onboarding;
 pub mod os;
 pub mod profile_commands;
+pub mod profile_config;
 pub mod reveal;
 pub mod search_commands;
 pub mod sessions;
