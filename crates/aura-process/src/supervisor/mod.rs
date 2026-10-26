@@ -115,40 +115,55 @@ where
         fixed: vec![read_task.abort_handle(), write_task.abort_handle()],
         periodic: None,
     };
-    let first = tokio::select! {
-        _ = stopping(&mut shutdown) => return Err(io::Error::new(io::ErrorKind::Interrupted, "supervisor stopped before launch")),
-        first = tokio::time::timeout(lease, commands.recv()) => first,
+    let Some(mut first) = setup_frame(&mut commands, &mut shutdown, lease).await? else {
+        return Ok(());
     };
-    let first = match first {
-        Ok(Some(Ok(Some(frame)))) => frame,
-        _ => return Err(invalid("supervisor expected its launch frame")),
-    };
+    let mut preparation = None;
     if first.tag == Tag::Inspect {
         let request: inspect::InspectRequest = first.decode()?;
         request.validate()?;
-        let env = context.env;
-        let task = tokio::task::spawn_blocking(move || inspect::inspect(&request, &env));
-        let result = tokio::time::timeout(lease, task)
-            .await
+        let env = Arc::clone(&context.env);
+        let task = tokio::task::spawn_blocking(move || inspect::Preparation::new(request, &env));
+        let result = tokio::select! {
+            _ = stopping(&mut shutdown) => return Err(io::Error::new(io::ErrorKind::Interrupted, "supervisor stopped during inspection")),
+            result = tokio::time::timeout(lease, task) => result,
+        }
             .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "host inspection timed out"))?
             .map_err(io::Error::other)??;
-        tokio::time::timeout(lease, output.send(Frame::json(Tag::Inspection, &result)?))
-            .await
-            .map_err(|_| {
-                io::Error::new(io::ErrorKind::TimedOut, "host inspection output stalled")
-            })??;
-        drop(output);
-        tokio::time::timeout(lease, &mut write_task)
-            .await
-            .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "host inspection output stalled"))?
-            .map_err(io::Error::other)?;
-        return Ok(());
+        tokio::time::timeout(
+            lease,
+            output.send(Frame::json(Tag::Inspection, result.response())?),
+        )
+        .await
+        .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "host inspection output stalled"))??;
+        preparation = Some(result);
+        // Keep the exact resolved login environment alive. A new connection cannot use this
+        // token, even if a second shell happens to report the same paths.
+        let Some(next) = setup_frame(&mut commands, &mut shutdown, lease).await? else {
+            return Ok(());
+        };
+        first = next;
     }
     if first.tag != Tag::Launch {
         return Err(invalid("supervisor expected its launch frame"));
     }
     let request: LaunchRequest = first.decode()?;
     request.validate()?;
+    if let Some(preparation) = preparation {
+        let env = Arc::clone(&context.env);
+        let launch = request.clone();
+        let task = tokio::task::spawn_blocking(move || preparation.verify(&launch, &env));
+        tokio::select! {
+            _ = stopping(&mut shutdown) => return Err(io::Error::new(io::ErrorKind::Interrupted, "supervisor stopped during preparation")),
+            result = tokio::time::timeout(lease, task) => result,
+        }
+            .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "host preparation timed out"))?
+            .map_err(io::Error::other)??;
+    } else if request.preparation.is_some() {
+        return Err(invalid(
+            "supervisor preparation requires inspection on this connection",
+        ));
+    }
     context.redactor.set_secrets(crate::secret_values(
         &request.set_env.effective(&context.env).vars,
     ));
@@ -292,6 +307,28 @@ where
         Err(io::Error::other(
             "supervisor could not confirm owned process cleanup",
         ))
+    }
+}
+
+async fn setup_frame(
+    commands: &mut mpsc::Receiver<io::Result<Option<Frame>>>,
+    shutdown: &mut Option<tokio::sync::watch::Receiver<bool>>,
+    lease: Duration,
+) -> io::Result<Option<Frame>> {
+    loop {
+        let next = tokio::select! {
+            _ = stopping(shutdown) => return Err(io::Error::new(io::ErrorKind::Interrupted, "supervisor stopped before launch")),
+            next = tokio::time::timeout(lease, commands.recv()) => next,
+        };
+        match next {
+            Ok(Some(Ok(Some(Frame {
+                tag: Tag::Heartbeat,
+                ..
+            })))) => {}
+            Ok(Some(Ok(Some(Frame { tag: Tag::Stop, .. })))) => return Ok(None),
+            Ok(Some(Ok(Some(frame)))) => return Ok(Some(frame)),
+            _ => return Err(invalid("supervisor expected its setup frame")),
+        }
     }
 }
 

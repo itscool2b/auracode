@@ -299,6 +299,12 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   spawning. All-target process Clippy passes; the focused regression executable compiled but Windows
   Application Control blocked execution (4551). Linux inspection/launch consistency remains a CI
   requirement. The bridge and deployment are still gated.
+- Supervisor protocol v2 now binds inspection and launch on one leased connection with a
+  preparation token. Final driver overrides are accepted only when canonical cwd, provider roots
+  and executable paths remain identical; stale tokens, changed realms and unreadable config roots
+  fail before process spawn. Seventeen focused Windows tests and all-target Clippy pass after an
+  ordinary Cargo retry. The Linux same-connection integration regression awaits CI; no WSL host
+  capability is enabled by this server-only checkpoint.
 - The Rust Linux supervisor endpoint now handles bounded control frames, raw agent lines, parent
   leases, EOF/signals, malformed input, queued-prompt disposal and redacted exit diagnostics through
   the existing process services. Read-only inspection supplies executable paths, canonical cwd and

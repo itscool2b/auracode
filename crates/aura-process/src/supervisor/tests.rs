@@ -15,6 +15,7 @@ fn request() -> LaunchRequest {
         program: "/usr/bin/agent".into(),
         args: vec!["stdio".into()],
         cwd: "/workspace".into(),
+        preparation: None,
         set_env: environment::LaunchEnvironment::default(),
         daemons: Vec::new(),
         max_line_bytes: 1024,
@@ -122,7 +123,7 @@ async fn launch_preserves_overrides_and_redacts_their_secret_values() {
     let ended = finish(&mut rig).await;
     assert!(!ended.stderr_tail.contains("a-private-test-override-value"));
     assert!(
-        ended.stderr_tail.contains("<REDACTED>"),
+        ended.stderr_tail.contains("<SECRET>"),
         "{}",
         ended.stderr_tail
     );
@@ -355,4 +356,113 @@ fn launch_validation_rejects_shell_relative_paths_and_unbounded_daemon_match() {
         args_in_order: Vec::new(),
     });
     assert!(invalid.validate().is_err());
+}
+
+#[tokio::test(start_paused = true)]
+async fn preparation_token_from_another_connection_never_spawns() {
+    let (spawner, mut agents) = FakeSpawner::new();
+    let (mut client, server) = tokio::io::duplex(4096);
+    let (reader, writer) = tokio::io::split(server);
+    let task = tokio::spawn(serve(reader, writer, context(spawner)));
+    let mut request = request();
+    request.preparation = Some(uuid::Uuid::now_v7().to_string());
+    wire::write_frame(
+        &mut client,
+        &Frame::json(Tag::Launch, &request).expect("frame"),
+    )
+    .await
+    .expect("write");
+    assert!(task.await.expect("join").is_err());
+    assert!(agents.try_recv().is_err());
+}
+
+#[tokio::test(start_paused = true)]
+async fn heartbeat_and_stop_before_launch_never_spawn() {
+    let (spawner, mut agents) = FakeSpawner::new();
+    let (mut client, server) = tokio::io::duplex(4096);
+    let (reader, writer) = tokio::io::split(server);
+    let task = tokio::spawn(serve(reader, writer, context(spawner)));
+    wire::write_frame(&mut client, &Frame::empty(Tag::Heartbeat))
+        .await
+        .expect("heartbeat");
+    wire::write_frame(&mut client, &Frame::empty(Tag::Stop))
+        .await
+        .expect("stop");
+    task.await.expect("join").expect("stopped");
+    assert!(agents.try_recv().is_err());
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn inspected_launch_uses_one_environment_and_rejects_a_changed_realm() {
+    use inspect::{InspectRequest, Prepared};
+    for change_realm in [false, true] {
+        let folder = tempfile::tempdir().expect("folder");
+        let (spawner, mut agents) = FakeSpawner::new();
+        let (mut client, server) = tokio::io::duplex(4096);
+        let (reader, writer) = tokio::io::split(server);
+        let mut context = context(spawner);
+        Arc::make_mut(&mut context.env).vars.insert(
+            crate::EnvKey::from("HOME"),
+            folder.path().as_os_str().to_owned(),
+        );
+        let task = tokio::spawn(serve(reader, writer, context));
+        let inspection = InspectRequest {
+            protocol: PROTOCOL_VERSION,
+            cwd: folder.path().to_string_lossy().into_owned(),
+            set_env: Default::default(),
+            executables: Vec::new(),
+        };
+        wire::write_frame(
+            &mut client,
+            &Frame::json(Tag::Inspect, &inspection).expect("frame"),
+        )
+        .await
+        .expect("inspect");
+        let frame = wire::read_frame(&mut client)
+            .await
+            .expect("read")
+            .expect("inspection");
+        assert_eq!(frame.tag, Tag::Inspection);
+        let prepared: Prepared = frame.decode().expect("prepared");
+        let mut launch = request();
+        launch.cwd = prepared.inspection.canonical_cwd.clone();
+        launch.preparation = Some(prepared.preparation);
+        launch
+            .set_env
+            .0
+            .push(("CLAUDE_CODE_SDK_READS_SESSION_STATE".into(), "1".into()));
+        if change_realm {
+            launch
+                .set_env
+                .0
+                .push(("CLAUDE_CONFIG_DIR".into(), "/other-config".into()));
+        }
+        wire::write_frame(
+            &mut client,
+            &Frame::json(Tag::Launch, &launch).expect("frame"),
+        )
+        .await
+        .expect("launch");
+        if change_realm {
+            assert!(task.await.expect("join").is_err());
+            assert!(agents.try_recv().is_err());
+        } else {
+            let ready = wire::read_frame(&mut client)
+                .await
+                .expect("read")
+                .expect("ready");
+            assert_eq!(ready.tag, Tag::Ready);
+            let agent = agents.recv().await.expect("agent");
+            assert_eq!(
+                agent.spec.env.vars[&crate::EnvKey::from("HOME")],
+                folder.path().as_os_str()
+            );
+            wire::write_frame(&mut client, &Frame::empty(Tag::Stop))
+                .await
+                .expect("stop");
+            while wire::read_frame(&mut client).await.expect("read").is_some() {}
+            task.await.expect("join").expect("serve");
+        }
+    }
 }

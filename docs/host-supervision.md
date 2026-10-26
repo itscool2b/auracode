@@ -18,7 +18,7 @@ process spawner, descendant tracking and leftover registry. The Linux environmen
 Provider configuration and credential contents are not inspected. Logs live under the explicit
 state directory, with the same redaction rules as native launches.
 
-Frames consist of a one-byte tag, a four-byte big-endian payload length, then that many bytes.
+Protocol version 2 frames consist of a one-byte tag, a four-byte big-endian payload length, then that many bytes.
 Control payloads are JSON and capped at 1 MiB. Agent stdin/stdout payloads are separate raw UTF-8
 frames, capped at the existing 64 MiB line limit, so JSON escaping cannot multiply their allocation.
 The output queue also has count and byte budgets. Malformed headers fail before payload allocation.
@@ -30,7 +30,7 @@ The output queue also has count and byte budgets. Malformed headers fail before 
 | CloseStdin | Ends only agent stdin, while ownership and the lease remain active. |
 | Heartbeat | Renews the 15-second parent lease. |
 | Stop | Stops accepting commands and shuts down the owned tree. Queued prompts are discarded. |
-| Inspect | Before launch only: resolves catalog executable names, cwd and known provider configuration roots from metadata. It exports no generic environment map and executes no discovered program. |
+| Inspect | Before launch only: resolves catalog executable names, cwd and known provider configuration roots from metadata, returning a connection-bound preparation token. It exports no generic environment map and executes no discovered program. |
 
 Ready identifies the owned Linux pid. Stdout and oversized-line keys retain their protocol meaning.
 Ended contains the direct exit, any unconfirmed leftovers, declared daemons spared, and a redacted
@@ -44,9 +44,12 @@ Inspection preserves Linux path case and resolves symlink aliases without readin
 It uses the same scrub-then-override environment as launch. Only `LaunchSpec.set_env` values may
 be sent from the parent; the Linux login environment is never exported. Override validation and
 Debug output omit values, and secret overrides join the Linux log redactor before process spawn.
-The bridge must bind inspection and launch to one connection and recheck the effective cwd and
-configuration realm after final driver overrides. Separate helper connections can resolve different
-login environments and must not authorize a previously inspected realm.
+The supervisor binds inspection and launch to one connection and rechecks effective cwd,
+configuration roots and executable paths after final driver overrides. A changed realm, changed
+symlink target or token from another connection rejects launch. Unreadable roots and dangling
+configuration symlinks fail inspection. Heartbeats keep preparation alive until launch; Stop
+discards it without starting an agent. The low-level unprepared Launch path is for endpoint tests
+and carries no host identity proof; the application bridge must always use preparation.
 The bridge must translate Windows drive paths using the actual distribution's `wslpath`, since
 custom automount settings can change the mount root. Do not assume `/mnt/c` or normalize Linux
 configuration roots with Windows case folding.

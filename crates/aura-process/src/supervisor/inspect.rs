@@ -44,7 +44,7 @@ impl InspectRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecutablePath {
     pub name: String,
     /// Keep the user's stable symlink as the launch path.
@@ -52,13 +52,71 @@ pub struct ExecutablePath {
     pub resolved_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HostInspection {
     pub protocol: u32,
     pub canonical_cwd: String,
     /// Known provider configuration roots only. Their spelling remains Linux case sensitive.
     pub config_roots: BTreeMap<String, String>,
     pub executables: Vec<ExecutablePath>,
+}
+
+/// Proof scoped to the current supervisor connection, not a reusable deployment capability.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Prepared {
+    pub preparation: String,
+    pub inspection: HostInspection,
+}
+
+pub(crate) struct Preparation {
+    request: InspectRequest,
+    prepared: Prepared,
+}
+
+impl Preparation {
+    pub(crate) fn new(request: InspectRequest, env: &ResolvedEnv) -> io::Result<Self> {
+        let inspection = inspect(&request, env)?;
+        Ok(Self {
+            request,
+            prepared: Prepared {
+                preparation: uuid::Uuid::now_v7().to_string(),
+                inspection,
+            },
+        })
+    }
+
+    pub(crate) fn response(&self) -> &Prepared {
+        &self.prepared
+    }
+
+    pub(crate) fn verify(
+        &self,
+        launch: &super::wire::LaunchRequest,
+        env: &ResolvedEnv,
+    ) -> io::Result<()> {
+        if launch.preparation.as_deref() != Some(self.prepared.preparation.as_str()) {
+            return Err(invalid(
+                "supervisor preparation does not match this connection",
+            ));
+        }
+        // Final driver flags may be added after discovery. Recompute the actual realm with all
+        // final overrides instead of assuming those flags cannot change HOME, PATH or a root.
+        let request = InspectRequest {
+            cwd: launch.cwd.clone(),
+            set_env: launch.set_env.clone(),
+            ..self.request.clone()
+        };
+        self.verify_snapshot(&inspect(&request, env)?)
+    }
+
+    fn verify_snapshot(&self, current: &HostInspection) -> io::Result<()> {
+        if current != &self.prepared.inspection {
+            return Err(invalid(
+                "supervisor host paths or configuration realm changed after inspection",
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// Blocking metadata work, called on the supervisor's blocking pool. No CLI or shell is started.
@@ -89,14 +147,30 @@ fn linux(request: &InspectRequest, env: &ResolvedEnv) -> io::Result<HostInspecti
             .ok_or_else(|| invalid("host path is not UTF-8"))
     }
     fn identity(path: PathBuf) -> io::Result<String> {
-        let path = path
-            .ancestors()
-            .find_map(|ancestor| {
-                std::fs::canonicalize(ancestor)
-                    .ok()
-                    .and_then(|root| path.strip_prefix(ancestor).ok().map(|tail| root.join(tail)))
-            })
-            .unwrap_or(path);
+        let mut canonical = None;
+        for ancestor in path.ancestors() {
+            match std::fs::canonicalize(ancestor) {
+                Ok(root) => {
+                    let tail = path.strip_prefix(ancestor).map_err(io::Error::other)?;
+                    canonical = Some(root.join(tail));
+                    break;
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    // A dangling symlink is not a missing lexical suffix. Its target realm is
+                    // unknown, so skipping it would falsely identify the alias as the root.
+                    match std::fs::symlink_metadata(ancestor) {
+                        Ok(_) => return Err(invalid("host configuration root cannot be resolved")),
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                        Err(_) => {
+                            return Err(invalid("host configuration root cannot be inspected"));
+                        }
+                    }
+                }
+                Err(_) => return Err(invalid("host configuration root cannot be inspected")),
+            }
+        }
+        let path =
+            canonical.ok_or_else(|| invalid("host configuration root cannot be resolved"))?;
         let mut normalized = PathBuf::new();
         for component in path.components() {
             match component {
@@ -160,6 +234,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn preparation_snapshot_rejects_changed_cwd_roots_and_executable_identity() {
+        let snapshot = HostInspection {
+            protocol: PROTOCOL_VERSION,
+            canonical_cwd: "/work".into(),
+            config_roots: [("claude".into(), "/home/user/.claude".into())].into(),
+            executables: vec![ExecutablePath {
+                name: "claude".into(),
+                launch_path: "/bin/claude".into(),
+                resolved_path: Some("/opt/claude-1".into()),
+            }],
+        };
+        let preparation = Preparation {
+            request: InspectRequest {
+                protocol: PROTOCOL_VERSION,
+                cwd: "/work".into(),
+                set_env: Default::default(),
+                executables: vec!["claude".into()],
+            },
+            prepared: Prepared {
+                preparation: uuid::Uuid::now_v7().to_string(),
+                inspection: snapshot.clone(),
+            },
+        };
+        preparation.verify_snapshot(&snapshot).expect("unchanged");
+        for field in ["cwd", "root", "executable"] {
+            let mut changed = snapshot.clone();
+            match field {
+                "cwd" => changed.canonical_cwd = "/other".into(),
+                "root" => {
+                    changed
+                        .config_roots
+                        .insert("claude".into(), "/other-config".into());
+                }
+                _ => changed.executables[0].resolved_path = Some("/opt/claude-2".into()),
+            }
+            assert!(preparation.verify_snapshot(&changed).is_err(), "{field}");
+        }
+    }
+
+    #[test]
     fn inspection_accepts_only_bounded_catalog_names_and_linux_folders() {
         let mut request = InspectRequest {
             protocol: PROTOCOL_VERSION,
@@ -216,5 +330,20 @@ mod tests {
         let body = serde_json::to_string(&result).expect("json");
         assert!(!body.contains("ANTHROPIC_API_KEY"));
         assert!(!body.contains("private-value"));
+
+        let dangling = dir.path().join("dangling");
+        std::os::unix::fs::symlink(dir.path().join("missing-target"), &dangling)
+            .expect("dangling alias");
+        let request = InspectRequest {
+            set_env: LaunchEnvironment(vec![(
+                "CODEX_HOME".into(),
+                dangling.to_string_lossy().into_owned(),
+            )]),
+            ..request
+        };
+        assert!(
+            inspect(&request, &env).is_err(),
+            "unknown target must not become a distinct realm"
+        );
     }
 }

@@ -10,7 +10,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use super::environment::LaunchEnvironment;
 use crate::{DaemonMatch, ExitInfo, MAX_LINE_BYTES};
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 const CONTROL_LIMIT: usize = 1024 * 1024;
 
 /// The parent explicitly requests one process. Environment values stay on the Linux host: the
@@ -22,6 +22,9 @@ pub struct LaunchRequest {
     pub program: String,
     pub args: Vec<String>,
     pub cwd: String,
+    /// An inspection on this same leased connection authorizes this launch's host realm.
+    #[serde(default)]
+    pub preparation: Option<String>,
     #[serde(default)]
     pub set_env: LaunchEnvironment,
     pub daemons: Vec<DaemonMatch>,
@@ -37,6 +40,10 @@ impl LaunchRequest {
             || !self.cwd.starts_with('/')
             || !plain(&self.program)
             || !plain(&self.cwd)
+            || self
+                .preparation
+                .as_ref()
+                .is_some_and(|id| uuid::Uuid::parse_str(id).is_err())
             || self.args.len() > 1024
             || self.args.iter().any(|arg| !plain(arg))
             || self.daemons.len() > 16
