@@ -663,6 +663,7 @@ pub enum DriverKind {
     Acp,
     Claude,
     Codex,
+    Headless,
     Mock,
 }
 

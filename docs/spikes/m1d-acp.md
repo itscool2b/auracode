@@ -18,6 +18,34 @@ remain pending.
 - [OMP 18.12.6 ACP source](https://github.com/can1357/oh-my-pi/blob/v18.12.6/packages/coding-agent/src/modes/acp/acp-agent.ts):
   `createAcpExtensionUiContext`, `elicitFormFromAcpClient`, `#requestAcpPlanApprovalChoice` and
   `#getAvailableModes`. This is a release tag, not moving main.
+- [Antigravity headless protocol](https://antigravity.google/docs/cli/headless/), observed
+  2026-10-26, with a 1.4.7 executable baseline. This documentation has no immutable revision.
+- [Grok headless protocol](https://github.com/xai-org/grok-build/blob/2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8/crates/codegen/xai-grok-pager/docs/user-guide/14-headless-mode.md),
+  pinned to source commit `2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8`; executable floor 1.0.70.
+
+## Catalog and restricted fallbacks
+
+The catalog adds vendor-named ACP launch recipes for Antigravity, Cursor, Grok, oh-my-pi and
+OpenCode V1/V2. Discovery runs only `--version`, enforces the documented minimum and major line
+where applicable, and labels these entries unverified. Cursor never probes an unrelated `agent`
+executable. Antigravity needs its complete official ACP distribution on PATH; auracode does not
+extract or substitute a lone archive member. OpenCode major lines qualify separately.
+
+`agy-stream` uses persistent JSONL input. It waits for the native conversation ID, sends each
+visible prompt in a `user` envelope, reconciles streamed response text with the final result and
+reports cumulative session usage. `grok-stream` starts one owned process per visible prompt with
+`-p` and a chosen `--session-id`, then `--resume` after the vendor confirms creation. Before that
+confirmation, readiness has no native ID, so stopping or failing the first prompt cannot save a
+fabricated resume target. Windows Grok requires a native executable because prompt text is an
+argument; shell shims are rejected. Its command-line prompt is limited to 12,000 UTF-16 units.
+
+Both fallbacks deliberately expose text and token totals only. They cannot enforce Ask/Auto-edit,
+show interactive approvals, change options, add folders or fork/rewind; those requests fail
+explicitly. They add no bypass flags and retain the user's CLI permission policy. Stop terminates
+only the owned process and closes the session. Malformed or oversized output stops safely, a
+missing terminal result ends the turn with an error, and EOF/exit cleanup remains bounded.
+Tool/thought/media details require the ACP entries. Install/authentication, exact binary identity
+and real transcript qualification are still pending for every new catalog entry.
 
 ## Deferred input contract
 
@@ -56,7 +84,9 @@ OMP boolean/choice/free-text conversion, unsupported types and unsupported const
 tests cover concurrent callbacks, out-of-order answers, withdrawal, late answers, turn-end cleanup,
 shutdown with an open approval, form capability advertisement and unsupported autonomy.
 
-The initial local Cargo check was blocked before compiling auracode by Windows Application Control
-(`os error 4551`) when executing newly compiled dependency build scripts. Rustfmt parsing and source
-checks are available; Rust tests and Clippy require a permitted build environment or repository CI.
-No policy settings or blocked binaries were changed to work around this restriction.
+The first build was blocked by Windows Application Control (`os error 4551`); a normal Cargo retry
+later succeeded without changing policy settings or blocked binaries. Agent discovery unit and fake
+tool integration tests pass. Driver tests cover fallback startup, explicit failure, identity
+confirmation, text reconciliation, token scope, oversized output and stop without dispatching queued
+work. The six native identity tests and core/driver all-target Clippy also pass. Synthetic tests are
+not a substitute for the pending authenticated vendor smoke tests.

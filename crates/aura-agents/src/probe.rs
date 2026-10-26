@@ -395,6 +395,39 @@ pub(crate) async fn detect(
                 }),
             }
         }
+        Recipe::QualifiedBinary {
+            program,
+            version_args,
+            min_version,
+            major,
+            ..
+        } => {
+            let Some(path) = find_program(program, &env.vars) else {
+                return Detection::missing(format!(
+                    "{program} was not found on your PATH. Install the official {} distribution first.",
+                    spec.name
+                ));
+            };
+            let printed = match probe(registry, env, &path, version_args, &home(env)).await {
+                Ok(printed) => printed,
+                Err(reason) => return Detection::broken(reason),
+            };
+            let version = match qualified_version(&printed, min_version, *major) {
+                Ok(version) => version,
+                Err(reason) => return Detection::broken(format!("{}: {reason}", spec.name)),
+            };
+            Detection {
+                availability: Availability::Ready {
+                    version: Some(format!("{} {version} (unverified)", spec.name)),
+                    path: path.display().to_string(),
+                },
+                needs_download: false,
+                located: Some(Located {
+                    program: path,
+                    node: None,
+                }),
+            }
+        }
         Recipe::NpmAdapter {
             package,
             version,
@@ -472,6 +505,28 @@ pub(crate) async fn detect(
             }
         }
     }
+}
+
+/// Protocol baselines are deliberately separate for OpenCode's incompatible major lines.
+fn qualified_version(printed: &str, floor: &str, major: Option<u64>) -> Result<String, String> {
+    let version = parse_version(printed)
+        .ok_or_else(|| "the version command did not identify a supported version".to_owned())?;
+    let found_major = version
+        .split('.')
+        .next()
+        .and_then(|value| value.parse::<u64>().ok());
+    if major.is_some() && major != found_major {
+        return Err(format!(
+            "this catalog entry requires the {}.x release line; found {version}",
+            major.unwrap_or_default()
+        ));
+    }
+    if !version_at_least(&version, floor) {
+        return Err(format!(
+            "requires the {floor} protocol baseline or newer; found {version}"
+        ));
+    }
+    Ok(version)
 }
 
 #[cfg(test)]

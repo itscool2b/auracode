@@ -20,6 +20,7 @@ pub mod claude;
 pub mod codex;
 pub mod driver;
 pub mod factory;
+pub mod headless;
 pub mod jsonrpc;
 pub mod mock;
 pub mod mock_driver;

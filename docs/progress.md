@@ -257,6 +257,11 @@ Windows. No real agent configuration or credentials were read or changed.
   when reported, holding queued work until its checked database write succeeds. Existing drivers
   retain their known IDs. Regressions cover two initially anonymous sessions, failed first prompts,
   restart without a resume target and the durable save barrier for an initially absent ID.
+- M1d catalog adds Antigravity, Cursor, Grok, oh-my-pi and separate OpenCode major lines, plus
+  restricted agy/Grok text fallbacks. Version-qualified discovery never probes generic `agent`.
+  ACP/fallback ownership aliases are shared. Agent tests (24 unit, 20 discovery, six installation)
+  and 357 driver unit tests, four schema checks and three fixture replay integration tests pass.
+  Install/authentication and real vendor acceptance remain pending; no paid prompts were run.
 
 - Rust owns backend logic. TypeScript remains for React and necessary platform/build glue.
 - D1 and Cloudflare Email Service replace Neon/Postgres, Neon Auth, Hyperdrive, and Resend.
