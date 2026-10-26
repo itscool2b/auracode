@@ -231,7 +231,12 @@ impl LiveAgents {
         chat: &str,
     ) -> bool {
         let mut inner = self.lock();
-        let key = (scope.clone(), native_session_id.to_owned());
+        // UUID spelling (case, hyphens) must not create another claim for one native transcript.
+        // Non-UUID IDs remain opaque for providers with a different identifier format.
+        let identity = uuid::Uuid::parse_str(native_session_id)
+            .map(|id| id.to_string())
+            .unwrap_or_else(|_| native_session_id.to_owned());
+        let key = (scope.clone(), identity);
         match inner.sessions.get(&key) {
             Some(holder) if holder != chat => false,
             _ => {
@@ -309,6 +314,19 @@ mod tests {
         );
         live.release("a");
         assert!(live.claim(&claude, "s1", "b"));
+    }
+
+    #[test]
+    fn uuid_spelling_does_not_create_another_native_session() {
+        let live = LiveAgents::new(12);
+        let claude = scope("claude", "local", &[]);
+        assert!(live.claim(&claude, "019abcde-0000-7000-8000-000000000001", "one"));
+        assert!(!live.claim(&claude, "019ABCDE000070008000000000000001", "two"));
+        assert!(live.claim(&claude, "s1", "one"));
+        assert!(
+            live.claim(&claude, "S1", "two"),
+            "other identifiers stay opaque"
+        );
     }
 
     #[test]

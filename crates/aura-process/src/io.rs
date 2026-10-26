@@ -77,6 +77,13 @@ impl LineSink {
     pub fn is_closed(&self) -> bool {
         self.closed.load(Ordering::Acquire) || self.tx.is_closed()
     }
+
+    /// Wait until the writer has stopped receiving queued lines, including asynchronous EPIPE
+    /// after `send` succeeded. Cancel-safe for a driver's select loop. After an intentional close,
+    /// this resolves when the writer drains its queue and exits, not when `close` is called.
+    pub async fn writer_closed(&self) {
+        self.tx.closed().await;
+    }
 }
 
 /// The agent's stdin no longer takes lines.
@@ -266,6 +273,22 @@ mod tests {
         let (sink, rx) = LineSink::channel();
         drop(rx);
         assert_eq!(sink.send("x".into()), Err(StdinClosed));
+        assert!(sink.is_closed());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_writer_failure_wakes_waiters_after_a_cancelled_wait() {
+        let (sink, rx) = LineSink::channel();
+        sink.send("queued before failure".into()).unwrap();
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(1), sink.writer_closed())
+                .await
+                .is_err()
+        );
+        drop(rx);
+        tokio::time::timeout(std::time::Duration::from_millis(1), sink.writer_closed())
+            .await
+            .unwrap();
         assert!(sink.is_closed());
     }
 
