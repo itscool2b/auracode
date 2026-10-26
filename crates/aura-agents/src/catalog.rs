@@ -41,6 +41,15 @@ pub enum Recipe {
         version_args: &'static [&'static str],
         min_version: Option<&'static str>,
     },
+    /// A vendor-named executable with a protocol baseline and an optional major line boundary.
+    /// In particular, Cursor never probes an unrelated executable named `agent`.
+    QualifiedBinary {
+        program: &'static str,
+        args: &'static [&'static str],
+        version_args: &'static [&'static str],
+        min_version: &'static str,
+        major: Option<u64>,
+    },
     /// The user's CLI directly, with an explicit executable override and a required version.
     /// Windows shell shims are rejected; no adapter or package installation is involved.
     NativeBinary {
@@ -196,6 +205,118 @@ fn build_catalog() -> Vec<AgentSpec> {
             daemons: Vec::new(),
             last_verified: "adapter 2.2.2 with Codex 0.164.0",
         },
+        acp_binary(
+            "antigravity",
+            "Antigravity",
+            "Google's separate ACP server. Install its complete official distribution and add it to PATH.",
+            "antigravity",
+            if cfg!(windows) {
+                "agy_acp_server"
+            } else {
+                "agy_acp_server.par"
+            },
+            if cfg!(target_os = "linux") {
+                &["--uid="]
+            } else {
+                &[]
+            },
+            "1.4.3",
+            Some(1),
+        ),
+        acp_binary(
+            "cursor",
+            "Cursor",
+            "Cursor CLI through ACP. Sign in using your own cursor-agent login.",
+            "cursor",
+            "cursor-agent",
+            &["acp"],
+            "2026.10.22",
+            None,
+        ),
+        acp_binary(
+            "grok",
+            "Grok Build",
+            "Your Grok Build CLI through its ACP server.",
+            "grok",
+            "grok",
+            &["agent", "stdio"],
+            "1.0.70",
+            Some(1),
+        ),
+        acp_binary(
+            "omp",
+            "oh-my-pi",
+            "oh-my-pi through ACP, with explicit extension dialogs and plan approval.",
+            "omp",
+            "omp",
+            &["acp"],
+            "18.12.6",
+            Some(18),
+        ),
+        acp_binary(
+            "opencode",
+            "OpenCode V1",
+            "OpenCode 1.x through ACP; qualified separately from V2.",
+            "opencode",
+            "opencode",
+            &["acp"],
+            "1.19.4",
+            Some(1),
+        ),
+        acp_binary(
+            "opencode-v2",
+            "OpenCode V2",
+            "OpenCode 2.x through ACP; qualified separately from V1.",
+            "opencode-v2",
+            "opencode",
+            &["acp"],
+            "2.1.4",
+            Some(2),
+        ),
+        AgentSpec {
+            id: "agy-stream",
+            name: "Antigravity (text fallback)",
+            description: "Restricted text transport. No interactive approvals; Stop ends the owned process.",
+            kind: DriverKind::Headless,
+            dialect: "agy-stream",
+            recipe: Recipe::QualifiedBinary {
+                program: "agy",
+                args: &[
+                    "--input-format",
+                    "stream-json",
+                    "--output-format",
+                    "stream-json",
+                ],
+                version_args: &["--version"],
+                min_version: "1.4.7",
+                major: Some(1),
+            },
+            startup_timeout: START_TIMEOUT,
+            turns_survive_process: false,
+            daemons: Vec::new(),
+            last_verified: "Unverified: documented stream contract only",
+        },
+        AgentSpec {
+            id: "grok-stream",
+            name: "Grok Build (text fallback)",
+            description: "One owned process per visible prompt. No interactive approvals; Stop ends the process.",
+            kind: DriverKind::Headless,
+            dialect: "grok-stream",
+            recipe: Recipe::NativeBinary {
+                user_binary: UserBinary {
+                    label: "Grok Build",
+                    program: "grok",
+                    env: "GROK_EXECUTABLE",
+                    version_args: &["--version"],
+                    min_version: "1.0.70",
+                },
+                args: &["--output-format", "streaming-json"],
+            },
+            startup_timeout: START_TIMEOUT,
+            turns_survive_process: false,
+            daemons: Vec::new(),
+            last_verified: "Unverified: pinned source contract only",
+        },
         AgentSpec {
             id: "mock",
             name: "Demo agent (scripted, no AI)",
@@ -209,6 +330,40 @@ fn build_catalog() -> Vec<AgentSpec> {
             last_verified: "auracode",
         },
     ]
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one declarative row per catalog entry"
+)]
+fn acp_binary(
+    id: &'static str,
+    name: &'static str,
+    description: &'static str,
+    dialect: &'static str,
+    program: &'static str,
+    args: &'static [&'static str],
+    min_version: &'static str,
+    major: Option<u64>,
+) -> AgentSpec {
+    AgentSpec {
+        id,
+        name,
+        description,
+        kind: DriverKind::Acp,
+        dialect,
+        recipe: Recipe::QualifiedBinary {
+            program,
+            args,
+            version_args: &["--version"],
+            min_version,
+            major,
+        },
+        startup_timeout: START_TIMEOUT,
+        turns_survive_process: false,
+        daemons: Vec::new(),
+        last_verified: "Unverified: documentation and synthetic protocol tests only",
+    }
 }
 
 /// The first `x.y.z` in `text` (a leading `v` is allowed and dropped): `"Claude Code 2.1.310"` gives
@@ -274,7 +429,24 @@ mod tests {
     #[test]
     fn the_catalog_lists_native_claude_before_its_compatibility_adapter() {
         let ids: Vec<&str> = catalog().iter().map(|spec| spec.id).collect();
-        assert_eq!(ids, ["hermes", "claude", "claude-acp", "codex-acp", "mock"]);
+        assert_eq!(
+            ids,
+            [
+                "hermes",
+                "claude",
+                "claude-acp",
+                "codex-acp",
+                "antigravity",
+                "cursor",
+                "grok",
+                "omp",
+                "opencode",
+                "opencode-v2",
+                "agy-stream",
+                "grok-stream",
+                "mock"
+            ]
+        );
         assert_eq!(ids.iter().collect::<HashSet<_>>().len(), ids.len());
         assert_eq!(get("codex-acp").map(|spec| spec.name), Some("Codex (ACP)"));
         assert!(get("agent").is_none());

@@ -661,6 +661,7 @@ pub enum AutoAnswer {
 pub enum DriverKind {
     Acp,
     Claude,
+    Headless,
     Mock,
 }
 

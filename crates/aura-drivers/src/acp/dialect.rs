@@ -140,7 +140,11 @@ impl AcpDialect for Vendor {
         }
     }
     fn prompt_usage_scope(&self) -> UsageScope {
-        UsageScope::Session
+        if matches!(self.0, "omp" | "grok") {
+            UsageScope::Turn
+        } else {
+            UsageScope::Session
+        }
     }
     fn form_elicitation(&self) -> bool {
         self.0 == "omp"
@@ -612,6 +616,11 @@ mod tests {
             ("hermes", UsageScope::Session, true, true),
             ("claude-acp", UsageScope::Turn, false, false),
             ("codex-acp", UsageScope::Turn, false, false),
+            ("omp", UsageScope::Turn, false, false),
+            ("grok", UsageScope::Turn, false, false),
+            ("cursor", UsageScope::Session, false, false),
+            ("antigravity", UsageScope::Session, false, false),
+            ("opencode-v2", UsageScope::Session, false, false),
             ("generic", UsageScope::Session, false, false),
             ("some-new-agent", UsageScope::Session, false, false),
         ] {
