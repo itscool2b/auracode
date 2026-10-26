@@ -1221,7 +1221,7 @@ async fn set_autonomy_replies_with_the_state_and_a_hand_picked_mode_turns_auto_a
             requested: Autonomy::Ask,
             native_mode: Some("default".into()),
             auto_answer: AutoAnswer::Never,
-            note: None
+            note: Some(dialect::HERMES_ASK_NOTE.into())
         }
     );
 
@@ -1245,12 +1245,16 @@ async fn set_autonomy_replies_with_the_state_and_a_hand_picked_mode_turns_auto_a
             note: Some("You picked the Accept Edits mode by hand, so auracode asks before every action. Choose an autonomy level to hand control back.".into()),
         }]
     );
-    // Back to the candidate's mode: restored.
+    // Back to the candidate's mode: restored, with the candidate's own note instead of the hand
+    // pick's.
     harness.update(json!({"sessionUpdate": "current_mode_update", "currentModeId": "default"}));
     let events = harness
         .events_until(|event| matches!(event, DriverEvent::Autonomy(_)))
         .await;
-    assert_eq!(autonomy_of(&events)[0].note, None);
+    assert_eq!(
+        autonomy_of(&events)[0].note.as_deref(),
+        Some(dialect::HERMES_ASK_NOTE)
+    );
 }
 
 // ---- options -----------------------------------------------------------------------------------
@@ -1880,7 +1884,12 @@ async fn set_autonomy_takes_effect_at_once_and_its_mode_change_follows_in_order(
     // Lowering to Ask: the policy changes now, in the reply; the mode change waits its turn.
     assert_eq!(
         answered_now(set_autonomy(&harness, Autonomy::Ask)).await,
-        Ok(state(Autonomy::Ask, "default", AutoAnswer::Never, None))
+        Ok(state(
+            Autonomy::Ask,
+            "default",
+            AutoAnswer::Never,
+            Some(dialect::HERMES_ASK_NOTE.into())
+        ))
     );
     harness.no_line();
     harness.reply(&set_model, json!({}));
@@ -2002,7 +2011,12 @@ async fn a_set_autonomy_nobody_waits_for_is_announced() {
     let (_, announced) = next_autonomy(&mut harness).await;
     assert_eq!(
         announced,
-        state(Autonomy::Ask, "default", AutoAnswer::Never, None)
+        state(
+            Autonomy::Ask,
+            "default",
+            AutoAnswer::Never,
+            Some(dialect::HERMES_ASK_NOTE.into())
+        )
     );
 }
 

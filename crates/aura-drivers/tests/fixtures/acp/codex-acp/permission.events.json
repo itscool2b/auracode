@@ -2719,7 +2719,7 @@
           "auto_answer": {
             "type": "never"
           },
-          "note": null
+          "note": "Codex works read-only and asks when it needs to write or go online. A model may stop and say so instead of asking."
         }
       }
     }

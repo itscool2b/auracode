@@ -266,7 +266,7 @@
           "auto_answer": {
             "type": "never"
           },
-          "note": null
+          "note": "Hermes asks before it edits files. Shell commands go to its own safety check first, which can run harmless ones without asking."
         }
       }
     }
