@@ -254,6 +254,18 @@ directories after the resolved PATH; npm prefix input is bounded to 64 KiB. Agen
 (287 with 19 existing skips), typecheck, bindings export and targeted all-target Clippy pass locally.
 WSL launch/cleanup, update/auth helpers, remote version caching and milestone acceptance remain open.
 
+Explicit `agent-auth <id>` and `agent-update <id>` commands now use the user's detected vendor binary
+and reviewed channel-specific argument vectors. Claude/Codex auth responses are reduced to local
+credentials-present, sign-in-required or unknown; account details are discarded. Updates reject
+bundled/unknown installs and local npm dependencies, serialize provider aliases, invalidate cached
+metadata and verify the resulting binary. Login command plans await the terminal sheet. Two fake
+maintenance integration tests, nine CLI parser tests and all-target agent/CLI Clippy pass locally.
+Windows Application Control blocked the newly linked agent unit-test executable (4551); those new
+pure cases require CI. No real auth, login, update or paid prompt was run for this checkpoint.
+The auth contracts are from [Claude's CLI reference](https://code.claude.com/docs/en/cli-reference),
+installed CLI help, and [Codex 0.162.1 login source](https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/cli/src/login.rs).
+Corrected M1c head `887ad12` passed full [Linux/Windows CI](https://github.com/itscool2b/auracode/actions/runs/40281970244).
+
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
   no-form plan auto-approval path and exposes only its enforceable Full auto autonomy. See

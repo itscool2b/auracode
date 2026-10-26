@@ -20,6 +20,7 @@ pub mod hosts;
 mod install;
 pub mod installation;
 mod launch;
+pub mod maintenance;
 mod probe;
 mod shared;
 

@@ -108,6 +108,16 @@ pub struct AgentInstallation {
     pub verification: VersionVerification,
 }
 
+/// The vendor's own local authentication check. This does not promise a successful paid request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum AgentAuthStatus {
+    CredentialsPresent,
+    SignInRequired,
+    Unknown { reason: String },
+    Unsupported,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -83,6 +83,32 @@ fn run(name: &str, args: &[String]) -> Result<ExitCode> {
     record(name, args)?;
     let mode = setting(name, "mode").unwrap_or_else(|| "ok".into());
     match (name, args.first().map(String::as_str)) {
+        ("claude", Some("auth")) | ("codex", Some("login")) => {
+            if setting(name, "maintenance").as_deref() == Some("fail") {
+                eprintln!("Error checking login status: private diagnostic");
+                return Ok(ExitCode::FAILURE);
+            }
+            if name == "claude" {
+                println!(
+                    "{{\"loggedIn\":true,\"email\":\"private@example.test\",\"token\":\"discard\"}}"
+                );
+            } else {
+                eprintln!("Logged in using ChatGPT");
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        ("claude" | "codex", Some("update")) => {
+            match setting(name, "maintenance").as_deref() {
+                Some("slow") => std::thread::sleep(Duration::from_millis(500)),
+                Some("fail") => return Ok(ExitCode::FAILURE),
+                Some("break-version") => {
+                    std::fs::write(fake_dir()?.join(format!("{name}.version")), "unknown")?
+                }
+                _ => {}
+            }
+            println!("Updated");
+            Ok(ExitCode::SUCCESS)
+        }
         ("npm", _) => npm(&mode),
         (_, Some("--version")) => version(name, &mode),
         ("node", Some(entry)) => {

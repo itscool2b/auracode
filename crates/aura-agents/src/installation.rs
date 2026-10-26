@@ -59,6 +59,14 @@ pub fn classify_channel(agent_id: &str, resolved_path: &str) -> InstallChannel {
         .collect();
     let lower: Vec<_> = parts.iter().map(|part| part.to_ascii_lowercase()).collect();
     // Bundled paths take precedence over nested npm/Homebrew-looking subdirectories.
+    if lower
+        .windows(3)
+        .any(|parts| parts == ["programs", "openai", "codex"])
+    {
+        return InstallChannel::Bundled {
+            application: "Codex Desktop".into(),
+        };
+    }
     if let Some(application) = parts.iter().zip(&lower).find_map(|(original, lower)| {
         lower
             .ends_with(".app")

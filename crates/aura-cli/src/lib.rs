@@ -116,7 +116,11 @@ pub fn main_with(args: impl IntoIterator<Item = OsString>) -> ExitCode {
         Command::Replay(replay_args) => {
             paused_runtime().and_then(|rt| rt.block_on(replay::run(replay_args, &out)))
         }
-        Command::Agents | Command::Probe(_) | Command::Smoke(_) => {
+        Command::Agents
+        | Command::AgentAuth(_)
+        | Command::AgentUpdate(_)
+        | Command::Probe(_)
+        | Command::Smoke(_) => {
             runtime().and_then(|rt| rt.block_on(run_headless(&invocation, &out)))
         }
     };
@@ -259,6 +263,32 @@ async fn command(
 ) -> Result<Outcome, CliError> {
     match &invocation.command {
         Command::Agents => agents::run(headless, out).await,
+        Command::AgentAuth(id) => {
+            if headless.detector.spec(id).is_none() {
+                return Err(unknown_agent(headless, id));
+            }
+            let status = headless.detector.auth_status(id).await;
+            let (message, outcome) = match status {
+                aura_protocol::agents::AgentAuthStatus::CredentialsPresent => ("The vendor reports local credentials present; request authorization has not been checked.".to_owned(), Outcome::Passed),
+                aura_protocol::agents::AgentAuthStatus::SignInRequired => ("The vendor reports sign-in is required.".to_owned(), Outcome::Failed),
+                aura_protocol::agents::AgentAuthStatus::Unknown { reason } => (reason, Outcome::Failed),
+                aura_protocol::agents::AgentAuthStatus::Unsupported => ("This agent has no supported standalone authentication check.".to_owned(), Outcome::Failed),
+            };
+            out.line(message);
+            Ok(outcome)
+        }
+        Command::AgentUpdate(id) => {
+            if headless.detector.spec(id).is_none() {
+                return Err(unknown_agent(headless, id));
+            }
+            headless
+                .detector
+                .update(id)
+                .await
+                .map_err(|error| CliError::Message(error.to_string()))?;
+            out.line("The vendor update completed. Agent detection has been refreshed.");
+            Ok(Outcome::Passed)
+        }
         Command::Probe(args) => {
             let (folder, hostile) = match &args.folder {
                 Some(folder) => (headless::absolute(folder)?, false),

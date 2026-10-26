@@ -18,6 +18,7 @@
 //! preparation at a [`Gate`]; the detector records every [`Detector::forget_install`].
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -68,11 +69,23 @@ struct Live {
 
 #[derive(Default)]
 struct LiveState {
+    maintenance: HashSet<String>,
+    minimum_generation: HashMap<String, u64>,
     /// Each agent's latest detection, with the generation of the probe that made it.
     results: HashMap<String, (u64, Detection)>,
     probes: HashMap<String, Probe>,
     installs: HashMap<String, Install>,
     generation: u64,
+}
+
+struct MaintenanceGuard {
+    live: Arc<Live>,
+    provider: String,
+}
+impl Drop for MaintenanceGuard {
+    fn drop(&mut self) {
+        lock(&self.live.state).maintenance.remove(&self.provider);
+    }
 }
 
 impl std::fmt::Debug for Live {
@@ -106,7 +119,13 @@ impl Live {
                 .results
                 .get(spec.id)
                 .is_some_and(|(known, _)| *known > generation);
-            if !newer {
+            let provider = crate::installation::provider_namespace(spec.id);
+            let invalidated = state
+                .minimum_generation
+                .get(provider)
+                .is_some_and(|minimum| generation < *minimum)
+                || state.maintenance.contains(provider);
+            if !newer && !invalidated {
                 state
                     .results
                     .insert(spec.id.to_owned(), (generation, detection.clone()));
@@ -559,6 +578,98 @@ impl Fixed {
 }
 
 impl Detector {
+    /// Runs the vendor's local status command and retains only a coarse status, never account data.
+    pub async fn auth_status(&self, id: &str) -> aura_protocol::agents::AgentAuthStatus {
+        use aura_protocol::agents::AgentAuthStatus;
+        let Mode::Live(live) = &self.mode else {
+            return AgentAuthStatus::Unsupported;
+        };
+        let Some(spec) = self.spec(id) else {
+            return AgentAuthStatus::Unsupported;
+        };
+        let Some(installation) = live.detect(&spec).await.installation else {
+            return AgentAuthStatus::Unknown {
+                reason: "The agent installation is not ready.".into(),
+            };
+        };
+        let command = match crate::maintenance::auth_command(&installation) {
+            Ok(command) => command,
+            Err(_) => return AgentAuthStatus::Unsupported,
+        };
+        if crate::maintenance::check_unchanged(&installation).is_err() {
+            return AgentAuthStatus::Unknown {
+                reason: "The installation changed. Refresh agents.".into(),
+            };
+        }
+        match crate::maintenance::run(
+            command,
+            live.env.get().await,
+            &live.registry,
+            crate::PROBE_TIMEOUT,
+        )
+        .await
+        {
+            Ok(output) => crate::maintenance::auth_status(&installation.provider, &output),
+            Err(error) => AgentAuthStatus::Unknown {
+                reason: error.to_string(),
+            },
+        }
+    }
+
+    /// Explicit user action only. Serialize aliases of one provider and invalidate detection even
+    /// on failure, because a vendor installer may have partially changed its files.
+    pub async fn update(&self, id: &str) -> Result<(), crate::maintenance::MaintenanceError> {
+        use crate::maintenance::{self, MaintenanceError};
+        let Mode::Live(live) = &self.mode else {
+            return Err(MaintenanceError::Unsupported);
+        };
+        let spec = self.spec(id).ok_or(MaintenanceError::Unsupported)?;
+        let provider = crate::installation::provider_namespace(id).to_owned();
+        if !lock(&live.state).maintenance.insert(provider.clone()) {
+            return Err(MaintenanceError::AlreadyRunning);
+        }
+        let guard = MaintenanceGuard {
+            live: Arc::clone(live),
+            provider: provider.clone(),
+        };
+        let installation = live
+            .probe(&spec, true)
+            .wait()
+            .await
+            .and_then(|detected| detected.installation)
+            .ok_or(MaintenanceError::Changed)?;
+        let env = live.env.get().await;
+        let command = maintenance::update_command(&installation, &env.vars)?;
+        maintenance::check_unchanged(&installation)?;
+        // Drop cached aliases before starting so cancellation cannot leave stale metadata.
+        {
+            let mut state = lock(&live.state);
+            state.generation += 1;
+            let floor = state.generation;
+            state.minimum_generation.insert(provider.clone(), floor);
+            state
+                .results
+                .retain(|id, _| crate::installation::provider_namespace(id) != provider);
+        }
+        let output = maintenance::run(command, env, &live.registry, crate::INSTALL_TIMEOUT).await?;
+        if output.timed_out {
+            return Err(MaintenanceError::TimedOut);
+        }
+        let code = output.exit.and_then(|exit| exit.code);
+        if code != Some(0) {
+            return Err(MaintenanceError::Failed(code));
+        }
+        drop(guard);
+        if !live
+            .probe(&spec, true)
+            .wait()
+            .await
+            .is_some_and(|detected| matches!(detected.availability, Availability::Ready { .. }))
+        {
+            return Err(MaintenanceError::VerificationFailed);
+        }
+        Ok(())
+    }
     /// Detects the catalog's agents. Detection starts in the background on `rt` at once and probes
     /// once the env resolves; `adapters_dir` is `<data root>/adapters`.
     pub fn new(

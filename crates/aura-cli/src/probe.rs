@@ -691,7 +691,10 @@ impl Probe<'_> {
                     ),
                 );
             }
-            Recipe::Binary { .. } | Recipe::NativeBinary { .. } | Recipe::Builtin => self
+            Recipe::Binary { .. }
+            | Recipe::QualifiedBinary { .. }
+            | Recipe::NativeBinary { .. }
+            | Recipe::Builtin => self
                 .report
                 .pass(step, "nothing ran the hostile chat folder's fake adapters"),
         }
@@ -1820,7 +1823,10 @@ pub fn adapter_folder(headless: &Headless, spec: &AgentSpec) -> Option<PathBuf> 
             "{}-{version}",
             package.trim_start_matches('@').replace('/', "-")
         ))),
-        Recipe::Binary { .. } | Recipe::NativeBinary { .. } | Recipe::Builtin => None,
+        Recipe::Binary { .. }
+        | Recipe::QualifiedBinary { .. }
+        | Recipe::NativeBinary { .. }
+        | Recipe::Builtin => None,
     }
 }
 
