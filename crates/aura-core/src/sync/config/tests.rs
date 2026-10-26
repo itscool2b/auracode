@@ -6,7 +6,7 @@ use crate::{
 use std::sync::Arc;
 
 #[test]
-fn device_rebinding_reissues_config_header_and_blob_without_losing_old_review_snapshot() {
+fn device_rebinding_reissues_sender_without_promoting_config_edit_or_replacing_blob() {
     let (_temp, mut store, context) = fixture();
     let id = "a".repeat(64);
     let old = publish_one(&mut store, &context, &id, None, b"retained config snapshot");
@@ -30,8 +30,8 @@ fn device_rebinding_reissues_config_header_and_blob_without_losing_old_review_sn
         "replacement-device"
     );
     let payload = decode(&current, &record).unwrap();
-    assert_eq!(payload.head.revision, record.hlc);
-    assert_ne!(payload.head.blob_id, old.blob_id);
+    assert_ne!(payload.head.revision, record.hlc);
+    assert_eq!(payload.head, old);
     assert_eq!(
         &*read_snapshot(store.conn(), &current, &id, &payload.head).unwrap(),
         b"retained config snapshot"
@@ -49,6 +49,171 @@ fn device_rebinding_reissues_config_header_and_blob_without_losing_old_review_sn
         )
         .unwrap();
     assert_eq!(uploaded, 0);
+    let count: i64 = store
+        .conn()
+        .query_row("SELECT COUNT(*) FROM sync_blobs", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+fn rebound(store: &mut Store, context: &SyncContext, now: u64) -> SyncContext {
+    let mut current = context.clone();
+    current.identity.device = "replacement-device".into();
+    let mut clock = Clock::new(&current.identity.device).unwrap();
+    let tx = store.conn_mut().transaction().unwrap();
+    crate::sync::rebind::outgoing_for_device(&tx, &current.identity, &current.key, &mut clock, now)
+        .unwrap();
+    tx.execute(
+        "UPDATE sync_state SET device_id=?1,last_hlc=?2",
+        params![current.identity.device, clock.last().to_string()],
+    )
+    .unwrap();
+    tx.commit().unwrap();
+    current
+}
+
+#[test]
+fn later_remote_config_edit_wins_over_recovered_old_pending_transport() {
+    let (_temp, mut source, source_context) = fixture();
+    let (_other, mut remote, remote_context) =
+        fixture_with(source_context.key.clone(), "remote-device");
+    let id = "b".repeat(64);
+    let old = publish_one(
+        &mut source,
+        &source_context,
+        &id,
+        None,
+        b"old pending config",
+    );
+    let wire = validate_id(&source_context, &id).unwrap();
+    let original = head(source.conn(), "config", &wire).unwrap().unwrap();
+    let now = crate::time::now_millis() as u64;
+    SyncLedger::new(
+        &mut remote,
+        remote_context.identity.clone(),
+        &remote_context.key,
+    )
+    .unwrap()
+    .accept_pull(&page(original, 1), now, |_, _, _| unreachable!())
+    .unwrap();
+    let newer = publish_one(
+        &mut remote,
+        &remote_context,
+        &id,
+        Some(old.revision.clone()),
+        b"new remote config",
+    );
+    let remote_record = head(remote.conn(), "config", &wire).unwrap().unwrap();
+    let current = rebound(&mut source, &source_context, now + 1000);
+    let recovered = head(source.conn(), "config", &wire).unwrap().unwrap();
+    assert!(recovered.hlc > remote_record.hlc);
+    SyncLedger::new(&mut source, current.identity.clone(), &current.key)
+        .unwrap()
+        .accept_pull(
+            &page(remote_record, 1),
+            now + 1000,
+            |_, _, _| unreachable!(),
+        )
+        .unwrap();
+    assert_eq!(
+        read_head(source.conn(), &current, &id)
+            .unwrap()
+            .unwrap()
+            .head,
+        newer
+    );
+    assert_eq!(
+        source
+            .conn()
+            .query_row("SELECT COUNT(*) FROM sync_outbox", [], |row| row
+                .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        &*read_snapshot(source.conn(), &current, &id, &old).unwrap(),
+        b"old pending config"
+    );
+}
+
+#[test]
+fn newer_content_reseals_as_current_sender_against_stale_content_with_later_transport() {
+    let (_temp, mut source, source_context) = fixture();
+    let (_other, mut remote, remote_context) =
+        fixture_with(source_context.key.clone(), "remote-device");
+    let id = "b".repeat(64);
+    let old = publish_one(
+        &mut source,
+        &source_context,
+        &id,
+        None,
+        b"old pending config",
+    );
+    let wire = validate_id(&source_context, &id).unwrap();
+    let original = head(source.conn(), "config", &wire).unwrap().unwrap();
+    let now = crate::time::now_millis() as u64;
+    SyncLedger::new(
+        &mut remote,
+        remote_context.identity.clone(),
+        &remote_context.key,
+    )
+    .unwrap()
+    .accept_pull(&page(original, 1), now, |_, _, _| unreachable!())
+    .unwrap();
+    let newer = publish_one(
+        &mut remote,
+        &remote_context,
+        &id,
+        Some(old.revision.clone()),
+        b"new remote config",
+    );
+    rebound(&mut source, &source_context, now + 1000);
+    let stale = head(source.conn(), "config", &wire).unwrap().unwrap();
+    SyncLedger::new(
+        &mut remote,
+        remote_context.identity.clone(),
+        &remote_context.key,
+    )
+    .unwrap()
+    .accept_pull(
+        &page(stale.clone(), 2),
+        now + 1000,
+        |_, _, _| unreachable!(),
+    )
+    .unwrap();
+    let winner = head(remote.conn(), "config", &wire).unwrap().unwrap();
+    assert!(winner.hlc > stale.hlc);
+    assert_eq!(
+        winner.hlc.parse::<Hlc>().unwrap().device(),
+        remote_context.identity.device
+    );
+    assert_eq!(
+        read_head(remote.conn(), &remote_context, &id)
+            .unwrap()
+            .unwrap()
+            .head,
+        newer
+    );
+    remote
+        .conn()
+        .execute("UPDATE sync_blobs SET uploaded=1", [])
+        .unwrap();
+    let mut ledger = SyncLedger::new(
+        &mut remote,
+        remote_context.identity.clone(),
+        &remote_context.key,
+    )
+    .unwrap();
+    assert_eq!(ledger.outgoing().unwrap(), vec![winner.clone()]);
+    ledger
+        .accept_heads(
+            std::slice::from_ref(&winner),
+            &page(winner.clone(), 3).records,
+            now + 1000,
+            |_, _, _| unreachable!(),
+        )
+        .unwrap();
+    assert!(ledger.outgoing().unwrap().is_empty());
 }
 
 fn fixture() -> (tempfile::TempDir, Store, SyncContext) {

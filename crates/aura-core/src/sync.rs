@@ -486,7 +486,7 @@ fn accept(
     }
     clock.observe(&remote_clock, now)?;
     if remote.collection == "config" {
-        return config::accept_remote(tx, identity, key, change);
+        return config::accept_remote(tx, identity, key, clock, change, now);
     }
     if remote.collection == "chat_chunks" {
         return transcript::accept_remote(tx, identity, key, change);

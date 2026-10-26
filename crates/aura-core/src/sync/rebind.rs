@@ -27,7 +27,7 @@ pub(crate) fn outgoing_for_device(
         if json.len() > 400_000 {
             return Err(SyncError::Invalid);
         }
-        let mut record: EncryptedRecord =
+        let record: EncryptedRecord =
             serde_json::from_str(&json).map_err(|_| SyncError::Invalid)?;
         if record.collection != collection
             || record.id != id
@@ -39,86 +39,46 @@ pub(crate) fn outgoing_for_device(
             return Err(SyncError::Identity);
         }
         let prior: Hlc = record.hlc.parse()?;
-        let next = clock.observe(&prior, now)?.to_string();
-        let plain = if collection == "config" {
-            config_payload(conn, identity, key, &record, &next)?
-        } else {
-            crypto::open_record(
-                key,
-                &context(identity, &record),
-                &SealedPayload {
-                    nonce: record.nonce.clone(),
-                    ciphertext: record.ciphertext.clone(),
+        let next = clock.observe(&prior, now)?;
+        if collection == "config" {
+            config::decode(
+                &SyncContext {
+                    identity: identity.clone(),
+                    key: key.clone(),
                 },
-            )?
-        };
-        record.hlc = next;
-        let sealed = crypto::seal_record(key, &context(identity, &record), &plain)?;
-        record.nonce = sealed.nonce;
-        record.ciphertext = sealed.ciphertext;
+                &record,
+            )
+            .map_err(|_| SyncError::Deferred)?;
+        }
+        let record = reseal(identity, key, &record, &next)?;
         save_head(conn, &record)?;
         enqueue(conn, &record)?;
     }
     Ok(())
 }
-fn config_payload(
-    conn: &Connection,
+/// Sender recovery and authoritative-head convergence do not create a new content edit. Preserve
+/// the authenticated inner payload, including config revision and immutable blob identity.
+pub(super) fn reseal(
     identity: &SyncIdentity,
-    key: &std::sync::Arc<AccountKey>,
+    key: &AccountKey,
     record: &EncryptedRecord,
-    revision: &str,
-) -> Result<zeroize::Zeroizing<Vec<u8>>> {
-    let config_context = SyncContext {
-        identity: identity.clone(),
-        key: key.clone(),
-    };
-    let mut payload = config::decode(&config_context, record).map_err(|_| SyncError::Deferred)?;
-    let (version, nonce, ciphertext): (u32, String, String) = conn.query_row(
-        "SELECT key_version,nonce,ciphertext FROM sync_blobs WHERE id=?1",
-        [&payload.head.blob_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-    )?;
-    if version != identity.key_version {
+    next: &Hlc,
+) -> Result<EncryptedRecord> {
+    if record.key_version != identity.key_version || next.device() != identity.device {
         return Err(SyncError::Identity);
     }
-    let original = crypto::open_blob(
+    let plain = crypto::open_record(
         key,
-        &identity.account,
-        &payload.head.blob_id,
-        version,
-        &SealedPayload { nonce, ciphertext },
+        &context(identity, record),
+        &SealedPayload {
+            nonce: record.nonce.clone(),
+            ciphertext: record.ciphertext.clone(),
+        },
     )?;
-    let snapshot = config::validate_blob(&payload.id, &payload.head, &original)
-        .map_err(|_| SyncError::Invalid)?;
-    payload.head.revision = revision.into();
-    payload.head.blob_id = crate::ids::new_id();
-    let header =
-        zeroize::Zeroizing::new(serde_json::to_vec(&payload).map_err(|_| SyncError::Invalid)?);
-    let mut bytes = zeroize::Zeroizing::new(Vec::with_capacity(4 + header.len() + snapshot.len()));
-    bytes.extend_from_slice(&(header.len() as u32).to_le_bytes());
-    bytes.extend_from_slice(&header);
-    bytes.extend_from_slice(&snapshot);
-    let sealed = crypto::seal_blob(
-        key,
-        &identity.account,
-        &payload.head.blob_id,
-        version,
-        &bytes,
-    )?;
-    conn.execute(
-        "INSERT INTO sync_blobs(id,key_version,nonce,ciphertext) VALUES(?1,?2,?3,?4)",
-        params![
-            payload.head.blob_id,
-            version,
-            sealed.nonce,
-            sealed.ciphertext
-        ],
-    )?;
-    conn.execute(
-        "UPDATE sync_blob_refs SET blob_id=?3 WHERE collection=?1 AND id=?2",
-        params![record.collection, record.id, payload.head.blob_id],
-    )?;
-    // Preserve the old blob for outstanding encrypted reviews and device merge bases. It has its
-    // own immutable identity and is never overwritten with the new header.
-    Ok(header)
+    let mut record = record.clone();
+    record.hlc = next.to_string();
+    let sealed = crypto::seal_record(key, &context(identity, &record), &plain)?;
+    record.nonce = sealed.nonce;
+    record.ciphertext = sealed.ciphertext;
+    Ok(record)
 }

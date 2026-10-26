@@ -196,7 +196,6 @@ fn decode_with(
     let payload: Payload = serde_json::from_slice(&bytes).map_err(|_| ConfigPortError::Invalid)?;
     if payload.schema_version != 1
         || payload.head.schema == 0
-        || payload.head.revision != record.hlc
         || payload.head.deleted != record.deleted
         || key
             .config_record_id(&identity.account, &payload.id)
@@ -206,11 +205,15 @@ fn decode_with(
     {
         return Err(ConfigPortError::Invalid);
     }
-    let _: Hlc = payload
+    let revision: Hlc = payload
         .head
         .revision
         .parse()
         .map_err(|_| ConfigPortError::Invalid)?;
+    let transport: Hlc = record.hlc.parse().map_err(|_| ConfigPortError::Invalid)?;
+    if revision > transport {
+        return Err(ConfigPortError::Invalid);
+    }
     if uuid::Uuid::parse_str(&payload.head.blob_id).is_err() {
         return Err(ConfigPortError::Invalid);
     }
@@ -223,7 +226,9 @@ pub(crate) fn accept_remote(
     conn: &Connection,
     identity: &SyncIdentity,
     key: &AccountKey,
+    clock: &mut Clock,
     change: &Change,
+    now: u64,
 ) -> Result<()> {
     let remote = &change.record;
     if remote.key_version != identity.key_version {
@@ -251,11 +256,22 @@ pub(crate) fn accept_remote(
     }
     let local = head(conn, "config", &remote.id)?;
     if let Some(local) = local {
-        let local_clock: Hlc = local.hlc.parse()?;
-        let remote_clock: Hlc = remote.hlc.parse()?;
         let previous = decode_with(identity, key, &local).map_err(|_| SyncError::Invalid)?;
+        let local_clock: Hlc = previous.head.revision.parse()?;
+        let remote_clock: Hlc = payload.head.revision.parse()?;
         if local_clock > remote_clock {
-            enqueue(conn, &local)?;
+            let transport: Hlc = local.hlc.parse()?;
+            // An authoritative server head may carry old content under a new sender clock. Keep
+            // the actual edit winner, but authenticate its retransmission as this device.
+            let winner = if transport.device() == identity.device
+                && transport > remote.hlc.parse::<Hlc>()?
+            {
+                local
+            } else {
+                rebind::reseal(identity, key, &local, &clock.tick(now)?)?
+            };
+            save_head(conn, &winner)?;
+            enqueue(conn, &winner)?;
             return Ok(());
         }
         if local_clock == remote_clock && previous != payload {

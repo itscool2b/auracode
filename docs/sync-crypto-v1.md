@@ -224,3 +224,12 @@ record. A failure before publication leaves the prior record intact. Corrupt or 
 preserved rather than replaced by defaults. The profile ownership lock and each service's gate
 serialize mutations. Local profiles keep their existing plaintext JSON formats.
 
+Config snapshots separate content revision from transport revision. The authenticated encrypted
+`head.revision` records the original edit HLC and must not exceed the authenticated record's outer
+HLC. Normal edits set both together. Recovering a device or reconciling an authoritative server head
+may reseal an identical payload under the current sender with a newer outer HLC; its content
+revision and immutable blob identity stay unchanged. Config conflict ordering compares content
+revisions. Equal content revisions with different payloads are refused as collisions. A winning
+local snapshot is resealed as the current sender when needed to replace a stale-content server head
+with a later transport clock. This prevents key/device recovery from promoting old config edits.
+
