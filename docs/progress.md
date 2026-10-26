@@ -2457,3 +2457,19 @@ navigation, delayed-response/profile-switch cases, accessibility and narrow layo
 were inspected. Exact export also includes the previously integrated rebind/removal commands and the
 removal fixture's existing null-result correction. No real account, credential store, agent or network
 service was accessed. Native platform acceptance remains part of the final combined gate.
+
+### Chat sign-in recovery
+
+An authentication-required chat now offers the existing vendor terminal sheet when the detected
+installation advertises a reviewed login command. Opening the card or sheet does not start a process;
+the sheet retains its separate Start sign-in action. Driver-supplied commands remain display/copy
+only, while Rust independently selects and rechecks the installed executable. A completed or failed
+login leaves Retry explicit so held prompts are not sent automatically. Unsupported installations
+and failed metadata lookups retain manual command instructions and Retry. Retired metadata responses
+cannot enable sign-in for a different agent.
+
+Twenty-four focused card/terminal tests, desktop TypeScript, Biome and instruction parity passed.
+Chromium and WebKit passed explicit launch, cancellation, success/failure, Retry, unsupported/manual
+fallback and stale lookup cases with synthetic terminal IO. Accessibility checks and inspected dark
+desktop/narrow screenshots passed. No vendor login, credential store, account service or paid prompt
+was used. Native sign-in acceptance remains in the final platform gate.

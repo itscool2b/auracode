@@ -198,6 +198,22 @@ describe("the error card", () => {
 });
 
 describe("the auth card", () => {
+  it("offers verified sign-in separately from Retry and retains manual commands", () => {
+    const html = renderToStaticMarkup(
+      <AuthCard
+        auth={{
+          message: "Sign in to continue.",
+          commands: [{ label: "Vendor login", argv: ["claude", "auth", "login"], env: [] }],
+        }}
+        onRetry={noop}
+        onSignIn={noop}
+      />,
+    );
+    expect(buttons(html).map((button) => button.label)).toEqual(["Copy", "Sign in…", "Retry"]);
+    expect(html).toContain("Complete the vendor sign-in, then press Retry.");
+    expect(html).toContain("claude auth login");
+  });
+
   it("auth_card_lists_commands: each sign-in command with its variables and Copy, then Retry", () => {
     const auth: AuthPrompt = {
       message: "Codex needs you to sign in.",

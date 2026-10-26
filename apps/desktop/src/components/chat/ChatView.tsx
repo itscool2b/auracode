@@ -5,8 +5,8 @@ import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
-import { AuthCard } from "./AuthCard";
 import { ChangesPanel } from "./ChangesPanel";
+import { ChatAuthCard } from "./ChatAuthCard";
 import { Composer } from "./Composer";
 import { ConversationDialog, type ConversationIntent } from "./ConversationDialog";
 import { GitDialog } from "./GitDialog";
@@ -288,8 +288,12 @@ export function ChatView({
               </p>
             ) : null}
             {state.auth !== null ? (
-              <AuthCard
+              <ChatAuthCard
+                key={state.chat.agent_id}
                 auth={state.auth}
+                agentId={state.chat.agent_id}
+                agentName={agent?.name ?? state.chat.agent_name}
+                transport={transport}
                 onRetry={() => void (held ? store.resumeQueue() : store.start(false))}
               />
             ) : null}
