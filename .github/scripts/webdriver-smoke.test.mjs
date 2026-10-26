@@ -108,13 +108,15 @@ test("the child cannot inherit a real profile, embedded smoke or agent configura
     AURACODE_STRESS: "1",
     AURACODE_EXPORT_BINDINGS: "1",
     WEBVIEW2_BROWSER_EXECUTABLE_FOLDER: "other-runtime",
+    WEBVIEW2_USER_DATA_FOLDER: "real-webview",
     CODEX_HOME: "real-codex",
     CLAUDE_CONFIG_DIR: "real-claude",
     PI_CODING_AGENT_DIR: "real-pi",
   };
   const env = isolatedEnvironment(source, root);
   assert.equal(env.AURACODE_DATA_DIR, join(root, "data"));
-  assert.equal(env.WEBVIEW2_USER_DATA_FOLDER, join(root, "webview"));
+  // Edge WebDriver gives the WebView its own fresh profile and reads its debugging port there.
+  assert.equal(env.WEBVIEW2_USER_DATA_FOLDER, undefined);
   assert.equal(env.USERPROFILE, join(root, "home"));
   assert.equal(env.CODEX_HOME, join(root, "home", ".codex"));
   assert.equal(env.CLAUDE_CONFIG_DIR, join(root, "home", ".claude"));

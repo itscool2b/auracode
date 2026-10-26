@@ -25,7 +25,6 @@ export function isolatedEnvironment(source, root) {
   return {
     ...env,
     AURACODE_DATA_DIR: join(root, "data"),
-    WEBVIEW2_USER_DATA_FOLDER: join(root, "webview"),
     HOME: join(root, "home"),
     USERPROFILE: join(root, "home"),
     APPDATA: join(root, "home", "AppData", "Roaming"),
