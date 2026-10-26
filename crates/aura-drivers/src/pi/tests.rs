@@ -185,7 +185,7 @@ async fn prompt_acceptance_and_agent_end_are_not_completion() {
     h.reply(&prompt, json!({"disposition":"started"}));
     h.send(json!({"type":"agent_start"}));
     h.send(json!({"type":"agent_end","messages":[],"willRetry":true}));
-    h.send(json!({"type":"agent_settled","aborted":false}));
+    h.send(json!({"type":"agent_settled"}));
     let mut ends = 0;
     loop {
         match h.event().await {
@@ -222,6 +222,8 @@ async fn interrupt_clears_queue_before_abort_and_withdraws_dialogs() {
     h.reply(&clear, json!({"steering":[],"followUp":[]}));
     let abort = h.wire().await;
     assert_eq!(abort["type"], "abort");
+    // The actual native settlement has no aborted field and can precede the abort reply.
+    h.send(json!({"type":"agent_settled"}));
     h.reply(&abort, Value::Null);
     let mut withdrawn = false;
     loop {
@@ -233,6 +235,88 @@ async fn interrupt_clears_queue_before_abort_and_withdraws_dialogs() {
                 break;
             }
             _ => {}
+        }
+    }
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn native_assistant_abort_is_preserved_at_the_empty_settled_boundary() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.prompt();
+    let prompt = h.wire().await;
+    h.reply(&prompt, json!({"disposition":"started"}));
+    h.send(json!({"type":"agent_start"}));
+    h.send(json!({"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"aborted"}}));
+    h.send(json!({"type":"agent_settled"}));
+    loop {
+        if let DriverEvent::TurnEnded { stop_reason, .. } = h.event().await {
+            assert_eq!(stop_reason, StopReason::Cancelled);
+            break;
+        }
+    }
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn manual_extension_compaction_returns_idle_without_agent_settled() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.send(json!({"type":"compaction_start","reason":"manual"}));
+    loop {
+        if matches!(h.event().await, DriverEvent::RunState { idle: false }) {
+            break;
+        }
+    }
+    h.send(json!({"type":"compaction_end","reason":"manual","aborted":false,"willRetry":false}));
+    loop {
+        let event = h.event().await;
+        assert!(!matches!(event, DriverEvent::TurnEnded { .. }));
+        if matches!(event, DriverEvent::RunState { idle: true }) {
+            break;
+        }
+    }
+    let stats = h.wire().await;
+    assert_eq!(stats["type"], "get_session_stats");
+    h.reply(
+        &stats,
+        json!({"cost":0,"contextUsage":{"tokens":null,"contextWindow":100000}}),
+    );
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn automatic_compaction_keeps_the_agent_busy_until_settlement() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.prompt();
+    let prompt = h.wire().await;
+    h.reply(&prompt, json!({"disposition":"started"}));
+    h.send(json!({"type":"agent_start"}));
+    h.send(json!({"type":"compaction_start","reason":"overflow"}));
+    h.send(json!({"type":"compaction_end","reason":"overflow","aborted":false,"willRetry":true}));
+    h.send(json!({"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"continued"}}));
+    loop {
+        let event = h.event().await;
+        assert!(!matches!(
+            event,
+            DriverEvent::RunState { idle: true } | DriverEvent::TurnEnded { .. }
+        ));
+        if matches!(
+            event,
+            DriverEvent::Event {
+                event: aura_protocol::AuraEvent::MessageDelta { .. },
+                ..
+            }
+        ) {
+            break;
+        }
+    }
+    h.send(json!({"type":"agent_settled"}));
+    loop {
+        if matches!(h.event().await, DriverEvent::RunState { idle: true }) {
+            break;
         }
     }
     h.stop().await;
@@ -395,7 +479,7 @@ async fn exhausted_retries_end_as_error_even_without_an_assistant_snapshot() {
     h.reply(&prompt, json!({"disposition":"started"}));
     h.send(json!({"type":"agent_start"}));
     h.send(json!({"type":"auto_retry_end","success":false,"attempt":3,"finalError":"provider unavailable"}));
-    h.send(json!({"type":"agent_settled","aborted":false}));
+    h.send(json!({"type":"agent_settled"}));
     loop {
         if let DriverEvent::TurnEnded {
             stop_reason, error, ..
@@ -448,7 +532,7 @@ async fn process_exit_drains_buffered_transcript_under_event_backpressure() {
     }
     h.send(json!({"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":chunk.repeat(500)}],
         "stopReason":"stop","usage":{"input":1,"output":2}}}));
-    h.send(json!({"type":"agent_settled","aborted":false}));
+    h.send(json!({"type":"agent_settled"}));
     h.end.to_client.send(FakeLine::Eof).unwrap();
     let (placeholder, _) = tokio::sync::oneshot::channel();
     let exit = std::mem::replace(&mut h.end.exit, placeholder);

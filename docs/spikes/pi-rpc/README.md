@@ -19,7 +19,10 @@ Pi publishes TypeScript protocol types, rather than a JSON Schema. The fixtures 
 instances derived from those types, not recordings or claims of real-agent acceptance.
 
 The driver completes started/queued prompts at `agent_settled`, not the prompt response or
-`agent_end`. A `handled` disposition completes that prompt while independent extension work
+`agent_end`. Pi 1.0.2 emits `agent_settled` without fields; cancellation comes from an owned
+interrupt or the completed assistant message's stop reason. Manual compaction has its own
+start/end lifecycle and does not require a subsequent settlement event. Automatic compaction
+keeps the agent run busy until settlement. A `handled` disposition completes that prompt while independent extension work
 continues under `RunState`. Stop clears native queues before aborting. A setting is acknowledged
 only after refreshed state and thinking levels confirm the native result. An ambiguous sent-setting
 timeout closes the session rather than releasing a prompt with unknown settings.
@@ -47,5 +50,7 @@ The first two ordinary local Cargo attempts were blocked before compilation by W
 Control (OS error 4551 on dependency build scripts). Linux CI for checkpoint `f316b59` passed all
 19 Pi tests, including the protocol replay, workspace Clippy and binding regeneration. Its full
 test step exposed catalog assertions that still expected five agents and a known CLI readiness
-race from the base branch. The follow-up fixes and complete Linux/Windows gates remain pending,
-as do expanded replay evidence and authorized real-agent acceptance. M1d is not complete.
+race from the base branch. CI run `40280216757` passed all applicable Linux/Windows gates for
+`fa41b80`. A subsequent audit corrected the synthetic settlement fixture to the actual empty
+event shape and added manual-compaction lifecycle coverage; those corrections need another CI
+run. Expanded replay evidence and authorized real-agent acceptance remain pending. M1d is not complete.
