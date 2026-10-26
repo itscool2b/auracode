@@ -24,6 +24,7 @@ pub mod headless;
 pub mod jsonrpc;
 pub mod mock;
 pub mod mock_driver;
+pub mod pi;
 #[cfg(feature = "replay")]
 pub mod replay;
 #[cfg(any(test, feature = "testing"))]

@@ -237,6 +237,24 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
 13. M8: Config Library.
 14. M9: three-way config sync.
 
+## M1d Pi implementation checkpoint (2026-10-26, pending verification)
+
+- Isolated branch `m1d-pi-agents` starts from checked backend commit `cfb67db`. The native Pi
+  catalog entry and Rust driver are implemented against the installed 1.0.2 protocol and official
+  pinned source. Only `pi --version` was executed; no prompts, sign-in or configuration reads.
+- Added explicit prompt acceptance versus `agent_settled` handling, `clear_queue` before `abort`,
+  bounded process shutdown/drain, authoritative settings refresh, usage/context reduction and
+  extension select/confirm/input mapping. Unsupported editor prefills cancel visibly. Full auto
+  is the only advertised autonomy; dialogs are never auto-answered. Product steer/fork/rewind
+  capabilities remain false, with typed native fork startup available for later UI work.
+- Added pure tests, fake-process lifecycle/failure tests, a protocol-derived replay fixture and
+  native Pi correlation/redaction support. Rustfmt parsing and instruction-file synchronization
+  pass. Rust tests and Clippy have not run: two ordinary Cargo attempts were blocked before driver
+  compilation by Windows Application Control, error 4551 on dependency build scripts. No policy
+  changes or alternate execution paths were attempted. Successful CI, binding regeneration,
+  expanded replay evidence and authorized real-agent acceptance remain required.
+- Remaining M1d ACP dialect integrations are separate work and are not implemented by this checkpoint.
+
 ## Decisions and constraints
 
 - M1e process supervision now has an explicit host boundary: native execution delegates unchanged,

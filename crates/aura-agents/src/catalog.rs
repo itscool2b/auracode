@@ -342,6 +342,23 @@ fn build_catalog() -> Vec<AgentSpec> {
             last_verified: "Unverified: pinned source contract only",
         },
         AgentSpec {
+            id: "pi",
+            name: "Pi",
+            description: "Your Pi agent, driven directly through its native RPC protocol.",
+            kind: DriverKind::Pi,
+            dialect: "pi",
+            recipe: Recipe::Binary {
+                program: "pi",
+                args: &[],
+                version_args: &["--version"],
+                min_version: Some("1.0.2"),
+            },
+            startup_timeout: START_TIMEOUT,
+            turns_survive_process: false,
+            daemons: Vec::new(),
+            last_verified: "Pi 1.0.2 protocol (real-agent acceptance pending)",
+        },
+        AgentSpec {
             id: "mock",
             name: "Demo agent (scripted, no AI)",
             description: "A scripted agent for trying auracode without an AI: it streams a demo turn, asks for permissions and questions, and can fail on purpose.",
@@ -469,6 +486,7 @@ mod tests {
                 "opencode-v2",
                 "agy-stream",
                 "grok-stream",
+                "pi",
                 "mock"
             ]
         );

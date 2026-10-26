@@ -999,7 +999,7 @@ impl Smoke<'_> {
             return;
         }
         let mut lines = vec!["Protocol logs, and the fixture each can become:".to_owned()];
-        let fixture_folder = if matches!(self.spec.kind, DriverKind::Claude | DriverKind::Codex) {
+        let fixture_folder = if matches!(self.spec.kind, DriverKind::Claude | DriverKind::Codex | DriverKind::Pi) {
             self.spec.id.to_owned()
         } else {
             format!("acp/{}", self.spec.id)
@@ -1060,7 +1060,7 @@ impl Answer {
 pub fn expected_scope(spec: &AgentSpec, first_of_spawn: bool) -> UsageScope {
     if matches!(
         spec.kind,
-        DriverKind::Mock | DriverKind::Claude | DriverKind::Codex
+        DriverKind::Mock | DriverKind::Claude | DriverKind::Codex | DriverKind::Pi
     ) {
         return UsageScope::Turn;
     }

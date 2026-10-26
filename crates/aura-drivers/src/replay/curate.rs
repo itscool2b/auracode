@@ -162,6 +162,24 @@ fn curate_native_tool_json(
     let mut groups = BTreeMap::<(String, String, u64), Vec<(usize, usize)>>::new();
     for (position, record) in records.iter().enumerate() {
         let message = &record["msg"];
+        if message["type"] == "message_start" && message["message"]["role"] == "assistant" {
+            *generations.entry("pi".into()).or_default() += 1;
+        }
+        if message["type"] == "message_update"
+            && message["assistantMessageEvent"]["type"] == "toolcall_delta"
+        {
+            let event = &message["assistantMessageEvent"];
+            if let (Some(index), Some(partial)) =
+                (event["contentIndex"].as_u64(), event["delta"].as_str())
+            {
+                let generation = generations.get("pi").copied().unwrap_or(0);
+                groups
+                    .entry(("pi".into(), format!("message-{generation}"), index))
+                    .or_default()
+                    .push((position, partial.len()));
+            }
+            continue;
+        }
         if message["type"] != "stream_event" {
             continue;
         }
@@ -194,7 +212,7 @@ fn curate_native_tool_json(
             .iter()
             .filter_map(|(position, _)| {
                 records[*position]
-                    .pointer("/msg/event/delta/partial_json")?
+                    .pointer(partial_pointer(&records[*position]))?
                     .as_str()
             })
             .collect::<String>();
@@ -241,12 +259,22 @@ fn curate_native_tool_json(
             while !curated.is_char_boundary(end) {
                 end -= 1;
             }
-            records[*position]["msg"]["event"]["delta"]["partial_json"] =
-                Value::String(curated[start..end].to_owned());
+            let pointer = partial_pointer(&records[*position]);
+            if let Some(value) = records[*position].pointer_mut(pointer) {
+                *value = Value::String(curated[start..end].to_owned());
+            }
             start = end;
         }
     }
     Ok(())
+}
+
+fn partial_pointer(record: &Value) -> &'static str {
+    if record["msg"]["type"] == "message_update" {
+        "/msg/assistantMessageEvent/delta"
+    } else {
+        "/msg/event/delta/partial_json"
+    }
 }
 
 /// What makes a fixture unfit to commit: email addresses, token shapes, home folders. Each finding
@@ -287,7 +315,8 @@ fn collect_sessions(value: &Value, sessions: &mut Vec<String>) {
         }
     };
     if let Some(start) = value.pointer("/note/start") {
-        let native = start["agent_id"] == "claude" || start["dialect"] == "claude";
+        let native = matches!(start["agent_id"].as_str(), Some("claude" | "pi"))
+            || matches!(start["dialect"].as_str(), Some("claude" | "pi"));
         if let Some(resume) = start["resume"].as_str()
             && (!native || uuid::Uuid::parse_str(resume).is_ok())
         {
@@ -753,5 +782,41 @@ mod tests {
         let error = curate(&log(&records), HOME, CWD, "someone", "").expect_err("unknown home");
         assert!(error.to_string().contains("native tool input block"));
         assert!(!error.to_string().contains("other"));
+    }
+
+    #[test]
+    fn pi_tool_argument_deltas_are_redacted_after_reassembly() {
+        let delta = |text: &str| {
+            json!({"d":"in","msg":{"type":"message_update","assistantMessageEvent":{
+            "type":"toolcall_delta","contentIndex":0,"delta":text}}})
+        };
+        let records = [
+            json!({"d":"in","msg":{"type":"message_start","message":{"role":"assistant"}}}),
+            delta(r#"{"path":"C:\\Us"#),
+            delta(r#"ers\\someone\\scratch\\a.txt"}"#),
+        ];
+        let curated = curate(
+            &log(&records),
+            r"C:\Users\someone",
+            r"C:\Users\someone\scratch",
+            "someone",
+            "",
+        )
+        .unwrap();
+        let value: String = curated
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .filter_map(|record| {
+                record
+                    .pointer("/msg/assistantMessageEvent/delta")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+            .collect();
+        assert_eq!(
+            serde_json::from_str::<Value>(&value).unwrap(),
+            json!({"path":r"<CWD>\a.txt"})
+        );
+        assert!(scan_clean(&value).is_empty());
     }
 }

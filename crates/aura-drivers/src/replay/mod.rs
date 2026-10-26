@@ -113,6 +113,7 @@ fn replay_launch(agent_id: &str) -> LaunchSpec {
             &["app-server", "--listen", "stdio://"],
             &[],
         ),
+        "pi" => ("/opt/agents/bin/pi", &[], &[]),
         "hermes" => ("/opt/agents/bin/hermes", &["acp"], &[]),
         "claude-acp" => (
             "/opt/agents/bin/node",
@@ -150,7 +151,8 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
             .ok_or_else(|| format!("the start note has no \"{key}\""))
     };
     let agent_id = text("agent_id")?;
-    let native = agent_id == "claude" || start["dialect"] == "claude";
+    let pi = agent_id == "pi" || start["dialect"] == "pi";
+    let native = pi || agent_id == "claude" || start["dialect"] == "claude";
     let autonomy: Autonomy = match start.get("autonomy") {
         Some(value) => {
             serde_json::from_value(value.clone()).map_err(|error| format!("autonomy: {error}"))?
@@ -199,7 +201,13 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
     }
     Ok(SessionSetup {
         chat_id: "replay".into(),
-        launch: replay_launch(if native { "claude" } else { &agent_id }),
+        launch: replay_launch(if pi {
+            "pi"
+        } else if native {
+            "claude"
+        } else {
+            &agent_id
+        }),
         dialect: text("dialect")?,
         agent_id,
         folder: PathBuf::from(REPLAY_FOLDER),
@@ -275,7 +283,8 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
     let (spawner, mut ends) = FakeSpawner::new();
     let (commands, receiver) = mpsc::unbounded_channel();
     let (sender, events) = event_channel();
-    let native = setup.agent_id == "claude" || setup.dialect == "claude";
+    let pi = setup.agent_id == "pi" || setup.dialect == "pi";
+    let native = pi || setup.agent_id == "claude" || setup.dialect == "claude";
     let native_session = setup
         .native_start
         .new_session_id
@@ -295,6 +304,8 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
     let codex = ctx.setup.agent_id == "codex" || ctx.setup.dialect == "codex";
     let driver: Box<dyn AgentDriver> = if codex {
         Box::new(CodexDriver::new())
+    } else if pi {
+        Box::new(crate::pi::PiDriver::new())
     } else if native {
         Box::new(ClaudeDriver::new())
     } else {

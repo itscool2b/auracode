@@ -664,6 +664,7 @@ pub enum DriverKind {
     Claude,
     Codex,
     Headless,
+    Pi,
     Mock,
 }
 

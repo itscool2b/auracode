@@ -2462,6 +2462,9 @@ pub fn expected_modes(spec: &AgentSpec, level: Autonomy) -> Vec<Option<String>> 
             .into(),
         )];
     }
+    if spec.kind == DriverKind::Pi {
+        return vec![None];
+    }
     if spec.kind == DriverKind::Claude {
         return match level {
             Autonomy::FullAuto => {
