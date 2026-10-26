@@ -752,3 +752,8 @@ Wire references: [ACP content](https://agentclientprotocol.com/protocol/v1/conte
 [Pi RPC commands](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc-commands.md),
 and the checked-in Codex 0.162.1 app-server schema. Image decoding uses the bounded
 [image crate API](https://docs.rs/image/0.25.10/image/).
+
+The local draft backend now stores text, selected attachment IDs and mentions in migration0005,
+using the existing backed-up migration path and bounded writer. Restore resolves attachment metadata
+within the chat. Core compilation passes after checkpoint integration; a profile-reopen regression
+is staged for the integration test batch. UI draft lifetime/write ordering is being wired separately.

@@ -1,10 +1,17 @@
 //! Composer metadata on the profile writer. Arbitrary blob hashes are never accepted from the UI.
 use super::{StoreError, blobs, rows};
-use aura_protocol::composer::ComposerAttachment;
-use rusqlite::{Connection, params};
+use aura_protocol::composer::{ComposerAttachment, ComposerInput};
+use rusqlite::{Connection, OptionalExtension as _, params};
 use std::{path::Path, sync::Arc};
 
 pub(crate) enum ComposerCommand {
+    ReadDraft {
+        chat_id: String,
+    },
+    SaveDraft {
+        chat_id: String,
+        input: ComposerInput,
+    },
     Import {
         chat_id: String,
         name: String,
@@ -18,6 +25,11 @@ pub(crate) enum ComposerCommand {
     },
 }
 
+pub(crate) enum ComposerReply {
+    Attachments(Vec<StoredAttachment>),
+    Draft(ComposerInput),
+}
+
 pub(crate) struct StoredAttachment {
     pub meta: ComposerAttachment,
     pub sha256: String,
@@ -26,6 +38,17 @@ pub(crate) struct StoredAttachment {
 impl ComposerCommand {
     pub fn bytes(&self) -> usize {
         match self {
+            Self::ReadDraft { .. } => 512,
+            Self::SaveDraft { input, .. } => {
+                input.text.len()
+                    + input
+                        .attachments
+                        .iter()
+                        .chain(&input.mentions)
+                        .map(String::len)
+                        .sum::<usize>()
+                    + 512
+            }
             Self::Import { bytes, .. } => bytes.len() + 2048,
             Self::Resolve { ids, .. } => ids.iter().map(String::len).sum::<usize>() + 512,
         }
@@ -37,11 +60,33 @@ pub(crate) fn execute(
     dir: &Path,
     now: i64,
     command: ComposerCommand,
-) -> Result<Vec<StoredAttachment>, StoreError> {
+) -> Result<ComposerReply, StoreError> {
     let sql = |error: rusqlite::Error| {
         StoreError::Other(format!("Could not save attachment metadata: {error}"))
     };
     match command {
+        ComposerCommand::ReadDraft { chat_id } => {
+            let json: Option<String> = conn
+                .query_row(
+                    "SELECT input_json FROM composer_drafts WHERE chat_id=?1",
+                    [&chat_id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(sql)?;
+            let input = match json {
+                Some(json) => serde_json::from_str(&json)
+                    .map_err(|_| StoreError::Other("The saved draft could not be read.".into()))?,
+                None => ComposerInput::default(),
+            };
+            Ok(ComposerReply::Draft(input))
+        }
+        ComposerCommand::SaveDraft { chat_id, input } => {
+            let json = serde_json::to_string(&input)
+                .map_err(|_| StoreError::Other("The draft could not be encoded.".into()))?;
+            conn.execute("INSERT INTO composer_drafts(chat_id,input_json,updated_at) VALUES (?1,?2,?3) ON CONFLICT(chat_id) DO UPDATE SET input_json=excluded.input_json,updated_at=excluded.updated_at", params![chat_id,json,now]).map_err(sql)?;
+            Ok(ComposerReply::Draft(input))
+        }
         ComposerCommand::Import {
             chat_id,
             name,
@@ -66,7 +111,7 @@ pub(crate) fn execute(
             let id = crate::ids::new_id();
             conn.execute("INSERT INTO composer_attachments (id,chat_id,sha256,display_name,mime,byte_length,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(chat_id,sha256,display_name) DO NOTHING", params![id, chat_id, sha256, name, mime, size as i64, now]).map_err(sql)?;
             let actual: String = conn.query_row("SELECT id FROM composer_attachments WHERE chat_id=?1 AND sha256=?2 AND display_name=?3", params![chat_id,sha256,name], |row| row.get(0)).map_err(sql)?;
-            Ok(vec![StoredAttachment {
+            Ok(ComposerReply::Attachments(vec![StoredAttachment {
                 meta: ComposerAttachment {
                     id: actual,
                     name,
@@ -75,7 +120,7 @@ pub(crate) fn execute(
                     bytes: size as u32,
                 },
                 sha256,
-            }])
+            }]))
         }
         ComposerCommand::Resolve { chat_id, ids } => {
             let mut result = Vec::with_capacity(ids.len());
@@ -86,7 +131,7 @@ pub(crate) fn execute(
                 }).map_err(|_| StoreError::Other("An attachment is unavailable in this chat. Attach it again.".into()))?;
                 result.push(item);
             }
-            Ok(result)
+            Ok(ComposerReply::Attachments(result))
         }
     }
 }

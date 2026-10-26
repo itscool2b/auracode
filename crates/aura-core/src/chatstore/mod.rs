@@ -87,6 +87,18 @@ impl ChatStore {
         &self,
         command: composer::ComposerCommand,
     ) -> Result<Vec<composer::StoredAttachment>, StoreError> {
+        match self.composer_command(command).await? {
+            composer::ComposerReply::Attachments(items) => Ok(items),
+            composer::ComposerReply::Draft(_) => {
+                Err(StoreError::Other("Unexpected draft response.".into()))
+            }
+        }
+    }
+
+    pub(crate) async fn composer_command(
+        &self,
+        command: composer::ComposerCommand,
+    ) -> Result<composer::ComposerReply, StoreError> {
         if self.is_paused() {
             return Err(self.timed_out());
         }
@@ -877,6 +889,41 @@ mod tests {
             }
         }
         lines
+    }
+
+    #[tokio::test]
+    async fn composer_drafts_survive_a_profile_reopen() {
+        use composer::ComposerCommand;
+        let fixture = start(WriterConfig::STANDARD);
+        let chat = new_chat(&fixture.store).await;
+        let input = aura_protocol::composer::ComposerInput {
+            text: "Unsent work".into(),
+            attachments: Vec::new(),
+            mentions: vec!["src/main.rs".into()],
+        };
+        fixture
+            .store
+            .composer_command(ComposerCommand::SaveDraft {
+                chat_id: chat.id.clone(),
+                input: input.clone(),
+            })
+            .await
+            .expect("save acknowledged");
+        assert!(fixture.store.shutdown(Duration::from_secs(10)).await);
+        let (store, _) = Store::open(&fixture.profile).expect("reopen");
+        let json: String = store
+            .conn()
+            .query_row(
+                "SELECT input_json FROM composer_drafts WHERE chat_id=?1",
+                [&chat.id],
+                |row| row.get(0),
+            )
+            .expect("stored draft");
+        assert_eq!(
+            serde_json::from_str::<aura_protocol::composer::ComposerInput>(&json)
+                .expect("typed draft"),
+            input
+        );
     }
 
     #[tokio::test]

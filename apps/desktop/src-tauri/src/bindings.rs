@@ -60,6 +60,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::composer_commands::composer_paste,
             crate::composer_commands::composer_mentions,
             crate::composer_commands::composer_send,
+            crate::composer_commands::composer_draft,
+            crate::composer_commands::composer_save_draft,
             commands::chats_list,
             crate::workspace_commands::workspace_snapshot,
             crate::workspace_commands::project_create,

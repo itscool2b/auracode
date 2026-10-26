@@ -22,6 +22,71 @@ fn invalid(message: impl Into<String>) -> SessionError {
 }
 
 impl SessionManager {
+    pub async fn composer_draft(
+        &self,
+        chat_id: &str,
+    ) -> Result<aura_protocol::composer::ComposerDraft, SessionError> {
+        self.composer_folder(chat_id).await?;
+        let reply = self
+            .deps()
+            .store
+            .composer_command(ComposerCommand::ReadDraft {
+                chat_id: chat_id.into(),
+            })
+            .await
+            .map_err(|e| invalid(e.to_string()))?;
+        let crate::chatstore::composer::ComposerReply::Draft(input) = reply else {
+            return Err(invalid("The saved draft could not be read."));
+        };
+        let files = self
+            .deps()
+            .store
+            .composer(ComposerCommand::Resolve {
+                chat_id: chat_id.into(),
+                ids: input.attachments.clone(),
+            })
+            .await
+            .map_err(|e| invalid(e.to_string()))?;
+        Ok(aura_protocol::composer::ComposerDraft {
+            input,
+            files: files.into_iter().map(|item| item.meta).collect(),
+        })
+    }
+
+    pub async fn composer_save_draft(
+        &self,
+        chat_id: &str,
+        input: ComposerInput,
+    ) -> Result<(), SessionError> {
+        let limit = self.deps().limits.max_prompt_bytes;
+        if input.text.len() > limit
+            || input.attachments.len() > MAX_ITEMS
+            || input.mentions.len() > 32
+            || input.attachments.iter().any(|id| id.len() > 128)
+            || input.mentions.iter().any(|path| path.len() > 4096)
+        {
+            return Err(invalid("The draft exceeds the message context limit."));
+        }
+        self.composer_folder(chat_id).await?;
+        self.deps()
+            .store
+            .composer(ComposerCommand::Resolve {
+                chat_id: chat_id.into(),
+                ids: input.attachments.clone(),
+            })
+            .await
+            .map_err(|e| invalid(e.to_string()))?;
+        self.deps()
+            .store
+            .composer_command(ComposerCommand::SaveDraft {
+                chat_id: chat_id.into(),
+                input,
+            })
+            .await
+            .map_err(|e| invalid(e.to_string()))?;
+        Ok(())
+    }
+
     /// Only call after an explicit file picker, drop or paste action by the user.
     pub async fn composer_import(
         &self,

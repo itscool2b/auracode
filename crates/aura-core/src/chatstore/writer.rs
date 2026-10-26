@@ -144,7 +144,7 @@ pub(crate) enum Work {
 pub(crate) enum Request {
     Composer {
         command: super::composer::ComposerCommand,
-        reply: oneshot::Sender<Result<Vec<super::composer::StoredAttachment>, StoreError>>,
+        reply: oneshot::Sender<Result<super::composer::ComposerReply, StoreError>>,
     },
     CheckpointContext {
         chat_id: String,

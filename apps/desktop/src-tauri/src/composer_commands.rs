@@ -3,6 +3,28 @@ use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
 };
+
+#[tauri::command]
+#[specta::specta]
+pub async fn composer_draft(
+    state: State<'_, AppState>,
+    chat_id: String,
+) -> Result<aura_protocol::composer::ComposerDraft, AppError> {
+    Ok(state.sessions()?.composer_draft(&chat_id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn composer_save_draft(
+    state: State<'_, AppState>,
+    chat_id: String,
+    input: ComposerInput,
+) -> Result<(), AppError> {
+    Ok(state
+        .sessions()?
+        .composer_save_draft(&chat_id, input)
+        .await?)
+}
 use aura_protocol::{
     composer::{ComposerAttachment, ComposerInput, FileMention},
     session::PromptAck,
