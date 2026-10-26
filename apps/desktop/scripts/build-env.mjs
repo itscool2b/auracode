@@ -15,3 +15,11 @@ export function releaseBuildEnv(env, roots) {
   }
   return { ...env, CARGO_ENCODED_RUSTFLAGS: flags.join("\x1f") };
 }
+
+export function requireUpdaterSigning(env) {
+  if (!env.AURACODE_UPDATER_PUBLIC_KEY?.trim() || !env.TAURI_SIGNING_PRIVATE_KEY?.trim()) {
+    throw new Error(
+      "Signed updater builds require AURACODE_UPDATER_PUBLIC_KEY and TAURI_SIGNING_PRIVATE_KEY from the release secret store.",
+    );
+  }
+}

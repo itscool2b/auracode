@@ -48,6 +48,10 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::git::WorktreeActionResult>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
+            crate::updater::app_update_status,
+            crate::updater::app_update_check,
+            crate::updater::app_update_download,
+            crate::updater::app_update_install,
             crate::onboarding::setup_snapshot,
             crate::onboarding::setup_apply,
             commands::start_demo_stream,

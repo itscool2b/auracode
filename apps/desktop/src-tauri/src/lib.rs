@@ -38,6 +38,7 @@ pub mod smoke;
 pub mod state;
 mod sync;
 pub mod terminal;
+pub mod updater;
 pub mod window;
 pub mod workspace_commands;
 
@@ -109,6 +110,8 @@ pub fn run() {
         // The folder picker and the quit question, called from Rust only: the page has no dialog
         // permission (capabilities/default.json).
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::Updates::default())
         .on_page_load(on_page_load)
         .invoke_handler(commands.invoke_handler())
         .setup(move |app| {

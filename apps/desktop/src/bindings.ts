@@ -11,6 +11,10 @@ export const commands = {
 	 *  mode, notices, and the fatal startup error if there was one. Never fails.
 	 */
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
+	appUpdateStatus: () => __TAURI_INVOKE<UpdateStatus>("app_update_status"),
+	appUpdateCheck: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_check")),
+	appUpdateDownload: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_download")),
+	appUpdateInstall: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_install")),
 	setupSnapshot: () => typedError<SetupSnapshot, AppError>(__TAURI_INVOKE("setup_snapshot")),
 	setupApply: (revision: number, action: SetupAction) => typedError<SetupSnapshot, AppError>(__TAURI_INVOKE("setup_apply", { revision, action })),
 	/**
@@ -1252,6 +1256,21 @@ export type UiQuestionOption = {
 export type UiRequest = {
 	request_id: string,
 	prompt: UiPrompt,
+};
+
+export type UpdateError = {
+	message: string,
+};
+
+export type UpdatePhase = "disabled" | "idle" | "checking" | "available" | "downloading" | "ready" | "waiting_for_idle" | "installing" | "restart_required" | "failed";
+
+export type UpdateStatus = {
+	phase: UpdatePhase,
+	version: string | null,
+	notes: string | null,
+	downloaded_bytes: number,
+	total_bytes: number | null,
+	message: string | null,
 };
 
 /**  Context-window and spend information for the session. */

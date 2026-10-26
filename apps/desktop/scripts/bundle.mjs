@@ -12,10 +12,20 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { releaseBuildEnv } from "./build-env.mjs";
+import { releaseBuildEnv, requireUpdaterSigning } from "./build-env.mjs";
 
 const signingScript = fileURLToPath(new URL("./macos-signing.sh", import.meta.url));
 const tauriCli = createRequire(import.meta.url).resolve("@tauri-apps/cli/tauri.js");
+const args = process.argv.slice(2);
+const signed = args.indexOf("--signed-updater");
+if (signed >= 0) {
+  requireUpdaterSigning(process.env);
+  args.splice(signed, 1);
+  args.push(
+    "--config",
+    fileURLToPath(new URL("../src-tauri/tauri.updater.conf.json", import.meta.url)),
+  );
+}
 
 const sysroot = spawnSync(process.env.RUSTC ?? "rustc", ["--print", "sysroot"], {
   encoding: "utf8",
@@ -50,7 +60,7 @@ if (process.platform === "darwin" && !env.APPLE_SIGNING_IDENTITY) {
   }
 }
 
-const build = spawnSync(process.execPath, [tauriCli, "build", ...process.argv.slice(2)], {
+const build = spawnSync(process.execPath, [tauriCli, "build", ...args], {
   stdio: "inherit",
   env,
 });

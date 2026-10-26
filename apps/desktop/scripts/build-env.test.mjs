@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { releaseBuildEnv } from "./build-env.mjs";
+import { releaseBuildEnv, requireUpdaterSigning } from "./build-env.mjs";
 
 test("Windows paths and spaces remain single rustc arguments", () => {
   const env = releaseBuildEnv({ RUSTFLAGS: "-C debuginfo=1" }, [
@@ -32,4 +32,24 @@ test("empty optional roots are omitted and ambiguous separators fail", () => {
   for (const path of ["/a=b", "/a\nb", "/a\x1fb"]) {
     assert.throws(() => releaseBuildEnv({}, [[path, "/auracode"]]), /cannot safely remap/u);
   }
+});
+
+test("signed updater builds require both public and private material without printing either", () => {
+  for (const env of [
+    {},
+    { AURACODE_UPDATER_PUBLIC_KEY: "fixture-public" },
+    { TAURI_SIGNING_PRIVATE_KEY: "fixture-private" },
+  ]) {
+    assert.throws(
+      () => requireUpdaterSigning(env),
+      (error) => {
+        assert(!error.message.includes("fixture-"));
+        return /require/u.test(error.message);
+      },
+    );
+  }
+  requireUpdaterSigning({
+    AURACODE_UPDATER_PUBLIC_KEY: "fixture-public",
+    TAURI_SIGNING_PRIVATE_KEY: "fixture-private",
+  });
 });

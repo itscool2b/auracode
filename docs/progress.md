@@ -1143,3 +1143,20 @@ is a backend checkpoint, not M4 completion. No real-repository mutation, paid pr
 - Three focused tests cover folder/agent exclusion, a concurrent start race, terminal reservations
   and permanent shutdown; core library Clippy passes. The updater will use these guards before
   invoking any installer. No installer, credentials or real agent ran.
+
+### M5 explicit signed update service, 2026-10-26
+
+- Added Rust-only check/download/install commands using pinned Tauri updater 2.14.0. Metadata and
+  package reads are bounded and restricted to the release HTTPS origin without redirects; package
+  signatures must bind the advertised newer version. Unsigned builds remain visibly disabled.
+- Installation uses reversible idle barriers, refuses failed draft/storage saves, and confirms
+  cleanup before Windows can exit through NSIS or macOS can restart. Vendor updater tasks now hold
+  admission through completion, including when their IPC caller disappears. No active work is
+  canceled to install an application update.
+- Five updater tests, a signed-version/IPC-permission regression, the vendor-maintenance admission
+  regression, exact binding export and core/desktop Clippy pass on Windows. An earlier `cargo check`
+  build-script hash was blocked by Application Control; normal test and Clippy builds subsequently
+  passed without a workaround or policy change. No actual update, sign-in or network probe ran.
+- Added explicit signed-updater build configuration that requires supplied signing material. Keys,
+  platform signing, release publication, native upgrade/signature acceptance and interface wiring
+  remain pending. The bootstrap run is still not final verification.

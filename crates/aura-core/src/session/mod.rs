@@ -471,11 +471,29 @@ impl SessionManager {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
+        let manager = self.clone();
+        let agent_id = agent_id.to_owned();
+        // Closing an IPC caller must not release update admission while its vendor installer runs.
         self.deps()
-            .detector
-            .update(agent_id)
+            .rt
+            .spawn(async move {
+                let _guard = manager
+                    .shared()
+                    .live
+                    .try_maintenance()
+                    .ok_or(SessionError::ShuttingDown)?;
+                if manager.shared().is_shutting_down() {
+                    return Err(SessionError::ShuttingDown);
+                }
+                manager
+                    .deps()
+                    .detector
+                    .update(&agent_id)
+                    .await
+                    .map_err(|error| SessionError::AgentUnavailable(error.to_string()))
+            })
             .await
-            .map_err(|error| SessionError::AgentUnavailable(error.to_string()))
+            .map_err(|_| SessionError::Internal("The vendor update task failed.".into()))?
     }
 
     /// The env agents start with: how it was resolved, and the names the scrub removes.

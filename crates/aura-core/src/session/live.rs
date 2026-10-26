@@ -188,11 +188,19 @@ pub(crate) struct LiveAgents {
 #[derive(Debug, Default)]
 struct Inner {
     quiescing: bool,
+    maintenance: usize,
     slots: HashSet<String>,
     folders: HashMap<String, PathBuf>,
     mutations: HashSet<PathBuf>,
     /// `(provider realm, native_session_id)` -> the chat holding it.
     sessions: HashMap<(NativeSessionScope, String), String>,
+}
+
+pub(crate) struct MaintenanceGuard<'a>(&'a LiveAgents);
+impl Drop for MaintenanceGuard<'_> {
+    fn drop(&mut self) {
+        self.0.lock().maintenance -= 1;
+    }
 }
 
 impl LiveAgents {
@@ -232,7 +240,11 @@ impl LiveAgents {
     /// Atomically excludes new starts and folder mutations while the caller prepares an update.
     pub(crate) fn try_quiesce(&self) -> bool {
         let mut inner = self.lock();
-        if inner.quiescing || !inner.slots.is_empty() || !inner.mutations.is_empty() {
+        if inner.quiescing
+            || inner.maintenance > 0
+            || !inner.slots.is_empty()
+            || !inner.mutations.is_empty()
+        {
             return false;
         }
         inner.quiescing = true;
@@ -241,6 +253,15 @@ impl LiveAgents {
 
     pub(crate) fn resume_admission(&self) {
         self.lock().quiescing = false;
+    }
+
+    pub(crate) fn try_maintenance(&self) -> Option<MaintenanceGuard<'_>> {
+        let mut inner = self.lock();
+        if inner.quiescing {
+            return None;
+        }
+        inner.maintenance = inner.maintenance.checked_add(1)?;
+        Some(MaintenanceGuard(self))
     }
 
     /// Gives `chat`'s slot back, and every native session it held.
@@ -356,6 +377,21 @@ mod tests {
                 assert_ne!(start.join().unwrap(), update);
             });
         }
+    }
+
+    #[test]
+    fn vendor_maintenance_blocks_application_update_until_its_owner_finishes() {
+        let live = LiveAgents::new(12);
+        let first = live.try_maintenance().unwrap();
+        let second = live.try_maintenance().unwrap();
+        assert!(!live.try_quiesce());
+        drop(first);
+        assert!(!live.try_quiesce());
+        drop(second);
+        assert!(live.try_quiesce());
+        assert!(live.try_maintenance().is_none());
+        live.resume_admission();
+        assert!(live.try_maintenance().is_some());
     }
 
     #[test]

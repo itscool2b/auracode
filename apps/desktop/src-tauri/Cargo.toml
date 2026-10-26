@@ -45,6 +45,9 @@ tauri-plugin-window-state.workspace = true
 tauri-specta.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+reqwest.workspace = true
+# Native TLS matches the rest of the desktop; signed-version verification is required.
+tauri-plugin-updater = { version = "=2.14.0", default-features = false, features = ["native-tls", "system-proxy", "zip"] }
 # Same release aura-drivers uses: its `run_script` takes a `CancellationToken`.
 tokio-util = "0.7.20"
 tracing.workspace = true
