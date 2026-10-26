@@ -993,3 +993,19 @@ read/write was performed.
 - Core profile opening, backup/recovery key propagation, durable sync transactions and macOS runtime
   qualification remain pending. No existing profile or database was opened or changed by these tests.
 
+# M7 encrypted profile opening (2026-10-26)
+
+- Added the explicit `aura-core/account-sync` keyed Store open, retaining the profile key for integrity
+  reads and encrypted pre-migration backups. Unkeyed Account opens fail before file access, while
+  Local profiles keep their existing plaintext behavior. A bounded durable encryption marker also
+  protects explicit path opens and builds without SQLCipher from plaintext corruption recovery.
+- Wrong keys, damaged encrypted headers, unknown marker formats, missing initialized databases and
+  newer schemas leave the original data untouched. Failed migrations roll back after an encrypted
+  backup. Encrypted damage reports a recovery-required error; plaintext salvage is never attempted.
+- Six focused Windows encrypted-store tests pass, including interrupted initial creation, WAL/data
+  confidentiality, backup contents/version, wrong-key preservation and failed upgrade rollback.
+  All 162 selected storage/chatstore regression tests pass with SQLCipher enabled. Feature-enabled
+  and default all-target Clippy pass. No lint allowances were added to production code.
+  Account session activation, attachment/checkpoint storage, backup restore UI, durable sync state and
+  macOS runtime qualification remain pending. No existing profile was opened or modified.
+

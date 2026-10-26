@@ -69,3 +69,22 @@ Pending gates: IPC cancellation and window/profile switch integration, private p
 validation, SQLCipher keying/migration backups, local-only import consent, real OS storage execution
 on macOS, visible Turnstile/account UI, encrypted offline queue/merge, config preview/rollback, and
 end-to-end approval/recovery across two real app devices. Those are not claimed complete here.
+# Encrypted profile storage seam
+
+`aura-core/account-sync` enables SQLCipher-backed account opening. Obtain a profile-bound
+`DatabaseKey` from the locally confirmed account key and pass an `Arc` to
+`Store::open_encrypted(&profile, key)`. `Store::open` refuses Account profiles before touching their
+database. Local profiles continue through their existing plaintext open and recovery path.
+
+The store retains the key for a separate integrity connection and encrypts each pre-migration online
+backup. Call `store.check_integrity()` rather than the unkeyed path helper for account data. The
+sidecar `aura.db.encryption` is bounded, contains only a format version and initialization state, and
+blocks unkeyed path opens even in a build without the account feature. An unknown marker, wrong key,
+damaged encrypted header, or missing database previously marked ready never creates an empty
+replacement. Migration failures roll back after a keyed backup. No database key appears in SQL text.
+
+Encrypted recovery currently stops with an actionable error and preserves the original file. It does
+not invoke plaintext salvage, `VACUUM INTO`, schema-page rewriting, or unkeyed scratch files. Explicit
+encrypted-backup restoration still needs its product flow. SQLCipher encrypts the database, WAL and
+backup data only. External attachment/checkpoint files and protocol logging must be handled separately
+before enabling production account sessions; this checkpoint does not claim those files are encrypted.
