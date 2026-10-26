@@ -6,6 +6,13 @@ Current owner correction: Windows and macOS are the supported targets. Linux and
 acceptance are deferred. Implementation checkpoints are committed locally with focused checks;
 the root task will run CI at major integration and final verification points.
 
+M2b backend work is isolated on `codex/m2b-core`, based on the integrated catalog. The initial
+`aura_protocol::workspace` types define project metadata, device-local folder mappings, archived
+listing filters, pinned chat metadata, explicit moves, and a busy-folder creation preview. Existing
+`ChatSummary` and transcript frames retain their shape. These types are exported in the generated
+desktop bindings; persistence operations and the Tauri command wiring are still pending. The
+binding export test passes locally. No CI push or real agent invocation was performed.
+
 The final local M1e follow-up resolves Windows Pi, OMP and Grok npm shims through the reviewed
 package's bounded `package.json` bin entry, using `node.exe` or a packaged executable. It never
 interprets shim content. Package name, relative entry containment and canonical target are checked;

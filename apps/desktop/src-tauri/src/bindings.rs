@@ -23,6 +23,12 @@ const HEADER: &str = "// Regenerate with `cargo test -p auracode-desktop export_
 /// come from this one list, so they cannot drift apart.
 pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new()
+        .typ::<aura_protocol::workspace::WorkspaceSnapshot>()
+        .typ::<aura_protocol::workspace::WorkspaceFilter>()
+        .typ::<aura_protocol::workspace::ProjectCreate>()
+        .typ::<aura_protocol::workspace::ChatCreatePreview>()
+        .typ::<aura_protocol::workspace::ProjectChatCreate>()
+        .typ::<aura_protocol::workspace::ChatMove>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
             commands::start_demo_stream,

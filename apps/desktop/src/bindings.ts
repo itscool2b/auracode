@@ -420,6 +420,22 @@ export type ChatAttach = {
 	history: HistoryPage,
 };
 
+export type ChatCreatePreview = {
+	folder: ProjectFolder,
+	/**  Sessions holding this canonical folder, including preparation and shutdown. */
+	busy_chats: ChatSummary[],
+};
+
+export type ChatMove = {
+	project_id: string,
+	/**
+	 *  Must belong to the destination project. `None` preserves the current primary path by
+	 *  attaching a matching folder to that project, never by moving files on disk.
+	 */
+	folder_id: string | null,
+	allow_busy_folder: boolean,
+};
+
 /**  Everything about a chat that is not in its history. */
 export type ChatSnapshot = {
 	chat: ChatSummary,
@@ -551,6 +567,8 @@ export type EventBatch = {
 	seq_start: number,
 	events: AuraEvent[],
 };
+
+export type FolderKind = "local" | "git";
 
 /**  Whether a chat's folder can be used on this machine. */
 export type FolderState = "ok" | "missing" | 
@@ -685,6 +703,50 @@ export type ProfileMeta = {
 	display_name: string,
 	/**  Unix ms, exported to TypeScript as `number` (see `DeviceIdentity::created_at`). */
 	created_at: number,
+};
+
+export type ProjectChatCreate = {
+	agent_id: string,
+	folder_id: string,
+	/**  Explicit acknowledgment of the busy-folder warning. The server rechecks before creation. */
+	allow_busy_folder: boolean,
+};
+
+export type ProjectCreate = {
+	project: ProjectInput,
+	folder: string,
+};
+
+export type ProjectFolder = {
+	id: string,
+	project_id: string,
+	display_name: string,
+	/**  This device's path only. An unavailable device mapping is never borrowed from another. */
+	path: string | null,
+	folder_state: FolderState,
+	unavailable_reason: string | null,
+	kind: FolderKind,
+	git_remote_url: string | null,
+	git_default_branch: string | null,
+};
+
+/**  Complete editable project values. `None` clears an optional field on update. */
+export type ProjectInput = {
+	name: string,
+	color: string | null,
+	default_agent: string | null,
+	default_model: string | null,
+};
+
+export type ProjectSummary = {
+	id: string,
+	name: string,
+	color: string | null,
+	default_agent: string | null,
+	default_model: string | null,
+	folders: ProjectFolder[],
+	created_at: number,
+	updated_at: number,
 };
 
 /**  What `chat_send` did with the prompt: sent at once, or queued behind a turn or a start. */
@@ -1026,6 +1088,26 @@ export type Value = null | boolean | number | string | Value[] | { [key in strin
 
 /**  Evidence about this exact installed version, independent of whether its binary can start. */
 export type VersionVerification = { state: "verified"; version: string; scope: string } | { state: "untested"; last_verified: string | null } | { state: "unknown" };
+
+export type WorkspaceChat = {
+	chat: ChatSummary,
+	project_id: string,
+	folder_id: string | null,
+	pinned: boolean,
+	archived: boolean,
+};
+
+export type WorkspaceFilter = {
+	/**  Archived chats are excluded unless the caller explicitly asks to include them. */
+	include_archived: boolean,
+	/**  Filters chats only; projects remain available as move destinations. */
+	project_id: string | null,
+};
+
+export type WorkspaceSnapshot = {
+	projects: ProjectSummary[],
+	chats: WorkspaceChat[],
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

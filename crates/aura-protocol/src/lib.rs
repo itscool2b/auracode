@@ -16,6 +16,7 @@
 pub mod agents;
 mod lenient;
 pub mod session;
+pub mod workspace;
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
