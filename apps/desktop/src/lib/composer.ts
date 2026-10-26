@@ -6,6 +6,7 @@ import {
   type FileMention,
   type ProjectFilePreview,
   type PromptAck,
+  type SteeringAck,
 } from "../bindings";
 import { settle } from "./ipc";
 
@@ -21,6 +22,7 @@ export interface ComposerTransport {
   paste(chatId: string, bytes: number[]): Promise<ComposerAttachment>;
   mentions(chatId: string, query: string): Promise<FileMention[]>;
   send(chatId: string, input: ComposerInput): Promise<PromptAck>;
+  steer?(chatId: string, expectedTurnId: string, input: ComposerInput): Promise<SteeringAck>;
 }
 
 export const composerApi: ComposerTransport = {
@@ -34,4 +36,5 @@ export const composerApi: ComposerTransport = {
   paste: async (id, bytes) => settle(commands.composerPaste(id, bytes)),
   mentions: async (id, query) => settle(commands.composerMentions(id, query)),
   send: async (id, input) => settle(commands.composerSend(id, input)),
+  steer: async (id, turn, input) => settle(commands.composerSteer(id, turn, input)),
 };

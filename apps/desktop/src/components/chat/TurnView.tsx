@@ -38,6 +38,7 @@ export const TurnView = memo(function TurnView({
   agentId = "generic",
   agentName = "Agent",
   active = false,
+  live = true,
   part,
   suppressByline = false,
 }: {
@@ -46,6 +47,7 @@ export const TurnView = memo(function TurnView({
   readonly agentId?: string;
   readonly agentName?: string;
   readonly active?: boolean;
+  readonly live?: boolean;
   /** Virtual rows render one stable item or the footer; standalone previews render the whole turn. */
   readonly part?: number | "footer";
   readonly suppressByline?: boolean;
@@ -60,7 +62,9 @@ export const TurnView = memo(function TurnView({
         : [];
   const footer = part === undefined || part === "footer";
   return (
+    // biome-ignore lint/a11y/useSemanticElements: A transcript group contains messages, not form controls.
     <section
+      role="group"
       className="chat-segment"
       data-kind={segment.turnId === null ? "outside" : "turn"}
       aria-label={segment.turnId === null ? "Between turns" : "Turn"}
@@ -91,6 +95,7 @@ export const TurnView = memo(function TurnView({
                 <UserMessage
                   key={item.key}
                   item={item}
+                  settled={segment.end !== null || !live}
                   onEdit={
                     segment.turnId && actions.onContinue && !active
                       ? () =>

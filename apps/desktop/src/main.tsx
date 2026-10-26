@@ -30,6 +30,10 @@ if (container) {
       void import("./dev/configSyncPreview").then(({ mountConfigSyncPreview }) =>
         mountConfigSyncPreview(container),
       );
+    else if (mode === "steering")
+      void import("./dev/steeringPreview").then(({ mountSteeringPreview }) =>
+        mountSteeringPreview(container),
+      );
     else if (mode === "worktree-setup")
       void import("./dev/worktreeSetupPreview").then(({ mountWorktreeSetupPreview }) =>
         mountWorktreeSetupPreview(container),

@@ -606,6 +606,15 @@
     color: inherit;
   }
 
+  .chat-steering-status {
+    display: grid;
+    gap: 3px;
+    margin: -4px 0 8px;
+    color: var(--ui-text-muted);
+    font-size: var(--ui-size-sm);
+    overflow-wrap: anywhere;
+  }
+
   .chat-user-actions {
     position: absolute;
     right: calc(100% + 6px);

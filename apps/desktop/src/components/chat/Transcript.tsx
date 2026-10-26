@@ -134,6 +134,7 @@ export function Transcript({
             agentId={agentId}
             agentName={agentName}
             active={active}
+            live={live}
             suppressByline={grouped}
           />
         ),

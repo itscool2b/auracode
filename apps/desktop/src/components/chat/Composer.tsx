@@ -18,6 +18,7 @@ export function Composer({
   commands,
   error,
   onSend,
+  onSteer,
   onStop,
   onForceStop,
   controls,
@@ -31,6 +32,7 @@ export function Composer({
   readonly error: string | null;
   /** Answers whether the text was taken. */
   readonly onSend: (text: string, context?: ComposerContext) => Promise<boolean>;
+  readonly onSteer?: (text: string, context?: ComposerContext) => Promise<boolean>;
   readonly onStop: () => void;
   readonly onForceStop: () => void;
   readonly controls?: ReactNode;
@@ -84,8 +86,9 @@ export function Composer({
   const mentionOpen = mentionItems.length > 0 && mentionQuery !== undefined;
   const empty = text.trim() === "" && !context.attachments.length && !context.mentions.length;
 
-  const send = async (): Promise<void> => {
+  const send = async (steer = false): Promise<void> => {
     if (sending || context.busy || blocked || empty) return;
+    if (steer && (!onSteer || status !== "running")) return;
     setSending(true);
     try {
       const sent = {
@@ -93,12 +96,13 @@ export function Composer({
         attachments: context.attachments.map((item) => item.id),
         mentions: [...context.mentions],
       };
+      const submit = steer && onSteer ? onSteer : onSend;
       const accepted =
         context.attachments.length || context.mentions.length
-          ? await onSend(text, sent)
-          : await onSend(text);
+          ? await submit(text, sent)
+          : await submit(text);
       if (accepted) {
-        context.consume(sent);
+        context.consume(sent, steer);
       }
     } finally {
       setSending(false);
@@ -245,6 +249,18 @@ export function Composer({
         {controls}
         <div className="chat-composer-actions">
           <StopButton status={status} onStop={onStop} onForceStop={onForceStop} />
+          {onSteer && status === "running" ? (
+            <button
+              type="button"
+              className="ui-button"
+              data-testid="composer-steer"
+              disabled={sending || context.busy || blocked || empty}
+              onClick={() => void send(true)}
+              title="Send this message to the current running turn"
+            >
+              Steer
+            </button>
+          ) : null}
           <button
             type="button"
             className="chat-send"

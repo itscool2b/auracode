@@ -305,6 +305,7 @@ class Draft {
         // The demo stream has no UI for agent questions; the demo agent never asks.
         break;
       case "user_message_delta":
+      case "steering_status":
       case "prompt_lifecycle":
         // The demo stream plays agent turns only: no user messages, no prompt queue.
         break;

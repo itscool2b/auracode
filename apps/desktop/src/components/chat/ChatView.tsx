@@ -308,7 +308,7 @@ export function ChatView({
             ) : null}
             <div className="chat-compose-slot" hidden={pendingPermissions.length > 0}>
               <Composer
-                blocked={!handoffLoaded || handoffError !== null}
+                blocked={!handoffLoaded || handoffError !== null || state.steeringPending}
                 chatId={chatId}
                 contextApi={transport.composer}
                 agentName={agent?.name ?? state.chat.agent_name}
@@ -335,6 +335,15 @@ export function ChatView({
                 commands={state.lists?.commands ?? []}
                 error={state.sendError}
                 onSend={(text, context) => store.send(text, context)}
+                onSteer={
+                  state.phase === "live" &&
+                  status === "running" &&
+                  state.lists?.capabilities?.steer &&
+                  transport.composer?.steer &&
+                  state.openTurnId
+                    ? (text, context) => store.steer(state.openTurnId as string, text, context)
+                    : undefined
+                }
                 onStop={() => void store.interrupt()}
                 onForceStop={() => void store.forceStop()}
               />

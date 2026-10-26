@@ -89,8 +89,8 @@ export function useComposerContext(chatId: string | undefined, api: ComposerTran
     flush: () => draft.flush(),
     setText: (value: string | ((current: string) => string)) =>
       draft.update({ text: typeof value === "function" ? value(draft.getSnapshot().text) : value }),
-    consume: (sent: import("../../bindings").ComposerInput) => {
-      draft.consume(sent);
+    consume: (sent: import("../../bindings").ComposerInput, onlyMatching = false) => {
+      draft.consume(sent, onlyMatching);
       setError(null);
     },
     removeAttachment: (id: string) =>

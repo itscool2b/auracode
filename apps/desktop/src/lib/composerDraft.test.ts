@@ -30,6 +30,24 @@ function fake(): ComposerTransport {
 }
 
 describe("durable composer draft coordination", () => {
+  it("clears an accepted steering draft only when the entire submitted draft still matches", async () => {
+    const api = fake();
+    const store = new ComposerDraftStore("chat", api);
+    await Promise.resolve();
+    store.update({ text: "first", mentions: ["first.rs"] });
+    const sent = store.input();
+    store.update({ text: "next", mentions: ["first.rs", "second.rs"] });
+    store.consume(sent, true);
+    expect(store.input()).toEqual({
+      text: "next",
+      attachments: [],
+      mentions: ["first.rs", "second.rs"],
+    });
+    store.consume(store.input(), true);
+    expect(store.input()).toEqual({ text: "", attachments: [], mentions: [] });
+    await store.flush();
+  });
+
   it("reuses a draft when its chat is reopened and flushes after the view leaves", async () => {
     const api = fake();
     const store = composerDraft("chat", api);

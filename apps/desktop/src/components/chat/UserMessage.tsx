@@ -1,15 +1,18 @@
 import { CopyButton } from "@auracode/ui/orbit";
 import { useCallback, useState } from "react";
-import type { UserItem } from "../../lib/chat/transcript";
+import { steeringState, type UserItem } from "../../lib/chat/transcript";
 import { useDisclosure } from "./DisclosureMemory";
 
 export function UserMessage({
   item,
   onEdit,
+  settled = false,
 }: {
   readonly item: UserItem;
   readonly onEdit?: () => void;
+  readonly settled?: boolean;
 }) {
+  const delivery = steeringState(item, settled);
   const [expanded, setExpanded] = useDisclosure(item.key, "prompt", false);
   const [long, setLong] = useState(() => item.text.split("\n").length > 12);
   const measure = useCallback((node: HTMLDivElement | null) => {
@@ -37,8 +40,23 @@ export function UserMessage({
           </button>
         ) : null}
       </div>
+      {delivery ? (
+        <div className="chat-steering-status" role="status" data-steering-state={delivery}>
+          <span>
+            {
+              {
+                pending: "Sending to current turn…",
+                accepted: "Delivered to current turn",
+                rejected: "Not delivered",
+                unconfirmed: "Delivery unconfirmed",
+              }[delivery]
+            }
+          </span>
+          {item.steering?.detail ? <span>{item.steering.detail}</span> : null}
+        </div>
+      ) : null}
       <div className="chat-user-actions">
-        {onEdit ? (
+        {onEdit && !item.steering ? (
           <button type="button" onClick={onEdit}>
             Edit prompt
           </button>

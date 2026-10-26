@@ -7,6 +7,7 @@ import type {
   PlanEntry,
   ResolvedBy,
   SessionStatus,
+  SteeringState,
   StopReason,
   TokenUsage,
   ToolCall,
@@ -56,6 +57,13 @@ export interface UserItem {
   readonly kind: "user";
   readonly key: string;
   readonly text: string;
+  readonly steering?: { readonly state: SteeringState; readonly detail: string | null };
+}
+
+/** A pending delivery cannot be claimed after its turn ends or the session is recovered. */
+export function steeringState(item: UserItem, settled: boolean): SteeringState | undefined {
+  const state = item.steering?.state;
+  return settled && state === "pending" ? "unconfirmed" : state;
 }
 
 export interface MessageItem {
@@ -322,7 +330,23 @@ class Draft {
         const key = `user:${event.message_id}`;
         const previous = this.#get(key);
         const text = (previous?.kind === "user" ? previous.text : "") + event.text;
-        this.#place(key, seq, { kind: "user", key, text });
+        this.#place(key, seq, {
+          ...(previous?.kind === "user" ? previous : {}),
+          kind: "user",
+          key,
+          text,
+        });
+        break;
+      }
+      case "steering_status": {
+        const key = `user:${event.message_id}`;
+        const previous = this.#get(key);
+        this.#place(key, seq, {
+          kind: "user",
+          key,
+          text: previous?.kind === "user" ? previous.text : "",
+          steering: { state: event.state, detail: event.detail },
+        });
         break;
       }
       case "message_delta": {

@@ -82,7 +82,8 @@ export class ComposerDraftStore {
     };
   }
   /** A send may finish after the user switches chats or continues editing the draft. */
-  consume(sent: ComposerInput) {
+  consume(sent: ComposerInput, onlyMatching = false) {
+    if (onlyMatching && JSON.stringify(this.input()) !== JSON.stringify(sent)) return;
     this.update({
       text: this.#state.text === sent.text ? "" : this.#state.text,
       attachments: this.#state.attachments.filter((item) => !sent.attachments.includes(item.id)),
