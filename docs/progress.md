@@ -1325,3 +1325,12 @@ This is the first M8 checkpoint, with source evidence and remaining work in docs
 Copy/apply/rollback and the desktop Library are still being implemented. Development uses only
 temporary synthetic configuration fixtures, with no real credential/config reads, agent processes,
 pushes or CI dispatches.
+
+The next M8 checkpoint adds instruction/skill copy previews, durable per-operation journals and
+restart-safe rollback. Both source and destination revisions are checked, directory handles remain
+bound through apply, and hard-link publication refuses a concurrent new target. Independent original
+snapshots remain available even if an editor retains an old file handle. Rollback refuses later edits
+and deletions while recognizing interrupted publication. Complete skill bundles preserve binary
+assets and execution bits; unrelated target files remain untouched. Fourteen Windows fixture tests
+and aura-config all-target Clippy pass. macOS execution, scoped MCP/plugin mutation and Library UI
+remain pending. All copies and recovery checks used temporary synthetic files only.

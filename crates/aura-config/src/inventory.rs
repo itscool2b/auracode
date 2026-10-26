@@ -15,7 +15,7 @@ pub struct Library {
 pub(crate) struct Entry {
     pub item: Item,
     pub text: String,
-    pub files: Vec<(String, Vec<u8>)>,
+    pub files: Vec<safe_fs::FileData>,
 }
 
 impl Library {
@@ -74,7 +74,7 @@ impl Library {
         Ok(ItemPreview {
             item: entry.item,
             text: entry.text,
-            files: entry.files.into_iter().map(|(path, _)| path).collect(),
+            files: entry.files.into_iter().map(|file| file.path).collect(),
             notices,
         })
     }
@@ -271,7 +271,7 @@ fn skills(source: &Source, root: &Dir, base: &str, entries: &mut Vec<Entry>) -> 
         match safe_fs::tree(root, &folder) {
             Ok(files) => {
                 entry.item.revision = safe_fs::tree_hash(&files);
-                entry.item.bytes = files.iter().map(|(_, bytes)| bytes.len() as u32).sum();
+                entry.item.bytes = files.iter().map(|file| file.bytes.len() as u32).sum();
                 entry.files = files;
             }
             Err(error) => {
@@ -302,14 +302,15 @@ fn text_entry(source: &Source, kind: Kind, key: &str, path: &str, bytes: Vec<u8>
             copy_blocked: None,
         },
         text,
-        files: vec![(
-            PathBuf::from(path)
+        files: vec![safe_fs::FileData {
+            path: PathBuf::from(path)
                 .file_name()
                 .and_then(|name| name.to_str())
                 .ok_or(Error::UnsafePath)?
                 .to_owned(),
             bytes,
-        )],
+            executable: false,
+        }],
     })
 }
 

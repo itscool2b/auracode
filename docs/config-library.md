@@ -42,6 +42,21 @@ Source evidence checked on 2026-10-26:
   [skills](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/skills.md).
   Pi packages and executable extensions are not interchangeable with another provider's plugins.
 
-This first checkpoint is an inventory foundation. Reviewed copy/apply/rollback, the desktop root
-resolver, Library commands/UI, duplicate precedence, nested skill discovery and platform execution
-checks remain pending. M8 and M9 are not complete. No real agent configuration was read or changed.
+Instruction files and complete skill bundles can now be copied through a ten-minute, one-use Rust
+preview. The source revision covers supporting bytes and executable bits. Apply checks all target
+revisions before touching any item and keeps the original target directory handle from preview.
+Replaced files and independent snapshots remain in an excluded `.auracode-library/<UUID>` directory.
+Publication refuses to overwrite a path another writer created. A partial failure returns its recovery
+ID and retains originals and staged content. This needs a filesystem with hard-link support; a failure
+is reported instead of falling back to an unsafe overwrite. The host must serialize mutations and
+keep the blocking operation owned after an IPC caller disconnects.
+
+Rollback validates the retained journal, selected paths and current revisions before any write. It
+works after restarting the host and recovers interruption between moving an original and publishing
+its replacement. Completed-copy markers distinguish interruption from a later user deletion. Newer
+edits are retained, and unrelated target files are neither copied into the journal nor removed.
+Windows file contents are flushed before mutation; macOS also flushes containing directories.
+
+MCP/plugin apply, the desktop root resolver, Library commands/UI, duplicate precedence, nested skill
+discovery and macOS execution checks remain pending. M8 and M9 are not complete. No real agent
+configuration was read or changed.

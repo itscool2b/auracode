@@ -2,6 +2,7 @@
 //! The host supplies approved roots. Credentials, sessions and vendor-synced directories are not
 //! part of an inventory. Content is untrusted data, never executable instructions for this crate.
 
+mod copy;
 mod inventory;
 mod mcp;
 mod safe_fs;
@@ -11,6 +12,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+pub use copy::PreparedCopy;
 pub use inventory::Library;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -93,6 +95,34 @@ pub struct ItemPreview {
     pub text: String,
     pub files: Vec<String>,
     pub notices: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct CopyFile {
+    pub path: String,
+    pub before_revision: Option<String>,
+    pub after_revision: String,
+    pub bytes: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct CopyPreview {
+    pub id: String,
+    pub from: ItemRef,
+    pub to_source: String,
+    pub files: Vec<CopyFile>,
+    pub before_text: Option<String>,
+    pub after_text: String,
+    pub notices: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct CopyResult {
+    pub id: String,
+    pub source_id: String,
+    pub applied: Vec<String>,
+    pub recovery_required: bool,
+    pub message: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]

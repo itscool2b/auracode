@@ -14,6 +14,13 @@ pub(crate) const TREE_LIMIT: usize = 16 * 1024 * 1024;
 pub(crate) const FILE_COUNT: usize = 256;
 pub(crate) const ITEM_COUNT: usize = 2048;
 
+#[derive(Clone)]
+pub(crate) struct FileData {
+    pub path: String,
+    pub bytes: Vec<u8>,
+    pub executable: bool,
+}
+
 pub(crate) fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -97,6 +104,10 @@ pub(crate) fn parent(root: &Dir, path: &str) -> Result<(Dir, String)> {
 }
 
 pub(crate) fn read(root: &Dir, path: &str) -> Result<Option<Vec<u8>>> {
+    Ok(read_file(root, path)?.map(|file| file.bytes))
+}
+
+pub(crate) fn read_file(root: &Dir, path: &str) -> Result<Option<FileData>> {
     validate(path)?;
     // A missing path is ordinary. Every subsequent open is capability-relative and refuses links.
     match root.symlink_metadata(path) {
@@ -122,7 +133,18 @@ pub(crate) fn read(root: &Dir, path: &str) -> Result<Option<Vec<u8>>> {
     if bytes.len() > FILE_LIMIT {
         return Err(Error::Limit);
     }
-    Ok(Some(bytes))
+    #[cfg(unix)]
+    let executable = {
+        use cap_std::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    };
+    #[cfg(not(unix))]
+    let executable = false;
+    Ok(Some(FileData {
+        path: path.into(),
+        bytes,
+        executable,
+    }))
 }
 
 pub(crate) fn directory(root: &Dir, path: &str) -> Result<Dir> {
@@ -158,13 +180,13 @@ pub(crate) fn children(root: &Dir, path: &str) -> Result<Vec<String>> {
     Ok(names)
 }
 
-pub(crate) fn tree(root: &Dir, path: &str) -> Result<Vec<(String, Vec<u8>)>> {
+pub(crate) fn tree(root: &Dir, path: &str) -> Result<Vec<FileData>> {
     fn walk(
         dir: &Dir,
         prefix: &str,
         depth: usize,
         total: &mut usize,
-        files: &mut Vec<(String, Vec<u8>)>,
+        files: &mut Vec<FileData>,
     ) -> Result<()> {
         if depth > 8 {
             return Err(Error::Limit);
@@ -196,29 +218,31 @@ pub(crate) fn tree(root: &Dir, path: &str) -> Result<Vec<(String, Vec<u8>)>> {
                 if files.len() == FILE_COUNT {
                     return Err(Error::Limit);
                 }
-                let bytes = read(dir, &name)?.ok_or(Error::Stale)?;
-                *total += bytes.len();
+                let mut file = read_file(dir, &name)?.ok_or(Error::Stale)?;
+                *total += file.bytes.len();
                 if *total > TREE_LIMIT {
                     return Err(Error::Limit);
                 }
-                files.push((path, bytes));
+                file.path = path;
+                files.push(file);
             }
         }
         Ok(())
     }
     let mut files = Vec::new();
     walk(&directory(root, path)?, "", 0, &mut 0, &mut files)?;
-    files.sort_by(|a, b| a.0.cmp(&b.0));
+    files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(files)
 }
 
-pub(crate) fn tree_hash(files: &[(String, Vec<u8>)]) -> String {
+pub(crate) fn tree_hash(files: &[FileData]) -> String {
     let mut digest = Sha256::new();
-    for (path, bytes) in files {
-        digest.update((path.len() as u64).to_le_bytes());
-        digest.update(path);
-        digest.update((bytes.len() as u64).to_le_bytes());
-        digest.update(bytes);
+    for file in files {
+        digest.update((file.path.len() as u64).to_le_bytes());
+        digest.update(&file.path);
+        digest.update([u8::from(file.executable)]);
+        digest.update((file.bytes.len() as u64).to_le_bytes());
+        digest.update(&file.bytes);
     }
     format!("{:x}", digest.finalize())
 }
