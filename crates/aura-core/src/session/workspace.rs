@@ -9,6 +9,18 @@ use super::*;
 use crate::chatstore::organization::{Organization, OrganizationCommand};
 
 impl SessionManager {
+    async fn portable_folder_identity(
+        &self,
+        folder: &std::path::Path,
+    ) -> Option<crate::gitworkspaces::FolderIdentity> {
+        self.deps()
+            .worktrees
+            .as_ref()?
+            .folder_identity(folder)
+            .await
+            .ok()
+    }
+
     pub async fn workspace_snapshot(
         &self,
         filter: WorkspaceFilter,
@@ -28,11 +40,13 @@ impl SessionManager {
     ) -> Result<ProjectSummary, SessionError> {
         self.validate_project(&request.project)?;
         let folder = checked_folder(&request.folder).await?;
+        let identity = self.portable_folder_identity(&folder).await;
         let organization = self
             .organization(OrganizationCommand::CreateProject {
                 id: crate::ids::new_id(),
                 input: request.project,
                 folder,
+                identity,
             })
             .await?;
         let id = organization.affected_id.clone();
@@ -72,10 +86,12 @@ impl SessionManager {
     ) -> Result<ProjectFolder, SessionError> {
         bounded(project_id, "Project ID", 128)?;
         let folder = checked_folder(path).await?;
+        let identity = self.portable_folder_identity(&folder).await;
         let organization = self
             .organization(OrganizationCommand::AddFolder {
                 project_id: project_id.into(),
                 folder,
+                identity,
             })
             .await?;
         let id = organization.affected_id.clone();

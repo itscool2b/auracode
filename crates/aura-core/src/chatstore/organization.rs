@@ -10,6 +10,7 @@ use aura_protocol::workspace::{
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{ChatRecord, rows};
+use crate::gitworkspaces::FolderIdentity;
 use crate::ids::new_id;
 
 #[derive(Debug, Clone)]
@@ -19,6 +20,7 @@ pub(crate) enum OrganizationCommand {
         id: String,
         input: ProjectInput,
         folder: PathBuf,
+        identity: Option<FolderIdentity>,
     },
     UpdateProject {
         id: String,
@@ -27,6 +29,7 @@ pub(crate) enum OrganizationCommand {
     AddFolder {
         project_id: String,
         folder: PathBuf,
+        identity: Option<FolderIdentity>,
     },
     RenameChat {
         id: String,
@@ -67,11 +70,27 @@ impl OrganizationCommand {
         };
         256 + match self {
             Self::Snapshot(filter) => filter.project_id.as_ref().map_or(0, String::len),
-            Self::CreateProject { id, input, folder } => {
-                id.len() + input_bytes(input) + folder.as_os_str().len()
+            Self::CreateProject {
+                id,
+                input,
+                folder,
+                identity,
+            } => {
+                id.len()
+                    + input_bytes(input)
+                    + folder.as_os_str().len()
+                    + identity.as_ref().map_or(0, FolderIdentity::bytes)
             }
             Self::UpdateProject { id, input } => id.len() + input_bytes(input),
-            Self::AddFolder { project_id, folder } => project_id.len() + folder.as_os_str().len(),
+            Self::AddFolder {
+                project_id,
+                folder,
+                identity,
+            } => {
+                project_id.len()
+                    + folder.as_os_str().len()
+                    + identity.as_ref().map_or(0, FolderIdentity::bytes)
+            }
             Self::RenameChat { id, title } => id.len() + title.len(),
             Self::PinChat { id, .. } | Self::ArchiveChat { id, .. } => id.len(),
             Self::MoveChat {
@@ -113,18 +132,30 @@ pub(crate) fn execute(
 ) -> rusqlite::Result<Organization> {
     let affected_id = match command {
         OrganizationCommand::Snapshot(filter) => return snapshot(conn, device, &filter),
-        OrganizationCommand::CreateProject { id, input, folder } => {
+        OrganizationCommand::CreateProject {
+            id,
+            input,
+            folder,
+            identity,
+        } => {
             conn.execute("INSERT INTO projects (id,name,color,default_agent,default_model,created_at,updated_at,device_id) VALUES (?1,?2,?3,?4,?5,?6,?6,?7)", params![id,input.name,input.color,input.default_agent,input.default_model,now,device])?;
-            add_folder(conn, device, now, &id, &folder)?;
+            let folder_id = add_folder(conn, device, now, &id, &folder)?;
+            update_identity(conn, device, now, &folder_id, identity.as_ref())?;
             id
         }
         OrganizationCommand::UpdateProject { id, input } => {
             changed(conn.execute("UPDATE projects SET name=?2,color=?3,default_agent=?4,default_model=?5,updated_at=?6,device_id=?7 WHERE id=?1 AND deleted=0", params![id,input.name,input.color,input.default_agent,input.default_model,now,device])?)?;
             id
         }
-        OrganizationCommand::AddFolder { project_id, folder } => {
+        OrganizationCommand::AddFolder {
+            project_id,
+            folder,
+            identity,
+        } => {
             project_exists(conn, &project_id)?;
-            add_folder(conn, device, now, &project_id, &folder)?
+            let id = add_folder(conn, device, now, &project_id, &folder)?;
+            update_identity(conn, device, now, &id, identity.as_ref())?;
+            id
         }
         OrganizationCommand::RenameChat { id, title } => {
             changed(conn.execute("UPDATE chats SET title=?2,title_source='manual',updated_at=?3,device_id=?4 WHERE id=?1 AND deleted=0", params![id,title,now,device])?)?;
@@ -188,7 +219,13 @@ pub(crate) fn execute(
                             "Locate the chat folder on this device before moving the chat.".into(),
                         ));
                     }
-                    add_folder(conn, device, now, &project_id, &current.folder)?
+                    let destination = add_folder(conn, device, now, &project_id, &current.folder)?;
+                    if let Some(source) = current.folder_id.as_ref() {
+                        // Organization moves preserve the same local folder. Carry its qualified
+                        // portable identity when the destination was newly registered as local.
+                        conn.execute("UPDATE project_folders SET kind='git',git_remote_url=(SELECT git_remote_url FROM project_folders WHERE id=?2),git_default_branch=(SELECT git_default_branch FROM project_folders WHERE id=?2),origin_device_id=NULL,updated_at=?3,device_id=?4 WHERE id=?1 AND kind='local' AND EXISTS(SELECT 1 FROM project_folders WHERE id=?2 AND kind='git' AND deleted=0)", params![destination,source,now,device])?;
+                    }
+                    destination
                 }
             };
             changed(conn.execute("UPDATE chats SET project_id=?2,folder_id=?3,updated_at=?4,device_id=?5 WHERE id=?1 AND deleted=0", params![id,project_id,folder_id,now,device])?)?;
@@ -230,6 +267,27 @@ fn project_exists(conn: &Connection, id: &str) -> rusqlite::Result<()> {
         [id],
         |_| Ok(()),
     )
+}
+
+fn update_identity(
+    conn: &Connection,
+    device: &str,
+    now: Millis,
+    id: &str,
+    identity: Option<&FolderIdentity>,
+) -> rusqlite::Result<()> {
+    let Some(identity) = identity else {
+        return Ok(());
+    };
+    let (kind, remote, branch) = match identity {
+        FolderIdentity::Local => ("local", None, None),
+        FolderIdentity::Git {
+            remote,
+            default_branch,
+        } => ("git", Some(remote.as_str()), default_branch.as_deref()),
+    };
+    conn.execute("UPDATE project_folders SET kind=?2,git_remote_url=?3,git_default_branch=?4,origin_device_id=CASE WHEN ?2='local' THEN ?5 ELSE NULL END,updated_at=?6,device_id=?5 WHERE id=?1 AND deleted=0", params![id,kind,remote,branch,device,now])?;
+    Ok(())
 }
 
 pub(super) fn add_folder(
@@ -349,6 +407,137 @@ fn snapshot(
 mod tests {
     use super::*;
     use crate::chatstore::test_support::TestDb;
+
+    #[test]
+    fn portable_identity_updates_preserve_folder_id_and_device_local_paths() {
+        let db = TestDb::new();
+        let input = ProjectInput {
+            name: "Project".into(),
+            color: None,
+            default_agent: None,
+            default_model: None,
+        };
+        let view = execute(
+            db.conn(),
+            "dev",
+            1,
+            OrganizationCommand::CreateProject {
+                id: "project".into(),
+                input,
+                folder: PathBuf::from("/owned/repo"),
+                identity: None,
+            },
+        )
+        .expect("project");
+        let original_id = view.projects[0].folders[0].id.clone();
+        let identity = FolderIdentity::Git {
+            remote: "https://github.com/fixture/project".into(),
+            default_branch: Some("trunk".into()),
+        };
+        let refresh = |identity| {
+            execute(
+                db.conn(),
+                "dev",
+                2,
+                OrganizationCommand::AddFolder {
+                    project_id: "project".into(),
+                    folder: PathBuf::from("/owned/repo"),
+                    identity,
+                },
+            )
+            .expect("refresh")
+        };
+        let view = refresh(Some(identity));
+        let folder = &view.projects[0].folders[0];
+        assert_eq!(folder.id, original_id);
+        assert_eq!(folder.kind, FolderKind::Git);
+        assert_eq!(folder.path.as_deref(), Some("/owned/repo"));
+        assert_eq!(folder.git_default_branch.as_deref(), Some("trunk"));
+        assert_eq!(refresh(None).projects[0].folders[0].kind, FolderKind::Git);
+        let foreign = execute(
+            db.conn(),
+            "other-device",
+            3,
+            OrganizationCommand::Snapshot(WorkspaceFilter::default()),
+        )
+        .expect("foreign view");
+        assert!(foreign.projects[0].folders[0].path.is_none());
+        assert_eq!(
+            foreign.projects[0].folders[0].git_remote_url.as_deref(),
+            Some("https://github.com/fixture/project")
+        );
+        let local = refresh(Some(FolderIdentity::Local));
+        assert_eq!(local.projects[0].folders[0].id, original_id);
+        assert_eq!(local.projects[0].folders[0].kind, FolderKind::Local);
+        assert!(local.projects[0].folders[0].git_remote_url.is_none());
+        assert!(local.projects[0].folders[0].git_default_branch.is_none());
+    }
+
+    #[test]
+    fn portable_identity_follows_a_project_move_that_keeps_the_same_folder() {
+        let db = TestDb::new();
+        let chat = db.chat("/owned/repo");
+        let source = rows::chat(db.conn(), "dev", &chat)
+            .expect("read")
+            .expect("chat");
+        update_identity(
+            db.conn(),
+            "dev",
+            2,
+            source.folder_id.as_ref().expect("folder"),
+            Some(&FolderIdentity::Git {
+                remote: "https://github.com/fixture/project".into(),
+                default_branch: Some("main".into()),
+            }),
+        )
+        .expect("identity");
+        execute(
+            db.conn(),
+            "dev",
+            3,
+            OrganizationCommand::CreateProject {
+                id: "destination-project".into(),
+                input: ProjectInput {
+                    name: "Destination".into(),
+                    color: None,
+                    default_agent: None,
+                    default_model: None,
+                },
+                folder: PathBuf::from("/other"),
+                identity: None,
+            },
+        )
+        .expect("destination");
+        let view = execute(
+            db.conn(),
+            "dev",
+            4,
+            OrganizationCommand::MoveChat {
+                id: chat,
+                project_id: "destination-project".into(),
+                folder_id: None,
+                preserves_folder: true,
+            },
+        )
+        .expect("move");
+        let destination = view
+            .projects
+            .iter()
+            .find(|project| project.id == "destination-project")
+            .expect("project");
+        let folder = destination
+            .folders
+            .iter()
+            .find(|folder| folder.path.as_deref() == Some("/owned/repo"))
+            .expect("folder");
+        assert_eq!(folder.kind, FolderKind::Git);
+        assert_eq!(
+            folder.git_remote_url.as_deref(),
+            Some("https://github.com/fixture/project")
+        );
+        assert_eq!(folder.git_default_branch.as_deref(), Some("main"));
+        assert_ne!(Some(&folder.id), source.folder_id.as_ref());
+    }
 
     #[test]
     fn foreign_device_paths_are_never_used_for_local_chats_or_folders() {

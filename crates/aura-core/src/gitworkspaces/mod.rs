@@ -3,11 +3,13 @@
 mod actions;
 mod create;
 mod git;
+mod identity;
 mod inspect;
 mod publish;
 mod records;
 mod recovery;
 pub(crate) mod setup;
+pub(crate) use identity::FolderIdentity;
 mod setup_files;
 #[cfg(test)]
 mod tests;
