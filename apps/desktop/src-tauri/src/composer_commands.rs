@@ -33,6 +33,19 @@ use tauri::{AppHandle, Manager as _, State};
 
 #[tauri::command]
 #[specta::specta]
+pub async fn project_file_preview(
+    state: State<'_, AppState>,
+    chat_id: String,
+    path: String,
+) -> Result<aura_protocol::composer::ProjectFilePreview, AppError> {
+    Ok(state
+        .sessions()?
+        .project_file_preview(&chat_id, path)
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn composer_pick(
     app: AppHandle,
     state: State<'_, AppState>,

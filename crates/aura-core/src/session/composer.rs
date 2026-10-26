@@ -22,6 +22,20 @@ fn invalid(message: impl Into<String>) -> SessionError {
 }
 
 impl SessionManager {
+    /// Reads only after the user selects a project file. Never adds its contents to a prompt.
+    pub async fn project_file_preview(
+        &self,
+        chat_id: &str,
+        relative: String,
+    ) -> Result<aura_protocol::composer::ProjectFilePreview, SessionError> {
+        let folder = self.composer_folder(chat_id).await?;
+        self.deps()
+            .rt
+            .spawn_blocking(move || preview_file(&folder, &relative))
+            .await
+            .map_err(|_| invalid("The file preview could not be read."))?
+    }
+
     pub async fn composer_draft(
         &self,
         chat_id: &str,
@@ -417,6 +431,78 @@ fn checked_mention(folder: &Path, relative: &str) -> Result<PathBuf, SessionErro
     Ok(target)
 }
 
+fn preview_file(
+    folder: &Path,
+    relative: &str,
+) -> Result<aura_protocol::composer::ProjectFilePreview, SessionError> {
+    use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt, OpenOptionsSyncExt};
+    const LIMIT: usize = 128 * 1024;
+    if Path::new(relative)
+        .components()
+        .any(|part| part.as_os_str().eq_ignore_ascii_case(".git"))
+    {
+        return Err(invalid(
+            "Git's internal files are not shown in the project viewer.",
+        ));
+    }
+    let path = checked_mention(folder, relative)?;
+    if !fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file()) {
+        return Err(invalid("Choose a regular project file."));
+    }
+    // Match checkpoint traversal: every component is capability-relative and refuses links.
+    let mut directory = cap_std::fs::Dir::open_ambient_dir(folder, cap_std::ambient_authority())
+        .map_err(|_| invalid("The project folder is unavailable."))?;
+    let relative_path = Path::new(relative);
+    let mut parts = relative_path.components().peekable();
+    while let Some(part) = parts.next() {
+        if parts.peek().is_none() {
+            break;
+        }
+        directory = directory
+            .open_dir_nofollow(part.as_os_str())
+            .map_err(|_| invalid("The file's parent folder changed or is a link."))?;
+    }
+    let name = relative_path
+        .file_name()
+        .ok_or_else(|| invalid("Choose a project file."))?;
+    let mut options = cap_std::fs::OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No).nonblock(true);
+    let file = directory
+        .open_with(name, &options)
+        .map_err(|_| invalid("The file changed, is a link, or could not be opened."))?;
+    let metadata = file
+        .metadata()
+        .map_err(|_| invalid("The file could not be inspected."))?;
+    if !metadata.is_file() {
+        return Err(invalid("Choose a regular project file."));
+    }
+    let mut bytes = Vec::new();
+    file.take(LIMIT as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| invalid("The file could not be read."))?;
+    let truncated = bytes.len() > LIMIT;
+    bytes.truncate(LIMIT);
+    let text = if bytes.contains(&0) {
+        None
+    } else {
+        match std::str::from_utf8(&bytes) {
+            Ok(text) => Some(text.to_owned()),
+            Err(error) if truncated && error.error_len().is_none() => {
+                std::str::from_utf8(&bytes[..error.valid_up_to()])
+                    .ok()
+                    .map(str::to_owned)
+            }
+            Err(_) => None,
+        }
+    };
+    Ok(aura_protocol::composer::ProjectFilePreview {
+        path: relative.replace('\\', "/"),
+        bytes: metadata.len(),
+        text,
+        truncated,
+    })
+}
+
 fn search(folder: &Path, query: &str) -> Result<Vec<FileMention>, SessionError> {
     let root = folder
         .canonicalize()
@@ -484,6 +570,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn file_preview_bounds_text_and_refuses_private_paths() {
+        let temp = tempfile::tempdir().expect("project");
+        fs::write(temp.path().join("main.rs"), "fn main() {}\n").expect("source");
+        let source = preview_file(temp.path(), "main.rs").expect("preview");
+        assert_eq!(source.text.as_deref(), Some("fn main() {}\n"));
+        assert!(!source.truncated);
+        fs::write(temp.path().join("large.txt"), "é".repeat(100_000)).expect("large");
+        let large = preview_file(temp.path(), "large.txt").expect("large preview");
+        assert!(large.truncated);
+        assert!(large.text.expect("valid text").len() <= 128 * 1024);
+        fs::write(temp.path().join("binary.dat"), [0, 255]).expect("binary");
+        assert!(
+            preview_file(temp.path(), "binary.dat")
+                .expect("binary preview")
+                .text
+                .is_none()
+        );
+        assert!(preview_file(temp.path(), "../outside").is_err());
+        assert!(preview_file(temp.path(), ".git/config").is_err());
+        assert!(preview_file(temp.path(), "auth.json").is_err());
+    }
+
+    #[test]
     fn imports_normalize_images_and_reject_binary_or_oversized_text() {
         let temp = tempfile::tempdir().expect("folder");
         let path = temp.path().join("sample.png");
@@ -534,6 +643,11 @@ mod tests {
         fs::write(outside.path().join("file.txt"), "outside").expect("outside file");
         std::os::unix::fs::symlink(outside.path(), temp.path().join("escape")).expect("link");
         assert!(checked_mention(temp.path(), "escape/file.txt").is_err());
+        assert!(preview_file(temp.path(), "escape/file.txt").is_err());
+        fs::write(temp.path().join("inside.txt"), "inside").expect("inside file");
+        std::os::unix::fs::symlink("inside.txt", temp.path().join("alias.txt"))
+            .expect("inside link");
+        assert!(preview_file(temp.path(), "alias.txt").is_err());
         assert!(
             !search(temp.path(), "")
                 .expect("search")

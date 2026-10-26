@@ -29,3 +29,11 @@ pub struct FileMention {
     pub path: String,
     pub directory: bool,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ProjectFilePreview {
+    pub path: String,
+    pub bytes: u64,
+    pub text: Option<String>,
+    pub truncated: bool,
+}

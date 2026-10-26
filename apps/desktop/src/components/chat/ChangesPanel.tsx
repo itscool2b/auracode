@@ -1,6 +1,7 @@
 import { FileDiff, RefreshCw, RotateCcw, X } from "lucide-react";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import type {
+  AgentEntry,
   ChangeDiff,
   ChangesSnapshot,
   RevertPreview,
@@ -8,8 +9,11 @@ import type {
   SessionStatus,
 } from "../../bindings";
 import type { ChangesTransport } from "../../lib/changes";
+import type { ChatState } from "../../lib/chat/chatStore";
 import { hasProcess, type Transcript } from "../../lib/chat/transcript";
+import type { ComposerTransport } from "../../lib/composer";
 import { errorMessage } from "../../lib/errors";
+import { ContextContents, type ContextTab } from "./ContextContents";
 import { DiffBlock } from "./DiffBlock";
 import { Modal } from "./Modal";
 
@@ -20,6 +24,9 @@ export function ChangesPanel({
   transcript,
   onClose,
   onStop,
+  state,
+  composer,
+  agent,
 }: {
   readonly chatId: string;
   readonly api: ChangesTransport;
@@ -27,6 +34,9 @@ export function ChangesPanel({
   readonly transcript: Transcript;
   readonly onClose: () => void;
   readonly onStop: () => void;
+  readonly state: ChatState;
+  readonly composer?: ComposerTransport;
+  readonly agent: AgentEntry | null;
 }) {
   const title = useId();
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -49,6 +59,7 @@ export function ChangesPanel({
   const [preview, setPreview] = useState<RevertPreview | null>(null);
   const [result, setResult] = useState<RevertResult | null>(null);
   const [width, setWidth] = useState(380);
+  const [tab, setTab] = useState<ContextTab>("Changes");
   const live = hasProcess(status);
 
   useEffect(() => {
@@ -189,8 +200,46 @@ export function ChangesPanel({
         onPointerUp={(event) => event.currentTarget.releasePointerCapture(event.pointerId)}
       />
       <header className="changes-panel-header">
-        <h2 id={title}>Changes</h2>
-        <span>{snapshot?.files.length ?? 0}</span>
+        <h2 id={title} className="sr-only">
+          Chat context
+        </h2>
+        <div
+          className="context-panel-tabs"
+          role="tablist"
+          aria-label="Chat context"
+          onKeyDown={(event) => {
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+            const tabs: ContextTab[] = ["Changes", "Files", "Plan", "Session"];
+            const index =
+              event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? tabs.length - 1
+                  : (tabs.indexOf(tab) + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) %
+                    tabs.length;
+            event.preventDefault();
+            setTab(tabs[index] ?? "Changes");
+            event.currentTarget.querySelectorAll<HTMLButtonElement>("button")[index]?.focus();
+          }}
+        >
+          {(["Changes", "Files", "Plan", "Session"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              role="tab"
+              id={`${title}-${item}`}
+              aria-controls={`${title}-content`}
+              aria-selected={tab === item}
+              tabIndex={tab === item ? 0 : -1}
+              onClick={() => setTab(item)}
+            >
+              {item}
+              {item === "Changes" && snapshot?.files.length ? (
+                <small>{snapshot.files.length}</small>
+              ) : null}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           className="chat-icon-button"
@@ -211,147 +260,161 @@ export function ChangesPanel({
           <X size={16} />
         </button>
       </header>
-      <label className="changes-scope">
-        Compare current files with
-        <select
-          value={scope}
-          onChange={(event) => {
-            setScope(event.currentTarget.value);
-            setSelected(new Set());
-            setSnapshot(null);
-            setPath(null);
-            setDiff(null);
-          }}
-        >
-          <option value="">Before the latest turn</option>
-          {turns.map((turn) => (
-            <option key={turn.id} value={turn.id}>
-              Before: {turn.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="changes-panel-scroll">
-        {busy ? (
-          <p className="changes-empty" role="status">
-            Reading changes…
-          </p>
-        ) : null}
-        {error ? (
-          <p className="ui-error" role="alert">
-            {error}
-          </p>
-        ) : null}
-        {snapshot?.unavailable_reason ? (
-          <p className="changes-empty">{snapshot.unavailable_reason}</p>
-        ) : null}
-        {!busy && checkpoint && snapshot?.files.length === 0 ? (
-          <p className="changes-empty">No file changes since this checkpoint.</p>
-        ) : null}
-        {checkpoint?.warnings.length ? (
-          <details className="changes-warnings">
-            <summary>Checkpoint exclusions</summary>
-            {checkpoint.warnings.map((warning) => (
-              <p key={warning}>{warning}</p>
-            ))}
-          </details>
-        ) : null}
-        <div className="changes-file-list">
-          {snapshot?.files.map((file) => (
-            <div key={file.path} data-selected={file.path === path}>
-              <input
-                type="checkbox"
-                aria-label={`Select ${file.path} for revert`}
-                checked={selected.has(file.path)}
-                onChange={(event) =>
-                  setSelected((current) => {
-                    const next = new Set(current);
-                    if (event.target.checked) next.add(file.path);
-                    else next.delete(file.path);
-                    return next;
-                  })
-                }
-              />
-              <button type="button" onClick={() => setPath(file.path)} title={file.path}>
-                <FileDiff size={14} />
-                <span>{file.path}</span>
-                <small data-kind={file.kind}>
-                  {file.kind === "added" ? "A" : file.kind === "deleted" ? "D" : "M"}
-                </small>
-              </button>
-            </div>
-          ))}
-        </div>
-        {diff ? (
-          diff.binary ? (
-            <p className="changes-empty">
-              Binary file.{" "}
-              {snapshot?.files.find((file) => file.path === diff.path)?.after_bytes ?? 0} bytes
-              after this change.
-            </p>
-          ) : (
-            <>
-              {diff.truncated ? (
-                <p className="changes-warning">
-                  This preview is shortened. Reverting restores the complete checkpoint file.
+      <div
+        className="context-tab-content"
+        role="tabpanel"
+        id={`${title}-content`}
+        aria-labelledby={`${title}-${tab}`}
+      >
+        {tab !== "Changes" ? (
+          <ContextContents tab={tab} state={state} api={composer} agent={agent} />
+        ) : (
+          <>
+            <label className="changes-scope">
+              Compare current files with
+              <select
+                value={scope}
+                onChange={(event) => {
+                  setScope(event.currentTarget.value);
+                  setSelected(new Set());
+                  setSnapshot(null);
+                  setPath(null);
+                  setDiff(null);
+                }}
+              >
+                <option value="">Before the latest turn</option>
+                {turns.map((turn) => (
+                  <option key={turn.id} value={turn.id}>
+                    Before: {turn.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="changes-panel-scroll">
+              {busy ? (
+                <p className="changes-empty" role="status">
+                  Reading changes…
                 </p>
               ) : null}
-              <DiffBlock
-                wholeFile={!diff.truncated}
-                key={`${checkpoint?.id}:${diff.path}`}
-                path={diff.path}
-                oldText={diff.before ?? ""}
-                newText={diff.after ?? ""}
-                disclosureKey={`changes:${chatId}:${checkpoint?.id}:${diff.path}`}
-              />
-            </>
-          )
-        ) : path && !error ? (
-          <p className="changes-empty" role="status">
-            Opening file diff…
-          </p>
-        ) : null}
-        {result ? (
-          <section className="changes-result" aria-label="Revert result">
-            <p role="status">
-              Reverted {result.applied.length} {result.applied.length === 1 ? "file" : "files"}.
-            </p>
-            {result.error ? (
-              <p role="alert" className="ui-error">
-                {result.error}
-              </p>
-            ) : null}
-            {result.recovery_paths.length ? (
-              <details>
-                <summary>Saved originals</summary>
-                {result.recovery_paths.map((path) => (
-                  <p className="ui-mono" key={path}>
-                    {path}
-                  </p>
+              {error ? (
+                <p className="ui-error" role="alert">
+                  {error}
+                </p>
+              ) : null}
+              {snapshot?.unavailable_reason ? (
+                <p className="changes-empty">{snapshot.unavailable_reason}</p>
+              ) : null}
+              {!busy && checkpoint && snapshot?.files.length === 0 ? (
+                <p className="changes-empty">No file changes since this checkpoint.</p>
+              ) : null}
+              {checkpoint?.warnings.length ? (
+                <details className="changes-warnings">
+                  <summary>Checkpoint exclusions</summary>
+                  {checkpoint.warnings.map((warning) => (
+                    <p key={warning}>{warning}</p>
+                  ))}
+                </details>
+              ) : null}
+              <div className="changes-file-list">
+                {snapshot?.files.map((file) => (
+                  <div key={file.path} data-selected={file.path === path}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${file.path} for revert`}
+                      checked={selected.has(file.path)}
+                      onChange={(event) =>
+                        setSelected((current) => {
+                          const next = new Set(current);
+                          if (event.target.checked) next.add(file.path);
+                          else next.delete(file.path);
+                          return next;
+                        })
+                      }
+                    />
+                    <button type="button" onClick={() => setPath(file.path)} title={file.path}>
+                      <FileDiff size={14} />
+                      <span>{file.path}</span>
+                      <small data-kind={file.kind}>
+                        {file.kind === "added" ? "A" : file.kind === "deleted" ? "D" : "M"}
+                      </small>
+                    </button>
+                  </div>
                 ))}
-              </details>
-            ) : null}
-          </section>
-        ) : null}
-      </div>
-      <footer className="changes-panel-footer">
-        <span>{selected.size ? `${selected.size} selected` : "Select files to revert"}</span>
-        {live ? (
-          <button type="button" className="ui-button" onClick={onStop}>
-            Stop session to revert
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="ui-button"
-            disabled={!selected.size || busy || acting || error !== null}
-            onClick={() => void review()}
-          >
-            <RotateCcw size={13} />
-            Review revert
-          </button>
+              </div>
+              {diff ? (
+                diff.binary ? (
+                  <p className="changes-empty">
+                    Binary file.{" "}
+                    {snapshot?.files.find((file) => file.path === diff.path)?.after_bytes ?? 0}{" "}
+                    bytes after this change.
+                  </p>
+                ) : (
+                  <>
+                    {diff.truncated ? (
+                      <p className="changes-warning">
+                        This preview is shortened. Reverting restores the complete checkpoint file.
+                      </p>
+                    ) : null}
+                    <DiffBlock
+                      wholeFile={!diff.truncated}
+                      key={`${checkpoint?.id}:${diff.path}`}
+                      path={diff.path}
+                      oldText={diff.before ?? ""}
+                      newText={diff.after ?? ""}
+                      disclosureKey={`changes:${chatId}:${checkpoint?.id}:${diff.path}`}
+                    />
+                  </>
+                )
+              ) : path && !error ? (
+                <p className="changes-empty" role="status">
+                  Opening file diff…
+                </p>
+              ) : null}
+              {result ? (
+                <section className="changes-result" aria-label="Revert result">
+                  <p role="status">
+                    Reverted {result.applied.length}{" "}
+                    {result.applied.length === 1 ? "file" : "files"}.
+                  </p>
+                  {result.error ? (
+                    <p role="alert" className="ui-error">
+                      {result.error}
+                    </p>
+                  ) : null}
+                  {result.recovery_paths.length ? (
+                    <details>
+                      <summary>Saved originals</summary>
+                      {result.recovery_paths.map((path) => (
+                        <p className="ui-mono" key={path}>
+                          {path}
+                        </p>
+                      ))}
+                    </details>
+                  ) : null}
+                </section>
+              ) : null}
+            </div>
+            <footer className="changes-panel-footer">
+              <span>{selected.size ? `${selected.size} selected` : "Select files to revert"}</span>
+              {live ? (
+                <button type="button" className="ui-button" onClick={onStop}>
+                  Stop session to revert
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="ui-button"
+                  disabled={!selected.size || busy || acting || error !== null}
+                  onClick={() => void review()}
+                >
+                  <RotateCcw size={13} />
+                  Review revert
+                </button>
+              )}
+            </footer>
+          </>
         )}
-      </footer>
+      </div>
       {preview ? (
         <Modal
           title="Revert selected files?"

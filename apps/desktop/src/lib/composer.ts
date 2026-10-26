@@ -4,6 +4,7 @@ import {
   type ComposerInput,
   commands,
   type FileMention,
+  type ProjectFilePreview,
   type PromptAck,
 } from "../bindings";
 import { settle } from "./ipc";
@@ -12,6 +13,7 @@ export type ComposerContext = Pick<ComposerInput, "attachments" | "mentions">;
 
 /** UI orchestration only. Rust validates, stores, normalizes and resolves every context item. */
 export interface ComposerTransport {
+  file?(chatId: string, path: string): Promise<ProjectFilePreview>;
   draft(chatId: string): Promise<ComposerDraft>;
   saveDraft(chatId: string, input: ComposerInput): Promise<void>;
   pick(chatId: string): Promise<ComposerAttachment | null>;
@@ -22,6 +24,7 @@ export interface ComposerTransport {
 }
 
 export const composerApi: ComposerTransport = {
+  file: async (id, path) => settle(commands.projectFilePreview(id, path)),
   draft: async (id) => settle(commands.composerDraft(id)),
   saveDraft: async (id, input) => {
     await settle(commands.composerSaveDraft(id, input));

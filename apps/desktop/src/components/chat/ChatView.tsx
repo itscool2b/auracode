@@ -58,6 +58,16 @@ export function ChatView({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "j" &&
+        !event.defaultPrevented &&
+        !document.querySelector("dialog[open]")
+      ) {
+        event.preventDefault();
+        setChangesOpen((open) => !open);
+        return;
+      }
       if (event.key === "Escape" && !event.defaultPrevented) void store.escape();
     };
     window.addEventListener("keydown", onKeyDown);
@@ -311,6 +321,9 @@ export function ChatView({
         </div>
         {changesOpen && transport.changes ? (
           <ChangesPanel
+            state={state}
+            composer={transport.composer}
+            agent={agent}
             chatId={chatId}
             api={transport.changes}
             status={status}

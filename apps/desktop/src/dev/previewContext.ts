@@ -23,6 +23,12 @@ export function withPreviewContext<T extends Transport>(
     image: false,
   };
   const composer: ComposerTransport = {
+    file: async (_chat, path) => ({
+      path,
+      bytes: 106,
+      text: 'export function Sidebar() {\n  return <nav aria-label="Projects">Your projects</nav>;\n}\n',
+      truncated: false,
+    }),
     draft: async () => ({ input, files: input.attachments.length ? [attachment] : [] }),
     saveDraft: async (_chat, value) => {
       input = value;

@@ -1059,3 +1059,24 @@ Windows/macOS generated bindings and native checks remain pending. No paid-agent
 - Seven isolated exporter-script cases, the actual Windows exporter in normal mode, Bash syntax,
   workflow pin/runner checks and instruction parity pass locally. Hosted macOS/Windows workflow
   execution and ShellCheck remain for the planned integration run. See docs/verification.md.
+
+## Read-only context panel and first hosted integration
+
+The resizable right panel now has Changes, Files, Plan and Session tabs and Cmd/Ctrl+J. Files shows
+bounded project search and paths from loaded tool history, opens a read-only preview, and can add a
+file mention to the durable composer without sending it. Rust refuses credential/Git-internal paths,
+traversal, links at every relative component and special files. Reads are capped at 128 KiB with
+nonblocking open; the UI displays at most 2,000 lines. Binary/encoding and missing-file outcomes are
+explicit. The preview does not persist content. Plan and Session show agent-reported data and label
+unreported usage instead of inventing values.
+
+The focused file-boundary/text/binary regression passes on Windows. All three context tabs and the
+file-to-draft interaction pass focused Chromium accessibility checks with zero violations. Dark
+Files and Session screenshots were inspected. Bindings for the new file-preview command remain
+pending generation. The combined browser script now includes these paths.
+
+The first planned hosted Windows/macOS run is 40311937683 at 28554a1. A cache input expression was
+rejected before jobs started and corrected. macOS then found a controlling-terminal ioctl argument
+type mismatch, fixed locally in b05d45e with Apple's required unsigned-long conversion. That failure
+blocked bootstrap binding generation and downstream frontend gates. Windows passed Clippy and is
+still running tests. There has been one started integration run; fixes are being batched.

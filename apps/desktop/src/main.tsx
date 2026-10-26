@@ -2,6 +2,7 @@ import "./styles.css";
 import "./ui-tokens.css";
 import "./chat.css";
 import "./orbit-shell.css";
+import "./context-panel.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";

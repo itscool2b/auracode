@@ -520,6 +520,20 @@ async function inspect(engine, launcher) {
     await page.getByText("Reverted 1 file.", { exact: true }).waitFor();
     assert.equal(await page.locator(".changes-file-list > div").count(), 1);
     assert.equal(await page.getByTestId("composer-input").inputValue(), "Review ");
+    for (const tab of ["Files", "Plan", "Session"]) {
+      await page.getByRole("tab", { name: tab, exact: true }).click();
+      if (tab === "Files") {
+        await page
+          .getByRole("region", { name: "Project files", exact: true })
+          .getByRole("button", { name: "src/components/Sidebar.tsx", exact: true })
+          .click();
+        await page.getByRole("region", { name: "Read-only file preview" }).waitFor();
+        await page.getByRole("button", { name: "Mention in message", exact: true }).click();
+        await page.getByText("Added to your draft.", { exact: true }).waitFor();
+      }
+      const scan = await new AxeBuilder({ page }).include(".changes-panel").analyze();
+      assert.deepEqual(scan.violations, [], `${tab} context accessibility`);
+    }
     await page.getByRole("button", { name: "Close Changes" }).click();
     await page.getByRole("button", { name: "Fork", exact: true }).click();
     await page.getByRole("region", { name: "Exact continuation context" }).waitFor();
