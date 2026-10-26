@@ -106,6 +106,20 @@ const HERMES: Prompts = Prompts {
     ..REAL
 };
 
+/// Codex's Ask (codex-acp's `read-only`, approvals `on-request`) asks only when the model requests
+/// more access; a small model told the folder is read-only may just say so. So its permission
+/// prompts tell it to request approval.
+const CODEX: Prompts = Prompts {
+    permission: "Run the shell command `touch aura-perm.txt` in the current folder. The sandbox is read-only, so request approval to run it with write access. Then reply done.",
+    permission_again: "Run `touch aura-perm.txt` again now, and request approval to run it with write access.",
+    ..REAL
+};
+
+/// Dialects whose agent drops an interrupted turn's partial answer from its own context: recorded
+/// with Codex 0.164.0 through codex-acp 2.2.2, whose resumed thread holds every completed turn
+/// (the resume check passes) but not the interrupted one's output.
+const FORGETS_INTERRUPTED: &[&str] = &["codex-acp"];
+
 /// The files the real scenarios ask for.
 const PERM_FILE: &str = "aura-perm.txt";
 const AUTO_FILE: &str = "aura-auto.txt";
@@ -185,6 +199,8 @@ impl Smoke<'_> {
             &DEMO
         } else if self.spec.dialect == "hermes" {
             &HERMES
+        } else if self.spec.dialect == "codex-acp" {
+            &CODEX
         } else {
             &REAL
         }
@@ -826,6 +842,17 @@ impl Smoke<'_> {
             .trim_matches(|c: char| !c.is_ascii_digit())
             .parse::<u64>()
             .ok();
+        if FORGETS_INTERRUPTED.contains(&self.spec.dialect) && answered != self.last_number {
+            // The agent's own behaviour: auracode kept the partial answer (interrupt checked it).
+            self.report.info(
+                step,
+                format!(
+                    "{} keeps no interrupted answer across a restart: {reply:?}",
+                    self.spec.name
+                ),
+            );
+            return;
+        }
         match (self.last_number, answered) {
             (Some(last), Some(answered)) => self.report.check(
                 last == answered,
