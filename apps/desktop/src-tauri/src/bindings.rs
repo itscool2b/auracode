@@ -29,6 +29,10 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::workspace::ChatCreatePreview>()
         .typ::<aura_protocol::workspace::ProjectChatCreate>()
         .typ::<aura_protocol::workspace::ChatMove>()
+        .typ::<aura_protocol::changes::ChangesSnapshot>()
+        .typ::<aura_protocol::changes::ChangeDiff>()
+        .typ::<aura_protocol::changes::RevertPreview>()
+        .typ::<aura_protocol::changes::RevertResult>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
             commands::start_demo_stream,

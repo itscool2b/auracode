@@ -420,6 +420,30 @@ export type Capabilities = {
 	autonomy_levels: Autonomy[],
 };
 
+export type ChangeDiff = {
+	path: string,
+	before: string | null,
+	after: string | null,
+	binary: boolean,
+	truncated: boolean,
+};
+
+export type ChangeKind = "added" | "modified" | "deleted";
+
+export type ChangedFile = {
+	path: string,
+	kind: ChangeKind,
+	before_bytes: number | null,
+	after_bytes: number | null,
+	binary: boolean,
+};
+
+export type ChangesSnapshot = {
+	checkpoint: CheckpointSummary | null,
+	files: ChangedFile[],
+	unavailable_reason: string | null,
+};
+
 /**
  *  What `chat_attach` returns: the snapshot and the newest history page, consistent with the frames
  *  the subscription carries from `next_seq` on.
@@ -484,6 +508,16 @@ export type ChatSummary = {
 	needs_attention: boolean,
 	created_at: number,
 	updated_at: number,
+};
+
+export type CheckpointSummary = {
+	id: string,
+	turn_id: string,
+	created_at: number,
+	file_count: number,
+	total_bytes: number,
+	/**  Exclusions and limits are visible. Excluded paths are never removed by a revert. */
+	warnings: string[],
 };
 
 /**  What an option controls, which decides where the UI shows it. */
@@ -788,6 +822,22 @@ export type ResolvedBy = "user" |
 "turn" | 
 /**  Recovery, or the agent's process ended. */
 "system" | "other";
+
+export type RevertPreview = {
+	token: string,
+	checkpoint_id: string,
+	files: ChangedFile[],
+	expires_at: number,
+	warnings: string[],
+};
+
+export type RevertResult = {
+	applied: string[],
+	/**  A partial failure is explicit; the caller must not report full success. */
+	error: string | null,
+	/**  Original files are preserved here whenever a revert replaces or removes them. */
+	recovery_paths: string[],
+};
 
 /**  How much of a damaged database made it into the database that replaced it. */
 export type Salvage = 

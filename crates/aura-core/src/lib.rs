@@ -31,6 +31,7 @@
 //! thread ([`chatstore::ChatStore`]), and [`session::SessionManager`] runs the chats on top of it.
 
 pub mod chatstore;
+pub mod checkpoints;
 pub mod device;
 pub mod error;
 pub mod ids;

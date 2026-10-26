@@ -50,6 +50,20 @@ actor regressions. The binding export test passes locally. Tauri wiring, Git fol
 checkpoints/Changes/revert, edit/retry/fork and visible agent handoff remain pending. No CI push
 or real agent invocation was performed.
 
+The standalone Rust checkpoint service now captures exact file bytes in per-folder shadow Git
+repositories using temporary indexes and `refs/aura` refs. Its owned Git helpers disable inherited
+Git overrides, global/system configuration, hooks, filters and line-ending conversion. Gitignore
+rules, 10 MiB file and 100 MiB total limits, submodule/link exclusions and protected agent/profile
+directories have explicit behavior. Changes preserves excluded files as exclusions, never as
+deletions. Revert requires a one-use content-bound preview and validates the full selection before
+writing. Directory-relative capability handles keep reads and restores inside the selected folder;
+replaced/removed files remain in a visible recovery directory if a later step fails. Partial failure
+is an explicit result. Eight focused tests cover exact CRLF bytes, unchanged user index/HEAD, ignore
+changes, exclusions, restore, stale previews and a concurrent edit between validation and rename.
+Core Clippy and desktop binding export pass locally. The Changes DTO is generated, but automatic
+before-turn capture, persisted turn links, live-folder revert guarding and command wiring are still
+pending. The service is not yet enabled for production turns. No CI push was made.
+
 The final local M1e follow-up resolves Windows Pi, OMP and Grok npm shims through the reviewed
 package's bounded `package.json` bin entry, using `node.exe` or a packaged executable. It never
 interprets shim content. Package name, relative entry containment and canonical target are checked;

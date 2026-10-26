@@ -87,6 +87,7 @@ impl AppError {
 impl From<SessionError> for AppError {
     fn from(error: SessionError) -> AppError {
         let code = match &error {
+            SessionError::Organization(_) => AppErrorCode::InvalidArgument,
             SessionError::ChatNotFound(_) => AppErrorCode::ChatNotFound,
             SessionError::UnknownAgent(_) => AppErrorCode::UnknownAgent,
             SessionError::AgentUnavailable(_) => AppErrorCode::AgentUnavailable,
