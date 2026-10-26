@@ -1,5 +1,14 @@
 # Auracode implementation progress
 
+## 2026-10-26: managed configuration claim foundation
+
+Added an encrypted, content-bound Account ownership store and explicit prepare/commit/cancel claim
+functions. They preserve the first device baseline, retain unresolved acknowledgments and distinguish
+committed management from ordinary sync heads. Account prepare/close now creates and invalidates the
+dedicated store. Three pure claim regressions and aura-config all-target Clippy pass. The new encrypted
+store test awaits native account-feature execution in the integrated environment. Profile filesystem
+switching and typed crash recovery are still pending, as described in `docs/config-profile-transitions.md`.
+
 ## 2026-10-26: explicit vendor integration reviews
 
 Added personal Claude plugin/marketplace, Codex plugin/marketplace and Pi package command planning,

@@ -268,7 +268,9 @@ async fn activate(
             Some(key) => SetupService::account(&selected.profile, key.clone())?,
             None => SetupService::new(selected.profile.dir.clone()),
         });
-        let journal = file_key.as_ref().map(|key| AccountConfigJournal::open(selected.profile.dir.join("config-apply"), key.clone()))
+        let journal = file_key.as_ref().map(|key| {
+            Ok::<_,aura_config::sync::ConfigPortError>((AccountConfigJournal::open(selected.profile.dir.join("config-apply"), key.clone())?, aura_core::sync::managed_config::AccountManagedConfig::open(&selected.profile.dir.join("config-managed"), key.clone())?))
+        })
             .transpose().map_err(|_| unavailable("The account configuration journal could not be authenticated. Existing data was preserved."))?;
         let mut next =
             sessions::start_profile_chats(&mut prepared, &version, &rt, outside, file_key, reuse)
@@ -280,7 +282,7 @@ async fn activate(
                         .unwrap_or("The selected profile could not start."),
                 )
             })?;
-        next.account_config = journal.map(|journal| Arc::new(crate::account_config::AccountConfigServices::new(&next.store, journal)));
+        next.account_config = journal.map(|(journal, managed)| Arc::new(crate::account_config::AccountConfigServices::new(&next.store, journal, managed)));
         next.sync_identity = selected.key.as_ref().map(|context| context.identity.clone());
         Ok::<_, AppError>((prepared, onboarding, Arc::new(next), selected.key))
     })

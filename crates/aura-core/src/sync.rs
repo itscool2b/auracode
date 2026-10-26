@@ -15,6 +15,7 @@ pub(crate) mod config;
 pub mod engine;
 pub mod exchange;
 pub mod journal;
+pub mod managed_config;
 mod projection;
 
 /// An unlocked Account writer's identity and encryption authority. Never exported through IPC.
