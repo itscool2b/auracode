@@ -4000,10 +4000,14 @@ impl ChatActor {
                             chat_id: self.chat_id.clone(),
                             at: now,
                         });
-                        self.queue_op(Op::CompactTurn {
-                            chat_id: self.chat_id.clone(),
-                            turn_id,
-                        });
+                        // A late steering acknowledgement still belongs to this turn. Seal its
+                        // history only after that attempt's final visible outcome has been saved.
+                        if !self.steering_pending {
+                            self.queue_op(Op::CompactTurn {
+                                chat_id: self.chat_id.clone(),
+                                turn_id,
+                            });
+                        }
                     }
                     _ => match &mut begin {
                         Some((_, turn_rows)) => turn_rows.push(row),

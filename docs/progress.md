@@ -1923,3 +1923,11 @@ All seven core continuation tests passed, including a failed native resume follo
 - Native all-target Clippy reached the changed configuration crate but Windows Application Control
   blocked darling_macro-b433f63937ec6736.dll with error 4551. No policy changes or bypass attempted;
   combined native qualification remains pending the final permitted Windows/macOS verification.
+
+### Late steering and immutable history
+
+Turn compaction now waits for an outstanding steering result, then includes its final saved visible
+status before the turn can become immutable sync history. Compaction also advances the saved last
+event sequence through that late outcome. A controlled driver regression ends its turn before replying
+to steering and verifies both the incomplete and sealed states. That regression and core all-target
+Clippy passed locally on Windows. No vendor call was performed.

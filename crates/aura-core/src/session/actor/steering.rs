@@ -163,6 +163,10 @@ impl ChatActor {
                     Some(&attempt.turn_id),
                 );
                 self.flush();
+                self.queue_op(Op::CompactTurn {
+                    chat_id: self.chat_id.clone(),
+                    turn_id: attempt.turn_id.clone(),
+                });
                 let _ = attempt.reply.send(Err(error));
                 self.release_if_idle();
                 self.dispatch_next();
@@ -240,6 +244,10 @@ impl ChatActor {
                     Some(&attempt.turn_id),
                 );
                 self.flush();
+                self.queue_op(Op::CompactTurn {
+                    chat_id: self.chat_id.clone(),
+                    turn_id: attempt.turn_id.clone(),
+                });
                 let _ = attempt.reply.send(Ok(ack));
                 self.release_if_idle();
                 self.dispatch_next();
