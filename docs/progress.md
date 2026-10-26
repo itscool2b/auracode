@@ -2702,6 +2702,14 @@ agent smoke runs' recorded owned process IDs are no longer running.
 
 Old-head CI 40380825667 completed with Windows test and Edge Driver preparation failures; macOS
 jobs were cancelled before runner acquisition. Concrete replay-golden and driver-banner fixes are
-being checkpointed separately. The identity-save regression's second Ready wait after restart
-remains under investigation. This is not a completed final verification. Old-head unsigned Build
+integrated as 0039870 after focused replay/provisioning checks passed. The identity-save regression's
+second Ready wait after restart remains unresolved. Its tentative timing-only diff is preserved in
+the separate Windows-fix worktree and was not integrated; the owned test process was stopped. This
+is not a completed final verification. Old-head unsigned Build
 40380831571 passed universal macOS and Windows ARM64; Windows x64 was still running at handoff.
+
+Third-party notice work is checkpointed separately as 60b3413 on codex/third-party-notices, with a
+clean worktree, four focused tests and inventory integrity checks passing. It is not integrated
+into this branch yet. The conservative source inventory and Vite hooks still require full builds,
+discoverable notices UI and artifact/native redistribution review. The project license remains
+unchanged. All parallel agents have stopped at the owner's handoff request.
