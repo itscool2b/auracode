@@ -15,11 +15,31 @@ pub(super) fn policies(autonomy: Autonomy) -> (&'static str, &'static str, Value
             "workspace-write",
             json!({"type":"workspaceWrite"}),
         ),
-        Autonomy::Ask => (
-            "untrusted",
-            "workspace-write",
-            json!({"type":"workspaceWrite"}),
-        ),
+        Autonomy::Ask => ("untrusted", "read-only", json!({"type":"readOnly"})),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ask_does_not_pregrant_file_writes_and_vendor_callbacks_always_reach_the_user() {
+        assert_eq!(
+            policies(Autonomy::Ask),
+            ("untrusted", "read-only", json!({"type":"readOnly"}))
+        );
+        assert_eq!(
+            policies(Autonomy::AutoEdit),
+            (
+                "on-request",
+                "workspace-write",
+                json!({"type":"workspaceWrite"})
+            )
+        );
+        for level in [Autonomy::Ask, Autonomy::AutoEdit, Autonomy::FullAuto] {
+            assert_eq!(autonomy(level).auto_answer, AutoAnswer::Never);
+        }
     }
 }
 

@@ -128,7 +128,7 @@ impl Harness {
         assert_eq!(models["method"], "model/list");
         self.send(json!({"id":models["id"],"result":{"data":[{"id":"m","model":"model-a","displayName":"Model A","defaultReasoningEffort":"medium","supportedReasoningEfforts":[{"reasoningEffort":"medium","description":"Balanced"},{"reasoningEffort":"high","description":"High"}]}],"nextCursor":null}}));
         assert_eq!(open["params"]["approvalsReviewer"], "user");
-        self.send(json!({"id":open["id"],"result":{"thread":{"id":"thread-1","sessionId":"tree-1","status":{"type":"idle"},"cliVersion":"0.162.1"},"model":"model-a","approvalPolicy":"untrusted","approvalsReviewer":"user","sandbox":{"type":"workspaceWrite"}}}));
+        self.send(json!({"id":open["id"],"result":{"thread":{"id":"thread-1","sessionId":"tree-1","status":{"type":"idle"},"cliVersion":"0.162.1"},"model":"model-a","approvalPolicy":"untrusted","approvalsReviewer":"user","sandbox":{"type":"readOnly"}}}));
         loop {
             if let DriverEvent::Ready(info) = self.event().await {
                 return info;

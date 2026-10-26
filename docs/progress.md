@@ -23,7 +23,7 @@ Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b 
 M1c is being implemented independently on `m1c-codex-native` from M1b checkpoint `08c19b1`.
 The native Codex driver uses an owned stdio app-server, initializes once, persists the native thread
 ID, separates turn completion from idle, and handles approvals, grouped questions, model/effort
-settings and account quota updates. Initial verification covers 29 native unit tests, seven synthetic
+settings and account quota updates. Initial verification covers 30 native unit tests, seven synthetic
 and three recorded native replay fixtures, and conformance to the installed Codex 0.162.1 generated schema. Existing ACP
 and Claude fixtures remain unchanged. No real prompts, credential/config inspection or vendor update
 were used. This is a work checkpoint, not milestone acceptance.
@@ -55,6 +55,10 @@ installation identity, configured MCP names and incidental stderr sanitized. All
 Replay preserves the recorded Codex client version without weakening full payload comparison, and
 recognizes explicit startup cancellation without requiring a Ready event. The running vendor version
 also recognizes the installed binary's `Codex Desktop/0.162.1` user-agent spelling.
+Ask uses a read-only native sandbox with untrusted-command approvals and user review, so it does
+not pregrant workspace writes. Auto-edit keeps workspace write access; Full auto requests full access
+with no driver auto-answering of vendor callbacks. The tightened Ask mapping passes schema and replay
+tests; its real permission turn remains part of prompted verification.
 
 M1c requirements still pending: opt-in prompted verification, generated
 schema verification for the historical 0.164.0 baseline, independent verification of review fixes,
