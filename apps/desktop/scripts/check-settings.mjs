@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 import { checkAccount } from "./check-account.mjs";
+import { checkAccountPreservation } from "./check-account-preservation.mjs";
 import { checkAccountVerification } from "./check-account-verification.mjs";
 import { checkConfigSync } from "./check-config-sync.mjs";
 import { checkDataTransfer } from "./check-data-transfer.mjs";
@@ -142,6 +143,7 @@ try {
       await checkGitReview(page, url, out, engine);
       await checkProjectTools(page, url, out, engine);
       await checkDataTransfer(page, url, out, engine);
+      await checkAccountPreservation(page, url, out, engine);
       await checkAccountVerification(browser, url, out, engine);
       await checkAccount(browser, url, out, engine);
       await checkProfiles(browser, url, out, engine);
