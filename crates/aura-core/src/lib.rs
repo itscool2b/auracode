@@ -43,6 +43,8 @@ pub mod paths;
 pub mod profile;
 pub mod session;
 pub mod store;
+#[cfg(feature = "account-sync")]
+pub mod sync;
 pub mod terminal;
 pub mod time;
 

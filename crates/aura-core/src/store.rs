@@ -66,7 +66,7 @@ use lock::OpenLock;
 use recovery::Recovery;
 
 /// The schema version this build reads and writes; equals the number of migrations.
-pub const SCHEMA_VERSION: u32 = 6;
+pub const SCHEMA_VERSION: u32 = 7;
 
 /// Pre-migration backups kept per database. Enough to step back through several upgrades without
 /// letting a long-lived install fill the disk with copies.
@@ -90,6 +90,7 @@ static MIGRATIONS: [M<'static>; SCHEMA_VERSION as usize] = [
     M::up(include_str!("../migrations/0004_composer.sql")).foreign_key_check(),
     M::up(include_str!("../migrations/0005_drafts.sql")).foreign_key_check(),
     M::up(include_str!("../migrations/0006_continuations.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0007_sync.sql")).foreign_key_check(),
 ];
 
 fn migrations() -> &'static [M<'static>] {
@@ -230,6 +231,11 @@ impl Store {
 
     pub fn conn(&self) -> &Connection {
         &self.conn
+    }
+
+    #[cfg(feature = "account-sync")]
+    pub(crate) fn is_encrypted(&self) -> bool {
+        self.key.is_some()
     }
 
     /// Mutable access, for `Connection::transaction`.

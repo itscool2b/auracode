@@ -1080,3 +1080,18 @@ rejected before jobs started and corrected. macOS then found a controlling-termi
 type mismatch, fixed locally in b05d45e with Apple's required unsigned-long conversion. That failure
 blocked bootstrap binding generation and downstream frontend gates. Windows passed Clippy and is
 still running tests. There has been one started integration run; fixes are being batched.
+# M7 durable sync ledger (2026-10-26)
+
+- Added migration0007 after the integrated continuation schema6. The encrypted account ledger pins
+  its account/device/key identity and saves the HLC, outgoing records and application projection in
+  one transaction. Pull pages authenticate before their projections and cursor commit together;
+  failed pages, callback failures and invalid future clocks preserve prior durable state.
+- Authoritative push heads merge against the latest local edit, so a delayed acknowledgement cannot
+  erase newer offline changes. Per-field merges queue a new combined head. Unsupported authenticated
+  revisions are retained before cursor advancement and prevent an older client overwriting that item.
+- Seven focused ledger tests pass on Windows for rollback, restart, clock validation, in-flight edits,
+  concurrent fields, identity substitution, explicit tombstones and future-schema retention.
+  Encrypted v6 migration coverage and Clippy are checked with the commit. Project/chat writer
+  integration, scheduling, chat/config codecs, encrypted external files, account UI and macOS
+  qualification remain pending; this does not mark M7 complete.
+

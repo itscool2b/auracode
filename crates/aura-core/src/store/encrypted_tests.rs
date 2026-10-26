@@ -227,3 +227,46 @@ fn interrupted_initialization_remains_keyed_and_can_finish_on_retry() {
     drop(store);
     assert_ciphertext(&path);
 }
+
+#[test]
+fn sync_migration_keeps_existing_account_projects_and_takes_a_keyed_v6_backup() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("account.db");
+    let backups = temp.path().join("backups");
+    let key = key();
+    let all = crate::store::migrations();
+    let (store, _) = open(&path, &backups, key.clone(), &all[..6]).unwrap();
+    store.conn().execute("INSERT INTO projects(id,name,created_at,updated_at,device_id) VALUES('project','private synthetic title',1,1,'windows')", []).unwrap();
+    drop(store);
+    let (store, info) = open(&path, &backups, key.clone(), all).unwrap();
+    let OpenOutcome::Migrated {
+        from: 6,
+        backup: Some(backup),
+        ..
+    } = info.outcome
+    else {
+        panic!("expected a v6 migration backup")
+    };
+    assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
+    assert_eq!(
+        store
+            .conn()
+            .query_row("SELECT name FROM projects WHERE id='project'", [], |r| {
+                r.get::<_, String>(0)
+            })
+            .unwrap(),
+        "private synthetic title"
+    );
+    assert_eq!(
+        store
+            .conn()
+            .query_row("SELECT count(*) FROM sync_state", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    assert_ciphertext(Path::new(&backup));
+    let backup = raw(Path::new(&backup), &key);
+    assert_eq!(stored_version(&backup).unwrap(), 6);
+    assert!(backup.prepare("SELECT * FROM sync_state").is_err());
+}

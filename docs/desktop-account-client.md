@@ -69,7 +69,7 @@ Pending gates: IPC cancellation and window/profile switch integration, private p
 validation, SQLCipher keying/migration backups, local-only import consent, real OS storage execution
 on macOS, visible Turnstile/account UI, encrypted offline queue/merge, config preview/rollback, and
 end-to-end approval/recovery across two real app devices. Those are not claimed complete here.
-# Encrypted profile storage seam
+## Encrypted profile storage seam
 
 `aura-core/account-sync` enables SQLCipher-backed account opening. Obtain a profile-bound
 `DatabaseKey` from the locally confirmed account key and pass an `Arc` to
@@ -88,3 +88,24 @@ not invoke plaintext salvage, `VACUUM INTO`, schema-page rewriting, or unkeyed s
 encrypted-backup restoration still needs its product flow. SQLCipher encrypts the database, WAL and
 backup data only. External attachment/checkpoint files and protocol logging must be handled separately
 before enabling production account sessions; this checkpoint does not claim those files are encrypted.
+
+## Transaction-bound sync ledger
+
+Migration0007 adds the persisted device clock, pull cursor, coalesced outgoing heads and deferred
+encrypted revisions. `SyncLedger` requires a keyed Store and pins account, device, key version and
+key fingerprint. Its `edit_metadata` callback writes the application projection inside the same
+transaction as metadata encryption, the clock and outgoing record. Changed fields need the new
+clock; field removal is an explicit tombstone. A failed callback leaves all four unchanged.
+
+`outgoing` returns at most 32 records. After HTTP, `accept_heads` merges the authoritative replies
+against the current local metadata, preserving edits made while the request was in flight. Only a
+head containing the current local state clears that outgoing item. Push replies do not advance the
+pull cursor. `accept_pull` authenticates and validates the whole ordered page, merges fields, calls
+the projection callback and advances its cursor in one transaction. A damaged final record rolls
+back earlier projections too. Unknown schemas are retained before cursor progress and block old
+edits or outgoing replacement of that item. No server error or payload is logged by the ledger.
+
+The ledger currently processes project/chat metadata. Config and immutable chat-chunk codecs are
+retained as authenticated ciphertext for their dedicated processors, which remain to be connected.
+The sole writer integration, scheduler, typed project/chat projection adapters, device-identity
+renewal, config previews/applies and account switching are still required for end-to-end acceptance.
