@@ -59,10 +59,14 @@ pub struct Booted {
     pub profile: Option<ProfileMeta>,
     /// The active profile's folder (`ProfileMeta` and this make an `aura_core::profile::Profile`).
     pub profile_dir: Option<PathBuf>,
-    /// This process owns the profile's sessions while this lives. Taken before the store opened;
-    /// it moves into the chat store with it.
-    pub owner: Option<ProfileOwner>,
     pub store: Option<Store>,
+    /// This process owns the profile's sessions while this lives. Taken before the store opened;
+    /// it moves into the chat store with it. Declared after `store` because fields drop in
+    /// declaration order: like the chat store's writer, a launch lets go of the profile only once
+    /// its database has closed, so whoever still holds the database's lock (even a process spawned
+    /// at that moment, which holds copies of open files until its exec) holds the profile too, and
+    /// the next launch is told the profile is in use instead of finding the database busy.
+    pub owner: Option<ProfileOwner>,
     pub db: Option<DbInfo>,
     /// Sentences the UI lists: repairs that happened, data that was moved aside.
     pub notices: Vec<String>,
@@ -169,7 +173,9 @@ pub fn boot(root: aura_core::Result<DataRoot>) -> Booted {
 /// Boots `root` as the next launch does, once the last owner's lock is really free. A test that
 /// drops an owner and boots again at once can find the lock still held for a moment: a process
 /// another test spawns at that instant holds a copy of every open file until its exec closes the
-/// close-on-exec ones. So this retries `ProfileInUse` for up to 5 s.
+/// close-on-exec ones. So this retries `ProfileInUse` for up to 5 s. The database's open lock can
+/// be held over the same way, but never without the owner's (`Booted` lets go of the owner last),
+/// so the same retry covers it.
 #[cfg(test)]
 pub(crate) fn boot_next(root: &DataRoot) -> Booted {
     use std::time::{Duration, Instant};
