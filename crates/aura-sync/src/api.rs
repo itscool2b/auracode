@@ -387,6 +387,31 @@ impl ApiClient {
     pub async fn keys(&self, token: &SessionToken) -> Result<Keys> {
         self.get("keys", token).await
     }
+    pub async fn review_reset(&self, token: &SessionToken) -> Result<ResetReview> {
+        #[derive(Deserialize)]
+        struct Response {
+            review: ResetReview,
+        }
+        let response: Response = self
+            .post("sync/reset/review", Some(token), &serde_json::json!({}))
+            .await?;
+        crypto::identifier(&response.review.id).map_err(|_| ApiError::Protocol)?;
+        if !(2..=1_000_000).contains(&response.review.key_version) {
+            return Err(ApiError::Protocol);
+        }
+        Ok(response.review)
+    }
+    pub async fn reset_sync(&self, token: &SessionToken, input: &ResetRequest) -> Result<Keys> {
+        self.post("sync/reset", Some(token), input).await
+    }
+    pub async fn cancel_reset(&self, token: &SessionToken, id: &str) -> Result<ResetCancellation> {
+        self.post(
+            "sync/reset/cancel",
+            Some(token),
+            &serde_json::json!({"review_id":id}),
+        )
+        .await
+    }
     pub async fn initialize_keys(
         &self,
         token: &SessionToken,

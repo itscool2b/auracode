@@ -14,6 +14,7 @@ pub(super) struct Bundle {
     pub session: Option<SavedSession>,
     pub account_key: Option<SavedKey>,
     pub account_deleted: bool,
+    pub pending_reset: Option<super::PendingReset>,
 }
 pub(super) struct SavedSession {
     pub token: SessionToken,
@@ -33,12 +34,13 @@ impl Bundle {
             session: None,
             account_key: None,
             account_deleted: false,
+            pending_reset: None,
         })
     }
     pub fn encode(&self) -> Result<Zeroizing<Vec<u8>>> {
         let mut value = Zeroizing::new(Vec::with_capacity(256));
         value.extend_from_slice(MAGIC);
-        value.push(2);
+        value.push(3);
         value.extend_from_slice(self.device_key.secret());
         let id = self.device_id.as_deref().unwrap_or_default();
         if !id.is_empty() {
@@ -59,6 +61,15 @@ impl Bundle {
             value.extend_from_slice(key.key.secret());
         }
         value.push(u8::from(self.account_deleted));
+        let pending = match &self.pending_reset {
+            Some(pending) => serde_json::to_vec(pending).map_err(|_| AccountError::StoredData)?,
+            None => Vec::new(),
+        };
+        if pending.len() > 1536 {
+            return Err(AccountError::StoredData);
+        }
+        value.extend_from_slice(&(pending.len() as u16).to_be_bytes());
+        value.extend_from_slice(&pending);
         Ok(value)
     }
     pub fn decode(value: &[u8]) -> Result<Self> {
@@ -67,7 +78,7 @@ impl Bundle {
             return Err(AccountError::StoredData);
         }
         let version = cursor.take(1)?[0];
-        if !matches!(version, 1 | 2) {
+        if !matches!(version, 1..=3) {
             return Err(AccountError::StoredData);
         }
         let device_key = DeviceKey::restore(cursor.take(32)?)?;
@@ -121,6 +132,37 @@ impl Bundle {
             None
         };
         let account_deleted = version >= 2 && cursor.flag()?;
+        let pending_reset = if version >= 3 {
+            let length = u16::from_be_bytes(
+                cursor
+                    .take(2)?
+                    .try_into()
+                    .map_err(|_| AccountError::StoredData)?,
+            ) as usize;
+            if length > 1536 {
+                return Err(AccountError::StoredData);
+            }
+            if length == 0 {
+                None
+            } else {
+                let pending: super::PendingReset = serde_json::from_slice(cursor.take(length)?)
+                    .map_err(|_| AccountError::StoredData)?;
+                crypto::identifier(&pending.request.review_id)
+                    .map_err(|_| AccountError::StoredData)?;
+                if !(2..=1_000_000).contains(&pending.version)
+                    || pending.request.confirmation != "RESET SYNC"
+                    || device_id.is_none()
+                    || account_key
+                        .as_ref()
+                        .is_none_or(|key| key.version != pending.version)
+                {
+                    return Err(AccountError::StoredData);
+                }
+                Some(pending)
+            }
+        } else {
+            None
+        };
         if !cursor.0.is_empty() || (account_deleted && session.is_some()) {
             return Err(AccountError::StoredData);
         }
@@ -130,6 +172,7 @@ impl Bundle {
             session,
             account_key,
             account_deleted,
+            pending_reset,
         })
     }
 }

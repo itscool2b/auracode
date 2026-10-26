@@ -3,12 +3,48 @@ use crate::{
     crypto,
     policy::{ApiError, Result},
     reset_sql as sql,
-    types::ResetSync,
+    types::{CancelReset, ResetSync},
 };
 use serde_json::{Value, json};
 use worker::{Request, Response};
 
 impl Api {
+    pub(super) async fn cancel_reset(
+        &self,
+        request: &mut Request,
+        identity: &Identity,
+    ) -> Result<Response> {
+        let input: CancelReset = body(request).await?;
+        crate::policy::identifier(&input.review_id)?;
+        self.db
+            .run(
+                sql::CANCEL,
+                vec![
+                    json!(input.review_id),
+                    json!(identity.hash),
+                    json!(self.now),
+                ],
+            )
+            .await?;
+        let review:Option<Value>=self.db.first("SELECT consumed_by,request_hash,key_version+1 AS key_version,device_id FROM sync_reset_reviews WHERE id=?1 AND user_id=?2",vec![json!(input.review_id),json!(identity.session.user_id)]).await?;
+        let key: Option<Value> = self
+            .db
+            .first(
+                "SELECT key_version FROM user_keys WHERE user_id=?1",
+                vec![json!(identity.session.user_id)],
+            )
+            .await?;
+        let current = key.ok_or(ApiError::Conflict)?;
+        let outcome = match review {
+            Some(value) if value["consumed_by"] == "cancelled" => "cancelled",
+            Some(value) if value["request_hash"].is_string() => "committed",
+            Some(_) => return Err(ApiError::Conflict),
+            None => "absent",
+        };
+        // Absent means no request can still consume this receipt. The client must additionally
+        // compare the current generation and retain its key if that generation could have committed.
+        json_response(json!({"outcome":outcome,"key_version":current["key_version"]}))
+    }
     pub(super) async fn review_reset(&self, identity: &Identity) -> Result<Response> {
         self.rate("reset", &identity.session.user_id, 3600, 5)
             .await?;

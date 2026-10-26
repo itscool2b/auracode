@@ -46,14 +46,18 @@ async fn deleted_account_retains_its_key_and_durable_state_without_network_retri
 }
 
 #[test]
-fn bundle_v2_reads_v1_and_rejects_unknown_or_inconsistent_deleted_states() {
+fn bundle_v3_reads_v1_and_v2_and_rejects_unknown_or_inconsistent_deleted_states() {
     let bundle = Bundle::new().unwrap();
     let mut bytes = bundle.encode().unwrap();
-    assert_eq!(bytes[12], 2);
+    assert_eq!(bytes[12], 3);
+    let v2_length = bytes.len() - 2;
+    bytes.truncate(v2_length);
+    bytes[12] = 2;
+    assert!(!Bundle::decode(&bytes).unwrap().account_deleted);
     bytes[12] = 1;
     bytes.pop();
     assert!(!Bundle::decode(&bytes).unwrap().account_deleted);
-    bytes[12] = 3;
+    bytes[12] = 4;
     assert!(Bundle::decode(&bytes).is_err());
     bytes[12] = 2;
     bytes.push(2);
@@ -65,6 +69,137 @@ fn bundle_v2_reads_v1_and_rejects_unknown_or_inconsistent_deleted_states() {
         expires_at: 1000,
     });
     assert!(Bundle::decode(&bundle.encode().unwrap()).is_err());
+}
+
+async fn staged_reset() -> (Account, Arc<Memory>, serde_json::Value, Zeroizing<String>) {
+    let (mut account, store) = account().await;
+    account.bundle.device_id = Some("device".into());
+    account.access = Access::PendingApproval {
+        code: "123456".into(),
+    };
+    let (wire, reviewed) = script(vec![(
+        "POST /api/v1/sync/reset/review ",
+        "200 OK",
+        serde_json::json!({"review":{"id":"receipt","key_version":8,"expires_at":400,"records":2,"blobs":1,"other_devices":1}}),
+    )]);
+    account.api = wire;
+    let setup = account.prepare_reset(100).await.unwrap();
+    let recovery = setup.recovery_text();
+    reviewed.join().unwrap();
+    let (wire, first) = script(vec![(
+        "POST /api/v1/sync/reset ",
+        "503 Unavailable",
+        serde_json::json!({"error":"unavailable"}),
+    )]);
+    account.api = wire;
+    assert!(
+        account
+            .confirm_reset(setup, "RESET SYNC", 100)
+            .await
+            .is_err()
+    );
+    (account, store, first.join().unwrap().remove(0), recovery)
+}
+#[tokio::test]
+async fn reset_retries_exact_persisted_request_after_restart_and_uses_the_next_epoch() {
+    let (account, store, first, recovery) = staged_reset().await;
+    let id = account.id.clone();
+    assert_eq!(account.pending_reset_version(), Some(8));
+    assert!(account.local_key().is_none());
+    drop(account);
+    let mut account = Account::restore(api(), &id, store.clone(), 100)
+        .await
+        .unwrap()
+        .unwrap();
+    let pending = account.bundle.pending_reset.as_ref().unwrap();
+    let recovered = crypto::unwrap_recovery(
+        &pending.request.recovery_envelope,
+        &RecoveryKey::parse(&recovery).unwrap(),
+        &id,
+        8,
+    )
+    .unwrap();
+    assert!(
+        crypto::unwrap_recovery(
+            &pending.request.recovery_envelope,
+            &RecoveryKey::parse(&recovery).unwrap(),
+            &id,
+            1
+        )
+        .is_err()
+    );
+    let response = serde_json::json!({"key_version":8,"approved_at":100,"wrapped_key":pending.request.wrapped_key,"recovery_envelope":pending.request.recovery_envelope});
+    let (wire, done) = script(vec![("POST /api/v1/sync/reset ", "200 OK", response)]);
+    account.api = wire;
+    account.retry_reset(100).await.unwrap();
+    assert_eq!(first, done.join().unwrap().remove(0));
+    assert_eq!(account.local_key().unwrap().1, 8);
+    assert_eq!(
+        account.key_fingerprint().unwrap().unwrap(),
+        recovered.fingerprint(&id, 8).unwrap()
+    );
+    assert!(account.reset_committed());
+    account.acknowledge_reset_profile().await.unwrap();
+    assert!(account.pending_reset_version().is_none());
+}
+#[tokio::test]
+async fn reset_cancel_arbitrates_before_discarding_its_unconfirmed_key() {
+    for (outcome, version, abandoned) in [
+        ("committed", 8, false),
+        ("absent", 8, false),
+        ("cancelled", 8, true),
+        ("absent", 7, true),
+    ] {
+        let (mut account, _, _, _) = staged_reset().await;
+        let (wire, done) = script(vec![(
+            "POST /api/v1/sync/reset/cancel ",
+            "200 OK",
+            serde_json::json!({"outcome":outcome,"key_version":version}),
+        )]);
+        account.api = wire;
+        assert_eq!(account.cancel_reset(100).await.unwrap(), abandoned);
+        done.join().unwrap();
+        assert_eq!(account.bundle.pending_reset.is_none(), abandoned);
+        assert_eq!(account.bundle.account_key.is_none(), abandoned);
+    }
+}
+#[tokio::test]
+async fn reset_vault_failure_prevents_dispatch_and_preserves_retry_material() {
+    let (mut account, store, _, _) = staged_reset().await;
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    account.api = ApiClient::local_test(&format!("http://{}/", listener.local_addr().unwrap()));
+    store.fail.store(true, Ordering::SeqCst);
+    assert!(matches!(
+        account.retry_reset(100).await,
+        Err(AccountError::Vault(_))
+    ));
+    assert!(matches!(listener.accept(),Err(error) if error.kind()==std::io::ErrorKind::WouldBlock));
+    assert_eq!(account.pending_reset_version(), Some(8));
+    assert!(account.bundle.account_key.is_some());
+}
+#[tokio::test]
+async fn fresh_sign_in_does_not_rotate_away_a_pending_reset_key() {
+    let (mut account, _, _, _) = staged_reset().await;
+    let public = account.bundle.device_key.public_key();
+    let (wire, done) = script(vec![
+        (
+            "GET /api/v1/auth/session ",
+            "200 OK",
+            session(&account, None),
+        ),
+        (
+            "GET /api/v1/devices/device ",
+            "200 OK",
+            device(&account, false),
+        ),
+    ]);
+    account.api = wire;
+    account.connect(100).await.unwrap();
+    done.join().unwrap();
+    assert_eq!(account.device_id(), Some("device"));
+    assert_eq!(account.bundle.device_key.public_key(), public);
+    assert_eq!(account.pending_reset_version(), Some(8));
 }
 
 #[derive(Default)]

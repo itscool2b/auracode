@@ -349,6 +349,58 @@ pub async fn account_status(state: State<'_, AppState>) -> Result<AccountStatus,
 }
 #[tauri::command]
 #[specta::specta]
+pub async fn account_reset_status(
+    state: State<'_, AppState>,
+) -> Result<AccountResetStatus, AccountFailure> {
+    state.accounts.get().await?.reset_status().await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn account_reset_review(
+    state: State<'_, AppState>,
+) -> Result<AccountResetReview, AccountFailure> {
+    run(&state, AccountAction::Manage, |accounts| async move {
+        accounts.prepare_sync_reset(now()).await
+    })
+    .await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn account_reset_confirm(
+    state: State<'_, AppState>,
+    review_id: String,
+    confirmation: String,
+    retained: bool,
+) -> Result<AccountStatus, AccountFailure> {
+    run(&state, AccountAction::Manage, |accounts| async move {
+        accounts
+            .confirm_sync_reset(&review_id, &confirmation, retained, now())
+            .await
+    })
+    .await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn account_reset_retry(
+    state: State<'_, AppState>,
+) -> Result<AccountStatus, AccountFailure> {
+    run(&state, AccountAction::Manage, |accounts| async move {
+        accounts.retry_sync_reset(now()).await
+    })
+    .await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn account_reset_cancel(
+    state: State<'_, AppState>,
+) -> Result<AccountStatus, AccountFailure> {
+    run(&state, AccountAction::Manage, |accounts| async move {
+        accounts.cancel_sync_reset(now()).await
+    })
+    .await
+}
+#[tauri::command]
+#[specta::specta]
 pub async fn account_request_code(
     state: State<'_, AppState>,
     email: String,

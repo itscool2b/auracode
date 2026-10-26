@@ -86,6 +86,36 @@ pub struct Keys {
     pub wrapped_key: Option<KeyEnvelope>,
     pub approved_at: Option<i64>,
 }
+#[derive(Debug, Clone, Deserialize)]
+pub struct ResetReview {
+    pub id: String,
+    pub key_version: u32,
+    pub expires_at: i64,
+    pub records: u32,
+    pub blobs: u32,
+    pub other_devices: u32,
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResetRequest {
+    pub review_id: String,
+    pub confirmation: String,
+    pub wrapped_key: KeyEnvelope,
+    pub recovery_envelope: KeyEnvelope,
+    pub recovery_verifier: String,
+}
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResetOutcome {
+    Cancelled,
+    Committed,
+    Absent,
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct ResetCancellation {
+    pub outcome: ResetOutcome,
+    pub key_version: u32,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EncryptedRecord {
     pub collection: String,

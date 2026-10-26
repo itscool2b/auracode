@@ -23,6 +23,29 @@ pub struct AccountVaultStatus {
     pub mode: AccountVaultMode,
     pub can_create: bool,
 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct AccountResetStatus {
+    pub pending: bool,
+    pub committed: bool,
+}
+#[derive(Serialize, Deserialize, Type)]
+pub struct AccountResetReview {
+    pub id: String,
+    pub key_version: u32,
+    pub records: u32,
+    pub blobs: u32,
+    pub other_devices: u32,
+    pub recovery_key: String,
+}
+impl std::fmt::Debug for AccountResetReview {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AccountResetReview")
+            .field("id", &self.id)
+            .field("key_version", &self.key_version)
+            .field("recovery_key", &"[REDACTED]")
+            .finish()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]

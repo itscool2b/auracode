@@ -20,6 +20,7 @@ mod error;
 mod index;
 mod network;
 pub mod passphrase;
+mod reset;
 pub use audit::audit_profile;
 use index::Index;
 pub type Result<T> = std::result::Result<T, AccountFailure>;
@@ -37,6 +38,7 @@ struct Inner {
     account: Option<Account>,
     challenge: Option<(String, Instant)>,
     recovery: Option<PendingRecovery>,
+    reset: Option<reset::PendingSetup>,
 }
 struct PendingRecovery {
     id: String,
@@ -79,6 +81,7 @@ impl Accounts {
                 account: None,
                 challenge: None,
                 recovery: None,
+                reset: None,
             }),
         })
     }
@@ -108,6 +111,7 @@ impl Accounts {
             .map_err(error::account)?;
         inner.account = Some(restored.ok_or_else(|| error::failure(AccountFailureCode::SecureStorage, "The key for this account profile is unavailable. Sign in and recover or unlock its secure store."))?);
         inner.recovery = None;
+        inner.reset = None;
         snapshot(&inner)
     }
     pub async fn request_code(
@@ -155,6 +159,7 @@ impl Accounts {
             .await?;
         inner.index = index;
         inner.recovery = None;
+        inner.reset = None;
         inner.account = Some(
             Account::signed_in(self.api.clone(), verified, self.vault.clone())
                 .await
@@ -168,6 +173,7 @@ impl Accounts {
             .connect(now)
             .await
             .map_err(error::account)?;
+        self.finish_reset_binding(&mut inner).await?;
         snapshot(&inner)
     }
     pub async fn register_device(
@@ -201,6 +207,7 @@ impl Accounts {
         let mut inner = self.action()?;
         inner.challenge = None;
         inner.recovery = None;
+        inner.reset = None;
         snapshot(&inner)
     }
     pub async fn confirm_recovery(
@@ -299,6 +306,9 @@ impl Accounts {
     pub async fn local_profile(&self) -> Result<AccountProfile> {
         let mut inner = self.action()?;
         let account = account(&mut inner)?;
+        if account.pending_reset_version().is_some() {
+            return Err(error::state());
+        }
         let (key, key_version) = account.local_key_handle().ok_or_else(error::state)?;
         let account_id = account.id().to_owned();
         let device_id = account.device_id().map(str::to_owned);

@@ -248,3 +248,42 @@ fn review_requires_pending_desktop_and_recent_email_verification() {
         assert_eq!(review(&db, "review"), 0, "{mutation}");
     }
 }
+
+#[test]
+fn cancellation_and_commit_have_one_winner_and_foreign_sessions_cannot_cancel() {
+    let mut db = db();
+    review(&db, "cancelled");
+    assert_eq!(
+        db.execute(CANCEL, params!["cancelled", "other", 1001])
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        db.execute(CANCEL, params!["cancelled", "fresh", 1001])
+            .unwrap(),
+        1
+    );
+    reset(&mut db, "cancelled", "late", 1001).unwrap();
+    assert_eq!(
+        number(&db, "SELECT key_version FROM user_keys WHERE user_id='u'"),
+        7
+    );
+    review(&db, "committed");
+    reset(&mut db, "committed", "first", 1001).unwrap();
+    assert_eq!(
+        db.execute(CANCEL, params!["committed", "fresh", 1002])
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        number(&db, "SELECT key_version FROM user_keys WHERE user_id='u'"),
+        8
+    );
+    assert_eq!(
+        number(
+            &db,
+            "SELECT COUNT(*) FROM sync_reset_reviews WHERE id='committed' AND consumed_by='first'"
+        ),
+        1
+    );
+}

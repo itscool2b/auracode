@@ -19,6 +19,12 @@ AND s.client_kind='desktop' AND s.created_at>=?3-300 AND s.created_at<=?3
 AND s.expires_at>?3 AND s.revoked_at IS NULL AND u.deletion_requested_at IS NULL
 AND d.revoked_at IS NULL AND d.approved_at IS NULL AND d.created_at>=?3-600)";
 
+pub const CANCEL: &str = "UPDATE sync_reset_reviews SET consumed_by='cancelled' WHERE id=?1
+AND consumed_by IS NULL AND EXISTS(SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id
+LEFT JOIN devices d ON d.id=s.device_id AND d.user_id=s.user_id WHERE s.token_hash=?2
+AND s.user_id=sync_reset_reviews.user_id AND s.revoked_at IS NULL AND s.expires_at>?3
+AND u.deletion_requested_at IS NULL AND (s.device_id IS NULL OR (d.id IS NOT NULL AND d.revoked_at IS NULL)))";
+
 // Parameters common to all effects: review ID, winning operation. Extra values start at ?3.
 pub const KEYS: &str = "UPDATE user_keys SET key_version=key_version+1,recovery_verifier=?3,
 recovery_envelope=?4,created_at=?5,initialized_by=(SELECT device_id FROM sync_reset_reviews WHERE id=?1)

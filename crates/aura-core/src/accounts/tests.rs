@@ -6,6 +6,7 @@ use std::{collections::HashMap, sync::Mutex as StdMutex};
 struct Memory {
     values: StdMutex<HashMap<VaultEntry, Vec<u8>>>,
     writes: StdMutex<usize>,
+    fail_entry: StdMutex<Option<VaultEntry>>,
 }
 impl SecretStore for Memory {
     fn load(&self, entry: &VaultEntry) -> aura_sync::vault::Result<Option<Zeroizing<Vec<u8>>>> {
@@ -18,6 +19,9 @@ impl SecretStore for Memory {
             .map(Zeroizing::new))
     }
     fn save(&self, entry: &VaultEntry, bytes: &[u8]) -> aura_sync::vault::Result<()> {
+        if self.fail_entry.lock().unwrap().as_ref() == Some(entry) {
+            return Err(VaultError::Write);
+        }
         self.values
             .lock()
             .unwrap()
@@ -29,6 +33,89 @@ impl SecretStore for Memory {
         self.values.lock().unwrap().remove(entry);
         Ok(())
     }
+}
+
+#[tokio::test]
+async fn reset_detaches_old_profile_durably_before_ack_and_never_reuses_its_ciphertext() {
+    let dir = tempfile::tempdir().unwrap();
+    let profiles = profiles(&dir);
+    profiles.open_active().unwrap();
+    let old = profiles
+        .create(ProfileKind::Account, "Old encrypted account")
+        .unwrap();
+    std::fs::write(old.db_path(), b"synthetic old ciphertext").unwrap();
+    let vault = Arc::new(Memory::default());
+    let account_entry = VaultEntry::new(ORIGIN, "account").unwrap();
+    let key = aura_sync::crypto::AccountKey::restore(&[7; 32]).unwrap();
+    let recovery = aura_sync::crypto::RecoveryKey::generate().unwrap();
+    let device = aura_sync::crypto::DeviceKey::restore(&[3; 32]).unwrap();
+    let pending = serde_json::json!({"version":8,"request":{
+        "review_id":"receipt","confirmation":"RESET SYNC",
+        "wrapped_key":aura_sync::crypto::wrap_device(&key,"account","device",8,&device.public_key()).unwrap(),
+        "recovery_envelope":aura_sync::crypto::wrap_recovery(&key,&recovery,"account",8).unwrap(),
+        "recovery_verifier":recovery.verifier("account",8).unwrap()}});
+    let pending = serde_json::to_vec(&pending).unwrap();
+    let mut bytes = b"AURA-ACCOUNT\x03".to_vec();
+    bytes.extend_from_slice(&[3; 32]);
+    bytes.push(6);
+    bytes.extend_from_slice(b"device");
+    bytes.extend_from_slice(&[0, 1]);
+    bytes.extend_from_slice(&8_u32.to_be_bytes());
+    bytes.extend_from_slice(&[1, 1]);
+    bytes.extend_from_slice(&[7; 32]);
+    bytes.push(0);
+    bytes.extend_from_slice(&(pending.len() as u16).to_be_bytes());
+    bytes.extend_from_slice(&pending);
+    vault.save(&account_entry, &bytes).unwrap();
+    let accounts = Accounts::open(api(), vault.clone(), profiles.clone())
+        .await
+        .unwrap();
+    {
+        let mut inner = accounts.inner.lock().await;
+        inner
+            .index
+            .accounts
+            .insert("account".into(), Some(old.meta.id.clone()));
+        inner
+            .index
+            .save(vault.clone(), accounts.index_entry.clone())
+            .await
+            .unwrap();
+        inner.account = Account::restore(api(), "account", vault.clone(), 100)
+            .await
+            .unwrap();
+        *vault.fail_entry.lock().unwrap() = Some(accounts.index_entry.clone());
+        assert!(accounts.finish_reset_binding(&mut inner).await.is_err());
+        assert!(inner.account.as_ref().unwrap().reset_committed());
+        assert_eq!(
+            inner.index.accounts["account"].as_deref(),
+            Some(old.meta.id.as_str())
+        );
+    }
+    assert!(accounts.local_profile().await.is_err());
+    {
+        let mut inner = accounts.inner.lock().await;
+        *vault.fail_entry.lock().unwrap() = Some(account_entry);
+        assert!(accounts.finish_reset_binding(&mut inner).await.is_err());
+        assert_eq!(inner.index.accounts["account"], None);
+        assert!(inner.account.as_ref().unwrap().reset_committed());
+        *vault.fail_entry.lock().unwrap() = None;
+        accounts.finish_reset_binding(&mut inner).await.unwrap();
+        assert!(
+            inner
+                .account
+                .as_ref()
+                .unwrap()
+                .pending_reset_version()
+                .is_none()
+        );
+    }
+    let new = accounts.local_profile().await.unwrap();
+    assert_ne!(new.profile.meta.id, old.meta.id);
+    assert_eq!(
+        std::fs::read(old.db_path()).unwrap(),
+        b"synthetic old ciphertext"
+    );
 }
 const ORIGIN: &str = "https://accounts.example.test";
 fn api() -> ApiClient {

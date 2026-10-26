@@ -27,6 +27,20 @@ export type AccountFailure = {
 
 export type AccountFailureCode = "invalid_input" | "invalid_state" | "offline" | "timed_out" | "unauthorized" | "deleted" | "forbidden" | "invalid_code" | "conflict" | "quota" | "rate_limited" | "delivery_failed" | "unavailable" | "not_found" | "protocol" | "secure_storage" | "local_storage" | "key_mismatch";
 
+export type AccountResetReview = {
+	id: string,
+	key_version: number,
+	records: number,
+	blobs: number,
+	other_devices: number,
+	recovery_key: string,
+};
+
+export type AccountResetStatus = {
+	pending: boolean,
+	committed: boolean,
+};
+
 export type AccountSignOut = {
 	status: AccountStatus,
 	/**  False means the local session is removed, but remote revocation could not be confirmed. */

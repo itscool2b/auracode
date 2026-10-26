@@ -17,6 +17,9 @@ use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
 mod bundle;
 use bundle::{Bundle, SavedKey, SavedSession};
+mod reset;
+use reset::PendingReset;
+pub use reset::ResetSetup;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Access {
@@ -246,6 +249,12 @@ impl Account {
                     return Err(ApiError::Forbidden.into());
                 }
                 if retained.approved_at.is_none() {
+                    if self.bundle.pending_reset.is_some() {
+                        self.access = Access::PendingApproval {
+                            code: self.bundle.device_key.approval_code(&self.id, &device)?,
+                        };
+                        return Ok(());
+                    }
                     // Rebind proves an approved device, not an abandoned pending registration.
                     // A new explicit registration can proceed under this fresh unbound session.
                     self.bundle.device_id = None;
@@ -322,7 +331,7 @@ impl Account {
     }
     pub fn prepare_first_key(&self) -> Result<FirstKeySetup> {
         self.current()?;
-        if self.access != Access::NeedsFirstKey {
+        if self.access != Access::NeedsFirstKey || self.bundle.pending_reset.is_some() {
             return Err(AccountError::State);
         }
         Ok(FirstKeySetup {
@@ -367,7 +376,9 @@ impl Account {
     }
     pub async fn recover(&mut self, recovery: RecoveryKey, now: i64) -> Result<()> {
         self.check(now).await?;
-        if !matches!(self.access, Access::PendingApproval { .. }) {
+        if !matches!(self.access, Access::PendingApproval { .. })
+            || self.bundle.pending_reset.is_some()
+        {
             return Err(AccountError::State);
         }
         self.access = Access::VerificationRequired;

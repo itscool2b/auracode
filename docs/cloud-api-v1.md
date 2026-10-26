@@ -52,6 +52,16 @@ deletion; a changed request conflicts. Ciphertext R2 objects remain tracked unti
 so blob quota may temporarily include pending cleanup. Existing offline encrypted profiles are retained.
 This endpoint does not recover the old plaintext or require its lost key.
 
+POST `/api/v1/sync/reset/cancel` with `review_id` arbitrates cancellation against commit under the
+same authenticated account. It returns `outcome:cancelled|committed|absent` and the current `key_version`.
+Cancellation never changes keys or synced data. A committed outcome retains the staged key until the
+client proves its device envelope. An absent receipt cannot still commit, but a matching current key
+version remains ambiguous and must retain the staged key. Other-account receipts are never exposed.
+The client saves the exact request and unconfirmed new key in its encrypted account bundle before
+dispatch. Retrying reuses that request. After success it durably detaches the old local profile binding
+before clearing the reset marker; old profile files remain preserved and a new profile is created on
+explicit activation.
+
 | Method and route | Request | Response |
 | --- | --- | --- |
 | GET `/api/v1/devices` | authentication | `devices:[{id,name,platform,public_key,verification_code,created_at,last_seen,approved_at,revoked_at}]` |

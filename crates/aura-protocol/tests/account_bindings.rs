@@ -7,6 +7,8 @@ fn export_account_bindings() {
     let types = specta::Types::default()
         .register::<AccountConfiguration>()
         .register::<AccountVaultStatus>()
+        .register::<AccountResetStatus>()
+        .register::<AccountResetReview>()
         .register::<AccountStatus>()
         .register::<SignInChallenge>()
         .register::<RecoverySetup>()

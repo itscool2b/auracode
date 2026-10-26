@@ -2248,3 +2248,19 @@ Seven focused encrypted-profile copy/recovery/publication tests passed on Window
 ### Integrated Keep as Local gate
 
 The combined native command export and desktop TypeScript pass with preservation, folder resolution, passphrase storage and readable export together. Chromium and WebKit pass the preservation fixture's explicit consent, cancellation, stale review, partial-copy reporting and separate Open Local copy recovery. The existing settings browser gate now includes those checks and screenshots using its owned development server. The account lifecycle coordinator is integrating the production Deleted-account entry point; that mount is not complete yet.
+### Durable reset client checkpoint
+
+The client now saves the exact reset request and unconfirmed new key in its encrypted version-3
+bundle before dispatch. Versions 1 and 2 remain readable. Restart, request failure and fresh sign-in
+retain that material; all key wrapping and recovery proofs use the reviewed next generation. A narrow
+same-account cancellation endpoint arbitrates against commit before the client may discard an
+unconfirmed key. A committed or ambiguous matching generation retains it for verification.
+
+Core reset completion saves a detached old-profile binding before acknowledging the durable reset.
+Existing encrypted profile files remain intact and cannot be reopened with the new generation's key.
+Seventeen focused account tests pass, including four new restart/retry, cancellation, vault-failure and
+fresh-sign-in regressions. Client all-target and Worker Wasm Clippy pass; the exact cancellation SQL
+also passed temporary Node SQLite arbitration tests. Generated Account DTOs include Deleted and
+reset types. Core fault-injection coverage for binding and acknowledgement failures is added, awaiting
+integrated native execution with the blocked SQLite build noted above. Reset presentation, restored
+profile binding after vault loss and device-local removal remain in progress; no live reset occurred.

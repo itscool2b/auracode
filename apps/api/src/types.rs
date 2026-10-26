@@ -128,6 +128,11 @@ pub struct ResetSync {
     pub recovery_envelope: KeyEnvelope,
     pub recovery_verifier: String,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CancelReset {
+    pub review_id: String,
+}
 impl ResetSync {
     pub fn validate(&self) -> Result<()> {
         policy::identifier(&self.review_id)?;
