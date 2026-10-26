@@ -1,0 +1,5 @@
+# Biome, shell scripts and protocol fixtures use LF on every platform. Binary files stay binary.
+* text=auto eol=lf
+# Keep mirrored instructions byte-identical across Windows and Unix checkouts.
+/AGENTS.md text eol=lf
+/CLAUDE.md text eol=lf
