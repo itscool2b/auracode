@@ -47,6 +47,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::git::WorktreeActionPreview>()
         .typ::<aura_protocol::git::WorktreeActionResult>()
         .typ::<aura_protocol::git::WorktreeRecoveryPreview>()
+        .typ::<aura_protocol::git::WorktreeRelocationPreview>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
             crate::updater::app_update_status,
@@ -101,6 +102,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::git_commands::worktree_action_apply,
             crate::git_commands::worktree_recovery_preview,
             crate::git_commands::worktree_recovery_apply,
+            crate::git_commands::worktree_relocation_preview,
+            crate::git_commands::worktree_relocation_apply,
             commands::chats_list,
             crate::workspace_commands::workspace_snapshot,
             crate::workspace_commands::project_create,

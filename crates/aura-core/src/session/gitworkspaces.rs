@@ -2,11 +2,19 @@
 
 use aura_protocol::git::{
     GitWorkspace, IsolationInput, IsolationPreview, IsolationResult, ManagedWorktree,
-    WorktreeAction, WorktreeActionPreview, WorktreeActionResult, WorktreeRecoveryAction,
-    WorktreeRecoveryPreview,
+    WorktreeAction, WorktreeActionPreview, WorktreeActionResult, WorktreeDestination,
+    WorktreeRecoveryAction, WorktreeRecoveryPreview, WorktreeRelocationPreview,
 };
 
 use super::*;
+
+#[derive(Clone)]
+pub(super) struct PreparedRelocation {
+    pub(super) record: ManagedWorktree,
+    pub(super) destination: WorktreeDestination,
+    pub(super) from: PathBuf,
+    pub(super) to: PathBuf,
+}
 
 pub(super) struct Reservations {
     shared: Arc<Shared>,
@@ -152,6 +160,14 @@ impl SessionManager {
         &self,
         folders: Vec<PathBuf>,
     ) -> Result<Reservations, SessionError> {
+        self.reserve_git_folders_except(folders, None).await
+    }
+
+    async fn reserve_git_folders_except(
+        &self,
+        folders: Vec<PathBuf>,
+        except: Option<&str>,
+    ) -> Result<Reservations, SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
@@ -199,6 +215,9 @@ impl SessionManager {
             reservations.folders.push(folder);
         }
         for chat in chats {
+            if Some(chat.as_str()) == except {
+                continue;
+            }
             let id = crate::ids::new_id();
             let mailbox = self.actor(&chat);
             let (reply, answer) = oneshot::channel();
@@ -248,5 +267,91 @@ impl SessionManager {
             service.recovery_apply(&chat_id, &worktree_id, &token).await
                 .map_err(|error| invalid(error.to_string()))
         }).await.map_err(|_| invalid("The recovery task ended unexpectedly. Its saved state and files remain available for review."))?
+    }
+
+    pub async fn worktree_relocation_preview(
+        &self,
+        chat_id: &str,
+        worktree_id: &str,
+        destination: WorktreeDestination,
+    ) -> Result<WorktreeRelocationPreview, SessionError> {
+        let chat = self.git_chat(chat_id).await?;
+        let (record, to) = self
+            .worktrees()?
+            .relocation_target(chat_id, worktree_id, destination)
+            .await
+            .map_err(|error| invalid(error.to_string()))?;
+        let from = chat
+            .folder
+            .canonicalize()
+            .map_err(|_| invalid("Locate the chat's current folder before moving it."))?;
+        let expected = match destination {
+            WorktreeDestination::Isolated => Path::new(&record.source),
+            WorktreeDestination::Direct => Path::new(&record.path),
+        }
+        .canonicalize()
+        .map_err(|_| invalid("The reviewed folder is unavailable."))?;
+        if from != expected || from == to {
+            return Err(invalid(
+                "This chat is no longer in the expected source folder for that move.",
+            ));
+        }
+        let preview = self
+            .continuation_preview_for_folder(
+                chat_id,
+                aura_protocol::conversation::ContinuationAction::SwitchAgent {
+                    agent_id: chat.agent_id,
+                },
+                Some(PreparedRelocation {
+                    record: record.clone(),
+                    destination,
+                    from: from.clone(),
+                    to: to.clone(),
+                }),
+            )
+            .await?;
+        Ok(WorktreeRelocationPreview {
+            token: preview.token,
+            worktree: record,
+            from: from.to_string_lossy().into_owned(),
+            to: to.to_string_lossy().into_owned(),
+            handoff: preview.handoff,
+            warnings: preview.warnings,
+            expires_at: preview.expires_at,
+        })
+    }
+
+    pub async fn worktree_relocation_apply(
+        &self,
+        chat_id: &str,
+        token: &str,
+    ) -> Result<aura_protocol::conversation::ContinuationResult, SessionError> {
+        let manager = self.clone();
+        let chat_id = chat_id.to_owned();
+        let token = token.to_owned();
+        self.deps().rt.spawn(async move {
+            let _organization = manager.shared().organization.lock().await;
+            let prepared = lock(&manager.shared().continuations).remove(&token)
+                .ok_or_else(|| invalid("This relocation preview expired or was already used."))?;
+            if prepared.expires <= Instant::now() || prepared.apply.source_chat != chat_id {
+                return Err(invalid("This relocation preview no longer belongs to the selected chat."));
+            }
+            let relocation = prepared.relocation.as_ref().ok_or_else(|| invalid("This preview is not a worktree relocation."))?;
+            let (record, destination) = manager.worktrees()?.relocation_target(&chat_id, &relocation.record.id, relocation.destination)
+                .await.map_err(|error| invalid(error.to_string()))?;
+            if record != relocation.record || destination != relocation.to {
+                return Err(invalid("The worktree changed after relocation preview. Review it again."));
+            }
+            // Other chats are reserved here. Continue serializes the moving chat's own admission
+            // and persistence barrier, while folder reservations prevent any new native process.
+            let _reservations = manager.reserve_git_folders_except(
+                vec![relocation.from.clone(), relocation.to.clone()], Some(&chat_id),
+            ).await?;
+            manager.ask(&chat_id, |reply| ChatMsg::Continue {
+                apply: Box::new(prepared.apply.clone()),
+                prompt: None,
+                reply,
+            }).await
+        }).await.map_err(|_| invalid("The relocation task ended unexpectedly. Reload the chat to inspect its saved folder and handoff."))?
     }
 }

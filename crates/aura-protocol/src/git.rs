@@ -105,6 +105,24 @@ pub struct WorktreeRecoveryPreview {
     pub expires_at: Millis,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum WorktreeDestination {
+    Isolated,
+    Direct,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeRelocationPreview {
+    pub token: String,
+    pub worktree: ManagedWorktree,
+    pub from: String,
+    pub to: String,
+    pub handoff: String,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct IsolationResult {
     pub worktree: ManagedWorktree,

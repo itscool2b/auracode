@@ -102,6 +102,8 @@ export const commands = {
 	worktreeActionApply: (chatId: string, token: string) => typedError<WorktreeActionResult, AppError>(__TAURI_INVOKE("worktree_action_apply", { chatId, token })),
 	worktreeRecoveryPreview: (chatId: string, worktreeId: string, action: WorktreeRecoveryAction) => typedError<WorktreeRecoveryPreview, AppError>(__TAURI_INVOKE("worktree_recovery_preview", { chatId, worktreeId, action })),
 	worktreeRecoveryApply: (chatId: string, worktreeId: string, token: string) => typedError<WorktreeActionResult, AppError>(__TAURI_INVOKE("worktree_recovery_apply", { chatId, worktreeId, token })),
+	worktreeRelocationPreview: (chatId: string, worktreeId: string, destination: WorktreeDestination) => typedError<WorktreeRelocationPreview, AppError>(__TAURI_INVOKE("worktree_relocation_preview", { chatId, worktreeId, destination })),
+	worktreeRelocationApply: (chatId: string, token: string) => typedError<ContinuationResult, AppError>(__TAURI_INVOKE("worktree_relocation_apply", { chatId, token })),
 	/**  Every chat, newest activity first. */
 	chatsList: () => typedError<ChatSummary[], AppError>(__TAURI_INVOKE("chats_list")),
 	workspaceSnapshot: (filter: WorkspaceFilter) => typedError<WorkspaceSnapshot, AppError>(__TAURI_INVOKE("workspace_snapshot", { filter })),
@@ -1353,6 +1355,8 @@ export type WorktreeActionResult = {
 	error: string | null,
 };
 
+export type WorktreeDestination = "isolated" | "direct";
+
 export type WorktreeRecovery = { type: "create" } | { type: "retire" } | { type: "restore" } | { type: "merge"; branch: string; before_ref: string; prepared_ref: string; before_commit: string; prepared_commit: string };
 
 export type WorktreeRecoveryAction = "reconcile" | "restore";
@@ -1364,6 +1368,16 @@ export type WorktreeRecoveryPreview = {
 	folder: GitWorkspace,
 	target: GitWorkspace | null,
 	destination: string,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type WorktreeRelocationPreview = {
+	token: string,
+	worktree: ManagedWorktree,
+	from: string,
+	to: string,
+	handoff: string,
 	warnings: string[],
 	expires_at: number,
 };

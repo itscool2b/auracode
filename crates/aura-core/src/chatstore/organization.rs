@@ -232,7 +232,7 @@ fn project_exists(conn: &Connection, id: &str) -> rusqlite::Result<()> {
     )
 }
 
-fn add_folder(
+pub(super) fn add_folder(
     conn: &Connection,
     device: &str,
     now: Millis,

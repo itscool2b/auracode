@@ -13,9 +13,10 @@ use aura_protocol::{
 };
 
 pub(super) struct PreparedContinuation {
-    expires: Instant,
-    apply: ApplyContinuation,
-    prompt: Option<(String, Vec<PromptPart>)>,
+    pub(super) expires: Instant,
+    pub(super) apply: ApplyContinuation,
+    pub(super) prompt: Option<(String, Vec<PromptPart>)>,
+    pub(super) relocation: Option<super::gitworkspaces::PreparedRelocation>,
 }
 
 fn invalid(message: impl Into<String>) -> SessionError {
@@ -111,6 +112,16 @@ impl SessionManager {
         chat_id: &str,
         action: ContinuationAction,
     ) -> Result<ContinuationPreview, SessionError> {
+        self.continuation_preview_for_folder(chat_id, action, None)
+            .await
+    }
+
+    pub(super) async fn continuation_preview_for_folder(
+        &self,
+        chat_id: &str,
+        action: ContinuationAction,
+        relocation: Option<super::gitworkspaces::PreparedRelocation>,
+    ) -> Result<ContinuationPreview, SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
@@ -129,6 +140,14 @@ impl SessionManager {
         let snapshot = self
             .conversation_snapshot(chat_id, selected, target.clone(), include_selected)
             .await?;
+        if let Some(relocation) = &relocation
+            && live::normalize_path(snapshot.chat.folder.clone())
+                != live::normalize_path(relocation.from.clone())
+        {
+            return Err(invalid(
+                "The chat folder changed while relocation was being reviewed.",
+            ));
+        }
         if snapshot
             .selected
             .as_ref()
@@ -154,7 +173,8 @@ impl SessionManager {
         let session = snapshot.target_session.as_ref().filter(|session| {
             session.host == snapshot.chat.agent_host && session.cwd == snapshot.chat.folder
         });
-        let resumes_native = switch
+        let resumes_native = relocation.is_none()
+            && switch
             && session
                 .and_then(|session| session.native_session_id.as_ref())
                 .is_some()
@@ -246,6 +266,27 @@ impl SessionManager {
             handoff.clear();
             warnings.push("The new native session forks the complete source session with a distinct ID; no synthetic history is sent.".into());
         }
+        if let Some(relocation) = &relocation {
+            let header = format!(
+                "Working folder changes from {} to {}.\nA new native session continues with this visible context.\n\n",
+                relocation.from.display(),
+                relocation.to.display()
+            );
+            if header.len() > 4096 {
+                return Err(invalid(
+                    "The folder paths exceed the visible handoff limit.",
+                ));
+            }
+            let available = crate::conversation::HANDOFF_BYTES.saturating_sub(header.len());
+            if handoff.len() > available {
+                warnings.push(
+                    "Earlier context was shortened to leave room for the visible folder change."
+                        .into(),
+                );
+            }
+            handoff = format!("{header}{}", crate::conversation::cut(&handoff, available));
+            warnings.push("Moving the chat preserves all earlier messages and saved native sessions. No files are copied or reverted, and no agent prompt is sent now.".into());
+        }
         if truncated || snapshot.truncated {
             warnings
                 .push("Earlier context was shortened to fit the visible handoff budget.".into());
@@ -319,6 +360,7 @@ impl SessionManager {
                 .map(|session| (session.id.clone(), session.native_session_id.clone())),
             target_agent: agent_id,
             destination_chat: creates_chat.then(crate::ids::new_id),
+            destination_folder: relocation.as_ref().map(|value| value.to.clone()),
             pending: PendingContinuation {
                 handoff,
                 force_fresh: !resumes_native && !uses_native_fork,
@@ -350,6 +392,7 @@ impl SessionManager {
                 expires,
                 apply,
                 prompt,
+                relocation,
             },
         );
         Ok(preview)
@@ -369,6 +412,11 @@ impl SessionManager {
         if prepared.expires <= Instant::now() || prepared.apply.source_chat != chat_id {
             return Err(invalid(
                 "This preview no longer belongs to the selected conversation.",
+            ));
+        }
+        if prepared.relocation.is_some() {
+            return Err(invalid(
+                "Use the reviewed worktree relocation action for this preview.",
             ));
         }
         self.ask(chat_id, |reply| ChatMsg::Continue {

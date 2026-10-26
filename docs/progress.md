@@ -1334,3 +1334,20 @@ and deletions while recognizing interrupted publication. Complete skill bundles 
 assets and execution bits; unrelated target files remain untouched. Fourteen Windows fixture tests
 and aura-config all-target Clippy pass. macOS execution, scoped MCP/plugin mutation and Library UI
 remain pending. All copies and recovery checks used temporary synthetic files only.
+
+## M4 visible chat relocation
+
+Moving a stopped chat into its managed worktree, or back to its source folder, now has a bounded
+preview of the exact folder change and visible conversation handoff. Apply consumes a one-use token,
+rechecks worktree ownership and conversation state, and reserves both canonical folders plus other
+affected chat actors. The chat folder and pending handoff are saved in one transaction. Earlier
+messages and native sessions remain intact. Applying the move sends no prompt; the next user prompt
+starts a fresh native session with the reviewed handoff. Returning keeps the isolated directory and
+its files. Cross-folder native resume remains unqualified and is not advertised.
+
+All 313 core tests pass on Windows. The new actor regressions cover preserved history, exact deferred
+handoff, fresh-session enforcement even when resume is supported, return to source, one-use tokens,
+live destinations and changed conversations. Core, CLI and desktop all-target Clippy and binding
+export pass. No migration is needed. The relocation Tauri commands and generated DTOs are included
+for frontend integration. Optional bring-changes/setup, PR creation, missing
+worktree recreation and macOS execution remain pending. No remote CI, push, agent prompt or login ran.

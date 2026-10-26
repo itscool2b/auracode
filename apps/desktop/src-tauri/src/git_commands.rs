@@ -2,8 +2,8 @@
 
 use aura_protocol::git::{
     GitWorkspace, IsolationInput, IsolationPreview, IsolationResult, ManagedWorktree,
-    WorktreeAction, WorktreeActionPreview, WorktreeActionResult, WorktreeRecoveryAction,
-    WorktreeRecoveryPreview,
+    WorktreeAction, WorktreeActionPreview, WorktreeActionResult, WorktreeDestination,
+    WorktreeRecoveryAction, WorktreeRecoveryPreview, WorktreeRelocationPreview,
 };
 use tauri::State;
 
@@ -99,5 +99,32 @@ pub async fn worktree_recovery_apply(
     Ok(state
         .sessions()?
         .worktree_recovery_apply(&chat_id, &worktree_id, &token)
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn worktree_relocation_preview(
+    state: State<'_, AppState>,
+    chat_id: String,
+    worktree_id: String,
+    destination: WorktreeDestination,
+) -> Result<WorktreeRelocationPreview, AppError> {
+    Ok(state
+        .sessions()?
+        .worktree_relocation_preview(&chat_id, &worktree_id, destination)
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn worktree_relocation_apply(
+    state: State<'_, AppState>,
+    chat_id: String,
+    token: String,
+) -> Result<aura_protocol::conversation::ContinuationResult, AppError> {
+    Ok(state
+        .sessions()?
+        .worktree_relocation_apply(&chat_id, &token)
         .await?)
 }

@@ -28,6 +28,34 @@ fn invalid(message: &str) -> GitError {
 }
 
 impl GitWorkspaces {
+    pub async fn relocation_target(
+        &self,
+        chat_id: &str,
+        worktree_id: &str,
+        destination: aura_protocol::git::WorktreeDestination,
+    ) -> Result<(ManagedWorktree, PathBuf)> {
+        let _guard = self.gate.lock().await;
+        let record = self.owned_record(chat_id, worktree_id)?;
+        let git = self.git().await?;
+        let isolated = inspect(&git, Path::new(&record.path)).await?;
+        let source = inspect(&git, Path::new(&record.source)).await?;
+        if source.common != isolated.common
+            || isolated.view.branch.as_deref() != Some(&record.branch)
+            || !isolated.view.is_linked_worktree
+            || !source.view.blockers.is_empty()
+            || !isolated.view.blockers.is_empty()
+        {
+            return Err(invalid(
+                "Resolve the folder's Git state and ownership before moving the chat.",
+            ));
+        }
+        let target = match destination {
+            aura_protocol::git::WorktreeDestination::Isolated => isolated.root,
+            aura_protocol::git::WorktreeDestination::Direct => source.root,
+        };
+        Ok((record, target))
+    }
+
     pub async fn action_preview(
         &self,
         chat_id: &str,
@@ -165,7 +193,7 @@ impl GitWorkspaces {
         }
     }
 
-    fn owned_record(&self, chat_id: &str, id: &str) -> Result<ManagedWorktree> {
+    pub(super) fn owned_record(&self, chat_id: &str, id: &str) -> Result<ManagedWorktree> {
         let record = self
             .read_records()?
             .into_iter()

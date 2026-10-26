@@ -44,6 +44,7 @@ pub(crate) struct ApplyContinuation {
     pub expected_target_session: Option<(String, Option<String>)>,
     pub target_agent: String,
     pub destination_chat: Option<String>,
+    pub destination_folder: Option<std::path::PathBuf>,
     pub pending: PendingContinuation,
     pub parts: Vec<PromptPart>,
 }
@@ -321,6 +322,23 @@ fn apply_change(
         conn.execute(
             "UPDATE chats SET active_agent=?2,updated_at=?3,device_id=?4 WHERE id=?1 AND deleted=0",
             params![destination, apply.target_agent, now, device],
+        )?;
+    }
+    if let Some(folder) = &apply.destination_folder {
+        if apply.destination_chat.is_some() || !apply.pending.force_fresh {
+            return Err(invalid(
+                "Folder relocation requires a fresh session in the same chat.",
+            ));
+        }
+        let project: String = conn.query_row(
+            "SELECT project_id FROM chats WHERE id=?1 AND deleted=0",
+            [destination],
+            |row| row.get(0),
+        )?;
+        let folder_id = super::organization::add_folder(conn, device, now, &project, folder)?;
+        conn.execute(
+            "UPDATE chats SET folder_id=?2 WHERE id=?1",
+            params![destination, folder_id],
         )?;
     }
     // Only references selected from a stored source turn can copy chat-scoped attachment metadata.
