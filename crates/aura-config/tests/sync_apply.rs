@@ -435,6 +435,46 @@ fn newly_added_tree_dependency_invalidates_review() {
 }
 
 #[test]
+fn case_aliases_in_a_remote_tree_are_skipped_before_any_file_write() {
+    let temp = tempfile::tempdir().unwrap();
+    let scan = scanner(temp.path(), Provider::Codex, true);
+    let desired = snapshot(
+        ConfigFormat::Tree,
+        "skills/fixture",
+        &[],
+        Some(skill(&[("SKILL.md", "one"), ("skill.md", "two")])),
+    );
+    assert!(matches!(
+        scan.prepare_apply(desired, &LocalSnapshot::Absent).unwrap(),
+        ConfigApplyPreparation::Skipped(_)
+    ));
+    assert!(!temp.path().join("skills").exists());
+}
+
+#[test]
+fn concurrent_creation_after_durable_review_cannot_be_overwritten() {
+    let temp = tempfile::tempdir().unwrap();
+    let scan = scanner(temp.path(), Provider::Codex, true);
+    let journal = Journal::default();
+    let path = temp.path().join("AGENTS.md");
+    let target = path.clone();
+    *journal.after_create.lock().unwrap() = Some(Box::new(move |_| {
+        std::fs::write(target, "external").unwrap()
+    }));
+    let result = scan
+        .apply(
+            prepare(
+                &scan,
+                snapshot(ConfigFormat::File, "AGENTS.md", &[], Some(file("after"))),
+            ),
+            &journal,
+        )
+        .unwrap();
+    assert!(matches!(result, ConfigApplyResult::NeedsRecovery { .. }));
+    assert_eq!(std::fs::read_to_string(path).unwrap(), "external");
+}
+
+#[test]
 fn authenticated_but_falsely_portable_path_is_rejected() {
     let temp = tempfile::tempdir().unwrap();
     let scan = scanner(temp.path(), Provider::Codex, true);

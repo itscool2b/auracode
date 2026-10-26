@@ -191,6 +191,13 @@ impl ConfigScanner {
             }
         }
         let mutations = mutations(&root, id, raw.as_ref(), content.as_ref())?;
+        let mut names = std::collections::HashSet::new();
+        if mutations
+            .iter()
+            .any(|file| !names.insert(file.path.to_lowercase()))
+        {
+            return skip("This item contains filenames that collide on a supported filesystem.");
+        }
         if self.platform == super::ConfigScope::Windows
             && mutations
                 .iter()

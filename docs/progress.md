@@ -1774,3 +1774,7 @@ desktop all-target Clippy passed. The fourth missing-index regression compiled, 
 Control blocked the refreshed core test executable (4551); it remains pending execution in the final
 qualified test batch. No policy workaround, credential access, network call or real config edit was
 performed. Remote projection, blob transfer, transcript sync and scheduling remain in progress.
+Follow-up checks also reject case-colliding remote filenames before review and verify that a file
+created after durable receipt publication is never overwritten. All 18 apply integration tests and
+all-target Clippy pass on Windows.
+
