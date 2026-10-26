@@ -16,7 +16,11 @@ export function chatActivity(state: ChatState): OrbState {
     return "idle";
   }
   for (const item of state.transcript.items.values()) {
-    if ((item.kind === "permission" || item.kind === "question") && item.resolution === null) {
+    if (
+      (item.kind === "permission" ||
+        (item.kind === "question" && item.request.prompt.type !== "notify")) &&
+      item.resolution === null
+    ) {
       const request = state.requests.get(item.request.request_id);
       if (!request?.gone && !request?.busy) return "waiting";
     }

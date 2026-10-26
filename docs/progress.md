@@ -2485,3 +2485,6 @@ Chromium and WebKit fixtures passed keyboard selection/submission, no automatic 
 - Corrected Codex startup-model recovery so a submitted answer does not also emit a withdrawal. Core already resolves the answer; the extra withdrawal produced a false notice that the answer did not reach the agent.
 - The real driver regression covers accepting the offered default and cancelling the recovery without withdrawal. Stop still withdraws its unanswered card, closes the owned process, and preserves queued user work through the existing core contract.
 - Validation: six focused native Codex recovery driver tests and both core startup recovery tests passed; aura-drivers all-target Clippy with replay/testing passed. No real agent or paid prompt ran.
+### Informational notifications do not request attention
+
+Chat activity now excludes Notify prompts from waiting status, matching the actionable request dock. Notifications remain in the transcript without an answer or resolution. A regression covers a notification beside running tool output, an actionable question taking attention, and the answered question restoring tool activity while the notification stays unresolved. All seven activity tests, desktop TypeScript, targeted Biome and instruction parity pass. No native agent call or CI run was performed.

@@ -43,6 +43,26 @@ describe("live Orbit protocol state", () => {
     expect(chatActivity(state(events, "auth_required"))).toBe("waiting");
   });
 
+  it("keeps informational notifications out of waiting activity before and after an answer", () => {
+    const events: AuraEvent[] = [
+      ev.turnStarted("t"),
+      ev.toolCall("read"),
+      {
+        type: "ui_request",
+        request_id: "notice",
+        prompt: { type: "notify", message: "Checking the workspace" },
+      },
+    ];
+    expect(chatActivity(state(events))).toBe("tool");
+    events.push(ev.question("q"));
+    expect(chatActivity(state(events))).toBe("waiting");
+    events.push(ev.questionResolved("q", { type: "select", index: 0 }));
+    const answered = state(events);
+    expect(chatActivity(answered)).toBe("tool");
+    const notice = answered.transcript.items.get("question:notice");
+    expect(notice?.kind === "question" && notice.resolution).toBeNull();
+  });
+
   it("keeps native background work active without reviving an ended thought", () => {
     expect(chatActivity(state([]))).toBe("thinking");
     const ended = state([ev.turnStarted("t"), ev.thought("a", "partial"), ev.turnEnded("t")]);
