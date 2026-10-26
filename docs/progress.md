@@ -93,6 +93,18 @@ offers `codex update`, but its help exposes no check-only switch. The desktop up
 installed 26.1021.31345 production release is up to date. No CLI update, setup mutation, policy
 change or doctor run was performed; no claim is made that an upgrade fixes this helper failure.
 
+The subsequently authorized targeted diagnostic read used only `.sandbox/setup_error.json` and
+the 2026-10-26 daily sandbox log block for the owned free probe at 06:06:28 UTC. The fatal array
+contains one error: runtime read/execute ACL validation of Codex's `cua_node/.../bin/node_repl.exe`
+failed to open the ACL target for a root-only update because the file was in use, Windows error 32.
+It processed zero write roots. The user-profile read-attributes warning was nonfatal. No unrelated
+log history, credentials or configuration was read. No vendor process was stopped or ACL changed.
+The [pinned runtime validation source](https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/windows-sandbox-rs/src/setup_provisioning/setup_runtime_bin.rs)
+walks the app runtime tree independently of the requested command. The installed `command/exec`
+schema has no runtime selector, so selecting another shell does not address that failure. An offline
+driver regression preserves the failed tool and its error text even when the provider completes the
+turn normally. Paid allow-once and the remaining smoke scenarios stay pending an external fix.
+
 M1c requirements still pending: opt-in prompted verification, generated
 schema verification for the historical 0.164.0 baseline, independent verification of review fixes,
 and final combined verification. Steer, fork, image attachments,

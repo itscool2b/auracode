@@ -391,6 +391,39 @@ async fn unavailable_approval_decisions_cannot_be_sent_even_by_direct_driver_com
 }
 
 #[tokio::test(start_paused = true)]
+async fn native_execution_setup_failure_remains_a_visible_failed_tool_and_completed_turn() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.begin().await;
+    let message =
+        "Failed to create unified exec process: helper_unknown_error: setup refresh had errors";
+    h.send(json!({"method":"item/started","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"exec-1","type":"commandExecution","command":"Get-Location","status":"inProgress","aggregatedOutput":null,"exitCode":null}}}));
+    h.send(json!({"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"exec-1","type":"commandExecution","command":"Get-Location","status":"failed","aggregatedOutput":message,"exitCode":-1}}}));
+    h.send(json!({"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}));
+    let mut saw_failure = false;
+    loop {
+        match h.event().await {
+            DriverEvent::Event {
+                event: AuraEvent::ToolUpdate(update),
+                ..
+            } if update.status == Some(aura_protocol::ToolStatus::Failed) => {
+                saw_failure = update.content.as_ref().is_some_and(|content| content.iter().any(|part| matches!(part, aura_protocol::ToolContent::Text { text, .. } if text.contains(message))));
+            }
+            DriverEvent::TurnEnded { stop_reason, .. } => {
+                assert_eq!(stop_reason, StopReason::EndTurn);
+                assert!(
+                    saw_failure,
+                    "a normal provider turn result must not hide a failed native tool"
+                );
+                break;
+            }
+            _ => {}
+        }
+    }
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
 async fn interrupt_waits_for_start_id_and_does_not_complete_on_acknowledgement() {
     let mut h = Harness::start().await;
     h.ready().await;
