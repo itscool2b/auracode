@@ -681,3 +681,23 @@ assigned, leaving a descendant ownership race. No breakaway flags or shell comma
 used. Four harmless Windows PTY tests pass for terminal IO, quoting, Unicode, resize, descendant
 cleanup, unrelated-process preservation and stalled output. Three raw transport regressions and
 all-target process Clippy also pass. macOS execution and the sign-in sheet remain pending.
+
+Explicit sign-in now has a reusable dark Orbit terminal sheet and typed IPC. A reserved, window-owned
+ID exists before the vendor command starts, so Close can cancel a delayed launch. The Rust service
+allows one terminal per window and four total, rejects cross-window IDs and concurrent reads, and
+closes pending/running terminals on page reload or exit. It launches only the detected installation's
+reviewed Claude/Codex login argv after executable identity validation. No arbitrary command or vendor
+credential/config file is accepted. Output stays ephemeral; xterm logging and OSC clipboard writes
+are disabled. Rendering completion gates the next bounded read, input is ordered and bounded, and
+resize requests coalesce. The explicit Start button avoids mount-triggered sign-in and StrictMode
+duplication. A completed command does not assert that authentication succeeded.
+
+Local Windows checks pass: four core ownership/cancellation tests plus the harmless PTY child helper,
+five frontend flow-control/presentation tests, generated bindings, TypeScript, Biome, and core/desktop
+all-target Clippy. An actual owned test process exercises terminal input and cancellation without any
+vendor login. The existing frontend suite also passed 293 tests with 19 existing skips while checking
+the new dependencies. Root UI integration, interactive browser review and macOS execution remain
+pending. No real login, paid prompt, CI dispatch or push was performed for these changes. Native
+transport and xterm reference sources: Microsoft ConPTY session creation documentation and the
+official xterm.js flow-control/security guides. M4 can reuse the same Rust ownership and streaming
+seam; arbitrary shell launch and a general terminal panel are not exposed by this checkpoint.

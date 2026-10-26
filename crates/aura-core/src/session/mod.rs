@@ -13,6 +13,7 @@
 
 mod actor;
 mod live;
+mod login;
 mod normalize;
 mod policy;
 mod spawner;

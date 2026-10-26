@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use specta_typescript::Typescript;
 
-use crate::{commands, smoke};
+use crate::{commands, smoke, terminal};
 
 /// Where the bindings live: `apps/desktop/src/bindings.ts`.
 pub const BINDINGS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../src/bindings.ts");
@@ -42,6 +42,12 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::agent_maintenance,
             commands::agent_auth_status,
             commands::agent_update,
+            terminal::terminal_reserve,
+            terminal::agent_login_start,
+            terminal::terminal_read,
+            terminal::terminal_write,
+            terminal::terminal_resize,
+            terminal::terminal_close,
             commands::env_status,
             commands::env_refresh,
             commands::pick_folder,

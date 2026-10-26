@@ -72,6 +72,8 @@ pub struct AppState {
     pub quit: Arc<Quit>,
     /// Each webview's current page, for the sinks of its channels.
     pub pages: Arc<Pages>,
+    /// Unlogged terminal sessions, owned by the window that explicitly opened them.
+    pub terminals: aura_core::terminal::Terminals,
     /// The background check after a session that did not close the database. Started once the
     /// window is shown, closed at exit before the store.
     pub integrity: IntegrityCheck,
@@ -123,6 +125,7 @@ impl AppState {
             recovery: Mutex::new(booted.recovery),
             quit: Arc::default(),
             pages: Arc::default(),
+            terminals: Default::default(),
             integrity: IntegrityCheck::new(booted.integrity_check),
             demos: DemoSessions::default(),
             launch,
@@ -220,6 +223,7 @@ impl AppState {
     /// connection folds SQLite's write-ahead log back into the file; a log left behind tells the
     /// next launch this one did not end cleanly.
     pub fn at_exit(&self) {
+        self.terminals.stop_all();
         if self.integrity.close() {
             tracing::info!("the integrity check is still running; it ends with the process");
         }

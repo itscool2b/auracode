@@ -21,6 +21,7 @@ import {
   type SessionLists,
   type SmokeReport,
   type StorageStatus,
+  type TerminalChunk,
   type UiAnswer,
 } from "../bindings";
 
@@ -190,6 +191,34 @@ export function agentMaintenance(agentId: string): Promise<AgentMaintenance> {
 
 export function agentAuthStatus(agentId: string): Promise<AgentAuthStatus> {
   return settle(commands.agentAuthStatus(agentId));
+}
+
+export function terminalReserve(): Promise<string> {
+  return settle(commands.terminalReserve());
+}
+export function agentLoginStart(
+  terminalId: string,
+  agentId: string,
+  rows: number,
+  cols: number,
+): Promise<string> {
+  return settle(commands.agentLoginStart(terminalId, agentId, rows, cols));
+}
+export function terminalRead(terminalId: string): Promise<TerminalChunk> {
+  return settle(commands.terminalRead(terminalId));
+}
+export async function terminalWrite(terminalId: string, bytes: number[]): Promise<void> {
+  await settle(commands.terminalWrite(terminalId, bytes));
+}
+export async function terminalResize(
+  terminalId: string,
+  rows: number,
+  cols: number,
+): Promise<void> {
+  await settle(commands.terminalResize(terminalId, rows, cols));
+}
+export async function terminalClose(terminalId: string): Promise<void> {
+  await settle(commands.terminalClose(terminalId));
 }
 
 export async function agentUpdate(agentId: string): Promise<void> {

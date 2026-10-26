@@ -32,6 +32,7 @@ pub mod sessions;
 pub mod smoke;
 pub mod state;
 mod sync;
+pub mod terminal;
 pub mod window;
 pub mod workspace_commands;
 
@@ -256,6 +257,7 @@ fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
     };
     let chats = state.chats();
     sessions::page_load(&state.pages, webview.label(), payload.event(), |owner| {
+        state.terminals.drop_owner(owner);
         if let Some(chats) = chats {
             chats.manager.drop_owner(owner);
         }
@@ -320,6 +322,7 @@ fn on_exit_requested(app: &tauri::AppHandle, code: Option<i32>, api: &tauri::Exi
         ExitRequest::Wait => api.prevent_exit(),
         ExitRequest::StartQuit => {
             api.prevent_exit();
+            state.terminals.close_all();
             // The last window closing asks without a code; that is a normal quit.
             let code = code.unwrap_or(0);
             let app = app.clone();

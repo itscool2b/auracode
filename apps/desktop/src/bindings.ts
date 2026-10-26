@@ -62,6 +62,12 @@ export const commands = {
 	agentAuthStatus: (agentId: string) => typedError<AgentAuthStatus, AppError>(__TAURI_INVOKE("agent_auth_status", { agentId })),
 	/**  Explicit update action. No updates run as part of detection or release checks. */
 	agentUpdate: (agentId: string) => typedError<null, AppError>(__TAURI_INVOKE("agent_update", { agentId })),
+	terminalReserve: () => typedError<string, AppError>(__TAURI_INVOKE("terminal_reserve")),
+	agentLoginStart: (terminalId: string, agentId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_login_start", { terminalId, agentId, rows, cols })),
+	terminalRead: (terminalId: string) => typedError<TerminalChunk, AppError>(__TAURI_INVOKE("terminal_read", { terminalId })),
+	terminalWrite: (terminalId: string, bytes: number[]) => typedError<null, AppError>(__TAURI_INVOKE("terminal_write", { terminalId, bytes })),
+	terminalResize: (terminalId: string, rows: number, cols: number) => typedError<null, AppError>(__TAURI_INVOKE("terminal_resize", { terminalId, rows, cols })),
+	terminalClose: (terminalId: string) => typedError<null, AppError>(__TAURI_INVOKE("terminal_close", { terminalId })),
 	/**
 	 *  The environment agents start with: resolving, resolved (and how), or a fallback, with the
 	 *  names of the variables no agent inherits. Never waits.
@@ -956,6 +962,14 @@ export type StressConfig = {
 	rate: number,
 	aura: boolean,
 	seconds: number,
+};
+
+/**  One bounded pull. An empty nonterminal chunk means only that the read wait elapsed. */
+export type TerminalChunk = {
+	bytes: number[],
+	done: boolean,
+	exit_code: number | null,
+	truncated: boolean,
 };
 
 /**  Token accounting for a turn, when the agent reports it. */
