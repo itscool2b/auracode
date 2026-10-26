@@ -168,6 +168,7 @@ jobs:
         run: bash .github/scripts/lint-workflows.sh
 
       - name: Install ShellCheck if needed
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: command -v shellcheck >/dev/null || brew install shellcheck
 
       - name: Check the CI scripts (ShellCheck)
@@ -224,6 +225,10 @@ jobs:
         with:
           toolchain: stable
           components: clippy, rustfmt
+      - name: Select native Windows Perl for vendored OpenSSL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/scripts/select-native-perl.ps1
       - name: Cache Rust build
         id: ready
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -372,17 +377,7 @@ jobs:
       - name: Select native Windows Perl for vendored OpenSSL
         if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          $nativePerl = $null
-          foreach ($candidate in @(Get-Command perl.exe -All -CommandType Application -ErrorAction SilentlyContinue)) {
-            $platform = & $candidate.Source -e 'print $^O'
-            if ($LASTEXITCODE -eq 0 -and "$platform" -eq 'MSWin32') {
-              $nativePerl = $candidate.Source
-              break
-            }
-          }
-          if (-not $nativePerl) { throw 'The Windows runner needs native Perl for vendored OpenSSL; Git/MSYS Perl is unsupported.' }
-          Add-Content -LiteralPath $env:GITHUB_ENV -Value ("OPENSSL_SRC_PERL=" + $nativePerl)
+        run: ./.github/scripts/select-native-perl.ps1
       - name: Cache encrypted build
         id: ready
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3

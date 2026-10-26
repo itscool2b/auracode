@@ -146,7 +146,9 @@ pub(super) fn prepare(
         FcntlArg::F_SETFL(OFlag::from_bits_retain(flags) | OFlag::O_NONBLOCK),
     )
     .map_err(io::Error::from)?;
-    let master = Arc::new(AsyncFd::new(master)?);
+    // SAFETY: File owns this open descriptor for the registration's full lifetime. It is never
+    // replaced or closed through a raw handle; all readers, writers and resizing share this Arc.
+    let master = Arc::new(unsafe { AsyncFd::register(master)? });
     let slave = File::from(pair.slave);
     let mut command = tokio::process::Command::new(program);
     command

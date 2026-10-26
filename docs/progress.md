@@ -1457,3 +1457,18 @@ Application Control on the `selectors` build script, without a workaround. Guard
 activation, writer projection and sync scheduling remain pending. No real sign-in or credential
 access was used during development.
 
+## Second integration corrections
+
+The second deliberate CI batch passed the compiled Worker checks, frontend checks, both browser
+engines and the complete macOS native chat smoke. Its two encrypted Windows/macOS core failures were
+stale future-schema fixtures that still used the now-current schema number. Those fixtures now use
+the current version plus one and preserve their refusal/no-quarantine assertions. Tokio's Unix PTY
+registration now explicitly states and satisfies descriptor ownership for its replacement API.
+Historical Linux spike results remain historical, while current runner documentation names the
+actual Windows spike job. CI helper contracts now require manual dispatch, and ShellCheck installation
+also runs after another independent check fails. All 33 spike-document checks and workflow lint pass
+locally; the full shell suite needs jq, which this local shell does not have. Native Perl selection
+is shared by encrypted, ordinary desktop and installer builds now that account storage is enabled.
+The exact second-batch binding artifact is recorded; subsequent Library/account commands still need
+the final combined native export. Remaining native/platform gates are not marked complete.
+

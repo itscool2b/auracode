@@ -56,6 +56,10 @@ jobs:
           toolchain: stable
           components: clippy, rustfmt
           targets: ${{ matrix.rust-targets }}
+      - name: Select native Windows Perl for vendored OpenSSL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/scripts/select-native-perl.ps1
       - name: Cache Rust build
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:

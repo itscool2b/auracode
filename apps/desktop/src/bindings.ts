@@ -87,13 +87,24 @@ export const commands = {
 	 *  (`AURACODE_SMOKE_FOLDER`) at once: automation cannot click through a system dialog.
 	 */
 	pickFolder: () => typedError<string | null, AppError>(__TAURI_INVOKE("pick_folder")),
+	workspaceSearch: (query: string, includeArchived: boolean) => typedError<SearchResults, AppError>(__TAURI_INVOKE("workspace_search", { query, includeArchived })),
+	conversationTurns: (chatId: string, beforeOrdinal: number | null) => typedError<ConversationTurns, AppError>(__TAURI_INVOKE("conversation_turns", { chatId, beforeOrdinal })),
+	conversationPending: (chatId: string) => typedError<PendingHandoff | null, AppError>(__TAURI_INVOKE("conversation_pending", { chatId })),
+	conversationEditable: (chatId: string, turnId: string) => typedError<EditablePrompt, AppError>(__TAURI_INVOKE("conversation_editable", { chatId, turnId })),
+	continuationPreview: (chatId: string, action: ContinuationAction) => typedError<ContinuationPreview, AppError>(__TAURI_INVOKE("continuation_preview", { chatId, action })),
+	continuationApply: (chatId: string, token: string) => typedError<ContinuationResult, AppError>(__TAURI_INVOKE("continuation_apply", { chatId, token })),
 	composerPick: (chatId: string) => typedError<ComposerAttachment | null, AppError>(__TAURI_INVOKE("composer_pick", { chatId })),
 	composerImport: (chatId: string, path: string) => typedError<ComposerAttachment, AppError>(__TAURI_INVOKE("composer_import", { chatId, path })),
 	composerPaste: (chatId: string, bytes: number[]) => typedError<ComposerAttachment, AppError>(__TAURI_INVOKE("composer_paste", { chatId, bytes })),
 	composerMentions: (chatId: string, query: string) => typedError<FileMention[], AppError>(__TAURI_INVOKE("composer_mentions", { chatId, query })),
+	projectFilePreview: (chatId: string, path: string) => typedError<ProjectFilePreview, AppError>(__TAURI_INVOKE("project_file_preview", { chatId, path })),
 	composerSend: (chatId: string, input: ComposerInput) => typedError<PromptAck, AppError>(__TAURI_INVOKE("composer_send", { chatId, input })),
 	composerDraft: (chatId: string) => typedError<ComposerDraft, AppError>(__TAURI_INVOKE("composer_draft", { chatId })),
 	composerSaveDraft: (chatId: string, input: ComposerInput) => typedError<null, AppError>(__TAURI_INVOKE("composer_save_draft", { chatId, input })),
+	chatChanges: (chatId: string, turnId: string | null) => typedError<ChangesSnapshot, AppError>(__TAURI_INVOKE("chat_changes", { chatId, turnId })),
+	chatChangeDiff: (chatId: string, checkpointId: string, path: string) => typedError<ChangeDiff, AppError>(__TAURI_INVOKE("chat_change_diff", { chatId, checkpointId, path })),
+	checkpointRevertPreview: (chatId: string, checkpointId: string, paths: string[]) => typedError<RevertPreview, AppError>(__TAURI_INVOKE("checkpoint_revert_preview", { chatId, checkpointId, paths })),
+	checkpointRevert: (chatId: string, token: string) => typedError<RevertResult, AppError>(__TAURI_INVOKE("checkpoint_revert", { chatId, token })),
 	gitWorkspace: (chatId: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_workspace", { chatId })),
 	managedWorktrees: (chatId: string) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("managed_worktrees", { chatId })),
 	isolationPreview: (chatId: string, input: IsolationInput) => typedError<IsolationPreview, AppError>(__TAURI_INVOKE("isolation_preview", { chatId, input })),
@@ -506,6 +517,14 @@ export type ChatMove = {
 	allow_busy_folder: boolean,
 };
 
+export type ChatSearchHit = {
+	id: string,
+	title: string,
+	project: string,
+	snippet: string | null,
+	archived: boolean,
+};
+
 /**  Everything about a chat that is not in its history. */
 export type ChatSnapshot = {
 	chat: ChatSummary,
@@ -727,6 +746,23 @@ export type FolderState = "ok" | "missing" |
 /**  The OS refused access (macOS privacy). */
 "not_allowed";
 
+export type GitFileState = {
+	path: string,
+	index: string,
+	worktree: string,
+	original_path: string | null,
+};
+
+export type GitWorkspace = {
+	root: string,
+	branch: string | null,
+	head: string | null,
+	files: GitFileState[],
+	blockers: string[],
+	has_submodules: boolean,
+	is_linked_worktree: boolean,
+};
+
 /**
  *  The material the window got, reported to the UI in `app_info`. `none` tells the UI to paint
  *  its own opaque background.
@@ -762,6 +798,26 @@ export type HistoryPage = {
 /**  How the installed binary is managed. Unknown and bundled installations cannot be updated here. */
 export type InstallChannel = { type: "vendor_standalone" } | { type: "npm"; package: string } | { type: "homebrew"; formula: string } | { type: "bundled"; application: string } | { type: "unknown" };
 
+export type IsolationInput = {
+	slug: string,
+	bring_changes: boolean,
+};
+
+export type IsolationPreview = {
+	token: string,
+	source: GitWorkspace,
+	branch: string,
+	path: string,
+	bring_changes: boolean,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type IsolationResult = {
+	worktree: ManagedWorktree,
+	warning: string | null,
+};
+
 /**  Public release metadata. Stale cached data remains visible during offline use. */
 export type LatestRelease = {
 	version: string | null,
@@ -783,9 +839,6 @@ export type LimitWindow = {
 	resets_at: number | null,
 };
 
-export type MotionPreference = 
-/**  Full motion still honors the operating system's reduced-motion setting. */
-"full" | "reduced" | "off";
 export type ManagedWorktree = {
 	id: string,
 	chat_id: string,
@@ -798,6 +851,10 @@ export type ManagedWorktree = {
 	recovery?: WorktreeRecovery | null,
 	created_at: number,
 };
+
+export type MotionPreference = 
+/**  Full motion still honors the operating system's reduced-motion setting. */
+"full" | "reduced" | "off";
 
 export type NoticeLevel = "info" | "warning" | "error";
 
@@ -818,6 +875,12 @@ export type OpenOutcome =
 { type: "recovered_from_corruption"; quarantined: string; salvage: Salvage };
 
 export type PauseReason = "disk_full" | "busy";
+
+export type PendingHandoff = {
+	agent_id: string,
+	handoff: string,
+	uses_native_fork: boolean,
+};
 
 export type PermissionDecision = { type: "selected"; option_id: string } | { type: "cancelled" };
 
@@ -885,6 +948,13 @@ export type ProjectCreate = {
 	folder: string,
 };
 
+export type ProjectFilePreview = {
+	path: string,
+	bytes: number,
+	text: string | null,
+	truncated: boolean,
+};
+
 export type ProjectFolder = {
 	id: string,
 	project_id: string,
@@ -904,6 +974,11 @@ export type ProjectInput = {
 	color: string | null,
 	default_agent: string | null,
 	default_model: string | null,
+};
+
+export type ProjectSearchHit = {
+	id: string,
+	name: string,
 };
 
 export type ProjectSummary = {
@@ -980,6 +1055,11 @@ export type Salvage =
 { type: "partial"; tables: string[] } | 
 /**  Nothing could be read, so the new database started out empty. */
 { type: "nothing" };
+
+export type SearchResults = {
+	chats: ChatSearchHit[],
+	projects: ProjectSearchHit[],
+};
 
 /**  Live header state of a chat. Never stored; coalesced to at most one per frame. */
 export type SessionInfo = {
