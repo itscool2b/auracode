@@ -1,5 +1,5 @@
 import type { Terminal } from "@xterm/xterm";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   TerminalSession,
@@ -18,12 +18,16 @@ export function TerminalSheet({
   onClose,
   onFinished,
   transport = terminalTransport,
+  purpose = "sign-in",
+  review,
 }: {
   readonly agentId: string;
   readonly agentName: string;
   readonly onClose: () => void;
   readonly onFinished?: (exitCode: number | null) => void;
   readonly transport?: TerminalTransport;
+  readonly purpose?: "sign-in" | "installation";
+  readonly review?: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const container = useRef<HTMLElement>(null);
@@ -90,7 +94,7 @@ export function TerminalSheet({
       const fit = new FitAddon();
       term.loadAddon(fit);
       term.open(element);
-      term.textarea?.setAttribute("aria-label", `${agentId} sign-in terminal input`);
+      term.textarea?.setAttribute("aria-label", `${agentId} ${purpose} terminal input`);
       // The canvas renderer is optional; terminal IO stays usable if WebGL is unavailable/lost.
       try {
         const webgl = new WebglAddon();
@@ -149,7 +153,7 @@ export function TerminalSheet({
       disposed = true;
       cleanup();
     };
-  }, [agentId, transport]);
+  }, [agentId, purpose, transport]);
 
   const close = () => {
     void session.current?.close();
@@ -157,15 +161,21 @@ export function TerminalSheet({
   };
   const status =
     state.state === "idle"
-      ? "Ready to sign in."
+      ? purpose === "installation"
+        ? "Review the installation before starting."
+        : "Ready to sign in."
       : state.state === "starting"
-        ? "Opening the vendor sign-in flow…"
+        ? purpose === "installation"
+          ? "Checking the reviewed installer…"
+          : "Opening the vendor sign-in flow…"
         : state.state === "running"
           ? "Follow the vendor's prompts below."
           : state.state === "failed"
             ? state.message
             : state.exitCode === 0
-              ? "The vendor command finished. Check sign-in status to confirm."
+              ? purpose === "installation"
+                ? "The installer finished. Refresh agents to verify the installation."
+                : "The vendor command finished. Check sign-in status to confirm."
               : state.exitCode === null
                 ? "The terminal closed without an exit status."
                 : `The vendor command exited with code ${state.exitCode}.`;
@@ -175,6 +185,8 @@ export function TerminalSheet({
       ref={dialog}
       className="orbit-theme terminal-sheet"
       data-theme="dark"
+      data-purpose={purpose}
+      data-state={state.state}
       aria-labelledby={title}
       aria-describedby={description}
       onCancel={(event) => {
@@ -184,18 +196,25 @@ export function TerminalSheet({
     >
       <header className="terminal-sheet__header">
         <div>
-          <h2 id={title}>Sign in to {agentName}</h2>
-          <p id={description}>Run the agent's own sign-in flow. Terminal output is not saved.</p>
+          <h2 id={title}>
+            {purpose === "installation" ? `Install ${agentName}` : `Sign in to ${agentName}`}
+          </h2>
+          <p id={description}>
+            {purpose === "installation"
+              ? "Review and run the package manager. Terminal output is not saved."
+              : "Run the agent's own sign-in flow. Terminal output is not saved."}
+          </p>
         </div>
         <button
           type="button"
           className="terminal-sheet__button"
           onClick={close}
-          aria-label="Close sign-in terminal"
+          aria-label={`Close ${purpose} terminal`}
         >
           Close
         </button>
       </header>
+      {review}
       <div className="terminal-sheet__status" role="status">
         {status}
       </div>
@@ -205,7 +224,7 @@ export function TerminalSheet({
       <section
         ref={container}
         className="terminal-sheet__viewport"
-        aria-label={`${agentName} sign-in terminal`}
+        aria-label={`${agentName} ${purpose} terminal`}
       />
       {link ? (
         <p className="terminal-sheet__link">
@@ -215,7 +234,9 @@ export function TerminalSheet({
         </p>
       ) : null}
       <footer className="terminal-sheet__footer">
-        <span className="terminal-sheet__hint">Closing this sheet stops its sign-in process.</span>
+        <span className="terminal-sheet__hint">
+          Closing this sheet stops its {purpose} process.
+        </span>
         <span role="status">{copyMessage}</span>
         <button
           type="button"
@@ -244,7 +265,7 @@ export function TerminalSheet({
             if (term) void session.current?.start(agentId, { rows: term.rows, cols: term.cols });
           }}
         >
-          Start sign-in
+          {purpose === "installation" ? "Start installation" : "Start sign-in"}
         </button>
       </footer>
     </dialog>

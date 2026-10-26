@@ -5,6 +5,7 @@ import type { AgentEntry } from "../../bindings";
 import { type AppStore, agentChoice } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
 import { AgentActions } from "../chat/AgentActions";
+import { InstallAgent } from "./InstallAgent";
 import "./setup.css";
 
 // External help links are presentation content. Rust still owns every install/update command.
@@ -91,6 +92,14 @@ export function AgentRoster({
                       Install the vendor's CLI using its official instructions, then refresh
                       detection. No installation or sign-in runs automatically.
                     </p>
+                    {agent.availability.state === "missing" &&
+                    ["claude", "codex", "pi"].includes(agent.id) ? (
+                      <InstallAgent
+                        agentId={agent.id}
+                        agentName={agent.name}
+                        onRefresh={onRefresh}
+                      />
+                    ) : null}
                     {INSTALL_GUIDES[agent.id] ? (
                       <a className="setup-guide" href={INSTALL_GUIDES[agent.id]} rel="noreferrer">
                         Open official installation guide <span aria-hidden="true">↗</span>

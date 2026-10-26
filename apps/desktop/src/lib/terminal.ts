@@ -107,7 +107,7 @@ export class TerminalSession {
     if (bytes.length + this.#queuedInput > 64 * 1024) {
       this.changed({
         state: "failed",
-        message: "Terminal input exceeded 64 KiB. Reopen sign-in and paste less at once.",
+        message: "Terminal input exceeded 64 KiB. Reopen the terminal and paste less at once.",
       });
       void this.close();
       return;
@@ -164,5 +164,5 @@ export class TerminalSession {
 }
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : "The sign-in terminal could not continue.";
+  return error instanceof Error ? error.message : "The terminal could not continue.";
 }

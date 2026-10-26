@@ -5,6 +5,7 @@ use crate::{
 };
 use aura_core::terminal::{TerminalChunk, TerminalError};
 use aura_process::{Spawner, pty::PtySize};
+use aura_protocol::setup_actions::AgentInstallReview;
 use tauri::{State, Webview};
 
 impl From<TerminalError> for AppError {
@@ -12,11 +13,61 @@ impl From<TerminalError> for AppError {
         let code = match error {
             TerminalError::Closed => AppErrorCode::SessionNotReady,
             TerminalError::AlreadyOpen | TerminalError::Full => AppErrorCode::TooManyStreams,
-            TerminalError::Start(_) => AppErrorCode::AgentUnavailable,
+            TerminalError::Start(_) | TerminalError::TimedOut => AppErrorCode::AgentUnavailable,
             _ => AppErrorCode::InvalidArgument,
         };
         Self::new(code, error.to_string())
     }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_install_review(
+    state: State<'_, AppState>,
+    agent_id: String,
+) -> Result<AgentInstallReview, AppError> {
+    Ok(state.sessions()?.review_agent_install(&agent_id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_install_start(
+    webview: Webview,
+    state: State<'_, AppState>,
+    terminal_id: String,
+    agent_id: String,
+    revision: String,
+    rows: u16,
+    cols: u16,
+) -> Result<String, AppError> {
+    if state.quit.is_quitting() {
+        return Err(AppError::new(
+            AppErrorCode::ShuttingDown,
+            "auracode is quitting.",
+        ));
+    }
+    let owner = webview.label();
+    let page = state.pages.for_view(owner);
+    if !page.is_current() {
+        return Err(TerminalError::Closed.into());
+    }
+    let size = PtySize { rows, cols }
+        .validate()
+        .map_err(|_| TerminalError::Resize)?;
+    let ticket = state.terminals.claim(owner, &terminal_id)?;
+    let spec = state
+        .sessions()?
+        .prepare_agent_install(&agent_id, &revision)
+        .await?;
+    if !page.is_current() || state.quit.is_quitting() {
+        return Err(TerminalError::Closed.into());
+    }
+    let chats = state.chats().ok_or(TerminalError::Closed)?;
+    let spawner = Spawner::new(
+        chats.registry.clone(),
+        tauri::async_runtime::handle().inner().clone(),
+    );
+    Ok(ticket.start_install(&spawner, spec, size).await?)
 }
 
 #[tauri::command]

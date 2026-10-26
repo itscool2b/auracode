@@ -17,6 +17,7 @@ mod composer;
 mod config_library;
 mod conversation;
 mod gitworkspaces;
+mod installer;
 mod live;
 mod login;
 mod normalize;

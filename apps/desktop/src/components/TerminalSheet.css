@@ -2,6 +2,7 @@
   color-scheme: dark;
   width: min(900px, calc(100vw - 48px));
   max-height: calc(100dvh - 48px);
+  margin: auto;
   padding: 20px;
   overflow: auto;
   color: var(--o-ink, #f2f1ee);
@@ -50,6 +51,9 @@
   max-width: 100%;
   overflow-wrap: anywhere;
   user-select: text;
+}
+.terminal-sheet[data-purpose="installation"][data-state="idle"] .terminal-sheet__viewport {
+  height: 180px;
 }
 .terminal-sheet__link a {
   color: var(--o-signal-text, #ff7a2e);

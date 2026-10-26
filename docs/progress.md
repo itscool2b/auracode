@@ -1567,3 +1567,25 @@ the account runtime; no account key, token or vault handle enters the configurat
 items remain explicitly skipped, and partial applies retain their previous merge base. Migration 0009
 is reserved for the account port's encrypted configuration storage. `cargo check -p aura-config` passes.
 The merge, apply and desktop integration remain in progress.
+
+### M3 explicit native installation checkpoint (2026-10-26)
+
+- Added Rust-reviewed, version-pinned npm installation for missing native Claude, Codex and Pi.
+  The review resolves Node and a validated npm package entry without reading or interpreting shell
+  shims, vendor configuration or credentials. Start rechecks availability and the exact reviewed
+  paths, argv and executable bytes. See `docs/setup-actions.md` for official sources and limits.
+- Agents/onboarding now expose a separate review and Start installation action in the owned dark
+  terminal. Mount/review cannot launch a process. Closing or page cancellation stops its process;
+  Rust enforces a ten-minute lifetime even with no renderer polling. Installation and sign-in stay
+  separate. A partial npm package is preserved for the vendor's next explicit attempt.
+- Generated setup DTOs through the pure aura-protocol Specta exporter. Full native command binding
+  refresh remains assigned to the final integrated Windows/macOS verification.
+- Passed: installer recipe/replacement regression; setup DTO export; all-target aura-agents Clippy;
+  complete desktop TypeScript; four existing terminal transport tests; Chromium and WebKit review,
+  explicit-start, close cancellation, stale-review rejection and accessibility checks. Inspected
+  the actual dark screenshots, including correcting terminal dialog centering.
+- Native core tests and Clippy could not reach our code: Application Control blocked io-lifetimes'
+  build-script-build with Windows error 4551 in this worktree. No bypass or binary relocation was
+  attempted. A harmless local-process no-polling deadline regression is included for integration.
+  No real installer, sign-in, model prompt, credentials, push or CI dispatch was run. Clone remains
+  the next authorized implementation step, not complete.

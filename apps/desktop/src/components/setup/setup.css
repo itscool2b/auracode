@@ -536,3 +536,35 @@ html[data-motion="off"] * {
     padding: 28px 20px;
   }
 }
+.setup-install-review {
+  max-height: 36vh;
+  overflow: auto;
+  margin: 0 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--o-line);
+  font-size: 12px;
+  color: var(--o-ink-muted);
+}
+.setup-install-review summary {
+  cursor: pointer;
+  color: var(--o-ink);
+}
+.setup-install-review code {
+  overflow-wrap: anywhere;
+  font-family: var(--o-mono);
+}
+.setup-install-review dl {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 8px;
+}
+.setup-install-review dd {
+  margin: 0;
+}
+.setup-install-review ol {
+  margin: 0;
+  padding-left: 20px;
+}
+.setup-install-review ul {
+  padding-left: 20px;
+}

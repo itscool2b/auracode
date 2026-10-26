@@ -19,6 +19,7 @@ mod detect;
 pub mod hosts;
 mod install;
 pub mod installation;
+pub mod installer;
 mod launch;
 pub mod maintenance;
 mod npm_entry;

@@ -38,6 +38,10 @@ pub enum TerminalError {
     Start(String),
     #[error("The terminal size is invalid or the terminal is closed.")]
     Resize,
+    #[error(
+        "The installation reached its ten-minute limit and was stopped. Review the output and refresh agents before trying again."
+    )]
+    TimedOut,
 }
 
 /// One bounded pull. An empty nonterminal chunk means only that the read wait elapsed.
@@ -57,10 +61,18 @@ struct Running {
 struct Slot {
     owner: String,
     claimed: AtomicBool,
+    timed_out: AtomicBool,
     canceled: watch::Sender<bool>,
     running: Mutex<Option<Arc<Running>>>,
 }
 impl Slot {
+    fn closed_error(&self) -> TerminalError {
+        if self.timed_out.load(Ordering::Acquire) {
+            TerminalError::TimedOut
+        } else {
+            TerminalError::Closed
+        }
+    }
     fn cancel(&self) {
         self.canceled.send_replace(true);
         if let Some(running) = lock(&self.running).as_ref() {
@@ -124,10 +136,32 @@ impl TerminalTicket {
         self.id.clone()
     }
     pub async fn start(
+        self,
+        spawner: &Spawner,
+        spec: SpawnSpec,
+        size: PtySize,
+    ) -> Result<String, TerminalError> {
+        self.start_with_limit(spawner, spec, size, None).await
+    }
+
+    /// An installer is bounded even when the renderer stops polling. Login keeps its existing
+    /// interactive lifetime; callers cannot choose an arbitrary program through this seam.
+    pub async fn start_install(
+        self,
+        spawner: &Spawner,
+        spec: SpawnSpec,
+        size: PtySize,
+    ) -> Result<String, TerminalError> {
+        self.start_with_limit(spawner, spec, size, Some(Duration::from_secs(600)))
+            .await
+    }
+
+    async fn start_with_limit(
         mut self,
         spawner: &Spawner,
         spec: SpawnSpec,
         size: PtySize,
+        limit: Option<Duration>,
     ) -> Result<String, TerminalError> {
         if *self.slot.canceled.borrow() {
             return Err(TerminalError::Closed);
@@ -139,6 +173,22 @@ impl TerminalTicket {
         let mut running = lock(&self.slot.running);
         if *self.slot.canceled.borrow() {
             return Err(TerminalError::Closed);
+        }
+        if let Some(limit) = limit {
+            let slot = Arc::downgrade(&self.slot);
+            let control = process.control.clone();
+            tokio::spawn(async move {
+                tokio::select! {
+                    biased;
+                    _ = control.exited() => {},
+                    _ = tokio::time::sleep(limit) => {
+                        if let Some(slot) = slot.upgrade() {
+                            slot.timed_out.store(true, Ordering::Release);
+                            slot.cancel();
+                        }
+                    }
+                }
+            });
         }
         *running = Some(Arc::new(Running {
             input: process.input,
@@ -180,6 +230,7 @@ impl Terminals {
         let slot = Arc::new(Slot {
             owner: owner.into(),
             claimed: AtomicBool::new(true),
+            timed_out: AtomicBool::new(false),
             canceled,
             running: Mutex::new(None),
         });
@@ -216,7 +267,7 @@ impl Terminals {
         let slot = self.slot(owner, id)?;
         let running = lock(&slot.running).clone().ok_or(TerminalError::Closed)?;
         if *slot.canceled.borrow() {
-            return Err(TerminalError::Closed);
+            return Err(slot.closed_error());
         }
         Ok((slot, running))
     }
@@ -229,7 +280,7 @@ impl Terminals {
         let mut canceled = slot.canceled.subscribe();
         let next = tokio::select! {
             biased;
-            _ = canceled.wait_for(|closed| *closed) => return Err(TerminalError::Closed),
+            _ = canceled.wait_for(|closed| *closed) => return Err(slot.closed_error()),
             next = output.next() => Some(next),
             _ = tokio::time::sleep(READ_WAIT) => None,
         };
@@ -449,6 +500,40 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(5), running.control.exited())
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn installation_deadline_stops_its_process_without_renderer_polling() {
+        let folder = tempfile::tempdir().unwrap();
+        let terminals = Terminals::default();
+        let ticket = terminals.reserve("main").unwrap();
+        let id = ticket.id.clone();
+        let spawner = Spawner::new(
+            LeftoverRegistry::disabled(),
+            tokio::runtime::Handle::current(),
+        );
+        ticket
+            .start_with_limit(
+                &spawner,
+                local_spec(folder.path()),
+                PtySize { rows: 24, cols: 80 },
+                Some(Duration::from_millis(250)),
+            )
+            .await
+            .unwrap();
+        let slot = terminals.slot("main", &id).unwrap();
+        let running = lock(&slot.running).clone().unwrap();
+        // No reads are necessary for the Rust-side deadline to own cancellation.
+        tokio::time::timeout(Duration::from_secs(10), running.control.exited())
+            .await
+            .unwrap();
+        assert!(slot.timed_out.load(Ordering::Acquire));
+        assert!(matches!(
+            terminals.read("main", &id).await,
+            Err(TerminalError::TimedOut)
+        ));
+        terminals.close("main", &id).unwrap();
+        assert!(terminals.reserve("main").is_ok());
     }
 
     #[test]

@@ -22,6 +22,7 @@ pub mod git;
 mod lenient;
 pub mod search;
 pub mod session;
+pub mod setup_actions;
 pub mod workspace;
 
 use serde::{Deserialize, Serialize};
