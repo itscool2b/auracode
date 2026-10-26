@@ -143,6 +143,7 @@ struct Pending {
     purpose: Purpose,
     deadline: Instant,
     startup: bool,
+    activity_revision: u64,
 }
 struct Dialog {
     frame: Value,
@@ -174,6 +175,7 @@ struct Session {
     idle: bool,
     run_active: bool,
     compacting: bool,
+    activity_revision: u64,
     turn: Option<String>,
     interrupted: bool,
     init_deadline: Instant,
@@ -209,6 +211,7 @@ impl Session {
                 command,
                 purpose,
                 startup,
+                activity_revision: self.activity_revision,
                 deadline: deadline.unwrap_or_else(|| Instant::now() + self.setup.timings.request),
             },
         );
@@ -339,7 +342,7 @@ impl Session {
         }));
         self.outbox.append(&mut self.before_ready);
     }
-    fn state(&mut self, data: &Value) -> bool {
+    fn state(&mut self, data: &Value, requested_at_revision: u64) -> bool {
         let Some(id) = wire::text(data, "sessionId").filter(|s| valid_id(s)) else {
             return false;
         };
@@ -363,7 +366,9 @@ impl Session {
         self.native_id = id.into();
         self.state_seen = true;
         self.metadata.state(data);
-        if !self.ready {
+        // The RPC handler may capture state before a concurrently emitted lifecycle event.
+        // A delayed initial snapshot must not undo newer busy/idle evidence.
+        if !self.ready && requested_at_revision == self.activity_revision {
             self.run_active = streaming || pending > 0;
             self.compacting = compacting;
             self.idle(!self.run_active && !self.compacting);
@@ -465,6 +470,7 @@ impl Session {
                 }
                 let deadline = frame["timeout"]
                     .as_u64()
+                    .filter(|ms| *ms > 0)
                     .map(|ms| Instant::now() + Duration::from_millis(ms.min(86_400_000)));
                 self.dialogs.insert(
                     id.clone(),
@@ -545,7 +551,7 @@ impl Session {
                 } else {
                     match pending.purpose {
                         Purpose::State => {
-                            if !self.state(&data) {
+                            if !self.state(&data, pending.activity_revision) {
                                 self.failure.get_or_insert_with(|| {
                                     error("Pi returned malformed or inconsistent session state.")
                                 });
@@ -623,6 +629,7 @@ impl Session {
                             // prompt or extension-only run need not emit another agent_settled.
                             self.run_active = false;
                             self.compacting = false;
+                            self.activity_revision = self.activity_revision.wrapping_add(1);
                             self.finish(StopReason::Cancelled, None);
                             self.idle(true);
                             self.interrupted = false;
@@ -656,6 +663,18 @@ impl Session {
         }
     }
     fn event(&mut self, frame: Value) {
+        if matches!(
+            wire::text(&frame, "type"),
+            Some(
+                "agent_start"
+                    | "agent_settled"
+                    | "auto_retry_start"
+                    | "compaction_start"
+                    | "compaction_end"
+            )
+        ) {
+            self.activity_revision = self.activity_revision.wrapping_add(1);
+        }
         for event in self.translator.ingest(&frame) {
             self.emit(event);
         }
@@ -990,6 +1009,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         idle: false,
         run_active: false,
         compacting: false,
+        activity_revision: 0,
         turn: None,
         interrupted: false,
         init_deadline: deadline,

@@ -26,6 +26,8 @@ keeps the agent run busy until settlement. A `handled` disposition completes tha
 continues under `RunState`. Stop clears native queues before aborting. A setting is acknowledged
 only after refreshed state and thinking levels confirm the native result. An ambiguous sent-setting
 timeout closes the session rather than releasing a prompt with unknown settings.
+An initial state reply cannot overwrite lifecycle events observed since its request. Extension
+dialog timeout zero means no timeout, matching the native runtime.
 
 Only Full auto is offered because Pi RPC has no native Ask/Auto edit permission policy. All
 extension select/confirm/input dialogs require a user answer. Unsupported editor prefills are

@@ -269,6 +269,12 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   Added manual-compaction idle handling, automatic-compaction continuation coverage and a bound
   for oversized committed block arrays. These follow-up changes require their own CI run. No
   real prompts have been sent, and M1d acceptance remains pending.
+- Pi startup now retains newer lifecycle events when the initial `get_state` reply is delayed,
+  preventing an old idle snapshot from releasing queued work and an old busy snapshot from leaving
+  the chat stuck. Paused-clock regressions cover both orders. A dialog timeout of zero now matches
+  native Pi's no-timeout semantics, with an end-to-end answer regression. These final source-audit
+  fixes still need CI verification. The preceding settlement/compaction checkpoint `a87ef36` has
+  passed Linux CI and Windows tests; Windows frontend smoke is still running.
 
 ## Decisions and constraints
 

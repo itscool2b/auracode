@@ -287,6 +287,72 @@ async fn manual_extension_compaction_returns_idle_without_agent_settled() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn delayed_initial_state_does_not_overwrite_newer_run_events() {
+    for was_streaming in [false, true] {
+        let mut h = Harness::start().await;
+        let mut queries = Vec::new();
+        for _ in 0..5 {
+            queries.push(h.wire().await);
+        }
+        let mut state = h.state();
+        state["isStreaming"] = json!(was_streaming);
+        h.send(json!({"type":"agent_start"}));
+        if was_streaming {
+            h.send(json!({"type":"agent_settled"}));
+        }
+        for query in queries {
+            let data = match query["type"].as_str().unwrap() {
+                "get_state" => state.clone(),
+                "get_available_models" => json!({"models":[]}),
+                "get_available_thinking_levels" => json!({"levels":["off"]}),
+                "get_commands" => json!({"commands":[]}),
+                "get_session_stats" => json!({"cost":0}),
+                other => panic!("unexpected query {other}"),
+            };
+            h.reply(&query, data);
+        }
+        let mut last_idle = None;
+        loop {
+            match h.event().await {
+                DriverEvent::RunState { idle } => last_idle = Some(idle),
+                DriverEvent::Ready(_) => break,
+                _ => {}
+            }
+        }
+        assert_eq!(last_idle, Some(was_streaming));
+        h.stop().await;
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn zero_dialog_timeout_remains_answerable_like_native_no_timeout() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.send(
+        json!({"type":"extension_ui_request","id":"q","method":"input","title":"Name","timeout":0}),
+    );
+    loop {
+        if matches!(h.event().await, DriverEvent::UiRequest { .. }) {
+            break;
+        }
+    }
+    tokio::time::advance(Duration::from_secs(1)).await;
+    h.tx.send(DriverCommand::RespondUi {
+        request_id: "q".into(),
+        answer: Some(aura_protocol::UiAnswer::Input {
+            text: "still valid".into(),
+        }),
+    })
+    .unwrap();
+    let response = h.wire().await;
+    assert_eq!(
+        response,
+        json!({"type":"extension_ui_response","id":"q","value":"still valid"})
+    );
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
 async fn automatic_compaction_keeps_the_agent_busy_until_settlement() {
     let mut h = Harness::start().await;
     h.ready().await;
