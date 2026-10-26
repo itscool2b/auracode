@@ -40,10 +40,9 @@ pub(crate) fn chats(conn: &Connection, device_id: &str) -> rusqlite::Result<Vec<
     rows.collect()
 }
 
-/// A chat with the folder as this device knows it (any device's path when this one has none).
+/// A chat with this device's mapping only. A foreign path must never become a local launch cwd.
 const CHAT_SELECT: &str = "SELECT c.id, c.title, c.title_source, c.active_agent, c.created_at, c.updated_at, \
-     COALESCE((SELECT fl.path FROM folder_locations fl WHERE fl.folder_id = c.folder_id AND fl.device_id = ?1), \
-              (SELECT fl.path FROM folder_locations fl WHERE fl.folder_id = c.folder_id LIMIT 1)), c.agent_host \
+     (SELECT fl.path FROM folder_locations fl WHERE fl.folder_id = c.folder_id AND fl.device_id = ?1), c.agent_host \
      FROM chats c";
 
 fn chat_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatRecord> {
@@ -66,6 +65,7 @@ fn parse_title_source(text: &str) -> Option<TitleSource> {
     match text {
         "first_line" => Some(TitleSource::FirstLine),
         "agent" => Some(TitleSource::Agent),
+        "manual" => Some(TitleSource::Manual),
         _ => None,
     }
 }
@@ -74,6 +74,7 @@ fn title_source_str(source: TitleSource) -> &'static str {
     match source {
         TitleSource::FirstLine => "first_line",
         TitleSource::Agent => "agent",
+        TitleSource::Manual => "manual",
     }
 }
 
@@ -507,7 +508,7 @@ pub(crate) fn set_title(
     title: &str,
     source: TitleSource,
 ) -> rusqlite::Result<()> {
-    conn.prepare_cached("UPDATE chats SET title = ?2, title_source = ?3 WHERE id = ?1")?
+    conn.prepare_cached("UPDATE chats SET title = ?2, title_source = ?3 WHERE id = ?1 AND (title_source IS NULL OR title_source <> 'manual' OR ?3 = 'manual')")?
         .execute(params![chat_id, title, title_source_str(source)])?;
     Ok(())
 }

@@ -142,6 +142,10 @@ pub(crate) enum Work {
 
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
+    Organization {
+        command: super::organization::OrganizationCommand,
+        reply: oneshot::Sender<Result<super::organization::Organization, StoreError>>,
+    },
     CreateChat {
         new: NewChat,
         reply: oneshot::Sender<Result<ChatRecord, StoreError>>,
@@ -167,6 +171,10 @@ pub(crate) enum Request {
 
 /// A read served from saved data, outside the FIFO, even while the writer is stalled.
 pub(crate) enum SavedRead {
+    Organization {
+        filter: aura_protocol::workspace::WorkspaceFilter,
+        reply: oneshot::Sender<Result<super::organization::Organization, StoreError>>,
+    },
     Chats {
         reply: oneshot::Sender<Result<Vec<ChatRecord>, StoreError>>,
     },
@@ -411,6 +419,7 @@ pub(crate) fn op_bytes(op: &Op) -> usize {
 fn work_bytes(work: &Work) -> usize {
     match work {
         Work::Op(op) => op_bytes(op),
+        Work::Request(Request::Organization { command, .. }) => command.bytes(),
         Work::Request(_) => 256,
         #[cfg(test)]
         Work::Test(_) => 256,
@@ -586,6 +595,7 @@ fn work_name(work: &Work) -> &'static str {
     match work {
         Work::Op(op) => op_name(op),
         Work::Request(Request::CreateChat { .. }) => "create_chat",
+        Work::Request(Request::Organization { .. }) => "organization",
         Work::Request(Request::Chats { .. }) => "chats",
         Work::Request(Request::LoadChat { .. }) => "load_chat",
         Work::Request(Request::ReadBlob { .. }) => "read_blob",
@@ -1153,6 +1163,18 @@ impl Writer {
 
     fn answer_request(&mut self, request: Request) {
         match request {
+            Request::Organization { command, reply } => {
+                let device = self.device_id.clone();
+                let now = now_millis();
+                let result = if command.is_read() {
+                    self.read(|conn| super::organization::execute(conn, &device, now, command))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| super::organization::execute(conn, &device, now, command))
+                };
+                let _ = reply.send(result);
+            }
             Request::CreateChat { new, reply } => {
                 let created = if let Mode::Damaged = self.mode {
                     Err(StoreError::Damaged(DAMAGED.to_owned()))
@@ -1281,6 +1303,17 @@ impl Writer {
     /// Serves a read from saved data.
     fn serve_saved(&mut self, read: SavedRead) {
         match read {
+            SavedRead::Organization { filter, reply } => {
+                let device = self.device_id.clone();
+                let _ = reply.send(self.read(|conn| {
+                    super::organization::execute(
+                        conn,
+                        &device,
+                        now_millis(),
+                        super::organization::OrganizationCommand::Snapshot(filter),
+                    )
+                }));
+            }
             SavedRead::Chats { reply } => {
                 let device = self.device_id.clone();
                 let _ = reply.send(self.read(|conn| rows::chats(conn, &device)));

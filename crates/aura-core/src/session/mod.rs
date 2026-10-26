@@ -18,6 +18,7 @@ mod policy;
 mod spawner;
 #[cfg(test)]
 mod tests;
+mod workspace;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -220,6 +221,8 @@ pub(crate) struct Shared {
     shutting_down: AtomicBool,
     /// The chat list's folder checks, by folder.
     folders: Mutex<HashMap<PathBuf, FolderCheck>>,
+    /// Serializes busy-folder preflight and project chat creation/moves.
+    organization: tokio::sync::Mutex<()>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
     #[cfg(test)]
     slow_folder: Mutex<Option<(PathBuf, Duration, Arc<AtomicU64>)>>,
@@ -332,6 +335,7 @@ impl SessionManager {
                     subscriptions: Mutex::new(HashMap::new()),
                     shutting_down: AtomicBool::new(false),
                     folders: Mutex::new(HashMap::new()),
+                    organization: tokio::sync::Mutex::new(()),
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
                 }),
@@ -1168,6 +1172,8 @@ pub struct ShutdownSummary {
 /// the UI shows.
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {
+    #[error("{0}")]
+    Organization(String),
     #[error("There is no chat with id {0}.")]
     ChatNotFound(String),
     #[error("auracode doesn't know an agent called \"{0}\".")]

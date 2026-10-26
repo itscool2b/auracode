@@ -92,7 +92,7 @@ impl NativeSessionScope {
 /// Resolve directory aliases using metadata only. A new configuration directory may not exist
 /// yet, so resolve its nearest existing ancestor before normalizing the remaining components.
 /// No provider configuration or credential file is read.
-fn normalize_path(path: PathBuf) -> PathBuf {
+pub(super) fn normalize_path(path: PathBuf) -> PathBuf {
     let path = path
         .ancestors()
         .find_map(|ancestor| {
@@ -251,6 +251,10 @@ impl LiveAgents {
 
     pub(crate) fn count(&self) -> usize {
         self.lock().slots.len()
+    }
+
+    pub(crate) fn contains(&self, chat: &str) -> bool {
+        self.lock().slots.contains(chat)
     }
 
     pub(crate) fn max(&self) -> usize {

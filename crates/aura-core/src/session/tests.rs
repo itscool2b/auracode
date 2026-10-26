@@ -1,6 +1,8 @@
 //! The session manager's tests that need the crate's internals: a store whose FIFO and retry are
 //! shrunk (saving pauses within a test), a small actor outbox, and the actor's panic hook.
 
+mod workspace;
+
 use std::sync::Mutex;
 use std::time::Duration;
 

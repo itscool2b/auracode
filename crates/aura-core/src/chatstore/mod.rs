@@ -25,6 +25,7 @@
 pub(crate) mod blobs;
 pub(crate) mod compact;
 pub(crate) mod history;
+pub(crate) mod organization;
 mod recover;
 pub(crate) mod rows;
 #[cfg(test)]
@@ -80,6 +81,34 @@ impl fmt::Debug for ChatStore {
 }
 
 impl ChatStore {
+    pub(crate) async fn organize(
+        &self,
+        command: organization::OrganizationCommand,
+    ) -> Result<organization::Organization, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if command.is_read() {
+            if self.is_paused()
+                && let organization::OrganizationCommand::Snapshot(filter) = command
+            {
+                return self
+                    .saved(writer::SavedRead::Organization { filter, reply }, answer)
+                    .await?;
+            }
+            return self
+                .request(Request::Organization { command, reply }, answer)
+                .await?;
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::Organization { command, reply }),
+            Some(permits),
+        );
+        // Mutations acknowledge the actual transaction, never a timeout followed by a late move.
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
     /// Moves the opened `Store` and the owner lock into the writer thread; global recovery is its
     /// first op.
     pub fn start(
@@ -599,6 +628,7 @@ pub struct QueuedRow {
 pub enum TitleSource {
     FirstLine,
     Agent,
+    Manual,
 }
 
 /// What recovery did.

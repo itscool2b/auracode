@@ -10,8 +10,18 @@ M2b backend work is isolated on `codex/m2b-core`, based on the integrated catalo
 `aura_protocol::workspace` types define project metadata, device-local folder mappings, archived
 listing filters, pinned chat metadata, explicit moves, and a busy-folder creation preview. Existing
 `ChatSummary` and transcript frames retain their shape. These types are exported in the generated
-desktop bindings; persistence operations and the Tauri command wiring are still pending. The
-binding export test passes locally. No CI push or real agent invocation was performed.
+desktop bindings. Rust now implements project creation/update/folder addition, rename, pin,
+archive/restore, organization moves, and project chat creation through the existing SQLite writer.
+Busy-folder preflight resolves aliases and includes preparing and retiring sessions; concurrent
+project chat creations serialize the final check. Moves require a stopped chat with no queued
+prompts, never move files, and cannot change a native session's cwd until the visible handoff path
+is implemented. Mutations acknowledge their actual transaction, and actor dispatch waits for a
+pending move. Manual titles reject late automatic writes. Saved workspace reads still work when
+saving pauses, and another device's folder mapping is never used for local launch.
+All 268 core unit tests and all-target core Clippy pass, including nine new organization and
+actor regressions. The binding export test passes locally. Tauri wiring, Git folder identities,
+checkpoints/Changes/revert, edit/retry/fork and visible agent handoff remain pending. No CI push
+or real agent invocation was performed.
 
 The final local M1e follow-up resolves Windows Pi, OMP and Grok npm shims through the reviewed
 package's bounded `package.json` bin entry, using `node.exe` or a packaged executable. It never
