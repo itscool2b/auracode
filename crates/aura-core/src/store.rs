@@ -1520,16 +1520,17 @@ mod tests {
     #[test]
     fn check_integrity_leaves_newer_data_alone() {
         let p = paths();
+        let future_version = SCHEMA_VERSION + 1;
         {
             let (store, _) = open(&p);
             store
                 .conn()
-                .pragma_update(None, "user_version", 7)
+                .pragma_update(None, "user_version", future_version)
                 .expect("bump");
         }
         assert!(matches!(
             check_integrity(&p.db),
-            Err(CoreError::SchemaTooNew { found: 7, .. })
+            Err(CoreError::SchemaTooNew { found, .. }) if found == future_version
         ));
         assert!(!recovery::damage_marker(&p.db).exists());
     }
@@ -2058,6 +2059,7 @@ mod tests {
     #[test]
     fn a_newer_schema_this_sqlite_cannot_parse_is_refused_not_quarantined() {
         let p = paths();
+        let future_version = SCHEMA_VERSION + 1;
         {
             let (store, _) = open(&p);
             let conn = store.conn();
@@ -2069,8 +2071,10 @@ mod tests {
                 [],
             )
             .expect("future schema row");
-            conn.execute_batch("PRAGMA writable_schema = OFF; PRAGMA user_version = 7;")
-                .expect("bump");
+            conn.execute_batch(&format!(
+                "PRAGMA writable_schema = OFF; PRAGMA user_version = {future_version};"
+            ))
+            .expect("bump");
         }
         let before = fs::read(&p.db).expect("read");
         let result = Store::open_at(&p.db, &p.backups);
@@ -2078,9 +2082,9 @@ mod tests {
             matches!(
                 result,
                 Err(CoreError::SchemaTooNew {
-                    found: 7,
+                    found,
                     supported: SCHEMA_VERSION
-                })
+                }) if found == future_version
             ),
             "{:?}",
             result.map(|(_, i)| i)
