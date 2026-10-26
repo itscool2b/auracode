@@ -6,10 +6,12 @@ use std::{future::Future, pin::Pin};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+mod apply;
 mod merge;
 mod scan;
 mod snapshot;
 
+pub use apply::{ConfigApplyJournal, MAX_APPLY_RECEIPT_BYTES, MAX_APPLY_RECEIPTS};
 pub use merge::{ConfigDecision, ConfigOperation, LocalSnapshot, merge};
 pub use scan::{ConfigScan, ConfigScanner, ConfigSkipped, ConfigSource};
 pub use snapshot::{ConfigContent, ConfigFile, ConfigFormat, ConfigIdentity, ConfigSnapshot};

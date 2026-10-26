@@ -1729,3 +1729,8 @@ withholding the command grant. Chromium and WebKit pass review, no implicit laun
 close cancellation, stale/partial recovery and accessibility checks. Screenshots were inspected. Full
 TypeScript and eight profile/terminal frontend tests pass. Native source tests, macOS behavior and the
 final combined CI remain pending.
+
+### M9 encrypted apply journal contract
+
+Added the profile-bound ConfigApplyJournal port with durable create, authenticated reads, compare-and-swap replacement, a bounded encrypted UUID index, and an 8 MiB receipt limit. Filesystem application and recovery remain in progress. The 44 existing aura-config tests pass against temporary synthetic files; no real configuration was read or changed.
+
