@@ -110,7 +110,12 @@ impl CommandWrapper for ControllingTerminal {
         // performs only ioctl and error capture, with no allocation or shared state.
         unsafe {
             command.pre_exec(|| {
-                if nix::libc::ioctl(0, nix::libc::TIOCSCTTY, 0) == -1 {
+                // Darwin exposes this request as u32 while ioctl takes an unsigned long.
+                #[cfg(target_vendor = "apple")]
+                let request = nix::libc::c_ulong::from(nix::libc::TIOCSCTTY);
+                #[cfg(not(target_vendor = "apple"))]
+                let request = nix::libc::TIOCSCTTY;
+                if nix::libc::ioctl(0, request, 0) == -1 {
                     Err(io::Error::last_os_error())
                 } else {
                     Ok(())
