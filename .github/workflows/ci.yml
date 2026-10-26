@@ -206,7 +206,6 @@ jobs:
             . -> target
             docs/spikes/windows-spawn -> target
             docs/spikes/claude-control -> target
-          save-if: ${{ !cancelled() }}
           cache-on-failure: true
       - name: Clippy
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
