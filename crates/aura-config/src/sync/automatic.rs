@@ -45,18 +45,14 @@ pub async fn automatic_batch(
 ) -> Result<AutomaticBatch, ConfigPortError> {
     let document = store.load()?.document;
     let (ids, next_cursor) = candidates(&document, after);
-    let recovery: BTreeSet<_> = scanner
-        .apply_history(journal)?
-        .into_iter()
-        .filter(|item| item.status == ConfigApplyStatus::RecoveryRequired)
-        .map(|item| item.identity.id())
-        .collect::<Result<_, _>>()?;
+    // Receipts may contain large before-images. An idle poll must not decrypt the entire history.
+    let mut recovery: Option<BTreeSet<String>> = None;
     let mut result = AutomaticBatch {
         next_cursor,
         ..Default::default()
     };
     for id in ids {
-        if reviewed.contains(&id) || recovery.contains(&id) {
+        if reviewed.contains(&id) {
             continue;
         }
         let Some(device) = port.read_device_state(&id).await? else {
@@ -90,6 +86,23 @@ pub async fn automatic_batch(
         if review.preview.item.operation == ConfigOperation::InSync
             && device.head == review.remote_head
         {
+            continue;
+        }
+        let unresolved = match &recovery {
+            Some(recovery) => recovery.contains(&id),
+            None => {
+                let pending = scanner
+                    .apply_history(journal)?
+                    .into_iter()
+                    .filter(|item| item.status == ConfigApplyStatus::RecoveryRequired)
+                    .map(|item| item.identity.id())
+                    .collect::<Result<BTreeSet<_>, _>>()?;
+                let unresolved = pending.contains(&id);
+                recovery = Some(pending);
+                unresolved
+            }
+        };
+        if unresolved {
             continue;
         }
         let files = if matches!(
