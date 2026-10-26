@@ -879,3 +879,9 @@ Core all-target compilation passes. A focused Chromium flow passed fork preview/
 persistent visible handoff and selected-file revert, with zero browser errors and zero accessibility
 violations in the continuation dialog. The complete browser/native verification and new bindings
 remain pending. No remote CI, push or paid-agent call.
+
+Cloudflare Email Sending now owns the auracode.si sender domain and reports its automatically
+provisioned SPF, DKIM, DMARC and return-path DNS as ready. No email was sent; delivery and Workers
+plan eligibility still need qualification. Continuation preview refreshes now discard superseded
+async responses when the dialog changes intent or closes. The synthetic preview session status is
+explicitly typed for transitions after stopping. Both changes join the combined verification batch.

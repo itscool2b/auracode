@@ -51,25 +51,33 @@ export function ConversationDialog({
   const [revision, setRevision] = useState(0);
   const live = hasProcess(status);
   const wasLive = useRef(live);
+  const request = useRef(0);
   useEffect(() => {
     const stopped = wasLive.current && !live;
     wasLive.current = live;
     if (!stopped || !preview || intent.type === "history") return;
     // Stopping can append a final event. Rebuild its content-bound preview before confirmation.
     const action: ContinuationAction = intent.type === "edit" ? { ...intent, text } : intent;
+    const current = ++request.current;
     setBusy(true);
     void api
       .preview(chatId, action)
-      .then(setPreview)
+      .then((value) => {
+        if (request.current === current) setPreview(value);
+      })
       .catch((error) => {
+        if (request.current !== current) return;
         setError(errorMessage(error));
         setPreview(null);
       })
-      .finally(() => setBusy(false));
+      .finally(() => {
+        if (request.current === current) setBusy(false);
+      });
   }, [api, chatId, intent, live, preview, text]);
   useEffect(() => {
     void revision;
     let stale = false;
+    ++request.current;
     setBusy(true);
     setError(null);
     setPreview(null);
@@ -98,35 +106,40 @@ export function ConversationDialog({
       });
     return () => {
       stale = true;
+      ++request.current;
     };
   }, [api, chatId, intent, revision]);
   const editPreview = async () => {
     if (!editable) return;
+    const current = ++request.current;
     setBusy(true);
     setError(null);
     try {
-      setPreview(await api.preview(chatId, { type: "edit", turn_id: editable.turn_id, text }));
+      const value = await api.preview(chatId, { type: "edit", turn_id: editable.turn_id, text });
+      if (request.current === current) setPreview(value);
     } catch (error) {
-      setError(errorMessage(error));
+      if (request.current === current) setError(errorMessage(error));
     } finally {
-      setBusy(false);
+      if (request.current === current) setBusy(false);
     }
   };
   const earlier = async () => {
     if (!turns || busy) return;
+    const current = ++request.current;
     setBusy(true);
     setError(null);
     try {
       const page = await api.turns(chatId, turns.before_ordinal);
-      setTurns({ ...page, turns: [...turns.turns, ...page.turns] });
+      if (request.current === current)
+        setTurns({ ...page, turns: [...turns.turns, ...page.turns] });
     } catch (error) {
-      setError(errorMessage(error));
+      if (request.current === current) setError(errorMessage(error));
     } finally {
-      setBusy(false);
+      if (request.current === current) setBusy(false);
     }
   };
   const apply = async () => {
-    if (!preview || applying || live || queued) return;
+    if (!preview || applying || busy || live || queued) return;
     setApplying(true);
     setError(null);
     let destination: string;

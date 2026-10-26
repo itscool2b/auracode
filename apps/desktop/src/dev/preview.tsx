@@ -331,7 +331,7 @@ function Preview() {
             : null;
     const initialHistory = before === null ? history : history.slice(before);
     let receive: ((batch: EventBatch) => void) | null = null;
-    let currentStatus = status;
+    let currentStatus: SessionStatus = status;
     const publish = (updates: AuraEvent[]) => {
       receive?.(frame("preview", seq, updates));
       seq += updates.length;
