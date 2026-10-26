@@ -570,6 +570,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "auracode-web-worker"
+version = "0.1.0"
+dependencies = [
+ "sha2 0.10.9",
+ "tempfile",
+ "worker",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

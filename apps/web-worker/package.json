@@ -1,0 +1,13 @@
+{
+  "name": "@auracode/web-worker",
+  "private": true,
+  "scripts": {
+    "worker:build": "corepack pnpm --filter @auracode/web build && worker-build --release",
+    "worker:test": "node --test tests/runtime.test.mjs",
+    "worker:check": "wrangler deploy --dry-run --env preview --outdir ../../target/web-worker-dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "4.152.0",
+    "miniflare": "5.20261019.2-beta"
+  }
+}

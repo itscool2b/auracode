@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/desktop/src-tauri", "apps/api"]
+members = ["crates/*", "apps/desktop/src-tauri", "apps/api", "apps/web-worker"]
 # Spikes are throwaway experiments with their own Cargo projects.
 exclude = ["docs/spikes"]
 

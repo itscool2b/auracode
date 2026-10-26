@@ -2516,3 +2516,9 @@ activation remains in packaged acceptance.
 Cloudflare MCP also confirmed Universal SSL enabled and an active Let's Encrypt certificate covering
 `auracode.si` and `*.auracode.si`, expiring 2027-01-22 with Cloudflare-managed renewal. The owner does
 not need to purchase an SSL certificate from the domain registrar.
+### Rust website code-deployment checkpoint
+
+- Added `apps/web-worker`, a separate Rust Worker that embeds the existing prerendered public website at build time. It uses ordinary Worker code modules without an Assets binding or upload, API/database access, secrets or outbound subrequests. The website rendering pipeline and assets-only alternative remain intact.
+- The response path preserves generated CSP/header policies, including the Tauri verification-page framing exception, auth no-store on every route alias, correct MIME, immutable Vite assets, revalidated stable files, HEAD and conditional ETags. Missing pages/assets and API paths never become a homepage fallback. Internal build files, unsupported paths/types, symlinks and encoded traversal are excluded or refused.
+- Validation: eight Rust unit tests, native all-target and Wasm Clippy, five compiled Miniflare cases checking every public byte and all nine page aliases, both existing static website tests, Biome and instruction parity pass. The compiled deployment modules measured 20,473 bytes JavaScript plus 985,588 bytes Wasm on this source. Root must rebuild from the final integrated website, then verify live route precedence/TLS/headers before publication.
+- No cloud mutation, denied upload retry, credential access or actual account/auth operation occurred. Live email/Turnstile, cross-device acceptance, landing performance and production publication remain pending. CI integration is coordinated separately with its owner.

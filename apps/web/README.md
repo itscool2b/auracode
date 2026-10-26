@@ -44,8 +44,10 @@ entrances. No third-party reference image is shipped.
 
 ## Deployment prerequisites
 
-No deployment has been performed. `wrangler.toml` is an assets-only configuration, with explicit
-production routes. `/api/*` must resolve to the more-specific Rust API Worker route on the same
+The assets-only `wrangler.toml` remains available. The separate [Rust website Worker](../web-worker/README.md)
+embeds the same public build for ordinary code deployment without an Assets upload. Deploy one
+implementation for a given website route, and rebuild from the final integrated source. Neither
+implementation has been deployed by this source checkpoint. `/api/*` must resolve to the more-specific Rust API Worker route on the same
 origin. Verify this precedence in a separate preview before publishing the site. The generated
 `_headers` supplies a hash-based CSP for the exact prerendered framework scripts. Rebuild headers
 whenever HTML changes. Turnstile is the only permitted third-party script and frame origin.
