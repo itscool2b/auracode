@@ -109,14 +109,26 @@ test("private preview gates the compiled Worker without trapping existing accoun
   let session;
 
   await t.test(
-    "unknown excluded email has no provider call, delivery, challenge or account writes",
+    "unknown excluded email is answered only after the bot check, without delivery or account writes",
     async () => {
       const before = providerCalls;
       await expectError(await begin(outsider), 403, "invite_required");
-      assert.equal(providerCalls, before);
-      for (const table of ["auth_challenges", "users", "sessions", "rate_limits"]) {
+      // Membership is never revealed without a verified Turnstile token and the IP limit.
+      assert.equal(providerCalls, before + 1);
+      for (const table of ["auth_challenges", "users", "sessions"]) {
         assert.equal((await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()).n, 0);
       }
+      // Only the keyed per-IP counter exists. No per-address limit row was created.
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM rate_limits").first()).n, 1);
+      await expectError(
+        await call("/auth/challenges", "POST", {
+          email: outsider,
+          client_kind: "desktop",
+          turnstile_token: "",
+        }),
+        400,
+        "invalid_request",
+      );
       const config = await (await call("/config")).json();
       assert.equal(config.private_preview, true);
       assert.equal(JSON.stringify(config).includes("@"), false);

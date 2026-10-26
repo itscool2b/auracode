@@ -2752,3 +2752,13 @@ profile Git accepts and still proves refs beyond 260 characters work. Default da
 below the limit. The local full Rust run otherwise passed fmt, all-target Clippy and 1,843 tests;
 Application Control blocked the `setup_bindings`, `auracode_api` and `demo_agent` test binaries, so
 those rely on CI.
+
+Security review of the pushed invitation gate found that sign-in initiation answered
+`invite_required` before its per-IP limit and Turnstile verification, so invitation or account
+membership could be probed without a bot check or throttle. Membership is now answered only after
+the keyed per-IP limit and a verified single-use Turnstile token; email change follows the same
+order. Excluded addresses still create no challenge, user, session, delivery or per-address row,
+only the HMAC-keyed IP counter. Both clients already reset verification after `invite_required`.
+The rebuilt API passes all 23 runtime tests and native/Wasm Clippy (JS unchanged, Wasm 1,087,289
+bytes, SHA-256 `9d545e66…`). The live preview API and staged production API still run the earlier
+order and need this build uploaded once Cloudflare access to the auracode account is available.

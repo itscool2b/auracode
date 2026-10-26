@@ -72,15 +72,17 @@ impl Api {
             )?;
         }
         let email = policy::email(&input.email)?;
-        if !allowlist.contains(&email) && !self.existing_account(&email).await? {
-            return Err(ApiError::InviteRequired);
-        }
+        // Membership is observable through `invite_required`, so each answer costs a solved
+        // single-use Turnstile token and counts against the per-IP limit.
         let ip = self.ip(request)?;
         self.rate("send-ip", &ip, 3600, 20).await?;
         if input.turnstile_token.is_empty() || input.turnstile_token.len() > 2048 {
             return Err(ApiError::InvalidRequest);
         }
         self.verify_turnstile(&input.turnstile_token, &ip).await?;
+        if !allowlist.contains(&email) && !self.existing_account(&email).await? {
+            return Err(ApiError::InviteRequired);
+        }
         let email_key = crypto::verifier(&self.key, "email", &[&email])?;
         self.rate("send-email", &email_key, 3600, 5).await?;
         let id = crypto::random_token()?;

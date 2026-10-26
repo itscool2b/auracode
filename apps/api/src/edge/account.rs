@@ -41,13 +41,15 @@ impl Api {
             .await?;
         let input: ChangeEmail = body(request).await?;
         let email = policy::email(&input.email)?;
-        self.allowlist()?.require(&email)?;
+        let allowlist = self.allowlist()?;
         if input.turnstile_token.is_empty() || input.turnstile_token.len() > 2048 {
             return Err(ApiError::InvalidRequest);
         }
         let ip = self.ip(request)?;
         self.rate("send-ip", &ip, 3600, 20).await?;
         self.verify_turnstile(&input.turnstile_token, &ip).await?;
+        // Membership is answered only after the bot check, as when signing in.
+        allowlist.require(&email)?;
         let key = crypto::verifier(&self.key, "email", &[&email])?;
         self.rate("send-email", &key, 3600, 5).await?;
         let id = crypto::random_token()?;
