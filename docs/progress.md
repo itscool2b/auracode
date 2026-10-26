@@ -1201,3 +1201,16 @@ unsigned-build behavior. Axe reported no violations on General, Shortcuts and Ab
 screenshots were inspected. Typechecking still awaits exact integrated binding generation; its
 remaining errors name pre-existing missing generated commands/types. No CI dispatch was added.
 
+
+The merge review found that current Git's read-tree overwrites ignored collisions. Merge application
+now uses native fast-forward merge with no-overwrite-ignore against the already prepared two-parent
+commit. Native checkout protects ignored files, Git compares the old ref, and automatic stashing is
+disabled. The app no longer creates its own HEAD.lock. It verifies symbolic branch identity, HEAD,
+index and working-tree state afterward, then checks for changes during final verification. A changed
+target follows RecoveryRequired with both durable refs retained. All eleven focused Windows Git tests
+pass, including ignored/untracked collisions, branch switching and newly staged changes. An earlier
+test launch was blocked by Application Control; a normal rebuild after the fix allowed execution.
+No security controls were changed. Source evidence is Git 2.54
+[read-tree](https://github.com/git/git/blob/v2.54.0/builtin/read-tree.c) and
+[native merge](https://github.com/git/git/blob/v2.54.0/builtin/merge.c), plus the
+[no-overwrite-ignore contract](https://git-scm.com/docs/git-merge).

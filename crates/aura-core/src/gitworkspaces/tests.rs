@@ -292,6 +292,104 @@ async fn discard_retires_owned_directory_with_ignored_bytes_and_rejects_external
 }
 
 #[tokio::test]
+async fn a_merge_never_overwrites_an_ignored_or_late_untracked_collision() {
+    use aura_protocol::git::WorktreeAction;
+    for ignored in [false, true] {
+        let rig = rig().await;
+        let worktree = isolated(&rig).await;
+        let path = Path::new(&worktree.path);
+        std::fs::write(path.join("introduced.txt"), "incoming\n").expect("introduced fixture");
+        rig.git
+            .run(path, git::args(&["add", "--", "introduced.txt"]), 8192)
+            .await
+            .expect("stage introduced");
+        rig.git
+            .run(
+                path,
+                git::args(&[
+                    "-c",
+                    "commit.gpgSign=false",
+                    "commit",
+                    "-m",
+                    "introduce path",
+                ]),
+                8192,
+            )
+            .await
+            .expect("commit fixture");
+        if ignored {
+            std::fs::write(rig.work.join(".git/info/exclude"), "introduced.txt\n")
+                .expect("owned exclude");
+        }
+        let preview = rig
+            .service
+            .action_preview(
+                "chat",
+                &worktree.id,
+                WorktreeAction::Merge {
+                    message: "reviewed merge".into(),
+                },
+            )
+            .await
+            .expect("preview before collision");
+        std::fs::write(rig.work.join("introduced.txt"), b"retain local bytes\r\n")
+            .expect("late collision");
+        let outcome = rig.service.action_apply("chat", &preview.token).await;
+        assert!(
+            !outcome.as_ref().is_ok_and(|result| result.error.is_none()),
+            "a collision cannot be called a clean merge"
+        );
+        assert_eq!(
+            std::fs::read(rig.work.join("introduced.txt")).expect("retained"),
+            b"retain local bytes\r\n",
+            "ignored={ignored}"
+        );
+        assert_eq!(
+            rig.service.inspect(&rig.work).await.expect("target").head,
+            preview.target.expect("target preview").head
+        );
+    }
+}
+
+#[tokio::test]
+async fn post_merge_verification_rejects_a_branch_switch_or_new_index_change() {
+    let rig = rig().await;
+    let head = rig
+        .service
+        .inspect(&rig.work)
+        .await
+        .expect("snapshot")
+        .head
+        .expect("head");
+    actions::verify_merge_result(&rig.git, &rig.work, "main", &head)
+        .await
+        .expect("matching state");
+    rig.git
+        .run(&rig.work, git::args(&["checkout", "-b", "other"]), 8192)
+        .await
+        .expect("external branch switch fixture");
+    assert!(
+        actions::verify_merge_result(&rig.git, &rig.work, "main", &head)
+            .await
+            .is_err()
+    );
+    rig.git
+        .run(&rig.work, git::args(&["checkout", "main"]), 8192)
+        .await
+        .expect("restore fixture branch");
+    std::fs::write(rig.work.join("file.txt"), "late change").expect("late change");
+    rig.git
+        .run(&rig.work, git::args(&["add", "--", "file.txt"]), 8192)
+        .await
+        .expect("late staged change");
+    assert!(
+        actions::verify_merge_result(&rig.git, &rig.work, "main", &head)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
 async fn create_isolation_preserves_dirty_user_index_and_head_and_is_durably_registered() {
     let rig = rig().await;
     std::fs::write(rig.work.join("file.txt"), "staged\n").expect("staged");

@@ -13,7 +13,6 @@ pub(super) struct Inspection {
     pub(super) view: GitWorkspace,
     pub(super) root: PathBuf,
     pub(super) common: PathBuf,
-    pub(super) git_dir: PathBuf,
     pub(super) fingerprint: String,
 }
 
@@ -94,6 +93,9 @@ pub(super) async fn inspect(git: &Git, folder: &Path) -> Result<Inspection> {
     if gitdir.join("index.lock").try_exists()? {
         blockers.push("Another Git operation holds the index lock. Wait for it to finish.".into());
     }
+    if gitdir.join("HEAD.lock").try_exists()? {
+        blockers.push("Another Git operation holds the branch lock. Wait for it to finish.".into());
+    }
     if files
         .iter()
         .any(|file| file.index == "U" || file.worktree == "U")
@@ -132,7 +134,6 @@ pub(super) async fn inspect(git: &Git, folder: &Path) -> Result<Inspection> {
         view,
         root,
         common,
-        git_dir: gitdir,
         fingerprint: format!("{:x}", hash.finalize()),
     })
 }

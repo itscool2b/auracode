@@ -1,6 +1,5 @@
 //! Confirmed merge and recoverable retirement of app-owned worktrees only.
 
-use std::fs::OpenOptions;
 use std::time::Duration;
 
 use aura_protocol::git::{
@@ -367,42 +366,42 @@ impl GitWorkspaces {
             "Merge to {branch} is in progress. Previous target: {recovery}. Prepared commit: {prepared_ref}."
         ));
         self.save_record(&record)?;
-        // A held HEAD lock blocks normal branch switching while read-tree updates the clean
-        // target. The index's own lock and read-tree's two-tree safety checks protect edits.
-        let head_lock = target.git_dir.join("HEAD.lock");
         let outcome = async {
-            let guard = HeadLock::acquire(head_lock)?;
             let current = inspect(git, &target.root).await?;
             if current.fingerprint != target.fingerprint {
                 return Err(invalid(
-                    "The merge target changed before its lock was acquired.",
+                    "The merge target changed before the prepared commit was applied.",
                 ));
             }
-            // The read-only preview deliberately left cached index stat data untouched. An
-            // explicit merge may refresh it; Git refuses dirty entries without discarding them.
-            git.run(&target.root, args(&["update-index", "--refresh"]), 8192)
-                .await?;
+            // read-tree -u -m overwrites ignored files on current Git. Native fast-forward
+            // checkout exposes the required no-overwrite-ignore protection and uses an
+            // expected-old ref update. Our two-parent commit already contains the reviewed tree.
             git.run(
                 &target.root,
-                args(&["read-tree", "-u", "-m", old, &commit]),
+                args(&[
+                    "-c",
+                    &format!("branch.{branch}.mergeOptions="),
+                    "-c",
+                    "submodule.recurse=false",
+                    "-c",
+                    "maintenance.auto=false",
+                    "-c",
+                    "gc.auto=0",
+                    "merge",
+                    "--ff-only",
+                    "--no-overwrite-ignore",
+                    "--no-autostash",
+                    "--no-squash",
+                    "--commit",
+                    "--no-edit",
+                    "--no-stat",
+                    "--no-progress",
+                    &commit,
+                ]),
                 8192,
             )
             .await?;
-            // Git's ref transaction also locks HEAD when this branch is checked out. Release
-            // our checkout guard only after files are applied, then use an expected-old ref
-            // update. A concurrent ref change fails and leaves the recovery commit recorded.
-            drop(guard);
-            git.run(
-                &target.root,
-                vec![
-                    "update-ref".into(),
-                    format!("refs/heads/{branch}").into(),
-                    commit.clone().into(),
-                    old.into(),
-                ],
-                8192,
-            )
-            .await?;
+            verify_merge_result(git, &target.root, branch, &commit).await?;
             Ok::<_, GitError>(())
         }
         .await;
@@ -428,26 +427,51 @@ impl GitWorkspaces {
     }
 }
 
-struct HeadLock {
-    path: PathBuf,
-    _file: std::fs::File,
-}
-impl HeadLock {
-    fn acquire(path: PathBuf) -> Result<Self> {
-        let file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .map_err(|_| {
-                invalid("Another Git operation holds the branch lock. Wait for it to finish.")
-            })?;
-        Ok(Self { path, _file: file })
+pub(super) async fn verify_merge_result(
+    git: &git::Git,
+    root: &Path,
+    branch: &str,
+    commit: &str,
+) -> Result<()> {
+    let current = inspect(git, root).await?;
+    if current.view.branch.as_deref() != Some(branch)
+        || current.view.head.as_deref() != Some(commit)
+        || !current.view.files.is_empty()
+        || !current.view.blockers.is_empty()
+    {
+        return Err(invalid(
+            "The target changed while the merge completed. Review the retained before/prepared refs; no automatic reset was performed.",
+        ));
     }
-}
-impl Drop for HeadLock {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+    for command in [
+        vec![
+            "diff",
+            "--cached",
+            "--quiet",
+            "--no-ext-diff",
+            "--no-textconv",
+            commit,
+            "--",
+        ],
+        vec!["diff", "--quiet", "--no-ext-diff", "--no-textconv", "--"],
+    ] {
+        let output = git.output(root, args(&command), 4096).await?;
+        if output.exit.as_ref().and_then(|exit| exit.code) != Some(0) {
+            return Err(invalid(
+                "The target index or files no longer match the prepared merge. Review its recovery refs.",
+            ));
+        }
     }
+    let settled = inspect(git, root).await?;
+    if settled.view.branch.as_deref() != Some(branch)
+        || settled.view.head.as_deref() != Some(commit)
+        || settled.fingerprint != current.fingerprint
+    {
+        return Err(invalid(
+            "The target changed during final merge verification. Review the retained recovery refs.",
+        ));
+    }
+    Ok(())
 }
 
 fn merge_output(bytes: &[u8], conflicted: bool) -> Result<(String, Vec<String>)> {
