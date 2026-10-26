@@ -433,6 +433,28 @@ impl Smoke<'_> {
     }
 
     async fn scenario(&mut self, scenario: Scenario) {
+        if scenario == Scenario::Permission {
+            match self.chat.lists().await {
+                Ok(lists)
+                    if lists.capabilities.is_some_and(|capabilities| {
+                        !capabilities.permissions
+                            || !capabilities.autonomy_levels.contains(&Autonomy::Ask)
+                    }) =>
+                {
+                    self.report.skip(
+                        scenario.name(),
+                        "The agent does not offer an enforceable Ask permission mode; no permission prompts were sent.",
+                    );
+                    return;
+                }
+                Err(error) => {
+                    self.report
+                        .fail(scenario.name(), format!("capabilities: {error}"));
+                    return;
+                }
+                _ => {}
+            }
+        }
         let autonomy = if scenario == Scenario::Permission {
             Autonomy::Ask
         } else {

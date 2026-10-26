@@ -24,8 +24,8 @@ use aura_drivers::testing::{
 use aura_process::testing::FakeSpawner;
 use aura_process::{LogFactory, Redactor};
 use aura_protocol::{
-    AuraEvent, Capabilities, EventBatch, PermissionOption, PermissionOptionKind, PermissionRequest,
-    PromptState, StopReason, ToolCall, ToolKind, ToolStatus,
+    AuraEvent, Autonomy, Capabilities, EventBatch, PermissionOption, PermissionOptionKind,
+    PermissionRequest, PromptState, StopReason, ToolCall, ToolKind, ToolStatus,
 };
 use common::Machine;
 
@@ -117,7 +117,11 @@ fn driver(second_turn: bool) -> (ScriptedDriver, ScriptHandle) {
             native_session_id: Some("native-session".into()),
             agent_name: None,
             agent_version: None,
-            capabilities: Capabilities::default(),
+            capabilities: Capabilities {
+                permissions: true,
+                autonomy_levels: vec![Autonomy::Ask, Autonomy::FullAuto],
+                ..Default::default()
+            },
             resumed: ResumeOutcome::New,
             spawn_id: "fake-spawn".into(),
             replay: None,
@@ -152,6 +156,48 @@ fn prompt_count(handle: &ScriptHandle) -> usize {
         .iter()
         .filter(|command| matches!(command, LoggedCommand::Prompt { .. }))
         .count()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn unsupported_permission_smoke_skips_without_changing_mode_or_prompting() {
+    let machine = Machine::new();
+    let (driver, handle) = ScriptedDriver::new(vec![
+        Step::Emit(DriverEvent::RunState { idle: true }),
+        Step::Emit(DriverEvent::Ready(ReadyInfo {
+            native_session_id: Some("native-no-permissions".into()),
+            agent_name: None,
+            agent_version: None,
+            capabilities: Capabilities {
+                autonomy_levels: vec![Autonomy::FullAuto],
+                ..Default::default()
+            },
+            resumed: ResumeOutcome::New,
+            spawn_id: "fake-spawn".into(),
+            replay: None,
+        })),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let headless = headless(&machine, driver).await;
+    let folder = machine.path("repo");
+    std::fs::create_dir(&folder).expect("folder");
+    let (out, captured) = Out::capture();
+    let result = smoke::run(&headless, &args(), &folder, TIMINGS, &out).await;
+    assert_eq!(
+        result.expect("smoke"),
+        Outcome::Passed,
+        "{}",
+        captured.text()
+    );
+    assert!(captured.text().contains("no permission prompts were sent"));
+    assert_eq!(prompt_count(&handle), 0);
+    assert!(
+        !handle
+            .commands()
+            .iter()
+            .any(|command| matches!(command, LoggedCommand::SetAutonomy { .. }))
+    );
+    assert!(headless.shutdown().await.saved);
 }
 
 struct QueueObserver(tokio::sync::mpsc::UnboundedSender<()>);

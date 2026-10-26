@@ -275,6 +275,11 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   native Pi's no-timeout semantics, with an end-to-end answer regression. These final source-audit
   fixes still need CI verification. The preceding settlement/compaction checkpoint `a87ef36` has
   passed Linux CI and Windows tests; Windows frontend smoke is still running.
+- The smoke runner now explicitly skips its permission scenario when the agent cannot enforce Ask,
+  before changing autonomy or sending prompts. This makes the capability limitation visible for
+  Pi and the remaining Full-auto-only integrations. A scripted regression verifies zero mode
+  changes and zero prompts for that skip; the existing permission tests now declare their actual
+  permissions/Ask support. Verification is pending in the next combined M1d CI run.
 
 ## Decisions and constraints
 
