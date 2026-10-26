@@ -137,14 +137,18 @@ async fn install_detail() {
     assert!(h.manager.agents(false).await[0].needs_download);
     let chat = h.chat_with("claude-acp").await;
     let sink = Sink::new("main");
-    h.manager
+    let attached = h
+        .manager
         .attach(&chat.id, sink.clone())
         .await
         .expect("attach");
     gate.until_waiting(1).await;
+    // Creating the chat started the download, so it can be under way before the view attaches:
+    // then the attach's snapshot carries the detail, otherwise a later frame does.
+    let in_snapshot = attached.snapshot.session.detail.as_deref() == Some(detail);
     let probe = sink.clone();
     eventually("the download detail shows", || {
-        details(&probe).iter().any(|shown| shown == detail)
+        in_snapshot || details(&probe).iter().any(|shown| shown == detail)
     })
     .await;
     assert_eq!(
