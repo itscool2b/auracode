@@ -209,7 +209,7 @@ mod tests {
     use aura_core::paths::DataRoot;
     use aura_core::store::OpenOutcome;
 
-    use crate::boot::{Booted, boot};
+    use crate::boot::{Booted, boot, boot_next};
 
     /// Generous: the machines that run these tests can be heavily loaded.
     const PATIENCE: Duration = Duration::from_secs(60);
@@ -408,7 +408,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         drop(booted);
-        let next = boot(Ok(root));
+        let next = boot_next(&root);
         assert_eq!(
             next.db.expect("db").outcome,
             OpenOutcome::Opened,
@@ -445,7 +445,7 @@ mod tests {
         bytes[start..start + 16].fill(0xA5);
         std::fs::write(&db, bytes).expect("damage a page");
 
-        let second = boot(Ok(root.clone()));
+        let second = boot_next(&root);
         assert_eq!(
             second.db.as_ref().expect("db").outcome,
             OpenOutcome::Opened,
@@ -473,7 +473,7 @@ mod tests {
         assert!(damaged, "the check found the damaged page");
         drop(second);
 
-        let third = boot(Ok(root));
+        let third = boot_next(&root);
         assert_eq!(third.fatal, None);
         assert!(
             matches!(
