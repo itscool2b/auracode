@@ -68,8 +68,8 @@ pub fn assert_golden(report: &ReplayReport, golden: &Path) {
     }
 }
 
-/// Where two goldens first differ, for the failure message.
-fn first_difference(stored: &Value, current: &Value) -> String {
+/// Where two goldens first differ, for the failure message (and `aura-cli replay`'s).
+pub fn first_difference(stored: &Value, current: &Value) -> String {
     for key in ["events", "replies"] {
         let empty = Vec::new();
         let old = stored.get(key).and_then(Value::as_array).unwrap_or(&empty);

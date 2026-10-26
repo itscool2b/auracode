@@ -26,7 +26,13 @@ export function Transcript({
   const scrollRef = useStickToBottom<HTMLDivElement>(state.transcript);
   const first = segments[0];
   return (
-    <div ref={scrollRef} className="chat-transcript" role="log" aria-label="Transcript">
+    <div
+      ref={scrollRef}
+      className="chat-transcript"
+      role="log"
+      aria-label="Transcript"
+      data-testid="transcript"
+    >
       <div className="chat-transcript-inner">
         {state.hasMore ? (
           <div className="ui-row">
@@ -34,6 +40,7 @@ export function Transcript({
               type="button"
               className="ui-button"
               data-kind="quiet"
+              data-testid="load-earlier"
               disabled={state.loadingEarlier}
               onClick={onLoadEarlier}
             >

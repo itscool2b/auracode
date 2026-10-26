@@ -1,0 +1,25 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    }
+  ],
+  "replies": [],
+  "exit": {
+    "type": "start_failed",
+    "data": {
+      "kind": "agent_exited",
+      "message": "The agent exited before it finished starting.",
+      "detail": "<TIME> [INFO] acp_adapter.entry: Loaded env from <HOME>/.hermes/.env\n<TIME> [INFO] acp_adapter.entry: Starting hermes-agent ACP adapter\n<TIME> [INFO] hermes_cli.plugins: Plugin 'browser-browser-use' registered browser provider: browser-use\n<TIME> [INFO] hermes_cli.plugins: Plugin 'browser-browserbase' registered browser provider: browserbase\n<TIME> [INFO] hermes_cli.plugins: Plugin 'browser-firecrawl' registered browser provider: firecrawl\n<TIME> [INFO] hermes_cli.plugins: Plugin 'default' registered delegation provider: default\n<TIME> [INFO] hermes_cli.plugins: Plugin 'deepinfra' registered image_gen provider: deepinfra\n<TIME> [INFO] hermes_cli.plugins: Plugin 'fal' registered image_gen provider: fal\n<TIME> [INFO] hermes_cli.plugins: Plugin 'krea' registered image_gen provider: krea\n<TIME> [INFO] hermes_cli.plugins: Plugin 'meta-ai-image-gen' registered image_gen provider: meta-ai\n<TIME> [INFO] hermes_cli.plugins: Plugin 'openai' registered image_gen provider: openai\n<TIME> [INFO] hermes_cli.plugins: Plugin 'openai-codex' registered image_gen provider: openai-codex\n<TIME> [INFO] hermes_cli.plugins: Plugin 'openrouter' registered image_gen provider: openrouter\n<TIME> [INFO] hermes_cli.plugins: Plugin 'openrouter' registered image_gen provider: nous\n<TIME> [INFO] hermes_cli.plugins: Plugin 'xai' registered image_gen provider: xai\n<TIME> [INFO] agent.credential_pool: credential pool: no available entries (all exhausted or empty)\n<TIME> [INFO] hermes_cli.plugins: Plugin 'deepinfra' registered video_gen provider: deepinfra\n<TIME> [INFO] hermes_cli.plugins: Plugin 'fal' registered video_gen provider: fal\n<TIME> [INFO] hermes_cli.plugins: Plugin 'openrouter' registered video_gen provider: openrouter\n<TIME> [INFO] hermes_cli.plugins: Plugin 'xai' registered video_gen provider: xai\n<TIME> [INFO] hermes_cli.plugins: Plugin 'web-brave-free' registered web provider: brave-free\n<TIME> [INFO] hermes_cli.plugins: Plugin 'web-ddgs' registered web provider: ddgs\n<TIME> [INFO] hermes_cli.plugins: Plugin 'web-exa' registered web provider: exa\n<TIME> [INFO] hermes_cli.plugins: Plugin 'web-firecrawl' registered web provider: firecrawl\n<TIME> [INFO] hermes_cli.plugins: Plugin 'web-keenable' registered web provider: keenable\n<TIME> [INFO] hermes_cli.plugins: Plugin 'web-openai-native' registered web provider: openai-native\n<TIME> [INFO] hermes_cli.plugins: Plugin 'web-parallel' registered web provider: parallel\n<TIME> [INFO] hermes_cli.plugins: Plugin 'web-perplexity' registered web provider: perplexity\n<TIME> [INFO] hermes_cli.plugins: Plugin 'web-searxng' registered web provider: searxng\n<TIME> [INFO] hermes_cli.plugins: Plugin 'web-tavily' registered web provider: tavily\n<TIME> [INFO] hermes_cli.plugins: Plugin 'web-xai' registered web provider: xai\n<TIME> [INFO] hermes_cli.plugin_capabilities: capability_check plugin=orca-status capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted\n<TIME> [INFO] hermes_cli.plugins: Plugin discovery complete: 63 found, 59 enabled\n"
+    }
+  }
+}

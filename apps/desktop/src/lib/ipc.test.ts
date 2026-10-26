@@ -145,12 +145,9 @@ describe("command wrappers through the generated bindings", () => {
   it("resolves with the command's value", async () => {
     const report: SmokeReport = {
       ok: true,
-      events_received: 1,
-      frames_received: 1,
-      seq_gaps: 0,
-      rendered_chars: 1,
-      fps_min: 60,
-      fps_avg: 60,
+      scenario: "chat",
+      stream: null,
+      checks: [{ name: "create-chat", ok: true, detail: "ready" }],
       errors: [],
     };
     const calls: string[] = [];

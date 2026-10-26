@@ -946,11 +946,12 @@ Retention runs at boot (background) and when a session ends.
 1. JSON keys, compared ASCII-lowercase with `_` and `-` removed. Credential keys: equal to or ending with one of
    `token`, `secret`, `password`, `passwd`, `apikey`, `authorization`, `cookie`, `credential`, `credentials`,
    `privatekey`, `sessionkey` (so `accessToken` and `client_secret` match; `inputTokens` and `apiKeySource` do not).
-   Identity keys: containing `email`, or equal to one of `account`, `oauthaccount`, `organization`,
+   Identity keys: containing `email`, or equal to one of `account`, `authstatus`, `oauthaccount`, `organization`,
    `organizationname`, `organizationuuid`, `orgid`, `orgname`, `accountuuid`, `accountid`, `userid`, `username`,
    `fullname`. Every string at or under such a key becomes `"<REDACTED>"`; numbers and booleans are kept. This covers
-   Claude's `initialize` `account` object and claude-acp's `_auth/status_update` (`authStatus.account.{email,
-   organization}`), and leaves model names (`displayName`, `name`) readable.
+   Claude's `initialize` `account` object and the adapters' `_auth/status_update` (`authStatus.account.{email,
+   organization}`, and `authStatus.label`, which names the user's plan, as the real-agent probes showed), and leaves
+   model names (`displayName`, `name`) readable.
 2. Every value of an `env` object, and `value` of `{ "name", "value" }` entries under `env` or `headers` arrays.
 3. Every remaining string, every `raw` and stderr line: email addresses (the spike's `mask_emails` rules, so
    `react@18.3.1` and `@scope/pkg` stay) to `<EMAIL>`; `sk-ant-[A-Za-z0-9_-]{10,}`, `sk-[A-Za-z0-9_-]{20,}`,
@@ -1381,9 +1382,11 @@ Initializing  initialize, deadline = launch.startup_timeout (60 s)
 Opening       resume = Some(id): agent advertises resume -> session/resume; else loadSession -> session/load;
                 else session/new with Fresh { "this agent can't continue earlier sessions" }
               resume or load reply:
-                -32002, -32601, -32602 -> session/new and Fresh { agent's message }, with the notice "Could not
-                  continue the earlier session (<message>); started a new one. The conversation above stays here, but
-                  the agent does not remember it."
+                -32002, -32601, -32602, or an error the dialect reads as not found (codex-acp: -32603 whose
+                  `data.details` says "no rollout found", its answer for a thread never prompted) -> session/new and
+                  Fresh { agent's message, or the dialect's reason }, with the notice "Could not continue the earlier
+                  session (<message>); started a new one. The conversation above stays here, but the agent does not
+                  remember it."
                 -32000 -> AuthRequired
                 any other error, or the open deadline -> StartFailed (AgentError or StartTimeout); the native id is
                   kept, so Retry tries to continue it again, and the card also offers Start fresh (chat_start fresh)
@@ -1591,6 +1594,9 @@ pub trait AcpDialect: Send + Sync + 'static {
     fn fallback_auth_commands(&self, _launch: &LaunchSpec, _env: &EnvMap) -> Vec<AuthCommand> { Vec::new() }
     /// A sentence added to a start failure whose stderr tail matches (Hermes on Windows, 3.2).
     fn start_failure_hint(&self, _stderr_tail: &str) -> Option<String> { None }
+    /// An error answer to a resume or load that says the session does not exist, beyond -32002, -32601 and
+    /// -32602: the reason the fallback's notice gives (5.3.2).
+    fn open_not_found(&self, _error: &RpcError) -> Option<String> { None }
     fn on_request(&self, _method: &str, _params: &serde_json::Value) -> DialectReply { DialectReply::NotMine }
     fn on_notification(&self, _method: &str, _params: &serde_json::Value) -> Vec<DriverEvent> { Vec::new() }
 }
@@ -1609,6 +1615,7 @@ as the build review's compile showed).
 | replay may hold unseen work | yes (its gateway outlives the viewer) | no | no | no |
 | auth commands | terminal method `hermes-setup` `["--setup"]` -> `hermes acp --setup` (the launch command plus the method's args) | terminal methods whose args start with `--cli` -> `[<user's claude>, rest]`, so `claude auth login --claudeai` and `--console` | none advertised as terminal -> fallback `[<user's codex>, "login"]` | launch command plus the method's args |
 | start failure hint | `windows_breakaway_unavailable` -> the 3.2 hint | none | none | none |
+| open not found | none | none | -32603 whose `data.details` holds "no rollout found" (a thread never prompted has no rollout), reason: the details | none |
 
 A terminal method's `env` (schema `AuthMethodTerminal.env`) is copied into `AuthCommand.env` and shown with the
 command.
@@ -1782,10 +1789,11 @@ The harness and its tests exist only with the `replay` feature: every `--workspa
 other `tests/**` file uses `aura_drivers::testing`, which only workspace runs and `replay` enable.
 
 Curation (`aura-cli fixture`): the log's redaction re-run, then literal `<HOME>`, `<USER>`, `<HOST>`, `<CWD>` (and
-Claude's project-dir spelling, as the spike's `Redactor::add_path`), native session ids to `<SESSION_n>`, ISO
-timestamps to `<TIME>`, `t` made relative; then `scan_clean` must return nothing. A log holding a capped record
-(3.8) cannot become a fixture: `curate` refuses it with the line and the bytes cut, and `Fixture::parse` refuses one
-found in a fixture. Fixtures live in `crates/aura-drivers/tests/fixtures/acp/<agent>/<scenario>.jsonl` with
+Claude's project-dir spelling, as the spike's `Redactor::add_path`), an npm adapter's install folder (the spawn note's
+`cwd` when it is not the chat folder, under whatever data root the run used) to `<ADAPTER>`, native session ids to
+`<SESSION_n>`, ISO timestamps to `<TIME>`, `t` made relative; then `scan_clean` must return nothing. A log holding a
+capped record (3.8) cannot become a fixture: `curate` refuses it with the line and the bytes cut, and `Fixture::parse`
+refuses one found in a fixture. Fixtures live in `crates/aura-drivers/tests/fixtures/acp/<agent>/<scenario>.jsonl` with
 `<scenario>.events.json` beside them, and a test scans every committed fixture for `@` email shapes, token prefixes,
 `/Users/`, `/home/`, `C:\Users\`.
 
@@ -2955,9 +2963,13 @@ with the floor in its reason (P50).
 
 ### 10.4 What stays manual
 
-- The bare UI on macOS with each agent and the demo agent: every block type, permission card, question card (demo
-  `/ask`), crash card (`kill -9` on the agent's pid), auth card, queue, quit and reopen (history, the interrupted turn,
-  Resume), quit with idle agents (no `-wal` file left), Ctrl+C under `pnpm dev` (the quit flow runs), the still
+- The bare UI with the demo agent is no longer manual: the chat smoke run (`.github/scripts/run-smoke.sh chat`, in CI
+  on Linux and Windows, and on a Mac by hand) drives every block type, the permission cards, the question card (demo
+  `/ask`), the error, crash (demo `/crash`) and auth cards, the queue held or sent as decision 11 says, Stop and Force
+  stop, quit through the quit flow and reopen (history, the interrupted turn, Resume), and checks that no `-wal` file
+  is left, reading the screens through their `data-testid` and `data-test-*` attributes. What stays manual: the bare
+  UI on macOS with each real agent (`AURACODE_SMOKE_AGENT=<agent id>` runs one minimal chat with it, locally only),
+  the crash card from `kill -9` on a real agent's pid, Ctrl+C under `pnpm dev` (the quit flow runs), the still
   working hint, the storage banner and the quit question while paused (optional: a small disk image as
   `AURACODE_DATA_DIR`).
 - macOS privacy: a fresh build (its ad-hoc signature is new, so no grant applies) and a chat in a `~/Desktop` folder:
@@ -2981,6 +2993,42 @@ with the floor in its reason (P50).
 | Hermes' replay lets the whitespace-free reply hash match what auracode stored | probe 7 shows it; a false notice only adds a duplicate of the latest reply |
 | the adapter download fits in 10 minutes, Hermes' gateway start in 60 s | both are catalog or constant values; Retry works |
 | `preserve_order` breaks no existing test | P0 runs the whole suite right after enabling it |
+
+
+### 10.6 Results (2026-10-25)
+
+Run on macOS against Hermes Agent 0.22.5 (its free tier, `nous/welcome`), Claude Code 2.1.310 through claude-agent-acp
+0.95.0 (Haiku 5.5, effort low) and codex-cli 0.164.0 through codex-acp 2.2.2 (gpt-6-luna, effort low). Every run
+checked afterwards that Claude's daemon and Hermes' gateway were alive and unchanged and that nothing of auracode's
+was left running.
+
+| Agent | Free probes | Paid scenarios | Chat UI (`AURACODE_SMOKE_AGENT`) |
+|---|---|---|---|
+| hermes | pass; `probe-*` fixtures | 18 of 18 checks | pass |
+| claude-acp | pass; `probe-*` fixtures | 20 of 20, including the model and effort switches | pass |
+| codex-acp | pass; `probe-*` fixtures | 19 of 19; after-interrupt informational (below) | pass |
+
+Bugs the runs found in auracode, each fixed with a test:
+
+- A prompt went out while a mode change was still on its way, so it ran under the agent's previous mode: after a
+  switch from Full auto to Ask, Hermes made the next edit without asking. A prompt now waits for the mode and option
+  changes queued before it (5.2); an interrupt or a close ends a waiting prompt once.
+- Hermes refuses a mode change that reaches its gateway before the previous one landed (-32603 with `details:
+  "stale_generation"`). The driver sends it again after 250, 500 and 750 ms (`AcpDialect::mode_change_retryable`),
+  instead of falling back as if the mode did not exist. Fixture `hermes/mode-retry-stale`.
+
+What the agents do that the scenarios had assumed otherwise:
+
+- Hermes' Ask (`default`) asks before edits made with its file tools; shell commands go to Hermes' own approval
+  model (an auxiliary model call), which runs harmless ones such as `touch` without asking. Its permission scenario
+  asks for `write_file`, and its Ask carries a note saying so.
+- Codex's Ask (codex-acp's `read-only`, approvals `on-request`) asks only when the model requests more access;
+  gpt-6-luna sometimes just said the folder was read-only. Its permission scenario names the command and asks it to
+  request approval, and its Ask carries a note. A deterministic Ask waits for M1c's app-server driver, which sets the
+  approval policy itself.
+- After an interrupt and a restart, Codex's resumed thread holds every completed turn but not the interrupted
+  answer, so after-interrupt is informational for codex-acp. auracode keeps the partial answer (scenario 3).
+- Claude Code asked before a shell command in Ask, as the scenario assumed; its usage arrives per turn.
 
 ---
 

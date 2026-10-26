@@ -55,6 +55,7 @@ export function NewChat({
     <form
       className="chat-new-form"
       aria-label="New chat"
+      data-testid="new-chat"
       onSubmit={(event) => {
         event.preventDefault();
         void draft.create().then((chat) => {
@@ -69,6 +70,7 @@ export function NewChat({
           <select
             id={agentId}
             className="ui-select"
+            data-testid="new-chat-agent"
             value={state.agentId ?? ""}
             onChange={(event) => draft.chooseAgent(event.currentTarget.value)}
           >
@@ -87,6 +89,7 @@ export function NewChat({
           <button
             type="button"
             className="ui-button"
+            data-testid="new-chat-refresh"
             disabled={refreshing}
             onClick={onRefreshAgents}
           >
@@ -115,20 +118,33 @@ export function NewChat({
           <button
             type="button"
             className="ui-button"
+            data-testid="new-chat-pick-folder"
             disabled={state.picking}
             onClick={() => void draft.chooseFolder()}
           >
             {state.picking ? "Choosing…" : "Choose folder"}
           </button>
-          <span className="ui-mono">{state.folder ?? "No folder chosen"}</span>
+          <span
+            className="ui-mono"
+            data-testid="new-chat-folder"
+            data-test-folder={state.folder ?? ""}
+          >
+            {state.folder ?? "No folder chosen"}
+          </span>
         </div>
       </div>
       <div className="ui-row">
-        <button type="submit" className="ui-button" data-kind="primary" disabled={!canCreate}>
+        <button
+          type="submit"
+          className="ui-button"
+          data-kind="primary"
+          data-testid="new-chat-create"
+          disabled={!canCreate}
+        >
           {state.creating ? "Creating…" : "Create"}
         </button>
         {state.error !== null ? (
-          <span role="alert" className="ui-error">
+          <span role="alert" className="ui-error" data-testid="new-chat-error">
             {state.error}
           </span>
         ) : null}

@@ -27,11 +27,11 @@ Done:
   (`aura-protocol`); the data folder, device identity, profiles, and per-profile database (`aura-core`);
   frame batching and the scripted mock agent (`aura-drivers`); the design system and WebGL orb renderer
   (`packages/ui`); the desktop shell with its glass window, typed commands and channels, and a demo stream;
-  the CI and bundle workflows (written, but they have not run yet: see below).
+  the CI and bundle workflows, which run on Linux and Windows (see [Checks](#checks)).
 - **Spikes.** [Claude Code's control protocol](docs/spikes/claude-control.md) is decided.
-  [Windows spawning](docs/spikes/windows-spawn.md) and
-  [the Windows titlebar](docs/spikes/windows-titlebar.md) are designed and implemented, and wait for
-  their first Windows run.
+  [Windows spawning](docs/spikes/windows-spawn.md) passes its automated tests on Windows and Linux in
+  CI; its manual checklist and [the Windows titlebar](docs/spikes/windows-titlebar.md) wait for a
+  Windows PC.
   [Render and power](docs/spikes/render-power.md) has measured the hidden window and the page in WebKit;
   the visible window and Windows remain.
 
@@ -51,6 +51,15 @@ Pending, each waiting on the repository owner:
   PC.
 - **An app screenshot.** It needs an unlocked screen: a locked Mac hides every window.
 
+### M1a: sessions, processes, the ACP client and the bare chat UI
+
+Built on the `m1a-core-acp` branch from [its spec](docs/design/m1a.md): agent processes and their
+environment, the session manager and its store, the ACP driver, the chat commands and channels, a bare
+chat UI styled through tokens, and `aura-cli`. Verified against real agents on this Mac (spec 10.6):
+Hermes, Claude Code through claude-agent-acp and Codex through codex-acp each pass the free probes, the
+six paid scenarios and a chat through the UI, with recorded fixtures replayed in CI. The visual
+language the UI moves to next is [Orbit](docs/design/visual-language.md), prototyped in the Design Lab.
+
 ## Layout
 
 ```
@@ -59,6 +68,7 @@ crates/aura-process/    agent processes: spawning, shutdown, leftovers, the agen
 crates/aura-agents/     the agent catalog, detection, the one-time npm adapter install, launch specs
 crates/aura-core/       device identity, data folder, profiles, the per-profile SQLite store, chat sessions
 crates/aura-drivers/    the driver contract, frame batching, the scripted mock agent; the ACP driver (M1a)
+crates/aura-cli/        dev CLI: probes and smoke-tests agents headlessly, records and replays fixtures
 apps/desktop/           Tauri v2 app: Rust shell in src-tauri/, React UI in src/
 packages/ui/            Aura design system: tokens, fonts, glass, motion, Orb, AuraField
 docs/                   plan and spike write-ups; spike code sits next to its write-up in docs/spikes/,
@@ -70,7 +80,6 @@ docs/                   plan and spike write-ups; spike code sits next to its wr
 Planned, not created yet:
 
 ```
-crates/aura-cli/        M1          dev CLI: detect and smoke-test agents, record and replay fixtures
 crates/aura-sync/       M6, M7, M9  API client, merge engines, end-to-end encryption
 crates/aura-config/     M8          per-agent config adapters for the Config Library
 apps/web/               M6          auracode.si (React Router 7 on Cloudflare Workers)
@@ -125,10 +134,30 @@ App data lives in a folder named `si.auracode.desktop` inside the local (never r
 
 `AURACODE_DATA_DIR` moves it anywhere else (see [Environment switches](#environment-switches)).
 
+### aura-cli
+
+`aura-cli` runs agents without the app, through the same session manager, on a temporary profile
+with a fresh temporary git repository as the chat folder (M1a spec 9.5 and 10):
+
+```sh
+cargo run -p aura-cli -- agents                               # the env and each agent
+cargo run -p aura-cli -- probe hermes                         # free probe steps, no prompt
+cargo run -p aura-cli -- smoke hermes --scenario all --spend  # paid scenarios
+cargo run -p aura-cli -- fixture <log> --scenario basic --out <file>
+cargo run -p aura-cli -- replay <fixture>                     # against its golden; --update writes it
+```
+
+A probe or smoke run keeps its folder (protocol logs, database, chat folder) and ends with the
+`aura-cli fixture` command for each log it left. Its agent processes register in the real data
+folder's `run/`, so the app's next start cleans up after a crashed run, and it shares the app's
+downloaded adapters. `--data-dir <dir>` runs on that data folder's own profile instead, and is refused
+while the app runs on it. `aura-cli help` lists every option; `RUST_LOG` shows its logs on stderr
+(default: warnings only).
+
 ### Checks
 
-GitHub Actions cannot run for this account yet (see [M0](#m0-scaffold-and-spikes)), so for now these
-checks run locally on a Mac, and nothing runs them on Linux or Windows. From the repository root:
+CI runs these on Linux and Windows for every pull request and every push to a milestone branch, and adds
+macOS for `main` (see below). To run them locally, from the repository root:
 
 ```sh
 pnpm check                      # pnpm lint, pnpm typecheck, pnpm test (Vitest)
@@ -144,8 +173,10 @@ bash .github/scripts/lint-workflows.sh                              # action pin
 shellcheck -x .github/scripts/*.sh
 bash .github/scripts/test.sh                                        # the CI scripts' own tests
 
-# The smoke run: the app, with its frontend embedded, streams a demo turn, a cancelled turn, and a
-# stress burst through the real UI, then prints its result and exits.
+# The smoke runs: the app, with its frontend embedded, streams a demo turn, a cancelled turn, and a
+# stress burst through the real UI; then it drives the chat screens against the demo agent in two
+# launches on one data folder, quitting through the quit flow between them, and prints every
+# check. A second argument, stream or chat, runs one of the two.
 pnpm --filter @auracode/desktop tauri build --debug --no-bundle
 bash .github/scripts/run-smoke.sh target/debug/auracode
 ```
@@ -158,7 +189,7 @@ merge, since the pull request's runs cover them; during a merge conflict GitHub 
 workflow, so the pushes run CI themselves. Pushes to `main` and manual runs add macOS. A weekly run on Mondays repeats the rust
 job on Linux and clippy on Windows; macOS never runs on a schedule. Biome, the typecheck, Vitest,
 `cargo fmt`, the doc check, the CI script checks, and the claude-control unit tests run on Linux only,
-and the spawning spike and the smoke run skip macOS.
+and the spawning spike and the smoke runs skip macOS.
 `.github/workflows/build.yml` builds unsigned installers for pushes to `main`, nightly when nothing
 has built `main`'s newest commit yet (one nightly try per commit), on demand, and for milestone-branch
 pushes whose newest commit message contains `[bundle]` (Windows and Linux only).
@@ -190,8 +221,10 @@ For development and automation; the app reads them once at startup. On/off switc
 | `AURACODE_DATA_DIR` | Keeps all app data in this folder instead of the OS default, for example a throwaway folder to test a first launch. Blank values are ignored; a relative path is resolved against the current folder. |
 | `AURACODE_NO_GLASS` | Opaque window without the native glass (Liquid Glass, vibrancy, Mica): the baseline of the power spike. |
 | `AURACODE_STRESS` | Opens straight into the stress view. Comma-separated `orbs` (1 to 24), `rate` (1 to 5000 tokens/s), `aura` (1 or 0), and `seconds` (0 to 86400, 0 streams until the window closes); missing keys default to `orbs=6,rate=200,aura=1,seconds=0`, and `1` alone means all defaults. An invalid value is ignored and the app shows a notice. See [docs/spikes/render-power.md](docs/spikes/render-power.md). |
-| `AURACODE_SMOKE` | Runs the scripted smoke check through the real UI (a demo turn, a cancelled turn, a short stress burst) and prints `AURACODE_SMOKE_RESULT <json>` on stdout, or a failing result if the UI has not reported within 120 seconds. Takes precedence over `AURACODE_STRESS`. |
-| `AURACODE_SMOKE_EXIT` | With `AURACODE_SMOKE`, exits after the result: code 0 if the check passed, 1 otherwise. |
+| `AURACODE_SMOKE` | Runs a scripted smoke check through the real UI and prints `AURACODE_SMOKE_RESULT <json>` on stdout, or a failing result if the UI has not reported in time (120 seconds; 300 for `chat`, 900 with `AURACODE_SMOKE_AGENT`). `1` (or `stream`): a demo turn, a cancelled turn, a short stress burst. `chat`: the chat screens against the demo agent, every block, card and queue path, ending with the quit flow while a turn runs; `chat-reopen`: the same data folder started again, checking the stored history, the interrupted turn and Resume. Each chat check is in the result. `0`, `false`, `no` and `off` are off; any other value that names no check prints a failing result. Takes precedence over `AURACODE_STRESS`. Smoke runs keep running while the window is hidden or the screen is locked (macOS 14 and later). |
+| `AURACODE_SMOKE_EXIT` | With `AURACODE_SMOKE`, exits after the result, through the quit flow: code 0 if the check passed, 1 otherwise. |
+| `AURACODE_SMOKE_FOLDER` | With `AURACODE_SMOKE=chat` or `chat-reopen`, the chat's folder (an absolute path), which the folder picker answers without a dialog. Required for those. |
+| `AURACODE_SMOKE_AGENT` | With `AURACODE_SMOKE=chat`, one minimal chat with this agent (`hermes`, `claude-acp`, `codex-acp`) instead of the demo agent's run: under Ask it sends "Reply with exactly: ok" and passes when the reply is ok (`mock`, the demo agent, gets `/echo ok`). `run-smoke.sh` passes it on and then runs that one launch. A real agent spends your quota, so this is for local runs only: the app and `run-smoke.sh` refuse it while `CI` or `GITHUB_ACTIONS` is set. A first start may download the agent's adapter, hence the longer watchdog. |
 | `RUST_LOG` | Log filter for the Rust side, which logs to stderr. Default `info`. |
 
 For example `AURACODE_STRESS=orbs=24,rate=200 pnpm dev`. In PowerShell, run

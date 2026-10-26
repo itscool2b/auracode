@@ -17,7 +17,7 @@ pub enum AppErrorCode {
     TooManyStreams,
     /// The main window does not exist (it was closed, or creating it failed).
     WindowUnavailable,
-    /// A command that only works in smoke mode (`AURACODE_SMOKE=1`) was called outside it.
+    /// A command that only works in smoke mode (`AURACODE_SMOKE`) was called outside it.
     NotInSmokeMode,
     /// Startup could not determine a data folder at all, so there is nothing to show.
     DataDirUnknown,

@@ -767,6 +767,78 @@ async fn open_resume_variants() {
     ));
 }
 
+/// codex-acp answers the resume of a thread that has no rollout yet (Codex writes one at a
+/// thread's first turn, so every session never prompted) with -32603 "Internal error" and the
+/// reason in `data.details`, as the real-agent probe showed (spec 10.2 step 7). The codex-acp
+/// dialect reads that as not found: a new session, Fresh, and the notice with Codex's reason.
+#[tokio::test(start_paused = true)]
+async fn codex_resume_of_a_thread_without_a_rollout_starts_a_new_session() {
+    let no_rollout = |id: &Value, details: &str| {
+        json!({"jsonrpc": "2.0", "id": id, "error": {
+            "code": -32603, "message": "Internal error", "data": {"details": details}}})
+    };
+    let resume = |dialect: &str| {
+        let mut setup = setup(dialect);
+        setup.resume = Some("old-1".into());
+        setup
+    };
+    let mut harness = Harness::start(resume("codex-acp")).await;
+    let (id, _) = harness.request("initialize").await;
+    harness.reply(&id, init_result());
+    let (id, _) = harness.request("session/resume").await;
+    harness.send(no_rollout(&id, "no rollout found for thread id old-1"));
+    let (id, _) = harness.request("session/new").await;
+    harness.reply(&id, json!({"sessionId": "new-1"}));
+    let events = harness
+        .events_until(|event| matches!(event, DriverEvent::Ready(_)))
+        .await;
+    let info = ready_info(&events);
+    assert_eq!(info.native_session_id, "new-1");
+    assert_eq!(
+        info.resumed,
+        ResumeOutcome::Fresh {
+            reason: "no rollout found for thread id old-1".into()
+        }
+    );
+    assert!(
+        transcript(&events)
+            .iter()
+            .any(|(turn, event)| turn.is_none()
+                && matches!(event, AuraEvent::Notice { message, .. }
+            if message == &fresh_notice("no rollout found for thread id old-1")))
+    );
+
+    // Any other internal error from codex-acp still ends the start, the id kept for Retry.
+    let mut harness = Harness::start(resume("codex-acp")).await;
+    let (id, _) = harness.request("initialize").await;
+    harness.reply(&id, init_result());
+    let (id, _) = harness.request("session/resume").await;
+    harness.send(no_rollout(&id, "the app-server exited"));
+    let (_, exit) = harness.finish().await;
+    assert!(matches!(
+        exit,
+        DriverExit::StartFailed(DriverError {
+            kind: ErrorKind::AgentError,
+            ..
+        })
+    ));
+
+    // Another agent's -32603 is a failed start too, whatever its details say.
+    let mut harness = Harness::start(resume("generic")).await;
+    let (id, _) = harness.request("initialize").await;
+    harness.reply(&id, init_result());
+    let (id, _) = harness.request("session/resume").await;
+    harness.send(no_rollout(&id, "no rollout found for thread id old-1"));
+    let (_, exit) = harness.finish().await;
+    assert!(matches!(
+        exit,
+        DriverExit::StartFailed(DriverError {
+            kind: ErrorKind::AgentError,
+            ..
+        })
+    ));
+}
+
 #[tokio::test(start_paused = true)]
 async fn the_open_deadline_resets_on_every_update_up_to_the_ceiling() {
     let (mut harness, _, id) = open_resume(init_result()).await;
@@ -1149,7 +1221,7 @@ async fn set_autonomy_replies_with_the_state_and_a_hand_picked_mode_turns_auto_a
             requested: Autonomy::Ask,
             native_mode: Some("default".into()),
             auto_answer: AutoAnswer::Never,
-            note: None
+            note: Some(dialect::HERMES_ASK_NOTE.into())
         }
     );
 
@@ -1173,12 +1245,16 @@ async fn set_autonomy_replies_with_the_state_and_a_hand_picked_mode_turns_auto_a
             note: Some("You picked the Accept Edits mode by hand, so auracode asks before every action. Choose an autonomy level to hand control back.".into()),
         }]
     );
-    // Back to the candidate's mode: restored.
+    // Back to the candidate's mode: restored, with the candidate's own note instead of the hand
+    // pick's.
     harness.update(json!({"sessionUpdate": "current_mode_update", "currentModeId": "default"}));
     let events = harness
         .events_until(|event| matches!(event, DriverEvent::Autonomy(_)))
         .await;
-    assert_eq!(autonomy_of(&events)[0].note, None);
+    assert_eq!(
+        autonomy_of(&events)[0].note.as_deref(),
+        Some(dialect::HERMES_ASK_NOTE)
+    );
 }
 
 // ---- options -----------------------------------------------------------------------------------
@@ -1609,7 +1685,7 @@ async fn a_parked_mode_change_that_fails_leaves_the_state_of_the_mode_hermes_kep
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_parked_mode_change_waits_for_a_turn_that_began_before_it_could_go_out() {
+async fn a_prompt_waits_for_the_changes_queued_before_it() {
     let mut harness = ready_hermes_full_auto().await;
     harness.prompt("T1", "one");
     let (first, _) = harness.request("session/prompt").await;
@@ -1623,17 +1699,38 @@ async fn a_parked_mode_change_waits_for_a_turn_that_began_before_it_could_go_out
     let (set_model, _) = harness.request("session/set_model").await;
     harness.reply(&first, json!({"stopReason": "end_turn"}));
     harness.events_until(is_turn_ended).await;
-    // The next queued prompt starts before the model change is answered.
+    // The next prompt waits for both changes: sent now, it would run under the previous mode
+    // (recorded with Hermes 0.22.5, which also refused the mode change that raced it).
     harness.prompt("T2", "two");
-    let (second, _) = harness.request("session/prompt").await;
-    harness.reply(&set_model, json!({}));
-    assert_eq!(model.await.expect("answered"), Ok(()));
-    // The parked mode change waits again: Hermes refuses mode changes mid-turn.
     tokio::time::sleep(Duration::from_millis(10)).await;
     harness.no_line();
-    harness.reply(&second, json!({"stopReason": "end_turn"}));
-    let (_, params) = harness.request("session/set_mode").await;
+    harness.reply(&set_model, json!({}));
+    assert_eq!(model.await.expect("answered"), Ok(()));
+    let (set_mode, params) = harness.request("session/set_mode").await;
     assert_eq!(params["modeId"], "default");
+    harness.no_line();
+    harness.reply(&set_mode, json!({}));
+    let (_, params) = harness.request("session/prompt").await;
+    assert_eq!(params["prompt"][0]["text"], "two");
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_interrupted_waiting_prompt_ends_cancelled_and_never_goes_out() {
+    let mut harness = ready_hermes_full_auto().await;
+    let mode = set_option(&harness, "mode", "default");
+    let (set_mode, _) = harness.request("session/set_mode").await;
+    harness.prompt("T", "work");
+    harness.command(DriverCommand::Interrupt);
+    let events = harness.events_until(is_turn_ended).await;
+    assert!(events.iter().any(|event| matches!(
+        event,
+        DriverEvent::TurnEnded { turn_id, stop_reason: StopReason::Cancelled, error: None, .. }
+            if turn_id == "T"
+    )));
+    harness.reply(&set_mode, json!({}));
+    assert_eq!(mode.await.expect("answered"), Ok(()));
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    harness.no_line();
 }
 
 #[tokio::test(start_paused = true)]
@@ -1787,7 +1884,12 @@ async fn set_autonomy_takes_effect_at_once_and_its_mode_change_follows_in_order(
     // Lowering to Ask: the policy changes now, in the reply; the mode change waits its turn.
     assert_eq!(
         answered_now(set_autonomy(&harness, Autonomy::Ask)).await,
-        Ok(state(Autonomy::Ask, "default", AutoAnswer::Never, None))
+        Ok(state(
+            Autonomy::Ask,
+            "default",
+            AutoAnswer::Never,
+            Some(dialect::HERMES_ASK_NOTE.into())
+        ))
     );
     harness.no_line();
     harness.reply(&set_model, json!({}));
@@ -1909,7 +2011,12 @@ async fn a_set_autonomy_nobody_waits_for_is_announced() {
     let (_, announced) = next_autonomy(&mut harness).await;
     assert_eq!(
         announced,
-        state(Autonomy::Ask, "default", AutoAnswer::Never, None)
+        state(
+            Autonomy::Ask,
+            "default",
+            AutoAnswer::Never,
+            Some(dialect::HERMES_ASK_NOTE.into())
+        )
     );
 }
 

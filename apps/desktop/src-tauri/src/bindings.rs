@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use specta_typescript::Typescript;
 
-use crate::commands;
+use crate::{commands, smoke};
 
 /// Where the bindings live: `apps/desktop/src/bindings.ts`.
 pub const BINDINGS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../src/bindings.ts");
@@ -61,6 +61,11 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         // aura-protocol's timestamps (`Millis`) are i64 Unix milliseconds and its token counts,
         // byte counts and offsets are u64, all sent by serde_json as plain JSON numbers and exact
         // in a JS number until 2^53. Typing them as `bigint` would not match what arrives.
+        // The checks each chat smoke scenario must report: the UI names them from these, and the
+        // shell holds its report to the same lists (`smoke::finalize`).
+        .constant("SMOKE_CHAT_CHECKS", smoke::CHAT_CHECKS)
+        .constant("SMOKE_CHAT_REOPEN_CHECKS", smoke::CHAT_REOPEN_CHECKS)
+        .constant("SMOKE_AGENT_CHECKS", smoke::AGENT_CHECKS)
         .dangerously_cast_bigints_to_number()
         // One TypeScript type per Rust type. With serde phases on, tauri-specta treats a `Channel`
         // argument as input and types the frames with the deserialize shape (`EventBatch_Deserialize`,
@@ -467,6 +472,10 @@ mod tests {
             "GlassEffect",
             "LaunchMode",
             "SmokeReport",
+            "SmokeScenario",
+            "SmokePlan",
+            "SmokeCheck",
+            "StreamMeasures",
             "StressConfig",
             "AgentEntry",
             "Availability",
@@ -489,6 +498,16 @@ mod tests {
         ] {
             assert!(
                 first.contains(&format!("export type {name} =")),
+                "{name} is missing"
+            );
+        }
+        for name in [
+            "SMOKE_CHAT_CHECKS",
+            "SMOKE_CHAT_REOPEN_CHECKS",
+            "SMOKE_AGENT_CHECKS",
+        ] {
+            assert!(
+                first.contains(&format!("export const {name} = [")),
                 "{name} is missing"
             );
         }

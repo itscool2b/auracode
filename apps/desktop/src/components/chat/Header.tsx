@@ -44,7 +44,7 @@ export function Header({
   const context = contextLabel(state.usage);
   const cost = costLabel(state.usage);
   return (
-    <header className="chat-header">
+    <header className="chat-header" data-testid="chat-header">
       <div className="chat-header-who">
         <span className="chat-header-agent" title={ready?.path}>
           {name}
@@ -59,12 +59,18 @@ export function Header({
           </span>
         ) : null}
       </div>
-      <span className="chat-status" data-status={status} aria-live="polite">
+      <span
+        className="chat-status"
+        data-status={status}
+        data-testid="chat-status"
+        data-test-status={status}
+        aria-live="polite"
+      >
         {statusWord(status)}
         {session?.detail ? <span className="ui-muted"> · {session.detail}</span> : null}
       </span>
       {context !== null || cost !== null ? (
-        <span className="ui-muted">
+        <span className="ui-muted" data-testid="chat-usage">
           {[context, cost].filter((part) => part !== null).join(" · ")}
         </span>
       ) : null}
@@ -73,6 +79,7 @@ export function Header({
           <button
             type="button"
             className="ui-button"
+            data-testid="chat-stop-session"
             onClick={onStop}
             disabled={status === "stopping"}
           >
@@ -84,23 +91,36 @@ export function Header({
               type="button"
               className="ui-button"
               data-kind="primary"
+              data-testid="chat-start"
+              data-test-resume={String(resumable)}
               onClick={() => onStart(false)}
             >
               {resumable ? "Resume session" : "Start session"}
             </button>
             {resumable ? (
-              <button type="button" className="ui-button" onClick={() => onStart(true)}>
+              <button
+                type="button"
+                className="ui-button"
+                data-testid="chat-start-fresh"
+                onClick={() => onStart(true)}
+              >
                 Start fresh
               </button>
             ) : null}
           </>
         )}
-        <button type="button" className="ui-button" data-kind="quiet" onClick={onShowLog}>
+        <button
+          type="button"
+          className="ui-button"
+          data-kind="quiet"
+          data-testid="chat-show-log"
+          onClick={onShowLog}
+        >
           Show log
         </button>
       </div>
       {state.actionError !== null ? (
-        <span role="alert" className="ui-error">
+        <span role="alert" className="ui-error" data-testid="chat-action-error">
           {state.actionError}
         </span>
       ) : null}

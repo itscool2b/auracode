@@ -16,7 +16,7 @@ const INFO: AppInfo = {
   profile: null,
   db: null,
   glass: "liquid_glass",
-  launch: { type: "smoke" },
+  launch: { type: "smoke", plan: { scenario: "stream", agent_id: null, folder: null } },
   notices: [],
   recovery_notice: null,
   fatal: null,
@@ -158,11 +158,14 @@ describe("runSmoke", () => {
     const report = await runSmoke(INFO, hooksFor(store));
     expect(report.errors).toEqual([]);
     expect(report.ok).toBe(true);
-    expect(report.seq_gaps).toBe(0);
-    expect(report.events_received).toBeGreaterThan(10);
-    expect(report.frames_received).toBe(report.events_received);
-    expect(report.rendered_chars).toBeGreaterThan(0);
-    expect(report.fps_avg).toBeCloseTo(60, 0);
+    expect(report.scenario).toBe("stream");
+    expect(report.checks).toEqual([]);
+    const stream = report.stream;
+    expect(stream?.seq_gaps).toBe(0);
+    expect(stream?.events_received).toBeGreaterThan(10);
+    expect(stream?.frames_received).toBe(stream?.events_received);
+    expect(stream?.rendered_chars).toBeGreaterThan(0);
+    expect(stream?.fps_avg).toBeCloseTo(60, 0);
   });
 
   it("fails when startup failed, without streaming", async () => {
@@ -182,7 +185,7 @@ describe("runSmoke", () => {
     shell.gapAt = 3;
     const report = await runSmoke(INFO, hooksFor(new StreamStore(shell)));
     expect(report.ok).toBe(false);
-    expect(report.seq_gaps).toBeGreaterThan(0);
+    expect(report.stream?.seq_gaps).toBeGreaterThan(0);
   });
 
   it("fails when the answer does not reach the DOM", async () => {
