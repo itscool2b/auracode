@@ -654,4 +654,6 @@ fn failure(status: u16, code: Option<&str>, retry: u32) -> ApiError {
 }
 
 #[cfg(test)]
+mod compiled_worker;
+#[cfg(test)]
 mod tests;

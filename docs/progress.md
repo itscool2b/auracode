@@ -2361,3 +2361,17 @@ account deletion/reset, GitHub publication or production data mutation occurred.
 - Account parent tombstones use existing encrypted metadata capture. Shared dispatch/writer admission defers incoming removals across startup, active turns, background work and pending steering. Once committed, a workspace change notification holds queued prompts and stops idle harnesses; cached actors cannot send, restart, continue or dispatch until restoration. Deferred metadata is retried by ordinary sync work, without requiring a new remote edit.
 - Core all-target check and Clippy with account-sync, rustfmt, instruction parity, and Chromium/WebKit review/cancel/stale-token/restore/parent-before-child/accessibility/narrow-layout fixtures passed locally. These fixtures test presentation with an injected API, not a native end-to-end removal. SQL/session/projection regressions compile, but Windows Application Control4551 blocked the core test executable before any tests ran. Native binding export was separately blocked before desktop source compilation by denied Tauri updater/dialog build scripts. Desktop typecheck currently reports missing generated removal bindings and their derived type errors. No security settings were changed, no real user item was removed, and no remote CI or native-agent invocation ran.
 - Integration gates pending: generate exact desktop bindings, rerun desktop typecheck, execute the core workspace_removal and parent_tombstone tests, include the new check-workspace-removal.mjs fixture in final browser gates, and exercise actual native removal/restore on an owned disposable profile on Windows/macOS. Public signing and packaged release qualification remain separate pending acceptance.
+
+### Rust client against the compiled cloud runtime
+
+A new isolated contract test runs the actual Rust HTTPS client in its test-only loopback mode against
+the compiled Rust Worker with disposable D1 and private R2 bindings. It registers synthetic Windows
+and macOS devices, initializes a real account key/recovery envelope, requires approval for the second
+device, unwraps that device's key, sends and decrypts records/blobs, checks retry/cursor/tombstone
+behavior and confirms immediate revocation. The server never receives the plaintext record or blob.
+The test performs no real sign-in, email, vendor credential access or deployed-cloud mutation.
+
+All fourteen compiled Worker runtime cases pass, including the new Rust-client contract. The client
+unit is ignored in ordinary Cargo runs and invoked explicitly by the existing Worker runtime gate,
+which supplies only its own 127.0.0.1 endpoint and deterministic disposable session fixtures. This
+adds cross-component evidence without changing the production client's HTTPS-only rule.

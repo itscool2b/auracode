@@ -1,5 +1,6 @@
 // Platform integration tests only. All backend behavior under test is the compiled Rust Worker.
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
@@ -62,6 +63,8 @@ before(async () => {
       },
     }),
     cf: false,
+    host: "127.0.0.1",
+    port: 0,
     telemetry: { enabled: false },
   });
   db = await runtime.getD1Database("DB");
@@ -104,6 +107,66 @@ const request = (path, method = "GET", body, headers = {}) =>
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+
+test("Rust client approves a second device and exchanges authenticated ciphertext with the compiled Worker", {
+  timeout: 660_000,
+}, async () => {
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO users(id,email_key,email,created_at) VALUES('rust-client-account','rust-client-key','synthetic-client@example.invalid',?)",
+      )
+      .bind(now),
+    ...[31, 32].map((value) =>
+      db
+        .prepare(
+          "INSERT INTO sessions(token_hash,user_id,client_kind,csrf_hash,created_at,expires_at) VALUES(?,'rust-client-account','desktop','synthetic-csrf',?,?)",
+        )
+        .bind(hash(Buffer.alloc(32, value).toString("base64url")), now, now + 3600),
+    ),
+  ]);
+  const origin = await runtime.ready;
+  assert.equal(origin.hostname, "127.0.0.1");
+  await new Promise((resolve, reject) => {
+    const child = spawn(
+      "cargo",
+      [
+        "test",
+        "-p",
+        "aura-sync",
+        "--lib",
+        "api::compiled_worker::compiled_worker_roundtrip",
+        "--locked",
+        "--",
+        "--ignored",
+        "--exact",
+      ],
+      {
+        cwd: fileURLToPath(new URL("../../", root)),
+        env: { ...process.env, AURACODE_COMPILED_WORKER_URL: origin.href },
+        windowsHide: true,
+        timeout: 600_000,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let output = "";
+    for (const stream of [child.stdout, child.stderr])
+      stream.on("data", (chunk) => {
+        output = (output + chunk).slice(-12_000);
+      });
+    child.on("error", reject);
+    child.on("exit", (code, signal) =>
+      code === 0
+        ? resolve()
+        : reject(new Error(`Rust client contract failed (${code ?? signal}):\n${output}`)),
+    );
+  });
+  const rows = await db
+    .prepare("SELECT ciphertext FROM sync_changes WHERE user_id='rust-client-account'")
+    .all();
+  assert.equal(rows.results.length, 2);
+  assert.equal(JSON.stringify(rows.results).includes("A synthetic shared project"), false);
+});
 
 test("lost-key reset consumes a fresh review once and preserves uploads after a lost response", async () => {
   const fresh = Buffer.alloc(32, 22).toString("base64url");
