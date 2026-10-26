@@ -1,10 +1,11 @@
 import { OrbitMark } from "@auracode/ui/orbit";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { ToolContent, ToolLocation, Truncation } from "../../bindings";
 import type { BlobState } from "../../lib/chat/chatStore";
 import type { ToolDisplayStatus, ToolItem } from "../../lib/chat/transcript";
 import { diffLines } from "../../lib/diff";
 import { formatCount } from "../../lib/format";
+import { useDisclosure } from "./DisclosureMemory";
 
 /** What a block needs to page a truncated output in through `chat_blob`. */
 export interface BlobProps {
@@ -33,10 +34,7 @@ export function ToolBlock({
   readonly agentId?: string;
 } & BlobProps) {
   const running = display === "pending" || display === "in_progress";
-  const [override, setOverride] = useState<{ status: ToolDisplayStatus; open: boolean } | null>(
-    null,
-  );
-  const expanded = override?.status === display ? override.open : running || display === "failed";
+  const [expanded, setExpanded] = useDisclosure(tool.key, display, running || display === "failed");
   return (
     <div
       className="chat-tool"
@@ -50,8 +48,7 @@ export function ToolBlock({
         data-testid="tool-output"
         open={expanded}
         onToggle={(event) => {
-          if (event.currentTarget.open !== expanded)
-            setOverride({ status: display, open: event.currentTarget.open });
+          if (event.currentTarget.open !== expanded) setExpanded(event.currentTarget.open);
         }}
       >
         <summary className="chat-tool-head">

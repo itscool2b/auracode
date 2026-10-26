@@ -134,6 +134,164 @@ async function inspect(engine, launcher) {
       }
     }
 
+    await page.goto(`${url}/?preview=history`);
+    await page.locator('[data-test-phase="live"]').waitFor();
+    await page.waitForTimeout(700);
+    assert.ok(
+      (await page.locator('[data-testid="segment"]').count()) < 30,
+      "large history renders every turn",
+    );
+    await page.locator('[data-test-turn-id="history-499"]').first().waitFor();
+    const transcript = page.getByTestId("transcript");
+    await transcript.hover();
+    await page.mouse.wheel(0, -1300);
+    await page.waitForTimeout(400);
+    const reading = await transcript.evaluate((node) => {
+      const top = node.getBoundingClientRect().top;
+      const segment = [...node.querySelectorAll("[data-row-key]")].find(
+        (entry) => entry.getBoundingClientRect().top >= top,
+      );
+      return {
+        id: segment?.getAttribute("data-row-key"),
+        y: segment?.getBoundingClientRect().top,
+      };
+    });
+    assert.ok(reading.id && reading.y !== undefined, "no reading anchor in large history");
+    await page.getByTestId("composer-input").fill("Append while I read earlier messages");
+    await page.getByTestId("composer-input").press("Enter");
+    await page.waitForTimeout(400);
+    const readingAfter = await page
+      .locator("[data-row-key]")
+      .evaluateAll(
+        (nodes, key) =>
+          nodes.find((node) => node.dataset.rowKey === key)?.getBoundingClientRect().y,
+        reading.id,
+      );
+    assert.ok(
+      readingAfter !== undefined && Math.abs(readingAfter - reading.y) < 3,
+      "a new turn moved the text being read",
+    );
+    await page.getByTestId("jump-latest").click();
+    await page
+      .getByText("This is a local UI preview. No prompt was sent to an agent.", { exact: true })
+      .waitFor();
+    assert.ok(
+      await transcript.evaluate((node) => document.activeElement === node),
+      "jump to latest lost keyboard focus",
+    );
+    await transcript.evaluate((node) => {
+      node.scrollTop = 0;
+    });
+    const firstLoaded = page.locator('[data-test-turn-id="history-250"][data-part="0"]');
+    await firstLoaded.waitFor();
+    const beforePrepend = await firstLoaded.boundingBox();
+    await page.getByTestId("load-earlier").click();
+    await page.getByTestId("load-earlier").waitFor({ state: "detached" });
+    await page.waitForTimeout(400);
+    const afterPrepend = await firstLoaded.boundingBox();
+    assert.ok(
+      beforePrepend && afterPrepend && Math.abs(beforePrepend.y - afterPrepend.y) < 3,
+      "loading earlier history moved the text being read",
+    );
+    await transcript.evaluate((node) => {
+      node.scrollTop = 0;
+    });
+    await page.locator('[data-test-turn-id="history-0"]').first().waitFor();
+    assert.ok(
+      (await page.locator('[data-testid="segment"]').count()) < 30,
+      "top of history lost its render bound",
+    );
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: resolve(out, `${engine}-large-history.png`) });
+    const focusedLink = page.locator('[data-test-turn-id="history-0"] a');
+    await focusedLink.focus();
+    await transcript.hover();
+    await page.mouse.wheel(0, 12000);
+    await page.waitForTimeout(400);
+    assert.ok(
+      await focusedLink.evaluate((node) => node === document.activeElement),
+      "virtual scrolling unmounted the keyboard focus",
+    );
+    await page.getByTestId("composer-input").focus();
+    await page.waitForTimeout(100);
+    assert.equal(
+      await page.locator('[data-test-turn-id="history-0"]').count(),
+      0,
+      "blurred overscan row remained mounted",
+    );
+
+    await page.goto(`${url}/?preview=history-question`);
+    await page.getByTestId("question-input").fill("Keep this unsent answer");
+    await page.getByTestId("composer-input").focus();
+    await page.getByTestId("transcript").evaluate((node) => {
+      node.scrollTop = 0;
+    });
+    await page.waitForTimeout(300);
+    assert.equal(
+      await page.getByTestId("question-input").inputValue(),
+      "Keep this unsent answer",
+      "offscreen question lost its draft",
+    );
+
+    await page.goto(`${url}/?preview=large-turn`);
+    await page.locator('[data-test-phase="live"]').waitFor();
+    await page.waitForTimeout(400);
+    assert.ok(
+      (await page.locator('[data-test-kind="tool"]').count()) < 35,
+      "one long turn mounted every tool",
+    );
+    const lastTool = page
+      .locator('[data-test-kind="tool"]')
+      .filter({ hasText: "Read file 999" })
+      .locator("details");
+    await lastTool.locator("summary").click();
+    await page.getByTestId("composer-input").focus();
+    await page.getByTestId("transcript").evaluate((node) => {
+      node.scrollTop = 0;
+    });
+    await page.waitForTimeout(300);
+    assert.equal(await lastTool.count(), 0, "old tool remained mounted");
+    const thought = page.locator(".chat-thought");
+    await thought.locator("summary").click();
+    await page.getByTestId("jump-latest").click();
+    await lastTool.waitFor();
+    assert.notEqual(
+      await lastTool.getAttribute("open"),
+      null,
+      "tool disclosure choice was forgotten",
+    );
+    await page.getByTestId("transcript").evaluate((node) => {
+      node.scrollTop = 0;
+    });
+    await thought.waitFor();
+    assert.notEqual(
+      await thought.getAttribute("open"),
+      null,
+      "thought disclosure choice was forgotten",
+    );
+
+    for (const mode of ["partial-history", "partial-message"]) {
+      await page.goto(`${url}/?preview=${mode}`);
+      await page.locator('[data-test-phase="live"]').waitFor();
+      await page.getByTestId("transcript").evaluate((node) => {
+        node.scrollTop = 0;
+      });
+      const partial = page.getByText(/^Paragraph 40:/).first();
+      await partial.waitFor();
+      await page.waitForTimeout(300);
+      const partialBefore = await partial.boundingBox();
+      await page.getByTestId("load-earlier").click();
+      await page.waitForTimeout(400);
+      const partialAfter = await page
+        .getByText(/^Paragraph 40:/)
+        .nth(mode === "partial-message" ? 1 : 0)
+        .boundingBox();
+      assert.ok(
+        partialBefore && partialAfter && Math.abs(partialBefore.y - partialAfter.y) < 3,
+        "loading the earlier part of a turn moved the text being read",
+      );
+    }
+
     await page.emulateMedia({ colorScheme: "dark", reducedMotion: "no-preference" });
     await page.goto(`${url}/?preview=thinking`);
     await page.locator('[data-test-phase="live"]').waitFor();
@@ -189,7 +347,7 @@ async function inspect(engine, launcher) {
     const failures = results.filter((result) => result.violations.length > 0);
     assert.deepEqual(failures, [], `${engine} accessibility violations`);
     console.log(
-      `${engine}: 14 theme/state accessibility scans, recorded transcripts, keyboard disclosure/send, no GPU, reduced/offscreen/hidden motion and minimum window passed`,
+      `${engine}: 14 accessibility scans, recorded transcripts, bounded 500-turn history and 1,000-tool turn, prepend/append anchors, draft/disclosure/focus retention, keyboard controls, motion and minimum window passed`,
     );
   } finally {
     await browser.close();

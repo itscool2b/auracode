@@ -1,10 +1,13 @@
 import { OrbitMark } from "@auracode/ui/orbit";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { chatActivity, hasLiveLine } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
 import { renderCache } from "../../lib/chat/transcript";
 import { useStickToBottom } from "../../lib/hooks";
+import type { StickToBottom } from "../../lib/stick";
+import { type DisclosureChoices, DisclosureMemory } from "./DisclosureMemory";
 import { type TurnActions, TurnView } from "./TurnView";
+import { type TranscriptRow, VirtualRows } from "./VirtualRows";
 
 /**
  * The chat's turns: "Load earlier" at the top while older pages remain, a marker when the oldest
@@ -24,8 +27,20 @@ export function Transcript({
   readonly onLoadEarlier: () => void;
 }) {
   const [render] = useState(renderCache);
+  const [disclosures] = useState<DisclosureChoices>(() => new Map());
   const segments = useMemo(() => render(state.transcript, live), [render, state.transcript, live]);
-  const scrollRef = useStickToBottom<HTMLDivElement>(state.transcript);
+  const scroller = useRef<HTMLDivElement>(null);
+  const stick = useRef<StickToBottom | null>(null);
+  const captureHistory = useRef<(() => void) | null>(null);
+  const [pinned, setPinned] = useState(true);
+  const followRef = useStickToBottom<HTMLDivElement>(state.transcript, stick, setPinned);
+  const scrollRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      scroller.current = node;
+      return followRef(node);
+    },
+    [followRef],
+  );
   const first = segments[0];
   const last = segments.at(-1);
   const status = state.session?.status ?? state.chat?.status ?? "stopped";
@@ -44,15 +59,11 @@ export function Transcript({
               ? "Thinking"
               : "Working"
             : null;
-  return (
-    <div
-      ref={scrollRef}
-      className="chat-transcript"
-      role="log"
-      aria-label="Transcript"
-      data-testid="transcript"
-    >
-      <div className="chat-transcript-inner">
+  const rows: TranscriptRow[] = [];
+  let leading: ReactNode = null;
+  if (state.hasMore || first?.partial || state.skipped > 0)
+    leading = (
+      <div className="chat-segment">
         {state.hasMore ? (
           <div className="ui-row">
             <button
@@ -61,7 +72,10 @@ export function Transcript({
               data-kind="quiet"
               data-testid="load-earlier"
               disabled={state.loadingEarlier}
-              onClick={onLoadEarlier}
+              onClick={() => {
+                captureHistory.current?.();
+                onLoadEarlier();
+              }}
             >
               {state.loadingEarlier ? "Loading…" : "Load earlier"}
             </button>
@@ -82,33 +96,104 @@ export function Transcript({
               : `${state.skipped} entries were written by a newer auracode and can't be shown.`}
           </p>
         ) : null}
-        {segments.map((segment) => (
+      </div>
+    );
+  for (const segment of segments) {
+    const active = status === "running" && segment === last && segment.end === null;
+    for (const [index, item] of segment.items.entries())
+      rows.push({
+        key: JSON.stringify([segment.key, item.key]),
+        estimate: item.kind === "message" ? 200 : item.kind === "user" ? 70 : 48,
+        retain:
+          (item.kind === "question" || item.kind === "permission") &&
+          item.resolution === null &&
+          actions.requests.get(item.request.request_id)?.gone !== true &&
+          (item.kind !== "question" || item.request.prompt.type !== "notify"),
+        content: (
           <TurnView
-            key={segment.key}
             segment={segment}
+            part={index}
             actions={actions}
             agentId={agentId}
             agentName={agentName}
-            active={status === "running" && segment === last && segment.end === null}
+            active={active}
           />
-        ))}
-        {pendingLabel ? (
-          <NowRow
-            key={`${last?.key ?? "new"}:${pendingLabel}`}
+        ),
+      });
+    if (segment.end !== null || (segment.plan?.length ?? 0) > 0)
+      rows.push({
+        key: JSON.stringify([segment.key, "footer"]),
+        estimate: 50,
+        content: (
+          <TurnView
+            segment={segment}
+            part="footer"
+            actions={actions}
             agentId={agentId}
             agentName={agentName}
-            label={pendingLabel}
-            activity={activity}
-            delay={
-              (pendingLabel === "Thinking" || pendingLabel === "Working") &&
-              (last?.items.some((item) => item.kind !== "user") ?? false)
-            }
           />
-        ) : null}
-        {segments.length === 0 && state.phase === "live" && pendingLabel === null ? (
-          <p className="chat-centered">Nothing here yet. Send a message to start.</p>
-        ) : null}
+        ),
+      });
+  }
+  if (pendingLabel)
+    rows.push({
+      key: `now:${last?.key ?? "new"}:${pendingLabel}`,
+      estimate: 28,
+      content: (
+        <NowRow
+          key={`${last?.key ?? "new"}:${pendingLabel}`}
+          agentId={agentId}
+          agentName={agentName}
+          label={pendingLabel}
+          activity={activity}
+          delay={
+            (pendingLabel === "Thinking" || pendingLabel === "Working") &&
+            (last?.items.some((item) => item.kind !== "user") ?? false)
+          }
+        />
+      ),
+    });
+  if (segments.length === 0 && state.phase === "live" && pendingLabel === null)
+    rows.push({
+      key: "empty",
+      estimate: 100,
+      content: <p className="chat-centered">Nothing here yet. Send a message to start.</p>,
+    });
+  return (
+    <div className="chat-transcript-shell">
+      <div
+        ref={scrollRef}
+        className="chat-transcript"
+        role="log"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: Scroll regions need keyboard navigation and a focus target after jumping to latest.
+        tabIndex={0}
+        aria-label="Transcript"
+        data-testid="transcript"
+      >
+        <DisclosureMemory.Provider value={disclosures}>
+          <VirtualRows
+            rows={rows}
+            leading={leading}
+            scroller={scroller}
+            stick={stick}
+            historyRevision={state.transcript}
+            captureHistory={captureHistory}
+          />
+        </DisclosureMemory.Provider>
       </div>
+      {!pinned ? (
+        <button
+          type="button"
+          className="chat-latest"
+          data-testid="jump-latest"
+          onClick={() => {
+            scroller.current?.focus({ preventScroll: true });
+            stick.current?.pin();
+          }}
+        >
+          <span aria-hidden="true">↓</span> Latest
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -169,6 +169,21 @@ material tests, desktop all-target Clippy, rustfmt and 33 documentation checks p
 Mica to system appearance; no host security settings changed. CI now runs the browser suite and
 retains its screenshots and accessibility reports for seven days.
 
+The next M2a checkpoint virtualizes stable transcript items, including tool-heavy single turns.
+The scroll controller distinguishes layout corrections from reader gestures, and a keyboard-accessible
+Latest control returns to the current output. Loading older pages preserves a visible text fragment,
+including pages cut inside a turn or the same message. Repeated paragraphs are anchored from the end
+so an identical paragraph in the newly loaded prefix cannot take over the reading position.
+Unanswered forms and focused rows stay mounted; manual thought/tool disclosure choices live at chat
+scope and survive row recycling. An independent review caught the draft-loss and partial-turn cases
+before completion. Browser fixtures now cover 500 turns, a 1,000-tool turn, append and prepend while
+reading, partial-message pages, draft retention, disclosure retention, keyboard focus and Latest.
+Both Chromium and WebKit pass that expanded suite, including repeated paragraphs in one message.
+The frontend gate passes 828 tests with 19 existing skips, and both production builds pass.
+M2a still needs its remaining transcript refinements and final milestone review. CI run `40282377517`
+passed Linux/Windows checks and the browser suite for the preceding `e1f3c67` checkpoint; macOS was
+skipped. The new virtualization checkpoint needs its own CI run.
+
 - Rust owns backend logic. TypeScript remains for React and necessary platform/build glue.
 - D1 and Cloudflare Email Service replace Neon/Postgres, Neon Auth, Hyperdrive, and Resend.
 - Reuse the existing targeted environment scrub, not the handoff's older blanket prefix scrub.

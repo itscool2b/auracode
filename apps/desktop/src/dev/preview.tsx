@@ -52,6 +52,68 @@ function recorded(source: { events: readonly { type: string; data: unknown }[] }
 }
 
 function synthetic(mode: string): AuraEvent[] {
+  if (mode === "partial-message")
+    return [
+      ev.turnStarted("long"),
+      ev.user("long-user", "Review the saved message."),
+      ...Array.from({ length: 80 }, (_, index) =>
+        ev.message(
+          "whole-message",
+          `Paragraph ${index === 20 || index === 60 ? 40 : index}: ${"A saved message in the same turn. ".repeat(4)}\n\n`,
+        ),
+      ),
+      ev.messageDone("whole-message"),
+      ev.turnEnded("long"),
+    ];
+  if (mode === "large-turn")
+    return [
+      ev.turnStarted("large"),
+      ev.user("large-user", "Review these files."),
+      ev.thought("large-thought", "Inspecting the files."),
+      ev.thoughtDone("large-thought", 1000),
+      ...Array.from({ length: 1000 }, (_, index) =>
+        ev.toolCall(`large-tool-${index}`, {
+          title: `Read file ${index}`,
+          status: "completed",
+          content: [{ type: "text", text: `Saved output ${index}`, truncated: null }],
+        }),
+      ),
+      ev.turnEnded("large"),
+    ];
+  if (mode === "partial-history")
+    return [
+      ev.turnStarted("long"),
+      ev.user("long-user", "Review the saved messages."),
+      ...Array.from({ length: 80 }, (_, index) => [
+        ev.message(
+          `part-${index}`,
+          `Paragraph ${index}: ${"A saved message in the same turn. ".repeat(4)}`,
+        ),
+        ev.messageDone(`part-${index}`),
+      ]).flat(),
+      ev.turnEnded("long"),
+    ];
+  if (mode === "history-question")
+    return [
+      ...synthetic("history"),
+      ev.turnStarted("question-turn"),
+      {
+        type: "ui_request",
+        request_id: "draft-question",
+        prompt: { type: "input", message: "Describe the change", placeholder: null },
+      },
+    ];
+  if (mode === "history")
+    return Array.from({ length: 500 }, (_, index) => [
+      ev.turnStarted(`history-${index}`),
+      ev.user(`user-${index}`, `Review file ${index + 1}.`),
+      ev.message(
+        `message-${index}`,
+        `Review ${index + 1}: the saved conversation remains available.\n\n${"This paragraph gives this turn a different measured height. ".repeat(1 + (index % 7))}\n\n[Review documentation](https://example.test/review/${index})`,
+      ),
+      ev.messageDone(`message-${index}`),
+      ev.turnEnded(`history-${index}`),
+    ]).flat();
   const events = [
     ev.turnStarted("first"),
     ev.user("u1", "Make the project list easier to scan, and keep the active chat visible."),
@@ -117,6 +179,11 @@ function Preview() {
     "permission",
     "error",
     "new",
+    "history",
+    "history-question",
+    "partial-history",
+    "partial-message",
+    "large-turn",
     "recorded-thinking",
     "recorded-tools",
   ].includes(requested)
@@ -126,7 +193,7 @@ function Preview() {
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
   const [selected, setSelected] = useState<string | null>(mode === "new" ? null : "preview");
   const status: SessionStatus =
-    mode === "thinking" || mode === "permission"
+    mode === "thinking" || mode === "permission" || mode === "history-question"
       ? "running"
       : mode === "error"
         ? "failed"
@@ -151,6 +218,16 @@ function Preview() {
           ? recorded(fullAuto)
           : synthetic(mode);
     let seq = events.length;
+    const history = items(numbered(events.map((event) => [null, event] as const)));
+    const before =
+      mode === "partial-message"
+        ? 42
+        : mode === "partial-history"
+          ? 82
+          : mode.startsWith("history")
+            ? 1250
+            : null;
+    const initialHistory = before === null ? history : history.slice(before);
     let receive: ((batch: EventBatch) => void) | null = null;
     const publish = (updates: AuraEvent[]) => {
       receive?.(frame("preview", seq, updates));
@@ -162,10 +239,15 @@ function Preview() {
         return attachResult(
           chatId,
           seq,
-          historyPage(chatId, items(numbered(events.map((event) => [null, event] as const)))),
+          historyPage(chatId, initialHistory, {
+            has_more: before !== null,
+            before_seq: before,
+            cut_turn_id: mode.startsWith("partial-") ? "long" : null,
+          }),
           { chat, session: sessionInfo({ agent_name: AGENT.name, status }) },
         );
       },
+      history: async (chatId) => historyPage(chatId, history.slice(0, before ?? 0)),
       pickFolder: async () => "/workspace/auracode",
       respondPermission: async (_chatId, requestId, optionId) =>
         publish([ev.permissionResolved(requestId, optionId)]),

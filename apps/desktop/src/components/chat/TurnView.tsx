@@ -9,6 +9,7 @@ import { Answer } from "../Markdown";
 import { ErrorCard } from "./ErrorCard";
 import { PermissionCard } from "./PermissionCard";
 import { QuestionCard } from "./QuestionCard";
+import { ThoughtBlock } from "./ThoughtBlock";
 import { type BlobProps, ToolBlock } from "./ToolBlock";
 
 /** What the items of a turn act on. */
@@ -34,28 +35,40 @@ export const TurnView = memo(function TurnView({
   agentId = "generic",
   agentName = "Agent",
   active = false,
+  part,
 }: {
   readonly segment: RenderedSegment;
   readonly actions: TurnActions;
   readonly agentId?: string;
   readonly agentName?: string;
   readonly active?: boolean;
+  /** Virtual rows render one stable item or the footer; standalone previews render the whole turn. */
+  readonly part?: number | "footer";
 }) {
   const firstAgentItem = segment.items.findIndex((item) => item.kind !== "user");
+  const selected = typeof part === "number" ? segment.items[part] : undefined;
+  const entries =
+    part === undefined
+      ? segment.items.map((item, index) => ({ item, index }))
+      : selected && typeof part === "number"
+        ? [{ item: selected, index: part }]
+        : [];
+  const footer = part === undefined || part === "footer";
   return (
     <section
       className="chat-segment"
       data-kind={segment.turnId === null ? "outside" : "turn"}
       aria-label={segment.turnId === null ? "Between turns" : "Turn"}
-      data-testid="segment"
+      data-testid={part === undefined || part === 0 ? "segment" : "segment-part"}
+      data-part={part ?? "whole"}
       data-test-kind={segment.turnId === null ? "outside" : "turn"}
       data-test-turn-id={segment.turnId ?? ""}
       data-test-stop-reason={segment.end?.stopReason ?? ""}
       data-test-recovered={String(segment.end?.recovered ?? false)}
     >
-      {segment.items.map((item, index) => {
+      {entries.map(({ item, index }) => {
         const byline =
-          index === firstAgentItem && segment.turnId !== null ? (
+          index === firstAgentItem && segment.turnId !== null && !segment.partial ? (
             <div className="chat-byline">
               <OrbitMark agent={agentId} size={16} label={agentName} />
               <span>{agentName}</span>
@@ -82,42 +95,13 @@ export const TurnView = memo(function TurnView({
               );
             case "thought":
               return (
-                <details
+                <ThoughtBlock
                   key={item.key}
-                  className="chat-thought"
-                  data-testid="item"
-                  data-test-kind="thought"
-                  data-test-completed={String(item.completed)}
-                  data-test-duration-ms={item.durationMs ?? ""}
-                >
-                  <summary>
-                    {active && !item.completed ? (
-                      <OrbitMark
-                        agent={agentId}
-                        state="thinking"
-                        size={16}
-                        label={`${agentName}, thinking`}
-                      />
-                    ) : (
-                      <span className="chat-disclosure" aria-hidden="true">
-                        ›
-                      </span>
-                    )}
-                    {item.completed
-                      ? item.durationMs === null
-                        ? "Thought"
-                        : `Thought for ${formatDuration(item.durationMs)}`
-                      : active
-                        ? "Thinking…"
-                        : "Thinking interrupted"}
-                  </summary>
-                  <p>
-                    {item.text ||
-                      (item.completed || !active
-                        ? "The agent did not share its reasoning."
-                        : "Thinking…")}
-                  </p>
-                </details>
+                  item={item}
+                  active={active}
+                  agentId={agentId}
+                  agentName={agentName}
+                />
               );
             case "tool":
               return (
@@ -195,8 +179,12 @@ export const TurnView = memo(function TurnView({
           </Fragment>
         );
       })}
-      {segment.plan !== null && segment.plan.length > 0 ? <Plan entries={segment.plan} /> : null}
-      <Footer segment={segment} canResume={actions.canResume} onStart={actions.onStart} />
+      {footer && segment.plan !== null && segment.plan.length > 0 ? (
+        <Plan entries={segment.plan} />
+      ) : null}
+      {footer ? (
+        <Footer segment={segment} canResume={actions.canResume} onStart={actions.onStart} />
+      ) : null}
     </section>
   );
 });
