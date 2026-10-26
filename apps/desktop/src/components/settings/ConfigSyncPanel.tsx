@@ -1,5 +1,6 @@
 import { ArrowRight, History, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { subscribeAccountSync } from "../../lib/account/sync";
 import { type ConfigSyncApi, configSyncApi } from "../../lib/config-sync/api";
 import type {
   ConfigOperation,
@@ -26,10 +27,12 @@ const PROVIDERS = { claude: "Claude", codex: "Codex", pi: "Pi", shared: "Shared"
 
 export function ConfigSyncPanel({
   active,
+  profileId = null,
   onAccount,
   api = configSyncApi,
 }: {
   readonly active: boolean;
+  readonly profileId?: string | null;
   readonly onAccount: () => void;
   readonly api?: ConfigSyncApi;
 }) {
@@ -46,6 +49,14 @@ export function ConfigSyncPanel({
   const lock = useRef(false);
   const alive = useRef(false);
   const refresh = () => setVersion((value) => value + 1);
+  useEffect(
+    () =>
+      subscribeAccountSync(active ? profileId : null, (status) => {
+        if (status.state === "idle" && status.last_sync_at !== null)
+          setVersion((value) => value + 1);
+      }),
+    [active, profileId],
+  );
   useEffect(() => {
     alive.current = true;
     return () => {

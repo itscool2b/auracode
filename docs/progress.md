@@ -1868,3 +1868,7 @@ continuation markers, explicit Local import and remote-folder resolution remain 
 ### Preview deployment and live API checks
 
 The preview D1 export was downloaded and verified before all three migrations were applied. The real Rust WASM Worker is deployed with preview-only data bindings, separate secret-store credentials and managed Turnstile widget, no workers.dev access, the same-origin API route and cleanup cron. Live health/configuration, missing-session and foreign-Origin checks passed. Production resources remain untouched. The website build is ready, but JWT-authenticated static asset upload returned Unauthorized after session registration; publication remains pending an authenticated supported upload path. Real email, browser challenge and signed-in multi-device acceptance are still pending. See infra/README.md for exact resource evidence.
+
+### Sync status and focus integration
+
+The main window now requests a coalesced native sync on focus. Profile-tagged status events refresh Account status and completed-cycle workspace, chat-list and configuration inventories; events from older profiles are ignored and listeners are released even when registration completes after navigation. Three focused listener ownership tests, integrated TypeScript and Biome pass. No account credentials reach the UI listener. Integrated native export and final platform checks remain pending the combined source batch.

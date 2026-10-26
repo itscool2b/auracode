@@ -19,6 +19,7 @@ import { LockedProfile } from "./components/settings/LockedProfile";
 import { SettingsScreen } from "./components/settings/SettingsScreen";
 import { AgentsScreen } from "./components/setup/AgentsScreen";
 import { Onboarding } from "./components/setup/Onboarding";
+import { subscribeAccountSync } from "./lib/account/sync";
 import type { AppStore } from "./lib/chat/appStore";
 import type { Transport } from "./lib/chat/transport";
 import { errorMessage } from "./lib/errors";
@@ -68,6 +69,17 @@ export function App({
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
   const [view, setView] = useState<View>("setup");
   const [restartSetup, setRestartSetup] = useState(false);
+  const activeProfileId = boot.status === "ready" ? (boot.info.profile?.id ?? null) : null;
+  useEffect(
+    () =>
+      subscribeAccountSync(activeProfileId, (status) => {
+        if (status.state === "idle" && status.last_sync_at !== null) {
+          void chats.reloadChats();
+          void workspace?.refresh();
+        }
+      }),
+    [activeProfileId, chats, workspace],
+  );
   useEffect(() => {
     const openSettings = (event: KeyboardEvent) => {
       if (

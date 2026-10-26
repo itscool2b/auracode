@@ -301,6 +301,14 @@ fn on_event(app: &tauri::AppHandle, event: RunEvent) {
         RunEvent::ExitRequested { code, api, .. } => on_exit_requested(app, code, &api),
         RunEvent::WindowEvent {
             label,
+            event: WindowEvent::Focused(true),
+            ..
+        } if label == window::MAIN_WINDOW => {
+            window::sync_webview_visibility(app);
+            account_sync::trigger(app);
+        }
+        RunEvent::WindowEvent {
+            label,
             event: WindowEvent::Resized(_) | WindowEvent::Focused(_),
             ..
         } if label == window::MAIN_WINDOW => window::sync_webview_visibility(app),

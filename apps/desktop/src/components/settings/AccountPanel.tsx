@@ -8,6 +8,7 @@ import type {
   RecoverySetup,
   SignInChallenge,
 } from "../../lib/account/bindings";
+import { subscribeAccountSync } from "../../lib/account/sync";
 import { type VerificationOrigin, verificationOrigin } from "../../lib/accountVerification";
 import { errorMessage } from "../../lib/errors";
 import { switchProfile } from "../../lib/profiles";
@@ -62,6 +63,15 @@ export function AccountPanel({
   const [now, setNow] = useState(Date.now());
   const mounted = useRef(false);
   const acting = useRef(false);
+  useEffect(
+    () =>
+      subscribeAccountSync(activeProfileId, (sync) => {
+        setStatus((current) =>
+          current?.profile_id === activeProfileId ? { ...current, sync } : current,
+        );
+      }),
+    [activeProfileId],
+  );
 
   useEffect(() => {
     mounted.current = true;

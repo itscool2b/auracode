@@ -284,6 +284,7 @@ export function SettingsScreen({
           ) : null}
           {page === "configuration" ? (
             <ConfigSyncPanel
+              profileId={info.profile?.id ?? null}
               active={info.profile?.kind === "account" && !info.profile_locked}
               onAccount={() => {
                 setPage("account");
