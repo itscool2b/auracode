@@ -2787,3 +2787,11 @@ Unsigned Build 40394621310 passed universal macOS, Windows ARM64 and Windows x64
 
 Rust fmt and Clippy pass for default and all-features configurations. Focused lock, store,
 checkpoint and process tests pass locally; macOS and WebDriver outcomes await the next CI run.
+
+CI 40411019758 (193a78a): lint and all Windows non-WebDriver jobs passed, and the lock fix holds
+on macOS (521 tests). The macOS terminal diagnosis showed a killed child with a shutdown report of
+no exit and no steps: the Unix chain read the exit once at its start, so a process ending right
+after left nothing to signal and nothing re-read the exit, and terminal cleanup stayed
+unconfirmed. The chain now takes the recorded exit at the end (07a6774). Removing the WebView2
+profile override did not fix the Windows WebDriver session; the gate now records WebView2 process
+switches and DevTools port file locations while the direct attempt is still pending.
