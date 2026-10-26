@@ -78,10 +78,11 @@ try {
         `${engine} discovery accessibility`,
       );
       await page.getByRole("button", { name: "Continue", exact: true }).click();
-      assert.equal(
-        await page.getByRole("button", { name: "Account sign-in unavailable" }).isDisabled(),
-        true,
-      );
+      await page.getByRole("button", { name: "Open Account", exact: true }).click();
+      await page.getByRole("heading", { name: "Account settings" }).waitFor();
+      await assertNoVendorCalls();
+      await page.getByRole("button", { name: "Back to setup" }).click();
+      await page.getByRole("button", { name: "Open Account", exact: true }).waitFor();
       await page.getByRole("button", { name: "Continue", exact: true }).click();
       await page.getByRole("radio", { name: /Off/ }).check();
       await page.waitForFunction(() => document.documentElement.dataset.motion === "off");

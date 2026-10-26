@@ -178,6 +178,10 @@ export function SettingsScreen({
   setup = setupApi,
   updates = updatesApi,
   reveal = revealDataDir,
+  initialPage = "general",
+  navigationId = "settings",
+  initialEmail = "",
+  backLabel = "Back to chats",
 }: {
   readonly info: AppInfo;
   readonly onBack: () => void;
@@ -189,9 +193,18 @@ export function SettingsScreen({
   readonly setup?: SetupApi;
   readonly updates?: UpdatesApi;
   readonly reveal?: () => Promise<void>;
+  readonly initialPage?: Page;
+  readonly navigationId?: string;
+  readonly initialEmail?: string;
+  readonly backLabel?: string;
 }) {
-  const [page, setPage] = useState<Page>("general");
+  const [page, setPage] = useState<Page>(initialPage);
   const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    void navigationId;
+    // A new website link selects Account without destroying an existing code/key setup.
+    setPage(initialPage);
+  }, [navigationId, initialPage]);
   useEffect(() => {
     const previous = document.activeElement;
     heading.current?.focus();
@@ -231,7 +244,7 @@ export function SettingsScreen({
       <aside className="settings-sidebar" aria-label="Settings navigation">
         <div className="chat-drag" data-tauri-drag-region="" />
         <button type="button" className="settings-back" onClick={onBack}>
-          <ArrowLeft size={15} /> Back to chats
+          <ArrowLeft size={15} /> {backLabel}
         </button>
         <h2>Settings</h2>
         <nav>
@@ -280,6 +293,7 @@ export function SettingsScreen({
             <>
               <ProfilePicker activeId={info.profile?.id ?? null} />
               <AccountPanel
+                initialEmail={initialEmail}
                 deviceName={info.device?.name ?? "My computer"}
                 activeProfileId={info.profile?.id ?? null}
               />

@@ -17,6 +17,7 @@ import { checkProfiles } from "./check-profiles.mjs";
 import { checkProjectTools } from "./check-project-tools.mjs";
 import { checkQuestions } from "./check-questions.mjs";
 import { checkSessionFallback } from "./check-session-fallback.mjs";
+import { checkSettingsNavigation } from "./check-settings-navigation.mjs";
 import { checkSteering } from "./check-steering.mjs";
 import { checkWorktreeSetup } from "./check-worktree-setup.mjs";
 
@@ -73,6 +74,7 @@ try {
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
+      await checkSettingsNavigation(page, url);
       await page.goto(`${url}/?preview=settings`);
       await page.getByRole("radio", { name: "Reduced", exact: true }).check();
       assert.equal(await page.evaluate(() => window.settingsFixture.motion()), "reduced");

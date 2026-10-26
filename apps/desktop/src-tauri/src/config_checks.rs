@@ -80,6 +80,17 @@ fn updates_require_a_signed_version_and_only_rust_can_install() {
 }
 
 #[test]
+fn sign_in_scheme_is_packaged_and_only_rust_receives_external_urls() {
+    assert_eq!(
+        json(TAURI_CONF)["plugins"]["deep-link"]["desktop"]["schemes"],
+        serde_json::json!(["auracode"])
+    );
+    for entry in permissions() {
+        assert!(!identifier(&entry).starts_with("deep-link:"));
+    }
+}
+
+#[test]
 fn http_and_https_are_the_only_urls_the_page_can_open() {
     let open_url: Vec<Value> = permissions()
         .into_iter()

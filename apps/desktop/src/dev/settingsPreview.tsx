@@ -3,6 +3,8 @@ import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AppInfo, SetupSnapshot, UpdateStatus } from "../bindings";
 import { SettingsScreen } from "../components/settings/SettingsScreen";
+import { accountApi } from "../lib/account/api";
+import type { AccountStatus } from "../lib/account/bindings";
 import type { SetupApi } from "../lib/setup";
 import type { UpdatesApi } from "../lib/updates";
 
@@ -26,6 +28,34 @@ const info: AppInfo = {
   fatal: null,
 };
 const calls: string[] = [];
+const signInFixture = new URLSearchParams(location.search).has("signin");
+if (signInFixture) {
+  const account: AccountStatus = {
+    access: new URLSearchParams(location.search).has("signed-out")
+      ? "signed_out"
+      : "needs_first_key",
+    account_id: "fixture",
+    device_id: "fixture",
+    profile_id: null,
+    local_key_available: false,
+    approval_code: null,
+    fingerprint: null,
+    sync: { state: "inactive", last_sync_at: null, pending_changes: null, message: null },
+  };
+  accountApi.config = async () => ({
+    service_origin: "https://auracode.si",
+    verification_url: "https://auracode.si/verify-device",
+  });
+  accountApi.status = async () => structuredClone(account);
+  accountApi.prepareRecovery = async () => ({
+    id: "fixture",
+    recovery_key: "SYNTHETIC-KEY-RETAINED-ACROSS-LINKS",
+  });
+  accountApi.cancelSetup = async () => {
+    calls.push("cancelSetup");
+    return structuredClone(account);
+  };
+}
 const preferences: SetupSnapshot = {
   cold_start: false,
   notice: null,
@@ -96,6 +126,12 @@ Object.assign(window, {
 });
 function Preview() {
   const [closed, setClosed] = useState(false);
+  const [entry, setEntry] = useState({ id: 0, email: "first@example.com" });
+  Object.assign(window, {
+    settingsNavigationFixture: {
+      open: (email: string) => setEntry((previous) => ({ id: previous.id + 1, email })),
+    },
+  });
   if (closed)
     return (
       <main className="orbit-theme" data-theme="dark">
@@ -104,6 +140,9 @@ function Preview() {
     );
   return (
     <SettingsScreen
+      navigationId={String(entry.id)}
+      initialPage={signInFixture ? "account" : "general"}
+      initialEmail={signInFixture ? entry.email : ""}
       info={info}
       setup={setup}
       updates={updates}

@@ -35,6 +35,7 @@ import { LATE_NOTICE_CHECKS_MS, withLateNotices } from "./lib/notices";
 import { installProfileEvents, switchProfile } from "./lib/profiles";
 import { afterPaint, whenPainted } from "./lib/ready";
 import { isRunning, type StreamStore } from "./lib/session";
+import { signInNavigationReady, subscribeSignInLinks } from "./lib/signInLinks";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
 import { runChatSmoke } from "./lib/smokeChat";
 import { activityOf } from "./lib/stream";
@@ -72,8 +73,45 @@ export function App({
   readonly workspace?: WorkspaceStore;
 }) {
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
+  const bootRef = useRef(boot);
+  bootRef.current = boot;
   const [view, setView] = useState<View>("setup");
   const [restartSetup, setRestartSetup] = useState(false);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const [settingsReturn, setSettingsReturn] = useState<"chats" | "setup">("chats");
+  const [settingsEntry, setSettingsEntry] = useState({
+    id: "initial",
+    page: "general" as "general" | "account",
+    email: "",
+  });
+  useEffect(
+    () =>
+      subscribeSignInLinks((link) => {
+        const current = bootRef.current;
+        if (
+          !signInNavigationReady(
+            current.status === "ready" ? current.info : null,
+            !!document.querySelector(
+              'dialog[open], [role="dialog"], #profile-transition, #root[inert]',
+            ),
+          )
+        )
+          return false;
+        setSettingsReturn((previous) =>
+          viewRef.current === "settings"
+            ? previous
+            : viewRef.current === "setup"
+              ? "setup"
+              : "chats",
+        );
+        setRestartSetup(false);
+        setSettingsEntry({ id: link.id, page: "account", email: link.email ?? "" });
+        setView("settings");
+        return true;
+      }),
+    [],
+  );
   const activeProfileId = boot.status === "ready" ? (boot.info.profile?.id ?? null) : null;
   useEffect(
     () =>
@@ -97,12 +135,17 @@ export function App({
         !document.querySelector('dialog[open], [role="dialog"]')
       ) {
         event.preventDefault();
-        setView((current) => (current === "settings" ? "chats" : "settings"));
+        if (view === "settings") setView(settingsReturn);
+        else {
+          setSettingsReturn("chats");
+          setSettingsEntry({ id: "shortcut", page: "general", email: "" });
+          setView("settings");
+        }
       }
     };
     document.addEventListener("keydown", openSettings);
     return () => document.removeEventListener("keydown", openSettings);
-  }, [view]);
+  }, [view, settingsReturn]);
   const [openChatRequest, setOpenChatRequest] = useState<{ id: string }>();
   useEffect(
     () =>
@@ -329,6 +372,12 @@ export function App({
           setView("chats");
         }}
         onDemo={() => setView("diagnostics")}
+        onAccount={() => {
+          setRestartSetup(false);
+          setSettingsReturn("setup");
+          setSettingsEntry({ id: "setup", page: "account", email: "" });
+          setView("settings");
+        }}
       />
     );
   if (view === "agents")
@@ -357,16 +406,24 @@ export function App({
             onRecoveryDismissed={onRecoveryDismissed}
             onDiagnostics={() => setView("diagnostics")}
             onAgents={() => setView("agents")}
-            onSettings={() => setView("settings")}
+            onSettings={() => {
+              setSettingsReturn("chats");
+              setSettingsEntry({ id: "chats", page: "general", email: "" });
+              setView("settings");
+            }}
           />
         </div>
         {view === "settings" ? (
           <SettingsScreen
+            navigationId={settingsEntry.id}
+            initialPage={settingsEntry.page}
+            initialEmail={settingsEntry.email}
+            backLabel={settingsReturn === "setup" ? "Back to setup" : "Back to chats"}
             info={info}
             onImported={async () => {
               await Promise.all([chats.reloadChats(), workspace?.refresh()]);
             }}
-            onBack={() => setView("chats")}
+            onBack={() => setView(settingsReturn)}
             onAgents={() => setView("agents")}
             onLibrary={() => setView("library")}
             onDiagnostics={() => setView("diagnostics")}

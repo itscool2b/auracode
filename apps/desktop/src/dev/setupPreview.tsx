@@ -140,6 +140,15 @@ Object.assign(window, {
 function Preview() {
   const [view, setView] = useState(params.get("preview") === "agents" ? "agents" : "setup");
   const [restart, setRestart] = useState(false);
+  if (view === "account")
+    return (
+      <main className="setup-shell">
+        <h1>Account settings</h1>
+        <button type="button" onClick={() => setView("setup")}>
+          Back to setup
+        </button>
+      </main>
+    );
   if (view === "agents")
     return (
       <AgentsScreen
@@ -177,6 +186,10 @@ function Preview() {
       restart={restart}
       onDone={() => setView("done")}
       onDemo={() => setView("demo")}
+      onAccount={() => {
+        setRestart(false);
+        setView("account");
+      }}
     />
   );
 }

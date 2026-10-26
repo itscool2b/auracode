@@ -45,6 +45,7 @@
     }
   },
   "plugins": {
+    "deep-link": { "desktop": { "schemes": ["auracode"] } },
     "updater": {
       "pubkey": "",
       "requireSignedVersion": true,

@@ -2488,3 +2488,31 @@ Chromium and WebKit fixtures passed keyboard selection/submission, no automatic 
 ### Informational notifications do not request attention
 
 Chat activity now excludes Notify prompts from waiting status, matching the actionable request dock. Notifications remain in the transcript without an answer or resolution. A regression covers a notification beside running tool output, an actionable question taking attention, and the answered question restoring tool activity while the notification stays unresolved. All seven activity tests, desktop TypeScript, targeted Biome and instruction parity pass. No native agent call or CI run was performed.
+
+### Website links and Account onboarding
+
+The packaged Windows/macOS app now receives `auracode://signin` links through Tauri's native
+deep-link and single-instance plugins. Rust accepts only bounded Account navigation with an optional
+email hint. It rejects other actions, extra query keys, credentials, ports and fragments. A latest
+pending request survives webview reload until the matching acknowledgement; old acknowledgements
+cannot erase a newer request. Development does not register or replace OS URL associations.
+
+The UI defers navigation through loading, locked profiles, configuration recovery, profile switching
+and open dialogs. Links open Account without authenticating, sending a code or changing the selected
+account. Repeated links preserve an inline code challenge, recovery key and unsent email. Onboarding
+now offers the real Account screen and returns to its saved setup step. Ordinary settings shortcuts
+still return to chats. Independent review caught and corrected early consumption across recovery
+reloads and unwanted Account remounts before this checkpoint.
+
+The integrated desktop native library passed all 201 tests, including URL rejection, stale
+acknowledgements, packaged configuration and exact command binding export. All-target desktop Clippy,
+TypeScript and 348 frontend tests pass (19 existing cases skipped). Chromium and WebKit passed the
+combined settings/account/configuration/continuation/question flows, including preservation across
+repeated Account navigation, and the onboarding return path. An earlier compiled native test binary
+was blocked by Application Control4551; ordinary verification after subsequent source integration
+ran successfully. No policy, binary relocation or security bypass was used. Actual installed OS URL
+activation remains in packaged acceptance.
+
+Cloudflare MCP also confirmed Universal SSL enabled and an active Let's Encrypt certificate covering
+`auracode.si` and `*.auracode.si`, expiring 2027-01-22 with Cloudflare-managed renewal. The owner does
+not need to purchase an SSL certificate from the domain registrar.

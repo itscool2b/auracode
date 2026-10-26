@@ -31,6 +31,7 @@ export function Onboarding({
   restart = false,
   onDone,
   onDemo,
+  onAccount,
   api = setupApi,
 }: {
   readonly app: AppStore;
@@ -39,6 +40,7 @@ export function Onboarding({
   readonly restart?: boolean;
   readonly onDone: () => void;
   readonly onDemo: () => void;
+  readonly onAccount: () => void;
   readonly api?: SetupApi;
 }) {
   const theme = useOrbitTheme();
@@ -330,11 +332,11 @@ export function Onboarding({
             {step === "account" ? (
               <>
                 <p className="setup-intro">
-                  Your projects and chats work offline. Cloud sign-in and encrypted sync will be
-                  available when account services are enabled for this build.
+                  Your projects and chats work offline. Add an Account when you want encrypted sync
+                  across your devices, or continue with Local.
                 </p>
-                <button type="button" className="setup-button" disabled>
-                  Account sign-in unavailable
+                <button type="button" className="setup-button" onClick={onAccount}>
+                  Open Account
                 </button>
                 <p className="setup-footnote">
                   Continue locally. Setup never signs in to an agent or sends a prompt.

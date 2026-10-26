@@ -11,6 +11,8 @@ export const commands = {
 	 *  mode, notices, and the fatal startup error if there was one. Never fails.
 	 */
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
+	signInLinkPending: () => __TAURI_INVOKE<SignInLink | null>("sign_in_link_pending"),
+	signInLinkAcknowledge: (id: string) => __TAURI_INVOKE<void>("sign_in_link_acknowledge", { id }),
 	accountConfig: () => typedError<AccountConfiguration, AccountFailure>(__TAURI_INVOKE("account_config")),
 	accountStatus: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_status")),
 	/**
@@ -1726,6 +1728,11 @@ export type SignInChallenge = {
 	id: string,
 	expires_in: number,
 	resend_after: number,
+};
+
+export type SignInLink = {
+	id: string,
+	email: string | null,
 };
 
 export type SlashCommand = {

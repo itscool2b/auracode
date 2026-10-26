@@ -51,6 +51,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::git::PullRequestPreview>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
+            crate::deep_links::sign_in_link_pending,
+            crate::deep_links::sign_in_link_acknowledge,
             crate::accounts::account_config,
             crate::accounts::account_status,
             crate::account_sync::account_sync_status,

@@ -35,6 +35,7 @@ pub mod config_library;
 pub mod config_sync;
 pub mod config_vendor;
 pub mod conversation_commands;
+pub mod deep_links;
 pub mod demo;
 pub mod error;
 pub mod folder_resolution_commands;
@@ -128,6 +129,8 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_deep_link::init())
+        .manage(deep_links::SignInLinks::default())
         // The folder picker and the quit question, called from Rust only: the page has no dialog
         // permission (capabilities/default.json).
         .plugin(tauri_plugin_dialog::init())
@@ -197,6 +200,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     // Tauri's setup hook runs outside any Tokio context, so everything that spawns gets the handle.
     let rt = tauri::async_runtime::handle().inner().clone();
     let chats = sessions::start_chats(&mut booted, &version, &rt, sessions::Outside::real);
+    let accept_sign_in_links = launch.single_instance();
     let state = AppState::new(booted, chats, &os, glass, launch, version);
     let shown = Arc::clone(&state.window_shown);
     let reported = Arc::clone(&state.smoke_reported);
@@ -209,6 +213,9 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     app.manage(Arc::new(config_sync::ConfigSyncService::default()));
     app.manage(Arc::new(aura_core::cloning::Clones::default()));
     native_shell::setup(app.handle());
+    if accept_sign_in_links {
+        deep_links::setup(app.handle());
+    }
     let account_app = app.handle().clone();
     rt.spawn(async move {
         profile_commands::restore_selected(account_app);

@@ -62,7 +62,8 @@ tauri = { version = "2.12.5", features = [] }
 tauri-build = { version = "2.7.4", features = [] }
 tauri-plugin-opener = "2.7.2"
 tauri-plugin-window-state = "2.5.0"
-tauri-plugin-single-instance = "2.5.4"
+tauri-plugin-single-instance = { version = "2.5.4", features = ["deep-link"] }
+tauri-plugin-deep-link = "=2.6.2"
 # The folder picker and the quit question, called from Rust only (the webview gets no permission).
 tauri-plugin-dialog = "=2.8.3"
 
