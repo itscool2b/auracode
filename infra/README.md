@@ -59,9 +59,22 @@ and scheduled ciphertext cleanup. A real Rust client also completes synthetic tw
 encrypted record/blob exchange and revocation against the compiled Worker. Live health/configuration and access rejection checks passed again
 after the deployment. No email was sent.
 
-The website's fresh production build is ready (48 static assets). Its Cloudflare upload-session
-registration succeeded, but the documented JWT-authenticated asset upload returned Unauthorized.
-No website Worker or catch-all route was deployed, and no alternative access path was used after
-that denial. Static-site deployment remains pending a supported authenticated upload path.
-The owner's requested connector was checked: its documented request helper cannot provide the
-separate JWT Authorization header required by the Static Assets upload API.
+The documented Static Assets upload returned Unauthorized, and the connector cannot supply its
+separate JWT Authorization header. That upload path remains unused. The website is instead compiled
+into a small independent Rust Worker and deployed through the ordinary authorized Worker code API.
+The Worker has no Assets, D1, R2, email, secret or outbound-service bindings.
+
+On 2026-10-26, the connector deployed `auracode-web-preview`, deployment
+`15cc1403e2e24868b449df0066abd0aa`, with `workers.dev` and version preview URLs disabled. Its new
+`preview.auracode.si/*` route (`ea92f2dd41954d8bbccda7968688550d`) retains the more-specific API route.
+The 985,588-byte Wasm has SHA-256
+`fc9b29d7f557fa3cb1e73b3d4830584b1ea623b4ce25e0e81f7d48557ed2f024`; the 20,473-byte generated JS has
+SHA-256 `7fea5f5a1ed14314a3fac9d81f3037e8375a9a4db3b535fe546813fc83a41eeb`.
+
+All 48 public files matched the local tested build byte-for-byte over live HTTPS. Nine page HEAD
+requests, missing-asset 404, security headers, auth `no-store` and API route precedence passed.
+Evidence is in ignored `target/live-preview-verification.json`. Production website/API publication
+and actual email/Turnstile/device acceptance remain pending.
+
+Universal SSL is enabled. An active Let's Encrypt certificate covers `auracode.si` and
+`*.auracode.si`, expires 2027-01-22 and is renewed by Cloudflare. No registrar certificate is needed.

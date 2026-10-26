@@ -2556,3 +2556,18 @@ final qualified run. No CI dispatch, push, runtime installation, paid agent or r
 - Kept the existing dark Orbit map and satellite positions; label plates now stay inside the panel and use the nearest vertical space clear of other labels and satellites. This prevents the native catalog order from clipping Claude or overlapping OpenCode V1 and Pi.
 - Aligned the browser setup fixture with the native primary catalog order and OpenCode V1 name. The existing setup browser check now checks label bounds/separation and captures both 1440x900 and 1024x768 map layouts.
 - Visually inspected the updated Chromium and WebKit screenshots. Both complete setup browser checks, shared UI typecheck, Biome and instruction parity passed. No native commands, CI or vendor actions ran.
+
+### Live preview and native Windows inspection
+
+The tested Rust website Worker is now deployed through Cloudflare MCP at
+`https://preview.auracode.si`, with a catch-all route below the existing API-specific route. All 48
+public files matched their tested local bytes over live TLS. Nine page HEAD responses, auth cache
+rules, CSP, a missing asset and API precedence passed. Artifact hashes, deployment and route IDs
+are recorded in `infra/README.md`. The Static Assets endpoint was not retried.
+
+The integrated Windows desktop built successfully with embedded frontend assets. An isolated fresh
+profile opened the actual native onboarding and chat workspace, detected the existing agent
+installations and displayed Local correctly. No vendor session, login or paid prompt was started.
+Visual inspection found the map label defect fixed in the preceding checkpoint. The disposable
+review instance was closed and its owned background process stopped; this inspection is not a
+substitute for the external WebDriver conversation gate or installed-package acceptance.
