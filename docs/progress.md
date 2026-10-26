@@ -114,6 +114,12 @@ Live Claude acceptance on Windows, with the installed native 2.1.310 CLI:
   regression passed 12 repeated runs after its race fix. Linux/Windows CI and installer builds for
   the final checkpoint remain pending; macOS has not been run locally on this Windows host.
 
+CI follow-up: Linux run `40276798121` exposed a smoke-start race. A delayed attach snapshot could
+overwrite a newer live Ready header, causing the first prompt wait to time out. The CLI watcher now
+keeps a live header at or beyond the attach boundary; regressions cover both delayed snapshots and
+fresh snapshots replacing older events. The rebuilt Windows test executable was blocked by
+Application Control (4551), so this follow-up needs CI verification. No policy bypass was attempted.
+
 1. M1b: native Claude driver, protocol replay, session readiness, permissions/questions, smoke tests.
 2. M1c: native Codex app-server driver and generated-schema compatibility.
 3. M1d: native Pi and remaining ACP integrations.
