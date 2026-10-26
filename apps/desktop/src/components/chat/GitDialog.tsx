@@ -15,7 +15,9 @@ import type {
 } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
 import type { GitWorkspaceApi } from "../../lib/gitWorkspace";
+import type { WorktreeSetupApi } from "../../lib/worktreeSetup";
 import { Modal } from "./Modal";
+import { WorktreeSetupPanel } from "./WorktreeSetupPanel";
 import "./git-dialog.css";
 
 type Preview =
@@ -86,6 +88,7 @@ export function GitDialog({
   onClose,
   onChanged,
   allowIsolation = true,
+  setupApi,
 }: {
   readonly chatId: string;
   readonly title: string;
@@ -95,6 +98,7 @@ export function GitDialog({
   readonly onClose: () => void;
   readonly onChanged: () => void;
   readonly allowIsolation?: boolean;
+  readonly setupApi?: WorktreeSetupApi;
 }) {
   const [workspace, setWorkspace] = useState<GitWorkspace | null>(null);
   const [worktrees, setWorktrees] = useState<ManagedWorktree[]>([]);
@@ -105,6 +109,7 @@ export function GitDialog({
   const [result, setResult] = useState<WorktreeActionResult | null>(null);
   const [pullRequest, setPullRequest] = useState<PullRequestResult | null>(null);
   const [prDraft, setPrDraft] = useState<ManagedWorktree | null>(null);
+  const [setupTree, setSetupTree] = useState<ManagedWorktree | null>(null);
   const [prTitle, setPrTitle] = useState(title);
   const [prBody, setPrBody] = useState("");
   const [prBase, setPrBase] = useState("");
@@ -304,7 +309,15 @@ export function GitDialog({
         ) : null}
         {loading ? <p role="status">Reading repository state…</p> : null}
         {workspace ? <Repository workspace={workspace} /> : null}
-        {preview ? (
+        {setupTree ? (
+          <WorktreeSetupPanel
+            chatId={chatId}
+            worktreeId={setupTree.id}
+            branch={setupTree.branch}
+            api={setupApi}
+            onBack={() => setSetupTree(null)}
+          />
+        ) : preview ? (
           <section className="git-review" aria-label="Review Git operation">
             <h3>
               {preview.type === "isolate"
@@ -625,6 +638,17 @@ export function GitDialog({
                       ) : null}
                       {tree.state === "ready" ? (
                         <div className="git-actions">
+                          <button
+                            className="ui-button"
+                            type="button"
+                            disabled={blocked}
+                            onClick={() => {
+                              setSetupTree(tree);
+                              setPrDraft(null);
+                            }}
+                          >
+                            Configure setup
+                          </button>
                           <button
                             className="ui-button"
                             type="button"

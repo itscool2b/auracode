@@ -1704,3 +1704,13 @@ reviews; worktree startup retains admission through terminal ownership. Boot sub
 publication before reading initial state, avoiding a lost startup-unlock event. Integrated Clippy is
 pending because Windows Application Control blocked darling_macro loading with error 4551. No policy
 change, artifact rename or alternate execution was attempted.
+
+### Worktree setup interface
+
+Owned worktrees now expose per-device setup recipes, explicit copy/command review, create-only file
+application and the owned terminal's separate Start setup action. Saving or reviewing never runs the
+command. Stale review failures retain source data, and partial copy results list completed files while
+withholding the command grant. Chromium and WebKit pass review, no implicit launch, explicit start,
+close cancellation, stale/partial recovery and accessibility checks. Screenshots were inspected. Full
+TypeScript and eight profile/terminal frontend tests pass. Native source tests, macOS behavior and the
+final combined CI remain pending.

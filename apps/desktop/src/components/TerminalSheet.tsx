@@ -26,7 +26,7 @@ export function TerminalSheet({
   readonly onClose: () => void;
   readonly onFinished?: (exitCode: number | null) => void;
   readonly transport?: TerminalTransport;
-  readonly purpose?: "sign-in" | "installation";
+  readonly purpose?: "sign-in" | "installation" | "setup";
   readonly review?: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -163,19 +163,27 @@ export function TerminalSheet({
     state.state === "idle"
       ? purpose === "installation"
         ? "Review the installation before starting."
-        : "Ready to sign in."
+        : purpose === "setup"
+          ? "Review the command before starting."
+          : "Ready to sign in."
       : state.state === "starting"
         ? purpose === "installation"
           ? "Checking the reviewed installer…"
-          : "Opening the vendor sign-in flow…"
+          : purpose === "setup"
+            ? "Checking the reviewed setup…"
+            : "Opening the vendor sign-in flow…"
         : state.state === "running"
-          ? "Follow the vendor's prompts below."
+          ? purpose === "setup"
+            ? "The setup command is running."
+            : "Follow the vendor's prompts below."
           : state.state === "failed"
             ? state.message
             : state.exitCode === 0
               ? purpose === "installation"
                 ? "The installer finished. Refresh agents to verify the installation."
-                : "The vendor command finished. Check sign-in status to confirm."
+                : purpose === "setup"
+                  ? "The setup command finished."
+                  : "The vendor command finished. Check sign-in status to confirm."
               : state.exitCode === null
                 ? "The terminal closed without an exit status."
                 : `The vendor command exited with code ${state.exitCode}.`;
@@ -197,12 +205,18 @@ export function TerminalSheet({
       <header className="terminal-sheet__header">
         <div>
           <h2 id={title}>
-            {purpose === "installation" ? `Install ${agentName}` : `Sign in to ${agentName}`}
+            {purpose === "installation"
+              ? `Install ${agentName}`
+              : purpose === "setup"
+                ? `Setup ${agentName}`
+                : `Sign in to ${agentName}`}
           </h2>
           <p id={description}>
             {purpose === "installation"
               ? "Review and run the package manager. Terminal output is not saved."
-              : "Run the agent's own sign-in flow. Terminal output is not saved."}
+              : purpose === "setup"
+                ? "Run the reviewed command in this worktree. Terminal output is not saved."
+                : "Run the agent's own sign-in flow. Terminal output is not saved."}
           </p>
         </div>
         <button
@@ -265,7 +279,11 @@ export function TerminalSheet({
             if (term) void session.current?.start(agentId, { rows: term.rows, cols: term.cols });
           }}
         >
-          {purpose === "installation" ? "Start installation" : "Start sign-in"}
+          {purpose === "installation"
+            ? "Start installation"
+            : purpose === "setup"
+              ? "Start setup"
+              : "Start sign-in"}
         </button>
       </footer>
     </dialog>

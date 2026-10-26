@@ -26,7 +26,11 @@ const container = document.getElementById("root");
 if (container) {
   if (import.meta.env.DEV && new URLSearchParams(location.search).has("preview")) {
     const mode = new URLSearchParams(location.search).get("preview");
-    if (mode === "profiles")
+    if (mode === "worktree-setup")
+      void import("./dev/worktreeSetupPreview").then(({ mountWorktreeSetupPreview }) =>
+        mountWorktreeSetupPreview(container),
+      );
+    else if (mode === "profiles")
       void import("./dev/profilesPreview").then(({ mountProfilesPreview }) =>
         mountProfilesPreview(container),
       );
