@@ -189,6 +189,15 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   ACP/fallback ownership aliases are shared. Agent tests (24 unit, 20 discovery, six installation)
   and 357 driver unit tests, four schema checks and three fixture replay integration tests pass.
   Install/authentication and real vendor acceptance remain pending; no paid prompts were run.
+- ACP refinements preserve OMP choice labels/descriptions separately from native values, show
+  Cursor's separate tasks/phases before plan approval, merge bounded Cursor todo notifications
+  and retain task/image context through ordinary tool events. Grok's prompt-wide usage ledger
+  uses disjoint cache buckets and turn scope. The current plan table now matches the documented
+  agy stdin protocol and leaves Cursor restart-based model switching unqualified.
+  The complete core suite passed after optional readiness; final branch CI remains pending.
+  The last executed driver run passed 362 tests. Application Control subsequently blocked the
+  newly linked test executables; the two newest callback regressions and doc-check compile but
+  await branch CI execution. No binaries or security policy were changed to bypass the block.
 
 ## Decisions and constraints
 
