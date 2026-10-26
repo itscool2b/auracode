@@ -17,7 +17,7 @@ let state: AccountStatus = {
   fingerprint: "1234 5678 90AB CDEF 1234 5678 90AB CDEF",
   sync: {
     state: "inactive",
-    pending_changes: null,
+    pending_changes: stage === "pending" ? 3 : null,
     last_sync_at: null,
     message: "Select the Account profile to sync.",
   },

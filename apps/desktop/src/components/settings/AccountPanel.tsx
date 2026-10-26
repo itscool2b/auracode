@@ -14,6 +14,7 @@ import { errorMessage } from "../../lib/errors";
 import { switchProfile } from "../../lib/profiles";
 import { Modal } from "../chat/Modal";
 import { AccountVerification } from "./AccountVerification";
+import { SignOutDialog } from "./SignOutDialog";
 import "./account.css";
 
 type Challenge = SignInChallenge & { expiresAt: number; resendAt: number };
@@ -49,6 +50,7 @@ export function AccountPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [signOutReview, setSignOutReview] = useState(false);
   const [generation, setGeneration] = useState(0);
   const [email, setEmail] = useState("");
   const [proof, setProof] = useState("");
@@ -201,6 +203,7 @@ export function AccountPanel({
     run(async () => {
       const value = await api.signOut();
       if (!mounted.current) return;
+      setSignOutReview(false);
       setStatus(value.status);
       setRecovery(null);
       setRecoveryInput("");
@@ -641,7 +644,10 @@ export function AccountPanel({
             className="ui-button"
             type="button"
             disabled={locked}
-            onClick={() => void signOut()}
+            onClick={() => {
+              setError(null);
+              setSignOutReview(true);
+            }}
           >
             Sign out
           </button>
@@ -670,6 +676,15 @@ export function AccountPanel({
         <p role="status" className="settings-footnote">
           Try again in {remaining} seconds.
         </p>
+      ) : null}
+      {!recoveryOnly && signOutReview ? (
+        <SignOutDialog
+          pending={status?.sync.pending_changes ?? null}
+          busy={busy}
+          error={error}
+          onCancel={() => setSignOutReview(false)}
+          onConfirm={() => void signOut()}
+        />
       ) : null}
       {!recoveryOnly && deviceAction ? (
         <Modal

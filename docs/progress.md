@@ -2096,3 +2096,11 @@ Desktop TypeScript, Biome, all three native account-admission tests and both rec
 passed. The dark recovery screen was visually inspected. Earlier integrated profile checks passed all
 13 cases. Final combined tests, native platform acceptance and real account recovery remain pending.
 
+### Review pending work before sign-out
+Desktop sign-out now opens an explicit review with the last reported pending-change count, or an
+honest unknown-count explanation. It states that encrypted local data stays and sync pauses. Cancel
+keeps the account open; confirmation alone invokes sign-out, and failure stays visible in the review.
+Chromium and WebKit passed unknown and nonzero-count review, cancellation, confirmation and
+accessibility alongside the existing account/device flows. TypeScript and Biome passed. No account
+request or credential operation ran during these synthetic checks.
+

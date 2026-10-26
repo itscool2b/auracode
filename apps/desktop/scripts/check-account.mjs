@@ -74,6 +74,15 @@ export async function checkAccount(browser, url, out, engine) {
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await page.screenshot({ path: resolve(out, `${engine}-account-devices.png`) });
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    const signOut = page.getByRole("dialog", { name: "Sign out of auracode?" });
+    await signOut
+      .getByText("Sync has not confirmed how many changes are waiting.", { exact: false })
+      .waitFor();
+    await signOut.getByRole("button", { name: "Stay signed in" }).click();
+    await signOut.waitFor({ state: "detached" });
+    await page.getByText("This device is approved", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await signOut.getByRole("button", { name: "Sign out now" }).click();
     await page.getByRole("heading", { name: "Sign in to auracode" }).waitFor();
     await page.goto(`${url}/?preview=account&stage=pending`);
     await page.getByText("THIS-DEVICE-1234", { exact: true }).waitFor();
@@ -82,6 +91,13 @@ export async function checkAccount(browser, url, out, engine) {
     assert.equal(await trust.isDisabled(), true);
     await page.getByLabel("I compared the complete fingerprint and it matches").check();
     await trust.click();
+    await page.getByText("This device is approved", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await signOut
+      .getByText("The last sync report shows 3 changes waiting to upload.", { exact: false })
+      .waitFor();
+    assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+    await signOut.getByRole("button", { name: "Stay signed in" }).click();
     await page.getByText("This device is approved", { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
     assert.deepEqual(errors, []);
