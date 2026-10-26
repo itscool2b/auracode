@@ -280,8 +280,11 @@ async fn stalled_identity_save_outlives_attach_deadline_across_restart() {
     );
     h.manager.stop(&chat.id).await.unwrap();
     h.status(&chat.id, SessionStatus::Stopped).await;
+    // Starting reads project folders through the same writer that is still waiting on the
+    // identity write, so the new generation cannot become Ready before that write resolves.
+    // Everything up to the release stays inside SQLite's busy wait, where the write may still
+    // commit.
     h.manager.start(&chat.id, false).await.unwrap();
-    h.status(&chat.id, SessionStatus::Ready).await;
     h.manager
         .send(&chat.id, "after restart".into())
         .await
@@ -291,6 +294,12 @@ async fn stalled_identity_save_outlives_attach_deadline_across_restart() {
         prompt_ids(&next_handle.commands()).is_empty(),
         "a new driver generation cannot bypass the identity write"
     );
+    assert!(
+        h.statuses
+            .last(&chat.id)
+            .is_none_or(|update| update.status != SessionStatus::Ready),
+        "the restart waits for the identity write"
+    );
     let stored: String = conn
         .query_row(
             "SELECT native_session_id FROM agent_sessions WHERE chat_id = ?1",
@@ -299,12 +308,12 @@ async fn stalled_identity_save_outlives_attach_deadline_across_restart() {
         )
         .unwrap();
     assert_eq!(stored, SOURCE);
-    assert_eq!(h.factory.setups()[1].resume.as_deref(), Some(NATIVE));
     conn.execute_batch("ROLLBACK").unwrap();
     eventually("prompt after the committed identity", || {
         prompt_ids(&next_handle.commands()).len() == 1
     })
     .await;
+    assert_eq!(h.factory.setups()[1].resume.as_deref(), Some(NATIVE));
     let stored: String = conn
         .query_row(
             "SELECT native_session_id FROM agent_sessions WHERE chat_id = ?1",
