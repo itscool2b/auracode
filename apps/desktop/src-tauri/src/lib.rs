@@ -23,6 +23,7 @@ pub mod account_sync;
 pub mod accounts;
 pub mod bindings;
 pub mod boot;
+pub mod catalog_refresh;
 pub mod changes_commands;
 pub mod chat_export;
 pub mod clone_commands;
@@ -317,6 +318,7 @@ fn on_event(app: &tauri::AppHandle, event: RunEvent) {
         } if label == window::MAIN_WINDOW => {
             window::sync_webview_visibility(app);
             account_sync::trigger(app);
+            catalog_refresh::on_focus(app);
         }
         RunEvent::WindowEvent {
             label,

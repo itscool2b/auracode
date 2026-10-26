@@ -81,6 +81,7 @@ pub struct AppState {
     pub quit: Arc<Quit>,
     /// Each webview's current page, for the sinks of its channels.
     pub pages: Arc<Pages>,
+    pub catalog_refresh: Arc<crate::catalog_refresh::RefreshGate>,
     /// Unlogged terminal sessions, owned by the window that explicitly opened them.
     pub terminals: aura_core::terminal::Terminals,
     /// Lazily loaded setup preferences, available only while this process owns the profile.
@@ -213,6 +214,7 @@ impl AppState {
             recovery: Mutex::new(booted.recovery),
             quit: Arc::default(),
             pages: Arc::default(),
+            catalog_refresh: Arc::default(),
             terminals: Default::default(),
             integrity: IntegrityCheck::new(booted.integrity_check),
             demos: DemoSessions::default(),

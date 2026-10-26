@@ -2264,3 +2264,16 @@ also passed temporary Node SQLite arbitration tests. Generated Account DTOs incl
 reset types. Core fault-injection coverage for binding and acknowledgement failures is added, awaiting
 integrated native execution with the blocked SQLite build noted above. Reset presentation, restored
 profile binding after vault loss and device-local removal remain in progress; no live reset occurred.
+
+### Agent discovery on focus
+
+Returning to an unlocked app refreshes installed-agent discovery at most once per minute. Startup,
+focus bursts and an in-flight refresh are coalesced, while running sessions retain their original
+launch specifications. The native Windows cooldown/concurrency regression and rustfmt pass. This
+also fixes the integrated reset-confirmation closure ownership required for native compilation.
+Watching binary directories and selecting shadowed installations remain pending.
+
+The owner requested Cloudflare MCP deployment. Its documented request interface can manage resources
+and upload the Rust Worker, but cannot supply the separate bearer token required by Static Assets
+uploads. The official direct-upload documentation confirms that requirement. Website publication
+remains pending; no alternate authentication, new login request or live resource mutation was made.

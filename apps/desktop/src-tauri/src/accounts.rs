@@ -372,7 +372,7 @@ pub async fn account_reset_confirm(
     confirmation: String,
     retained: bool,
 ) -> Result<AccountStatus, AccountFailure> {
-    run(&state, AccountAction::Manage, |accounts| async move {
+    run(&state, AccountAction::Manage, move |accounts| async move {
         accounts
             .confirm_sync_reset(&review_id, &confirmation, retained, now())
             .await
