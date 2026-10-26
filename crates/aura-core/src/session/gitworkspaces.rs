@@ -38,6 +38,39 @@ fn invalid(message: impl Into<String>) -> SessionError {
 }
 
 impl SessionManager {
+    pub async fn worktree_pr_preview(
+        &self,
+        chat_id: &str,
+        worktree_id: &str,
+        input: aura_protocol::git::PullRequestInput,
+    ) -> Result<aura_protocol::git::PullRequestPreview, SessionError> {
+        self.git_chat(chat_id).await?;
+        self.worktrees()?
+            .pull_request_preview(chat_id, worktree_id, input)
+            .await
+            .map_err(|error| invalid(error.to_string()))
+    }
+
+    pub async fn worktree_pr_apply(
+        &self,
+        chat_id: &str,
+        token: &str,
+    ) -> Result<aura_protocol::git::PullRequestResult, SessionError> {
+        let manager = self.clone();
+        let chat_id = chat_id.to_owned();
+        let token = token.to_owned();
+        self.deps().rt.spawn(async move {
+            let _organization = manager.shared().organization.lock().await;
+            manager.git_chat(&chat_id).await?;
+            let service = manager.worktrees()?;
+            let records = service.list(&chat_id).await.map_err(|error|invalid(error.to_string()))?;
+            let folders = records.into_iter().filter(|record|record.state == aura_protocol::git::WorktreeState::Ready)
+                .flat_map(|record|[PathBuf::from(record.source), PathBuf::from(record.path)]).collect();
+            let _reservations = manager.reserve_git_folders(folders).await?;
+            service.pull_request_apply(&chat_id, &token).await.map_err(|error|invalid(error.to_string()))
+        }).await.map_err(|_| invalid("The publishing task ended unexpectedly. Refresh GitHub to check the branch and pull request before retrying."))?
+    }
+
     fn worktrees(&self) -> Result<Arc<crate::gitworkspaces::GitWorkspaces>, SessionError> {
         self.deps()
             .worktrees

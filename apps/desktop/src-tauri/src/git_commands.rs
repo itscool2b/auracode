@@ -128,3 +128,30 @@ pub async fn worktree_relocation_apply(
         .worktree_relocation_apply(&chat_id, &token)
         .await?)
 }
+
+#[tauri::command]
+#[specta::specta]
+pub async fn worktree_pr_preview(
+    state: State<'_, AppState>,
+    chat_id: String,
+    worktree_id: String,
+    input: aura_protocol::git::PullRequestInput,
+) -> Result<aura_protocol::git::PullRequestPreview, AppError> {
+    Ok(state
+        .sessions()?
+        .worktree_pr_preview(&chat_id, &worktree_id, input)
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn worktree_pr_apply(
+    state: State<'_, AppState>,
+    chat_id: String,
+    token: String,
+) -> Result<aura_protocol::git::PullRequestResult, AppError> {
+    Ok(state
+        .sessions()?
+        .worktree_pr_apply(&chat_id, &token)
+        .await?)
+}

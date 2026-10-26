@@ -115,6 +115,8 @@ export const commands = {
 	worktreeRecoveryApply: (chatId: string, worktreeId: string, token: string) => typedError<WorktreeActionResult, AppError>(__TAURI_INVOKE("worktree_recovery_apply", { chatId, worktreeId, token })),
 	worktreeRelocationPreview: (chatId: string, worktreeId: string, destination: WorktreeDestination) => typedError<WorktreeRelocationPreview, AppError>(__TAURI_INVOKE("worktree_relocation_preview", { chatId, worktreeId, destination })),
 	worktreeRelocationApply: (chatId: string, token: string) => typedError<ContinuationResult, AppError>(__TAURI_INVOKE("worktree_relocation_apply", { chatId, token })),
+	worktreePrPreview: (chatId: string, worktreeId: string, input: PullRequestInput) => typedError<PullRequestPreview, AppError>(__TAURI_INVOKE("worktree_pr_preview", { chatId, worktreeId, input })),
+	worktreePrApply: (chatId: string, token: string) => typedError<PullRequestResult, AppError>(__TAURI_INVOKE("worktree_pr_apply", { chatId, token })),
 	/**  Every chat, newest activity first. */
 	chatsList: () => typedError<ChatSummary[], AppError>(__TAURI_INVOKE("chats_list")),
 	workspaceSnapshot: (filter: WorkspaceFilter) => typedError<WorkspaceSnapshot, AppError>(__TAURI_INVOKE("workspace_snapshot", { filter })),
@@ -1000,6 +1002,36 @@ export type PromptAck = {
 
 /**  What happened to a queued prompt. */
 export type PromptState = "queued" | "started" | "completed" | "cancelled" | "failed";
+
+export type PullRequestInput = {
+	title: string,
+	body: string,
+	base_branch: string | null,
+};
+
+export type PullRequestPreview = {
+	token: string,
+	worktree_id: string,
+	repository: string,
+	repository_url: string,
+	head_branch: string,
+	head_commit: string,
+	base_branch: string,
+	title: string,
+	body: string,
+	will_push: boolean,
+	existing_url: string | null,
+	diff_stat: string,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type PullRequestResult = {
+	url: string,
+	created: boolean,
+	head_commit: string,
+	warning: string | null,
+};
 
 export type QueuedPrompt = {
 	prompt_id: string,

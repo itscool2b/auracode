@@ -1483,3 +1483,22 @@ The pure aura-protocol Account DTO exporter now passes and generated TypeScript 
 the Account UI's thin invoke transport. It retains the Rust serde names and bounds timestamps to
 JSON numbers. This does not change or substitute for the blocked full Tauri command export gate.
 
+## M4 reviewed pull request publication
+
+The worktree PR preview now shows the repository, committed head, base, diff summary, exact title/body
+and whether the branch will be published. Apply consumes that review once and rechecks local state,
+origin and remote branch/base state while holding folder/actor reservations in an owned task. A new
+remote branch uses an explicitly empty expected ref lease, which only creates a missing branch.
+An existing remote branch must already equal the reviewed commit. No local files are committed, no
+existing remote history is replaced, and an existing matching open PR is reused without editing it.
+
+GitHub CLI receives an explicit repository/head/base and the body through bounded stdin. The explicit
+head disables implicit pushing/forking; the created PR is normal, with maintainer edits disabled.
+Missing CLI, sign-in/access failures and uncertain network outcomes have actionable errors; an
+unconfirmed final head after creation returns the PR URL with a warning. GitHub.com origin remotes
+are supported initially. Five focused publication tests pass on Windows with a fake GitHub service
+and a real owned temporary bare Git repository. The full current Git suite has 23 passing tests;
+core/CLI/desktop all-target Clippy and exact binding export pass. Native GitHub publishing, macOS
+execution, setup and remaining M4 acceptance are pending. No real remote mutation or agent call ran.
+The native behavior follows the official [GitHub PR create](https://cli.github.com/manual/gh_pr_create)
+and [Git push lease](https://git-scm.com/docs/git-push) contracts.

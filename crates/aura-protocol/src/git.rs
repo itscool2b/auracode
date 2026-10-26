@@ -124,6 +124,39 @@ pub struct WorktreeRelocationPreview {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct PullRequestInput {
+    pub title: String,
+    pub body: String,
+    pub base_branch: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct PullRequestPreview {
+    pub token: String,
+    pub worktree_id: String,
+    pub repository: String,
+    pub repository_url: String,
+    pub head_branch: String,
+    pub head_commit: String,
+    pub base_branch: String,
+    pub title: String,
+    pub body: String,
+    pub will_push: bool,
+    pub existing_url: Option<String>,
+    pub diff_stat: String,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct PullRequestResult {
+    pub url: String,
+    pub created: bool,
+    pub head_commit: String,
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct IsolationResult {
     pub worktree: ManagedWorktree,
     pub warning: Option<String>,

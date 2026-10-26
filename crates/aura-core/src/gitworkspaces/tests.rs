@@ -3,14 +3,14 @@ use crate::{paths::DataRoot, profile::Profiles};
 use aura_process::{EnvSource, ResolvedEnv, process_env};
 use aura_protocol::git::{IsolationInput, WorktreeState};
 
-struct Rig {
+pub(super) struct Rig {
     _dir: tempfile::TempDir,
-    work: PathBuf,
-    service: Arc<GitWorkspaces>,
-    git: git::Git,
+    pub(super) work: PathBuf,
+    pub(super) service: Arc<GitWorkspaces>,
+    pub(super) git: git::Git,
 }
 
-async fn rig() -> Rig {
+pub(super) async fn rig() -> Rig {
     let dir = tempfile::tempdir().expect("fixture");
     let profile = Profiles::new(DataRoot::at(dir.path().join("data")))
         .open_active()
@@ -74,7 +74,7 @@ async fn rig() -> Rig {
     }
 }
 
-async fn isolated(rig: &Rig) -> aura_protocol::git::ManagedWorktree {
+pub(super) async fn isolated(rig: &Rig) -> aura_protocol::git::ManagedWorktree {
     let preview = rig
         .service
         .isolation_preview(
@@ -265,7 +265,7 @@ async fn bring_changes_rejects_changed_bytes_even_when_git_status_is_identical()
     );
 }
 
-async fn commit_file(rig: &Rig, path: &Path, text: &str) {
+pub(super) async fn commit_file(rig: &Rig, path: &Path, text: &str) {
     std::fs::write(path.join("file.txt"), text).expect("edit");
     rig.git
         .run(path, git::args(&["add", "--", "file.txt"]), 8192)
