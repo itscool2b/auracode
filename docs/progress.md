@@ -14,7 +14,8 @@ Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b 
 - Updated architecture documentation for Rust, Cloudflare and Orbit. No cloud application is deployed.
 - Verified the new buckets have no public r2.dev access or custom domains; verified the old bucket is absent.
 - Local checks passed: pnpm check (4 instruction tests, 805 frontend tests, 19 pre-existing skips),
-  pnpm build, cargo fmt, and 33 documentation tests. Full Rust tests and branch CI are pending.
+  pnpm build, cargo fmt, 33 documentation tests, and the full locked Rust workspace test suite.
+  Branch CI passed lint, Clippy and Linux application smoke checks; Windows smoke checks are pending.
 - A separate review found no blocking code issues; corrected its two documentation inconsistencies.
 
 ## Remaining, in order
