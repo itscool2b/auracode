@@ -271,6 +271,7 @@ pub(crate) struct Shared {
     /// Serializes busy-folder preflight and project chat creation/moves.
     organization: tokio::sync::Mutex<()>,
     continuations: Mutex<HashMap<String, conversation::PreparedContinuation>>,
+    project_tools: Mutex<HashMap<String, project_tools::PreparedTools>>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
     #[cfg(test)]
     slow_folder: Mutex<Option<(PathBuf, Duration, Arc<AtomicU64>)>>,
@@ -385,6 +386,7 @@ impl SessionManager {
                     folders: Mutex::new(HashMap::new()),
                     organization: tokio::sync::Mutex::new(()),
                     continuations: Mutex::new(HashMap::new()),
+                    project_tools: Mutex::new(HashMap::new()),
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
                 }),
@@ -1040,6 +1042,21 @@ impl SessionManager {
     pub async fn wait_owned_work(&self, deadline: Duration) -> bool {
         tokio::time::timeout(deadline, async {
             while self.shared().live.owned_work_count() != 0 {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .is_ok()
+    }
+
+    /// General shells require explicit quit confirmation instead of the protected mutation drain.
+    pub fn project_terminal_count(&self) -> usize {
+        self.shared().live.project_terminal_count()
+    }
+
+    pub async fn wait_project_terminals(&self, deadline: Duration) -> bool {
+        tokio::time::timeout(deadline, async {
+            while self.project_terminal_count() != 0 {
                 tokio::time::sleep(Duration::from_millis(25)).await;
             }
         })

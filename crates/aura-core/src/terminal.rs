@@ -43,7 +43,7 @@ pub enum TerminalError {
     )]
     TimedOut,
     #[error(
-        "Setup cleanup could not be confirmed. Its folders remain reserved until the application closes; inspect the owned-process recovery information before restarting work."
+        "Terminal cleanup could not be confirmed. Its folders remain reserved until the application closes; inspect the owned-process recovery information before restarting work."
     )]
     CleanupUnconfirmed,
     #[error(
@@ -75,6 +75,7 @@ struct Slot {
     cleanup_unconfirmed: AtomicBool,
     cleanup: watch::Sender<Option<bool>>,
     setup_timed_out: AtomicBool,
+    project: AtomicBool,
 }
 impl Slot {
     fn closed_error(&self) -> TerminalError {
@@ -149,9 +150,30 @@ impl TerminalTicket {
         size: PtySize,
         guard: Box<dyn Send + Sync>,
     ) -> Result<String, TerminalError> {
-        tokio::spawn(self.start_guarded_owned(spawner, spec, size, guard, Duration::from_secs(600)))
+        tokio::spawn(self.start_guarded_owned(
+            spawner,
+            spec,
+            size,
+            guard,
+            Some(Duration::from_secs(600)),
+        ))
+        .await
+        .map_err(|_| TerminalError::Start("Setup startup ended unexpectedly.".into()))?
+    }
+
+    /// An explicitly opened project shell has no setup deadline. Its folder and profile guard
+    /// remains owned until confirmed process cleanup, including after page or IPC cancellation.
+    pub async fn start_project(
+        self,
+        spawner: Arc<Spawner>,
+        spec: SpawnSpec,
+        size: PtySize,
+        guard: Box<dyn Send + Sync>,
+    ) -> Result<String, TerminalError> {
+        self.slot.project.store(true, Ordering::Release);
+        tokio::spawn(self.start_guarded_owned(spawner, spec, size, guard, None))
             .await
-            .map_err(|_| TerminalError::Start("Setup startup ended unexpectedly.".into()))?
+            .map_err(|_| TerminalError::Start("Terminal startup ended unexpectedly.".into()))?
     }
 
     async fn start_guarded_owned(
@@ -160,7 +182,7 @@ impl TerminalTicket {
         spec: SpawnSpec,
         size: PtySize,
         guard: Box<dyn Send + Sync>,
-        limit: Duration,
+        limit: Option<Duration>,
     ) -> Result<String, TerminalError> {
         if *self.slot.canceled.borrow() {
             return Err(TerminalError::Closed);
@@ -180,7 +202,7 @@ impl TerminalTicket {
                 biased;
                 _=control.exited()=>{},
                 _=canceled.wait_for(|value|*value)=>{},
-                _=tokio::time::sleep(limit)=>{
+                _=async {match limit {Some(limit)=>tokio::time::sleep(limit).await,None=>std::future::pending().await}}=>{
                     if let Some(slot)=slot.upgrade(){slot.setup_timed_out.store(true,Ordering::Release);}
                     control.kill();
                 },
@@ -321,6 +343,7 @@ impl Terminals {
             cleanup_unconfirmed: AtomicBool::new(false),
             cleanup,
             setup_timed_out: AtomicBool::new(false),
+            project: AtomicBool::new(false),
         });
         slots.insert(id.clone(), Arc::clone(&slot));
         Ok(TerminalTicket {
@@ -444,6 +467,25 @@ impl Terminals {
         }
         slots.clear();
     }
+
+    /// Preserve general shells until quit is confirmed. Existing bounded setup/vendor shutdown
+    /// can finish before that question without leaving file mutations behind.
+    pub fn close_non_project(&self) {
+        self.close_kind(false);
+    }
+    pub fn close_projects(&self) {
+        self.close_kind(true);
+    }
+    fn close_kind(&self, project: bool) {
+        lock(&self.0.slots).retain(|_, slot| {
+            if slot.project.load(Ordering::Acquire) == project {
+                slot.cancel();
+                false
+            } else {
+                true
+            }
+        });
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -497,6 +539,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn project_shell_retains_its_guard_after_start_and_releases_only_after_page_cleanup() {
+        struct Guard(Arc<AtomicBool>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let folder = tempfile::tempdir().unwrap();
+        let terminals = Terminals::default();
+        let released = Arc::new(AtomicBool::new(false));
+        let id = terminals
+            .reserve("main")
+            .unwrap()
+            .start_project(
+                Spawner::new(
+                    LeftoverRegistry::disabled(),
+                    tokio::runtime::Handle::current(),
+                ),
+                local_spec(folder.path()),
+                PtySize { rows: 24, cols: 80 },
+                Box::new(Guard(released.clone())),
+            )
+            .await
+            .unwrap();
+        read_until(&terminals, &id, "local-terminal-ready").await;
+        assert!(!released.load(Ordering::Acquire));
+        let (_, running) = terminals.running("main", &id).unwrap();
+        terminals.drop_owner("main");
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !released.load(Ordering::Acquire) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(running.control.try_exited().is_some());
+        assert!(running.control.shutdown().await.leftovers.is_empty());
+    }
+
+    #[tokio::test]
     async fn guarded_setup_deadline_cleans_up_without_renderer_polling() {
         struct Guard(Arc<AtomicBool>);
         impl Drop for Guard {
@@ -518,7 +600,7 @@ mod tests {
                 local_spec(folder.path()),
                 PtySize { rows: 24, cols: 80 },
                 Box::new(Guard(released.clone())),
-                Duration::from_millis(250),
+                Some(Duration::from_millis(250)),
             )
             .await
             .unwrap();
@@ -743,6 +825,20 @@ mod tests {
         assert!(*next.slot.canceled.borrow());
         assert!(other.iter().all(|ticket| !*ticket.slot.canceled.borrow()));
         assert!(terminals.reserve("main").is_ok());
+    }
+
+    #[test]
+    fn quit_preflight_preserves_project_slots_until_explicit_close() {
+        let terminals = Terminals::default();
+        let project = terminals.reserve("project").unwrap();
+        project.slot.project.store(true, Ordering::Release);
+        let vendor = terminals.reserve("vendor").unwrap();
+        terminals.close_non_project();
+        assert!(*vendor.slot.canceled.borrow());
+        assert!(!*project.slot.canceled.borrow());
+        assert!(terminals.try_quiesce_when_idle().is_none());
+        terminals.close_projects();
+        assert!(*project.slot.canceled.borrow());
     }
 
     #[test]

@@ -1,5 +1,6 @@
 import { OrbitMark } from "@auracode/ui/orbit";
-import { Ellipsis, GitBranch, PanelRight } from "lucide-react";
+import { Ellipsis, GitBranch, PanelRight, SquareTerminal } from "lucide-react";
+import { useState } from "react";
 import type { AgentEntry, ChatSummary } from "../../bindings";
 import { chatActivity } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
@@ -9,6 +10,7 @@ import { inTauri } from "../../lib/ipc";
 import { projectName } from "./ChatList";
 import { FolderContext } from "./FolderContext";
 import { Popover } from "./Popover";
+import { ProjectToolsDialog } from "./ProjectToolsDialog";
 
 /**
  * The chat's header: the agent and the version that runs (the user's own binary behind an
@@ -46,6 +48,7 @@ export function Header({
   readonly onGit?: () => void;
   readonly changesOpen?: boolean;
 }) {
+  const [toolsOpen, setToolsOpen] = useState(false);
   const { session } = state;
   const chat = listed ?? state.chat;
   const status = session?.status ?? chat?.status ?? "stopped";
@@ -119,6 +122,23 @@ export function Header({
         >
           <GitBranch size={16} />
         </button>
+      ) : null}
+      {chat && inTauri() ? (
+        <button
+          type="button"
+          className="chat-icon-button"
+          aria-label="Project tools"
+          title="Terminal and editor"
+          onClick={(event) => {
+            event.currentTarget.focus();
+            setToolsOpen(true);
+          }}
+        >
+          <SquareTerminal size={16} />
+        </button>
+      ) : null}
+      {toolsOpen && chat ? (
+        <ProjectToolsDialog key={chat.id} chatId={chat.id} onClose={() => setToolsOpen(false)} />
       ) : null}
       <Popover
         label="Chat details and controls"

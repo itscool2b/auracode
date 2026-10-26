@@ -12,6 +12,7 @@ import { checkAccountVerification } from "./check-account-verification.mjs";
 import { checkConfigSync } from "./check-config-sync.mjs";
 import { checkGitReview } from "./check-git-review.mjs";
 import { checkProfiles } from "./check-profiles.mjs";
+import { checkProjectTools } from "./check-project-tools.mjs";
 import { checkSessionFallback } from "./check-session-fallback.mjs";
 import { checkSteering } from "./check-steering.mjs";
 import { checkWorktreeSetup } from "./check-worktree-setup.mjs";
@@ -138,6 +139,7 @@ try {
         })
         .waitFor();
       await checkGitReview(page, url, out, engine);
+      await checkProjectTools(page, url, out, engine);
       await checkAccountVerification(browser, url, out, engine);
       await checkAccount(browser, url, out, engine);
       await checkProfiles(browser, url, out, engine);

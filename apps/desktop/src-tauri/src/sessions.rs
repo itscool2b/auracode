@@ -649,6 +649,15 @@ pub trait QuitHost: Send + Sync {
         async { true }
     }
     fn owned_work_blocked(&self) {}
+    fn project_terminal_count(&self) -> usize {
+        0
+    }
+    fn close_project_terminals(&self, _deadline: Duration) -> impl Future<Output = bool> + Send {
+        async { true }
+    }
+    fn terminal_cleanup_blocked(&self) {
+        self.owned_work_blocked();
+    }
     /// Save editor state while the database and webview are still available.
     fn flush_drafts(&self) -> impl Future<Output = bool> + Send {
         async { true }
@@ -771,6 +780,30 @@ pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutco
         .unwrap_or(false);
     host.hide_window();
     let mut question = quit_question_with_work(&host.storage(), host.active_work_count());
+    let terminals = host.project_terminal_count();
+    if terminals > 0 {
+        let message = if terminals == 1 {
+            "One project terminal is open. Quitting stops its shell and owned child processes."
+                .into()
+        } else {
+            format!(
+                "{terminals} project terminals are open. Quitting stops their shells and owned child processes."
+            )
+        };
+        match &mut question {
+            Some(question) => {
+                question.message = format!("{message}\n\n{}", question.message);
+                question.quit = "Stop work and quit".into();
+            }
+            None => {
+                question = Some(QuitQuestion {
+                    message,
+                    quit: "Close terminals and quit".into(),
+                    keep: "Keep auracode open".into(),
+                })
+            }
+        }
+    }
     if !drafts_saved {
         let message =
             "An unsent draft could not be confirmed saved. Quitting may discard its latest edits.";
@@ -791,6 +824,19 @@ pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutco
         host.show_window();
         quit.keep_running();
         tracing::info!("kept auracode open after the quit question");
+        return QuitOutcome::Kept;
+    }
+    if terminals > 0
+        && !tokio::time::timeout(
+            QUIT_SESSIONS_DEADLINE,
+            host.close_project_terminals(QUIT_SESSIONS_DEADLINE),
+        )
+        .await
+        .unwrap_or(false)
+    {
+        host.show_window();
+        host.terminal_cleanup_blocked();
+        quit.keep_running();
         return QuitOutcome::Kept;
     }
     let summary = tokio::time::timeout(
@@ -845,16 +891,29 @@ pub struct AppQuitHost<'a> {
 
 impl QuitHost for AppQuitHost<'_> {
     fn owned_work_guard(&self) -> Option<Box<dyn Send + '_>> {
+        // lib::quit already holds the transition mutex across runtime selection and this flow.
+        self.chats
+            .manager
+            .try_drain_owned_work()
+            .map(|guard| Box::new(guard) as Box<dyn Send>)
+    }
+
+    fn project_terminal_count(&self) -> usize {
+        self.chats.manager.project_terminal_count()
+    }
+
+    async fn close_project_terminals(&self, deadline: Duration) -> bool {
         use tauri::Manager as _;
-        let transition = self
-            .app
+        self.app
             .state::<crate::state::AppState>()
-            .transition
-            .clone()
-            .try_lock_owned()
-            .ok()?;
-        let guard = self.chats.manager.try_drain_owned_work()?;
-        Some(Box::new((transition, guard)))
+            .terminals
+            .close_projects();
+        self.chats.manager.wait_project_terminals(deadline).await
+    }
+
+    fn terminal_cleanup_blocked(&self) {
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+        self.app.dialog().message("A project terminal's process cleanup could not be confirmed. auracode stayed open and kept its folder protected. Review owned-process recovery before retrying quit.").title("Terminal cleanup needs attention").buttons(MessageDialogButtons::Ok).show(|_|{});
     }
 
     async fn wait_owned_work(&self, deadline: Duration) -> bool {
@@ -1588,6 +1647,8 @@ mod tests {
         CloseRegistry,
         Exit(i32),
         OwnedWorkBlocked,
+        CloseProjectTerminals,
+        TerminalCleanupBlocked,
     }
 
     /// Records every call; the store and the sessions are real when given, and either can be
@@ -1602,6 +1663,8 @@ mod tests {
         stuck_store: bool,
         active_work: usize,
         stuck_owned_work: bool,
+        project_terminals: usize,
+        terminal_cleanup: bool,
     }
 
     impl FakeHost {
@@ -1616,6 +1679,8 @@ mod tests {
                 stuck_store: false,
                 active_work: 0,
                 stuck_owned_work: false,
+                project_terminals: 0,
+                terminal_cleanup: true,
             }
         }
 
@@ -1649,6 +1714,16 @@ mod tests {
         }
         fn owned_work_blocked(&self) {
             self.record(Call::OwnedWorkBlocked);
+        }
+        fn project_terminal_count(&self) -> usize {
+            self.project_terminals
+        }
+        async fn close_project_terminals(&self, _deadline: Duration) -> bool {
+            self.record(Call::CloseProjectTerminals);
+            self.terminal_cleanup
+        }
+        fn terminal_cleanup_blocked(&self) {
+            self.record(Call::TerminalCleanupBlocked);
         }
         async fn flush_drafts(&self) -> bool {
             self.drafts_saved
@@ -1718,6 +1793,66 @@ mod tests {
             state: StorageState::Paused { reason, since: 1 },
             unsaved_bytes,
         }
+    }
+
+    #[tokio::test]
+    async fn quit_cancel_preserves_project_shell_and_confirmation_waits_for_cleanup() {
+        for confirmed in [false, true] {
+            let quit = Quit::default();
+            quit.on_exit_requested();
+            let mut host = FakeHost::new(StorageStatus::default(), confirmed);
+            host.project_terminals = 1;
+            let result = run_quit(&quit, &host, 0).await;
+            let calls = host.calls();
+            assert!(matches!(&calls[1],Call::Ask(message) if message.contains("project terminal")));
+            if confirmed {
+                assert!(matches!(result, QuitOutcome::Exited { .. }));
+                assert_eq!(calls[2], Call::CloseProjectTerminals);
+                assert!(matches!(calls[3], Call::StopSessions(_)));
+            } else {
+                assert_eq!(result, QuitOutcome::Kept);
+                assert_eq!(calls.len(), 3);
+                assert_eq!(calls[2], Call::Show);
+            }
+        }
+        let quit = Quit::default();
+        quit.on_exit_requested();
+        let mut host = FakeHost::new(StorageStatus::default(), true);
+        host.project_terminals = 1;
+        host.terminal_cleanup = false;
+        assert_eq!(run_quit(&quit, &host, 0).await, QuitOutcome::Kept);
+        assert!(host.calls().ends_with(&[
+            Call::CloseProjectTerminals,
+            Call::Show,
+            Call::TerminalCleanupBlocked
+        ]));
+        assert!(!host.calls().iter().any(|call| matches!(
+            call,
+            Call::CloseStore(_) | Call::StopSessions(_) | Call::Exit(_)
+        )));
+    }
+
+    #[tokio::test]
+    async fn ordinary_quit_keeps_outer_transition_exclusive_without_reacquiring_it() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut booted = boot(Ok(DataRoot::at(temp.path().join("data"))));
+        let chats = testing::start(&mut booted).expect("chats");
+        let transition = tokio::sync::Mutex::new(());
+        let outer = transition.lock().await;
+        let quit = Quit::default();
+        quit.on_exit_requested();
+        let mut host = FakeHost::new(StorageStatus::default(), false);
+        host.chats = Some(chats);
+        assert!(transition.try_lock().is_err());
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_secs(10), run_quit(&quit, &host, 0))
+                .await
+                .unwrap(),
+            QuitOutcome::Exited { saved: true, .. }
+        ));
+        assert!(transition.try_lock().is_err());
+        drop(outer);
+        assert!(transition.try_lock().is_ok());
     }
 
     #[tokio::test]

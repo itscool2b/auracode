@@ -193,6 +193,7 @@ struct Inner {
     slots: HashSet<String>,
     folders: HashMap<String, Vec<PathBuf>>,
     mutations: HashSet<PathBuf>,
+    folder_uses: HashMap<PathBuf, usize>,
     /// `(provider realm, native_session_id)` -> the chat holding it.
     sessions: HashMap<(NativeSessionScope, String), String>,
 }
@@ -247,6 +248,7 @@ impl LiveAgents {
             || inner.maintenance > 0
             || !inner.slots.is_empty()
             || !inner.mutations.is_empty()
+            || !inner.folder_uses.is_empty()
         {
             return false;
         }
@@ -294,6 +296,10 @@ impl LiveAgents {
     pub(crate) fn owned_work_count(&self) -> usize {
         let inner = self.lock();
         inner.maintenance.saturating_add(inner.mutations.len())
+    }
+
+    pub(crate) fn project_terminal_count(&self) -> usize {
+        self.lock().folder_uses.values().sum()
     }
 
     /// Gives `chat`'s slot back, and every native session it held.
@@ -361,6 +367,10 @@ impl LiveAgents {
         if inner.quiescing
             || inner.owned_draining
             || inner
+                .folder_uses
+                .keys()
+                .any(|held| folder.starts_with(held) || held.starts_with(folder))
+            || inner
                 .mutations
                 .iter()
                 .any(|held| folder.starts_with(held) || held.starts_with(folder))
@@ -381,6 +391,36 @@ impl LiveAgents {
         self.lock().mutations.remove(folder);
     }
 
+    /// A terminal can share a folder with agents, but cannot race destructive folder operations.
+    pub(crate) fn begin_folder_use(&self, folder: PathBuf) -> bool {
+        let mut inner = self.lock();
+        if inner.quiescing
+            || inner.owned_draining
+            || inner
+                .mutations
+                .iter()
+                .any(|held| folder.starts_with(held) || held.starts_with(&folder))
+        {
+            return false;
+        }
+        let count = inner.folder_uses.entry(folder).or_default();
+        let Some(next) = count.checked_add(1) else {
+            return false;
+        };
+        *count = next;
+        true
+    }
+
+    pub(crate) fn end_folder_use(&self, folder: &Path) {
+        let mut inner = self.lock();
+        if let Some(count) = inner.folder_uses.get_mut(folder) {
+            *count -= 1;
+            if *count == 0 {
+                inner.folder_uses.remove(folder);
+            }
+        }
+    }
+
     pub(crate) fn max(&self) -> usize {
         self.max
     }
@@ -392,6 +432,37 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+
+    #[test]
+    fn project_terminal_shares_agents_but_excludes_overlapping_mutations_and_idle_barriers() {
+        let live = LiveAgents::new(12);
+        let folder = PathBuf::from("/fixture/project");
+        assert!(live.acquire("agent"));
+        assert!(live.set_folder("agent", folder.clone()));
+        assert!(live.begin_folder_use(folder.clone()));
+        assert!(live.begin_folder_use(folder.join("child")));
+        assert_eq!(live.project_terminal_count(), 2);
+        assert_eq!(live.owned_work_count(), 0);
+        assert!(live.acquire("second"));
+        assert!(live.set_folder("second", folder.clone()));
+        live.release("agent");
+        live.release("second");
+        assert!(!live.reserve_folder(&folder));
+        assert!(!live.reserve_folder(Path::new("/fixture")));
+        assert!(!live.reserve_folder(&folder.join("child/deeper")));
+        assert!(!live.try_quiesce());
+        live.end_folder_use(&folder);
+        assert!(!live.reserve_folder(&folder));
+        live.end_folder_use(&folder.join("child"));
+        assert!(live.reserve_folder(&folder));
+        assert!(!live.begin_folder_use(folder.join("child")));
+        live.release_folder(&folder);
+        assert!(live.try_quiesce());
+        assert!(!live.begin_folder_use(folder.clone()));
+        live.resume_admission();
+        assert!(live.begin_owned_drain());
+        assert!(!live.begin_folder_use(folder));
+    }
 
     #[test]
     fn update_quiesce_excludes_agent_starts_and_git_mutations_atomically() {

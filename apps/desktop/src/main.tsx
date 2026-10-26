@@ -50,6 +50,10 @@ if (container) {
       void import("./dev/verificationPreview").then(({ mountVerificationPreview }) =>
         mountVerificationPreview(container),
       );
+    else if (mode === "project-tools")
+      void import("./dev/projectToolsPreview").then(({ mountProjectToolsPreview }) =>
+        mountProjectToolsPreview(container),
+      );
     else if (mode === "git")
       void import("./dev/gitPreview").then(({ mountGitPreview }) => mountGitPreview(container));
     else if (mode === "settings")

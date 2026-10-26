@@ -159,6 +159,9 @@ export const commands = {
 	gitWorkspace: (chatId: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_workspace", { chatId })),
 	gitInitializePreview: (chatId: string, initialBranch: string) => typedError<GitInitializePreview, AppError>(__TAURI_INVOKE("git_initialize_preview", { chatId, initialBranch })),
 	gitInitializeApply: (chatId: string, token: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_initialize_apply", { chatId, token })),
+	projectToolsReview: (chatId: string) => typedError<ProjectToolsReview, AppError>(__TAURI_INVOKE("project_tools_review", { chatId })),
+	projectTerminalStart: (chatId: string, token: string, shell: ProjectShell, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("project_terminal_start", { chatId, token, shell, terminalId, rows, cols })),
+	projectEditorOpen: (chatId: string, token: string, editor: ProjectEditor) => typedError<null, AppError>(__TAURI_INVOKE("project_editor_open", { chatId, token, editor })),
 	managedWorktrees: (chatId: string) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("managed_worktrees", { chatId })),
 	isolationPreview: (chatId: string, input: IsolationInput) => typedError<IsolationPreview, AppError>(__TAURI_INVOKE("isolation_preview", { chatId, input })),
 	isolationApply: (chatId: string, token: string) => typedError<IsolationResult, AppError>(__TAURI_INVOKE("isolation_apply", { chatId, token })),
@@ -1271,6 +1274,8 @@ export type ProjectCreate = {
 	folder: string,
 };
 
+export type ProjectEditor = "cursor" | "vs_code" | "vs_code_insiders";
+
 export type ProjectFilePreview = {
 	path: string,
 	bytes: number,
@@ -1304,6 +1309,15 @@ export type ProjectSearchHit = {
 	name: string,
 };
 
+export type ProjectShell = "power_shell" | "command_prompt" | "zsh" | "bash";
+
+export type ProjectShellChoice = {
+	id: ProjectShell,
+	label: string,
+	program: string,
+	args: string[],
+};
+
 export type ProjectSummary = {
 	id: string,
 	name: string,
@@ -1313,6 +1327,14 @@ export type ProjectSummary = {
 	folders: ProjectFolder[],
 	created_at: number,
 	updated_at: number,
+};
+
+export type ProjectToolsReview = {
+	token: string,
+	folder: string,
+	shells: ProjectShellChoice[],
+	editors: ProjectEditor[],
+	expires_at: number,
 };
 
 /**  What `chat_send` did with the prompt: sent at once, or queued behind a turn or a start. */

@@ -244,7 +244,7 @@ impl SessionManager {
         for folder in folders {
             if !self.shared().live.reserve_folder(&folder) {
                 return Err(invalid(
-                    "Stop all chats using these folders, including startup and shutdown, before Git actions.",
+                    "Stop all chats and close project terminals using these folders before Git actions. Wait for their process cleanup to finish.",
                 ));
             }
             reservations.folders.push(folder);

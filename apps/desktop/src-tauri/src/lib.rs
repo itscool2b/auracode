@@ -367,7 +367,7 @@ fn on_exit_requested(app: &tauri::AppHandle, code: Option<i32>, api: &tauri::Exi
         ExitRequest::Wait => api.prevent_exit(),
         ExitRequest::StartQuit => {
             api.prevent_exit();
-            state.terminals.close_all();
+            state.terminals.close_non_project();
             if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
                 clones.cancel_all();
             }

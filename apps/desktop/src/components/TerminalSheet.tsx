@@ -26,7 +26,7 @@ export function TerminalSheet({
   readonly onClose: () => void;
   readonly onFinished?: (exitCode: number | null) => void;
   readonly transport?: TerminalTransport;
-  readonly purpose?: "sign-in" | "installation" | "setup";
+  readonly purpose?: "sign-in" | "installation" | "setup" | "project";
   readonly review?: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -165,17 +165,23 @@ export function TerminalSheet({
         ? "Review the installation before starting."
         : purpose === "setup"
           ? "Review the command before starting."
-          : "Ready to sign in."
+          : purpose === "project"
+            ? "Review the folder and shell before starting."
+            : "Ready to sign in."
       : state.state === "starting"
         ? purpose === "installation"
           ? "Checking the reviewed installer…"
           : purpose === "setup"
             ? "Checking the reviewed setup…"
-            : "Opening the vendor sign-in flow…"
+            : purpose === "project"
+              ? "Checking the reviewed project folder…"
+              : "Opening the vendor sign-in flow…"
         : state.state === "running"
           ? purpose === "setup"
             ? "The setup command is running."
-            : "Follow the vendor's prompts below."
+            : purpose === "project"
+              ? "The project shell is running."
+              : "Follow the vendor's prompts below."
           : state.state === "failed"
             ? state.message
             : state.exitCode === 0
@@ -183,10 +189,12 @@ export function TerminalSheet({
                 ? "The installer finished. Refresh agents to verify the installation."
                 : purpose === "setup"
                   ? "The setup command finished."
-                  : "The vendor command finished. Check sign-in status to confirm."
+                  : purpose === "project"
+                    ? "The project shell finished."
+                    : "The vendor command finished. Check sign-in status to confirm."
               : state.exitCode === null
                 ? "The terminal closed without an exit status."
-                : `The vendor command exited with code ${state.exitCode}.`;
+                : `The ${purpose === "project" ? "project shell" : "vendor command"} exited with code ${state.exitCode}.`;
 
   const content = (
     <dialog
@@ -209,14 +217,18 @@ export function TerminalSheet({
               ? `Install ${agentName}`
               : purpose === "setup"
                 ? `Setup ${agentName}`
-                : `Sign in to ${agentName}`}
+                : purpose === "project"
+                  ? `${agentName} terminal`
+                  : `Sign in to ${agentName}`}
           </h2>
           <p id={description}>
             {purpose === "installation"
               ? "Review and run the package manager. Terminal output is not saved."
               : purpose === "setup"
                 ? "Run the reviewed command. Terminal output is not saved."
-                : "Run the agent's own sign-in flow. Terminal output is not saved."}
+                : purpose === "project"
+                  ? "Open a shell in the reviewed project folder. Terminal output is not saved."
+                  : "Run the agent's own sign-in flow. Terminal output is not saved."}
           </p>
         </div>
         <button
@@ -283,7 +295,9 @@ export function TerminalSheet({
             ? "Start installation"
             : purpose === "setup"
               ? "Start setup"
-              : "Start sign-in"}
+              : purpose === "project"
+                ? "Start project terminal"
+                : "Start sign-in"}
         </button>
       </footer>
     </dialog>

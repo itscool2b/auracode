@@ -1,8 +1,333 @@
 //! Explicit project utilities share the native profile and folder admission rules.
 use super::*;
+use aura_process::{LaunchSpec, ProcessCwd, ResolvedEnv, SpawnSpec};
 use aura_protocol::git::{GitInitializePreview, GitWorkspace};
+use aura_protocol::project_tools::{
+    ProjectEditor, ProjectShell, ProjectShellChoice, ProjectToolsReview,
+};
+use same_file::Handle;
+use std::time::Instant;
+
+pub(super) struct PreparedTools {
+    chat_id: String,
+    folder: PathBuf,
+    identity: Handle,
+    env: Arc<ResolvedEnv>,
+    shells: Vec<Shell>,
+    editors: Vec<ProjectEditor>,
+    expires: Instant,
+}
+struct Shell {
+    choice: ProjectShellChoice,
+    program: PathBuf,
+    identity: Handle,
+}
+
+pub struct ProjectTerminalPlan {
+    pub spec: SpawnSpec,
+    pub guard: Box<dyn Send + Sync>,
+}
+struct FolderUse {
+    shared: Arc<Shared>,
+    folder: PathBuf,
+    _identity: Handle,
+}
+impl Drop for FolderUse {
+    fn drop(&mut self) {
+        self.shared.live.end_folder_use(&self.folder);
+    }
+}
+
+fn invalid(message: impl Into<String>) -> SessionError {
+    SessionError::Organization(message.into())
+}
+fn display_path(path: &std::path::Path) -> Result<String, SessionError> {
+    let value = path.to_str().ok_or_else(|| {
+        invalid("This folder's name cannot be represented by the editor or terminal interface.")
+    })?;
+    #[cfg(windows)]
+    let value = value
+        .strip_prefix(r"\\?\UNC\")
+        .map(|tail| format!(r"\\{tail}"))
+        .unwrap_or_else(|| value.strip_prefix(r"\\?\").unwrap_or(value).to_owned());
+    Ok(value.to_owned())
+}
+
+fn shell(env: &ResolvedEnv) -> Vec<Shell> {
+    let mut choices = Vec::<(ProjectShell, &str, PathBuf, Vec<&str>)>::new();
+    #[cfg(windows)]
+    if let Some(root) = env
+        .vars
+        .get(&"SystemRoot".into())
+        .map(PathBuf::from)
+        .filter(|root| root.is_absolute())
+    {
+        choices.push((
+            ProjectShell::PowerShell,
+            "PowerShell",
+            root.join("System32/WindowsPowerShell/v1.0/powershell.exe"),
+            vec!["-NoLogo", "-NoProfile"],
+        ));
+        choices.push((
+            ProjectShell::CommandPrompt,
+            "Command Prompt",
+            root.join("System32/cmd.exe"),
+            vec!["/D"],
+        ));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = env;
+        choices.push((
+            ProjectShell::Zsh,
+            "Zsh",
+            PathBuf::from("/bin/zsh"),
+            vec!["-f", "-i"],
+        ));
+        choices.push((
+            ProjectShell::Bash,
+            "Bash",
+            PathBuf::from("/bin/bash"),
+            vec!["--noprofile", "--norc", "-i"],
+        ));
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let _ = env;
+    choices
+        .into_iter()
+        .filter_map(|(id, label, path, args)| {
+            let program = path.canonicalize().ok()?;
+            if !program.is_file() {
+                return None;
+            }
+            let identity = Handle::from_path(&program).ok()?;
+            Some(Shell {
+                choice: ProjectShellChoice {
+                    id,
+                    label: label.into(),
+                    program: display_path(&program).ok()?,
+                    args: args.into_iter().map(String::from).collect(),
+                },
+                program,
+                identity,
+            })
+        })
+        .collect()
+}
+
+// Metadata-only detection of standard native application locations. Custom installs may still be
+// opened manually. A detected application is not a claim that its OS URL handler can dispatch.
+fn editors(env: &ResolvedEnv) -> Vec<ProjectEditor> {
+    let mut candidates = Vec::<(ProjectEditor, PathBuf)>::new();
+    #[cfg(windows)]
+    {
+        for (key, base) in [
+            ("LOCALAPPDATA", "Programs"),
+            ("ProgramFiles", ""),
+            ("ProgramFiles(x86)", ""),
+        ] {
+            if let Some(root) = env
+                .vars
+                .get(&key.into())
+                .map(PathBuf::from)
+                .filter(|root| root.is_absolute())
+            {
+                let root = root.join(base);
+                candidates.extend([
+                    (ProjectEditor::Cursor, root.join("cursor/Cursor.exe")),
+                    (
+                        ProjectEditor::VsCode,
+                        root.join("Microsoft VS Code/Code.exe"),
+                    ),
+                    (
+                        ProjectEditor::VsCodeInsiders,
+                        root.join("Microsoft VS Code Insiders/Code - Insiders.exe"),
+                    ),
+                ]);
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut roots = vec![PathBuf::from("/Applications")];
+        if let Some(home) = env
+            .vars
+            .get(&"HOME".into())
+            .map(PathBuf::from)
+            .filter(|root| root.is_absolute())
+        {
+            roots.push(home.join("Applications"));
+        }
+        for root in roots {
+            candidates.extend([
+                (
+                    ProjectEditor::Cursor,
+                    root.join("Cursor.app/Contents/MacOS/Cursor"),
+                ),
+                (
+                    ProjectEditor::VsCode,
+                    root.join("Visual Studio Code.app/Contents/MacOS/Electron"),
+                ),
+                (
+                    ProjectEditor::VsCodeInsiders,
+                    root.join("Visual Studio Code - Insiders.app/Contents/MacOS/Electron"),
+                ),
+            ]);
+        }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let _ = env;
+    let mut found = Vec::new();
+    for (editor, path) in candidates {
+        if path.is_file() && !found.contains(&editor) {
+            found.push(editor);
+        }
+    }
+    found
+}
 
 impl SessionManager {
+    pub async fn project_tools_review(
+        &self,
+        chat_id: &str,
+    ) -> Result<ProjectToolsReview, SessionError> {
+        if self.shared().is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
+        let chat = self.git_chat(chat_id).await?;
+        let folder = chat
+            .folder
+            .canonicalize()
+            .map_err(|_| invalid("Locate this chat's folder before opening project tools."))?;
+        if !folder.is_dir() {
+            return Err(invalid("This chat's folder is unavailable."));
+        }
+        let identity = Handle::from_path(&folder)
+            .map_err(|_| invalid("The project folder could not be inspected."))?;
+        let env = self.deps().env.get().await;
+        let shells = shell(&env);
+        let editors = editors(&env);
+        let token = crate::ids::new_id();
+        let review = ProjectToolsReview {
+            token: token.clone(),
+            folder: display_path(&folder)?,
+            shells: shells.iter().map(|item| item.choice.clone()).collect(),
+            editors: editors.clone(),
+            expires_at: crate::time::now_millis() + 600_000,
+        };
+        let mut prepared = lock(&self.shared().project_tools);
+        prepared.retain(|_, item| item.expires > Instant::now());
+        if prepared.len() >= 32 {
+            return Err(invalid(
+                "Too many project tool reviews are open. Wait for an earlier review to expire.",
+            ));
+        }
+        prepared.insert(
+            token,
+            PreparedTools {
+                chat_id: chat_id.into(),
+                folder,
+                identity,
+                env,
+                shells,
+                editors,
+                expires: Instant::now() + Duration::from_secs(600),
+            },
+        );
+        Ok(review)
+    }
+
+    async fn consume_project_tools(
+        &self,
+        chat_id: &str,
+        token: &str,
+    ) -> Result<PreparedTools, SessionError> {
+        if self.shared().is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
+        let prepared = lock(&self.shared().project_tools)
+            .remove(token)
+            .ok_or_else(|| {
+                invalid("This project tool review expired or was used. Review the folder again.")
+            })?;
+        let chat = self.git_chat(chat_id).await?;
+        if prepared.chat_id != chat_id
+            || prepared.expires <= Instant::now()
+            || chat.folder.canonicalize().ok().as_ref() != Some(&prepared.folder)
+            || Handle::from_path(&prepared.folder).ok().as_ref() != Some(&prepared.identity)
+        {
+            return Err(invalid(
+                "The chat or folder changed after review. Review project tools again.",
+            ));
+        }
+        Ok(prepared)
+    }
+
+    pub async fn prepare_project_terminal(
+        &self,
+        chat_id: &str,
+        token: &str,
+        shell: ProjectShell,
+    ) -> Result<ProjectTerminalPlan, SessionError> {
+        let _organization = self.shared().organization.lock().await;
+        let prepared = self.consume_project_tools(chat_id, token).await?;
+        let shell = prepared
+            .shells
+            .into_iter()
+            .find(|item| item.choice.id == shell)
+            .ok_or_else(|| invalid("This shell was not available in the review."))?;
+        if Handle::from_path(&shell.program).ok().as_ref() != Some(&shell.identity) {
+            return Err(invalid(
+                "The shell changed after review. Review project tools again.",
+            ));
+        }
+        let folder_key = live::normalize_path(prepared.folder.clone());
+        if !self.shared().live.begin_folder_use(folder_key.clone()) {
+            return Err(invalid(
+                "A folder operation or application transition is in progress. Finish it before opening the terminal.",
+            ));
+        }
+        let guard = FolderUse {
+            shared: self.shared().clone(),
+            folder: folder_key,
+            _identity: prepared.identity,
+        };
+        let spec = SpawnSpec {
+            launch: LaunchSpec {
+                label: format!("Project {}", shell.choice.label),
+                program: shell.program,
+                args: shell.choice.args.into_iter().map(Into::into).collect(),
+                cwd: ProcessCwd::Fixed(prepared.folder.clone()),
+                set_env: Vec::new(),
+                daemons: Vec::new(),
+                startup_timeout: Duration::from_secs(15),
+            },
+            folder: prepared.folder,
+            env: prepared.env,
+            max_line_bytes: aura_process::MAX_LINE_BYTES,
+        };
+        Ok(ProjectTerminalPlan {
+            spec,
+            guard: Box::new(guard),
+        })
+    }
+
+    pub async fn project_editor_folder(
+        &self,
+        chat_id: &str,
+        token: &str,
+        editor: ProjectEditor,
+    ) -> Result<String, SessionError> {
+        let _organization = self.shared().organization.lock().await;
+        let prepared = self.consume_project_tools(chat_id, token).await?;
+        if !prepared.editors.contains(&editor) || !editors(&prepared.env).contains(&editor) {
+            return Err(invalid(
+                "This editor is no longer detected. Install it or open the folder manually.",
+            ));
+        }
+        display_path(&prepared.folder)
+    }
+
     pub async fn git_initialize_preview(
         &self,
         chat_id: &str,
