@@ -12,36 +12,38 @@ import { WorkspaceStore } from "../lib/workspace";
 const params = new URLSearchParams(location.search);
 const missing = params.has("missing");
 const agents: AgentEntry[] = [
+  "hermes",
   "claude",
   "codex",
-  "pi",
-  "hermes",
+  "antigravity",
   "cursor",
   "grok",
   "omp",
   "opencode",
-  "antigravity",
+  "pi",
 ].map((id, index) => ({
   id,
   name:
     [
+      "Hermes",
       "Claude Code",
       "Codex",
-      "Pi",
-      "Hermes",
+      "Antigravity",
       "Cursor",
       "Grok Build",
       "oh-my-pi",
-      "OpenCode",
-      "Antigravity",
+      "OpenCode V1",
+      "Pi",
     ][index] ?? id,
   description: "Synthetic detection fixture. No vendor command can run here.",
   availability:
-    missing || index > 2
+    missing || !["claude", "codex", "pi"].includes(id)
       ? { state: "missing", reason: "Not installed in this fixture." }
       : {
           state: "ready",
-          version: ["2.1.310", "0.162.1", "0.70.0"][index] ?? "1.0.0",
+          version:
+            ({ claude: "2.1.310", codex: "0.162.1", pi: "0.70.0" } as Record<string, string>)[id] ??
+            "1.0.0",
           path: `C:/fixture/${id}`,
         },
   launch: id,

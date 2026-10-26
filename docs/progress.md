@@ -2550,3 +2550,9 @@ regressions, pinned-action workflow lint, Biome and instruction parity pass. The
 and clone review gate passed Chromium and WebKit with synthetic IO and accessibility checks. Actual
 external Windows WebDriver, package compilation and native device acceptance are still pending the
 final qualified run. No CI dispatch, push, runtime installation, paid agent or real sign-in occurred.
+
+### Onboarding map label bounds
+
+- Kept the existing dark Orbit map and satellite positions; label plates now stay inside the panel and use the nearest vertical space clear of other labels and satellites. This prevents the native catalog order from clipping Claude or overlapping OpenCode V1 and Pi.
+- Aligned the browser setup fixture with the native primary catalog order and OpenCode V1 name. The existing setup browser check now checks label bounds/separation and captures both 1440x900 and 1024x768 map layouts.
+- Visually inspected the updated Chromium and WebKit screenshots. Both complete setup browser checks, shared UI typecheck, Biome and instruction parity passed. No native commands, CI or vendor actions ran.

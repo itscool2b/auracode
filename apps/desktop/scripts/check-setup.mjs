@@ -54,6 +54,51 @@ try {
       await page.getByRole("button", { name: "Get started" }).waitFor();
       await page.waitForFunction(() => !document.querySelector("[data-cinematic]"));
       await page.screenshot({ path: resolve(out, `${engine}-welcome.png`) });
+      const checkMapLabels = async () => {
+        const boxes = await page.locator(".setup-night").evaluate((panel) => {
+          const bounds = panel.getBoundingClientRect();
+          return [...panel.querySelectorAll(".o-globe-label")].map((label) => {
+            const box = label.getBoundingClientRect();
+            return {
+              left: box.left - bounds.left,
+              top: box.top - bounds.top,
+              right: box.right - bounds.left,
+              bottom: box.bottom - bounds.top,
+              width: bounds.width,
+              height: bounds.height,
+              text: label.textContent,
+            };
+          });
+        });
+        assert.equal(boxes.length, 9);
+        for (const [index, box] of boxes.entries()) {
+          assert.ok(
+            box.left >= 8 &&
+              box.top >= 8 &&
+              box.right <= box.width - 8 &&
+              box.bottom <= box.height - 8,
+            `${engine}: clipped ${box.text}`,
+          );
+          for (const other of boxes.slice(index + 1))
+            assert.ok(
+              box.right + 4 <= other.left ||
+                other.right + 4 <= box.left ||
+                box.bottom + 4 <= other.top ||
+                other.bottom + 4 <= box.top,
+              `${engine}: overlapping ${box.text} / ${other.text}`,
+            );
+        }
+      };
+      await checkMapLabels();
+      await page.setViewportSize({ width: 1024, height: 768 });
+      await page.waitForFunction(
+        () =>
+          Number(document.querySelector(".setup-night svg")?.getAttribute("width")) ===
+          document.querySelector(".setup-night")?.clientWidth,
+      );
+      await checkMapLabels();
+      await page.screenshot({ path: resolve(out, `${engine}-compact-map.png`) });
+      await page.setViewportSize({ width: 1440, height: 900 });
       const assertNoVendorCalls = async () =>
         assert.deepEqual(
           await page.evaluate(() =>

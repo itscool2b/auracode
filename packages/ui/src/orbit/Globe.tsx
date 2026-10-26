@@ -8,8 +8,9 @@ import type { GlobeAgent as DiscoveredAgent, GlobeDiscovery as DiscoveryModel } 
  * copy), square markers and mono labels with their data lines. Every agent flies its signature orbit
  * around it, staggered from 1.18 to 1.62 globe radii, in a quiet line. As the scan finds an agent its
  * orbit draws in and its satellite settles; missing agents get a dashed orbit and a hollow square.
- * Each label sits on a black plate 16px out along its orbit's outward normal, so no line ever runs
- * through text. Positions are pure functions of the playhead, so a frozen frame is always the same.
+ * Each label starts on a black plate 16px out along its orbit's outward normal, then moves inward
+ * or vertically when needed to clear panel edges and other labels or satellites. Positions are pure
+ * functions of the playhead, so a frozen frame is always the same.
  */
 
 const TAU = Math.PI * 2;
@@ -29,9 +30,7 @@ const LABEL_CHAR = LABEL_SIZE * (0.6 + 0.04);
 const LABEL_GAP = 16;
 
 /**
- * Where each agent's satellite rests (degrees along its own orbit). Chosen by searching every
- * combination for the one where no label touches another label, a satellite, the sphere or the
- * panel's edges, in the full panel and in a narrow one, with the labels spread around the globe:
+ * Where each agent's satellite rests (degrees along its own orbit), with labels spread around the globe:
  * Claude Code and Antigravity to the left, Codex, Hermes and Cursor to the right, Pi above and
  * Grok Build below.
  */
@@ -184,23 +183,13 @@ export function labelLines(
   return lines;
 }
 
-function Label({
-  agent,
-  x,
-  y,
-  direction,
-  opacity,
-  compact,
-}: {
-  readonly agent: DiscoveredAgent;
-  readonly compact: boolean;
-  /** The satellite's centre. */
-  readonly x: number;
-  readonly y: number;
-  /** The orbit's outward normal at the satellite: the label opens this way. */
-  readonly direction: { readonly x: number; readonly y: number };
-  readonly opacity: number;
-}) {
+function labelBox(
+  agent: DiscoveredAgent,
+  compact: boolean,
+  x: number,
+  y: number,
+  direction: { readonly x: number; readonly y: number },
+) {
   const lines = labelLines(agent, compact);
   const width = Math.max(...lines.map((line) => line.text.length)) * LABEL_CHAR;
   const height = lines.length * LABEL_LINE;
@@ -214,6 +203,59 @@ function Label({
       : direction.y < -0.55
         ? anchorY - height
         : anchorY - LABEL_LINE / 2 - (direction.y < 0 ? height - LABEL_LINE : 0);
+  return { lines, width, height, left, top };
+}
+
+type LabelBox = ReturnType<typeof labelBox>;
+
+/** Keep the plates inside the panel and separate them even when catalog order changes radii. */
+function placeLabels(
+  boxes: readonly LabelBox[],
+  width: number,
+  height: number,
+  satellites: readonly { readonly x: number; readonly y: number }[],
+) {
+  const inset = 24;
+  const gap = 12;
+  const clamp = (value: number, low: number, high: number) =>
+    Math.max(low, Math.min(Math.max(low, high), value));
+  const placed: Pick<LabelBox, "left" | "top" | "width" | "height">[] = satellites.map((p) => ({
+    left: p.x - SATELLITE / 2,
+    top: p.y - SATELLITE / 2,
+    width: SATELLITE,
+    height: SATELLITE,
+  }));
+  const result = [...boxes];
+  const ordered = boxes.map((box, index) => ({ box, index })).sort((a, b) => a.box.top - b.box.top);
+  for (const { box, index } of ordered) {
+    const left = clamp(box.left, inset, width - box.width - inset);
+    const top = clamp(box.top, inset, height - box.height - inset);
+    const neighbors = placed.filter(
+      (other) => left < other.left + other.width + gap && left + box.width + gap > other.left,
+    );
+    const candidates = [
+      top,
+      ...neighbors.flatMap((other) => [
+        other.top - box.height - gap,
+        other.top + other.height + gap,
+      ]),
+    ].filter((candidate) => candidate >= inset && candidate + box.height <= height - inset);
+    candidates.sort((a, b) => Math.abs(a - top) - Math.abs(b - top));
+    const separated = candidates.find((candidate) =>
+      neighbors.every(
+        (other) =>
+          candidate + box.height + gap <= other.top || candidate >= other.top + other.height + gap,
+      ),
+    );
+    const position = { ...box, left, top: separated ?? top };
+    placed.push(position);
+    result[index] = position;
+  }
+  return result;
+}
+
+function Label({ box, opacity }: { readonly box: LabelBox; readonly opacity: number }) {
+  const { lines, left, top, width, height } = box;
   return (
     <g className="o-globe-label" opacity={opacity}>
       <rect
@@ -289,6 +331,25 @@ export const Globe = memo(function Globe({
     return Math.min(1, Math.max(0, (t - agent.at) / LAND_MS));
   };
   const visible = orbits.filter(({ agent }) => drawn(agent) > 0);
+  const satellites = visible.map((entry) => {
+    const land = landing(entry.agent);
+    const eased = 1 - (1 - land) ** 3;
+    const park = (PARK[entry.agent.id] ?? 40) * DEG;
+    const approach = park - entry.signature.direction * (1 - eased) * 30 * DEG;
+    const p = point(entry.orbit, approach, cx, cy);
+    return {
+      ...entry,
+      eased,
+      p,
+      label: labelBox(entry.agent, width < 700, p.x, p.y, normal(entry.orbit, park)),
+    };
+  });
+  const labels = placeLabels(
+    satellites.map((entry) => entry.label),
+    width,
+    height,
+    satellites.map((entry) => entry.p),
+  );
   // A sparse graticule: the equator, the 30 degree parallels and four meridians.
   const parallels = [-30, 0, 30].map((lat) =>
     onSphere((u) => ({ lat: lat * DEG, lon: u * TAU }), radius, cx, cy),
@@ -371,12 +432,8 @@ export const Globe = memo(function Globe({
             );
           })
         : null}
-      {visible.map((entry) => {
-        const land = landing(entry.agent);
-        const eased = 1 - (1 - land) ** 3;
-        const park = (PARK[entry.agent.id] ?? 40) * DEG;
-        const approach = park - entry.signature.direction * (1 - eased) * 30 * DEG;
-        const p = point(entry.orbit, approach, cx, cy);
+      {satellites.map((entry, index) => {
+        const { p, eased } = entry;
         const missing = entry.agent.status === "missing";
         const needsSignIn = entry.agent.status === "found" && entry.agent.signedIn === false;
         return (
@@ -391,16 +448,7 @@ export const Globe = memo(function Globe({
               opacity={eased}
               transform={needsSignIn ? `rotate(45 ${p.x} ${p.y})` : undefined}
             />
-            {showLabels ? (
-              <Label
-                agent={entry.agent}
-                x={p.x}
-                y={p.y}
-                direction={normal(entry.orbit, park)}
-                opacity={eased}
-                compact={width < 700}
-              />
-            ) : null}
+            {showLabels && labels[index] ? <Label box={labels[index]} opacity={eased} /> : null}
           </g>
         );
       })}
