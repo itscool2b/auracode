@@ -110,6 +110,20 @@ mod tests {
             [9; 24],
         )
         .expect("seal");
+        // Shared with the independently implemented desktop opener. Synthetic keys only.
+        assert_eq!(
+            recipient_public,
+            "Xf7dO2vUf2-ijuFdlp1bsOpTd01Ii9r53xxuASSz7yI"
+        );
+        assert_eq!(
+            envelope.ciphertext,
+            "mNgCeLn249w8yCPoZAwkYJcOiFZ3cdMrhAyIMXuDa8zPpp5vvS6UFGDZ5ApNF0oK"
+        );
+        assert_eq!(envelope.nonce, "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ");
+        assert_eq!(
+            envelope.ephemeral_public_key.as_deref(),
+            Some("UKYUCbHd0DJemxa3AOcZ6XcsBwALG9d4bpB8ZT0gSV0")
+        );
         let ephemeral = envelope.ephemeral_public_key.as_ref().expect("public");
         let remote: [u8; 32] = crypto::decode(ephemeral, 32, 32)
             .expect("decode")

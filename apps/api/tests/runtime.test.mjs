@@ -219,3 +219,83 @@ test("retained-device proof binds only its fresh desktop session and cannot be r
   assert.deepEqual(await response.json(), { device_id: "device", rebound: true });
   assert.equal((await call(proof)).status, 403);
 });
+
+test("account export streams ciphertext with a completion marker and no session secrets", async () => {
+  const response = await request("/account/export");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("Content-Disposition"), /attachment/);
+  const text = await response.text();
+  const lines = text
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.equal(lines[0].type, "account");
+  assert.equal(lines[0].account.email, "test@example.invalid");
+  assert.equal(lines.at(-1).type, "complete");
+  assert.ok(
+    lines.some((line) => line.type === "record" && typeof line.record.deleted === "boolean"),
+  );
+  assert.ok(lines.some((line) => line.type === "blob" && line.blob.ciphertext));
+  assert.equal(text.includes("object_key"), false);
+  assert.equal(text.includes("csrf_hash"), false);
+  assert.equal(text.includes("recovery_verifier"), false);
+  assert.equal(text.includes(token), false);
+});
+
+test("verified email change preserves account data, revokes other sessions and refuses proof replay", async () => {
+  const primary = Buffer.alloc(32, 20).toString("base64url");
+  const secondary = Buffer.alloc(32, 21).toString("base64url");
+  const challenge = Buffer.alloc(32, 22).toString("base64url");
+  const email = "changed@example.invalid";
+  const emailKey = verifier("email", [email]);
+  const code = "654321";
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO users(id,email_key,email,created_at) VALUES('change-account','change-old','old@example.invalid',?)",
+      )
+      .bind(now),
+    ...[primary, secondary].map((value) =>
+      db
+        .prepare(
+          "INSERT INTO sessions(token_hash,user_id,client_kind,csrf_hash,created_at,expires_at) VALUES(?,'change-account','desktop','csrf',?,?)",
+        )
+        .bind(hash(value), now, now + 1000),
+    ),
+    db
+      .prepare(
+        "INSERT INTO email_changes(id,session_hash,user_id,email,email_key,verifier,created_at,expires_at,delivery) VALUES(?,?,'change-account',?,?,?,?,?,'sent')",
+      )
+      .bind(
+        challenge,
+        hash(primary),
+        email,
+        emailKey,
+        verifier("email-change", [challenge, hash(primary), emailKey, code]),
+        now,
+        now + 600,
+      ),
+  ]);
+  const call = (path, method, body, value = primary) =>
+    request(path, method, body, { Authorization: `Bearer ${value}` });
+  assert.equal(
+    (await call("/account/email/verify", "POST", { challenge_id: challenge, code }, secondary))
+      .status,
+    400,
+  );
+  assert.equal(
+    (await call("/account/email/verify", "POST", { challenge_id: challenge, code: "000000" }))
+      .status,
+    400,
+  );
+  const changed = await call("/account/email/verify", "POST", { challenge_id: challenge, code });
+  assert.equal(changed.status, 200, await changed.clone().text());
+  assert.equal((await (await call("/account")).json()).account.email, email);
+  assert.equal(
+    (await call("/account/email/verify", "POST", { challenge_id: challenge, code })).status,
+    400,
+  );
+  assert.equal((await call("/account", "GET", undefined, secondary)).status, 401);
+  assert.equal((await call("/auth/logout-all", "POST")).status, 200);
+  assert.equal((await call("/account")).status, 401);
+});

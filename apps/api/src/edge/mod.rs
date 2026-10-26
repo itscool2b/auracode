@@ -1,8 +1,10 @@
 //! Cloudflare runtime adapter. No request payload, token, email or provider error is logged.
+mod account;
 mod auth;
 mod cleanup;
 mod db;
 mod devices;
+mod export;
 mod rebind;
 mod sync;
 
@@ -96,12 +98,30 @@ impl Api {
             (Method::Get, "/api/v1/health") => {
                 return json_response(json!({"ok":true,"protocol":1}));
             }
+            (Method::Get, "/api/v1/config") => {
+                let site_key = self
+                    .env
+                    .var("TURNSTILE_SITE_KEY")
+                    .ok()
+                    .map(|v| v.to_string())
+                    .filter(|v| !v.is_empty());
+                return json_response(json!({"turnstile_site_key":site_key,"protocol":1}));
+            }
             (Method::Post, "/api/v1/auth/challenges") => return self.begin_auth(request).await,
             (Method::Post, "/api/v1/auth/verify") => return self.verify_auth(request).await,
             _ => {}
         }
         let identity = self.authenticate(request).await?;
         match (method, path.as_str()) {
+            (Method::Get, "/api/v1/account") => self.account(&identity).await,
+            (Method::Get, "/api/v1/account/export") => self.export(&identity).await,
+            (Method::Post, "/api/v1/auth/logout-all") => self.logout_all(&identity).await,
+            (Method::Post, "/api/v1/account/email/challenges") => {
+                self.begin_email(request, &identity).await
+            }
+            (Method::Post, "/api/v1/account/email/verify") => {
+                self.verify_email(request, &identity).await
+            }
             (Method::Get, "/api/v1/auth/session") => json_response(
                 json!({"session":identity.session,"csrf_token":self.csrf(&identity.token)?}),
             ),

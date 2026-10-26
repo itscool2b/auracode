@@ -54,6 +54,12 @@ planned Windows/macOS integration gate. This is a saved implementation checkpoin
   and both public keys. Atomic consumption rechecks expiry, revocation and fresh-session identity;
   replay, wrong-session, expiry and revocation regressions pass. No account key enters this proof.
 
+- Account summary, session-wide sign-out, verified email changes and bounded streaming encrypted
+  exports are implemented in Rust. Seven actual compiled-Worker tests pass, including email proof
+  isolation/replay, preservation of account identity and export completion without session secrets.
+  Native and wasm Clippy pass. The new native SQL unit rerun is blocked by Windows Application
+  Control (4551); its compiled-Wasm runtime path passes. No policy or executable was changed.
+
 Current owner correction: Windows and macOS are the supported targets. Linux and WSL work and
 acceptance are deferred. Implementation checkpoints are committed locally with focused checks;
 the root task will run CI at major integration and final verification points.

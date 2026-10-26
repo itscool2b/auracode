@@ -6,5 +6,6 @@ pub mod possession;
 pub mod sql;
 pub mod types;
 
+pub mod account_sql;
 #[cfg(target_arch = "wasm32")]
 mod edge;

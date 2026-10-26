@@ -84,6 +84,10 @@ async fn cleanup(env: Env) -> Result<()> {
     }
     db.batch(vec![
         (
+            "DELETE FROM email_changes WHERE expires_at<?1",
+            vec![json!(now)],
+        ),
+        (
             "DELETE FROM device_rebind_challenges WHERE expires_at<?1",
             vec![json!(now)],
         ),

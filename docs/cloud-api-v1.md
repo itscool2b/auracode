@@ -139,6 +139,30 @@ Initial service limits are 100 MiB of sync history and 1 GiB of reserved blob st
 Record accounting includes routing/envelope overhead. These are application defaults, not claims
 about Cloudflare plan limits. Quota checks and counters commit atomically with writes.
 
+## Browser account management
+
+GET `/api/v1/config` returns `{protocol:1,turnstile_site_key}`. The public key is null until the
+environment has a configured widget. No secret or test key is substituted in production.
+GET `/api/v1/account` returns `{account:{id,email,created_at,sync_used_bytes,sync_limit_bytes,
+blob_reserved_bytes,blob_limit_bytes}}`. POST `/api/v1/auth/logout-all` revokes every session,
+including the caller, without revoking device keys. A retained device can sign in and prove possession.
+
+POST `/api/v1/account/email/challenges` takes `{email,turnstile_token}` and requires a session
+created within five minutes. It delivers a ten-minute, five-attempt code to the new address.
+POST `/api/v1/account/email/verify` takes `{challenge_id,code}`. Proof is bound to the initiating
+session. A successful change preserves the account ID, keys and encrypted data and revokes all
+other sessions. An address already belonging to another account returns conflict only after proof;
+accounts are never merged. Both routes retain browser Origin/CSRF and send/verify rate limits.
+
+GET `/api/v1/account/export` downloads `auracode-encrypted-export.jsonl`. The stream contains an
+account row with device public metadata and encrypted key envelopes, encrypted record history up
+to a captured sequence, each current encrypted blob, then a mandatory `complete` marker. It never
+includes session tokens, verifier hashes or internal R2 paths. Interrupted downloads lack the marker
+and must be retried. Reads are bounded to one record page or one blob and recheck authentication on
+each page, with a ten-minute total bound. Blob heads reflect their value when read; pause syncing for
+a stable workspace export. Account deletion or revocation aborts an active export. The desktop,
+which holds the keys, owns plaintext export and import, not the website.
+
 ## Deletion and failure behavior
 
 Account deletion immediately denies authentication and revokes all sessions. Scheduled cleanup clears

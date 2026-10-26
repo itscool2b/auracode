@@ -46,7 +46,7 @@ impl Api {
         }
         Ok(())
     }
-    fn ip(&self, request: &Request) -> Result<String> {
+    pub(super) fn ip(&self, request: &Request) -> Result<String> {
         let value = request
             .headers()
             .get("CF-Connecting-IP")
@@ -113,7 +113,7 @@ impl Api {
             json!({"challenge_id":id,"expires_in":policy::CODE_TTL,"resend_after":policy::RESEND_SECONDS}),
         )
     }
-    async fn verify_turnstile(&self, token: &str, ip: &str) -> Result<()> {
+    pub(super) async fn verify_turnstile(&self, token: &str, ip: &str) -> Result<()> {
         let headers = Headers::new();
         headers
             .set("Content-Type", "application/json")
@@ -157,7 +157,7 @@ impl Api {
         }
         Ok(())
     }
-    async fn deliver(&self, email: &str, code: &str) -> Result<()> {
+    pub(super) async fn deliver(&self, email: &str, code: &str) -> Result<()> {
         let sender = policy::email(&self.env.var("EMAIL_FROM").map_err(unavailable)?.to_string())
             .map_err(|_| ApiError::Unavailable)?;
         let raw = format!(
