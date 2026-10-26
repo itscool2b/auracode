@@ -207,6 +207,8 @@ export function ChatView({
         ) : null}
         <div className="chat-compose-slot" hidden={pendingPermissions.length > 0}>
           <Composer
+            chatId={chatId}
+            contextApi={transport.composer}
             agentName={agent?.name ?? state.chat.agent_name}
             controls={
               <Pickers
@@ -224,7 +226,7 @@ export function ChatView({
             status={status}
             commands={state.lists?.commands ?? []}
             error={state.sendError}
-            onSend={(text) => store.send(text)}
+            onSend={(text, context) => store.send(text, context)}
             onStop={() => void store.interrupt()}
             onForceStop={() => void store.forceStop()}
           />

@@ -11,8 +11,8 @@ use aura_process::{
 };
 use aura_protocol::session::{AuthCommand, AuthPrompt, ConfigValue};
 use aura_protocol::{
-    AuraEvent, Autonomy, Capabilities, ErrorKind, LimitWindow, NoticeLevel, PromptPart, StopReason,
-    TokenUsage, UiPrompt, UiRequest, UsageScope,
+    AuraEvent, Autonomy, Capabilities, ErrorKind, LimitWindow, NoticeLevel, StopReason, TokenUsage,
+    UiPrompt, UiRequest, UsageScope,
 };
 use futures::future::BoxFuture;
 use serde_json::{Value, json};
@@ -248,6 +248,7 @@ impl Session {
                 ResumeOutcome::New
             },
             capabilities: Capabilities {
+                images: true,
                 interrupt: true,
                 resume: true,
                 set_model: !self.models.is_empty(),
@@ -815,26 +816,19 @@ impl Session {
                     });
                     return;
                 }
-                let mut input = Vec::new();
-                for part in parts {
-                    match part {
-                        PromptPart::Text { text } => input.push(json!({"type":"text","text":text})),
-                        PromptPart::Mention { path } => {
-                            input.push(json!({"type":"mention","name":path,"path":path}))
-                        }
-                        PromptPart::Image { .. } => {
+                let input =
+                    match crate::attachments::codex(&parts, self.setup.attachment_dir.as_deref()) {
+                        Ok(input) => input,
+                        Err(message) => {
                             self.outbox.push_back(DriverEvent::TurnEnded {
                                 turn_id: turn.turn_id,
                                 stop_reason: StopReason::Error,
                                 usage: None,
-                                error: Some(protocol_error(
-                                    "Image attachments are not available to the Codex driver yet.",
-                                )),
+                                error: Some(protocol_error(&message)),
                             });
                             return;
                         }
-                    }
-                }
+                    };
                 let (approval, _, sandbox) = options::policies(self.setup.autonomy);
                 let mut params = json!({"threadId":self.thread,"input":input,"model":self.model,"cwd":self.setup.agent_folder,"approvalPolicy":approval,"approvalsReviewer":"user","sandboxPolicy":sandbox,"clientUserMessageId":turn.turn_id});
                 if let Some(effort) = self.effort.as_ref().or_else(|| {

@@ -20,6 +20,7 @@
 pub mod bindings;
 pub mod boot;
 pub mod commands;
+pub mod composer_commands;
 pub mod demo;
 pub mod error;
 pub mod glass;

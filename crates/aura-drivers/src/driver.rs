@@ -119,6 +119,8 @@ fn is_false(value: &bool) -> bool {
 /// How the session wants the agent started.
 #[derive(Debug, Clone)]
 pub struct SessionSetup {
+    /// Private, app-owned blob directory. Never an arbitrary source file or agent credential path.
+    pub attachment_dir: Option<PathBuf>,
     pub chat_id: String,
     pub agent_id: String,
     pub dialect: String,
@@ -831,6 +833,7 @@ mod tests {
         let mut vars = EnvMap::new();
         vars.insert("ANTHROPIC_API_KEY".into(), "sk-ant-secret".into());
         let mut setup = SessionSetup {
+            attachment_dir: None,
             chat_id: "c".into(),
             agent_id: "hermes".into(),
             dialect: "hermes".into(),

@@ -1619,6 +1619,7 @@ impl ChatActor {
             generation,
         ));
         let setup = SessionSetup {
+            attachment_dir: Some(deps.store.attachment_dir().to_path_buf()),
             chat_id: self.chat_id.clone(),
             agent_id: spec.id.to_owned(),
             dialect: spec.dialect.to_owned(),

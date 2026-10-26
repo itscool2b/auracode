@@ -1773,23 +1773,22 @@ impl Session {
             });
             return;
         }
-        let mut texts = Vec::with_capacity(parts.len());
-        for part in parts {
-            match part {
-                PromptPart::Text { text } => texts.push(text.as_str()),
-                PromptPart::Image { .. } | PromptPart::Mention { .. } => {
-                    self.outbox.push(DriverEvent::TurnEnded {
-                        turn_id,
-                        stop_reason: StopReason::Error,
-                        usage: None,
-                        error: Some(internal(
-                            "This agent can't take images or mentions in auracode yet.",
-                        )),
-                    });
-                    return;
-                }
+        let blocks = match crate::attachments::acp(
+            parts,
+            self.setup.attachment_dir.as_deref(),
+            self.init.image,
+        ) {
+            Ok(blocks) => blocks,
+            Err(message) => {
+                self.outbox.push(DriverEvent::TurnEnded {
+                    turn_id,
+                    stop_reason: StopReason::Error,
+                    usage: None,
+                    error: Some(internal(&message)),
+                });
+                return;
             }
-        }
+        };
         // Sent now, it would run under the agent's previous mode (and Hermes refuses a mode change
         // that races a prompt), so it waits for the changes queued before it.
         if self.ops_pending() {
@@ -1804,7 +1803,7 @@ impl Session {
             .push(DriverEvent::Status(DriverStatus::Prompting));
         match self.rpc.request(
             methods::SESSION_PROMPT,
-            requests::prompt(&session_id, &texts),
+            serde_json::json!({"sessionId": session_id, "prompt": blocks}),
         ) {
             Ok(request) => {
                 self.pending.insert(

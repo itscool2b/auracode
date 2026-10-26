@@ -701,3 +701,26 @@ pending. No real login, paid prompt, CI dispatch or push was performed for these
 transport and xterm reference sources: Microsoft ConPTY session creation documentation and the
 official xterm.js flow-control/security guides. M4 can reuse the same Rust ownership and streaming
 seam; arbitrary shell launch and a general terminal panel are not exposed by this checkpoint.
+
+## Composer context checkpoint
+
+Typed prompt parts now persist through the queue and begun turns. Explicit file picker, drag/drop,
+and pasted-image UI feed a Rust import service with bounded image decoding, metadata-free PNG
+normalization, bounded UTF-8 text, private content-addressed storage and chat-scoped attachment IDs.
+File discovery reads names only, excludes private credential paths and dependencies, and validates
+mentions inside the active project folder. Transcript text includes the text-file context sent to
+the agent. Images and mentions now map to native Claude, Codex, Pi and capability-checked ACP input.
+The dark composer exposes removable context chips and keyboard file selection, retains input after
+send failure, and avoids clearing text typed while a send was pending.
+
+The core and driver crates pass all-target compilation and Clippy. Import/path/integrity and wire
+regressions are written for the integration test batch. Generated desktop bindings, native picker,
+paste/drop, queue restart and browser acceptance remain pending. Windows Application Control still
+blocks this root checkout's Tauri macro DLL, so binding generation belongs to the planned remote
+Windows/macOS integration checkpoint. No policy changes, paid-agent calls, CI dispatch or push were
+made. Durable unsent drafts and the remaining M2c controls are still being implemented.
+
+Wire references: [ACP content](https://agentclientprotocol.com/protocol/v1/content),
+[Pi RPC commands](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc-commands.md),
+and the checked-in Codex 0.162.1 app-server schema. Image decoding uses the bounded
+[image crate API](https://docs.rs/image/0.25.10/image/).

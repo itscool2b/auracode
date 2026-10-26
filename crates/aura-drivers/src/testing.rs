@@ -770,6 +770,7 @@ mod tests {
 
     fn setup() -> SessionSetup {
         SessionSetup {
+            attachment_dir: None,
             chat_id: "chat".into(),
             agent_id: "mock".into(),
             dialect: "mock".into(),

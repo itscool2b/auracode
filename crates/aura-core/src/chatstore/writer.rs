@@ -142,6 +142,10 @@ pub(crate) enum Work {
 
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
+    Composer {
+        command: super::composer::ComposerCommand,
+        reply: oneshot::Sender<Result<Vec<super::composer::StoredAttachment>, StoreError>>,
+    },
     Organization {
         command: super::organization::OrganizationCommand,
         reply: oneshot::Sender<Result<super::organization::Organization, StoreError>>,
@@ -420,6 +424,7 @@ fn work_bytes(work: &Work) -> usize {
     match work {
         Work::Op(op) => op_bytes(op),
         Work::Request(Request::Organization { command, .. }) => command.bytes(),
+        Work::Request(Request::Composer { command, .. }) => command.bytes(),
         Work::Request(_) => 256,
         #[cfg(test)]
         Work::Test(_) => 256,
@@ -596,6 +601,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Op(op) => op_name(op),
         Work::Request(Request::CreateChat { .. }) => "create_chat",
         Work::Request(Request::Organization { .. }) => "organization",
+        Work::Request(Request::Composer { .. }) => "composer",
         Work::Request(Request::Chats { .. }) => "chats",
         Work::Request(Request::LoadChat { .. }) => "load_chat",
         Work::Request(Request::ReadBlob { .. }) => "read_blob",
@@ -1163,6 +1169,20 @@ impl Writer {
 
     fn answer_request(&mut self, request: Request) {
         match request {
+            Request::Composer { command, reply } => {
+                let dir = self.attachments.clone();
+                let now = now_millis();
+                let result = if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| {
+                        super::composer::execute(conn, &dir, now, command).map_err(|error| {
+                            rusqlite::Error::ToSqlConversionFailure(Box::new(error))
+                        })
+                    })
+                };
+                let _ = reply.send(result);
+            }
             Request::Organization { command, reply } => {
                 let device = self.device_id.clone();
                 let now = now_millis();

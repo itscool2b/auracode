@@ -16,6 +16,7 @@ import type {
   StorageStatus,
   UiAnswer,
 } from "../../bindings";
+import { type ComposerTransport, composerApi } from "../composer";
 import {
   agentAuthStatus,
   agentMaintenance,
@@ -54,6 +55,7 @@ import {
  * wrappers throw `CommandError`s with the shell's codes.
  */
 export interface Transport {
+  readonly composer?: ComposerTransport;
   agentMaintenance(agentId: string): Promise<AgentMaintenance>;
   agentAuthStatus(agentId: string): Promise<AgentAuthStatus>;
   agentUpdate(agentId: string): Promise<void>;
@@ -93,6 +95,7 @@ export interface Transport {
 
 /** The shell, through the typed command wrappers. */
 export const tauriTransport: Transport = {
+  composer: composerApi,
   agentMaintenance,
   agentAuthStatus,
   agentUpdate,

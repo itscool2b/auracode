@@ -24,6 +24,7 @@
 
 pub(crate) mod blobs;
 pub(crate) mod compact;
+pub(crate) mod composer;
 pub(crate) mod history;
 pub(crate) mod organization;
 mod recover;
@@ -68,6 +69,7 @@ pub struct ChatStore {
     shared: Arc<Shared>,
     rt: Handle,
     db_path: PathBuf,
+    attachment_dir: PathBuf,
     recovered: watch::Receiver<Option<RecoveryReport>>,
 }
 
@@ -81,6 +83,24 @@ impl fmt::Debug for ChatStore {
 }
 
 impl ChatStore {
+    pub(crate) async fn composer(
+        &self,
+        command: composer::ComposerCommand,
+    ) -> Result<Vec<composer::StoredAttachment>, StoreError> {
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        let (reply, answer) = oneshot::channel();
+        self.shared.push(
+            Work::Request(Request::Composer { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
     pub(crate) async fn organize(
         &self,
         command: organization::OrganizationCommand,
@@ -158,6 +178,7 @@ impl ChatStore {
             shared,
             rt,
             db_path: profile.db_path(),
+            attachment_dir: profile.attachments_dir(),
             recovered: recovered_rx,
         }))
     }
@@ -169,6 +190,10 @@ impl ChatStore {
 
     pub fn is_paused(&self) -> bool {
         self.shared.is_paused()
+    }
+
+    pub(crate) fn attachment_dir(&self) -> &std::path::Path {
+        &self.attachment_dir
     }
 
     /// What startup recovery did, once it finished.
@@ -821,6 +846,57 @@ mod tests {
             }
         }
         lines
+    }
+
+    #[tokio::test]
+    async fn composer_attachment_ids_are_chat_scoped_and_blobs_are_verified() {
+        use composer::ComposerCommand;
+        use sha2::{Digest as _, Sha256};
+        let fixture = start(WriterConfig::STANDARD);
+        let store = &fixture.store;
+        let first = new_chat(store).await;
+        let second = new_chat(store).await;
+        let bytes: Arc<[u8]> = Arc::from(b"explicit context".as_slice());
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        let saved = store
+            .composer(ComposerCommand::Import {
+                chat_id: first.id.clone(),
+                name: "notes.txt".into(),
+                mime: "text/plain".into(),
+                sha256: hash.clone(),
+                bytes,
+            })
+            .await
+            .expect("saved");
+        let id = saved[0].meta.id.clone();
+        assert!(
+            store
+                .composer(ComposerCommand::Resolve {
+                    chat_id: second.id,
+                    ids: vec![id.clone()]
+                })
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            store
+                .composer(ComposerCommand::Resolve {
+                    chat_id: first.id,
+                    ids: vec![id]
+                })
+                .await
+                .expect("owned")[0]
+                .sha256,
+            hash
+        );
+        let dir = fixture.profile.attachments_dir();
+        assert_eq!(
+            aura_drivers::attachments::read(&dir, &hash, 256).expect("verified"),
+            b"explicit context"
+        );
+        std::fs::write(dir.join(&hash), b"changed data").expect("alter synthetic blob");
+        assert!(aura_drivers::attachments::read(&dir, &hash, 256).is_err());
+        assert!(store.shutdown(Duration::from_secs(10)).await);
     }
 
     #[tokio::test]

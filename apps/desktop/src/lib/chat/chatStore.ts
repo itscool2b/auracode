@@ -650,10 +650,17 @@ export class ChatStore {
   // ---------- prompts and the session ----------
 
   /** Sends the text exactly as typed. Answers whether it was taken (the composer then clears). */
-  async send(text: string): Promise<boolean> {
-    if (text.trim() === "") return false;
+  async send(text: string, context?: import("../composer").ComposerContext): Promise<boolean> {
+    if (text.trim() === "" && !context?.attachments.length && !context?.mentions.length)
+      return false;
     try {
-      await this.#transport.send(this.chatId, text);
+      if (context && (context.attachments.length || context.mentions.length)) {
+        if (!this.#transport.composer)
+          throw new Error("Attachments are unavailable in this session.");
+        await this.#transport.composer.send(this.chatId, { text, ...context });
+      } else {
+        await this.#transport.send(this.chatId, text);
+      }
       this.#set({ ...this.#state, sendError: null });
       return true;
     } catch (error) {

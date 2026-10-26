@@ -23,6 +23,7 @@ impl AgentSpawner for Quiet {
 }
 fn setup() -> SessionSetup {
     SessionSetup {
+        attachment_dir: None,
         chat_id: "chat".into(),
         agent_id: "codex".into(),
         dialect: "codex".into(),

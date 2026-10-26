@@ -15,6 +15,7 @@
 //! [`AuraEvent`]: aura_protocol::AuraEvent
 
 pub mod acp;
+pub mod attachments;
 pub mod batch;
 pub mod claude;
 pub mod codex;

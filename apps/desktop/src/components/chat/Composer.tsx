@@ -1,7 +1,10 @@
-import { ArrowUp, Square } from "lucide-react";
-import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
-import type { SessionStatus, SlashCommand } from "../../bindings";
+import { ArrowUp, AtSign, Paperclip, Square } from "lucide-react";
+import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import type { FileMention, SessionStatus, SlashCommand } from "../../bindings";
 import { matchingCommands, slashQuery } from "../../lib/chat/present";
+import type { ComposerContext, ComposerTransport } from "../../lib/composer";
+import { errorMessage } from "../../lib/errors";
+import { ContextChips, MentionMenu, useComposerContext } from "./ComposerContext";
 import { SlashMenu } from "./SlashMenu";
 
 /**
@@ -19,22 +22,51 @@ export function Composer({
   onForceStop,
   controls,
   agentName = "the agent",
+  chatId,
+  contextApi,
 }: {
   readonly status: SessionStatus;
   readonly commands: readonly SlashCommand[];
   readonly error: string | null;
   /** Answers whether the text was taken. */
-  readonly onSend: (text: string) => Promise<boolean>;
+  readonly onSend: (text: string, context?: ComposerContext) => Promise<boolean>;
   readonly onStop: () => void;
   readonly onForceStop: () => void;
   readonly controls?: ReactNode;
   readonly agentName?: string;
+  readonly chatId?: string;
+  readonly contextApi?: ComposerTransport;
 }) {
   const [text, setText] = useState("");
   const [active, setActive] = useState(0);
   const [menuClosed, setMenuClosed] = useState(false);
   const [sending, setSending] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
+  const context = useComposerContext(chatId, contextApi);
+  const [mentionItems, setMentionItems] = useState<FileMention[]>([]);
+  const [mentionError, setMentionError] = useState<string | null>(null);
+  const mentionQuery =
+    !menuClosed && contextApi ? text.match(/(?:^|\s)@([^\s]*)$/)?.[1] : undefined;
+  useEffect(() => {
+    setMentionItems([]);
+    setMentionError(null);
+    if (!contextApi || !chatId || mentionQuery === undefined) return;
+    let disposed = false;
+    const timer = window.setTimeout(() => {
+      void contextApi
+        .mentions(chatId, mentionQuery)
+        .then((items) => {
+          if (!disposed) setMentionItems(items);
+        })
+        .catch((error) => {
+          if (!disposed) setMentionError(errorMessage(error));
+        });
+    }, 120);
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+    };
+  }, [contextApi, chatId, mentionQuery]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: The value changes scrollHeight after React commits the textarea.
   useLayoutEffect(() => {
     if (!input.current) return;
@@ -43,15 +75,28 @@ export function Composer({
   }, [text]);
   const fieldId = useId();
   const menuId = useId();
+  const mentionId = useId();
   const query = slashQuery(text);
   const matches = query === null || menuClosed ? [] : matchingCommands(commands, query);
   const menuOpen = matches.length > 0;
+  const mentionOpen = mentionItems.length > 0 && mentionQuery !== undefined;
+  const empty = text.trim() === "" && !context.attachments.length && !context.mentions.length;
 
   const send = async (): Promise<void> => {
-    if (sending || text.trim() === "") return;
+    if (sending || context.busy || empty) return;
     setSending(true);
     try {
-      if (await onSend(text)) setText("");
+      const accepted =
+        context.attachments.length || context.mentions.length
+          ? await onSend(text, {
+              attachments: context.attachments.map((item) => item.id),
+              mentions: context.mentions,
+            })
+          : await onSend(text);
+      if (accepted) {
+        setText((current) => (current === text ? "" : current));
+        context.clear();
+      }
     } finally {
       setSending(false);
     }
@@ -61,9 +106,25 @@ export function Composer({
     setText(`/${command.name} `);
     setActive(0);
   };
+  const chooseMention = (item: FileMention): void => {
+    context.addMention(item.path);
+    setText((value) => value.replace(/@[^\s]*$/, ""));
+    setMentionItems([]);
+    setActive(0);
+    input.current?.focus();
+  };
 
   return (
     <div className="chat-composer">
+      <ContextChips context={context} />
+      {mentionOpen ? (
+        <MentionMenu
+          id={mentionId}
+          items={mentionItems}
+          active={Math.min(active, mentionItems.length - 1)}
+          onChoose={chooseMention}
+        />
+      ) : null}
       {menuOpen ? (
         <SlashMenu
           id={menuId}
@@ -83,13 +144,45 @@ export function Composer({
         value={text}
         placeholder={`Message ${agentName}`}
         title="Enter sends, Shift+Enter adds a line, / lists commands"
-        aria-controls={menuOpen ? menuId : undefined}
+        aria-controls={mentionOpen ? mentionId : menuOpen ? menuId : undefined}
+        onPaste={(event) => {
+          if (!contextApi) return;
+          const image = Array.from(event.clipboardData.files).find((file) =>
+            file.type.startsWith("image/"),
+          );
+          if (image) {
+            event.preventDefault();
+            void context.paste(image);
+          }
+        }}
         onChange={(event) => {
           setText(event.currentTarget.value);
           setMenuClosed(false);
           setActive(0);
         }}
         onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing) return;
+          if (mentionOpen) {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              const step = event.key === "ArrowDown" ? 1 : -1;
+              setActive((value) => (value + step + mentionItems.length) % mentionItems.length);
+              return;
+            }
+            if (event.key === "Enter" || event.key === "Tab") {
+              const item = mentionItems[Math.min(active, mentionItems.length - 1)];
+              if (item) {
+                event.preventDefault();
+                chooseMention(item);
+                return;
+              }
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setMenuClosed(true);
+              return;
+            }
+          }
           if (menuOpen) {
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
               event.preventDefault();
@@ -119,6 +212,31 @@ export function Composer({
         }}
       />
       <div className="chat-composer-controls">
+        {contextApi ? (
+          <div className="composer-context-actions">
+            <button
+              type="button"
+              aria-label="Attach a file"
+              title="Attach a file, drop one here, or paste an image"
+              disabled={context.busy || sending}
+              onClick={() => void context.pick()}
+            >
+              <Paperclip size={16} />
+            </button>
+            <button
+              type="button"
+              aria-label="Mention a project file"
+              title="Mention a project file"
+              onClick={() => {
+                setText((value) => `${value}${value && !value.endsWith(" ") ? " " : ""}@`);
+                setMenuClosed(false);
+                input.current?.focus();
+              }}
+            >
+              <AtSign size={16} />
+            </button>
+          </div>
+        ) : null}
         {controls}
         <div className="chat-composer-actions">
           <StopButton status={status} onStop={onStop} onForceStop={onForceStop} />
@@ -127,7 +245,7 @@ export function Composer({
             className="chat-send"
             data-kind="primary"
             data-testid="composer-send"
-            disabled={sending || text.trim() === ""}
+            disabled={sending || context.busy || empty}
             onClick={() => void send()}
             aria-label={
               status === "running" || status === "starting" ? "Queue message" : "Send message"
@@ -138,9 +256,9 @@ export function Composer({
           </button>
         </div>
       </div>
-      {error !== null ? (
+      {error !== null || context.error !== null || mentionError !== null ? (
         <span role="alert" className="ui-error" data-testid="composer-error">
-          {error}
+          {context.error ?? mentionError ?? error}
         </span>
       ) : null}
     </div>

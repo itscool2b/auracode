@@ -14,6 +14,7 @@
 //! name they do not know as their fallback (`lenient.rs`).
 
 pub mod agents;
+pub mod composer;
 mod lenient;
 pub mod session;
 pub mod workspace;

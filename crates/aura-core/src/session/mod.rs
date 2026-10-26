@@ -12,6 +12,7 @@
 //! chat reads `Stopped`.
 
 mod actor;
+mod composer;
 mod live;
 mod login;
 mod normalize;

@@ -13,7 +13,7 @@ use aura_process::{
 };
 use aura_protocol::{
     AuraEvent, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, NoticeLevel,
-    PromptPart, StopReason, UiRequest, UsageInfo,
+    StopReason, UiRequest, UsageInfo,
 };
 use futures::future::BoxFuture;
 use serde_json::{Value, json};
@@ -330,6 +330,7 @@ impl Session {
                 ResumeOutcome::New
             },
             capabilities: Capabilities {
+                images: true,
                 interrupt: true,
                 resume: true,
                 set_model: !self.metadata.models.is_empty(),
@@ -789,22 +790,19 @@ impl Session {
                     });
                     return;
                 }
-                let parts: Option<Vec<_>> = parts
-                    .into_iter()
-                    .map(|p| match p {
-                        PromptPart::Text { text } => Some(text),
-                        _ => None,
-                    })
-                    .collect();
-                let Some(parts) = parts else {
-                    self.outbox.push_back(DriverEvent::TurnEnded {
-                        turn_id: turn.turn_id,
-                        stop_reason: StopReason::Error,
-                        usage: None,
-                        error: Some(error("Pi currently accepts text prompts only.")),
-                    });
-                    return;
-                };
+                let request =
+                    match crate::attachments::pi(&parts, self.setup.attachment_dir.as_deref()) {
+                        Ok(request) => request,
+                        Err(message) => {
+                            self.outbox.push_back(DriverEvent::TurnEnded {
+                                turn_id: turn.turn_id,
+                                stop_reason: StopReason::Error,
+                                usage: None,
+                                error: Some(error(message)),
+                            });
+                            return;
+                        }
+                    };
                 self.translator.begin_turn();
                 self.last_error = None;
                 self.run_failed = false;
@@ -813,12 +811,7 @@ impl Session {
                 self.idle(false);
                 self.outbox
                     .push_back(DriverEvent::Status(DriverStatus::Prompting));
-                self.request(
-                    json!({"type":"prompt","message":parts.join("\n")}),
-                    Purpose::Prompt,
-                    false,
-                    None,
-                );
+                self.request(request, Purpose::Prompt, false, None);
             }
             DriverCommand::SetOption {
                 option_id,

@@ -19,6 +19,7 @@ futures.workspace = true
 # Fallible (io::Result) instead of panicking when the OS refuses, so a broken hostname lookup
 # degrades to "This device" rather than taking the app down.
 hostname = "0.4.2"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 rusqlite.workspace = true
 rusqlite_migration.workspace = true
 serde.workspace = true

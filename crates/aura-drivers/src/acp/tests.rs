@@ -47,6 +47,7 @@ fn launch() -> LaunchSpec {
 
 fn setup(dialect: &str) -> SessionSetup {
     SessionSetup {
+        attachment_dir: None,
         chat_id: "chat".into(),
         agent_id: dialect.into(),
         dialect: dialect.into(),

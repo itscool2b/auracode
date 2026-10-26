@@ -12,8 +12,7 @@ use aura_process::{
 use aura_protocol::session::{AuthCommand, AuthPrompt, ConfigValue};
 use aura_protocol::{
     AuraEvent, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, LimitWindow,
-    NoticeLevel, PermissionOption, PermissionOptionKind, PermissionRequest, PromptPart, StopReason,
-    UsageInfo,
+    NoticeLevel, PermissionOption, PermissionOptionKind, PermissionRequest, StopReason, UsageInfo,
 };
 use aura_protocol::{UiAnswer, UiPrompt, UiQuestion, UiQuestionOption, UiRequest};
 use futures::future::BoxFuture;
@@ -610,6 +609,7 @@ impl Session {
             agent_name: Some("Claude Code".into()),
             agent_version: self.init["claude_code_version"].as_str().map(str::to_owned),
             capabilities: Capabilities {
+                images: true,
                 interrupt: true,
                 resume: true,
                 set_model: true,
@@ -696,33 +696,26 @@ impl Session {
                         .push_back((arrived, DriverCommand::Prompt { turn, parts }));
                     return;
                 }
-                let mut text = String::new();
-                for part in parts {
-                    match part {
-                        PromptPart::Text { text: part } => text.push_str(&part),
-                        PromptPart::Mention { path } => {
-                            text.push('@');
-                            text.push_str(&path);
-                        }
-                        PromptPart::Image { .. } => {
-                            self.outbox.push_back(DriverEvent::TurnEnded {
-                                turn_id: turn.turn_id,
-                                stop_reason: StopReason::Error,
-                                usage: None,
-                                error: Some(error(
-                                    ErrorKind::Internal,
-                                    "Image attachment loading is not available yet.",
-                                )),
-                            });
-                            return;
-                        }
+                let content = match crate::attachments::claude(
+                    &parts,
+                    self.setup.attachment_dir.as_deref(),
+                ) {
+                    Ok(content) => content,
+                    Err(message) => {
+                        self.outbox.push_back(DriverEvent::TurnEnded {
+                            turn_id: turn.turn_id,
+                            stop_reason: StopReason::Error,
+                            usage: None,
+                            error: Some(error(ErrorKind::ProtocolError, &message)),
+                        });
+                        return;
                     }
-                }
+                };
                 self.translator.begin_turn();
                 self.idle = false;
                 self.turn = Some(turn.turn_id.clone());
                 self.outbox.push_back(DriverEvent::RunState { idle: false });
-                self.send(json!({"type":"user","message":{"role":"user","content":text},"parent_tool_use_id":null,"session_id":self.native_id,"uuid":turn.turn_id}));
+                self.send(json!({"type":"user","message":{"role":"user","content":content},"parent_tool_use_id":null,"session_id":self.native_id,"uuid":turn.turn_id}));
             }
             DriverCommand::Interrupt => self.interrupt(),
             DriverCommand::RewindFiles {
