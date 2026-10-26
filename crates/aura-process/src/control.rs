@@ -179,6 +179,9 @@ pub(crate) struct ControlState {
     /// take it, so nothing signals the group again.
     #[cfg(unix)]
     pub(crate) group_gone: Arc<AtomicBool>,
+    /// A shutdown that could not confirm cleanup must leave its recovery record intact.
+    #[cfg(unix)]
+    pub(crate) retain_registry: AtomicBool,
     /// Windows: kill requests to the waiter, which owns the job.
     #[cfg(windows)]
     pub(crate) kill: tokio::sync::mpsc::UnboundedSender<()>,
@@ -218,6 +221,8 @@ impl ControlState {
             escaped: Mutex::new(Vec::new()),
             #[cfg(unix)]
             group_gone,
+            #[cfg(unix)]
+            retain_registry: AtomicBool::new(false),
             #[cfg(windows)]
             kill,
             chain: Mutex::new(None),
@@ -244,6 +249,10 @@ impl Drop for ControlState {
     /// The last handle and any chain are gone, so is the process tree (the last handle's drop
     /// killed it): the registry no longer needs its entry. Registry writes block, so on the pool.
     fn drop(&mut self) {
+        #[cfg(unix)]
+        if self.retain_registry.load(Ordering::Acquire) {
+            return;
+        }
         let registry = self.registry.clone();
         let pid = self.pid;
         drop(self.rt.spawn_blocking(move || registry.unregister(pid)));

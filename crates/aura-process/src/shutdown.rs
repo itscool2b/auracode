@@ -458,7 +458,9 @@ mod unix {
                 None => wait_exit(state, Duration::ZERO).await,
             };
         }
-        // 7. Unregister and report.
+        // 7. Remove recovery metadata only after cleanup is confirmed. A failed process-table
+        // read or a surviving descendant must remain recoverable after this instance exits.
+        state.retain_registry.store(true, Ordering::Release);
         let registry = state.registry.clone();
         let agent = state.pid;
         let escaped = tree.escaped.clone();
@@ -466,11 +468,8 @@ mod unix {
         let leftovers = state
             .rt
             .spawn_blocking(move || {
-                registry.unregister(agent);
-                let mut leftovers: Vec<u32> = alive_escaped(&escaped)
-                    .iter()
-                    .map(|proc| proc.pid)
-                    .collect();
+                let alive = alive_escaped(&escaped);
+                let mut leftovers: Vec<u32> = alive.iter().map(|proc| proc.pid).collect();
                 if group_alive(&group) {
                     // Who is left in the group, if the table can say.
                     let members = ptable::tree_of(group.pid, group.pgid)
@@ -481,15 +480,20 @@ mod unix {
                                 .map(|info| info.pid)
                                 .collect::<Vec<u32>>()
                         })
-                        .unwrap_or_default();
+                        // The group was still alive but could not be enumerated. Report its
+                        // identity as unconfirmed, rather than claiming an empty cleanup.
+                        .unwrap_or_else(|_| vec![group.pid]);
                     leftovers.extend(members);
                 }
                 leftovers.sort_unstable();
                 leftovers.dedup();
+                let complete = leftovers.is_empty() && group.exited_now().is_some();
+                registry.finish_shutdown(agent, alive, complete);
+                group.retain_registry.store(!complete, Ordering::Release);
                 leftovers
             })
             .await
-            .unwrap_or_default();
+            .unwrap_or_else(|_| vec![state.pid]);
         ShutdownReport {
             exit,
             steps,

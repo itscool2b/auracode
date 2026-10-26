@@ -245,6 +245,10 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   its deployment/qualification remain pending, so discovered WSL installations are not launchable
   yet. Two fake-spawner regressions cover the boundary; local execution is blocked by Application
   Control build-script checks and awaits CI. No blocked binaries or host policy were altered.
+- M1e process review found shutdown could erase recovery records even when owned descendants
+  remained. Unix cleanup now retains exact escaped identities after incomplete cleanup, including
+  a clean application close. Failed process-table reads no longer count as an empty group. Two
+  registry regressions cover retention and later successful cleanup; Linux execution awaits CI.
 
 M1e is progressing in the isolated `m1e-agent-catalog` worktree. Its first checkpoint adds typed
 native/WSL host identity, bounded WSL distribution decoding, installation channel classification from
