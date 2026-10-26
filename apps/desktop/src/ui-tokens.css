@@ -1,66 +1,58 @@
-/*
- * Semantic tokens for the chat screens: every colour, size, font, spacing step and radius the chat
- * components use is one of these names. Components never hold a literal, so the visual language
- * restyles every chat screen by remapping these names here.
- *
- * They map onto Orbit (docs/design/visual-language.md, section 3; the Design Lab's
- * src/directions/orbit/tokens.css holds the same values): black and white, one ink at alpha steps
- * for text, and colour that means four things only: orange (look here), green (done, added), red
- * (failed, removed) and ink. The window is pinned dark for now (tauri.conf.json), so the light
- * values below wait for the theme to follow the system.
- */
+/* Chat semantics share the chosen Orbit tokens with the Design Lab and website. */
+@import "@auracode/ui/orbit-tokens.css";
+@import "@auracode/ui/orbit.css";
 
-:root {
+.orbit-theme {
   /* Surfaces, back to front. Only the sidebar sits on the window's material; panes are solid. */
-  --ui-surface-sidebar: rgb(0 0 0 / 0.82);
-  --ui-surface-main: #0e0e0d;
-  --ui-surface-panel: #171716;
-  --ui-surface-raised: #1f1f1e;
-  --ui-surface-input: #171716;
-  --ui-surface-code: #000;
-  --ui-surface-hover: rgb(242 241 238 / 0.05);
-  --ui-surface-pressed: rgb(242 241 238 / 0.09);
-  --ui-surface-selected: rgb(242 241 238 / 0.07);
+  --ui-surface-sidebar: var(--o-tray-tint);
+  --ui-surface-main: var(--o-pane);
+  --ui-surface-panel: var(--o-raised);
+  --ui-surface-raised: var(--o-raised-2);
+  --ui-surface-input: var(--o-raised);
+  --ui-surface-code: var(--o-well);
+  --ui-surface-hover: var(--o-hover);
+  --ui-surface-pressed: var(--o-pressed);
+  --ui-surface-selected: var(--o-selected);
   /* The user's message is an inverted ink block (Grok Bot). */
-  --ui-surface-user: #e9e8e4;
-  --ui-surface-scrim: rgb(0 0 0 / 0.56);
+  --ui-surface-user: var(--o-user-bg);
+  --ui-surface-scrim: var(--o-scrim);
 
   /* Text, strongest to faintest */
-  --ui-text-primary: #f2f1ee;
-  --ui-text-secondary: rgb(242 241 238 / 0.7);
-  --ui-text-muted: rgb(242 241 238 / 0.5);
-  --ui-text-faint: rgb(242 241 238 / 0.28);
-  --ui-text-on-accent: #0a0a0a;
-  --ui-text-user: #0a0a0a;
-  --ui-text-link: #f2f1ee;
-  --ui-text-link-underline: rgb(242 241 238 / 0.3);
+  --ui-text-primary: var(--o-text-1);
+  --ui-text-secondary: var(--o-text-2);
+  --ui-text-muted: var(--o-text-3);
+  --ui-text-faint: var(--o-text-4);
+  --ui-text-on-accent: var(--o-on-ink);
+  --ui-text-user: var(--o-user-fg);
+  --ui-text-link: var(--o-text-1);
+  --ui-text-link-underline: var(--o-text-4);
 
   /* Borders */
   --ui-border-width: 1px;
-  --ui-border-subtle: rgb(242 241 238 / 0.09);
-  --ui-border-default: rgb(242 241 238 / 0.15);
-  --ui-border-strong: rgb(242 241 238 / 0.24);
-  --ui-focus-ring: rgb(242 241 238 / 0.55);
+  --ui-border-subtle: var(--o-line);
+  --ui-border-default: var(--o-line-strong);
+  --ui-border-strong: var(--o-dash);
+  --ui-focus-ring: var(--o-ink);
   --ui-focus-width: 2px;
 
   /* Accent: ink. Primary actions are ink pills; no agent colours. */
-  --ui-accent: #f2f1ee;
-  --ui-accent-soft: rgb(242 241 238 / 0.1);
+  --ui-accent: var(--o-ink);
+  --ui-accent-soft: var(--o-selected);
 
   /* Status: orange means look here, green done, red failed; information stays ink. */
-  --ui-status-info: rgb(242 241 238 / 0.7);
-  --ui-status-success: #31c88e;
-  --ui-status-warning: #ff6308;
-  --ui-status-danger: #f64b5c;
-  --ui-status-info-soft: rgb(242 241 238 / 0.06);
-  --ui-status-warning-soft: rgb(255 99 8 / 0.16);
-  --ui-status-danger-soft: rgb(246 75 92 / 0.14);
-  --ui-diff-added: rgb(49 200 142 / 0.12);
-  --ui-diff-removed: rgb(246 75 92 / 0.12);
+  --ui-status-info: var(--o-text-2);
+  --ui-status-success: var(--o-green-text);
+  --ui-status-warning: var(--o-signal-text);
+  --ui-status-danger: var(--o-red);
+  --ui-status-info-soft: var(--o-hover);
+  --ui-status-warning-soft: var(--o-signal-tint);
+  --ui-status-danger-soft: var(--o-red-tint);
+  --ui-diff-added: var(--o-add-line);
+  --ui-diff-removed: var(--o-del-line);
 
   /* Type: Geist and Geist Mono only. Light on black reads heavier, so dark drops weights by 20. */
-  --ui-font-body: var(--font-sans);
-  --ui-font-mono: var(--font-mono);
+  --ui-font-body: var(--o-sans);
+  --ui-font-mono: var(--o-mono);
   --ui-size-xs: 11px;
   --ui-size-sm: 12.5px;
   --ui-size-md: 14px;
@@ -69,9 +61,9 @@
   --ui-leading-tight: 1.3;
   --ui-leading-body: 1.57;
   --ui-leading-prose: 1.65;
-  --ui-weight-regular: 380;
-  --ui-weight-medium: 480;
-  --ui-weight-strong: 580;
+  --ui-weight-regular: var(--o-w-body);
+  --ui-weight-medium: var(--o-w-strong);
+  --ui-weight-strong: var(--o-w-heading);
   --ui-tracking-caps: 0.08em;
 
   /* Spacing steps: a 4px base */
@@ -105,51 +97,4 @@
   /* Motion: no springs, no overshoot */
   --ui-duration-fast: 150ms;
   --ui-ease: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --ui-surface-sidebar: rgb(243 242 239 / 0.86);
-    --ui-surface-main: #fff;
-    --ui-surface-panel: #fff;
-    --ui-surface-raised: #f7f6f3;
-    --ui-surface-input: #fff;
-    --ui-surface-code: #f3f2ef;
-    --ui-surface-hover: rgb(10 10 10 / 0.04);
-    --ui-surface-pressed: rgb(10 10 10 / 0.08);
-    --ui-surface-selected: rgb(10 10 10 / 0.06);
-    --ui-surface-user: #0a0a0a;
-    --ui-surface-scrim: rgb(10 10 10 / 0.24);
-
-    --ui-text-primary: #0a0a0a;
-    --ui-text-secondary: rgb(10 10 10 / 0.72);
-    --ui-text-muted: rgb(10 10 10 / 0.57);
-    --ui-text-faint: rgb(10 10 10 / 0.3);
-    --ui-text-on-accent: #fff;
-    --ui-text-user: #fff;
-    --ui-text-link: #0a0a0a;
-    --ui-text-link-underline: rgb(10 10 10 / 0.3);
-
-    --ui-border-subtle: rgb(10 10 10 / 0.08);
-    --ui-border-default: rgb(10 10 10 / 0.14);
-    --ui-border-strong: rgb(10 10 10 / 0.22);
-    --ui-focus-ring: rgb(10 10 10 / 0.5);
-
-    --ui-accent: #0a0a0a;
-    --ui-accent-soft: rgb(10 10 10 / 0.08);
-
-    --ui-status-info: rgb(10 10 10 / 0.72);
-    --ui-status-success: #0a8f5c;
-    --ui-status-warning: #ec5800;
-    --ui-status-danger: #d11a28;
-    --ui-status-info-soft: rgb(10 10 10 / 0.05);
-    --ui-status-warning-soft: rgb(255 99 8 / 0.1);
-    --ui-status-danger-soft: rgb(244 33 46 / 0.09);
-    --ui-diff-added: rgb(0 186 124 / 0.1);
-    --ui-diff-removed: rgb(244 33 46 / 0.08);
-
-    --ui-weight-regular: 400;
-    --ui-weight-medium: 500;
-    --ui-weight-strong: 600;
-  }
 }

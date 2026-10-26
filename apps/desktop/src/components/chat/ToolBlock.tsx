@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { OrbitMark } from "@auracode/ui/orbit";
+import { useMemo, useState } from "react";
 import type { ToolContent, ToolLocation, Truncation } from "../../bindings";
 import type { BlobState } from "../../lib/chat/chatStore";
 import type { ToolDisplayStatus, ToolItem } from "../../lib/chat/transcript";
@@ -25,43 +26,75 @@ export function ToolBlock({
   display,
   blobs,
   onLoadBlob,
-}: { readonly tool: ToolItem; readonly display: ToolDisplayStatus } & BlobProps) {
+  agentId = "generic",
+}: {
+  readonly tool: ToolItem;
+  readonly display: ToolDisplayStatus;
+  readonly agentId?: string;
+} & BlobProps) {
+  const running = display === "pending" || display === "in_progress";
+  const [override, setOverride] = useState<{ status: ToolDisplayStatus; open: boolean } | null>(
+    null,
+  );
+  const expanded = override?.status === display ? override.open : running || display === "failed";
   return (
     <div
-      className="chat-block"
+      className="chat-tool"
       data-kind="tool"
       data-testid="item"
       data-test-kind="tool"
       data-test-tool-kind={tool.toolKind}
       data-test-status={display}
     >
-      <div className="chat-block-head">
-        <span className="chat-block-title">{tool.title || tool.toolName || "Tool"}</span>
-        <span className="chat-block-tag">{tool.toolKind.replace("_", " ")}</span>
-        <span className="chat-tool-status" data-status={display}>
-          {STATUS_LABEL[display]}
-        </span>
-      </div>
-      <Locations locations={tool.locations} />
-      {tool.content.length > 0 ? (
-        <details data-testid="tool-output">
-          <summary className="ui-muted">Output</summary>
-          <div className="chat-segment">
-            {tool.content.map((content, index) => (
-              <ToolContentView
-                // biome-ignore lint/suspicious/noArrayIndexKey: an update replaces content as a whole.
-                key={index}
-                content={content}
-                blobs={blobs}
-                onLoadBlob={onLoadBlob}
-              />
-            ))}
-          </div>
-        </details>
-      ) : null}
-      {tool.truncated ? (
-        <EventDetails truncation={tool.truncated} blobs={blobs} onLoadBlob={onLoadBlob} />
-      ) : null}
+      <details
+        data-testid="tool-output"
+        open={expanded}
+        onToggle={(event) => {
+          if (event.currentTarget.open !== expanded)
+            setOverride({ status: display, open: event.currentTarget.open });
+        }}
+      >
+        <summary className="chat-tool-head">
+          {running ? (
+            <OrbitMark
+              agent={agentId}
+              state="tool"
+              size={16}
+              label={`Running ${tool.title || tool.toolName || "tool"}`}
+            />
+          ) : (
+            <span className="chat-tool-icon" aria-hidden="true">
+              {display === "failed" ? "×" : tool.toolKind === "execute" ? "$" : "›"}
+            </span>
+          )}
+          <span className="chat-block-title">{tool.title || tool.toolName || "Tool"}</span>
+          <span className="chat-block-tag">{tool.toolKind.replace("_", " ")}</span>
+          <span className="chat-tool-status" data-status={display}>
+            {STATUS_LABEL[display]}
+          </span>
+        </summary>
+        <div className="chat-tool-well">
+          <Locations locations={tool.locations} />
+          {tool.content.length > 0 ? (
+            <div className="chat-segment">
+              {tool.content.map((content, index) => (
+                <ToolContentView
+                  // biome-ignore lint/suspicious/noArrayIndexKey: an update replaces content as a whole.
+                  key={index}
+                  content={content}
+                  blobs={blobs}
+                  onLoadBlob={onLoadBlob}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="ui-muted">{running ? "Waiting for output…" : "No output reported."}</p>
+          )}
+          {tool.truncated ? (
+            <EventDetails truncation={tool.truncated} blobs={blobs} onLoadBlob={onLoadBlob} />
+          ) : null}
+        </div>
+      </details>
     </div>
   );
 }

@@ -74,7 +74,7 @@ export function Pickers({
         />
       ))}
       <div className="chat-picker-note">
-        {chosen === "full_auto" ? <div>Full auto: no checkpoints until M2.</div> : null}
+        {chosen === "full_auto" ? <div>Full auto: changes are not checkpointed yet.</div> : null}
         {lists?.autonomy.note ? <div>{lists.autonomy.note}</div> : null}
         {lists?.autonomy.native_mode ? <div>Agent mode: {lists.autonomy.native_mode}</div> : null}
         {error !== null ? (

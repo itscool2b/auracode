@@ -12,7 +12,8 @@
     "./tokens.css": "./src/tokens.css",
     "./fonts.css": "./src/fonts.css",
     "./orbit": "./src/orbit/index.ts",
-    "./orbit.css": "./src/orbit/orbit.css"
+    "./orbit.css": "./src/orbit/orbit.css",
+    "./orbit-tokens.css": "./src/orbit/tokens.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p .",

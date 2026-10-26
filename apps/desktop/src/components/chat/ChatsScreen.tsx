@@ -1,3 +1,4 @@
+import { useOrbitTheme } from "@auracode/ui/orbit";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { AppInfo } from "../../bindings";
 import { type AppStore, NewChatDraft } from "../../lib/chat/appStore";
@@ -26,6 +27,7 @@ export function ChatsScreen({
   readonly onDiagnostics: () => void;
 }) {
   const snapshot = useSyncExternalStore(app.subscribe, app.getSnapshot, app.getSnapshot);
+  const theme = useOrbitTheme();
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState(() => new NewChatDraft(transport));
 
@@ -35,7 +37,7 @@ export function ChatsScreen({
   }, [app]);
 
   return (
-    <div className="chat-app">
+    <div className="chat-app orbit-theme" data-theme={theme} data-glass={info.glass}>
       <aside className="chat-sidebar" aria-label="Sidebar">
         <div className="chat-drag" data-tauri-drag-region="" />
         <ChatList

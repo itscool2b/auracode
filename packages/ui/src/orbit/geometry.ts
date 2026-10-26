@@ -305,7 +305,7 @@ const WAIT_GLIDE_MS = 300;
 const ERROR_DROP_MS = 400;
 const DONE_EASE_MS = 500;
 const CHECK_DRAW_MS = 250;
-const CHECK_HOLD_MS = 1600;
+export const CHECK_HOLD_MS = 1600;
 const CHECK_FADE_MS = 300;
 
 /** The shortest signed turn from `from` to `to`. */
@@ -374,7 +374,7 @@ export function markFrame(
     }
     if (state === "done") {
       const elapsed = t - since;
-      const visible = elapsed < CHECK_HOLD_MS + CHECK_DRAW_MS;
+      const visible = elapsed < CHECK_HOLD_MS;
       return { ...base, checkDraw: visible ? 1 : 0, checkOpacity: visible ? 1 : 0 };
     }
     return base;

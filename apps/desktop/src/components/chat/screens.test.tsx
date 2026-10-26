@@ -311,7 +311,7 @@ describe("the pickers", () => {
     const stopped = render("stopped");
     expect(stopped.match(/<select[^>]*disabled/g)).toHaveLength(1);
     expect(stopped).toMatch(/<input[^>]*type="checkbox"[^>]*disabled/);
-    expect(stopped).toContain("Full auto: no checkpoints until M2.");
+    expect(stopped).toContain("Full auto: changes are not checkpointed yet.");
     expect(stopped).toContain("(pending: Smart)");
     expect(stopped.indexOf("Model")).toBeLessThan(stopped.indexOf("Fast mode"));
     const ready = render("ready");
@@ -375,7 +375,7 @@ describe("the pickers", () => {
       />,
     );
     expect(html).toContain('<option value="ask" selected="">Ask</option>');
-    expect(html).not.toContain("no checkpoints until M2");
+    expect(html).not.toContain("changes are not checkpointed yet");
     expect(html).toContain("Applies when the agent starts.");
     expect(html).toContain("Agent mode: acceptEdits");
     expect(html).toContain("The agent refused that model.");

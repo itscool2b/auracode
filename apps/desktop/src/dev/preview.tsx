@@ -1,0 +1,253 @@
+/** Development-only visual harness. It never starts a process or uses the native transport. */
+import { useOrbitTheme } from "@auracode/ui/orbit";
+import { useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
+import fullAuto from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-full-auto.events.json";
+import thinking from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-thinking.events.json";
+import type { AgentEntry, AuraEvent, EventBatch, SessionStatus } from "../bindings";
+import { ChatList } from "../components/chat/ChatList";
+import { ChatView } from "../components/chat/ChatView";
+import { NewChat } from "../components/chat/NewChat";
+import { NewChatDraft } from "../lib/chat/appStore";
+import {
+  attachResult,
+  chatSummary,
+  ev,
+  FakeTransport,
+  frame,
+  historyPage,
+  items,
+  numbered,
+  sessionInfo,
+} from "../lib/chat/testing";
+
+const AGENT: AgentEntry = {
+  id: "claude",
+  name: "Claude Code",
+  description: "Your installed Claude Code CLI",
+  availability: { state: "ready", version: "2.1.310", path: "Recorded protocol fixture" },
+  launch: "claude",
+  needs_download: false,
+  last_verified: "2026-10-26",
+};
+
+/** Driver golden events receive only the actor's turn boundaries needed by the real chat store. */
+function recorded(source: { events: readonly { type: string; data: unknown }[] }): AuraEvent[] {
+  const events: AuraEvent[] = [];
+  const turns = new Set<string>();
+  for (const envelope of source.events) {
+    if (envelope.type === "event") {
+      const data = envelope.data as { turn: string | null; event: AuraEvent };
+      if (data.turn !== null && !turns.has(data.turn)) {
+        turns.add(data.turn);
+        events.push(ev.turnStarted(data.turn));
+      }
+      events.push(data.event);
+    } else if (envelope.type === "turn_ended") {
+      const data = envelope.data as Extract<AuraEvent, { type: "turn_ended" }>;
+      events.push({ ...data, type: "turn_ended", duration_ms: null, recovered: false });
+    }
+  }
+  return events;
+}
+
+function synthetic(mode: string): AuraEvent[] {
+  const events = [
+    ev.turnStarted("first"),
+    ev.user("u1", "Make the project list easier to scan, and keep the active chat visible."),
+    ev.thought("thought", "I will check the sidebar layout and its existing keyboard behavior."),
+    ev.thoughtDone("thought", 2400),
+    ev.toolCall("read", {
+      title: "Read Sidebar.tsx",
+      status: "completed",
+      locations: [{ path: "src/components/Sidebar.tsx", line: 18 }],
+      content: [
+        {
+          type: "text",
+          text: 'export function Sidebar() {\n  return <nav aria-label="Projects">...</nav>;\n}',
+          truncated: null,
+        },
+      ],
+    }),
+    ev.toolCall("test", {
+      kind: "execute",
+      title: "pnpm test -- sidebar",
+      status: "completed",
+      content: [
+        {
+          type: "terminal",
+          output: "✓ keeps the selected chat visible\n✓ preserves keyboard focus\n\n2 tests passed",
+          exit_code: 0,
+          truncated: null,
+        },
+      ],
+    }),
+    ev.message(
+      "answer",
+      'The sidebar now keeps the active chat visible and gives each project a clearer heading.\n\n- **Keyboard focus** stays on the same chat when new activity arrives.\n- **Needs you** collects pending requests without duplicating chats.\n\n```tsx\n<nav aria-label="Projects">\n  <ProjectList selected={chat.id} />\n</nav>\n```\n\nBoth sidebar tests pass.',
+    ),
+    ev.messageDone("answer"),
+    ev.turnEnded("first", "end_turn", { durationMs: 18400 }),
+  ];
+  if (mode === "settled") return events;
+  events.push(ev.turnStarted("next"), ev.user("u2", "Check the small window layout too."));
+  if (mode === "permission")
+    events.push(
+      ev.toolCall("cmd", { kind: "execute", title: "pnpm test -- sidebar" }),
+      ev.permission("permission"),
+    );
+  else if (mode === "error")
+    events.push(
+      ev.error(
+        "agent_exited",
+        "The agent stopped unexpectedly.",
+        "The visible transcript is still saved.",
+      ),
+      ev.turnEnded("next", "error"),
+    );
+  else events.push(ev.thought("next-thought", "Checking the narrow layout and the focus order."));
+  return events;
+}
+
+function Preview() {
+  const requested = new URLSearchParams(location.search).get("preview") ?? "settled";
+  const mode = [
+    "settled",
+    "thinking",
+    "permission",
+    "error",
+    "new",
+    "recorded-thinking",
+    "recorded-tools",
+  ].includes(requested)
+    ? requested
+    : "settled";
+  const systemTheme = useOrbitTheme();
+  const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
+  const [selected, setSelected] = useState<string | null>(mode === "new" ? null : "preview");
+  const status: SessionStatus =
+    mode === "thinking" || mode === "permission"
+      ? "running"
+      : mode === "error"
+        ? "failed"
+        : "ready";
+  const chat = useMemo(
+    () =>
+      chatSummary("preview", {
+        title: "Make the sidebar easier to scan",
+        agent_id: "claude",
+        agent_name: AGENT.name,
+        folder: "/workspace/auracode",
+        status,
+        needs_attention: mode === "permission",
+      }),
+    [mode, status],
+  );
+  const transport = useMemo(() => {
+    const events =
+      mode === "recorded-thinking"
+        ? recorded(thinking)
+        : mode === "recorded-tools"
+          ? recorded(fullAuto)
+          : synthetic(mode);
+    let seq = events.length;
+    let receive: ((batch: EventBatch) => void) | null = null;
+    const publish = (updates: AuraEvent[]) => {
+      receive?.(frame("preview", seq, updates));
+      seq += updates.length;
+    };
+    return new FakeTransport({
+      attach: async (chatId, onFrame) => {
+        receive = onFrame;
+        return attachResult(
+          chatId,
+          seq,
+          historyPage(chatId, items(numbered(events.map((event) => [null, event] as const)))),
+          { chat, session: sessionInfo({ agent_name: AGENT.name, status }) },
+        );
+      },
+      pickFolder: async () => "/workspace/auracode",
+      respondPermission: async (_chatId, requestId, optionId) =>
+        publish([ev.permissionResolved(requestId, optionId)]),
+      send: async (_chatId, text) => {
+        publish([
+          ev.turnStarted("preview-send"),
+          ev.user("preview-user", text),
+          ev.message(
+            "preview-answer",
+            "This is a local UI preview. No prompt was sent to an agent.",
+          ),
+          ev.messageDone("preview-answer"),
+          ev.turnEnded("preview-send"),
+        ]);
+        return { prompt_id: "preview-send", queued: false };
+      },
+    });
+  }, [mode, status, chat]);
+  const draft = useMemo(() => new NewChatDraft(transport), [transport]);
+  return (
+    <div
+      className="chat-app orbit-theme"
+      data-theme={theme === "system" ? systemTheme : theme}
+      data-glass="none"
+    >
+      <aside className="chat-sidebar" aria-label="Sidebar">
+        <ChatList
+          chats={[
+            chat,
+            chatSummary("older", {
+              title: "Set up the project",
+              folder: chat.folder,
+              agent_name: "Codex",
+              agent_id: "codex",
+            }),
+          ]}
+          error={null}
+          selected={selected}
+          onSelect={() => setSelected("preview")}
+          onNewChat={() => setSelected(null)}
+        />
+        <div className="chat-sidebar-footer">
+          <p className="ui-muted">
+            {mode.startsWith("recorded-") ? "Recorded Claude protocol" : "Synthetic UI fixture"}
+          </p>
+          <label className="ui-field">
+            Preview theme
+            <select
+              className="ui-select"
+              value={theme}
+              onChange={(event) => setTheme(event.currentTarget.value as typeof theme)}
+            >
+              <option>system</option>
+              <option>light</option>
+              <option>dark</option>
+            </select>
+          </label>
+        </div>
+      </aside>
+      <main className="chat-main">
+        {selected === null ? (
+          <NewChat
+            agents={[AGENT]}
+            refreshing={false}
+            draft={draft}
+            onRefreshAgents={() => {}}
+            onCreated={() => setSelected("preview")}
+          />
+        ) : (
+          <ChatView
+            chatId="preview"
+            transport={transport}
+            listed={chat}
+            storage={null}
+            agents={[AGENT]}
+          />
+        )}
+      </main>
+    </div>
+  );
+}
+
+export function mountPreview(container: HTMLElement): void {
+  createRoot(container).render(<Preview />);
+}

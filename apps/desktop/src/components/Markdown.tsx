@@ -16,7 +16,13 @@ import {
  * appears (never per character); finished blocks are memoized, so a new frame only re-renders the
  * block that is still growing. Everything is React elements: agent text cannot inject HTML.
  */
-export function Answer({ text }: { readonly text: string }) {
+export function Answer({
+  text,
+  motion: movement = "enter",
+}: {
+  readonly text: string;
+  readonly motion?: "enter" | "none";
+}) {
   const cache = useRef<SplitCache>(EMPTY_SPLIT);
   const split = useMemo(() => {
     cache.current = splitIncremental(cache.current, text);
@@ -27,9 +33,11 @@ export function Answer({ text }: { readonly text: string }) {
     <div className="answer" data-answer="">
       {split.stable.map((source, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: blocks only ever append, so an index names the same block for its whole life.
-        <MarkdownBlock key={index} source={source} />
+        <MarkdownBlock key={index} source={source} movement={movement} />
       ))}
-      {split.tail !== null ? <MarkdownBlock key={split.stable.length} source={split.tail} /> : null}
+      {split.tail !== null ? (
+        <MarkdownBlock key={split.stable.length} source={split.tail} movement={movement} />
+      ) : null}
     </div>
   );
 }
@@ -38,14 +46,22 @@ const ENTER = { opacity: 0, y: 6 } as const;
 const SHOWN = { opacity: 1, y: 0 } as const;
 const ENTER_TRANSITION = { duration: 0.38, ease: easings.out } as const;
 
-const MarkdownBlock = memo(function MarkdownBlock({ source }: { readonly source: string }) {
+const MarkdownBlock = memo(function MarkdownBlock({
+  source,
+  movement,
+}: {
+  readonly source: string;
+  readonly movement: "enter" | "none";
+}) {
   const blocks = useMemo(() => parseBlock(source), [source]);
+  const content = blocks.map((block, index) => (
+    // biome-ignore lint/suspicious/noArrayIndexKey: a block's parts are positional and re-derived from its text.
+    <BlockView key={index} block={block} />
+  ));
+  if (movement === "none") return <div className="md-block">{content}</div>;
   return (
     <motion.div className="md-block" initial={ENTER} animate={SHOWN} transition={ENTER_TRANSITION}>
-      {blocks.map((block, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: a block's parts are positional and re-derived from its text.
-        <BlockView key={index} block={block} />
-      ))}
+      {content}
     </motion.div>
   );
 });

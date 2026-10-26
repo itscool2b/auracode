@@ -4,7 +4,7 @@ import { usePrefersReducedMotion } from "../motion";
 import { ORB_STATE_LABELS, type OrbState } from "../orb/states";
 import { motionDeadline, type OrbitActivity, transitionActivity } from "./activity";
 import { orbitClock } from "./clock";
-import { markFrame, signatureOf } from "./geometry";
+import { CHECK_HOLD_MS, markFrame, signatureOf } from "./geometry";
 import { OrbitSvg } from "./OrbitSvg";
 
 export interface OrbitMarkProps {
@@ -48,7 +48,8 @@ export function OrbitMark({
     const current = transitionActivity(activity.current, state, performance.now());
     activity.current = current;
     const signature = signatureOf(brand.id);
-    const until = motionDeadline(current);
+    const until =
+      reduced && state === "done" ? current.since + CHECK_HOLD_MS : motionDeadline(current);
     let visible = typeof IntersectionObserver === "undefined";
     let unsubscribe: (() => void) | null = null;
     let expiry: ReturnType<typeof setTimeout> | null = null;

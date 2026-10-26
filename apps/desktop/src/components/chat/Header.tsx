@@ -1,4 +1,6 @@
+import { OrbitMark } from "@auracode/ui/orbit";
 import type { AgentEntry, ChatSummary } from "../../bindings";
+import { chatActivity } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
 import { contextLabel, costLabel, folderStateLabel, statusWord } from "../../lib/chat/present";
 import { hasProcess } from "../../lib/chat/transcript";
@@ -43,8 +45,16 @@ export function Header({
   const folderState = chat ? folderStateLabel(chat.folder_state) : null;
   const context = contextLabel(state.usage);
   const cost = costLabel(state.usage);
+  const activity = chatActivity(state);
+  const statusLabel = activity === "waiting" ? "Waiting on you" : statusWord(status);
   return (
     <header className="chat-header" data-testid="chat-header">
+      <OrbitMark
+        agent={chat?.agent_id ?? agent?.id ?? "generic"}
+        state={activity}
+        size={16}
+        label={`${name}, ${session?.detail ?? statusLabel}`}
+      />
       <div className="chat-header-who">
         <span className="chat-header-agent" title={ready?.path}>
           {name}
@@ -66,7 +76,7 @@ export function Header({
         data-test-status={status}
         aria-live="polite"
       >
-        {statusWord(status)}
+        {statusLabel}
         {session?.detail ? <span className="ui-muted"> · {session.detail}</span> : null}
       </span>
       {context !== null || cost !== null ? (

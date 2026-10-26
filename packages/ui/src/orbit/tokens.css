@@ -1,0 +1,290 @@
+/*
+ * Orbit's tokens: docs/design/visual-language.md, section 3, for both themes.
+ *
+ * The app/site's .orbit-theme and the lab's scoped .o-root share these values. Each root
+ * carries data-theme="light" or "dark". One temperature: warm paper in light, near-neutral
+ * black in dark, one ink at alpha steps for text. Colour means four things and nothing else:
+ * orange (look here), green (done, added), red (failed, removed) and ink.
+ */
+
+/* ------------------------------------------------------------------ theme-independent tokens */
+
+:is(.orbit-theme, [data-direction="orbit"] .o-root) {
+  --o-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --o-mono:
+    "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Spacing: a 4px base. */
+  --o-sp-2: 2px;
+  --o-sp-4: 4px;
+  --o-sp-6: 6px;
+  --o-sp-8: 8px;
+  --o-sp-12: 12px;
+  --o-sp-16: 16px;
+  --o-sp-20: 20px;
+  --o-sp-24: 24px;
+  --o-sp-32: 32px;
+  --o-sp-40: 40px;
+  --o-sp-48: 48px;
+  --o-sp-64: 64px;
+  --o-sp-96: 96px;
+
+  /* Radii: zero for markers, small for content, pills for controls. */
+  --o-r-0: 0;
+  --o-r-xs: 4px;
+  --o-r-sm: 6px;
+  --o-r-md: 8px;
+  --o-r-lg: 12px;
+  --o-r-xl: 16px;
+  --o-r-pill: 9999px;
+
+  /* Motion. No springs, no overshoot. */
+  --o-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --o-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --o-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --o-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --o-ease-settle: cubic-bezier(0, 0.7, 0.3, 1);
+  --o-instant: 0ms;
+  --o-micro: 100ms;
+  --o-fast: 150ms;
+  --o-base: 200ms;
+  --o-dock: 260ms;
+  --o-slow: 400ms;
+  --o-hero: 650ms;
+  --o-glint: 900ms;
+
+  /* Layout, in the lab's 1440 x 900 window. */
+  --o-sidebar-w: 264px;
+  --o-inset: 8px;
+  --o-head-h: 44px;
+  --o-column: 720px;
+  --o-panel-w: 380px;
+
+  /* The night panel (onboarding, the dark boot) is black in both themes; the globe on it is a
+     solid sphere one value step above the black (SpaceXAI's careers globe, inverted). */
+  --o-night: #000;
+  --o-night-ring: rgb(255 255 255 / 0.08);
+  --o-night-body: #121212;
+
+  /* The appearance tiles draw both themes in miniature, whichever theme is on. */
+  --o-swatch-light-tray: #f3f2ef;
+  --o-swatch-light-pane: #fff;
+  --o-swatch-light-ink: #0a0a0a;
+  --o-swatch-dark-tray: #000;
+  --o-swatch-dark-pane: #0e0e0d;
+  --o-swatch-dark-ink: #e9e8e4;
+
+  /* Project squares: four muted tones, none saturated, none violet, none near the signal. */
+  --o-project-slate: #8a98a6;
+  --o-project-stone: #a59e92;
+  --o-project-sage: #8c9c88;
+  --o-project-clay: #a88e80;
+}
+
+/* ---------------------------------------------------------------------------------- light */
+
+:is(.orbit-theme, [data-direction="orbit"] .o-root)[data-theme="light"] {
+  color-scheme: light;
+
+  --o-tray: #f3f2ef;
+  --o-tray-tint: rgb(243 242 239 / 0.86);
+  /*
+   * The lab's stand-in for the light sidebar material. WindowChrome simulates dark glass; a light
+   * window's material is light frosted glass, so this lifts it before the tray tint goes on.
+   */
+  --o-material: rgb(242 241 238 / 0.9);
+  --o-pane: #fff;
+  --o-raised: #fff;
+  --o-raised-2: #f7f6f3;
+  --o-well: #f3f2ef;
+  --o-hover: rgb(10 10 10 / 0.04);
+  --o-pressed: rgb(10 10 10 / 0.08);
+  --o-selected: rgb(10 10 10 / 0.06);
+
+  --o-ink: #0a0a0a;
+  --o-text-1: #0a0a0a;
+  --o-text-2: rgb(10 10 10 / 0.72);
+  --o-text-3: rgb(10 10 10 / 0.57);
+  --o-text-4: rgb(10 10 10 / 0.3);
+  --o-on-ink: #fff;
+  --o-on-ink-2: rgb(255 255 255 / 0.8);
+  --o-user-bg: #0a0a0a;
+  --o-user-fg: #fff;
+  --o-ink-hover: rgb(10 10 10 / 0.84);
+
+  --o-line: rgb(10 10 10 / 0.08);
+  --o-line-strong: rgb(10 10 10 / 0.14);
+  --o-rule: rgb(10 10 10 / 0.06);
+  --o-dash: rgb(10 10 10 / 0.18);
+  --o-ring-composer: rgb(10 10 10 / 0.1);
+  /* Rings at double alpha, for the 0.5px hairlines of 2x displays. */
+  --o-line-2x: rgb(10 10 10 / 0.16);
+  --o-line-strong-2x: rgb(10 10 10 / 0.28);
+
+  --o-signal: #ec5800;
+  --o-signal-text: #bf4400;
+  --o-signal-tint: rgb(255 99 8 / 0.1);
+  --o-green: #0a8f5c;
+  --o-green-text: #007e50;
+  --o-green-tint: rgb(0 186 124 / 0.12);
+  --o-red: #d11a28;
+  --o-red-tint: rgb(244 33 46 / 0.09);
+  --o-scrim: rgb(10 10 10 / 0.24);
+  --o-toast: rgb(20 20 20 / 0.88);
+  --o-toast-fg: #fff;
+  --o-toast-ring: transparent;
+  --o-selection: rgb(10 10 10 / 0.12);
+  --o-tooltip: rgb(10 10 10 / 0.92);
+  --o-tooltip-fg: #fff;
+
+  --o-add-line: rgb(0 186 124 / 0.1);
+  --o-add-word: rgb(0 186 124 / 0.24);
+  --o-add-num: #007e50;
+  --o-del-line: rgb(244 33 46 / 0.08);
+  --o-del-word: rgb(244 33 46 / 0.19);
+  --o-del-num: #d11a28;
+  --o-hunk: rgb(10 10 10 / 0.04);
+
+  --o-code-fg: #2a2a29;
+  --o-code-bright: #0a0a0a;
+  --o-code-dim: #6c6b6a;
+  --o-code-green: #1e7a2b;
+  --o-code-blue: #2365d1;
+  --o-code-teal: #00676c;
+  --o-code-yellow: #876500;
+  --o-code-orange: #a84e00;
+  --o-code-red: #be2e31;
+  --o-code-purple: #6d48d1;
+
+  --o-key-fill: rgb(10 10 10 / 0.06);
+  --o-key-ring: rgb(10 10 10 / 0.1);
+  --o-meter-track: rgb(10 10 10 / 0.1);
+  --o-square-rest: rgb(10 10 10 / 0.12);
+  --o-switch-off: rgb(10 10 10 / 0.14);
+  --o-inline-code: rgb(10 10 10 / 0.05);
+
+  --o-e1: 0 1px 2px rgb(10 10 10 / 0.06);
+  --o-e2: 0 1px 2px rgb(10 10 10 / 0.04), 0 6px 16px -6px rgb(10 10 10 / 0.1);
+  --o-e3: 0 2px 6px rgb(10 10 10 / 0.05), 0 16px 40px -12px rgb(10 10 10 / 0.2);
+  --o-e4: 0 24px 64px -16px rgb(10 10 10 / 0.32);
+  --o-lit-edge: none;
+
+  /* Light reads lighter, so it keeps the nominal weights. */
+  --o-w-body: 400;
+  --o-w-ui: 450;
+  --o-w-strong: 500;
+  --o-w-hover: 520;
+  --o-w-heading: 600;
+  --o-w-display: 500;
+}
+
+/* ----------------------------------------------------------------------------------- dark */
+
+:is(.orbit-theme, [data-direction="orbit"] .o-root)[data-theme="dark"] {
+  color-scheme: dark;
+
+  --o-tray: #000;
+  --o-tray-tint: rgb(0 0 0 / 0.82);
+  /*
+   * The lab's stand-in for the dark sidebar material. WindowChrome's glass is a saturated copy of
+   * the wallpaper; the native material is far quieter, so a neutral layer keeps a purple desktop
+   * from tinting the sidebar (section 6: it must read black on dusk and dawn).
+   */
+  --o-material: rgb(16 16 15 / 0.8);
+  --o-pane: #0e0e0d;
+  --o-raised: #171716;
+  --o-raised-2: #1f1f1e;
+  --o-well: #000;
+  --o-hover: rgb(242 241 238 / 0.05);
+  --o-pressed: rgb(242 241 238 / 0.09);
+  --o-selected: rgb(242 241 238 / 0.07);
+
+  --o-ink: #f2f1ee;
+  --o-text-1: #f2f1ee;
+  --o-text-2: rgb(242 241 238 / 0.7);
+  --o-text-3: rgb(242 241 238 / 0.5);
+  --o-text-4: rgb(242 241 238 / 0.28);
+  --o-on-ink: #0a0a0a;
+  --o-on-ink-2: rgb(10 10 10 / 0.8);
+  --o-user-bg: #e9e8e4;
+  --o-user-fg: #0a0a0a;
+  --o-ink-hover: #fff;
+
+  --o-line: rgb(242 241 238 / 0.09);
+  --o-line-strong: rgb(242 241 238 / 0.15);
+  --o-rule: rgb(242 241 238 / 0.07);
+  --o-dash: rgb(242 241 238 / 0.2);
+  --o-ring-composer: rgb(242 241 238 / 0.09);
+  --o-line-2x: rgb(242 241 238 / 0.18);
+  --o-line-strong-2x: rgb(242 241 238 / 0.3);
+
+  --o-signal: #ff6308;
+  --o-signal-text: #ff7a2e;
+  --o-signal-tint: rgb(255 99 8 / 0.16);
+  --o-green: #31c88e;
+  --o-green-text: #31c88e;
+  --o-green-tint: rgb(49 200 142 / 0.14);
+  --o-red: #f64b5c;
+  --o-red-tint: rgb(246 75 92 / 0.14);
+  --o-scrim: rgb(0 0 0 / 0.56);
+  --o-toast: rgb(38 38 37 / 0.92);
+  --o-toast-fg: #f2f1ee;
+  --o-toast-ring: rgb(242 241 238 / 0.1);
+  --o-selection: rgb(242 241 238 / 0.18);
+  --o-tooltip: #e9e8e4;
+  --o-tooltip-fg: #0a0a0a;
+
+  --o-add-line: rgb(49 200 142 / 0.12);
+  --o-add-word: rgb(49 200 142 / 0.28);
+  --o-add-num: #31c88e;
+  --o-del-line: rgb(246 75 92 / 0.12);
+  --o-del-word: rgb(246 75 92 / 0.28);
+  --o-del-num: #f64b5c;
+  --o-hunk: rgb(242 241 238 / 0.05);
+
+  --o-code-fg: #d7d1c9;
+  --o-code-bright: #f2ede5;
+  --o-code-dim: #8d867e;
+  --o-code-green: #91c17a;
+  --o-code-blue: #8db4ff;
+  --o-code-teal: #29c6be;
+  --o-code-yellow: #cfb47c;
+  --o-code-orange: #d59556;
+  --o-code-red: #d7766c;
+  --o-code-purple: #bc97ff;
+
+  --o-key-fill: rgb(242 241 238 / 0.08);
+  --o-key-ring: rgb(242 241 238 / 0.12);
+  --o-meter-track: rgb(242 241 238 / 0.1);
+  --o-square-rest: rgb(242 241 238 / 0.12);
+  --o-switch-off: rgb(242 241 238 / 0.15);
+  --o-inline-code: rgb(242 241 238 / 0.07);
+
+  --o-e1: inset 0 1px 0 rgb(242 241 238 / 0.04);
+  --o-e2: 0 8px 24px -8px rgb(0 0 0 / 0.6), inset 0 1px 0 rgb(242 241 238 / 0.04);
+  --o-e3: 0 16px 48px -12px rgb(0 0 0 / 0.7);
+  --o-e4: 0 24px 64px -16px rgb(0 0 0 / 0.6);
+  /* Linear's lit edge: the only light in the interface, on the dark composer's border. */
+  --o-lit-edge: linear-gradient(135deg, rgb(242 241 238 / 0.14), rgb(242 241 238 / 0.04) 30%);
+
+  /* Light on black reads heavier: every weight drops by 20. */
+  --o-w-body: 380;
+  --o-w-ui: 430;
+  --o-w-strong: 480;
+  --o-w-hover: 500;
+  --o-w-heading: 580;
+  --o-w-display: 480;
+}
+
+/* Hairlines: 1px, or 0.5px at double alpha on 2x displays, the machined look. */
+:is(.orbit-theme, [data-direction="orbit"] .o-root) {
+  --o-ring: 0 0 0 1px var(--o-line);
+  --o-ring-strong: 0 0 0 1px var(--o-line-strong);
+}
+
+@media (min-resolution: 2dppx) {
+  :is(.orbit-theme, [data-direction="orbit"] .o-root) {
+    --o-ring: 0 0 0 0.5px var(--o-line-2x);
+    --o-ring-strong: 0 0 0 0.5px var(--o-line-strong-2x);
+  }
+}

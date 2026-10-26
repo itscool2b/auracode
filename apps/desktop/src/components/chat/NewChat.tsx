@@ -1,3 +1,4 @@
+import { OrbitMark } from "@auracode/ui/orbit";
 import { useId, useSyncExternalStore } from "react";
 import type { AgentEntry, ChatSummary } from "../../bindings";
 import { agentChoice, type NewChatDraft } from "../../lib/chat/appStore";
@@ -63,7 +64,15 @@ export function NewChat({
         });
       }}
     >
-      <h1>New chat</h1>
+      <div className="chat-welcome">
+        <OrbitMark
+          agent={selected?.id ?? "generic"}
+          size={56}
+          label={selected ? `${selected.name}, ready for a new chat` : "Choose your agent"}
+        />
+        <h1>What are we working on?</h1>
+        <p>Your agents, in one place. Choose a folder to begin.</p>
+      </div>
       <div className="ui-field">
         <label htmlFor={agentId}>Agent</label>
         <div className="ui-row">

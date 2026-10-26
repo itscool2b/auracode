@@ -3,9 +3,9 @@
 //! | OS | Material | Window |
 //! |---|---|---|
 //! | macOS 26+ | Liquid Glass (regular), vibrancy listed as Tauri's fallback | transparent |
-//! | macOS 13.3 (the oldest the bundle installs on) to 15 | vibrancy (`UnderWindowBackground`, dark through the window theme) | transparent |
-//! | Windows 11 (build 22000+) | Mica (`MicaDark`, so the caption stays dark on a light system theme) | transparent |
-//! | Windows 10, Linux, anything else | none: the UI paints its opaque near-black base | opaque |
+//! | macOS 13.3 (the oldest the bundle installs on) to 15 | vibrancy (`UnderWindowBackground`, following system appearance) | transparent |
+//! | Windows 11 (build 22000+) | Mica (following system appearance) | transparent |
+//! | Windows 10, Linux, anything else | none: the UI paints its opaque Orbit tray | opaque |
 //! | `AURACODE_NO_GLASS=1` | none (the power spike's baseline) | opaque |
 //!
 //! Opaque is the fallback because a transparent window with no material behind it shows whatever
@@ -96,7 +96,7 @@ pub fn plan(os: &str, version: Option<OsVersion>, disabled: bool) -> GlassPlan {
         },
         "windows" => match version {
             Some(v) if v.major >= 10 && v.patch >= MICA_WINDOWS_BUILD => {
-                GlassPlan::with(GlassEffect::Mica, vec![Effect::MicaDark])
+                GlassPlan::with(GlassEffect::Mica, vec![Effect::Mica])
             }
             _ => GlassPlan::opaque(),
         },
@@ -144,12 +144,12 @@ mod tests {
     }
 
     #[test]
-    fn windows_11_gets_dark_mica() {
+    fn windows_11_gets_system_appearance_mica() {
         for version in [v(10, 0, 22000), v(10, 0, 22631), v(10, 0, 26100)] {
             let plan = plan("windows", version, false);
             assert_eq!(plan.effect, GlassEffect::Mica);
             assert!(plan.transparent);
-            assert_eq!(plan.effects, vec![Effect::MicaDark]);
+            assert_eq!(plan.effects, vec![Effect::Mica]);
         }
     }
 

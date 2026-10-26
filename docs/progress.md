@@ -137,7 +137,25 @@ tests, UI/Lab typechecks and the Lab build pass after extraction. The live mark 
 animation clock, keeps bounded state history without losing orbital phase, and stops scheduling
 frames when settled, hidden, offscreen or under reduced motion. Tool completion ripples finish
 before idle; reduced-motion success expires with one timer. All 183 UI tests and its typecheck pass.
-Desktop integration, both themes and browser accessibility/visual checks remain pending.
+The desktop now consumes the shared light/dark tokens, follows system appearance and uses SVG
+marks for live protocol activity, thought/tool rows, bylines and the empty state. It no longer
+probes WebGL at startup; retained diagnostics and other Lab directions keep their existing shader
+dependencies. Streamed prose stays stationary, completed tools collapse and failures open, and the
+transcript distinguishes native work that continues after a response from an idle session.
+
+The development-only `?preview=` harness renders both synthetic UI cases and curated real Claude
+thinking/tool recordings through the real chat store. It has no native transport and is removed
+from production builds. Chromium and WebKit each passed 14 state/theme accessibility scans with
+zero automated WCAG A/AA violations, keyboard tool disclosure and send, reduced-motion/offscreen/
+hidden-document frame checks, zero canvases, and the 960x640 minimum window. Screenshots and JSON
+reports are in ignored `target/orbit-browser/`. `pnpm --filter @auracode/desktop check:orbit` runs the
+suite with its own local server. This automated evidence does not replace native platform checks.
+Full M2a review, long-history rendering and the remaining transcript refinements are pending.
+The current frontend gate passes 827 tests with 19 existing skips and both production builds.
+The preview and frame instrumentation are absent from the production output. All 11 native window
+material tests, desktop all-target Clippy, rustfmt and 33 documentation checks pass after switching
+Mica to system appearance; no host security settings changed. CI now runs the browser suite and
+retains its screenshots and accessibility reports for seven days.
 
 - Rust owns backend logic. TypeScript remains for React and necessary platform/build glue.
 - D1 and Cloudflare Email Service replace Neon/Postgres, Neon Auth, Hyperdrive, and Resend.

@@ -1,4 +1,5 @@
-import { memo } from "react";
+import { OrbitMark } from "@auracode/ui/orbit";
+import { Fragment, memo } from "react";
 import type { PlanEntry, UiAnswer } from "../../bindings";
 import type { RequestState } from "../../lib/chat/chatStore";
 import { costLabel, type ErrorActions, tokensLabel } from "../../lib/chat/present";
@@ -30,10 +31,17 @@ export interface TurnActions extends BlobProps {
 export const TurnView = memo(function TurnView({
   segment,
   actions,
+  agentId = "generic",
+  agentName = "Agent",
+  active = false,
 }: {
   readonly segment: RenderedSegment;
   readonly actions: TurnActions;
+  readonly agentId?: string;
+  readonly agentName?: string;
+  readonly active?: boolean;
 }) {
+  const firstAgentItem = segment.items.findIndex((item) => item.kind !== "user");
   return (
     <section
       className="chat-segment"
@@ -45,115 +53,147 @@ export const TurnView = memo(function TurnView({
       data-test-stop-reason={segment.end?.stopReason ?? ""}
       data-test-recovered={String(segment.end?.recovered ?? false)}
     >
-      {segment.items.map((item) => {
-        switch (item.kind) {
-          case "user":
-            return (
-              <div key={item.key} className="chat-user" data-testid="item" data-test-kind="user">
-                {item.text}
-              </div>
-            );
-          case "message":
-            return (
-              <div
-                key={item.key}
-                data-testid="item"
-                data-test-kind="message"
-                data-test-completed={String(item.completed)}
-              >
-                <Answer text={item.text} />
-              </div>
-            );
-          case "thought":
-            return (
-              <details
-                key={item.key}
-                className="chat-thought"
-                data-testid="item"
-                data-test-kind="thought"
-                data-test-completed={String(item.completed)}
-                data-test-duration-ms={item.durationMs ?? ""}
-              >
-                <summary>
-                  {item.completed
-                    ? item.durationMs === null
-                      ? "Thought"
-                      : `Thought for ${formatDuration(item.durationMs)}`
-                    : "Thinking…"}
-                </summary>
-                <p>
-                  {item.text ||
-                    (item.completed ? "The agent did not share its reasoning." : "Thinking…")}
+      {segment.items.map((item, index) => {
+        const byline =
+          index === firstAgentItem && segment.turnId !== null ? (
+            <div className="chat-byline">
+              <OrbitMark agent={agentId} size={16} label={agentName} />
+              <span>{agentName}</span>
+            </div>
+          ) : null;
+        const content = (() => {
+          switch (item.kind) {
+            case "user":
+              return (
+                <div key={item.key} className="chat-user" data-testid="item" data-test-kind="user">
+                  {item.text}
+                </div>
+              );
+            case "message":
+              return (
+                <div
+                  key={item.key}
+                  data-testid="item"
+                  data-test-kind="message"
+                  data-test-completed={String(item.completed)}
+                >
+                  <Answer text={item.text} motion="none" />
+                </div>
+              );
+            case "thought":
+              return (
+                <details
+                  key={item.key}
+                  className="chat-thought"
+                  data-testid="item"
+                  data-test-kind="thought"
+                  data-test-completed={String(item.completed)}
+                  data-test-duration-ms={item.durationMs ?? ""}
+                >
+                  <summary>
+                    {active && !item.completed ? (
+                      <OrbitMark
+                        agent={agentId}
+                        state="thinking"
+                        size={16}
+                        label={`${agentName}, thinking`}
+                      />
+                    ) : (
+                      <span className="chat-disclosure" aria-hidden="true">
+                        ›
+                      </span>
+                    )}
+                    {item.completed
+                      ? item.durationMs === null
+                        ? "Thought"
+                        : `Thought for ${formatDuration(item.durationMs)}`
+                      : active
+                        ? "Thinking…"
+                        : "Thinking interrupted"}
+                  </summary>
+                  <p>
+                    {item.text ||
+                      (item.completed || !active
+                        ? "The agent did not share its reasoning."
+                        : "Thinking…")}
+                  </p>
+                </details>
+              );
+            case "tool":
+              return (
+                <ToolBlock
+                  key={item.key}
+                  tool={item}
+                  agentId={agentId}
+                  display={item.display}
+                  blobs={actions.blobs}
+                  onLoadBlob={actions.onLoadBlob}
+                />
+              );
+            case "permission":
+              return (
+                <PermissionCard
+                  key={item.key}
+                  item={item}
+                  request={actions.requests.get(item.request.request_id)}
+                  onRespond={(optionId) =>
+                    actions.onRespondPermission(item.request.request_id, optionId)
+                  }
+                  blobs={actions.blobs}
+                  onLoadBlob={actions.onLoadBlob}
+                />
+              );
+            case "question":
+              return (
+                <QuestionCard
+                  key={item.key}
+                  item={item}
+                  request={actions.requests.get(item.request.request_id)}
+                  onRespond={(answer) => actions.onRespondUi(item.request.request_id, answer)}
+                />
+              );
+            case "notice":
+              return (
+                <p
+                  key={item.key}
+                  className="chat-notice"
+                  data-level={item.level}
+                  data-testid="item"
+                  data-test-kind="notice"
+                  data-test-level={item.level}
+                >
+                  {item.message}
                 </p>
-              </details>
-            );
-          case "tool":
-            return (
-              <ToolBlock
-                key={item.key}
-                tool={item}
-                display={item.display}
-                blobs={actions.blobs}
-                onLoadBlob={actions.onLoadBlob}
-              />
-            );
-          case "permission":
-            return (
-              <PermissionCard
-                key={item.key}
-                item={item}
-                request={actions.requests.get(item.request.request_id)}
-                onRespond={(optionId) =>
-                  actions.onRespondPermission(item.request.request_id, optionId)
-                }
-                blobs={actions.blobs}
-                onLoadBlob={actions.onLoadBlob}
-              />
-            );
-          case "question":
-            return (
-              <QuestionCard
-                key={item.key}
-                item={item}
-                request={actions.requests.get(item.request.request_id)}
-                onRespond={(answer) => actions.onRespondUi(item.request.request_id, answer)}
-              />
-            );
-          case "notice":
-            return (
-              <p
-                key={item.key}
-                className="chat-notice"
-                data-level={item.level}
-                data-testid="item"
-                data-test-kind="notice"
-                data-test-level={item.level}
-              >
-                {item.message}
-              </p>
-            );
-          case "error":
-            return (
-              <ErrorCard
-                key={item.key}
-                item={item}
-                actions={actions.errorActions(item.key, item.errorKind)}
-                onRetry={() => actions.onStart(false)}
-                onStartFresh={() => actions.onStart(true)}
-                onShowLog={actions.onShowLog}
-              />
-            );
-          case "gap":
-            return (
-              <p key={item.key} className="chat-marker" data-testid="item" data-test-kind="gap">
-                Recent output isn't saved yet; it appears here when saving resumes.
-              </p>
-            );
-          default: {
-            const unreachable: never = item;
-            throw new Error(`unhandled item: ${JSON.stringify(unreachable)}`);
+              );
+            case "error":
+              return (
+                <ErrorCard
+                  key={item.key}
+                  item={item}
+                  actions={actions.errorActions(item.key, item.errorKind)}
+                  onRetry={() => actions.onStart(false)}
+                  onStartFresh={() => actions.onStart(true)}
+                  onShowLog={actions.onShowLog}
+                />
+              );
+            case "gap":
+              return (
+                <p key={item.key} className="chat-marker" data-testid="item" data-test-kind="gap">
+                  Recent output isn't saved yet; it appears here when saving resumes.
+                </p>
+              );
+            default: {
+              const unreachable: never = item;
+              throw new Error(`unhandled item: ${JSON.stringify(unreachable)}`);
+            }
           }
-        }
+        })();
+        return (
+          <Fragment key={item.key}>
+            {byline}
+            {content}
+          </Fragment>
+        );
       })}
       {segment.plan !== null && segment.plan.length > 0 ? <Plan entries={segment.plan} /> : null}
       <Footer segment={segment} canResume={actions.canResume} onStart={actions.onStart} />

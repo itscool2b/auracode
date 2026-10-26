@@ -1,7 +1,7 @@
 /*
  * The chat screens. Every colour, size, font, spacing step and radius comes from ui-tokens.css,
  * so remapping those tokens restyles everything here; this file holds only layout and which token
- * each part uses. Plain controls, laid out to be usable: the visual language arrives later.
+ * each part uses. Orbit keeps the workspace on solid panes and reserves color for state.
  */
 
 @layer components {
@@ -16,6 +16,28 @@
     font-size: var(--ui-size-md);
     line-height: var(--ui-leading-body);
     color: var(--ui-text-primary);
+    font-weight: var(--ui-weight-regular);
+    font-synthesis: none;
+  }
+
+  :root:has(.chat-app) body {
+    background: transparent;
+  }
+
+  .chat-app::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 0 var(--ui-sidebar-width);
+    background: var(--o-tray);
+  }
+
+  .chat-app :focus-visible {
+    outline: var(--ui-focus-width) solid var(--ui-focus-ring);
+    outline-offset: 2px;
+  }
+
+  .chat-app ::selection {
+    background: var(--o-selection);
   }
 
   .chat-sidebar {
@@ -26,8 +48,11 @@
     min-height: 0;
     padding: var(--ui-titlebar-height) var(--ui-space-4) var(--ui-space-4);
     background: var(--ui-surface-sidebar);
-    border-right: var(--ui-border-width) solid var(--ui-border-subtle);
     overflow-y: auto;
+  }
+
+  .chat-app[data-glass="none"] .chat-sidebar {
+    background: var(--o-tray);
   }
 
   .chat-main {
@@ -36,14 +61,22 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
-    padding-top: var(--ui-titlebar-height);
+    margin: var(--ui-space-3) var(--ui-space-3) var(--ui-space-3) 0;
     background: var(--ui-surface-main);
+    border-radius: var(--ui-radius-lg);
+    box-shadow: var(--o-ring);
+    overflow: hidden;
   }
 
   .chat-drag {
     position: absolute;
     inset: 0 0 auto;
     height: var(--ui-titlebar-height);
+  }
+
+  .chat-main > .chat-drag {
+    height: 44px;
+    pointer-events: none;
   }
 
   /* ---------- Controls ---------- */
@@ -82,6 +115,10 @@
     background: var(--ui-accent);
     border-color: var(--ui-accent);
     color: var(--ui-text-on-accent);
+  }
+
+  .ui-button[data-kind="primary"]:hover:not(:disabled) {
+    background: var(--o-ink-hover);
   }
 
   .ui-button[data-kind="primary"]:disabled {
@@ -221,7 +258,8 @@
   }
 
   .chat-row[aria-current="true"] {
-    background: var(--ui-surface-selected);
+    background: var(--ui-surface-panel);
+    box-shadow: var(--o-ring-strong), var(--o-e1);
   }
 
   .chat-row-title {
@@ -252,7 +290,8 @@
     flex: none;
     width: var(--ui-dot-size);
     height: var(--ui-dot-size);
-    border-radius: var(--ui-radius-pill);
+    border-radius: 0;
+    transform: rotate(45deg) scale(0.75);
     background: var(--ui-status-warning);
   }
 
@@ -308,6 +347,30 @@
     margin: 0 auto;
     padding: var(--ui-space-6) var(--ui-space-5);
     overflow-y: auto;
+    margin-block: auto;
+  }
+
+  .chat-welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--ui-space-5);
+    padding: var(--ui-space-7) 0;
+    text-align: center;
+  }
+
+  .chat-welcome h1 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 28px;
+    font-weight: var(--ui-weight-medium);
+    letter-spacing: -0.015em;
+  }
+
+  .chat-welcome p {
+    margin: 0;
+    color: var(--ui-text-muted);
+    font-size: var(--ui-size-sm);
   }
 
   .chat-new-form h1 {
@@ -338,6 +401,7 @@
     align-items: center;
     gap: var(--ui-space-3) var(--ui-space-5);
     padding: var(--ui-space-3) var(--ui-space-5);
+    min-height: 44px;
     border-bottom: var(--ui-border-width) solid var(--ui-border-subtle);
   }
 
@@ -395,6 +459,9 @@
     min-height: 0;
     overflow-y: auto;
     user-select: text;
+    scrollbar-width: thin;
+    scrollbar-color: var(--o-dash) transparent;
+    overflow-anchor: none;
   }
 
   .chat-transcript-inner {
@@ -403,7 +470,7 @@
     gap: var(--ui-space-5);
     max-width: var(--ui-transcript-width);
     margin: 0 auto;
-    padding: var(--ui-space-5);
+    padding: var(--ui-space-6) var(--ui-space-5) var(--ui-space-7);
   }
 
   .chat-segment {
@@ -414,21 +481,21 @@
 
   .chat-segment[data-kind="turn"] {
     padding-bottom: var(--ui-space-4);
-    border-bottom: var(--ui-border-width) solid var(--ui-border-subtle);
   }
 
   .chat-marker {
     margin: 0;
     color: var(--ui-text-muted);
     font-size: var(--ui-size-sm);
-    font-style: italic;
+    font-style: normal;
   }
 
   .chat-user {
     align-self: flex-end;
-    max-width: 85%;
-    padding: var(--ui-space-3) var(--ui-space-4);
-    border-radius: var(--ui-radius-lg);
+    max-width: 82%;
+    padding: 10px 14px;
+    margin-bottom: var(--ui-space-3);
+    border-radius: 16px 16px 4px 16px;
     background: var(--ui-surface-user);
     color: var(--ui-text-user);
     white-space: pre-wrap;
@@ -436,16 +503,87 @@
   }
 
   .chat-thought summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 24px;
     color: var(--ui-text-muted);
     font-size: var(--ui-size-sm);
     cursor: pointer;
+    list-style: none;
+  }
+
+  .chat-thought summary::-webkit-details-marker,
+  .chat-tool summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .chat-disclosure,
+  .chat-tool-icon {
+    display: inline-flex;
+    flex: none;
+    width: 16px;
+    justify-content: center;
+    color: var(--ui-text-muted);
+  }
+
+  .chat-thought[open] .chat-disclosure {
+    transform: rotate(90deg);
+  }
+
+  .chat-byline,
+  .chat-now {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 24px;
+    font-size: 13px;
+    font-weight: var(--ui-weight-medium);
+  }
+
+  .chat-now {
+    color: var(--ui-text-secondary);
+    min-height: 28px;
+  }
+
+  .chat-now[data-state="waiting"] {
+    color: var(--ui-status-warning);
+  }
+
+  .chat-tool-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    font-size: 13px;
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .chat-tool-well {
+    margin: 4px 0 8px 22px;
+    padding: 10px 12px;
+    border: var(--ui-border-width) solid var(--ui-border-subtle);
+    border-radius: var(--ui-radius-md);
+    background: var(--ui-surface-code);
+  }
+
+  .chat-tool-well p {
+    margin: 0;
+    font-size: var(--ui-size-sm);
+  }
+
+  .chat-tool:has(.chat-tool-status[data-status="failed"]) .chat-tool-well {
+    box-shadow: inset 2px 0 var(--ui-status-danger);
   }
 
   .chat-thought p {
-    margin: var(--ui-space-2) 0 0;
+    margin: var(--ui-space-2) 0 0 22px;
     color: var(--ui-text-secondary);
     font-size: var(--ui-size-sm);
     white-space: pre-wrap;
+    max-width: 560px;
+    line-height: 22px;
   }
 
   .chat-notice {
@@ -505,6 +643,15 @@
     min-width: 0;
     font-weight: var(--ui-weight-medium);
     overflow-wrap: anywhere;
+  }
+
+  .chat-tool-head .chat-block-title {
+    font-weight: var(--ui-weight-regular);
+    color: var(--ui-text-secondary);
+  }
+
+  .chat-tool-head:hover .chat-block-title {
+    color: var(--ui-text-primary);
   }
 
   .chat-block-tag {
@@ -634,8 +781,12 @@
     align-items: center;
     gap: var(--ui-space-2) var(--ui-space-4);
     margin: 0;
+    margin-top: var(--ui-space-4);
+    padding-top: var(--ui-space-3);
+    border-top: 1px dashed var(--o-dash);
     color: var(--ui-text-muted);
     font-size: var(--ui-size-xs);
+    font-variant-numeric: tabular-nums;
   }
 
   .chat-command {
@@ -754,6 +905,16 @@
     line-height: var(--ui-leading-prose);
     color: var(--ui-text-primary);
     user-select: text;
+    padding-left: 22px;
+  }
+
+  .chat-app .answer :is(p, ul, ol, blockquote) {
+    max-width: 560px;
+  }
+
+  .chat-app .answer em {
+    font-style: normal;
+    font-weight: var(--ui-weight-medium);
   }
 
   .chat-app .md-block + .md-block {
@@ -764,10 +925,10 @@
   .chat-app .answer h2,
   .chat-app .answer h3,
   .chat-app .answer h4 {
-    margin: var(--ui-space-2) 0 0;
-    font-size: var(--ui-size-lg);
+    margin: var(--ui-space-5) 0 6px;
+    font-size: 15px;
     font-weight: var(--ui-weight-strong);
-    line-height: var(--ui-leading-tight);
+    line-height: 22px;
   }
 
   .chat-app .answer h1 {
@@ -781,6 +942,10 @@
   .chat-app .answer ul,
   .chat-app .answer ol {
     padding-left: var(--ui-space-6);
+  }
+
+  .chat-app .answer ul {
+    list-style-type: square;
   }
 
   .chat-app .answer li {
@@ -826,7 +991,8 @@
   .chat-app .answer hr {
     height: var(--ui-border-width);
     margin: var(--ui-space-3) 0;
-    background: var(--ui-border-default);
+    background: transparent;
+    border-top: 1px dashed var(--o-dash);
   }
 
   .chat-app .answer table {
