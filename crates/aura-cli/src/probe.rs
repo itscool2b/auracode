@@ -2319,6 +2319,9 @@ fn cheapest_of<'a>(choices: &[&'a ConfigChoice]) -> Option<&'a ConfigChoice> {
 /// The native modes an autonomy level may land on: the dialect's candidates (spec 5.5.2), the
 /// demo agent's own table for the demo agent.
 pub fn expected_modes(spec: &AgentSpec, level: Autonomy) -> Vec<Option<String>> {
+    if spec.kind == DriverKind::Pi {
+        return vec![None];
+    }
     if spec.kind == DriverKind::Claude {
         return match level {
             Autonomy::FullAuto => {

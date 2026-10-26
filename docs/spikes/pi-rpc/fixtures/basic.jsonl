@@ -1,0 +1,33 @@
+{"d":"note","note":{"text":"Synthetic Pi 1.0.2 RPC fixture from official types and JSON stream documentation. No real prompt or account data."}}
+{"d":"note","note":{"start":{"agent_id":"pi","dialect":"pi","resume":null,"native_session_id":"<SESSION_1>","autonomy":"full_auto","desired":{},"spawn_id":"019a0000-0000-7000-8000-00000000aaaa"}}}
+{"d":"out","msg":{"id":"state","type":"get_state"}}
+{"d":"out","msg":{"id":"models","type":"get_available_models"}}
+{"d":"out","msg":{"id":"levels","type":"get_available_thinking_levels"}}
+{"d":"out","msg":{"id":"commands","type":"get_commands"}}
+{"d":"out","msg":{"id":"stats","type":"get_session_stats"}}
+{"d":"in","msg":{"type":"response","id":"models","command":"get_available_models","success":true,"data":{"models":[{"provider":"test","id":"model","name":"Example"}]}}}
+{"d":"in","msg":{"type":"response","id":"state","command":"get_state","success":true,"data":{"sessionId":"<SESSION_1>","model":{"provider":"test","id":"model","name":"Example"},"thinkingLevel":"off","isStreaming":false,"isCompacting":false,"pendingMessageCount":0,"autoCompactionEnabled":true}}}
+{"d":"in","msg":{"type":"response","id":"levels","command":"get_available_thinking_levels","success":true,"data":{"levels":["off","low","high"]}}}
+{"d":"in","msg":{"type":"response","id":"commands","command":"get_commands","success":true,"data":{"commands":[]}}}
+{"d":"in","msg":{"type":"response","id":"stats","command":"get_session_stats","success":true,"data":{"cost":0,"contextUsage":{"tokens":0,"contextWindow":100000},"tokens":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0}}}}
+{"d":"cmd","cmd":{"type":"prompt","turn_id":"turn-1","parts":[{"type":"text","text":"Reply ok."}]}}
+{"d":"out","msg":{"id":"prompt","type":"prompt","message":"Reply ok."}}
+{"d":"in","msg":{"type":"response","id":"prompt","command":"prompt","success":true,"data":{"disposition":"started"}}}
+{"d":"in","msg":{"type":"agent_start"}}
+{"d":"in","msg":{"type":"message_start","message":{"role":"assistant","content":[],"timestamp":1}}}
+{"d":"in","msg":{"type":"message_update","assistantMessageEvent":{"type":"text_start","contentIndex":0}}}
+{"d":"in","msg":{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"o"}}}
+{"d":"in","msg":{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"k"}}}
+{"d":"in","msg":{"type":"message_update","assistantMessageEvent":{"type":"text_end","contentIndex":0,"content":"ok"}}}
+{"d":"in","msg":{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"ok"}],"timestamp":1,"stopReason":"stop","usage":{"input":3,"output":2,"cacheRead":1,"cacheWrite":0}}}}
+{"d":"in","msg":{"type":"agent_end","messages":[],"willRetry":false}}
+{"d":"in","msg":{"type":"agent_settled","aborted":false}}
+{"d":"out","msg":{"id":"state-2","type":"get_state"}}
+{"d":"out","msg":{"id":"levels-2","type":"get_available_thinking_levels"}}
+{"d":"out","msg":{"id":"commands-2","type":"get_commands"}}
+{"d":"out","msg":{"id":"stats-2","type":"get_session_stats"}}
+{"d":"in","msg":{"type":"response","id":"state-2","command":"get_state","success":true,"data":{"sessionId":"<SESSION_1>","model":{"provider":"test","id":"model","name":"Example"},"thinkingLevel":"off","isStreaming":false,"isCompacting":false,"pendingMessageCount":0,"autoCompactionEnabled":true}}}
+{"d":"in","msg":{"type":"response","id":"levels-2","command":"get_available_thinking_levels","success":true,"data":{"levels":["off","low","high"]}}}
+{"d":"in","msg":{"type":"response","id":"commands-2","command":"get_commands","success":true,"data":{"commands":[]}}}
+{"d":"in","msg":{"type":"response","id":"stats-2","command":"get_session_stats","success":true,"data":{"cost":0.001,"contextUsage":{"tokens":100,"contextWindow":100000},"tokens":{"input":3,"output":2,"cacheRead":1,"cacheWrite":0}}}}
+{"d":"cmd","cmd":{"type":"shutdown"}}

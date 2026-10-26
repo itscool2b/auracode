@@ -197,6 +197,23 @@ fn build_catalog() -> Vec<AgentSpec> {
             last_verified: "adapter 2.2.2 with Codex 0.164.0",
         },
         AgentSpec {
+            id: "pi",
+            name: "Pi",
+            description: "Your Pi agent, driven directly through its native RPC protocol.",
+            kind: DriverKind::Pi,
+            dialect: "pi",
+            recipe: Recipe::Binary {
+                program: "pi",
+                args: &[],
+                version_args: &["--version"],
+                min_version: Some("1.0.2"),
+            },
+            startup_timeout: START_TIMEOUT,
+            turns_survive_process: false,
+            daemons: Vec::new(),
+            last_verified: "Pi 1.0.2 protocol (real-agent acceptance pending)",
+        },
+        AgentSpec {
             id: "mock",
             name: "Demo agent (scripted, no AI)",
             description: "A scripted agent for trying auracode without an AI: it streams a demo turn, asks for permissions and questions, and can fail on purpose.",
@@ -274,7 +291,10 @@ mod tests {
     #[test]
     fn the_catalog_lists_native_claude_before_its_compatibility_adapter() {
         let ids: Vec<&str> = catalog().iter().map(|spec| spec.id).collect();
-        assert_eq!(ids, ["hermes", "claude", "claude-acp", "codex-acp", "mock"]);
+        assert_eq!(
+            ids,
+            ["hermes", "claude", "claude-acp", "codex-acp", "pi", "mock"]
+        );
         assert_eq!(ids.iter().collect::<HashSet<_>>().len(), ids.len());
         assert_eq!(get("codex-acp").map(|spec| spec.name), Some("Codex (ACP)"));
         assert!(get("agent").is_none());

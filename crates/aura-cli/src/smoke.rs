@@ -999,7 +999,9 @@ impl Smoke<'_> {
             return;
         }
         let mut lines = vec!["Protocol logs, and the fixture each can become:".to_owned()];
-        let fixture_folder = if self.spec.kind == DriverKind::Claude {
+        let fixture_folder = if self.spec.kind == DriverKind::Pi {
+            "pi".to_owned()
+        } else if self.spec.kind == DriverKind::Claude {
             "claude".to_owned()
         } else {
             format!("acp/{}", self.spec.id)
@@ -1058,7 +1060,10 @@ impl Answer {
 /// session-scope ones (Hermes), the session total on a spawn's first turn and deltas after it
 /// (spec 5.5.4).
 pub fn expected_scope(spec: &AgentSpec, first_of_spawn: bool) -> UsageScope {
-    if matches!(spec.kind, DriverKind::Mock | DriverKind::Claude) {
+    if matches!(
+        spec.kind,
+        DriverKind::Mock | DriverKind::Claude | DriverKind::Pi
+    ) {
         return UsageScope::Turn;
     }
     match dialect_for(spec.dialect).prompt_usage_scope() {
