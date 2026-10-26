@@ -22,6 +22,7 @@ pub mod map;
 pub mod options;
 pub mod permissions;
 pub mod requests;
+mod vendor_updates;
 pub mod wire;
 
 #[cfg(test)]
@@ -638,6 +639,7 @@ struct Session {
     /// Transcript events of a start that ended without `Ready` (rule 1 forbids handing them over).
     dropped_before_ready: usize,
     mapper: Mapper,
+    cursor_updates: vendor_updates::CursorUpdates,
     prompt: Option<PromptState>,
     permissions: PendingPermissions,
     ui_requests: Vec<PendingUi>,
@@ -776,6 +778,7 @@ impl Session {
             outbox,
             dialect,
             mapper: Mapper::new(spawn_id.clone()),
+            cursor_updates: vendor_updates::CursorUpdates::default(),
             spawn_id,
             rpc: RpcOut::new(io.stdin, true),
             stdout: io.stdout,
@@ -1184,6 +1187,21 @@ impl Session {
     }
 
     fn on_notification(&mut self, method: &str, params: &Value) {
+        if self.dialect.id() == "cursor" && method.starts_with("cursor/") {
+            if !self.ready
+                || self.loading()
+                || params
+                    .get("sessionId")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| Some(id) != self.session_id.as_deref())
+            {
+                return;
+            }
+            if let Some(update) = self.cursor_updates.notification(method, params) {
+                self.apply_update(update, Instant::now());
+                return;
+            }
+        }
         match method {
             methods::SESSION_UPDATE => self.on_update(params),
             methods::CANCEL_REQUEST => self.on_cancel_request(params),
@@ -1851,7 +1869,21 @@ impl Session {
                 if let Some(reason) = &reply.unknown_reason {
                     tracing::info!(reason, "a stop reason auracode does not know");
                 }
-                let usage = reply.usage.map(|usage| self.turn_usage(usage));
+                if self.dialect.id() == "grok"
+                    && value
+                        .pointer("/_meta/usage/usageIsIncomplete")
+                        .and_then(Value::as_bool)
+                        == Some(true)
+                {
+                    self.push_notice(
+                        NoticeLevel::Warning,
+                        "Grok reports incomplete token usage for this turn.".into(),
+                    );
+                }
+                let usage = self
+                    .dialect
+                    .prompt_usage(&value)
+                    .map(|usage| self.turn_usage(usage));
                 (reply.stop_reason, usage, None)
             }
             Err(Failure::Rpc(_)) if prompt.cancelling => (StopReason::Cancelled, None, None),

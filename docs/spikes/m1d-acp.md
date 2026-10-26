@@ -22,6 +22,11 @@ remain pending.
   2026-10-26, with a 1.4.7 executable baseline. This documentation has no immutable revision.
 - [Grok headless protocol](https://github.com/xai-org/grok-build/blob/2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8/crates/codegen/xai-grok-pager/docs/user-guide/14-headless-mode.md),
   pinned to source commit `2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8`; executable floor 1.0.70.
+- [Grok PromptUsage wire types](https://github.com/xai-org/grok-build/blob/2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8/crates/codegen/xai-grok-shell/src/extensions/notification.rs):
+  the ACP prompt ledger is `_meta.usage`, with input including both cache buckets, unlike the
+  disjoint headless projection. The driver separates them and reports turn scope. Incomplete
+  ledger flags produce a visible warning; absent usage stays unknown. OMP's pinned
+  `#buildTurnUsage` also reports turn scope, so its second turn must not subtract the first.
 
 ## Catalog and restricted fallbacks
 
@@ -58,6 +63,12 @@ cancel the appropriate outstanding requests. Numeric and string JSON-RPC IDs rem
 Cursor's full plan markdown is rendered as transcript text before its confirmation card. It does
 not pass through the confirmation card's 2 KiB text cap. A plan callback before Ready is cancelled
 because its full context cannot yet be displayed. No hidden prompt or file read is involved.
+
+Cursor todo notifications maintain a bounded list and honor merge versus replacement by native
+ID. Cancelled entries are labelled `Cancelled:` and treated as closed. Task and image notifications
+use the normal tool mapper, retaining the reported delegation prompt and path without reading
+files. These notifications send no reply and never execute work. Only advertised standard options
+are offered; a restart-based model switch remains unqualified in the current official docs.
 
 OMP advertises `elicitation.form: {}` because its pinned source otherwise automatically approves
 plan proposals. Supported forms include string input/editor, explicit boolean choices, string
