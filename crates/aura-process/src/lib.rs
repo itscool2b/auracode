@@ -27,6 +27,7 @@ pub mod ptable;
 pub mod registry;
 pub mod shutdown;
 pub mod spawn;
+pub mod supervisor;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 

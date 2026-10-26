@@ -249,6 +249,14 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   remained. Unix cleanup now retains exact escaped identities after incomplete cleanup, including
   a clean application close. Failed process-table reads no longer count as an empty group. Two
   registry regressions cover retention and later successful cleanup; Linux execution awaits CI.
+- The Rust Linux supervisor endpoint now handles bounded control frames, raw agent lines, parent
+  leases, EOF/signals, malformed input, queued-prompt disposal and redacted exit diagnostics through
+  the existing process services. Read-only inspection supplies executable paths, canonical cwd and
+  known provider configuration roots without exporting environment values. Eleven focused tests
+  and all-target process Clippy pass on Windows. The earlier full process run passed 176 unit and
+  nine helper tests before Application Control blocked a remaining integration executable. Linux
+  ownership tests are added but await CI. WSL deployment/bridge and Windows daemon breakaway remain
+  gated and pending; see [the host contract](host-supervision.md).
 
 M1e is progressing in the isolated `m1e-agent-catalog` worktree. Its first checkpoint adds typed
 native/WSL host identity, bounded WSL distribution decoding, installation channel classification from
