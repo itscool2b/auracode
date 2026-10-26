@@ -1,0 +1,402 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    },
+    {
+      "type": "status",
+      "data": "configuring"
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "mode",
+          "name": "Mode",
+          "description": null,
+          "category": "mode",
+          "kind": {
+            "type": "select",
+            "current": "dont_ask",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": "Ask before edits.",
+                "group": null
+              },
+              {
+                "value": "accept_edits",
+                "name": "Accept Edits",
+                "description": "Auto-allow workspace and temp-dir edits; still asks for sensitive paths.",
+                "group": null
+              },
+              {
+                "value": "dont_ask",
+                "name": "Don't Ask",
+                "description": "Auto-allow file edits for this session except sensitive paths.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "nous:nous/welcome",
+            "choices": [
+              {
+                "value": "nous:nous/welcome",
+                "name": "Nous · free tier · nous/welcome",
+                "description": "Provider: Nous · free tier • current",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-fable-5.1",
+                "name": "Anthropic · claude-fable-5.1",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-fable-5",
+                "name": "Anthropic · claude-fable-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-5-5",
+                "name": "Anthropic · claude-opus-5-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-5",
+                "name": "Anthropic · claude-opus-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-5",
+                "name": "Anthropic · claude-sonnet-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-8",
+                "name": "Anthropic · claude-opus-4-8",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-7",
+                "name": "Anthropic · claude-opus-4-7",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-6",
+                "name": "Anthropic · claude-opus-4-6",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-4-6",
+                "name": "Anthropic · claude-sonnet-4-6",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-5-20251101",
+                "name": "Anthropic · claude-opus-4-5-20251101",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-4-5-20250929",
+                "name": "Anthropic · claude-sonnet-4-5-20250929",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-20250514",
+                "name": "Anthropic · claude-opus-4-20250514",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-4-20250514",
+                "name": "Anthropic · claude-sonnet-4-20250514",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-haiku-4-5-20251001",
+                "name": "Anthropic · claude-haiku-4-5-20251001",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-5-5",
+                "name": "Anthropic · claude-sonnet-5-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-haiku-5-5",
+                "name": "Anthropic · claude-haiku-5-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-fable-5-1",
+                "name": "Anthropic · claude-fable-5-1",
+                "description": "Provider: Anthropic",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": "dont_ask",
+        "auto_answer": {
+          "type": "kinds",
+          "kinds": [
+            "execute"
+          ]
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "<SESSION_1>",
+        "agent_name": "hermes-agent",
+        "agent_version": "0.22.5",
+        "capabilities": {
+          "images": true,
+          "steer": false,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": true,
+          "set_effort": false,
+          "permissions": true,
+          "plans": true,
+          "usage": true,
+          "limits": false,
+          "slash_commands": true,
+          "add_dirs": false,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "resumed"
+        },
+        "spawn_id": "01a175ed-1553-75f7-8255-a3040ca5e51b",
+        "replay": {
+          "user_turns": 4,
+          "last_reply": "1\n2\n3\n4\n5\n6\n7",
+          "last_reply_sha256": "8bb0cf6eb9b17d0f7d22b456f121257dc1254e1f01665370476383ea776df414"
+        }
+      }
+    },
+    {
+      "type": "status",
+      "data": "prompting"
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ed-1919-75a1-aeb3-59b2319dbb1e",
+        "event": {
+          "type": "usage_updated",
+          "context_used": 10357,
+          "context_size": 1000000,
+          "cost": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ed-1919-75a1-aeb3-59b2319dbb1e",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ed-1919-75a1-aeb3-59b2319dbb1e.m1",
+          "text": "7"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ed-1919-75a1-aeb3-59b2319dbb1e",
+        "event": {
+          "type": "usage_updated",
+          "context_used": 10379,
+          "context_size": 1000000,
+          "cost": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ed-1919-75a1-aeb3-59b2319dbb1e",
+        "event": {
+          "type": "message_completed",
+          "message_id": "01a175ed-1919-75a1-aeb3-59b2319dbb1e.m1"
+        }
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "01a175ed-1919-75a1-aeb3-59b2319dbb1e",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 18,
+          "output_tokens": 136,
+          "cache_read_tokens": 40476,
+          "cache_write_tokens": null,
+          "reasoning_tokens": 39,
+          "scope": "session"
+        },
+        "error": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    },
+    {
+      "type": "commands",
+      "data": [
+        {
+          "name": "help",
+          "description": "List available commands",
+          "input_hint": null
+        },
+        {
+          "name": "model",
+          "description": "Show current model and provider, or switch models",
+          "input_hint": "model name to switch to"
+        },
+        {
+          "name": "tools",
+          "description": "List available tools",
+          "input_hint": null
+        },
+        {
+          "name": "context",
+          "description": "Show conversation context usage",
+          "input_hint": null
+        },
+        {
+          "name": "reset",
+          "description": "Clear conversation history",
+          "input_hint": null
+        },
+        {
+          "name": "compress",
+          "description": "Compress conversation context",
+          "input_hint": null
+        },
+        {
+          "name": "steer",
+          "description": "Inject guidance into the currently running agent turn",
+          "input_hint": "guidance for the active turn"
+        },
+        {
+          "name": "queue",
+          "description": "Queue a prompt to run after the current turn finishes",
+          "input_hint": "prompt to run next"
+        },
+        {
+          "name": "usage",
+          "description": "Show token usage and rate limits",
+          "input_hint": null
+        },
+        {
+          "name": "status",
+          "description": "Show session, model, token, and context info",
+          "input_hint": null
+        },
+        {
+          "name": "version",
+          "description": "Show Hermes version",
+          "input_hint": null
+        },
+        {
+          "name": "title",
+          "description": "Show or set the session title",
+          "input_hint": "new title"
+        },
+        {
+          "name": "undo",
+          "description": "Remove the last N user turns and their replies",
+          "input_hint": "number of turns"
+        },
+        {
+          "name": "retry",
+          "description": "Resend the last user message",
+          "input_hint": null
+        }
+      ]
+    }
+  ],
+  "replies": [
+    {
+      "set_autonomy": "full_auto",
+      "reply": {
+        "ok": {
+          "requested": "full_auto",
+          "native_mode": "dont_ask",
+          "auto_answer": {
+            "type": "kinds",
+            "kinds": [
+              "execute"
+            ]
+          },
+          "note": null
+        }
+      }
+    }
+  ],
+  "exit": {
+    "type": "closed"
+  }
+}

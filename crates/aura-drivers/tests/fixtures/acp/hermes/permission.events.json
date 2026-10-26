@@ -1,0 +1,1051 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    },
+    {
+      "type": "status",
+      "data": "configuring"
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "mode",
+          "name": "Mode",
+          "description": null,
+          "category": "mode",
+          "kind": {
+            "type": "select",
+            "current": "dont_ask",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": "Ask before edits.",
+                "group": null
+              },
+              {
+                "value": "accept_edits",
+                "name": "Accept Edits",
+                "description": "Auto-allow workspace and temp-dir edits; still asks for sensitive paths.",
+                "group": null
+              },
+              {
+                "value": "dont_ask",
+                "name": "Don't Ask",
+                "description": "Auto-allow file edits for this session except sensitive paths.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "nous:nous/welcome",
+            "choices": [
+              {
+                "value": "nous:nous/welcome",
+                "name": "Nous · free tier · nous/welcome",
+                "description": "Provider: Nous · free tier • current",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-fable-5.1",
+                "name": "Anthropic · claude-fable-5.1",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-fable-5",
+                "name": "Anthropic · claude-fable-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-5-5",
+                "name": "Anthropic · claude-opus-5-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-5",
+                "name": "Anthropic · claude-opus-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-5",
+                "name": "Anthropic · claude-sonnet-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-8",
+                "name": "Anthropic · claude-opus-4-8",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-7",
+                "name": "Anthropic · claude-opus-4-7",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-6",
+                "name": "Anthropic · claude-opus-4-6",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-4-6",
+                "name": "Anthropic · claude-sonnet-4-6",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-5-20251101",
+                "name": "Anthropic · claude-opus-4-5-20251101",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-4-5-20250929",
+                "name": "Anthropic · claude-sonnet-4-5-20250929",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-20250514",
+                "name": "Anthropic · claude-opus-4-20250514",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-4-20250514",
+                "name": "Anthropic · claude-sonnet-4-20250514",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-haiku-4-5-20251001",
+                "name": "Anthropic · claude-haiku-4-5-20251001",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-5-5",
+                "name": "Anthropic · claude-sonnet-5-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-haiku-5-5",
+                "name": "Anthropic · claude-haiku-5-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-fable-5-1",
+                "name": "Anthropic · claude-fable-5-1",
+                "description": "Provider: Anthropic",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": "dont_ask",
+        "auto_answer": {
+          "type": "kinds",
+          "kinds": [
+            "execute"
+          ]
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "<SESSION_1>",
+        "agent_name": "hermes-agent",
+        "agent_version": "0.22.5",
+        "capabilities": {
+          "images": true,
+          "steer": false,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": true,
+          "set_effort": false,
+          "permissions": true,
+          "plans": true,
+          "usage": true,
+          "limits": false,
+          "slash_commands": true,
+          "add_dirs": false,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "resumed"
+        },
+        "spawn_id": "01a175ec-ce07-7034-8e12-dc3232a972f6",
+        "replay": {
+          "user_turns": 1,
+          "last_reply": "ok",
+          "last_reply_sha256": "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "usage_updated",
+          "context_used": 9969,
+          "context_size": 1000000,
+          "cost": null
+        }
+      }
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "mode",
+          "name": "Mode",
+          "description": null,
+          "category": "mode",
+          "kind": {
+            "type": "select",
+            "current": "default",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": "Ask before edits.",
+                "group": null
+              },
+              {
+                "value": "accept_edits",
+                "name": "Accept Edits",
+                "description": "Auto-allow workspace and temp-dir edits; still asks for sensitive paths.",
+                "group": null
+              },
+              {
+                "value": "dont_ask",
+                "name": "Don't Ask",
+                "description": "Auto-allow file edits for this session except sensitive paths.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "nous:nous/welcome",
+            "choices": [
+              {
+                "value": "nous:nous/welcome",
+                "name": "Nous · free tier · nous/welcome",
+                "description": "Provider: Nous · free tier • current",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-fable-5.1",
+                "name": "Anthropic · claude-fable-5.1",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-fable-5",
+                "name": "Anthropic · claude-fable-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-5-5",
+                "name": "Anthropic · claude-opus-5-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-5",
+                "name": "Anthropic · claude-opus-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-5",
+                "name": "Anthropic · claude-sonnet-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-8",
+                "name": "Anthropic · claude-opus-4-8",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-7",
+                "name": "Anthropic · claude-opus-4-7",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-6",
+                "name": "Anthropic · claude-opus-4-6",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-4-6",
+                "name": "Anthropic · claude-sonnet-4-6",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-5-20251101",
+                "name": "Anthropic · claude-opus-4-5-20251101",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-4-5-20250929",
+                "name": "Anthropic · claude-sonnet-4-5-20250929",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-opus-4-20250514",
+                "name": "Anthropic · claude-opus-4-20250514",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-4-20250514",
+                "name": "Anthropic · claude-sonnet-4-20250514",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-haiku-4-5-20251001",
+                "name": "Anthropic · claude-haiku-4-5-20251001",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-sonnet-5-5",
+                "name": "Anthropic · claude-sonnet-5-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-haiku-5-5",
+                "name": "Anthropic · claude-haiku-5-5",
+                "description": "Provider: Anthropic",
+                "group": null
+              },
+              {
+                "value": "anthropic:claude-fable-5-1",
+                "name": "Anthropic · claude-fable-5-1",
+                "description": "Provider: Anthropic",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "status",
+      "data": "prompting"
+    },
+    {
+      "type": "title",
+      "data": "Create aura-perm.txt #2"
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "tool_call",
+          "tool_call_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.call_QO4t21yUZNZ4WQL6MrC7uh3P",
+          "kind": "edit",
+          "title": "write_file: aura-perm.txt",
+          "status": "pending",
+          "locations": [
+            {
+              "path": "aura-perm.txt",
+              "line": null
+            }
+          ],
+          "raw_input": null,
+          "tool_name": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Preparing write to aura-perm.txt. Approval prompt shows the diff.",
+              "truncated": null
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "permission",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "request": {
+          "request_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.p1",
+          "tool_call_id": null,
+          "title": "Approve edit: <CWD>/aura-perm.txt",
+          "kind": "edit",
+          "raw_input": {
+            "tool": "write_file",
+            "arguments": {
+              "path": "aura-perm.txt",
+              "content": ""
+            }
+          },
+          "content": [
+            {
+              "type": "diff",
+              "path": "<CWD>/aura-perm.txt",
+              "old_text": null,
+              "new_text": "",
+              "truncated": null
+            }
+          ],
+          "locations": [],
+          "options": [
+            {
+              "option_id": "allow_once",
+              "kind": "allow_once",
+              "label": "Allow once"
+            },
+            {
+              "option_id": "deny",
+              "kind": "reject_once",
+              "label": "Deny"
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.call_QO4t21yUZNZ4WQL6MrC7uh3P",
+          "status": "failed",
+          "title": null,
+          "kind": "edit",
+          "locations": null,
+          "raw_input": null,
+          "tool_name": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "write_file failed for aura-perm.txt: Edit approval denied by ACP client; file was not modified.",
+              "truncated": null
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "usage_updated",
+          "context_used": 10084,
+          "context_size": 1000000,
+          "cost": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": "\n\nI"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": " couldn"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": "’t"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": " create"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": " `"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": "a"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": "ura"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": "-per"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": "m"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": ".txt"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": "`;"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": " the"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": " write"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": " was"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": " denied"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": " by"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": " the"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": " ACP"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": " client"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": "."
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "usage_updated",
+          "context_used": 10129,
+          "context_size": 1000000,
+          "cost": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1",
+          "text": "\n\nI couldn’t create `aura-perm.txt`; the write was denied by the ACP client.\n\n⚠️ File-mutation verifier: 1 file edit(s) FAILED this turn despite any wording above that may suggest otherwise. Run `git status` or `read_file` to confirm what actually landed.\n  • `aura-perm.txt` — [write_file] Edit approval denied by ACP client; file was not modified."
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "event": {
+          "type": "message_completed",
+          "message_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea.m1"
+        }
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "01a175ec-d21d-73f9-bce3-bd56af65e5ea",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 9,
+          "output_tokens": 74,
+          "cache_read_tokens": 9999,
+          "cache_write_tokens": null,
+          "reasoning_tokens": 17,
+          "scope": "session"
+        },
+        "error": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "status",
+      "data": "prompting"
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-eb29-724d-826a-f1db9d49a9c2",
+        "event": {
+          "type": "tool_call",
+          "tool_call_id": "01a175ec-eb29-724d-826a-f1db9d49a9c2.call_S4xHHtMSEwYpYU0rZQctrBXX",
+          "kind": "edit",
+          "title": "write_file: aura-perm.txt",
+          "status": "pending",
+          "locations": [
+            {
+              "path": "aura-perm.txt",
+              "line": null
+            }
+          ],
+          "raw_input": null,
+          "tool_name": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Preparing write to aura-perm.txt. Approval prompt shows the diff.",
+              "truncated": null
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "permission",
+      "data": {
+        "turn": "01a175ec-eb29-724d-826a-f1db9d49a9c2",
+        "request": {
+          "request_id": "01a175ec-eb29-724d-826a-f1db9d49a9c2.p1",
+          "tool_call_id": null,
+          "title": "Approve edit: <CWD>/aura-perm.txt",
+          "kind": "edit",
+          "raw_input": {
+            "tool": "write_file",
+            "arguments": {
+              "path": "aura-perm.txt",
+              "content": ""
+            }
+          },
+          "content": [
+            {
+              "type": "diff",
+              "path": "<CWD>/aura-perm.txt",
+              "old_text": null,
+              "new_text": "",
+              "truncated": null
+            }
+          ],
+          "locations": [],
+          "options": [
+            {
+              "option_id": "allow_once",
+              "kind": "allow_once",
+              "label": "Allow once"
+            },
+            {
+              "option_id": "deny",
+              "kind": "reject_once",
+              "label": "Deny"
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-eb29-724d-826a-f1db9d49a9c2",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "01a175ec-eb29-724d-826a-f1db9d49a9c2.call_S4xHHtMSEwYpYU0rZQctrBXX",
+          "status": "completed",
+          "title": null,
+          "kind": "edit",
+          "locations": null,
+          "raw_input": null,
+          "tool_name": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "✅ write_file completed for `aura-perm.txt`\nFiles: `<CWD>/aura-perm.txt`",
+              "truncated": null
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-eb29-724d-826a-f1db9d49a9c2",
+        "event": {
+          "type": "usage_updated",
+          "context_used": 10281,
+          "context_size": 1000000,
+          "cost": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-eb29-724d-826a-f1db9d49a9c2",
+        "event": {
+          "type": "message_delta",
+          "message_id": "01a175ec-eb29-724d-826a-f1db9d49a9c2.m1",
+          "text": "\n\ndone"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-eb29-724d-826a-f1db9d49a9c2",
+        "event": {
+          "type": "usage_updated",
+          "context_used": 10308,
+          "context_size": 1000000,
+          "cost": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a175ec-eb29-724d-826a-f1db9d49a9c2",
+        "event": {
+          "type": "message_completed",
+          "message_id": "01a175ec-eb29-724d-826a-f1db9d49a9c2.m1"
+        }
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "01a175ec-eb29-724d-826a-f1db9d49a9c2",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 6,
+          "output_tokens": 42,
+          "cache_read_tokens": 20158,
+          "cache_write_tokens": null,
+          "reasoning_tokens": 9,
+          "scope": "turn"
+        },
+        "error": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "ready"
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    },
+    {
+      "type": "commands",
+      "data": [
+        {
+          "name": "help",
+          "description": "List available commands",
+          "input_hint": null
+        },
+        {
+          "name": "model",
+          "description": "Show current model and provider, or switch models",
+          "input_hint": "model name to switch to"
+        },
+        {
+          "name": "tools",
+          "description": "List available tools",
+          "input_hint": null
+        },
+        {
+          "name": "context",
+          "description": "Show conversation context usage",
+          "input_hint": null
+        },
+        {
+          "name": "reset",
+          "description": "Clear conversation history",
+          "input_hint": null
+        },
+        {
+          "name": "compress",
+          "description": "Compress conversation context",
+          "input_hint": null
+        },
+        {
+          "name": "steer",
+          "description": "Inject guidance into the currently running agent turn",
+          "input_hint": "guidance for the active turn"
+        },
+        {
+          "name": "queue",
+          "description": "Queue a prompt to run after the current turn finishes",
+          "input_hint": "prompt to run next"
+        },
+        {
+          "name": "usage",
+          "description": "Show token usage and rate limits",
+          "input_hint": null
+        },
+        {
+          "name": "status",
+          "description": "Show session, model, token, and context info",
+          "input_hint": null
+        },
+        {
+          "name": "version",
+          "description": "Show Hermes version",
+          "input_hint": null
+        },
+        {
+          "name": "title",
+          "description": "Show or set the session title",
+          "input_hint": "new title"
+        },
+        {
+          "name": "undo",
+          "description": "Remove the last N user turns and their replies",
+          "input_hint": "number of turns"
+        },
+        {
+          "name": "retry",
+          "description": "Resend the last user message",
+          "input_hint": null
+        }
+      ]
+    }
+  ],
+  "replies": [
+    {
+      "set_autonomy": "ask",
+      "reply": {
+        "ok": {
+          "requested": "ask",
+          "native_mode": "default",
+          "auto_answer": {
+            "type": "never"
+          },
+          "note": null
+        }
+      }
+    }
+  ],
+  "exit": {
+    "type": "closed"
+  }
+}
