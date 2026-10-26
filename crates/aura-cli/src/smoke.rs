@@ -1023,7 +1023,7 @@ impl Answer {
 /// session-scope ones (Hermes), the session total on a spawn's first turn and deltas after it
 /// (spec 5.5.4).
 pub fn expected_scope(spec: &AgentSpec, first_of_spawn: bool) -> UsageScope {
-    if spec.kind == DriverKind::Mock {
+    if matches!(spec.kind, DriverKind::Mock | DriverKind::Claude) {
         return UsageScope::Turn;
     }
     match dialect_for(spec.dialect).prompt_usage_scope() {
@@ -1088,6 +1088,9 @@ mod tests {
 
     #[test]
     fn usage_scopes_follow_the_dialect() {
+        let claude = aura_agents::get("claude").expect("native Claude");
+        assert_eq!(expected_scope(claude, true), UsageScope::Turn);
+        assert_eq!(expected_scope(claude, false), UsageScope::Turn);
         let hermes = aura_agents::get("hermes").expect("hermes").clone();
         assert_eq!(expected_scope(&hermes, true), UsageScope::Session);
         assert_eq!(expected_scope(&hermes, false), UsageScope::Turn);

@@ -28,6 +28,7 @@ serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+time = { version = "0.3.55", default-features = false, features = ["parsing"] }
 tokio-util = "0.7.20"
 tracing.workspace = true
 # Grapheme boundaries, so a split delta never cuts an emoji sequence or an accent off its letter.

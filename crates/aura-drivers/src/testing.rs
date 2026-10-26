@@ -590,6 +590,7 @@ fn in_turn(event: DriverEvent, turn_id: String) -> DriverEvent {
             error,
         },
         untagged @ (DriverEvent::Status(_)
+        | DriverEvent::RunState { .. }
         | DriverEvent::Ready(_)
         | DriverEvent::PermissionWithdrawn { .. }
         | DriverEvent::UiWithdrawn { .. }

@@ -171,7 +171,7 @@ Commands:
             at the first failure. Refused without --spend.
   fixture   Curates a protocol log into a replay fixture: placeholders, the redaction scan, a
             replay check, and a checklist for the review.
-  replay    Replays a fixture through the real ACP driver and compares the result with its golden
+  replay    Replays a fixture through its real agent driver and compares the result with its golden
             (<fixture>.events.json); --update writes the golden instead.
 
 Options:

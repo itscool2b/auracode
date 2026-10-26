@@ -23,6 +23,7 @@ impl DriverFactory for StandardDriverFactory {
     fn create(&self, kind: DriverKind) -> Box<dyn AgentDriver> {
         match kind {
             DriverKind::Acp => Box::new(AcpDriver::new()),
+            DriverKind::Claude => Box::new(crate::claude::ClaudeDriver::new()),
             DriverKind::Mock => Box::new(MockDriver::new(MockBehavior::default())),
         }
     }

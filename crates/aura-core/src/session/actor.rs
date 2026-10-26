@@ -46,6 +46,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::{AbortHandle, JoinError, JoinHandle};
 use tokio::time::Instant;
 
+use super::live::NativeSessionScope;
 use super::normalize::{
     MESSAGE_BYTES, Normalizer, OpenCard, cap_chars, cap_escaped, suffix_escaped,
 };
@@ -277,6 +278,10 @@ struct LiveDriver {
     /// Aborts the driver's task, wherever its join handle went.
     abort: AbortHandle,
     ready: bool,
+    /// `None` keeps the original turn-based contract. Otherwise only an idle report permits
+    /// another prompt, even after the current prompt's result has arrived.
+    run_idle: Option<bool>,
+    native_scope: NativeSessionScope,
     stop: Stop,
     spawn_id: Option<String>,
 }
@@ -906,7 +911,12 @@ impl ChatActor {
         self.status == SessionStatus::Ready
             && self.turn.is_none()
             && self.driver.as_ref().is_some_and(|driver| {
-                driver.ready && driver.stop == Stop::None && driver.events.is_some()
+                driver.ready
+                    && driver.stop == Stop::None
+                    && driver.events.is_some()
+                    && driver
+                        .run_idle
+                        .is_none_or(|idle| idle && !self.normalizer.has_open_requests())
             })
     }
 
@@ -982,10 +992,13 @@ impl ChatActor {
     /// Starts a turn for `prompt`: the turn's first rows go out in one `BeginTurn` (which removes
     /// the queued row), then the prompt goes to the driver.
     fn dispatch(&mut self, prompt: Prompt) {
-        let Some(driver) = &self.driver else {
+        let Some(driver) = &mut self.driver else {
             return;
         };
         let commands = driver.commands.clone();
+        if driver.run_idle.is_some() {
+            driver.run_idle = Some(false);
+        }
         self.queue.retain(|row| row.id != prompt.id);
         self.ordinal = self.ordinal.saturating_add(1);
         let turn_id = new_id();
@@ -1078,23 +1091,27 @@ impl ChatActor {
     fn interrupt(&mut self) {
         match self.status {
             SessionStatus::Running => {
-                let Some(turn) = &mut self.turn else {
-                    return;
-                };
-                turn.interrupt_requested = true;
-                let turn_id = turn.id.clone();
-                let tag = Arc::clone(&turn.tag);
+                let turn = self.turn.as_mut().map(|turn| {
+                    turn.interrupt_requested = true;
+                    (turn.id.clone(), Arc::clone(&turn.tag))
+                });
                 self.hold_queue();
                 self.send_command(DriverCommand::Interrupt);
-                for event in self
-                    .normalizer
-                    .resolve_turn_requests(&turn_id, ResolvedBy::Turn)
-                {
-                    self.push_normalized(event, Some(Arc::clone(&tag)));
+                if let Some((turn_id, tag)) = &turn {
+                    for event in self
+                        .normalizer
+                        .resolve_turn_requests(turn_id, ResolvedBy::Turn)
+                    {
+                        self.push_normalized(event, Some(Arc::clone(tag)));
+                    }
                 }
                 self.set_status(
                     SessionStatus::Cancelling,
-                    Some("Stopping the turn; press Esc again to force stop".into()),
+                    Some(if turn.is_some() {
+                        "Stopping the turn; press Esc again to force stop".into()
+                    } else {
+                        "Stopping background work; press Esc again to force stop".into()
+                    }),
                 );
                 self.refresh_attention();
             }
@@ -1445,8 +1462,15 @@ impl ChatActor {
                 .as_ref()
                 .and_then(|session| session.native_session_id.clone())
         };
+        let native_scope = NativeSessionScope::local(
+            spec.id,
+            &self.shared.deps.device_id,
+            &prepared.env,
+            &prepared.launch,
+            &self.chat.folder,
+        );
         if let Some(id) = &resume
-            && !self.shared.live.claim(spec.id, id, &self.chat_id)
+            && !self.shared.live.claim(&native_scope, id, &self.chat_id)
         {
             let message =
                 SessionError::Internal("this session is already open in another chat".into())
@@ -1494,6 +1518,8 @@ impl ChatActor {
             abort: join.abort_handle(),
             join: Some(join),
             ready: false,
+            run_idle: None,
+            native_scope,
             stop: Stop::None,
             spawn_id: None,
         });
@@ -1552,6 +1578,7 @@ impl ChatActor {
             tag.as_deref(),
         );
         self.refresh_attention();
+        self.refresh_run_status();
         Ok(())
     }
 
@@ -1587,6 +1614,7 @@ impl ChatActor {
             tag.as_deref(),
         );
         self.refresh_attention();
+        self.refresh_run_status();
         Ok(())
     }
 
@@ -1901,6 +1929,11 @@ impl ChatActor {
         self.last_activity = Instant::now();
         match event {
             DriverEvent::Status(status) => self.on_driver_status(status),
+            DriverEvent::RunState { idle } => {
+                if let Some(driver) = &mut self.driver {
+                    driver.run_idle = Some(idle);
+                }
+            }
             DriverEvent::Ready(info) => self.on_ready(info),
             DriverEvent::Event { turn, event } => {
                 let tag = self.open_tag(turn.as_deref());
@@ -1953,6 +1986,7 @@ impl ChatActor {
             }
             DriverEvent::AuthRequired(prompt) => self.auth = Some(prompt),
         }
+        self.refresh_run_status();
     }
 
     /// The open turn's tag when `turn` names it; anything else is stored outside turns.
@@ -2006,7 +2040,7 @@ impl ChatActor {
         if !self
             .shared
             .live
-            .claim(spec.id, &info.native_session_id, &self.chat_id)
+            .claim(&driver.native_scope, &info.native_session_id, &self.chat_id)
         {
             // Two processes on one native session would interleave one transcript.
             let message =
@@ -2111,7 +2145,14 @@ impl ChatActor {
         self.agent_version = info.agent_version;
         self.capabilities = Some(info.capabilities);
         self.revision = self.revision.wrapping_add(1);
-        self.set_status(SessionStatus::Ready, None);
+        if self
+            .driver
+            .as_ref()
+            .is_some_and(|driver| driver.run_idle.is_none())
+        {
+            self.set_status(SessionStatus::Ready, None);
+        }
+        self.refresh_run_status();
         self.dispatch_next();
     }
 
@@ -2294,7 +2335,14 @@ impl ChatActor {
         if stop_reason == StopReason::Error && !turn.interrupt_requested {
             self.hold_queue();
         }
-        self.set_status(SessionStatus::Ready, None);
+        if !self
+            .driver
+            .as_ref()
+            .is_some_and(|driver| driver.run_idle.is_some())
+        {
+            self.set_status(SessionStatus::Ready, None);
+        }
+        self.refresh_run_status();
         self.dispatch_next();
     }
 
@@ -3018,6 +3066,33 @@ impl ChatActor {
         }
     }
 
+    /// An opted-in driver's prompt can finish while its background work is still running.
+    fn refresh_run_status(&mut self) {
+        let Some(driver) = &self.driver else {
+            return;
+        };
+        let Some(idle) = driver.run_idle else {
+            return;
+        };
+        if !driver.ready || driver.stop != Stop::None || self.turn.is_some() {
+            return;
+        }
+        if idle && !self.normalizer.has_open_requests() {
+            if self.status != SessionStatus::Ready {
+                self.set_status(SessionStatus::Ready, None);
+            }
+            self.dispatch_next();
+        } else if !matches!(
+            self.status,
+            SessionStatus::Cancelling | SessionStatus::Running
+        ) {
+            self.set_status(
+                SessionStatus::Running,
+                Some("Agent work is still running".into()),
+            );
+        }
+    }
+
     fn publish(&self) {
         self.shared.publish(
             &self.chat_id,
@@ -3180,6 +3255,39 @@ fn fits(prompt: &UiPrompt, answer: &UiAnswer) -> bool {
         (UiPrompt::Select { options, .. }, UiAnswer::Select { index }) => {
             (*index as usize) < options.len()
         }
+        (UiPrompt::Questions { questions, .. }, UiAnswer::Questions { answers }) => {
+            !questions.is_empty()
+                && questions.len() == answers.len()
+                && questions.iter().enumerate().all(|(index, question)| {
+                    !question.id.is_empty()
+                        && !questions[..index]
+                            .iter()
+                            .any(|other| other.id == question.id)
+                        && answers
+                            .iter()
+                            .filter(|answer| answer.question_id == question.id)
+                            .count()
+                            == 1
+                        && answers
+                            .iter()
+                            .find(|answer| answer.question_id == question.id)
+                            .is_some_and(|answer| {
+                                let text = answer.text.as_ref();
+                                let choices = answer.selected.len() + usize::from(text.is_some());
+                                choices > 0
+                                    && (question.multi_select || choices == 1)
+                                    && text.is_none_or(|text| {
+                                        question.allow_free_text && !text.trim().is_empty()
+                                    })
+                                    && answer.selected.iter().enumerate().all(
+                                        |(index, selected)| {
+                                            (*selected as usize) < question.options.len()
+                                                && !answer.selected[..index].contains(selected)
+                                        },
+                                    )
+                            })
+                })
+        }
         _ => false,
     }
 }
@@ -3189,6 +3297,7 @@ fn prompt_message(prompt: &UiPrompt) -> &str {
         UiPrompt::Confirm { message }
         | UiPrompt::Select { message, .. }
         | UiPrompt::Input { message, .. }
+        | UiPrompt::Questions { message, .. }
         | UiPrompt::Notify { message } => message,
     }
 }
@@ -3348,5 +3457,71 @@ async fn check_folder(folder: PathBuf) -> Result<(), StartFailure> {
             ),
             folder: Some(FolderState::NotAllowed),
         }),
+    }
+}
+
+#[cfg(test)]
+mod question_validation_tests {
+    use super::fits;
+    use aura_protocol::{UiAnswer, UiPrompt, UiQuestion, UiQuestionAnswer};
+
+    #[test]
+    fn empty_or_ambiguous_question_ids_never_accept_an_answer() {
+        let question = UiQuestion {
+            id: "q1".into(),
+            header: "Header".into(),
+            question: "What next?".into(),
+            options: Vec::new(),
+            multi_select: false,
+            allow_free_text: true,
+        };
+        let answer = UiQuestionAnswer {
+            question_id: "q1".into(),
+            selected: Vec::new(),
+            text: Some("Continue".into()),
+        };
+        assert!(fits(
+            &UiPrompt::Questions {
+                message: String::new(),
+                questions: vec![question.clone()]
+            },
+            &UiAnswer::Questions {
+                answers: vec![answer.clone()]
+            }
+        ));
+        assert!(!fits(
+            &UiPrompt::Questions {
+                message: String::new(),
+                questions: Vec::new()
+            },
+            &UiAnswer::Questions {
+                answers: Vec::new()
+            }
+        ));
+        assert!(!fits(
+            &UiPrompt::Questions {
+                message: String::new(),
+                questions: vec![question.clone(), question.clone()]
+            },
+            &UiAnswer::Questions {
+                answers: vec![answer.clone(), answer]
+            }
+        ));
+        assert!(!fits(
+            &UiPrompt::Questions {
+                message: String::new(),
+                questions: vec![UiQuestion {
+                    id: String::new(),
+                    ..question
+                }]
+            },
+            &UiAnswer::Questions {
+                answers: vec![UiQuestionAnswer {
+                    question_id: String::new(),
+                    selected: Vec::new(),
+                    text: Some("Continue".into())
+                }]
+            }
+        ));
     }
 }

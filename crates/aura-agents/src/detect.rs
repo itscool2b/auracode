@@ -6,6 +6,8 @@
 //! runs an adapter: the install happens in [`Detector::prepare_launch`].
 //!
 //! - `Binary`: found on the env's `PATH`, its version command runs, and it meets its floor.
+//! - `NativeBinary`: the user's executable override or CLI on `PATH` runs and meets its floor,
+//!   with the same executable rules as adapters but without Node.js or npm.
 //! - `NpmAdapter`: Node of the required major or newer; the user's binary (the adapter's variable
 //!   when it names an executable file, else the one on `PATH`; `.exe` only on Windows) runs and
 //!   meets its floor; `npm` is needed only until the adapter is installed. `Ready` names the user's
@@ -193,6 +195,17 @@ impl Live {
                     reason: format!("{program} was not found on your PATH."),
                 })?;
                 Ok(launch::binary(spec, &located.program, program, args))
+            }
+            Recipe::NativeBinary { user_binary, args } => {
+                let located = located.ok_or_else(|| LaunchError::Missing {
+                    reason: format!("{} was not found on your PATH.", user_binary.program),
+                })?;
+                Ok(launch::binary(
+                    spec,
+                    &located.program,
+                    user_binary.program,
+                    args,
+                ))
             }
             Recipe::NpmAdapter {
                 package,
@@ -718,6 +731,10 @@ fn launch_label(spec: &AgentSpec) -> String {
             .chain(args.iter().copied())
             .collect::<Vec<_>>()
             .join(" "),
+        Recipe::NativeBinary { user_binary, args } => std::iter::once(user_binary.program)
+            .chain(args.iter().copied())
+            .collect::<Vec<_>>()
+            .join(" "),
         Recipe::NpmAdapter {
             package,
             version,
@@ -801,7 +818,7 @@ mod tests {
         let detector = live();
         let entries = detector.detect_all(true).await;
         let ids: Vec<&str> = entries.iter().map(|entry| entry.id.as_str()).collect();
-        assert_eq!(ids, ["hermes", "claude-acp", "codex-acp", "mock"]);
+        assert_eq!(ids, ["hermes", "claude", "claude-acp", "codex-acp", "mock"]);
         let reasons: Vec<Availability> = entries
             .iter()
             .map(|entry| entry.availability.clone())
@@ -811,6 +828,9 @@ mod tests {
             [
                 Availability::Missing {
                     reason: "hermes was not found on your PATH.".into()
+                },
+                Availability::Missing {
+                    reason: "claude was not found on your PATH.".into()
                 },
                 Availability::Missing {
                     reason: "Node.js 22 or newer is required (found none).".into()
@@ -827,7 +847,7 @@ mod tests {
         assert!(entries.iter().all(|entry| !entry.needs_download));
         assert_eq!(entries[0].launch, "hermes acp");
         assert_eq!(
-            entries[1].launch,
+            entries[2].launch,
             "@agentclientprotocol/claude-agent-acp 0.95.0 with your claude"
         );
         assert_eq!(detector.cached(), entries);
@@ -863,7 +883,11 @@ mod tests {
         let detector = live();
         let entries = detector.cached();
         assert!(matches!(
-            entries[3].availability,
+            entries
+                .iter()
+                .find(|entry| entry.id == "mock")
+                .expect("demo agent")
+                .availability,
             Availability::Ready { .. }
         ));
     }

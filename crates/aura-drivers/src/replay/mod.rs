@@ -1,4 +1,4 @@
-//! The replay harness (feature `replay`): the real ACP driver over `FakeSpawner` pipes against a
+//! The replay harness (feature `replay`): real ACP and Claude drivers over `FakeSpawner` pipes against a
 //! fake agent playing a curated protocol log, on paused time, with the collected events and replies
 //! compared with a golden file.
 //!
@@ -40,6 +40,7 @@ pub use fixture::{AgentAction, Fixture, FixtureError, FixtureRecord};
 pub use golden::{assert_golden, golden_path};
 
 use crate::acp::AcpDriver;
+use crate::claude::ClaudeDriver;
 use crate::driver::{
     AgentDriver, AgentSpawner, DriverCommand, DriverContext, DriverEvent, DriverTimings,
     EventReceiver, LoggedCommand, PermissionOutcome, SessionSetup, StopPlan, TurnRef,
@@ -52,6 +53,9 @@ pub const REPLAY_FOLDER: &str = "<CWD>";
 
 /// The client version replays advertise.
 pub const REPLAY_CLIENT_VERSION: &str = "0.0.0-replay";
+
+/// Stable new-session identity when curation replaced the recorded Claude UUID with a placeholder.
+const REPLAY_NATIVE_SESSION_ID: &str = "019a0000-0000-7000-8000-000000000001";
 
 /// How long, in virtual time, a replay may take after its last record before it is given up.
 pub const REPLAY_END_LIMIT: Duration = Duration::from_secs(30 * 60);
@@ -86,6 +90,7 @@ impl AgentSpawner for ReplaySpawner {
 /// commands read it.
 fn replay_launch(agent_id: &str) -> LaunchSpec {
     let (program, args, set_env): (&str, &[&str], &[(&str, &str)]) = match agent_id {
+        "claude" => ("/opt/agents/bin/claude", &[], &[]),
         "hermes" => ("/opt/agents/bin/hermes", &["acp"], &[]),
         "claude-acp" => (
             "/opt/agents/bin/node",
@@ -123,6 +128,7 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
             .ok_or_else(|| format!("the start note has no \"{key}\""))
     };
     let agent_id = text("agent_id")?;
+    let native = agent_id == "claude" || start["dialect"] == "claude";
     let autonomy: Autonomy = match start.get("autonomy") {
         Some(value) => {
             serde_json::from_value(value.clone()).map_err(|error| format!("autonomy: {error}"))?
@@ -136,8 +142,16 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
         _ => BTreeMap::new(),
     };
     Ok(SessionSetup {
-        chat_id: "replay".into(),
-        launch: replay_launch(&agent_id),
+        chat_id: if native {
+            start["native_session_id"]
+                .as_str()
+                .filter(|id| uuid::Uuid::parse_str(id).is_ok())
+                .unwrap_or(REPLAY_NATIVE_SESSION_ID)
+                .into()
+        } else {
+            "replay".into()
+        },
+        launch: replay_launch(if native { "claude" } else { &agent_id }),
         dialect: text("dialect")?,
         agent_id,
         folder: PathBuf::from(REPLAY_FOLDER),
@@ -174,7 +188,8 @@ enum ReplyWait {
     ),
 }
 
-/// Runs the real `AcpDriver` over `FakeSpawner` pipes against a fake agent playing `fixture`.
+/// Runs the fixture's real driver over fake pipes. The start's agent or dialect selects Claude;
+/// existing ACP fixtures retain their original driver and comparison rules.
 pub async fn run(fixture: &Fixture) -> ReplayReport {
     let mut report = ReplayReport::default();
     let Some(start) = fixture.start() else {
@@ -198,6 +213,11 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
     let (spawner, mut ends) = FakeSpawner::new();
     let (commands, receiver) = mpsc::unbounded_channel();
     let (sender, events) = event_channel();
+    let native = setup.agent_id == "claude" || setup.dialect == "claude";
+    let native_session = setup
+        .resume
+        .clone()
+        .unwrap_or_else(|| setup.chat_id.clone());
     let ctx = DriverContext {
         commands: receiver,
         events: sender,
@@ -207,7 +227,12 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
         }),
         setup,
     };
-    let driver = tokio::spawn(Box::new(AcpDriver::new()).run(ctx));
+    let driver: Box<dyn AgentDriver> = if native {
+        Box::new(ClaudeDriver::new())
+    } else {
+        Box::new(AcpDriver::new())
+    };
+    let driver = tokio::spawn(driver.run(ctx));
     let collected = Arc::new(Mutex::new(Vec::new()));
     let collector = tokio::spawn(collect(events, Arc::clone(&collected)));
     let end = match timeout(Duration::from_secs(5), ends.recv()).await {
@@ -221,6 +246,9 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
         }
     };
     let mut agent = FakeAgent::new(end);
+    if native && let Some(recorded) = start["native_session_id"].as_str() {
+        agent.native_session(recorded, &native_session);
+    }
     let mut commands = Some(commands);
     let mut replies = Vec::new();
     for (index, record) in fixture.records.iter().enumerate() {
@@ -420,6 +448,30 @@ mod tests {
 
     fn fixture(lines: &[&str]) -> Fixture {
         Fixture::parse("test", &lines.join("\n")).expect("parses")
+    }
+
+    #[test]
+    fn native_start_reuses_a_recorded_uuid_and_has_a_stable_curated_fallback() {
+        let mut start = json!({"agent_id":"claude","dialect":"claude","native_session_id":"019a0000-0000-7000-8000-000000000009"});
+        let setup = setup_from_start(&start).expect("native setup");
+        assert_eq!(setup.chat_id, start["native_session_id"]);
+        assert_eq!(
+            setup.launch.program,
+            PathBuf::from("/opt/agents/bin/claude")
+        );
+        start["native_session_id"] = json!("<SESSION_1>");
+        assert_eq!(
+            setup_from_start(&start).expect("curated setup").chat_id,
+            REPLAY_NATIVE_SESSION_ID
+        );
+        start["agent_id"] = json!("custom-claude");
+        assert_eq!(
+            setup_from_start(&start)
+                .expect("dialect selects native")
+                .launch
+                .program,
+            PathBuf::from("/opt/agents/bin/claude")
+        );
     }
 
     #[test]

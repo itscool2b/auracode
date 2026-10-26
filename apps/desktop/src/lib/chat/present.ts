@@ -107,6 +107,20 @@ export function answerLabel(answer: UiAnswer, prompt: UiPrompt): string {
         : `Choice ${answer.index + 1}`;
     case "input":
       return answer.text;
+    case "questions":
+      return answer.answers
+        .map((item) => {
+          const question =
+            prompt.type === "questions"
+              ? prompt.questions.find((question) => question.id === item.question_id)
+              : undefined;
+          const values = item.selected.map(
+            (index) => question?.options[index]?.label ?? `Choice ${index + 1}`,
+          );
+          if (item.text !== null) values.push(item.text);
+          return `${question?.question || question?.header || item.question_id}: ${values.join(", ")}`;
+        })
+        .join("; ");
   }
 }
 

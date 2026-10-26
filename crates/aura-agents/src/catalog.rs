@@ -41,6 +41,13 @@ pub enum Recipe {
         version_args: &'static [&'static str],
         min_version: Option<&'static str>,
     },
+    /// The user's CLI directly, with an explicit executable override and a required version.
+    /// Windows shell shims are rejected; no adapter or package installation is involved.
+    NativeBinary {
+        user_binary: UserBinary,
+        /// Protocol transport flags. Session, model and permission flags belong to the driver.
+        args: &'static [&'static str],
+    },
     /// An npm adapter installed once per version into `<data root>/adapters`, launched as
     /// `node <entry>` from its own folder, driving the user's own CLI.
     NpmAdapter {
@@ -55,13 +62,13 @@ pub enum Recipe {
     Builtin,
 }
 
-/// The user's own CLI that an adapter must drive, passed through `env` (always set).
+/// The user's own CLI, run directly or by an adapter. An adapter always sets `env` to its path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UserBinary {
     /// "Claude Code", for messages.
     pub label: &'static str,
     pub program: &'static str,
-    /// `CLAUDE_CODE_EXECUTABLE`, `CODEX_PATH`.
+    /// Executable override: `CLAUDE_CODE_EXECUTABLE`, `CODEX_PATH`.
     pub env: &'static str,
     pub version_args: &'static [&'static str],
     pub min_version: &'static str,
@@ -102,6 +109,40 @@ fn build_catalog() -> Vec<AgentSpec> {
                 args_in_order: vec!["hermes_cli.main".into(), "gateway".into(), "run".into()],
             }],
             last_verified: "Hermes 0.22.5",
+        },
+        AgentSpec {
+            id: "claude",
+            name: "Claude Code",
+            description: "Your Claude Code, driven directly through its native control protocol.",
+            kind: DriverKind::Claude,
+            dialect: "claude",
+            recipe: Recipe::NativeBinary {
+                user_binary: UserBinary {
+                    label: "Claude Code",
+                    program: "claude",
+                    env: "CLAUDE_CODE_EXECUTABLE",
+                    version_args: &["--version"],
+                    min_version: "2.1.310",
+                },
+                args: &[
+                    "-p",
+                    "--input-format",
+                    "stream-json",
+                    "--output-format",
+                    "stream-json",
+                    "--verbose",
+                    "--include-partial-messages",
+                    "--permission-prompt-tool",
+                    "stdio",
+                ],
+            },
+            startup_timeout: START_TIMEOUT,
+            turns_survive_process: false,
+            daemons: vec![DaemonMatch {
+                program: Some("claude".into()),
+                args_in_order: vec!["daemon".into(), "run".into()],
+            }],
+            last_verified: "Claude Code 2.1.310 (macOS)",
         },
         AgentSpec {
             id: "claude-acp",
@@ -231,9 +272,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_catalog_lists_the_m1a_agents_once_each() {
+    fn the_catalog_lists_native_claude_before_its_compatibility_adapter() {
         let ids: Vec<&str> = catalog().iter().map(|spec| spec.id).collect();
-        assert_eq!(ids, ["hermes", "claude-acp", "codex-acp", "mock"]);
+        assert_eq!(ids, ["hermes", "claude", "claude-acp", "codex-acp", "mock"]);
         assert_eq!(ids.iter().collect::<HashSet<_>>().len(), ids.len());
         assert_eq!(get("codex-acp").map(|spec| spec.name), Some("Codex (ACP)"));
         assert!(get("agent").is_none());
@@ -256,6 +297,23 @@ mod tests {
                 program: "hermes",
                 args: ["acp"],
                 min_version: None,
+                ..
+            }
+        ));
+
+        let native = get("claude").expect("native Claude");
+        assert_eq!(native.kind, DriverKind::Claude);
+        assert_eq!(native.dialect, "claude");
+        assert!(!native.turns_survive_process);
+        assert!(matches!(
+            native.recipe,
+            Recipe::NativeBinary {
+                user_binary: UserBinary {
+                    program: "claude",
+                    env: "CLAUDE_CODE_EXECUTABLE",
+                    min_version: "2.1.310",
+                    ..
+                },
                 ..
             }
         ));

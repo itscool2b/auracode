@@ -1,9 +1,9 @@
 //! Launch specs: how one start of an agent runs.
 //!
-//! A `Binary` agent runs its program with its args from the chat folder. An `NpmAdapter` runs as
-//! `node <absolute entry>` from its own install folder, never the chat folder (which reaches the
-//! adapter only as the ACP `cwd`), with the user's binary forced through the adapter's variable. A
-//! `Builtin` agent has no process.
+//! A `Binary` or `NativeBinary` agent runs its program with its args from the chat folder. An
+//! `NpmAdapter` runs as `node <absolute entry>` from its own install folder, never the chat folder
+//! (which reaches the adapter only as the ACP `cwd`), with the user's binary forced through the
+//! adapter's variable. A `Builtin` agent has no process.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

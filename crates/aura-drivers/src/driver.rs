@@ -8,7 +8,7 @@
 //!
 //! Contract every driver keeps:
 //!
-//! 1. Before [`DriverEvent::Ready`], only `Status`, `Options`, `Commands`, `Title`, `Autonomy`,
+//! 1. Before [`DriverEvent::Ready`], only `Status`, `RunState`, `Options`, `Commands`, `Title`, `Autonomy`,
 //!    `AuthRequired`, `Event` with a `Notice` or `UsageUpdated` (untagged), and untagged `Permission`
 //!    and `UiRequest` (an agent may ask during setup). A fatal start problem ends `run` with
 //!    [`DriverExit::StartFailed`] (after `AuthRequired` when that is the cause).
@@ -29,6 +29,9 @@
 //! 8. An event read after the driver processed `Prompt(t)` and before that prompt's reply is tagged
 //!    `t`; every other event is untagged, including updates the agent sends after its reply and
 //!    requests from background work.
+//! 9. A driver with work that outlives a prompt emits `RunState` before `Ready` and on every run
+//!    state change. Its `TurnEnded` finishes the prompt only; `RunState { idle: true }` permits
+//!    another prompt. Drivers that omit `RunState` retain the turn-based readiness contract.
 //!
 //! Error text crosses raw: a driver holds no session redactor, so it puts stderr tails and the
 //! agent's error text into [`DriverError`] and [`DriverExit::Crashed`] unredacted, and never writes
@@ -216,6 +219,11 @@ pub enum DriverCommand {
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum DriverEvent {
     Status(DriverStatus),
+    /// Authoritative run state, including background work. Emitting this opts the session into
+    /// waiting for idle separately from `TurnEnded`; emit the initial state before `Ready`.
+    RunState {
+        idle: bool,
+    },
     Ready(ReadyInfo),
     /// Transcript events, tagged with their turn (rule 8). Never `TurnStarted`, `TurnEnded`,
     /// `UserMessageDelta`, `SessionUpdated`, `PromptLifecycle`, `PermissionRequested`,

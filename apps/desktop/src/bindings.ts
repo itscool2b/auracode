@@ -909,13 +909,44 @@ export type Truncation = {
 };
 
 /**  The answer to a [`UiRequest`], matching its [`UiPrompt`] (`Notify` takes none). */
-export type UiAnswer = { type: "confirm"; yes: boolean } | { type: "select"; index: number } | { type: "input"; text: string };
+export type UiAnswer = { type: "confirm"; yes: boolean } | { type: "select"; index: number } | { type: "input"; text: string } | { type: "questions"; answers: UiQuestionAnswer[] };
 
-export type UiPrompt = { type: "confirm"; message: string } | { type: "select"; message: string; options: string[] } | { type: "input"; message: string; placeholder: string | null } | { type: "notify"; message: string };
+export type UiPrompt = { type: "confirm"; message: string } | { type: "select"; message: string; options: string[] } | { type: "input"; message: string; placeholder: string | null } | { type: "questions"; message: string; questions: UiQuestion[] } | { type: "notify"; message: string };
 
 /**
- *  An agent asks the UI for input that isn't a tool permission (Pi extension UI, Cursor questions,
- *  ACP elicitation). Never auto-answered.
+ *  One question in a grouped prompt. The driver keeps the original native question and maps it by
+ *  `id`, so display normalization never changes the key sent back to the agent.
+ */
+export type UiQuestion = {
+	/**  Stable within the request and unique among its questions. */
+	id: string,
+	header: string,
+	question: string,
+	options: UiQuestionOption[],
+	multi_select: boolean,
+	allow_free_text: boolean,
+};
+
+/**
+ *  One answer per question. A single-select question accepts one option or free text; a
+ *  multi-select question accepts multiple options and optional free text. Nothing is preselected.
+ */
+export type UiQuestionAnswer = {
+	question_id: string,
+	/**  Distinct indices into the question's options, in their displayed order. */
+	selected: number[],
+	/**  Nonblank when present, and accepted only when the question allows free text. */
+	text: string | null,
+};
+
+export type UiQuestionOption = {
+	label: string,
+	description: string,
+};
+
+/**
+ *  An agent asks the UI for input that isn't a tool permission (Claude or Cursor questions,
+ *  Pi extension UI, ACP elicitation). Never auto-answered.
  */
 export type UiRequest = {
 	request_id: string,

@@ -10,7 +10,7 @@
 //! | 4 options, autonomy | every option set to its current value; the model switched to the cheapest and back (what else the switch changed; Hermes: what a second session reports meanwhile); Full auto, Auto-edit, Ask and back, each mode reaching the agent, against the dialect's candidates |
 //! | 5 cancel | an interrupt while idle changes nothing |
 //! | 6 close | Stop: stdin closed, the exit and the shutdown steps; nothing left in the process table (Unix), once a stop's chain is over |
-//! | 7 resume | Start again: the native session continues (or the agent says why not: claude-acp and codex-acp keep no session before its first prompt), no transcript comes back, the options are back as step 4 chose them (or the agent no longer offers a value, and auracode says so) |
+//! | 7 resume | ACP starts again: the session continues (or the agent says why not: claude-acp and codex-acp keep no session before its first prompt), no transcript comes back, and chosen options return. Native Claude is skipped because this free probe has no persisted prompted transcript. |
 //! | 8 auth | an agent that needs a sign-in: its card (codex-acp with `--env CODEX_HOME=<empty folder>`) |
 //! | 9 interrupt | an interrupt right after initialize stops the start with nothing left, and the next start works |
 //!
@@ -184,6 +184,10 @@ struct Probe<'a> {
 impl Probe<'_> {
     fn demo(&self) -> bool {
         self.spec.kind == DriverKind::Mock
+    }
+
+    fn native_claude(&self) -> bool {
+        self.spec.kind == DriverKind::Claude
     }
 
     /// Cards the agent showed while a setting changed, and how the probe answered them.
@@ -578,6 +582,33 @@ impl Probe<'_> {
             (Some(sent), Some(answered)) => format!(" in {} ms", answered - sent),
             _ => String::new(),
         };
+        if self.native_claude() {
+            match native_initialize_result(&msg) {
+                Ok(result) => {
+                    self.report.pass(
+                        step,
+                        format!(
+                            "Claude Code {} answered native initialize{took}; session state {}",
+                            text_at(result, "/claude_code_version"),
+                            text_at(result, "/session_state")
+                        ),
+                    );
+                    self.report.info(
+                        step,
+                        format!(
+                            "native permission mode {}; capabilities: {}",
+                            text_at(result, "/current_permission_mode"),
+                            result
+                                .get("capabilities")
+                                .map_or_else(|| "none".into(), Value::to_string)
+                        ),
+                    );
+                }
+                Err(reason) => self.report.fail(step, reason),
+            }
+            self.hostile_check(&records);
+            return;
+        }
         match msg.get("result") {
             Some(result) => {
                 let name = text_at(result, "/agentInfo/name");
@@ -648,7 +679,7 @@ impl Probe<'_> {
                     ),
                 );
             }
-            Recipe::Binary { .. } | Recipe::Builtin => self
+            Recipe::Binary { .. } | Recipe::NativeBinary { .. } | Recipe::Builtin => self
                 .report
                 .pass(step, "nothing ran the hostile chat folder's fake adapters"),
         }
@@ -726,31 +757,42 @@ impl Probe<'_> {
         if !self.demo()
             && let Some(log) = self.session_log(chat)
         {
-            let records = self
-                .log_records(&log, |records| {
-                    logs::first_open(records).is_some_and(|open| {
-                        logs::message(open)
-                            .and_then(|msg| msg.get("id"))
-                            .is_some_and(|id| logs::reply(records, id).is_some())
+            if self.native_claude() {
+                let records = self
+                    .log_records(&log, |records| {
+                        logs::exchange(records, "initialize").is_some()
                     })
-                })
-                .await;
-            if let Some(result) = open_result(&records) {
-                let models = result
-                    .pointer("/models/availableModels")
-                    .and_then(Value::as_array)
-                    .map_or(0, Vec::len);
-                let modes: Vec<&str> = result
-                    .pointer("/modes/availableModes")
-                    .and_then(Value::as_array)
-                    .map(|modes| {
-                        modes
-                            .iter()
-                            .filter_map(|mode| mode.get("id").and_then(Value::as_str))
-                            .collect()
+                    .await;
+                match native_open(&records, &native, None) {
+                    Ok(description) => self.report.pass(step, description),
+                    Err(reason) => self.report.fail(step, reason),
+                }
+            } else {
+                let records = self
+                    .log_records(&log, |records| {
+                        logs::first_open(records).is_some_and(|open| {
+                            logs::message(open)
+                                .and_then(|msg| msg.get("id"))
+                                .is_some_and(|id| logs::reply(records, id).is_some())
+                        })
                     })
-                    .unwrap_or_default();
-                self.report.info(
+                    .await;
+                if let Some(result) = open_result(&records) {
+                    let models = result
+                        .pointer("/models/availableModels")
+                        .and_then(Value::as_array)
+                        .map_or(0, Vec::len);
+                    let modes: Vec<&str> = result
+                        .pointer("/modes/availableModes")
+                        .and_then(Value::as_array)
+                        .map(|modes| {
+                            modes
+                                .iter()
+                                .filter_map(|mode| mode.get("id").and_then(Value::as_str))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    self.report.info(
                     step,
                     format!(
                         "the open's reply: {models} legacy model(s) (current {}); modes {} (current {})",
@@ -763,6 +805,7 @@ impl Probe<'_> {
                         text_at(result, "/modes/currentModeId"),
                     ),
                 );
+                }
             }
         }
         if asked.is_empty() {
@@ -799,10 +842,7 @@ impl Probe<'_> {
         } else {
             self.session_log(chat).and_then(|log| {
                 let records = logs::read(&log).ok()?.records;
-                logs::updates(&records, "available_commands_update")
-                    .filter_map(|record| logs::message(record))
-                    .map(|msg| msg.to_string().len())
-                    .max()
+                largest_commands_update(&records, self.native_claude())
             })
         };
         self.report.info(
@@ -1143,9 +1183,9 @@ impl Probe<'_> {
         }
     }
 
-    /// Waits until the agent runs the mode `state` names: the session's Mode option reads it, with
-    /// nothing pending. Returns the autonomy in effect then, where a candidate whose mode change
-    /// failed meanwhile shows as the one the driver fell back to.
+    /// Waits until the agent runs the mode `state` names: ACP reports its Mode option with nothing
+    /// pending, while native Claude acknowledges the control. Returns the autonomy in effect then,
+    /// including a fallback after a candidate's mode change failed.
     async fn mode_lands(
         &self,
         chat: &ChatRun<'_>,
@@ -1157,14 +1197,20 @@ impl Probe<'_> {
         let deadline = Instant::now() + MODE_CHANGE_LIMIT;
         loop {
             let lists = chat.lists().await.map_err(|error| error.to_string())?;
-            let landed = lists
+            let landed = if self.native_claude() {
+                self.session_log(chat)
+                    .and_then(|log| logs::read(&log).ok())
+                    .is_some_and(|read| native_effective_mode(&read.records) == Some(mode.as_str()))
+            } else {
+                lists
                 .options
                 .iter()
                 .find(|option| option.category == ConfigCategory::Mode)
                 .is_some_and(|option| {
                     option.pending.is_none()
                         && matches!(&option.kind, ConfigKind::Select { current, .. } if *current == mode)
-                });
+                })
+            };
             if landed || lists.autonomy.native_mode.as_deref() != Some(mode.as_str()) {
                 return Ok(lists.autonomy);
             }
@@ -1187,20 +1233,25 @@ impl Probe<'_> {
         }
         tokio::time::sleep(self.timings.settle).await;
         let status = chat.status();
+        let method = if self.native_claude() {
+            "interrupt"
+        } else {
+            "session/cancel"
+        };
         let cancels = if self.demo() {
             0
         } else {
             self.session_log(chat)
                 .and_then(|log| logs::read(&log).ok())
                 .map_or(0, |read| {
-                    logs::requests_of(&read.records, &["session/cancel"]).count()
+                    logs::requests_of(&read.records, &[method]).count()
                 })
         };
         self.report.check(
             status == Some(SessionStatus::Ready) && cancels == 0,
             step,
             format!(
-                "an interrupt while idle left the session {} and sent {cancels} session/cancel (auracode sends none while no prompt runs)",
+                "an interrupt while idle left the session {} and sent {cancels} {method} (auracode sends none while no prompt runs)",
                 status_name(status)
             ),
         );
@@ -1372,6 +1423,13 @@ impl Probe<'_> {
         native: Option<&str>,
     ) {
         let step = "7 resume";
+        if self.native_claude() {
+            self.report.skip(
+                step,
+                "native resume was not exercised: this free probe sent no prompt, so there is no persisted transcript to resume; a prompted smoke test must verify resume and restored settings",
+            );
+            return;
+        }
         let mark = chat.mark();
         let logs_before = chat.logs();
         let (end, _) = match chat.start(self.timings.start).await {
@@ -1547,7 +1605,16 @@ impl Probe<'_> {
             return;
         }
         let logs_before = chat.logs();
-        if let Err(error) = self.headless.manager.start(&chat.chat_id, false).await {
+        // Native Claude has no persisted transcript before a prompt. Fresh starts still exercise
+        // startup interruption without claiming that an unprompted native session can resume.
+        let fresh = self.native_claude();
+        if fresh {
+            self.report.info(
+                step,
+                "native interruption and restart use fresh sessions because this free probe has no persisted transcript",
+            );
+        }
+        if let Err(error) = self.headless.manager.start(&chat.chat_id, fresh).await {
             self.report.fail(step, error);
             return;
         }
@@ -1601,7 +1668,15 @@ impl Probe<'_> {
         }
         let logs_before = chat.logs();
         let mark = chat.mark();
-        match chat.start(self.timings.start).await {
+        let started = if fresh {
+            match self.headless.manager.start(&chat.chat_id, true).await {
+                Ok(()) => Ok(chat.settle(self.timings.start).await),
+                Err(error) => Err(error),
+            }
+        } else {
+            chat.start(self.timings.start).await
+        };
+        match started {
             Ok((StartEnd::Ready, _)) => {
                 self.report.pass(step, "the next start was ready");
                 self.name_new_logs(chat, &logs_before, "probe-restart");
@@ -1645,6 +1720,34 @@ impl Probe<'_> {
         if !self.demo() {
             for log in chat.logs() {
                 self.note_pid(&log);
+                match logs::read(&log) {
+                    Ok(read) => {
+                        let complete = read.unreadable == 0
+                            && !logs::notes(&read.records, "dropped")
+                                .any(|count| count.as_u64().unwrap_or(0) > 0)
+                            && !read.records.iter().any(|record| {
+                                logs::direction(record) == Some("out")
+                                    && record.get("truncated").is_some()
+                            });
+                        let free = complete && !logs::has_prompt(&read.records);
+                        self.report.check(
+                            free,
+                            "free",
+                            if free {
+                                format!("no prompt was sent in {}", log.display())
+                            } else {
+                                format!(
+                                    "a prompt was sent or its absence could not be verified in {}",
+                                    log.display()
+                                )
+                            },
+                        );
+                    }
+                    Err(error) => self.report.fail(
+                        "free",
+                        format!("could not verify {}: {error}", log.display()),
+                    ),
+                }
             }
             self.leftovers("end", &[]).await;
         }
@@ -1655,11 +1758,15 @@ impl Probe<'_> {
             return;
         }
         let mut lines = vec!["Protocol logs, and the fixture each can become:".to_owned()];
+        let fixture_dir = if self.native_claude() {
+            "claude".into()
+        } else {
+            format!("acp/{}", self.spec.id)
+        };
         for (log, name) in &self.named_logs {
             lines.push(format!(
-                "  aura-cli fixture {} --scenario {name} --out crates/aura-drivers/tests/fixtures/acp/{}/{name}.jsonl",
+                "  aura-cli fixture {} --scenario {name} --out crates/aura-drivers/tests/fixtures/{fixture_dir}/{name}.jsonl",
                 log.display(),
-                self.spec.id
             ));
         }
         self.report.note(lines.join("\n"));
@@ -1676,7 +1783,7 @@ pub fn adapter_folder(headless: &Headless, spec: &AgentSpec) -> Option<PathBuf> 
             "{}-{version}",
             package.trim_start_matches('@').replace('/', "-")
         ))),
-        Recipe::Binary { .. } | Recipe::Builtin => None,
+        Recipe::Binary { .. } | Recipe::NativeBinary { .. } | Recipe::Builtin => None,
     }
 }
 
@@ -1868,6 +1975,143 @@ fn auth_method_ids(result: &Value) -> String {
     } else {
         ids.join(", ")
     }
+}
+
+/// Native initialize is a control response, not JSON-RPC. Inspect only fields needed by the
+/// probe; its account and other opaque payloads never belong in the report.
+fn native_initialize_result(message: &Value) -> Result<&Value, String> {
+    if message["type"] != "control_response" || message["response"]["subtype"] != "success" {
+        return Err(format!(
+            "native initialize failed: {}",
+            message
+                .pointer("/response/error")
+                .and_then(Value::as_str)
+                .unwrap_or("no success response")
+        ));
+    }
+    let result = message
+        .pointer("/response/response")
+        .filter(|value| value.is_object())
+        .ok_or("native initialize has no response payload")?;
+    if result["claude_code_version"]
+        .as_str()
+        .is_none_or(str::is_empty)
+        || result["current_permission_mode"]
+            .as_str()
+            .is_none_or(str::is_empty)
+        || !matches!(
+            result["session_state"].as_str(),
+            Some("idle" | "running" | "requires_action")
+        )
+    {
+        return Err("native initialize did not report its version, permission mode and recognized session state".into());
+    }
+    Ok(result)
+}
+
+/// Prove a native session was opened through its expected launch argument and initialized. This
+/// checks the open handshake only; a free probe cannot prove the model recalls a prior turn.
+fn native_open(records: &[Value], native_id: &str, resume: Option<&str>) -> Result<String, String> {
+    let initialized = logs::exchange(records, "initialize")
+        .and_then(|(_, answer)| logs::message(answer))
+        .ok_or("native session has no initialize response")?;
+    native_initialize_result(initialized)?;
+    let start = logs::note(records, "start").ok_or("native session has no start note")?;
+    let resume_matches = match resume {
+        Some(id) => start["resume"].as_str() == Some(id),
+        None => start.get("resume").is_some_and(Value::is_null),
+    };
+    if native_id.is_empty()
+        || start["native_session_id"].as_str() != Some(native_id)
+        || !resume_matches
+    {
+        return Err("native session identity does not match its start note".into());
+    }
+    let args = logs::note(records, "spawn")
+        .and_then(|spawn| spawn["args"].as_array())
+        .ok_or("native session has no logged launch arguments")?;
+    let args: Vec<&str> = args
+        .iter()
+        .map(Value::as_str)
+        .collect::<Option<_>>()
+        .ok_or("native session has malformed launch arguments")?;
+    let flag = resume.map_or_else(
+        || format!("--session-id={native_id}"),
+        |id| format!("--resume={id}"),
+    );
+    let identity: Vec<&str> = args
+        .iter()
+        .copied()
+        .filter(|arg| arg.starts_with("--session-id=") || arg.starts_with("--resume="))
+        .collect();
+    if identity != [flag.as_str()] {
+        return Err(format!(
+            "native session was not launched with exactly {flag}"
+        ));
+    }
+    let value = |name: &str| {
+        args.windows(2)
+            .find(|pair| pair[0] == name)
+            .map(|pair| pair[1])
+    };
+    if value("--input-format") != Some("stream-json")
+        || value("--output-format") != Some("stream-json")
+        || value("--permission-prompt-tool") != Some("stdio")
+        || !matches!(
+            value("--permission-mode"),
+            Some("default" | "acceptEdits" | "bypassPermissions")
+        )
+        || !["-p", "--verbose", "--include-partial-messages"]
+            .iter()
+            .all(|flag| args.contains(flag))
+        || args
+            .iter()
+            .any(|arg| *arg == "--bare" || arg.starts_with("--system-prompt"))
+    {
+        return Err("native launch did not preserve the required stream transport and explicit permission mode".into());
+    }
+    Ok(format!(
+        "native session {native_id} initialized through {flag} with explicit permission mode {}",
+        value("--permission-mode").unwrap_or_default()
+    ))
+}
+
+fn largest_commands_update(records: &[Value], native: bool) -> Option<usize> {
+    if native {
+        logs::native_events(records, "commands_changed")
+            .filter_map(logs::message)
+            .map(|message| message.to_string().len())
+            .max()
+    } else {
+        logs::updates(records, "available_commands_update")
+            .filter_map(logs::message)
+            .map(|message| message.to_string().len())
+            .max()
+    }
+}
+
+/// The last mode the native CLI acknowledged. Unlike ACP, Claude need not publish a Mode option.
+fn native_effective_mode(records: &[Value]) -> Option<&str> {
+    let mut mode = logs::exchange(records, "initialize")
+        .and_then(|(_, answer)| logs::message(answer))
+        .and_then(|message| native_initialize_result(message).ok())
+        .and_then(|result| result["current_permission_mode"].as_str());
+    for request in logs::requests_of(records, &["set_permission_mode"]).filter_map(logs::message) {
+        let Some(reply) = request
+            .get("request_id")
+            .and_then(|id| logs::reply(records, id))
+            .and_then(logs::message)
+        else {
+            continue;
+        };
+        if reply["response"]["subtype"] == "success" {
+            mode = reply
+                .pointer("/response/response/mode")
+                .and_then(Value::as_str)
+                .or_else(|| request.pointer("/request/mode").and_then(Value::as_str));
+        }
+    }
+    mode
 }
 
 /// Whether a log holds the first session open's outcome: its reply, and after an error reply the
@@ -2075,6 +2319,15 @@ fn cheapest_of<'a>(choices: &[&'a ConfigChoice]) -> Option<&'a ConfigChoice> {
 /// The native modes an autonomy level may land on: the dialect's candidates (spec 5.5.2), the
 /// demo agent's own table for the demo agent.
 pub fn expected_modes(spec: &AgentSpec, level: Autonomy) -> Vec<Option<String>> {
+    if spec.kind == DriverKind::Claude {
+        return match level {
+            Autonomy::FullAuto => {
+                vec![Some("bypassPermissions".into()), Some("acceptEdits".into())]
+            }
+            Autonomy::AutoEdit => vec![Some("acceptEdits".into())],
+            Autonomy::Ask => vec![Some("default".into())],
+        };
+    }
     if spec.kind == DriverKind::Mock {
         let mode = match level {
             Autonomy::FullAuto => "full_auto",
@@ -2100,7 +2353,9 @@ fn level_name(level: Autonomy) -> &'static str {
 
 fn autonomy_text(level: Autonomy, state: &AutonomyState) -> String {
     let answers = match &state.auto_answer {
-        AutoAnswer::Never => "asks before every action".to_owned(),
+        AutoAnswer::Never => {
+            "auracode does not auto-answer remaining permission requests".to_owned()
+        }
         AutoAnswer::All => "answers every tool kind itself".to_owned(),
         AutoAnswer::Kinds { kinds } => format!(
             "answers {} itself",
@@ -2386,5 +2641,91 @@ mod tests {
             .and_then(|msg| msg.get("result"))
             .expect("result");
         assert_eq!(auth_method_ids(init), "openrouter, hermes-setup");
+    }
+
+    fn native_records(resume: Option<&str>) -> Vec<Value> {
+        use serde_json::json;
+        vec![
+            json!({"d":"note","note":{"start":{"agent_id":"claude","dialect":"claude","native_session_id":"native-1","resume":resume}}}),
+            json!({"d":"note","note":{"spawn":{"args":["-p","--input-format","stream-json","--output-format","stream-json","--verbose","--include-partial-messages","--permission-prompt-tool","stdio","--permission-mode","acceptEdits",if let Some(id) = resume {format!("--resume={id}")} else {"--session-id=native-1".into()}]}}}),
+            json!({"d":"out","msg":{"type":"control_request","request_id":"init","request":{"subtype":"initialize"}}}),
+            json!({"d":"in","msg":{"type":"control_response","response":{"subtype":"success","request_id":"init","response":{"claude_code_version":"2.1.310","session_state":"idle","current_permission_mode":"acceptEdits","capabilities":[]}}}}),
+        ]
+    }
+
+    #[test]
+    fn native_open_checks_transport_permissions_and_identity_instead_of_acp_opens() {
+        let fresh = native_records(None);
+        assert!(
+            native_open(&fresh, "native-1", None)
+                .expect("native open")
+                .contains("--session-id=native-1")
+        );
+        let resumed = native_records(Some("native-1"));
+        assert!(
+            native_open(&resumed, "native-1", Some("native-1"))
+                .expect("native resume")
+                .contains("--resume=native-1")
+        );
+        assert!(native_open(&fresh, "another", None).is_err());
+        assert!(native_open(&fresh, "native-1", Some("native-1")).is_err());
+        let mut malformed_resume = fresh.clone();
+        malformed_resume[0]["note"]["start"]["resume"] = serde_json::json!(false);
+        assert!(native_open(&malformed_resume, "native-1", None).is_err());
+        let mut missing_mode = fresh.clone();
+        missing_mode[1]["note"]["spawn"]["args"][9] = serde_json::json!("--another-flag");
+        assert!(native_open(&missing_mode, "native-1", None).is_err());
+        let mut hidden_prompt = fresh.clone();
+        hidden_prompt[1]["note"]["spawn"]["args"]
+            .as_array_mut()
+            .expect("args")
+            .push(serde_json::json!("--system-prompt=hidden"));
+        assert!(native_open(&hidden_prompt, "native-1", None).is_err());
+        let mut malformed = fresh;
+        malformed[3]["msg"]["response"]["response"]["session_state"] =
+            serde_json::json!({"state":"idle"});
+        assert!(native_open(&malformed, "native-1", None).is_err());
+    }
+
+    #[test]
+    fn native_modes_follow_successful_controls_and_preserve_mode_on_refusal() {
+        use serde_json::json;
+        let mut records = native_records(None);
+        assert_eq!(native_effective_mode(&records), Some("acceptEdits"));
+        records.push(json!({"d":"out","msg":{"type":"control_request","request_id":"mode","request":{"subtype":"set_permission_mode","mode":"bypassPermissions"}}}));
+        assert_eq!(
+            native_effective_mode(&records),
+            Some("acceptEdits"),
+            "pending requests do not confirm a mode"
+        );
+        records.push(json!({"d":"in","msg":{"type":"control_response","response":{"subtype":"error","request_id":"mode","error":"policy"}}}));
+        assert_eq!(native_effective_mode(&records), Some("acceptEdits"));
+        records.push(json!({"d":"out","msg":{"type":"control_request","request_id":"ask","request":{"subtype":"set_permission_mode","mode":"default"}}}));
+        records.push(json!({"d":"in","msg":{"type":"control_response","response":{"subtype":"success","request_id":"ask","response":{}}}}));
+        assert_eq!(native_effective_mode(&records), Some("default"));
+        let spec = aura_agents::get("claude").expect("native Claude");
+        assert_eq!(
+            expected_modes(spec, Autonomy::Ask),
+            [Some("default".into())]
+        );
+        assert_eq!(
+            expected_modes(spec, Autonomy::AutoEdit),
+            [Some("acceptEdits".into())]
+        );
+        assert_eq!(
+            expected_modes(spec, Autonomy::FullAuto),
+            [Some("bypassPermissions".into()), Some("acceptEdits".into())]
+        );
+    }
+
+    #[test]
+    fn command_update_measurement_uses_the_selected_protocol() {
+        let native = serde_json::json!({"d":"in","msg":{"type":"system","subtype":"commands_changed","commands":[{"name":"usage"}]}});
+        let acp = serde_json::json!({"d":"in","msg":{"method":"session/update","params":{"update":{"sessionUpdate":"available_commands_update","availableCommands":[]}}}});
+        let native_size = native["msg"].to_string().len();
+        let acp_size = acp["msg"].to_string().len();
+        let records = vec![native, acp];
+        assert_eq!(largest_commands_update(&records, true), Some(native_size));
+        assert_eq!(largest_commands_update(&records, false), Some(acp_size));
     }
 }

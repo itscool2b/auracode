@@ -1,0 +1,1660 @@
+//! One task owns control correlation, events and shutdown. Event backpressure pauses stdout but
+//! never blocks incoming commands or the process shutdown chain.
+use super::{translate, wire};
+use crate::driver::{
+    DriverCommand, DriverContext, DriverError, DriverEvent, DriverExit, DriverStatus,
+    LoggedCommand, PermissionOutcome, ReadyInfo, ResumeOutcome, SessionSetup,
+};
+use aura_process::{
+    LineSink, LogNote, MAX_LINE_BYTES, PIPE_EOF_GRACE, ProtocolLog, STDERR_TAIL_BYTES,
+    ShutdownPlan, SpawnSpec, StdoutItem,
+};
+use aura_protocol::session::{AuthCommand, AuthPrompt, ConfigValue};
+use aura_protocol::{
+    AuraEvent, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, LimitWindow,
+    NoticeLevel, PermissionOption, PermissionOptionKind, PermissionRequest, PromptPart, StopReason,
+    UsageInfo,
+};
+use aura_protocol::{UiAnswer, UiPrompt, UiQuestion, UiQuestionOption, UiRequest};
+use futures::future::BoxFuture;
+use serde_json::{Value, json};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    sync::Arc,
+    time::Duration,
+};
+use tokio::{sync::oneshot, time::Instant};
+
+fn error(kind: ErrorKind, message: impl Into<String>) -> DriverError {
+    DriverError {
+        kind,
+        message: message.into(),
+        detail: None,
+    }
+}
+fn config_timeout() -> DriverError {
+    error(
+        ErrorKind::AgentError,
+        "Claude did not apply this setting before its deadline.",
+    )
+}
+fn log_command(log: &ProtocolLog, command: &DriverCommand) {
+    if let Ok(value) = serde_json::to_value(LoggedCommand::from(command)) {
+        log.command(value);
+    }
+}
+fn is_config(command: &DriverCommand) -> bool {
+    matches!(
+        command,
+        DriverCommand::SetOption { .. } | DriverCommand::SetAutonomy { .. }
+    )
+}
+fn explicit_effort(value: &str) -> Option<String> {
+    (value != translate::DEFAULT_EFFORT).then(|| value.to_owned())
+}
+fn auth_required(frame: &Value) -> bool {
+    frame["type"] == "result" && frame["api_error_status"].as_u64() == Some(401)
+}
+fn auth_error() -> DriverError {
+    error(
+        ErrorKind::AuthRequired,
+        "Claude Code needs you to sign in again.",
+    )
+}
+fn auth_prompt(program: &std::path::Path) -> AuthPrompt {
+    AuthPrompt {
+        message: auth_error().message,
+        commands: vec![AuthCommand {
+            label: "Sign in to Claude Code".into(),
+            argv: vec![
+                program.to_string_lossy().into_owned(),
+                "auth".into(),
+                "login".into(),
+            ],
+            env: Vec::new(),
+        }],
+    }
+}
+fn merge_usage(current: &mut UsageInfo, update: UsageInfo) -> bool {
+    let before = current.clone();
+    if update.context_used.is_some() {
+        current.context_used = update.context_used;
+    }
+    if update.context_size.is_some() {
+        current.context_size = update.context_size;
+    }
+    if update.cost.is_some() {
+        current.cost = update.cost;
+    }
+    *current != before
+}
+fn reset_millis(value: &Value) -> Option<i64> {
+    let date = time::OffsetDateTime::parse(
+        value.as_str()?,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .ok()?;
+    i64::try_from(date.unix_timestamp_nanos().div_euclid(1_000_000)).ok()
+}
+fn usage_limits(payload: &Value) -> Vec<LimitWindow> {
+    let limits = &payload["rate_limits"];
+    let label = |name: &str| match name {
+        "session" | "five_hour" => "5 hours".to_owned(),
+        "weekly_all" | "seven_day" => "7 days".to_owned(),
+        _ => crate::acp::options::truncate(name, 48),
+    };
+    if let Some(windows) = limits["limits"].as_array() {
+        return windows
+            .iter()
+            .filter_map(|window| {
+                let percent = window["percent"]
+                    .as_f64()
+                    .filter(|number| number.is_finite())?;
+                let kind = window["kind"].as_str()?;
+                let name = if kind == "weekly_scoped" {
+                    window["scope"]["model"]["display_name"]
+                        .as_str()
+                        .map(|model| format!("7 days ({model})"))
+                        .unwrap_or_else(|| label(kind))
+                } else {
+                    label(kind)
+                };
+                Some(LimitWindow {
+                    label: crate::acp::options::truncate(&name, 48),
+                    used_percent: percent.clamp(0.0, 100.0),
+                    resets_at: reset_millis(&window["resets_at"]),
+                })
+            })
+            .take(16)
+            .collect();
+    }
+    limits
+        .as_object()
+        .map(|windows| {
+            windows
+                .iter()
+                .filter_map(|(name, window)| {
+                    let percent = window["utilization"]
+                        .as_f64()
+                        .filter(|number| number.is_finite())?;
+                    Some(LimitWindow {
+                        label: label(name),
+                        used_percent: percent.clamp(0.0, 100.0),
+                        resets_at: reset_millis(&window["resets_at"]),
+                    })
+                })
+                .take(16)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+fn result_reason(frame: &Value) -> StopReason {
+    let terminal = frame["terminal_reason"].as_str().unwrap_or_default();
+    let subtype = frame["subtype"].as_str().unwrap_or_default();
+    if auth_required(frame) {
+        StopReason::Error
+    } else if terminal.starts_with("aborted_") {
+        StopReason::Cancelled
+    } else if terminal == "max_turns" || subtype == "error_max_turns" {
+        StopReason::MaxTurnRequests
+    } else if frame["stop_reason"] == "max_tokens" {
+        StopReason::MaxTokens
+    } else if frame["stop_reason"] == "refusal" {
+        StopReason::Refusal
+    } else if frame["is_error"] == true
+        || subtype.starts_with("error_")
+        || matches!(
+            terminal,
+            "budget_exhausted" | "prompt_too_long" | "api_error"
+        )
+    {
+        StopReason::Error
+    } else if terminal.is_empty() || terminal == "completed" {
+        StopReason::EndTurn
+    } else {
+        StopReason::Other
+    }
+}
+fn mode(a: Autonomy) -> &'static str {
+    match a {
+        Autonomy::Ask => "default",
+        Autonomy::AutoEdit => "acceptEdits",
+        Autonomy::FullAuto => "bypassPermissions",
+    }
+}
+fn autonomy(requested: Autonomy, native: &str) -> AutonomyState {
+    // The vendor mode applies approvals. Remaining requests include explicit ask rules and
+    // restrictions and must never be bypassed by our own permission policy.
+    AutonomyState {
+        requested,
+        native_mode: Some(native.into()),
+        auto_answer: AutoAnswer::Never,
+        note: None,
+    }
+}
+pub(super) fn launch(setup: &SessionSetup, native_id: &str) -> aura_process::LaunchSpec {
+    let mut launch = setup.launch.clone();
+    // Apply Full auto only after initialize and before any prompt. A policy refusal can then
+    // leave acceptEdits in effect without retrying an executed prompt.
+    let initial = if setup.autonomy == Autonomy::FullAuto {
+        "acceptEdits"
+    } else {
+        mode(setup.autonomy)
+    };
+    launch.args.extend([
+        "--permission-mode".into(),
+        initial.into(),
+        "--allow-dangerously-skip-permissions".into(),
+    ]);
+    launch.args.push(
+        match &setup.resume {
+            Some(id) => format!("--resume={id}"),
+            None => format!("--session-id={native_id}"),
+        }
+        .into(),
+    );
+    if let Some(ConfigValue::Choice { value: model }) = setup.desired.get("model") {
+        launch.args.push(format!("--model={model}").into());
+    }
+    for dir in &setup.add_dirs {
+        launch
+            .args
+            .extend(["--add-dir".into(), dir.as_os_str().to_owned()]);
+    }
+    launch
+        .set_env
+        .retain(|(key, _)| key != "CLAUDE_CODE_SDK_READS_SESSION_STATE");
+    launch
+        .set_env
+        .push(("CLAUDE_CODE_SDK_READS_SESSION_STATE".into(), "1".into()));
+    launch
+}
+enum Purpose {
+    Initialize,
+    InitialMode,
+    InitialEffort,
+    Interrupt,
+    Telemetry(TelemetryKind),
+    Option {
+        id: String,
+        value: ConfigValue,
+        reply: oneshot::Sender<Result<(), DriverError>>,
+    },
+    Autonomy {
+        value: Autonomy,
+        reply: oneshot::Sender<Result<AutonomyState, DriverError>>,
+    },
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TelemetryKind {
+    Context,
+    Usage,
+}
+impl TelemetryKind {
+    fn index(self) -> usize {
+        match self {
+            Self::Context => 0,
+            Self::Usage => 1,
+        }
+    }
+    fn request(self) -> Value {
+        match self {
+            Self::Context => json!({"subtype":"get_context_usage","detail":"summary"}),
+            Self::Usage => json!({"subtype":"get_usage","skip_behaviors":true}),
+        }
+    }
+}
+struct Pending {
+    purpose: Purpose,
+    deadline: Instant,
+}
+struct Approval {
+    request: Value,
+    turn: Option<String>,
+    allowed: Vec<String>,
+}
+struct Questions {
+    input: Value,
+    questions: Vec<UiQuestion>,
+    turn: Option<String>,
+}
+struct Session {
+    sink: LineSink,
+    log: ProtocolLog,
+    setup: SessionSetup,
+    native_id: String,
+    spawn_id: String,
+    next_id: u64,
+    pending: BTreeMap<String, Pending>,
+    approvals: BTreeMap<String, Approval>,
+    questions: BTreeMap<String, Questions>,
+    translator: translate::Translator,
+    outbox: VecDeque<DriverEvent>,
+    held: VecDeque<(Instant, DriverCommand)>,
+    init: Value,
+    ready: bool,
+    idle: bool,
+    turn: Option<String>,
+    model: String,
+    effort: Option<String>,
+    mode: String,
+    init_deadline: Instant,
+    commands_due: Option<Instant>,
+    command_list: Option<Vec<aura_protocol::SlashCommand>>,
+    failure: Option<DriverError>,
+    stopping: bool,
+    usage: UsageInfo,
+    telemetry_dirty: [bool; 2],
+}
+impl Session {
+    fn send(&mut self, value: Value) {
+        if self.sink.send(value.to_string()).is_err() {
+            self.failure
+                .get_or_insert_with(|| error(ErrorKind::AgentExited, "Claude closed its input."));
+        }
+    }
+    fn request(&mut self, request: Value, purpose: Purpose) {
+        self.request_until(
+            request,
+            purpose,
+            Instant::now() + self.setup.timings.request,
+        );
+    }
+    fn request_until(&mut self, request: Value, purpose: Purpose, deadline: Instant) {
+        self.next_id += 1;
+        let id = format!("aura_{}", self.next_id);
+        self.pending
+            .insert(id.clone(), Pending { purpose, deadline });
+        self.send(json!({"type":"control_request","request_id":id,"request":request}));
+    }
+    fn response(&mut self, id: &str, response: Value) {
+        self.send(json!({"type":"control_response","response":{"subtype":"success","request_id":id,"response":response}}));
+    }
+    fn notice(&mut self, message: impl Into<String>) {
+        self.outbox.push_back(DriverEvent::Event {
+            turn: None,
+            event: AuraEvent::Notice {
+                level: NoticeLevel::Warning,
+                message: message.into(),
+            },
+        });
+    }
+    fn options(&mut self) {
+        self.outbox
+            .push_back(DriverEvent::Options(translate::options(
+                &self.init,
+                &self.model,
+                self.effort.as_deref(),
+            )));
+    }
+    fn emit_usage(&mut self, update: UsageInfo, turn: Option<String>) {
+        if merge_usage(&mut self.usage, update) {
+            self.outbox.push_back(DriverEvent::Event {
+                turn,
+                event: AuraEvent::UsageUpdated(self.usage.clone()),
+            });
+        }
+    }
+    fn refresh_telemetry(&mut self) {
+        if !self.ready || self.stopping || self.failure.is_some() {
+            return;
+        }
+        for kind in [TelemetryKind::Context, TelemetryKind::Usage] {
+            if self.pending.values().any(|pending| matches!(pending.purpose, Purpose::Telemetry(pending_kind) if pending_kind == kind)) {
+                self.telemetry_dirty[kind.index()] = true;
+            } else {
+                self.request(kind.request(), Purpose::Telemetry(kind));
+            }
+        }
+    }
+    fn telemetry_reply(&mut self, kind: TelemetryKind, payload: &Value, failed: bool) {
+        let dirty = std::mem::take(&mut self.telemetry_dirty[kind.index()]);
+        if self.stopping || self.failure.is_some() {
+            return;
+        }
+        if failed {
+            // Error strings can include account details. The user only needs to know the meter
+            // could not refresh; leave its last successful values intact.
+            self.notice(match kind {
+                TelemetryKind::Context => "Claude could not refresh context usage.",
+                TelemetryKind::Usage => "Claude could not refresh usage limits.",
+            });
+        } else if !dirty {
+            match kind {
+                TelemetryKind::Context => self.emit_usage(translate::context_usage(payload), None),
+                TelemetryKind::Usage => {
+                    self.emit_usage(translate::result_usage(&payload["session"]), None);
+                    let windows = usage_limits(payload);
+                    if !windows.is_empty() {
+                        self.outbox.push_back(DriverEvent::Event {
+                            turn: None,
+                            event: AuraEvent::LimitsUpdated { windows },
+                        });
+                    }
+                }
+            }
+        }
+        if dirty {
+            self.request(kind.request(), Purpose::Telemetry(kind));
+        }
+    }
+    fn finish_start(&mut self) {
+        if self.ready || self.failure.is_some() || self.stopping {
+            return;
+        }
+        self.ready = true;
+        self.outbox
+            .push_back(DriverEvent::RunState { idle: self.idle });
+        let mut state = autonomy(self.setup.autonomy, &self.mode);
+        if self.mode != mode(self.setup.autonomy) {
+            state.note = Some("Claude's policy did not allow the requested mode.".into());
+        }
+        self.outbox.push_back(DriverEvent::Autonomy(state));
+        self.options();
+        self.outbox
+            .push_back(DriverEvent::Commands(translate::reduce_commands(
+                &self.init,
+            )));
+        self.outbox.push_back(DriverEvent::Ready(ReadyInfo {
+            native_session_id: self.native_id.clone(),
+            agent_name: Some("Claude Code".into()),
+            agent_version: self.init["claude_code_version"].as_str().map(str::to_owned),
+            capabilities: Capabilities {
+                interrupt: true,
+                resume: true,
+                set_model: true,
+                set_effort: true,
+                permissions: true,
+                usage: true,
+                limits: true,
+                slash_commands: true,
+                add_dirs: true,
+                autonomy_levels: vec![Autonomy::FullAuto, Autonomy::AutoEdit, Autonomy::Ask],
+                ..Default::default()
+            },
+            resumed: if self.setup.resume.is_some() {
+                ResumeOutcome::Resumed
+            } else {
+                ResumeOutcome::New
+            },
+            spawn_id: self.spawn_id.clone(),
+            replay: None,
+        }));
+        self.refresh_telemetry();
+    }
+    fn configure_effort(&mut self) {
+        if let Some(value) = self.setup.desired.get("effort").cloned() {
+            match self.effort_request(&value) {
+                Ok(request) => self.request(request, Purpose::InitialEffort),
+                Err(err) => self.failure = Some(err),
+            }
+        } else {
+            self.finish_start();
+        }
+    }
+    fn effort_request(&self, value: &ConfigValue) -> Result<Value, DriverError> {
+        let ConfigValue::Choice { value: effort } = value else {
+            return Err(error(
+                ErrorKind::ProtocolError,
+                "Effort must be a supported level.",
+            ));
+        };
+        if effort == translate::DEFAULT_EFFORT {
+            return Ok(json!({"subtype":"apply_flag_settings","settings":{"effortLevel":null}}));
+        }
+        let model = self.init["models"].as_array().and_then(|models| {
+            models.iter().find(|m| {
+                m["value"].as_str() == Some(&self.model)
+                    || m["resolvedModel"].as_str() == Some(&self.model)
+            })
+        });
+        if !model
+            .and_then(|m| m["supportedEffortLevels"].as_array())
+            .is_some_and(|levels| levels.iter().any(|l| l.as_str() == Some(effort)))
+        {
+            return Err(error(
+                ErrorKind::ProtocolError,
+                "This model does not offer that effort level.",
+            ));
+        }
+        Ok(json!({"subtype":"apply_flag_settings","settings":{"effortLevel":effort}}))
+    }
+    fn configuring(&self) -> bool {
+        self.pending
+            .values()
+            .any(|p| matches!(p.purpose, Purpose::Option { .. } | Purpose::Autonomy { .. }))
+    }
+    fn command(&mut self, command: DriverCommand) {
+        log_command(&self.log, &command);
+        self.dispatch(Instant::now(), command);
+    }
+    fn dispatch(&mut self, arrived: Instant, command: DriverCommand) {
+        match command {
+            DriverCommand::Prompt { turn, parts } => {
+                if !self.ready || self.turn.is_some() || !self.idle {
+                    self.outbox.push_back(DriverEvent::TurnEnded {
+                        turn_id: turn.turn_id,
+                        stop_reason: StopReason::Error,
+                        usage: None,
+                        error: Some(error(
+                            ErrorKind::Internal,
+                            "Claude is not ready for another prompt.",
+                        )),
+                    });
+                    return;
+                }
+                if self.configuring() {
+                    self.held
+                        .push_back((arrived, DriverCommand::Prompt { turn, parts }));
+                    return;
+                }
+                let mut text = String::new();
+                for part in parts {
+                    match part {
+                        PromptPart::Text { text: part } => text.push_str(&part),
+                        PromptPart::Mention { path } => {
+                            text.push('@');
+                            text.push_str(&path);
+                        }
+                        PromptPart::Image { .. } => {
+                            self.outbox.push_back(DriverEvent::TurnEnded {
+                                turn_id: turn.turn_id,
+                                stop_reason: StopReason::Error,
+                                usage: None,
+                                error: Some(error(
+                                    ErrorKind::Internal,
+                                    "Image attachment loading is not available yet.",
+                                )),
+                            });
+                            return;
+                        }
+                    }
+                }
+                self.translator.begin_turn();
+                self.idle = false;
+                self.turn = Some(turn.turn_id.clone());
+                self.outbox.push_back(DriverEvent::RunState { idle: false });
+                self.send(json!({"type":"user","message":{"role":"user","content":text},"parent_tool_use_id":null,"session_id":self.native_id,"uuid":turn.turn_id}));
+            }
+            DriverCommand::Interrupt => self.interrupt(),
+            DriverCommand::RespondPermission {
+                request_id,
+                outcome,
+            } => {
+                if let Some(approval) = self.approvals.remove(&request_id) {
+                    let mut response =
+                        json!({"behavior":"deny","message":"The user declined this request."});
+                    if let PermissionOutcome::Selected(choice) = outcome
+                        && approval.allowed.contains(&choice)
+                    {
+                        if choice == "allow" {
+                            response = json!({"behavior":"allow","updatedInput":approval.request["input"]});
+                        } else if let Some(index) = choice
+                            .strip_prefix("always:")
+                            .and_then(|n| n.parse::<usize>().ok())
+                            && let Some(suggestion) = approval.request["permission_suggestions"]
+                                .as_array()
+                                .and_then(|s| s.get(index))
+                        {
+                            response = json!({"behavior":"allow","updatedInput":approval.request["input"],"updatedPermissions":[suggestion]});
+                        }
+                    }
+                    self.response(&request_id, response);
+                }
+            }
+            DriverCommand::RespondUi { request_id, answer } => {
+                if let Some(pending) = self.questions.remove(&request_id) {
+                    let mut input = pending.input;
+                    let result = question_answers(&pending.questions, answer);
+                    if let Some(answers) = result {
+                        input["answers"] = answers;
+                        self.response(
+                            &request_id,
+                            json!({"behavior":"allow","updatedInput":input}),
+                        );
+                    } else {
+                        self.response(&request_id,json!({"behavior":"deny","message":"The questions were dismissed or the answers were invalid."}));
+                    }
+                }
+            }
+            DriverCommand::SetOption {
+                option_id,
+                value,
+                reply,
+            } => {
+                if reply.is_closed() {
+                    return;
+                }
+                let deadline = arrived + self.setup.timings.request;
+                if Instant::now() >= deadline {
+                    let _ = reply.send(Err(config_timeout()));
+                    return;
+                }
+                if self.configuring() || !self.ready {
+                    self.held.push_back((
+                        arrived,
+                        DriverCommand::SetOption {
+                            option_id,
+                            value,
+                            reply,
+                        },
+                    ));
+                    return;
+                }
+                let request = match (&*option_id, &value) {
+                    ("model", ConfigValue::Choice { value: model }) => {
+                        Ok(json!({"subtype":"set_model","model":model}))
+                    }
+                    ("effort", _) => self.effort_request(&value),
+                    _ => Err(error(
+                        ErrorKind::ProtocolError,
+                        "This setting is not supported by Claude.",
+                    )),
+                };
+                match request {
+                    Ok(request) => self.request_until(
+                        request,
+                        Purpose::Option {
+                            id: option_id,
+                            value,
+                            reply,
+                        },
+                        deadline,
+                    ),
+                    Err(err) => {
+                        let _ = reply.send(Err(err));
+                    }
+                }
+            }
+            DriverCommand::SetAutonomy {
+                autonomy: value,
+                reply,
+            } => {
+                if reply.is_closed() {
+                    return;
+                }
+                let deadline = arrived + self.setup.timings.request;
+                if Instant::now() >= deadline {
+                    let _ = reply.send(Err(config_timeout()));
+                    return;
+                }
+                if self.configuring() || !self.ready {
+                    self.held.push_back((
+                        arrived,
+                        DriverCommand::SetAutonomy {
+                            autonomy: value,
+                            reply,
+                        },
+                    ));
+                    return;
+                }
+                self.request_until(
+                    json!({"subtype":"set_permission_mode","mode":mode(value)}),
+                    Purpose::Autonomy { value, reply },
+                    deadline,
+                );
+            }
+            DriverCommand::Shutdown { .. } => {}
+        }
+    }
+    fn interrupt(&mut self) {
+        let mut retained = VecDeque::new();
+        while let Some((arrived, command)) = self.held.pop_front() {
+            if let DriverCommand::Prompt { turn, .. } = command {
+                self.outbox.push_back(DriverEvent::TurnEnded {
+                    turn_id: turn.turn_id,
+                    stop_reason: StopReason::Cancelled,
+                    usage: None,
+                    error: None,
+                });
+                self.outbox
+                    .push_back(DriverEvent::RunState { idle: self.idle });
+            } else {
+                retained.push_back((arrived, command));
+            }
+        }
+        self.held = retained;
+        if !self
+            .pending
+            .values()
+            .any(|p| matches!(p.purpose, Purpose::Interrupt))
+        {
+            self.request(json!({"subtype":"interrupt"}), Purpose::Interrupt);
+        }
+    }
+    fn withdraw(&mut self, id: &str) {
+        if self.approvals.remove(id).is_some() {
+            self.outbox.push_back(DriverEvent::PermissionWithdrawn {
+                request_id: id.into(),
+            });
+        }
+        if self.questions.remove(id).is_some() {
+            self.outbox.push_back(DriverEvent::UiWithdrawn {
+                request_id: id.into(),
+            });
+        }
+    }
+    fn withdraw_turn(&mut self) {
+        let ids: Vec<_> = self
+            .approvals
+            .iter()
+            .filter(|(_, p)| p.turn == self.turn)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in ids {
+            self.response(
+                &id,
+                json!({"behavior":"deny","message":"The turn has ended."}),
+            );
+            self.withdraw(&id);
+        }
+        let ids: Vec<_> = self
+            .questions
+            .iter()
+            .filter(|(_, p)| p.turn == self.turn)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in ids {
+            self.response(
+                &id,
+                json!({"behavior":"deny","message":"The turn has ended."}),
+            );
+            self.withdraw(&id);
+        }
+    }
+    fn withdraw_all(&mut self) {
+        let ids = self
+            .approvals
+            .keys()
+            .chain(self.questions.keys())
+            .cloned()
+            .collect::<Vec<_>>();
+        for id in ids {
+            self.response(
+                &id,
+                json!({"behavior":"deny","message":"The session is closing."}),
+            );
+            self.withdraw(&id);
+        }
+    }
+    fn incoming(&mut self, incoming: wire::Incoming) {
+        match incoming {
+            wire::Incoming::Cancel { id } => self.withdraw(&id),
+            wire::Incoming::Invalid(_) => {
+                self.notice("Claude sent a malformed control frame; it was ignored.")
+            }
+            wire::Incoming::Request { id, request } => self.approval(id, request),
+            wire::Incoming::Response { id, response } => self.control_reply(id, response),
+            wire::Incoming::Event(frame) => self.event(frame),
+        }
+    }
+    fn approval(&mut self, id: String, request: Value) {
+        if request["subtype"] == "request_user_dialog" {
+            // No dialog kinds were advertised by our initialize request. The native dialog
+            // payload is opaque, so do not claim to have answered an unsupported dialog.
+            self.notice("Claude requested an unsupported native dialog.");
+            return;
+        }
+        if self.stopping || self.failure.is_some() {
+            if !self.sink.is_closed() {
+                self.response(
+                    &id,
+                    json!({"behavior":"deny","message":"The session is closing."}),
+                );
+            }
+            return;
+        }
+        if self.approvals.contains_key(&id) || self.questions.contains_key(&id) {
+            return;
+        }
+        if request["subtype"] != "can_use_tool" {
+            self.send(json!({"type":"control_response","response":{"subtype":"error","request_id":id,"error":"This control request is not supported by auracode."}}));
+            return;
+        }
+        if request["tool_name"] == "AskUserQuestion" {
+            if let Some(questions) = parse_questions(&request["input"]) {
+                self.outbox.push_back(DriverEvent::UiRequest {
+                    turn: self.turn.clone(),
+                    request: UiRequest {
+                        request_id: id.clone(),
+                        prompt: UiPrompt::Questions {
+                            message: "Claude needs your input".into(),
+                            questions: questions.clone(),
+                        },
+                    },
+                });
+                self.questions.insert(
+                    id,
+                    Questions {
+                        input: request["input"].clone(),
+                        questions,
+                        turn: self.turn.clone(),
+                    },
+                );
+            } else {
+                self.response(&id,json!({"behavior":"deny","message":"Claude sent an unsupported question structure."}));
+            }
+            return;
+        }
+        let title = request["title"]
+            .as_str()
+            .or(request["description"].as_str())
+            .or(request["display_name"].as_str())
+            .unwrap_or("Claude asks for permission")
+            .to_owned();
+        let mut options = vec![
+            PermissionOption {
+                option_id: "allow".into(),
+                kind: PermissionOptionKind::AllowOnce,
+                label: "Allow once".into(),
+            },
+            PermissionOption {
+                option_id: "deny".into(),
+                kind: PermissionOptionKind::RejectOnce,
+                label: "Deny".into(),
+            },
+        ];
+        if request["suppress_always_allow_rule"] != true
+            && let Some(suggestions) = request["permission_suggestions"].as_array()
+        {
+            for (i, suggestion) in suggestions.iter().enumerate() {
+                if suggestion["type"] == "addRules" && suggestion["behavior"] == "allow" {
+                    options.push(PermissionOption {
+                        option_id: format!("always:{i}"),
+                        kind: PermissionOptionKind::AllowAlways,
+                        label: "Always allow this rule".into(),
+                    });
+                }
+            }
+        }
+        let native_tool = request["tool_use_id"].as_str().unwrap_or("");
+        let allowed = options.iter().map(|o| o.option_id.clone()).collect();
+        let card = PermissionRequest {
+            request_id: id.clone(),
+            tool_call_id: self.translator.tool_call_id(native_tool).map(str::to_owned),
+            title,
+            kind: None,
+            raw_input: request.get("input").cloned(),
+            content: vec![],
+            locations: vec![],
+            options,
+            truncated: None,
+        };
+        self.approvals.insert(
+            id,
+            Approval {
+                request,
+                turn: self.turn.clone(),
+                allowed,
+            },
+        );
+        self.outbox.push_back(DriverEvent::Permission {
+            turn: self.turn.clone(),
+            request: card,
+        });
+    }
+    fn control_reply(&mut self, id: String, response: Value) {
+        let Some(pending) = self.pending.remove(&id) else {
+            return;
+        };
+        if !self.ready && (self.failure.is_some() || self.stopping) {
+            return;
+        }
+        let failure = (response["subtype"] == "error").then(|| {
+            error(
+                ErrorKind::AgentError,
+                response["error"]
+                    .as_str()
+                    .unwrap_or("Claude rejected a control request."),
+            )
+        });
+        let payload = &response["response"];
+        match pending.purpose {
+            Purpose::Initialize => {
+                if let Some(err) = failure {
+                    self.failure = Some(err);
+                    return;
+                }
+                if !payload.is_object()
+                    || !matches!(
+                        payload["session_state"].as_str(),
+                        Some("idle" | "running" | "requires_action")
+                    )
+                {
+                    self.failure = Some(error(
+                        ErrorKind::ProtocolMismatch,
+                        "Claude returned an initialize response without a valid session state.",
+                    ));
+                    return;
+                }
+                self.init = payload.clone();
+                self.mode = payload["current_permission_mode"]
+                    .as_str()
+                    .unwrap_or("default")
+                    .into();
+                self.idle = payload["session_state"] == "idle";
+                self.model = self
+                    .setup
+                    .desired
+                    .get("model")
+                    .and_then(|v| {
+                        if let ConfigValue::Choice { value: m } = v {
+                            Some(m.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .or_else(|| payload["model"].as_str().map(str::to_owned))
+                    .unwrap_or_else(|| "default".into());
+                for key in [
+                    "pending_permission_requests",
+                    "pending_user_dialog_requests",
+                ] {
+                    if let Some(requests) = response[key].as_array() {
+                        for item in requests {
+                            if let (Some(id), Some(request)) =
+                                (item["request_id"].as_str(), item.get("request"))
+                            {
+                                self.approval(id.into(), request.clone());
+                            }
+                        }
+                    }
+                }
+                if self.mode != mode(self.setup.autonomy) {
+                    self.request(
+                        json!({"subtype":"set_permission_mode","mode":mode(self.setup.autonomy)}),
+                        Purpose::InitialMode,
+                    );
+                } else {
+                    self.configure_effort();
+                }
+            }
+            Purpose::InitialMode => {
+                if let Some(err) = failure {
+                    if self.setup.autonomy == Autonomy::FullAuto && self.mode == "acceptEdits" {
+                        self.notice(format!(
+                            "Claude refused Full auto. Auto-edit remains active: {}",
+                            err.message
+                        ));
+                    } else {
+                        self.failure = Some(err);
+                        return;
+                    }
+                } else {
+                    self.mode = payload["mode"]
+                        .as_str()
+                        .unwrap_or(mode(self.setup.autonomy))
+                        .into();
+                }
+                self.configure_effort();
+            }
+            Purpose::InitialEffort => {
+                if let Some(err) = failure {
+                    self.failure = Some(err);
+                } else {
+                    self.effort = self.setup.desired.get("effort").and_then(|v| {
+                        if let ConfigValue::Choice { value: s } = v {
+                            explicit_effort(s)
+                        } else {
+                            None
+                        }
+                    });
+                    self.finish_start();
+                }
+            }
+            Purpose::Option { id, value, reply } => {
+                if let Some(err) = failure {
+                    let _ = reply.send(Err(err));
+                } else {
+                    if let ConfigValue::Choice { value } = value {
+                        if id == "model" {
+                            self.model = payload["model"].as_str().unwrap_or(&value).into();
+                            self.effort = None;
+                        } else {
+                            self.effort = explicit_effort(&value);
+                        }
+                    }
+                    self.options();
+                    let _ = reply.send(Ok(()));
+                }
+            }
+            Purpose::Autonomy { value, reply } => {
+                if let Some(err) = failure {
+                    let _ = reply.send(Err(err));
+                } else {
+                    self.mode = payload["mode"].as_str().unwrap_or(mode(value)).into();
+                    self.setup.autonomy = value;
+                    let state = autonomy(value, &self.mode);
+                    self.outbox.push_back(DriverEvent::Autonomy(state.clone()));
+                    let _ = reply.send(Ok(state));
+                }
+            }
+            Purpose::Interrupt => {
+                if let Some(err) = failure {
+                    self.notice(err.message);
+                }
+            }
+            Purpose::Telemetry(kind) => self.telemetry_reply(kind, payload, failure.is_some()),
+        }
+    }
+    fn event(&mut self, frame: Value) {
+        if frame["type"] == "system"
+            && frame["subtype"] == "session_state_changed"
+            && let Some(state) = frame["state"].as_str()
+        {
+            self.idle = state == "idle";
+            self.outbox
+                .push_back(DriverEvent::RunState { idle: self.idle });
+        }
+        if frame["type"] == "system" && frame["subtype"] == "commands_changed" {
+            self.command_list = Some(translate::reduce_commands(&frame));
+            if self.commands_due.is_none() {
+                self.commands_due = Some(Instant::now() + self.setup.timings.commands_debounce);
+            }
+        }
+        if !self.ready {
+            return;
+        }
+        if frame["type"] == "result"
+            && let Some(id) = frame["user_message_uuid"].as_str()
+            && self.turn.as_deref() != Some(id)
+        {
+            return;
+        }
+        for event in self.translator.ingest(&frame) {
+            match event {
+                AuraEvent::UsageUpdated(usage) => self.emit_usage(usage, self.turn.clone()),
+                event => self.outbox.push_back(DriverEvent::Event {
+                    turn: self.turn.clone(),
+                    event,
+                }),
+            }
+        }
+        if frame["type"] == "result" && self.turn.is_some() {
+            let needs_auth = auth_required(&frame);
+            let reason = result_reason(&frame);
+            let failed = reason == StopReason::Error;
+            self.withdraw_turn();
+            if let Some(turn_id) = self.turn.take() {
+                self.outbox.push_back(DriverEvent::TurnEnded {
+                    turn_id,
+                    stop_reason: reason,
+                    usage: translate::token_usage(&frame),
+                    error: failed.then(|| {
+                        if needs_auth {
+                            return auth_error();
+                        }
+                        error(
+                            ErrorKind::AgentError,
+                            frame["errors"]
+                                .as_array()
+                                .map(|a| {
+                                    a.iter()
+                                        .filter_map(Value::as_str)
+                                        .collect::<Vec<_>>()
+                                        .join("\n")
+                                })
+                                .filter(|s| !s.is_empty())
+                                .unwrap_or_else(|| "Claude could not complete this turn.".into()),
+                        )
+                    }),
+                });
+            }
+            if needs_auth {
+                // The session actor sees AuthRequired on TurnEnded, holds the failed prompt and
+                // requests an orderly shutdown. Keep the login command in a separate UI event.
+                self.outbox.push_back(DriverEvent::AuthRequired(auth_prompt(
+                    &self.setup.launch.program,
+                )));
+            } else {
+                self.refresh_telemetry();
+            }
+        }
+    }
+    fn expire(&mut self) {
+        let now = Instant::now();
+        if !self.ready && !self.stopping && self.failure.is_none() && now >= self.init_deadline {
+            self.failure = Some(error(
+                ErrorKind::StartTimeout,
+                "Claude did not initialize before the startup deadline.",
+            ));
+        }
+        let expired: Vec<_> = self
+            .pending
+            .iter()
+            .filter(|(_, p)| now >= p.deadline && !matches!(p.purpose, Purpose::Initialize))
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in expired {
+            if self.pending.get(&id).is_some_and(|pending| {
+                matches!(
+                    pending.purpose,
+                    Purpose::Option { .. } | Purpose::Autonomy { .. }
+                )
+            }) {
+                if let Some(pending) = self.pending.remove(&id) {
+                    match pending.purpose {
+                        Purpose::Option { reply, .. } => {
+                            let _ = reply.send(Err(config_timeout()));
+                        }
+                        Purpose::Autonomy { reply, .. } => {
+                            let _ = reply.send(Err(config_timeout()));
+                        }
+                        _ => {}
+                    }
+                }
+                let message = "Claude did not confirm a settings change. Restart the session before sending another prompt.";
+                self.notice(message);
+                self.failure = Some(error(ErrorKind::ProtocolError, message));
+                continue;
+            }
+            self.control_reply(id,json!({"subtype":"error","error":"Claude did not answer this control request in time."}));
+        }
+        let mut retained = VecDeque::new();
+        while let Some((arrived, command)) = self.held.pop_front() {
+            let expired = now >= arrived + self.setup.timings.request;
+            match command {
+                DriverCommand::SetOption { reply, .. } if expired || reply.is_closed() => {
+                    let _ = reply.send(Err(config_timeout()));
+                }
+                DriverCommand::SetAutonomy { reply, .. } if expired || reply.is_closed() => {
+                    let _ = reply.send(Err(config_timeout()));
+                }
+                command => retained.push_back((arrived, command)),
+            }
+        }
+        self.held = retained;
+        if self.commands_due.is_some_and(|due| now >= due) {
+            self.commands_due = None;
+            if let Some(commands) = self.command_list.take() {
+                self.outbox.push_back(DriverEvent::Commands(commands));
+            }
+        }
+    }
+}
+
+fn parse_questions(input: &Value) -> Option<Vec<UiQuestion>> {
+    let items = input["questions"].as_array()?;
+    if items.is_empty() || items.len() > 4 {
+        return None;
+    }
+    let mut questions = Vec::new();
+    for (index, item) in items.iter().enumerate() {
+        let question = item["question"].as_str()?.to_owned();
+        if question.is_empty()
+            || questions
+                .iter()
+                .any(|q: &UiQuestion| q.question == question)
+        {
+            return None;
+        }
+        let choices = item["options"].as_array()?;
+        if !(2..=4).contains(&choices.len()) {
+            return None;
+        }
+        let options = choices
+            .iter()
+            .map(|choice| {
+                Some(UiQuestionOption {
+                    label: choice["label"].as_str()?.into(),
+                    description: choice["description"].as_str().unwrap_or("").into(),
+                })
+            })
+            .collect::<Option<Vec<_>>>()?;
+        questions.push(UiQuestion {
+            id: format!("q{index}"),
+            header: item["header"].as_str().unwrap_or("").into(),
+            question,
+            options,
+            multi_select: item["multiSelect"].as_bool().unwrap_or(false),
+            allow_free_text: true,
+        });
+    }
+    Some(questions)
+}
+
+fn question_answers(questions: &[UiQuestion], answer: Option<UiAnswer>) -> Option<Value> {
+    let UiAnswer::Questions { answers } = answer? else {
+        return None;
+    };
+    if answers.len() != questions.len() {
+        return None;
+    }
+    let mut result = serde_json::Map::new();
+    for question in questions {
+        let mut matching = answers.iter().filter(|a| a.question_id == question.id);
+        let answer = matching.next()?;
+        if matching.next().is_some() {
+            return None;
+        }
+        let text = answer
+            .text
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        if !question.multi_select
+            && (answer.selected.len() > 1 || (!answer.selected.is_empty() && text.is_some()))
+        {
+            return None;
+        }
+        let mut labels = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for index in &answer.selected {
+            if !seen.insert(index) {
+                return None;
+            }
+            labels.push(question.options.get(*index as usize)?.label.clone());
+        }
+        if let Some(text) = text {
+            labels.push(text.into());
+        }
+        if labels.is_empty() {
+            return None;
+        }
+        result.insert(question.question.clone(), json!(labels.join(", ")));
+    }
+    Some(Value::Object(result))
+}
+
+pub(super) async fn run(ctx: DriverContext) -> DriverExit {
+    let DriverContext {
+        mut commands,
+        events,
+        spawner,
+        setup,
+    } = ctx;
+    let native_id = setup.resume.clone().unwrap_or_else(|| {
+        uuid::Uuid::parse_str(&setup.chat_id)
+            .map(|id| id.to_string())
+            .unwrap_or_else(|_| uuid::Uuid::now_v7().to_string())
+    });
+    let spec = SpawnSpec {
+        launch: launch(&setup, &native_id),
+        folder: setup.folder.clone(),
+        env: Arc::clone(&setup.env),
+        max_line_bytes: MAX_LINE_BYTES,
+    };
+    let mut spawning = spawner.spawn(spec);
+    let mut early = VecDeque::from([DriverEvent::Status(DriverStatus::Spawning)]);
+    let mut held = VecDeque::new();
+    let process = loop {
+        let bytes = early.front().map_or(0, DriverEvent::approx_bytes);
+        tokio::select! {
+            command=commands.recv()=>match command {None|Some(DriverCommand::Shutdown {..})=>return DriverExit::Closed,Some(command)=>held.push_back((Instant::now(),command))},
+            permit=events.reserve(bytes),if !early.is_empty()=>{let Ok(permit)=permit else {return DriverExit::Closed;};if let Some(event)=early.pop_front() {permit.send(event);}},
+            result=&mut spawning=>match result {Ok(process)=>break process,Err(err)=>return DriverExit::StartFailed(crate::acp::spawn_failure(&err))},
+        }
+    };
+    let mut start = setup.start_note(&process.spawn_id);
+    start["native_session_id"] = json!(native_id);
+    process.log.note(LogNote::Start(start));
+    for (_, command) in &held {
+        log_command(&process.log, command);
+    }
+    let mut s = Session {
+        sink: process.io.stdin,
+        log: process.log,
+        setup,
+        native_id,
+        spawn_id: process.spawn_id.clone(),
+        next_id: 0,
+        pending: BTreeMap::new(),
+        approvals: BTreeMap::new(),
+        translator: translate::Translator::with_prefix(&process.spawn_id),
+        outbox: early,
+        held,
+        init: Value::Null,
+        ready: false,
+        idle: false,
+        turn: None,
+        model: "default".into(),
+        effort: None,
+        mode: "default".into(),
+        init_deadline: Instant::now(),
+        commands_due: None,
+        command_list: None,
+        failure: None,
+        stopping: false,
+        questions: BTreeMap::new(),
+        usage: UsageInfo::default(),
+        telemetry_dirty: [false; 2],
+    };
+    s.init_deadline = Instant::now()
+        + s.setup
+            .timings
+            .open_ceiling
+            .min(s.setup.launch.startup_timeout);
+    s.outbox
+        .push_back(DriverEvent::Status(DriverStatus::Initializing));
+    s.request(
+        json!({"subtype":"initialize","hooks":null}),
+        Purpose::Initialize,
+    );
+    let control = process.control;
+    let mut stdout = process.io.stdout;
+    let mut exit = control.exited();
+    let mut exited = None;
+    let mut process_done = false;
+    let mut eof = false;
+    let mut requested_close = false;
+    let mut closing: Option<(Instant, ShutdownPlan)> = None;
+    let mut shutdown: Option<BoxFuture<'static, aura_process::ShutdownReport>> = None;
+    let mut drain_used = Duration::ZERO;
+    let mut drain_since: Option<Instant> = None;
+    loop {
+        if s.failure.is_some() && closing.is_none() && shutdown.is_none() && !process_done {
+            closing = Some((Instant::now(), ShutdownPlan::STANDARD));
+        }
+        if let Some((due, plan)) = closing
+            && (Instant::now() >= due || s.idle)
+        {
+            s.stopping = true;
+            closing = None;
+            s.withdraw_all();
+            s.pending.clear();
+            s.held.clear();
+            s.sink.close();
+            shutdown = Some(control.shutdown(plan));
+        }
+        if eof && process_done && s.outbox.is_empty() {
+            break;
+        }
+        if s.ready
+            && !s.configuring()
+            && !requested_close
+            && !s.stopping
+            && !process_done
+            && s.failure.is_none()
+            && let Some((arrived, command)) = s.held.pop_front()
+        {
+            s.dispatch(arrived, command);
+        }
+        let bytes = s.outbox.front().map_or(0, DriverEvent::approx_bytes);
+        let full = s.outbox.len() >= 64
+            || s.outbox
+                .iter()
+                .map(DriverEvent::approx_bytes)
+                .sum::<usize>()
+                >= 8 * 1024 * 1024;
+        match (process_done && !eof && !full, drain_since) {
+            (true, None) => drain_since = Some(Instant::now()),
+            (false, Some(since)) => {
+                drain_used += since.elapsed();
+                drain_since = None;
+            }
+            _ => {}
+        }
+        let drain_deadline =
+            drain_since.map(|since| since + PIPE_EOF_GRACE.saturating_sub(drain_used));
+        let deadline = s
+            .pending
+            .values()
+            .filter(|p| !matches!(p.purpose, Purpose::Initialize))
+            .map(|p| p.deadline)
+            .chain(
+                s.held
+                    .iter()
+                    .filter(|(_, command)| is_config(command))
+                    .map(|(arrived, _)| *arrived + s.setup.timings.request),
+            )
+            .chain((!s.ready && s.failure.is_none() && !requested_close).then_some(s.init_deadline))
+            .chain(s.commands_due)
+            .chain(closing.map(|c| c.0))
+            .chain(drain_deadline.filter(|_| !full && !eof))
+            .min()
+            .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400));
+        tokio::select! {
+            command=commands.recv(),if !requested_close&&s.failure.is_none()&&!s.stopping&&!process_done=>{match command {
+                None|Some(DriverCommand::Shutdown {..})=>{let plan=match command {Some(DriverCommand::Shutdown {plan})=>plan,_=>crate::driver::StopPlan {cancel_grace:Duration::ZERO,process:ShutdownPlan::STANDARD}};
+                    s.log.command(json!({"type":"shutdown"}));requested_close=true;s.stopping=true;s.outbox.push_back(DriverEvent::Status(DriverStatus::Closing));if !s.idle {s.interrupt();}closing=Some((Instant::now()+plan.cancel_grace,plan.process));},
+                Some(command)=>s.command(command),
+            }},
+            permit=events.reserve(bytes),if !s.outbox.is_empty()=>{let Ok(permit)=permit else {control.kill_tree();return DriverExit::Closed;};if let Some(event)=s.outbox.pop_front() {permit.send(event);}},
+            item=stdout.next(),if !eof&&!full=>match item {Some(StdoutItem::Line(line))=>s.incoming(wire::parse_line(&line)),Some(StdoutItem::Oversized {..})=>s.notice("Claude sent an update larger than 64 MiB; it was skipped."),None=>{eof=true;if !process_done && shutdown.is_none() {closing=Some((Instant::now()+Duration::from_secs(2),ShutdownPlan::FORCE));}}},
+            info=&mut exit,if !process_done=>{exited=Some(info);process_done=true;},
+            report=async {if let Some(task)=&mut shutdown {Some(task.await)} else {None}},if shutdown.is_some()=>{shutdown=None;process_done=true;if let Some(report)=report {exited=exited.or(report.exit);}},
+            _=tokio::time::sleep_until(deadline)=>{s.expire();if drain_deadline.is_some_and(|due|Instant::now()>=due)&&!full {eof=true;}},
+        }
+    }
+    if requested_close {
+        DriverExit::Closed
+    } else if !s.ready {
+        let mut failure = s.failure.unwrap_or_else(|| {
+            error(
+                ErrorKind::AgentExited,
+                "Claude exited before opening the session.",
+            )
+        });
+        let tail = control.stderr_tail(STDERR_TAIL_BYTES);
+        if failure.detail.is_none() && !tail.trim().is_empty() {
+            failure.detail = Some(tail);
+        }
+        DriverExit::StartFailed(failure)
+    } else {
+        DriverExit::Crashed {
+            exit: exited,
+            stderr_tail: control.stderr_tail(STDERR_TAIL_BYTES),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn resetting_effort_sends_null_and_reports_default_after_an_explicit_choice() {
+        let mut harness = super::super::tests::Harness::start().await;
+        let initialize = harness.wire().await;
+        let source =
+            include_str!("../../../../docs/spikes/claude-control/fixtures/turn-basic.jsonl");
+        let payload = source
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .find(|frame| frame["response"]["response"]["models"].is_array())
+            .expect("real initialize")["response"]["response"]
+            .clone();
+        harness.send(json!({"type":"control_response","response":{"subtype":"success","request_id":initialize["request_id"],"response":payload}})).await;
+        loop {
+            if matches!(harness.event().await, DriverEvent::Ready(_)) {
+                break;
+            }
+        }
+        for value in ["medium", translate::DEFAULT_EFFORT] {
+            let (reply, receive) = oneshot::channel();
+            harness
+                .tx
+                .send(DriverCommand::SetOption {
+                    option_id: "effort".into(),
+                    value: ConfigValue::Choice {
+                        value: value.into(),
+                    },
+                    reply,
+                })
+                .expect("set effort");
+            let request = harness.wire().await;
+            assert_eq!(request["request"]["subtype"], "apply_flag_settings");
+            assert_eq!(
+                request["request"]["settings"]["effortLevel"],
+                explicit_effort(value).map_or(Value::Null, Value::String)
+            );
+            harness.send(json!({"type":"control_response","response":{"subtype":"success","request_id":request["request_id"],"response":null}})).await;
+            assert!(receive.await.expect("effort reply").is_ok());
+            loop {
+                if let DriverEvent::Options(options) = harness.event().await {
+                    let effort = options
+                        .iter()
+                        .find(|option| option.id == "effort")
+                        .expect("effort option");
+                    let aura_protocol::session::ConfigKind::Select { current, choices } =
+                        &effort.kind
+                    else {
+                        panic!("effort select")
+                    };
+                    assert_eq!(current, value);
+                    assert!(choices.iter().any(|choice| choice.value == *current));
+                    break;
+                }
+            }
+        }
+        assert_eq!(
+            explicit_effort(translate::DEFAULT_EFFORT),
+            None,
+            "initial desired reset also stores no override"
+        );
+        harness.stop().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn telemetry_errors_do_not_block_prompts_or_expose_vendor_account_text() {
+        let mut harness = super::super::tests::Harness::start().await;
+        let initialize = harness.wire().await;
+        harness.send(json!({"type":"control_response","response":{
+            "subtype":"success","request_id":initialize["request_id"],"response":{
+                "current_permission_mode":"default","session_state":"idle","models":[],"commands":[]
+            }
+        }})).await;
+        let mut requests = Vec::new();
+        for _ in 0..2 {
+            let wire = tokio::time::timeout(Duration::from_secs(2), harness.end.from_client.recv())
+                .await
+                .expect("telemetry deadline")
+                .expect("telemetry request");
+            requests.push(serde_json::from_str::<Value>(&wire).expect("telemetry JSON"));
+        }
+        assert_eq!(requests[0]["request"], TelemetryKind::Context.request());
+        assert_eq!(requests[1]["request"], TelemetryKind::Usage.request());
+        for request in requests {
+            harness
+                .send(json!({"type":"control_response","response":{
+                    "subtype":"error","request_id":request["request_id"],
+                    "error":"private-account@example.test belongs to Private Organization"
+                }}))
+                .await;
+        }
+        harness.prompt();
+        assert_eq!(
+            harness.wire().await["type"],
+            "user",
+            "telemetry never holds a prompt"
+        );
+        let mut notices = 0;
+        while notices < 2 {
+            let event = harness.event().await;
+            let serialized = serde_json::to_string(&event).expect("serialize event");
+            assert!(!serialized.contains("private-account"));
+            assert!(!serialized.contains("Private Organization"));
+            if let DriverEvent::Event {
+                event: AuraEvent::Notice { message, .. },
+                ..
+            } = event
+            {
+                assert!(message.starts_with("Claude could not refresh"));
+                notices += 1;
+            }
+        }
+        harness.stop().await;
+    }
+
+    #[test]
+    fn telemetry_requests_are_free_summaries_without_account_or_transcript_queries() {
+        assert_eq!(
+            TelemetryKind::Context.request(),
+            json!({"subtype":"get_context_usage","detail":"summary"})
+        );
+        assert_eq!(
+            TelemetryKind::Usage.request(),
+            json!({"subtype":"get_usage","skip_behaviors":true})
+        );
+    }
+
+    #[test]
+    fn partial_and_empty_usage_updates_preserve_the_other_meter_fields() {
+        let mut usage = UsageInfo::default();
+        assert!(merge_usage(
+            &mut usage,
+            translate::result_usage(&json!({"total_cost_usd":0.03}))
+        ));
+        assert!(merge_usage(
+            &mut usage,
+            translate::context_usage(&json!({"totalTokens":250,"maxTokens":1000}))
+        ));
+        assert!(!merge_usage(&mut usage, UsageInfo::default()));
+        assert_eq!(usage.context_used, Some(250));
+        assert_eq!(usage.context_size, Some(1000));
+        assert_eq!(usage.cost.as_ref().map(|cost| cost.amount), Some(0.03));
+        assert!(merge_usage(
+            &mut usage,
+            translate::context_usage(&json!({"totalTokens":300}))
+        ));
+        assert!(merge_usage(
+            &mut usage,
+            translate::result_usage(&json!({"total_cost_usd":0.04}))
+        ));
+        assert_eq!(usage.context_used, Some(300));
+        assert_eq!(usage.context_size, Some(1000));
+        assert_eq!(usage.cost.as_ref().map(|cost| cost.amount), Some(0.04));
+    }
+
+    #[test]
+    fn recorded_get_usage_normalizes_percentages_offsets_and_scoped_windows() {
+        let source = include_str!("../../../../docs/spikes/claude-control/fixtures/controls.jsonl");
+        let payload = source
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .find(|frame| frame["response"]["request_id"] == "req_5_spike")
+            .expect("recorded get_usage response")["response"]["response"]
+            .clone();
+        let windows = usage_limits(&payload);
+        assert_eq!(windows.len(), 3);
+        assert_eq!(windows[0].label, "5 hours");
+        assert_eq!(windows[0].used_percent, 31.0);
+        assert_eq!(windows[0].resets_at, Some(1792834799749));
+        assert_eq!(windows[1].used_percent, 21.0);
+        assert_eq!(windows[2].label, "7 days (Fable)");
+        let serialized = serde_json::to_string(&windows).expect("serialize");
+        assert!(!serialized.contains("subscription"));
+        assert!(!serialized.contains("account"));
+    }
+
+    #[test]
+    fn legacy_get_usage_windows_do_not_scale_percentages_or_accept_invalid_resets() {
+        let windows = usage_limits(&json!({"rate_limits":{
+            "five_hour":{"utilization":25,"resets_at":"2026-10-24T09:39:59.749255Z"},
+            "seven_day":{"utilization":101,"resets_at":"invalid"},
+            "bad":{"utilization":"unknown"}
+        }}));
+        assert_eq!(windows.len(), 2);
+        assert_eq!(windows[0].used_percent, 25.0);
+        assert_eq!(windows[0].resets_at, Some(1792834799749));
+        assert_eq!(windows[1].used_percent, 100.0);
+        assert_eq!(windows[1].resets_at, None);
+        assert!(usage_limits(&json!({})).is_empty());
+    }
+
+    #[test]
+    fn only_confirmed_401_results_request_auth_with_the_users_native_binary() {
+        assert!(auth_required(
+            &json!({"type":"result","api_error_status":401})
+        ));
+        for frame in [
+            json!({"type":"result","api_error_status":403}),
+            json!({"type":"result","is_error":true}),
+            json!({"type":"user","api_error_status":401}),
+        ] {
+            assert!(!auth_required(&frame));
+        }
+        let prompt = auth_prompt(std::path::Path::new("C:/Apps/Claude Code/claude.exe"));
+        assert_eq!(
+            prompt.commands[0].argv,
+            ["C:/Apps/Claude Code/claude.exe", "auth", "login"]
+        );
+        assert!(prompt.commands[0].env.is_empty());
+    }
+
+    #[test]
+    fn result_reasons_keep_native_limits_refusals_and_failures_distinct() {
+        for (frame, expected) in [
+            (
+                json!({"terminal_reason":"aborted_tools","is_error":true}),
+                StopReason::Cancelled,
+            ),
+            (
+                json!({"terminal_reason":"aborted_streaming","is_error":true}),
+                StopReason::Cancelled,
+            ),
+            (
+                json!({"subtype":"error_max_turns","is_error":true}),
+                StopReason::MaxTurnRequests,
+            ),
+            (
+                json!({"terminal_reason":"max_turns","is_error":true}),
+                StopReason::MaxTurnRequests,
+            ),
+            (json!({"stop_reason":"max_tokens"}), StopReason::MaxTokens),
+            (json!({"stop_reason":"refusal"}), StopReason::Refusal),
+            (
+                json!({"subtype":"success","is_error":true,"api_error_status":401}),
+                StopReason::Error,
+            ),
+            (
+                json!({"terminal_reason":"budget_exhausted"}),
+                StopReason::Error,
+            ),
+            (
+                json!({"subtype":"error_during_execution"}),
+                StopReason::Error,
+            ),
+            (
+                json!({"subtype":"success","terminal_reason":null}),
+                StopReason::EndTurn,
+            ),
+            (
+                json!({"terminal_reason":"future_reason"}),
+                StopReason::Other,
+            ),
+        ] {
+            assert_eq!(result_reason(&frame), expected, "{frame}");
+        }
+    }
+}

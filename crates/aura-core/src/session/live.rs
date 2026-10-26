@@ -9,7 +9,97 @@
 //! refused.
 
 use std::collections::{HashMap, HashSet};
+use std::ffi::OsString;
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
+
+use aura_process::{EnvKey, LaunchSpec, ProcessCwd, ResolvedEnv};
+
+/// Native and ACP transports use the same provider's transcript store. The namespace also
+/// includes its host and configuration directory, because another realm can reuse the same id.
+/// All current launches are local; a future remote launcher must supply its host realm here.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct NativeSessionScope {
+    provider: String,
+    host: String,
+    config_dir: Option<PathBuf>,
+}
+
+impl NativeSessionScope {
+    pub(crate) fn local(
+        agent_id: &str,
+        device_id: &str,
+        env: &ResolvedEnv,
+        launch: &LaunchSpec,
+        folder: &Path,
+    ) -> Self {
+        let (provider, config) = match agent_id {
+            "claude" | "claude-acp" => ("claude", Some(("CLAUDE_CONFIG_DIR", ".claude"))),
+            "codex" | "codex-acp" => ("codex", Some(("CODEX_HOME", ".codex"))),
+            other => (other, None),
+        };
+        // Only configuration-path variables are consulted. Credential files and values are
+        // neither inspected nor added to the claim key.
+        let variable = |name: &str| -> Option<OsString> {
+            let key = EnvKey::from(name);
+            launch
+                .set_env
+                .iter()
+                .rev()
+                .find(|(name, _)| EnvKey::from(name.as_os_str()) == key)
+                .map(|(_, value)| value.clone())
+                .or_else(|| env.vars.get(&key).cloned())
+                .filter(|value| !value.is_empty())
+        };
+        let config_dir = config.and_then(|(override_name, default)| {
+            let home = if cfg!(windows) {
+                variable("USERPROFILE").or_else(|| variable("HOME"))
+            } else {
+                variable("HOME")
+            };
+            variable(override_name)
+                .map(PathBuf::from)
+                .or_else(|| home.map(|home| PathBuf::from(home).join(default)))
+                .map(|path| {
+                    // ACP's Node launcher runs in its installation directory, but the native
+                    // CLI it creates uses the session's chat folder.
+                    let cwd = if matches!(agent_id, "claude-acp" | "codex-acp") {
+                        folder
+                    } else {
+                        match &launch.cwd {
+                            ProcessCwd::ChatFolder => folder,
+                            ProcessCwd::Fixed(cwd) => cwd,
+                        }
+                    };
+                    normalize_path(if path.is_absolute() {
+                        path
+                    } else {
+                        cwd.join(path)
+                    })
+                })
+        });
+        Self {
+            provider: provider.into(),
+            host: device_id.into(),
+            config_dir,
+        }
+    }
+}
+
+/// Normalize lexical aliases without opening the provider's configuration or credential files.
+fn normalize_path(path: PathBuf) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    normalized
+}
 
 /// The live agents of every chat.
 #[derive(Debug)]
@@ -21,8 +111,8 @@ pub(crate) struct LiveAgents {
 #[derive(Debug, Default)]
 struct Inner {
     slots: HashSet<String>,
-    /// `(agent_id, native_session_id)` -> the chat holding it.
-    sessions: HashMap<(String, String), String>,
+    /// `(provider realm, native_session_id)` -> the chat holding it.
+    sessions: HashMap<(NativeSessionScope, String), String>,
 }
 
 impl LiveAgents {
@@ -60,9 +150,14 @@ impl LiveAgents {
     }
 
     /// Claims a native session for `chat`; false when another chat holds it.
-    pub(crate) fn claim(&self, agent_id: &str, native_session_id: &str, chat: &str) -> bool {
+    pub(crate) fn claim(
+        &self,
+        scope: &NativeSessionScope,
+        native_session_id: &str,
+        chat: &str,
+    ) -> bool {
         let mut inner = self.lock();
-        let key = (agent_id.to_owned(), native_session_id.to_owned());
+        let key = (scope.clone(), native_session_id.to_owned());
         match inner.sessions.get(&key) {
             Some(holder) if holder != chat => false,
             _ => {
@@ -83,7 +178,37 @@ impl LiveAgents {
 
 #[cfg(test)]
 mod tests {
+    use aura_process::{EnvMap, EnvSource};
+    use std::time::Duration;
+
     use super::*;
+
+    fn scope(agent: &str, host: &str, vars: &[(&str, &str)]) -> NativeSessionScope {
+        let env = ResolvedEnv {
+            vars: vars
+                .iter()
+                .map(|(name, value)| (EnvKey::from(*name), (*value).into()))
+                .collect::<EnvMap>(),
+            source: EnvSource::Fallback {
+                reason: "test".into(),
+            },
+            warnings: Vec::new(),
+            resolved_at_ms: 0,
+        };
+        NativeSessionScope::local(agent, host, &env, &launch(), Path::new("/work"))
+    }
+
+    fn launch() -> LaunchSpec {
+        LaunchSpec {
+            label: "test".into(),
+            program: "agent".into(),
+            args: Vec::new(),
+            cwd: ProcessCwd::ChatFolder,
+            set_env: Vec::new(),
+            daemons: Vec::new(),
+            startup_timeout: Duration::from_secs(60),
+        }
+    }
 
     #[test]
     fn slots_are_capped_and_idempotent() {
@@ -100,14 +225,108 @@ mod tests {
     #[test]
     fn a_native_session_belongs_to_one_chat() {
         let live = LiveAgents::new(12);
-        assert!(live.claim("claude-acp", "s1", "a"));
-        assert!(live.claim("claude-acp", "s1", "a"), "its own claim");
-        assert!(!live.claim("claude-acp", "s1", "b"));
+        let claude = scope("claude-acp", "local", &[]);
+        assert!(live.claim(&claude, "s1", "a"));
+        assert!(live.claim(&claude, "s1", "a"), "its own claim");
+        assert!(!live.claim(&claude, "s1", "b"));
         assert!(
-            live.claim("codex-acp", "s1", "b"),
+            live.claim(&scope("codex-acp", "local", &[]), "s1", "b"),
             "another agent's id space"
         );
         live.release("a");
-        assert!(live.claim("claude-acp", "s1", "b"));
+        assert!(live.claim(&claude, "s1", "b"));
+    }
+
+    #[test]
+    fn native_and_acp_aliases_share_claims_in_both_directions() {
+        for (native, acp) in [("claude", "claude-acp"), ("codex", "codex-acp")] {
+            for (first, second) in [(native, acp), (acp, native)] {
+                let live = LiveAgents::new(12);
+                assert!(live.claim(&scope(first, "local", &[]), "s1", "a"));
+                assert!(!live.claim(&scope(second, "local", &[]), "s1", "b"));
+                live.release("a");
+                assert!(live.claim(&scope(second, "local", &[]), "s1", "b"));
+            }
+        }
+    }
+
+    #[test]
+    fn host_and_configuration_realms_keep_separate_native_id_spaces() {
+        for (provider, variable) in [("claude", "CLAUDE_CONFIG_DIR"), ("codex", "CODEX_HOME")] {
+            let live = LiveAgents::new(12);
+            assert!(live.claim(
+                &scope(provider, "local", &[(variable, "/config/one")]),
+                "s1",
+                "a"
+            ));
+            assert!(live.claim(
+                &scope(provider, "remote", &[(variable, "/config/one")]),
+                "s1",
+                "b"
+            ));
+            assert!(live.claim(
+                &scope(provider, "local", &[(variable, "/config/two")]),
+                "s1",
+                "c"
+            ));
+            assert!(!live.claim(
+                &scope(provider, "local", &[(variable, "/config/./one")]),
+                "s1",
+                "d"
+            ));
+        }
+    }
+
+    #[test]
+    fn launch_overrides_and_default_home_resolve_the_configuration_realm() {
+        let env = ResolvedEnv {
+            vars: [
+                (EnvKey::from("HOME"), "/users/me".into()),
+                (EnvKey::from("USERPROFILE"), "/users/me".into()),
+            ]
+            .into(),
+            source: EnvSource::Fallback {
+                reason: "test".into(),
+            },
+            warnings: Vec::new(),
+            resolved_at_ms: 0,
+        };
+        let mut launch = launch();
+        let default =
+            NativeSessionScope::local("claude", "local", &env, &launch, Path::new("/work"));
+        launch
+            .set_env
+            .push(("CLAUDE_CONFIG_DIR".into(), "/users/me/.claude".into()));
+        assert_eq!(
+            default,
+            NativeSessionScope::local("claude-acp", "local", &env, &launch, Path::new("/work"))
+        );
+        launch
+            .set_env
+            .push(("CLAUDE_CONFIG_DIR".into(), "/separate".into()));
+        assert_ne!(
+            default,
+            NativeSessionScope::local("claude", "local", &env, &launch, Path::new("/work"))
+        );
+    }
+
+    #[test]
+    fn relative_configuration_roots_use_the_native_clis_folder_for_acp() {
+        let env = ResolvedEnv {
+            vars: [(EnvKey::from("CLAUDE_CONFIG_DIR"), "config".into())].into(),
+            source: EnvSource::Fallback {
+                reason: "test".into(),
+            },
+            warnings: Vec::new(),
+            resolved_at_ms: 0,
+        };
+        let mut launch = launch();
+        let native =
+            NativeSessionScope::local("claude", "local", &env, &launch, Path::new("/work"));
+        launch.cwd = ProcessCwd::Fixed("/adapter".into());
+        assert_eq!(
+            native,
+            NativeSessionScope::local("claude-acp", "local", &env, &launch, Path::new("/work"))
+        );
     }
 }

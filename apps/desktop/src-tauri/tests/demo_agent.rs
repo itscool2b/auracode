@@ -404,7 +404,7 @@ mod end_to_end {
         let ids: Vec<&str> = agents.iter().map(|agent| agent.id.as_str()).collect();
         assert_eq!(
             ids,
-            ["hermes", "claude-acp", "codex-acp", "mock"],
+            ["hermes", "claude", "claude-acp", "codex-acp", "mock"],
             "the catalog"
         );
         for agent in &agents {

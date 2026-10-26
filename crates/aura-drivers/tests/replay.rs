@@ -1,4 +1,4 @@
-//! Every fixture under `tests/fixtures/acp` replays to its golden, keeps the driver contract, and
+//! Every fixture under `tests/fixtures` replays to its golden, keeps the driver contract, and
 //! holds no personal data. `AURA_UPDATE_GOLDEN=1` rewrites the goldens.
 #![cfg(feature = "replay")]
 
@@ -15,7 +15,7 @@ mod replay {
     use serde_json::Value;
 
     fn fixture_root() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/acp")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
     }
 
     /// Every `.jsonl` fixture, sorted.
@@ -84,6 +84,7 @@ mod replay {
         for event in before_ready {
             let allowed = match event {
                 DriverEvent::Status(_)
+                | DriverEvent::RunState { .. }
                 | DriverEvent::Options(_)
                 | DriverEvent::Commands(_)
                 | DriverEvent::Title(_)
@@ -154,6 +155,79 @@ mod replay {
                 violations.push(format!("no TurnEnded for {turn_id}"));
             }
         }
+        if fixture
+            .start()
+            .is_some_and(|start| start["agent_id"] == "claude")
+        {
+            violations.extend(native_contract_violations(fixture, &events, report));
+        }
+        violations
+    }
+
+    fn native_contract_violations(
+        fixture: &Fixture,
+        events: &[DriverEvent],
+        report: &ReplayReport,
+    ) -> Vec<String> {
+        use aura_protocol::StopReason;
+        let mut violations = Vec::new();
+        if !events
+            .iter()
+            .take_while(|event| !matches!(event, DriverEvent::Ready(_)))
+            .any(|event| matches!(event, DriverEvent::RunState { .. }))
+        {
+            violations.push("native driver did not opt in to run state before Ready".into());
+        }
+        let ended = |turn: &str, reason| {
+            events.iter().any(|event| matches!(event, DriverEvent::TurnEnded { turn_id, stop_reason, .. } if turn_id == turn && *stop_reason == reason))
+        };
+        let stale_model = events.iter().any(|event| matches!(event,
+            DriverEvent::Options(options) if options.iter().any(|option| matches!(
+                &option.kind, aura_protocol::session::ConfigKind::Select { current, .. } if current == "late-model"
+            ))
+        ));
+        match fixture.name.as_str() {
+            "telemetry-merge" | "telemetry-coalesced" => {
+                if fixture.name == "telemetry-coalesced" && events.iter().any(|event| matches!(event, DriverEvent::Event { event: AuraEvent::UsageUpdated(usage), .. } if usage.context_used == Some(100))) {
+                    violations.push("stale pending context reply was emitted after the result requested a refresh".into());
+                }
+                let usage = events.iter().rev().find_map(|event| match event {
+                    DriverEvent::Event { event: AuraEvent::UsageUpdated(usage), .. } => Some(usage),
+                    _ => None,
+                });
+                if !usage.is_some_and(|usage| usage.context_used == Some(250) && usage.context_size == Some(1000) && usage.cost.as_ref().is_some_and(|cost| cost.amount == 0.03)) {
+                    violations.push("telemetry refresh lost result spend or context occupancy".into());
+                }
+                let limits = events.iter().rev().find_map(|event| match event {
+                    DriverEvent::Event { event: AuraEvent::LimitsUpdated { windows }, .. } => Some(windows),
+                    _ => None,
+                });
+                if !limits.is_some_and(|windows| windows.iter().any(|window| window.used_percent == 25.0 && window.resets_at == Some(1792834799749))) {
+                    violations.push("control telemetry quota percentages or reset times were translated incorrectly".into());
+                }
+                if !events.iter().any(|event| matches!(event, DriverEvent::TurnEnded { usage: Some(usage), .. } if usage.input_tokens == 3 && usage.output_tokens == 4 && usage.cache_read_tokens == Some(2))) {
+                    violations.push("control telemetry replaced the result's per-turn token counters".into());
+                }
+            }
+            "basic" if !events.iter().any(|event| matches!(event, DriverEvent::Event { event: AuraEvent::MessageDelta { text, .. }, .. } if text == "hello back")) => violations.push("native assistant content was not replayed".into()),
+            "result-before-idle" => {
+                if !ended("TOO-EARLY", StopReason::Error) || !ended("T2", StopReason::EndTurn) {
+                    violations.push("native result incorrectly made another prompt dispatchable before idle".into());
+                }
+            }
+            "permission-withdrawal" => {
+                let permission = events.iter().position(|event| matches!(event, DriverEvent::Permission { turn: None, request } if request.request_id == "permission-1"));
+                let withdrawal = events.iter().position(|event| matches!(event, DriverEvent::PermissionWithdrawn { request_id } if request_id == "permission-1"));
+                if !matches!((permission, withdrawal), (Some(request), Some(withdrawn)) if request < withdrawn) {
+                    violations.push("background permission did not remain untagged and withdraw".into());
+                }
+            }
+            "interrupt" if !ended("T1", StopReason::Cancelled) => violations.push("native interruption did not end as cancelled".into()),
+            "bad-late-controls" if report.replies.len() != 2 || report.replies.iter().any(|reply| reply.pointer("/reply/ok").is_none()) || stale_model => {
+                violations.push("late control reply affected the next setting request".into());
+            }
+            _ => {}
+        }
         violations
     }
 
@@ -206,6 +280,31 @@ mod replay {
 
     #[test]
     fn every_spec_scenario_has_a_fixture() {
+        let native_names: BTreeSet<String> = fixtures()
+            .iter()
+            .filter(|path| {
+                path.parent()
+                    .is_some_and(|parent| parent.ends_with("claude"))
+            })
+            .filter_map(|path| {
+                path.file_stem()
+                    .map(|stem| stem.to_string_lossy().into_owned())
+            })
+            .collect();
+        for scenario in [
+            "basic",
+            "result-before-idle",
+            "permission-withdrawal",
+            "interrupt",
+            "bad-late-controls",
+            "telemetry-merge",
+            "telemetry-coalesced",
+        ] {
+            assert!(
+                native_names.contains(scenario),
+                "no native Claude fixture for {scenario}"
+            );
+        }
         let names: BTreeSet<String> = fixtures()
             .iter()
             .filter_map(|path| {

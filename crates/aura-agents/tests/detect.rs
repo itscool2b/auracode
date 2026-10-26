@@ -120,6 +120,158 @@ async fn a_ready_binary_shows_its_version_and_launches_from_the_chat_folder() {
 }
 
 #[tokio::test]
+async fn native_claude_launches_the_user_binary_without_node_or_npm() {
+    let machine = Machine::with_tools(&["claude"]);
+    let detector = machine.detector(machine.env(&[]));
+    let claude = spec("claude");
+    assert_eq!(
+        detector.detect(&claude).await,
+        Availability::Ready {
+            version: Some("Claude Code 2.1.310".into()),
+            path: machine.tool("claude").display().to_string(),
+        }
+    );
+    let launch = detector
+        .prepare_launch(&claude, progress())
+        .await
+        .expect("launch");
+    assert_eq!(launch.program, machine.tool("claude"));
+    assert_eq!(launch.cwd, ProcessCwd::ChatFolder);
+    assert_eq!(
+        launch.args,
+        [
+            "-p",
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--include-partial-messages",
+            "--permission-prompt-tool",
+            "stdio",
+        ]
+    );
+    assert_eq!(launch.daemons, claude.daemons);
+    assert_eq!(launch.startup_timeout, Duration::from_secs(60));
+    assert!(
+        launch.set_env.is_empty(),
+        "session state and permission settings belong to the driver"
+    );
+    assert!(!machine.adapters.exists());
+    assert!(machine.runs("node").is_empty());
+    assert!(machine.runs("npm").is_empty());
+    let runs = machine.runs("claude");
+    assert_eq!(runs.len(), 1, "a version probe only");
+    assert_eq!(runs[0]["argv"], serde_json::json!(["--version"]));
+    assert_eq!(
+        std::fs::canonicalize(runs[0]["cwd"].as_str().expect("cwd")).expect("canonical"),
+        std::fs::canonicalize(&machine.home).expect("canonical")
+    );
+    assert!(
+        !detector
+            .cached()
+            .iter()
+            .find(|entry| entry.id == "claude")
+            .expect("entry")
+            .needs_download
+    );
+}
+
+#[tokio::test]
+async fn native_claude_requires_the_verified_baseline_and_preserves_acp_compatibility() {
+    for version in ["2.1.296", "2.1.309", "unknown"] {
+        let machine = Machine::new();
+        machine.version("claude", version);
+        let detector = machine.detector(machine.env(&[]));
+        let claude = spec("claude");
+        assert_eq!(
+            detector.detect(&claude).await,
+            Availability::Broken {
+                reason: format!(
+                    "auracode needs Claude Code 2.1.310 or newer (found {}).",
+                    if version == "unknown" {
+                        "an unknown version"
+                    } else {
+                        version
+                    }
+                ),
+            }
+        );
+        assert!(matches!(
+            detector.prepare_launch(&claude, progress()).await,
+            Err(LaunchError::Broken { .. })
+        ));
+        if version == "2.1.309" {
+            assert!(matches!(
+                detector.detect(&spec("claude-acp")).await,
+                Availability::Ready { .. }
+            ));
+        }
+    }
+}
+
+#[tokio::test]
+async fn native_claude_uses_the_explicit_executable_without_an_adapter() {
+    let machine = Machine::with_tools(&["claude"]);
+    let own = machine.install_tool(&machine.root.path().join("my Claude (native)"), "claude");
+    let detector =
+        machine.detector(machine.env(&[("CLAUDE_CODE_EXECUTABLE", own.to_str().expect("utf-8"))]));
+    let claude = spec("claude");
+    assert_eq!(ready_path(&detector.detect(&claude).await), own);
+    assert_eq!(
+        detector
+            .prepare_launch(&claude, progress())
+            .await
+            .expect("launch")
+            .program,
+        own
+    );
+    assert_eq!(machine.runs("claude").len(), 1);
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn native_claude_refuses_shell_shims_without_running_them() {
+    let machine = Machine::with_tools(&[]);
+    std::fs::write(machine.bin.join("claude.cmd"), b"@echo 2.1.310\r\n").expect("shim");
+    let detector = machine.detector(machine.env(&[]));
+    let claude = spec("claude");
+    assert_eq!(
+        detector.detect(&claude).await,
+        Availability::Missing {
+            reason: "auracode can't run the claude.cmd shell shim as native Claude Code on Windows. Install the standalone Claude Code, or set CLAUDE_CODE_EXECUTABLE to a claude.exe.".into(),
+        }
+    );
+    assert!(matches!(
+        detector.prepare_launch(&claude, progress()).await,
+        Err(LaunchError::Missing { .. })
+    ));
+    assert!(machine.runs("claude").is_empty());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn native_claude_keeps_the_stable_executable_symlink() {
+    let machine = Machine::with_tools(&[]);
+    let versioned = machine.install_tool(&machine.root.path().join("2.1.310"), "claude");
+    std::os::unix::fs::symlink(versioned, machine.tool("claude")).expect("symlink");
+    let detector = machine.detector(machine.env(&[]));
+    let claude = spec("claude");
+    assert_eq!(
+        ready_path(&detector.detect(&claude).await),
+        machine.tool("claude")
+    );
+    assert_eq!(
+        detector
+            .prepare_launch(&claude, progress())
+            .await
+            .expect("launch")
+            .program,
+        machine.tool("claude")
+    );
+}
+
+#[tokio::test]
 async fn find_program_follows_path_order() {
     let machine = Machine::with_tools(&[]);
     let first = machine.root.path().join("first");

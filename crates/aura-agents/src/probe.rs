@@ -56,16 +56,16 @@ impl Detection {
     }
 }
 
-/// Where an adapter's user binary is.
+/// Where the user's CLI is, for direct launches and adapters.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UserBinaryLookup {
     Found(PathBuf),
-    /// Windows: only an npm shim (`.cmd`, `.bat`, `.ps1`), which the adapters cannot spawn.
+    /// Windows: only a shell shim (`.cmd`, `.bat`, `.ps1`), which a direct CLI launch cannot spawn.
     ShimOnly(PathBuf),
     NotFound,
 }
 
-/// The adapter's variable when it names an executable file (a `.exe` under Windows rules), else the
+/// The binary's variable when it names an executable file (a `.exe` under Windows rules), else the
 /// binary on `PATH`: any executable file on Unix, only `<program>.exe` under Windows rules, where a
 /// shim alone is reported as such. `windows` picks the rules, so both are tested on every OS.
 pub(crate) fn locate_user_binary(
@@ -175,6 +175,25 @@ pub(crate) fn missing_user_binary(binary: &UserBinary, lookup: &UserBinaryLookup
             label = binary.label,
             program = binary.program,
         ),
+    }
+}
+
+/// Why a direct native driver cannot start the user's CLI.
+fn missing_native_binary(binary: &UserBinary, lookup: &UserBinaryLookup) -> String {
+    match lookup {
+        UserBinaryLookup::ShimOnly(shim) => format!(
+            "auracode can't run the {shim} shell shim as native {label} on Windows. Install the standalone {label}, or set {env} to a {program}.exe.",
+            shim = shim.file_name().map_or_else(
+                || shim.display().to_string(),
+                |name| name.to_string_lossy().into_owned()
+            ),
+            label = binary.label,
+            env = binary.env,
+            program = binary.program,
+        ),
+        UserBinaryLookup::NotFound | UserBinaryLookup::Found(_) => {
+            format!("{} was not found on your PATH.", binary.program)
+        }
     }
 }
 
@@ -338,6 +357,44 @@ pub(crate) async fn detect(
                 }),
             }
         }
+        Recipe::NativeBinary { user_binary, .. } => {
+            let path = match locate_user_binary(user_binary, &env.vars, cfg!(windows)) {
+                UserBinaryLookup::Found(path) => path,
+                lookup => return Detection::missing(missing_native_binary(user_binary, &lookup)),
+            };
+            let printed =
+                match probe(registry, env, &path, user_binary.version_args, &home(env)).await {
+                    Ok(printed) => printed,
+                    Err(reason) => return Detection::broken(reason),
+                };
+            let version = parse_version(&printed);
+            if !version
+                .as_deref()
+                .is_some_and(|found| version_at_least(found, user_binary.min_version))
+            {
+                return Detection::broken(format!(
+                    "auracode needs {} {} or newer (found {}).",
+                    user_binary.label,
+                    user_binary.min_version,
+                    version.as_deref().unwrap_or("an unknown version")
+                ));
+            }
+            Detection {
+                availability: Availability::Ready {
+                    version: Some(format!(
+                        "{} {}",
+                        user_binary.label,
+                        version.as_deref().unwrap_or_default()
+                    )),
+                    path: path.display().to_string(),
+                },
+                needs_download: false,
+                located: Some(Located {
+                    program: path,
+                    node: None,
+                }),
+            }
+        }
         Recipe::NpmAdapter {
             package,
             version,
@@ -464,6 +521,10 @@ mod tests {
         assert_eq!(
             missing_user_binary(&binary, &lookup),
             "Claude Code is installed through npm here, and the adapter can't run its claude.cmd shim on Windows. Install the standalone Claude Code, or set CLAUDE_CODE_EXECUTABLE to a claude.exe."
+        );
+        assert_eq!(
+            missing_native_binary(&binary, &lookup),
+            "auracode can't run the claude.cmd shell shim as native Claude Code on Windows. Install the standalone Claude Code, or set CLAUDE_CODE_EXECUTABLE to a claude.exe."
         );
 
         // A .exe elsewhere on PATH is used, even after the shim's folder.

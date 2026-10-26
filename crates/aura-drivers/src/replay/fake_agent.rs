@@ -8,6 +8,10 @@
 //! `session/set_mode` and `session/set_model` (paths and session ids are placeholders on both sides).
 //! It also checks contract rule 3: every request the agent made is answered, unless the agent ended
 //! first.
+//!
+//! Native Claude messages compare their complete payload after correlating only the protocol's
+//! control-request, prompt and session envelope IDs. Withdrawn native requests need no reply, and
+//! deliberately unknown control replies pass through unchanged for malformed/late-reply fixtures.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -48,6 +52,7 @@ pub(crate) struct FakeAgent {
     eof_sent: bool,
     /// Recorded request id (as JSON text) to the live id the driver used.
     ids: HashMap<String, Value>,
+    native: NativeCorrelation,
     /// The agent's requests by id (as JSON text), in the order made.
     requests: Vec<(String, AgentRequest)>,
     pub(crate) mismatches: Vec<String>,
@@ -62,9 +67,16 @@ impl FakeAgent {
             exit: Some(exit),
             eof_sent: false,
             ids: HashMap::new(),
+            native: NativeCorrelation::default(),
             requests: Vec::new(),
             mismatches: Vec::new(),
         }
+    }
+
+    pub(crate) fn native_session(&mut self, recorded: &str, live: &str) {
+        self.native
+            .sessions
+            .insert(recorded.into(), Value::String(live.into()));
     }
 
     fn mismatch(&mut self, record: usize, what: String) {
@@ -76,6 +88,36 @@ impl FakeAgent {
     /// it answers.
     pub(crate) fn write_in(&mut self, record: usize, message: &Value) {
         let mut message = message.clone();
+        if message.get("type").is_some() && message.get("jsonrpc").is_none() {
+            self.native.rewrite_in(&mut message);
+            match message["type"].as_str() {
+                Some("control_request") => {
+                    if let (Some(id), Some(method)) = (
+                        message["request_id"].as_str(),
+                        message.pointer("/request/subtype").and_then(Value::as_str),
+                    ) && !id.is_empty()
+                        && !method.is_empty()
+                    {
+                        self.requests.push((
+                            Value::String(id.into()).to_string(),
+                            AgentRequest {
+                                method: method.into(),
+                                answered: false,
+                                orphaned: false,
+                            },
+                        ));
+                    }
+                }
+                Some("control_cancel_request") => {
+                    if let Some(id) = message.get("request_id") {
+                        self.answer_request(id);
+                    }
+                }
+                _ => {}
+            }
+            self.line(FakeLine::Line(message.to_string()));
+            return;
+        }
         let is_reply = message.get("method").is_none()
             && (message.get("result").is_some() || message.get("error").is_some());
         if is_reply {
@@ -217,6 +259,12 @@ impl FakeAgent {
 
     /// Notes a reply the driver wrote to one of the agent's requests.
     fn observe(&mut self, actual: &Value) {
+        if actual["type"] == "control_response" {
+            if let Some(id) = actual.pointer("/response/request_id") {
+                self.answer_request(id);
+            }
+            return;
+        }
         if actual.get("method").is_none()
             && let Some(id) = actual.get("id").map(Value::to_string)
             && let Some((_, request)) = self.requests.iter_mut().find(|(known, _)| *known == id)
@@ -225,7 +273,22 @@ impl FakeAgent {
         }
     }
 
+    fn answer_request(&mut self, id: &Value) {
+        let id = id.to_string();
+        if let Some((_, request)) = self
+            .requests
+            .iter_mut()
+            .rev()
+            .find(|(known, _)| *known == id)
+        {
+            request.answered = true;
+        }
+    }
+
     fn compare(&mut self, expected: &Value, actual: &Value) -> Vec<String> {
+        if expected.get("type").is_some() && expected.get("jsonrpc").is_none() {
+            return self.native.compare(expected, actual);
+        }
         let mut found = Vec::new();
         let (expected_kind, actual_kind) = (kind(expected), kind(actual));
         if expected_kind != actual_kind {
@@ -366,6 +429,133 @@ impl FakeAgent {
     }
 }
 
+/// Only native envelope correlation fields are mapped. Tool input, content, provider message IDs,
+/// and unrelated request_id/uuid fields remain byte-for-byte values from the fixture.
+#[derive(Default)]
+struct NativeCorrelation {
+    controls: HashMap<String, Value>,
+    prompts: HashMap<String, Value>,
+    sessions: HashMap<String, Value>,
+}
+
+impl NativeCorrelation {
+    fn compare(&mut self, expected: &Value, actual: &Value) -> Vec<String> {
+        if expected.get("type") != actual.get("type") {
+            return vec![format!(
+                "expected {}, the driver wrote {}",
+                describe(expected),
+                describe(actual)
+            )];
+        }
+        let mut normalized = expected.clone();
+        let mut errors = Vec::new();
+        match expected["type"].as_str() {
+            Some("control_request") => Self::map_out(
+                &mut self.controls,
+                "/request_id",
+                &mut normalized,
+                actual,
+                &mut errors,
+            ),
+            Some("user") => {
+                Self::map_out(
+                    &mut self.prompts,
+                    "/uuid",
+                    &mut normalized,
+                    actual,
+                    &mut errors,
+                );
+                Self::map_out(
+                    &mut self.sessions,
+                    "/session_id",
+                    &mut normalized,
+                    actual,
+                    &mut errors,
+                );
+            }
+            _ => {}
+        }
+        if normalized != *actual {
+            errors.push(format!(
+                "native payload differs: expected {}, the driver wrote {}",
+                describe(&normalized),
+                describe(actual)
+            ));
+        }
+        errors
+    }
+
+    fn map_out(
+        map: &mut HashMap<String, Value>,
+        pointer: &str,
+        expected: &mut Value,
+        actual: &Value,
+        errors: &mut Vec<String>,
+    ) {
+        let (Some(recorded), Some(live)) = (
+            expected.pointer(pointer).and_then(Value::as_str),
+            actual.pointer(pointer).filter(|value| value.is_string()),
+        ) else {
+            errors.push(format!("native message has no string {pointer}"));
+            return;
+        };
+        if let Some(known) = map.get(recorded) {
+            if known != live {
+                errors.push(format!(
+                    "native {pointer} {recorded} was {known} before and is {live} now"
+                ));
+            }
+        } else {
+            if map.values().any(|known| known == live) {
+                errors.push(format!(
+                    "native {pointer} {recorded} reused another recorded id's live value {live}"
+                ));
+            }
+            map.insert(recorded.into(), live.clone());
+        }
+        if let Some(value) = expected.pointer_mut(pointer) {
+            *value = live.clone();
+        }
+    }
+
+    fn rewrite_in(&self, message: &mut Value) {
+        match message["type"].as_str() {
+            Some("control_response") => {
+                // Unknown and late responses are deliberately allowed so fixtures can verify
+                // the driver's behavior without replay inventing a request for them.
+                Self::replace(&self.controls, message.pointer_mut("/response/request_id"));
+            }
+            Some(
+                "system" | "assistant" | "user" | "stream_event" | "result" | "command_lifecycle"
+                | "rate_limit_event",
+            ) => {
+                Self::replace(&self.sessions, message.get_mut("session_id"));
+                Self::replace(&self.prompts, message.get_mut("user_message_uuid"));
+                if let Some(ids) = message
+                    .get_mut("user_message_uuids")
+                    .and_then(Value::as_array_mut)
+                {
+                    for id in ids {
+                        Self::replace(&self.prompts, Some(id));
+                    }
+                }
+                if message["type"] == "command_lifecycle" {
+                    Self::replace(&self.prompts, message.get_mut("command_uuid"));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn replace(map: &HashMap<String, Value>, value: Option<&mut Value>) {
+        if let Some(value) = value
+            && let Some(live) = value.as_str().and_then(|id| map.get(id))
+        {
+            *value = live.clone();
+        }
+    }
+}
+
 fn kind(message: &Value) -> &'static str {
     match (message.get("method").is_some(), message.get("id").is_some()) {
         (true, true) => "request",
@@ -387,4 +577,49 @@ fn describe(message: &Value) -> String {
         end -= 1;
     }
     format!("{}...", &text[..end])
+}
+
+#[cfg(test)]
+mod native_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn correlation_rewrites_only_native_envelope_fields() {
+        let mut ids = NativeCorrelation::default();
+        assert!(ids.compare(&json!({"type":"control_request","request_id":"old-control","request":{"subtype":"initialize","hooks":null}}), &json!({"type":"control_request","request_id":"live-control","request":{"subtype":"initialize","hooks":null}})).is_empty());
+        assert!(ids.compare(&json!({"type":"user","uuid":"old-prompt","session_id":"old-session","message":{"content":"old-prompt"}}), &json!({"type":"user","uuid":"live-prompt","session_id":"live-session","message":{"content":"old-prompt"}})).is_empty());
+        let mut event = json!({"type":"assistant","session_id":"old-session","user_message_uuid":"old-prompt","user_message_uuids":["old-prompt"],"uuid":"old-prompt","request_id":"old-control","message":{"id":"old-prompt","content":[{"type":"tool_use","id":"old-control","input":{"uuid":"old-prompt","session_id":"old-session"}}]}});
+        let content = event["message"].clone();
+        ids.rewrite_in(&mut event);
+        assert_eq!(event["session_id"], "live-session");
+        assert_eq!(event["user_message_uuid"], "live-prompt");
+        assert_eq!(event["user_message_uuids"], json!(["live-prompt"]));
+        assert_eq!(event["uuid"], "old-prompt");
+        assert_eq!(event["request_id"], "old-control");
+        assert_eq!(event["message"], content);
+        let mut reply = json!({"type":"control_response","response":{"request_id":"old-control","response":{"request_id":"old-control"}}});
+        ids.rewrite_in(&mut reply);
+        assert_eq!(reply["response"]["request_id"], "live-control");
+        assert_eq!(reply["response"]["response"]["request_id"], "old-control");
+    }
+
+    #[test]
+    fn native_comparison_checks_the_whole_payload_and_id_consistency() {
+        let mut ids = NativeCorrelation::default();
+        let expected = json!({"type":"control_request","request_id":"recorded","request":{"subtype":"interrupt"}});
+        let actual =
+            json!({"type":"control_request","request_id":"live","request":{"subtype":"interrupt"}});
+        assert!(ids.compare(&expected, &actual).is_empty());
+        let mut wrong = actual.clone();
+        wrong["request"]["unexpected"] = json!(true);
+        assert!(!ids.compare(&expected, &wrong).is_empty());
+        wrong = actual;
+        wrong["request_id"] = json!("different");
+        assert!(!ids.compare(&expected, &wrong).is_empty());
+        let another = json!({"type":"control_request","request_id":"another-recorded","request":{"subtype":"interrupt"}});
+        let reused =
+            json!({"type":"control_request","request_id":"live","request":{"subtype":"interrupt"}});
+        assert!(!ids.compare(&another, &reused).is_empty());
+    }
 }
