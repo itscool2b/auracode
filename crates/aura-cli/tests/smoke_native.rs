@@ -308,6 +308,14 @@ async fn smoke_removes_its_queued_prompt_when_native_work_never_becomes_idle() {
         "failed smoke leaves no prompt to run on restart"
     );
     handle.emit(DriverEvent::RunState { idle: true });
+    // Force stop reaches Stopped before the retired driver's join releases its live slot.
+    tokio::time::timeout(TIMINGS.stop, async {
+        while headless.manager.has_live_sessions() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("the force-stopped driver retires without another shutdown");
     assert_eq!(prompt_count(&handle), 1);
     assert!(!headless.manager.has_live_sessions());
     assert!(headless.shutdown().await.saved);

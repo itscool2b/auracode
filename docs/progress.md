@@ -230,6 +230,12 @@ bindings and desktop smokes. Its full test step exposed two stale catalog assump
 missing-agent count and Grok's single-probe count despite ACP/fallback aliases. Those assertions
 now derive the catalog size and verify every observed invocation is a version check. Final combined
 CI, the expanded replay fixtures and real-agent qualification remain pending.
+Combined checkpoint `d7055a6` passed the complete Linux CI job and all 398 driver tests on both
+platforms, including the expanded Pi replay fixtures. Windows exposed one scheduling race in a
+CLI smoke assertion: force stop reaches `Stopped` before the retired driver's join releases its
+live slot. The smoke regression now waits within its existing stop deadline for that release,
+before any shutdown fallback, and still verifies that the removed prompt never runs. The corrected
+Windows gate remains pending; native-agent acceptance and macOS verification remain outstanding.
 
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
