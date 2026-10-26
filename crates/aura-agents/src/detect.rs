@@ -665,6 +665,7 @@ impl Detector {
         use aura_protocol::agents::AgentMaintenance;
         let unavailable = |reason: String| AgentMaintenance {
             auth_status: false,
+            login_available: false,
             update_unavailable: Some(reason),
         };
         let Mode::Live(live) = &self.mode else {
@@ -689,6 +690,7 @@ impl Detector {
         };
         AgentMaintenance {
             auth_status: crate::maintenance::auth_command(&installation).is_ok(),
+            login_available: crate::maintenance::login_command(&installation).is_ok(),
             update_unavailable,
         }
     }

@@ -18,13 +18,17 @@ export function subscribeNativeNavigation(open: (chatId: string) => void): () =>
         // A closing window cannot accept navigation. Rust owns any subsequent wake request.
       });
   };
-  void listen("auracode-open-chat", consume).then((stop) => {
-    if (disposed) stop();
-    else {
-      unlisten = stop;
+  void listen("auracode-open-chat", consume)
+    .then((stop) => {
+      if (disposed) stop();
+      else {
+        unlisten = stop;
+        consume();
+      }
+    })
+    .catch(() => {
       consume();
-    }
-  });
+    });
   window.addEventListener("focus", consume);
   return () => {
     disposed = true;

@@ -1,5 +1,6 @@
 import type { Terminal } from "@xterm/xterm";
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   TerminalSession,
   type TerminalState,
@@ -169,10 +170,11 @@ export function TerminalSheet({
                 ? "The terminal closed without an exit status."
                 : `The vendor command exited with code ${state.exitCode}.`;
 
-  return (
+  return createPortal(
     <dialog
       ref={dialog}
-      className="terminal-sheet"
+      className="orbit-theme terminal-sheet"
+      data-theme="dark"
       aria-labelledby={title}
       aria-describedby={description}
       onCancel={(event) => {
@@ -245,6 +247,7 @@ export function TerminalSheet({
           Start sign-in
         </button>
       </footer>
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }

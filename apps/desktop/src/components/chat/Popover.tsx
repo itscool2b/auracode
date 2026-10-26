@@ -22,6 +22,7 @@ export function Popover({
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || !root.current) return;
+      if (event.target instanceof Element && event.target.closest("dialog[open]")) return;
       event.preventDefault();
       root.current.open = false;
       root.current.querySelector("summary")?.focus();

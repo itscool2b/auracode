@@ -548,7 +548,11 @@ export class FakeTransport implements Transport {
     this.#record("agentMaintenance", [agentId]);
     return (
       this.handlers.agentMaintenance?.(agentId) ??
-      Promise.resolve({ auth_status: false, update_unavailable: "No vendor commands." })
+      Promise.resolve({
+        auth_status: false,
+        login_available: false,
+        update_unavailable: "No vendor commands.",
+      })
     );
   }
 

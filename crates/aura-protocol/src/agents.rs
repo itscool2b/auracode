@@ -122,6 +122,8 @@ pub enum AgentAuthStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct AgentMaintenance {
     pub auth_status: bool,
+    /// A reviewed interactive vendor login command can run in the explicit terminal sheet.
+    pub login_available: bool,
     /// `None` enables the explicit update action. Otherwise this explains the owning channel or
     /// missing helper; the UI must not offer an update for that installation.
     pub update_unavailable: Option<String>,

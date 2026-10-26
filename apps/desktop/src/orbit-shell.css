@@ -1,5 +1,60 @@
 /* Orbit's product frame. The transcript remains in chat.css; these rules compose its real controls. */
 @layer components {
+  .chat-new-form {
+    max-width: 600px;
+    gap: 16px;
+  }
+  .chat-new-form > .ui-field {
+    gap: 8px;
+  }
+  .chat-new-form .ui-select {
+    flex: 1;
+    min-width: 0;
+  }
+  .chat-new-form .chat-welcome {
+    padding-bottom: 32px;
+  }
+  .chat-new-details {
+    color: var(--o-text-3);
+    font-size: 12px;
+  }
+  .chat-new-details > summary {
+    cursor: pointer;
+    padding: 4px 0;
+  }
+  .chat-new-details[open] {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .chat-new-details[open] > .ui-field {
+    margin-top: 12px;
+  }
+  .chat-new-details > .ui-mono {
+    display: block;
+    overflow-wrap: anywhere;
+  }
+  .chat-busy-warning {
+    padding: 14px 16px;
+    border: 1px solid var(--o-signal);
+    border-radius: 10px;
+    font-size: 12px;
+  }
+  .chat-busy-warning strong {
+    color: var(--o-signal-text);
+  }
+  .chat-busy-warning p {
+    color: var(--o-text-3);
+  }
+  .chat-agent-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chat-agent-actions > span,
+  .chat-agent-actions > p {
+    width: 100%;
+  }
   .chat-modal {
     width: min(480px, calc(100vw - 48px));
     max-height: calc(100vh - 64px);

@@ -356,7 +356,8 @@ describe("choosing an agent", () => {
 describe("the New chat draft", () => {
   it("runs auth and updates only after explicit actions, and refuses unsupported updates", async () => {
     const fake = new FakeTransport({
-      agentMaintenance: () => Promise.resolve({ auth_status: true, update_unavailable: null }),
+      agentMaintenance: () =>
+        Promise.resolve({ auth_status: true, login_available: true, update_unavailable: null }),
       agentAuthStatus: () => Promise.resolve({ state: "credentials_present" }),
     });
     const draft = new NewChatDraft(fake);
@@ -368,7 +369,11 @@ describe("the New chat draft", () => {
     expect(await draft.updateAgent()).toBe(true);
     expect(fake.callsOf("agentUpdate")).toEqual([["claude"]]);
     fake.handlers.agentMaintenance = () =>
-      Promise.resolve({ auth_status: true, update_unavailable: "Managed by Editor." });
+      Promise.resolve({
+        auth_status: true,
+        login_available: true,
+        update_unavailable: "Managed by Editor.",
+      });
     draft.chooseAgent("codex");
     await settled();
     expect(await draft.updateAgent()).toBe(false);
@@ -378,7 +383,8 @@ describe("the New chat draft", () => {
   it("does not show a delayed auth response on another agent", async () => {
     let finish: ((value: { state: "sign_in_required" }) => void) | undefined;
     const fake = new FakeTransport({
-      agentMaintenance: () => Promise.resolve({ auth_status: true, update_unavailable: null }),
+      agentMaintenance: () =>
+        Promise.resolve({ auth_status: true, login_available: true, update_unavailable: null }),
       agentAuthStatus: () =>
         new Promise((resolve) => {
           finish = resolve;

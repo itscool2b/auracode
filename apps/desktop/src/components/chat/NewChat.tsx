@@ -240,67 +240,70 @@ export function NewChat({
             {refreshing ? "Refreshing…" : "Refresh agents"}
           </button>
         </div>
-        {selected ? <span className="ui-muted">{selected.description}</span> : null}
-        {ready !== null ? <span className="ui-muted ui-mono">{ready}</span> : null}
-        {selected?.installation ? (
-          <InstallationStatus installation={selected.installation} />
-        ) : null}
-        {selected?.latest_release?.version ? (
-          <small className="ui-muted">
-            Latest on {selected.latest_release.source}: {selected.latest_release.version}
-            {selected.latest_release.stale ? " (cached; refresh unavailable)" : null}
-          </small>
-        ) : null}
-        {selected?.installation ? (
-          <section className="ui-field" aria-label="Agent maintenance">
-            {state.maintenanceBusy === "checking" ? (
-              <small className="ui-muted">Checking available actions…</small>
-            ) : null}
-            <div className="ui-row">
-              {state.maintenance?.auth_status ? (
-                <button
-                  type="button"
-                  className="ui-button"
-                  disabled={state.maintenanceBusy !== null}
-                  onClick={() => void draft.checkAuth()}
-                >
-                  {state.maintenanceBusy === "auth" ? "Checking sign-in…" : "Check sign-in"}
-                </button>
+        <details className="chat-new-details">
+          <summary>Agent details and sign-in</summary>
+          {selected ? <span className="ui-muted">{selected.description}</span> : null}
+          {ready !== null ? <span className="ui-muted ui-mono">{ready}</span> : null}
+          {selected?.installation ? (
+            <InstallationStatus installation={selected.installation} />
+          ) : null}
+          {selected?.latest_release?.version ? (
+            <small className="ui-muted">
+              Latest on {selected.latest_release.source}: {selected.latest_release.version}
+              {selected.latest_release.stale ? " (cached; refresh unavailable)" : null}
+            </small>
+          ) : null}
+          {selected?.installation ? (
+            <section className="ui-field" aria-label="Agent maintenance">
+              {state.maintenanceBusy === "checking" ? (
+                <small className="ui-muted">Checking available actions…</small>
               ) : null}
-              {state.maintenance?.update_unavailable === null ? (
-                <button
-                  type="button"
-                  className="ui-button"
-                  disabled={state.maintenanceBusy !== null || state.creating}
-                  onClick={() => void draft.updateAgent().then(() => onRefreshAgents())}
-                >
-                  {state.maintenanceBusy === "update" ? "Updating agent…" : "Update agent"}
-                </button>
+              <div className="ui-row">
+                {state.maintenance?.auth_status ? (
+                  <button
+                    type="button"
+                    className="ui-button"
+                    disabled={state.maintenanceBusy !== null}
+                    onClick={() => void draft.checkAuth()}
+                  >
+                    {state.maintenanceBusy === "auth" ? "Checking sign-in…" : "Check sign-in"}
+                  </button>
+                ) : null}
+                {state.maintenance?.update_unavailable === null ? (
+                  <button
+                    type="button"
+                    className="ui-button"
+                    disabled={state.maintenanceBusy !== null || state.creating}
+                    onClick={() => void draft.updateAgent().then(() => onRefreshAgents())}
+                  >
+                    {state.maintenanceBusy === "update" ? "Updating agent…" : "Update agent"}
+                  </button>
+                ) : null}
+              </div>
+              {state.maintenance?.update_unavailable ? (
+                <small className="ui-muted">{state.maintenance.update_unavailable}</small>
               ) : null}
-            </div>
-            {state.maintenance?.update_unavailable ? (
-              <small className="ui-muted">{state.maintenance.update_unavailable}</small>
-            ) : null}
-            {state.auth ? (
-              <span role="status" className="ui-muted">
-                {authStatusText(state.auth)}
-              </span>
-            ) : null}
-            {state.maintenanceMessage ? (
-              <span role="status">{state.maintenanceMessage}</span>
-            ) : null}
-            {state.maintenanceError ? (
-              <span role="alert" className="ui-error">
-                {state.maintenanceError}
-              </span>
-            ) : null}
-          </section>
-        ) : null}
+              {state.auth ? (
+                <span role="status" className="ui-muted">
+                  {authStatusText(state.auth)}
+                </span>
+              ) : null}
+              {state.maintenanceMessage ? (
+                <span role="status">{state.maintenanceMessage}</span>
+              ) : null}
+              {state.maintenanceError ? (
+                <span role="alert" className="ui-error">
+                  {state.maintenanceError}
+                </span>
+              ) : null}
+            </section>
+          ) : null}
+        </details>
         {note !== null ? <span>{note}</span> : null}
       </div>
       {unavailable.length > 0 ? (
-        <section aria-label="Unavailable agents">
-          <p className="ui-muted">Not available here:</p>
+        <details className="chat-new-details">
+          <summary>Other agents</summary>
           <ul className="chat-unavailable">
             {unavailable.map((agent) => (
               <li key={agent.id}>
@@ -308,7 +311,7 @@ export function NewChat({
               </li>
             ))}
           </ul>
-        </section>
+        </details>
       ) : null}
       <div className="ui-field">
         <span>Folder</span>

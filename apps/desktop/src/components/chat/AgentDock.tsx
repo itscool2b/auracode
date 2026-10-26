@@ -2,6 +2,8 @@ import { OrbitMark } from "@auracode/ui/orbit";
 import { Settings2 } from "lucide-react";
 import type { AgentEntry, ChatSummary } from "../../bindings";
 import { agentChoice } from "../../lib/chat/appStore";
+import type { Transport } from "../../lib/chat/transport";
+import { AgentActions } from "./AgentActions";
 import { Popover } from "./Popover";
 
 const CODES: Readonly<Record<string, string>> = {
@@ -21,11 +23,15 @@ export function AgentDock({
   chats,
   onChoose,
   onDiagnostics,
+  transport,
+  onRefresh,
 }: {
   readonly agents: readonly AgentEntry[] | null;
   readonly chats: readonly ChatSummary[] | null;
   readonly onChoose: (agentId: string) => void;
   readonly onDiagnostics: () => void;
+  readonly transport?: Transport;
+  readonly onRefresh?: () => void;
 }) {
   const ready = agents?.filter((agent) => agentChoice(agent).enabled).length ?? 0;
   return (
@@ -76,6 +82,9 @@ export function AgentDock({
               >
                 New chat with {agent.name}
               </button>
+              {transport && onRefresh ? (
+                <AgentActions agent={agent} transport={transport} onRefresh={onRefresh} />
+              ) : null}
             </Popover>
           );
         })}
