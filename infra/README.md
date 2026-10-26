@@ -199,3 +199,9 @@ Production website `auracode-web` version `0d0ca4e4-5884-4151-9ea0-ce639629867f`
 tested modules as preview (JS `7fea5f5a…`, Wasm `e926c1c6…`). All 53 public files match over
 `https://auracode.si`, with ten page HEAD checks, the notices page and policy, footer link and
 missing-asset 404. The unrouted `/api/v1/config` still returns a plain non-HTML 404.
+
+Production API `auracode-api` version `a173e36a-cd71-437d-aa9f-b783af83fdd1` is staged with the same
+invitation-order build as preview (Wasm `9d545e66…`). All three secrets, D1, R2, email, plain vars,
+the five-minute cron and disabled `workers.dev`/preview URLs are unchanged. It still has no route:
+the zone routes only `auracode.si/*` to the website and the two preview routes. Production D1 has no
+users, sessions or challenges.
