@@ -38,6 +38,7 @@ pub(crate) mod rows;
 pub(crate) mod search;
 #[cfg(test)]
 pub(crate) mod test_support;
+pub(crate) mod worktree_setup;
 mod writer;
 
 use std::fmt;
@@ -119,6 +120,29 @@ impl ChatStore {
             answer,
         )
         .await?
+    }
+    pub(crate) async fn worktree_setup(
+        &self,
+        command: worktree_setup::Command,
+    ) -> Result<aura_protocol::worktree_setup::WorktreeSetup, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if command.save.is_none() {
+            return self
+                .request(Request::WorktreeSetup { command, reply }, answer)
+                .await?;
+        }
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::WorktreeSetup { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
     }
     pub(crate) async fn conversation(
         &self,

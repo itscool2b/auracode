@@ -144,6 +144,10 @@ pub(crate) enum Request {
     Flush {
         reply: oneshot::Sender<Result<(), StoreError>>,
     },
+    WorktreeSetup {
+        command: super::worktree_setup::Command,
+        reply: oneshot::Sender<Result<aura_protocol::worktree_setup::WorktreeSetup, StoreError>>,
+    },
     Search {
         query: String,
         include_archived: bool,
@@ -450,6 +454,7 @@ fn work_bytes(work: &Work) -> usize {
     match work {
         Work::Op(op) => op_bytes(op),
         Work::Request(Request::Organization { command, .. }) => command.bytes(),
+        Work::Request(Request::WorktreeSetup { command, .. }) => command.bytes(),
         Work::Request(Request::Composer { command, .. }) => command.bytes(),
         Work::Request(Request::Search { query, .. }) => 256 + query.len(),
         Work::Request(_) => 256,
@@ -629,6 +634,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Op(op) => op_name(op),
         Work::Request(Request::CreateChat { .. }) => "create_chat",
         Work::Request(Request::Organization { .. }) => "organization",
+        Work::Request(Request::WorktreeSetup { .. }) => "worktree setup",
         Work::Request(Request::Composer { .. }) => "composer",
         Work::Request(Request::CheckpointContext { .. }) => "checkpoint_context",
 
@@ -1203,6 +1209,20 @@ impl Writer {
                     Mode::Normal if self.store.is_some() => Ok(()),
                     Mode::Damaged => Err(StoreError::Damaged(DAMAGED.into())),
                     _ => Err(StoreError::Closed),
+                };
+                let _ = reply.send(result);
+            }
+            Request::WorktreeSetup { command, reply } => {
+                let device = self.device_id.clone();
+                let now = now_millis();
+                let result = if command.save.is_none() {
+                    self.read(|conn| super::worktree_setup::execute(conn, &device, now, command))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| {
+                        super::worktree_setup::execute(conn, &device, now, command)
+                    })
                 };
                 let _ = reply.send(result);
             }

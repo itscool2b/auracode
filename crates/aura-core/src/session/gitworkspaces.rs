@@ -71,14 +71,16 @@ impl SessionManager {
         }).await.map_err(|_| invalid("The publishing task ended unexpectedly. Refresh GitHub to check the branch and pull request before retrying."))?
     }
 
-    fn worktrees(&self) -> Result<Arc<crate::gitworkspaces::GitWorkspaces>, SessionError> {
+    pub(super) fn worktrees(
+        &self,
+    ) -> Result<Arc<crate::gitworkspaces::GitWorkspaces>, SessionError> {
         self.deps()
             .worktrees
             .clone()
             .ok_or_else(|| invalid("Git worktrees are unavailable in this runtime."))
     }
 
-    async fn git_chat(&self, chat_id: &str) -> Result<ChatRecord, SessionError> {
+    pub(super) async fn git_chat(&self, chat_id: &str) -> Result<ChatRecord, SessionError> {
         let (chat, _) = self
             .deps()
             .store

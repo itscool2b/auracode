@@ -59,7 +59,7 @@ pub(super) fn paths(bytes: &[u8]) -> Result<Vec<String>> {
     Ok(paths)
 }
 
-pub(super) fn validate(path: &str) -> Result<()> {
+pub(crate) fn validate(path: &str) -> Result<()> {
     if path.is_empty()
         || path.len() > 4096
         || path.contains(['\\', ':'])

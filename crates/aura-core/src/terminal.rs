@@ -42,6 +42,14 @@ pub enum TerminalError {
         "The installation reached its ten-minute limit and was stopped. Review the output and refresh agents before trying again."
     )]
     TimedOut,
+    #[error(
+        "Setup cleanup could not be confirmed. Its folders remain reserved until the application closes; inspect the owned-process recovery information before restarting work."
+    )]
+    CleanupUnconfirmed,
+    #[error(
+        "Setup reached its ten-minute limit and was stopped. Review the terminal output and worktree before preparing another command."
+    )]
+    SetupTimedOut,
 }
 
 /// One bounded pull. An empty nonterminal chunk means only that the read wait elapsed.
@@ -64,6 +72,9 @@ struct Slot {
     timed_out: AtomicBool,
     canceled: watch::Sender<bool>,
     running: Mutex<Option<Arc<Running>>>,
+    cleanup_unconfirmed: AtomicBool,
+    cleanup: watch::Sender<Option<bool>>,
+    setup_timed_out: AtomicBool,
 }
 impl Slot {
     fn closed_error(&self) -> TerminalError {
@@ -91,6 +102,7 @@ struct Inner {
     slots: Mutex<HashMap<String, Arc<Slot>>>,
     stopped: AtomicBool,
     quiescing: AtomicBool,
+    cleanup_guards: Mutex<Vec<Box<dyn Send + Sync>>>,
 }
 
 /// Blocks new terminal reservations without canceling any existing terminal.
@@ -128,6 +140,78 @@ impl Drop for TerminalTicket {
     }
 }
 impl TerminalTicket {
+    /// A setup launch owns the caller's folder reservations through process cleanup. Startup
+    /// continues in an owned task if the IPC future disappears; its ticket still responds to Close.
+    pub async fn start_guarded(
+        self,
+        spawner: Arc<Spawner>,
+        spec: SpawnSpec,
+        size: PtySize,
+        guard: Box<dyn Send + Sync>,
+    ) -> Result<String, TerminalError> {
+        tokio::spawn(self.start_guarded_owned(spawner, spec, size, guard, Duration::from_secs(600)))
+            .await
+            .map_err(|_| TerminalError::Start("Setup startup ended unexpectedly.".into()))?
+    }
+
+    async fn start_guarded_owned(
+        mut self,
+        spawner: Arc<Spawner>,
+        spec: SpawnSpec,
+        size: PtySize,
+        guard: Box<dyn Send + Sync>,
+        limit: Duration,
+    ) -> Result<String, TerminalError> {
+        if *self.slot.canceled.borrow() {
+            return Err(TerminalError::Closed);
+        }
+        let process = tokio::time::timeout(Duration::from_secs(15), spawner.spawn_pty(spec, size))
+            .await
+            .map_err(|_| TerminalError::Start("Startup timed out.".into()))?
+            .map_err(|error| TerminalError::Start(error.to_string()))?;
+        let control = process.control.clone();
+        let mut canceled = self.slot.canceled.subscribe();
+        let slot = Arc::downgrade(&self.slot);
+        let terminals = self.terminals.clone();
+        self.slot.cleanup.send_replace(None);
+        // This monitor is independent of output consumption, window lifetime and IPC cancellation.
+        tokio::spawn(async move {
+            tokio::select! {
+                biased;
+                _=control.exited()=>{},
+                _=canceled.wait_for(|value|*value)=>{},
+                _=tokio::time::sleep(limit)=>{
+                    if let Some(slot)=slot.upgrade(){slot.setup_timed_out.store(true,Ordering::Release);}
+                    control.kill();
+                },
+            }
+            let report = control.shutdown().await;
+            let confirmed = report.exit.is_some() && report.leftovers.is_empty();
+            if !confirmed {
+                lock(&terminals.0.cleanup_guards).push(guard);
+            } else {
+                drop(guard);
+            }
+            if let Some(slot) = slot.upgrade() {
+                slot.cleanup_unconfirmed
+                    .store(!confirmed, Ordering::Release);
+                slot.cleanup.send_replace(Some(confirmed));
+            }
+        });
+        let mut running = lock(&self.slot.running);
+        if *self.slot.canceled.borrow() {
+            process.control.kill();
+            return Err(TerminalError::Closed);
+        }
+        *running = Some(Arc::new(Running {
+            input: process.input,
+            output: AsyncMutex::new(process.output),
+            control: process.control,
+        }));
+        self.committed = true;
+        Ok(self.id.clone())
+    }
+
     /// Return the reservation before beginning any vendor work. A close can now name and cancel
     /// it even if a later start handler has not begun yet.
     pub fn pending(mut self) -> String {
@@ -227,12 +311,16 @@ impl Terminals {
         }
         let id = uuid::Uuid::now_v7().to_string();
         let (canceled, _) = watch::channel(false);
+        let (cleanup, _) = watch::channel(Some(true));
         let slot = Arc::new(Slot {
             owner: owner.into(),
             claimed: AtomicBool::new(true),
             timed_out: AtomicBool::new(false),
             canceled,
             running: Mutex::new(None),
+            cleanup_unconfirmed: AtomicBool::new(false),
+            cleanup,
+            setup_timed_out: AtomicBool::new(false),
         });
         slots.insert(id.clone(), Arc::clone(&slot));
         Ok(TerminalTicket {
@@ -273,6 +361,12 @@ impl Terminals {
     }
     pub async fn read(&self, owner: &str, id: &str) -> Result<TerminalChunk, TerminalError> {
         let (slot, running) = self.running(owner, id)?;
+        if slot.cleanup_unconfirmed.load(Ordering::Acquire) {
+            return Err(TerminalError::CleanupUnconfirmed);
+        }
+        if slot.setup_timed_out.load(Ordering::Acquire) {
+            return Err(TerminalError::SetupTimedOut);
+        }
         let mut output = running
             .output
             .try_lock()
@@ -285,6 +379,15 @@ impl Terminals {
             _ = tokio::time::sleep(READ_WAIT) => None,
         };
         let done = matches!(next, Some(None));
+        if done {
+            let mut cleanup = slot.cleanup.subscribe();
+            tokio::select! {
+                _=canceled.wait_for(|closed|*closed)=>return Err(TerminalError::Closed),
+                result=cleanup.wait_for(|result|result.is_some())=>{
+                    match result {Ok(value) if *value==Some(true)=>{},_=>return Err(TerminalError::CleanupUnconfirmed)}
+                },
+            }
+        }
         Ok(TerminalChunk {
             bytes: next.flatten().unwrap_or_default(),
             done,
@@ -354,6 +457,84 @@ mod tests {
     use super::*;
     use aura_process::{EnvSource, LaunchSpec, LeftoverRegistry, ProcessCwd, ResolvedEnv};
     use std::io::Write;
+
+    #[tokio::test]
+    async fn guarded_setup_holds_reservations_until_close_finishes_owned_cleanup() {
+        struct Guard(Arc<AtomicBool>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let folder = tempfile::tempdir().unwrap();
+        let terminals = Terminals::default();
+        let released = Arc::new(AtomicBool::new(false));
+        let ticket = terminals.reserve("setup").unwrap();
+        let id = ticket
+            .start_guarded(
+                Spawner::new(
+                    LeftoverRegistry::disabled(),
+                    tokio::runtime::Handle::current(),
+                ),
+                local_spec(folder.path()),
+                PtySize { rows: 24, cols: 80 },
+                Box::new(Guard(released.clone())),
+            )
+            .await
+            .unwrap();
+        let (_, running) = terminals.running("setup", &id).unwrap();
+        assert!(!released.load(Ordering::Acquire));
+        terminals.close("setup", &id).unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !released.load(Ordering::Acquire) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(running.control.try_exited().is_some());
+        assert!(running.control.shutdown().await.leftovers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn guarded_setup_deadline_cleans_up_without_renderer_polling() {
+        struct Guard(Arc<AtomicBool>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let folder = tempfile::tempdir().unwrap();
+        let terminals = Terminals::default();
+        let released = Arc::new(AtomicBool::new(false));
+        let id = terminals
+            .reserve("setup")
+            .unwrap()
+            .start_guarded_owned(
+                Spawner::new(
+                    LeftoverRegistry::disabled(),
+                    tokio::runtime::Handle::current(),
+                ),
+                local_spec(folder.path()),
+                PtySize { rows: 24, cols: 80 },
+                Box::new(Guard(released.clone())),
+                Duration::from_millis(250),
+            )
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !released.load(Ordering::Acquire) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(matches!(
+            terminals.read("setup", &id).await,
+            Err(TerminalError::SetupTimedOut)
+        ));
+        terminals.close("setup", &id).unwrap();
+    }
 
     // A harmless test-harness subprocess. The ordinary unit test returns immediately; only the
     // explicit PTY test below supplies this marker and invokes this exact test name.

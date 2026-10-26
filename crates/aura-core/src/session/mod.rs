@@ -28,8 +28,10 @@ mod spawner;
 #[cfg(test)]
 mod tests;
 mod workspace;
+mod worktree_setup;
 
 pub use config_library::LibraryRoots;
+pub use worktree_setup::WorktreeSetupLaunch;
 
 use std::collections::HashMap;
 use std::fmt;

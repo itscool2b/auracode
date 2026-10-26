@@ -46,6 +46,7 @@ pub mod terminal;
 pub mod updater;
 pub mod window;
 pub mod workspace_commands;
+pub mod worktree_setup_commands;
 
 #[cfg(test)]
 mod config_checks;

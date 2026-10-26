@@ -1357,3 +1357,5 @@ mod tests {
         const { assert!(EVENT_BUDGET < MAX_FRAME_BYTES) };
     }
 }
+
+pub mod worktree_setup;
