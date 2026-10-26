@@ -18,6 +18,7 @@ const routes = [
   "privacy",
   "terms",
   "changelog",
+  "third-party-notices",
 ];
 let runtime;
 before(() => {
@@ -107,6 +108,8 @@ test("every public byte is embedded with its MIME and content-addressed cache po
     js: "text/javascript; charset=utf-8",
     css: "text/css; charset=utf-8",
     png: "image/png",
+    webp: "image/webp",
+    txt: "text/plain; charset=utf-8",
     woff: "font/woff",
     woff2: "font/woff2",
   };
