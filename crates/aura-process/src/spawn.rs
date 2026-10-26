@@ -529,7 +529,17 @@ pub(crate) fn wrap(command: tokio::process::Command, new_session: bool) -> Comma
     wrapped
 }
 
+/// How often a start is tried again while the binary is busy, waiting `BUSY_WAIT` times the attempt
+/// before each.
+const BUSY_RETRIES: u32 = 3;
+const BUSY_WAIT: Duration = Duration::from_millis(10);
+
 /// Spawns inside `rt`, so the child's pipes and reaping belong to it wherever this is polled.
+///
+/// Linux refuses to run a file someone holds open for writing ("text file busy"). Right after a
+/// binary is written, a child that another thread of this process is forking holds it open until
+/// its own exec: an agent that just updated itself, or a test's fake binary. That clears within
+/// milliseconds, so the start is tried again a few times before it fails.
 fn start(
     rt: &Handle,
     command: tokio::process::Command,
@@ -537,9 +547,20 @@ fn start(
     program: &Path,
 ) -> Result<Box<dyn ChildWrapper>, SpawnError> {
     let _context = rt.enter();
-    wrap(command, new_session)
-        .spawn()
-        .map_err(|source| spawn_error(program, source))
+    let mut wrapped = wrap(command, new_session);
+    let mut attempt = 0;
+    loop {
+        match wrapped.spawn() {
+            Ok(child) => return Ok(child),
+            Err(source)
+                if source.kind() == io::ErrorKind::ExecutableFileBusy && attempt < BUSY_RETRIES =>
+            {
+                attempt += 1;
+                std::thread::sleep(BUSY_WAIT * attempt);
+            }
+            Err(source) => return Err(spawn_error(program, source)),
+        }
+    }
 }
 
 fn spawn_error(program: &Path, source: io::Error) -> SpawnError {

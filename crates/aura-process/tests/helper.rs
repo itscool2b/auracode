@@ -61,6 +61,38 @@ async fn captures_git_version_from_stdout() {
     assert!(!output.timed_out && !output.stdout_truncated);
 }
 
+/// Linux refuses to run a file someone holds open for writing ("text file busy"), as a freshly
+/// written binary is while another thread's fork still holds it: the start waits for it to clear.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn a_binary_busy_for_a_moment_still_starts() {
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+
+    let folder = tempfile::tempdir().expect("tempdir");
+    let tool = folder.path().join("tool");
+    let mut file = std::fs::File::create(&tool).expect("create");
+    file.write_all(b"#!/bin/sh\necho ready\n").expect("write");
+    std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    // Still open for writing, so exec says busy until this thread closes it.
+    let closer = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(15));
+        drop(file);
+    });
+    let output = run_helper(
+        &LeftoverRegistry::disabled(),
+        HelperSpec {
+            program: tool,
+            env: HelperEnv::ProcessEnv,
+            ..helper(&[], folder.path())
+        },
+    )
+    .await
+    .expect("starts once the file is closed");
+    closer.join().expect("the closer ends");
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "ready");
+}
+
 #[tokio::test]
 async fn a_helper_runs_where_it_is_told_with_what_it_is_given() {
     let folder = tempfile::tempdir().expect("tempdir");
