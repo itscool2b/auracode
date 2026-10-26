@@ -548,6 +548,46 @@ export type ConfigOption = {
 /**  A value for a [`ConfigOption`]: a choice for a select, a flag for a toggle. */
 export type ConfigValue = { type: "choice"; value: string } | { type: "toggle"; value: boolean };
 
+export type ContinuationAction = { type: "switch_agent"; agent_id: string } | { type: "retry"; turn_id: string } | { type: "edit"; turn_id: string; text: string } | { type: "fork"; turn_id: string };
+
+export type ContinuationPreview = {
+	token: string,
+	source_chat_id: string,
+	agent_id: string,
+	creates_chat: boolean,
+	resumes_native: boolean,
+	/**  Exact bounded context shown before confirmation and included in the next visible prompt. */
+	handoff: string,
+	/**
+	 *  Retry/edit prompt, including the visible labels/text for retained attachments and mentions.
+	 *  Switch/fork waits for the next user prompt and therefore has no prompt here.
+	 */
+	prompt: string | null,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type ContinuationResult = {
+	chat_id: string,
+	prompt: PromptAck | null,
+};
+
+export type ConversationTurn = {
+	turn_id: string,
+	ordinal: number,
+	agent_id: string,
+	status: string,
+	prompt_preview: string,
+	started_at: number,
+};
+
+export type ConversationTurns = {
+	/**  Newest first, up to 50 turns. The full source transcript remains unchanged. */
+	turns: ConversationTurn[],
+	before_ordinal: number | null,
+	has_more: boolean,
+};
+
 export type Cost = {
 	amount: number | null,
 	currency: string,
@@ -580,6 +620,13 @@ export type DeviceIdentity = {
 	 *  2^53 ms, hundreds of millennia away.
 	 */
 	created_at: number,
+};
+
+export type EditablePrompt = {
+	turn_id: string,
+	/**  Original free text only. Existing attachment and mention context is retained on edit. */
+	text: string,
+	has_context: boolean,
 };
 
 export type EnvState = { state: "resolving" } | { state: "ready"; source: string; took_ms: number; vars: number } | { state: "fallback"; reason: string };

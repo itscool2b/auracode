@@ -117,6 +117,12 @@ so the full CLI integration command could not finish. The scripted fixture now u
 actual device ID instead of a mismatched literal, preserving device-local folder isolation. Tauri command wiring,
 macOS execution, edit/retry/fork and visible handoff remain pending. No CI push was made.
 
+The continuation DTO now defines paged turn summaries, editable free text with retained context,
+switch/retry/edit/fork actions, and an exact visible preview with a one-use expiring token.
+Retry/edit previews show their complete prompt; switch/fork wait for the next user message.
+Source transcript preservation and native-resume status are explicit. TypeScript export passes;
+continuation persistence and execution are still being implemented.
+
 The final local M1e follow-up resolves Windows Pi, OMP and Grok npm shims through the reviewed
 package's bounded `package.json` bin entry, using `node.exe` or a packaged executable. It never
 interprets shim content. Package name, relative entry containment and canonical target are checked;

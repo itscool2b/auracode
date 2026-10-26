@@ -33,6 +33,11 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::changes::ChangeDiff>()
         .typ::<aura_protocol::changes::RevertPreview>()
         .typ::<aura_protocol::changes::RevertResult>()
+        .typ::<aura_protocol::conversation::ConversationTurns>()
+        .typ::<aura_protocol::conversation::EditablePrompt>()
+        .typ::<aura_protocol::conversation::ContinuationAction>()
+        .typ::<aura_protocol::conversation::ContinuationPreview>()
+        .typ::<aura_protocol::conversation::ContinuationResult>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
             commands::start_demo_stream,
