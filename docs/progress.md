@@ -105,6 +105,12 @@ schema has no runtime selector, so selecting another shell does not address that
 driver regression preserves the failed tool and its error text even when the provider completes the
 turn normally. Paid allow-once and the remaining smoke scenarios stay pending an external fix.
 
+Checkpoint `e2416e7` passed [Linux and Windows CI](https://github.com/itscool2b/auracode/actions/runs/40278206764),
+including the native approval regressions, all replay fixtures, generated schema checks, bindings,
+frontend checks and both app smoke runs. macOS was skipped by branch policy. The subsequently added
+helper-failure lifecycle regression compiles and passes Clippy; its execution is part of the next CI
+checkpoint. The restricted-menu expected golden is now verified on both CI platforms.
+
 M1c requirements still pending: opt-in prompted verification, generated
 schema verification for the historical 0.164.0 baseline, independent verification of review fixes,
 and final combined verification. Steer, fork, image attachments,
