@@ -47,6 +47,7 @@ pub mod os;
 pub mod profile_commands;
 pub mod profile_config;
 pub mod project_tools;
+pub mod repository_publication_commands;
 pub mod reveal;
 pub mod search_commands;
 pub mod sessions;

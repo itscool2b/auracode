@@ -132,6 +132,9 @@ export const commands = {
 	folderLocateApply: (review: FolderLocationReview) => typedError<ProjectFolder, AppError>(__TAURI_INVOKE("folder_locate_apply", { review })),
 	accountKeepLocalPreview: () => typedError<KeepLocalPreview, AppError>(__TAURI_INVOKE("account_keep_local_preview")),
 	accountKeepLocalApply: (token: string) => typedError<KeepLocalResult, AppError>(__TAURI_INVOKE("account_keep_local_apply", { token })),
+	repositoryPublicationReview: (folderId: string, input: RepositoryPublicationInput) => typedError<RepositoryPublicationReview, AppError>(__TAURI_INVOKE("repository_publication_review", { folderId, input })),
+	repositoryPublicationDraft: (folderId: string) => typedError<RepositoryPublicationDraft | null, AppError>(__TAURI_INVOKE("repository_publication_draft", { folderId })),
+	repositoryPublicationApply: (folderId: string, token: string) => typedError<RepositoryPublicationResult, AppError>(__TAURI_INVOKE("repository_publication_apply", { folderId, token })),
 	terminalRead: (terminalId: string) => typedError<TerminalChunk, AppError>(__TAURI_INVOKE("terminal_read", { terminalId })),
 	terminalWrite: (terminalId: string, bytes: number[]) => typedError<null, AppError>(__TAURI_INVOKE("terminal_write", { terminalId, bytes })),
 	terminalResize: (terminalId: string, rows: number, cols: number) => typedError<null, AppError>(__TAURI_INVOKE("terminal_resize", { terminalId, rows, cols })),
@@ -1491,6 +1494,43 @@ export type RecoverySetup = {
 	id: string,
 	recovery_key: string,
 };
+
+export type RepositoryPublicationDraft = {
+	input: RepositoryPublicationInput,
+	unfinished: boolean,
+};
+
+export type RepositoryPublicationInput = {
+	/**  Empty selects the currently authenticated GitHub user during the explicit review. */
+	owner: string,
+	name: string,
+};
+
+export type RepositoryPublicationResult = {
+	folder_id: string,
+	url: string,
+	repository: string,
+	head_commit: string,
+	state: RepositoryPublicationState,
+	detail: string,
+};
+
+export type RepositoryPublicationReview = {
+	token: string,
+	folder_id: string,
+	path: string,
+	repository: string,
+	url: string,
+	branch: string,
+	head_commit: string,
+	private: boolean,
+	recovering: boolean,
+	will_create: boolean,
+	will_push: boolean,
+	notices: string[],
+};
+
+export type RepositoryPublicationState = "complete" | "needs_review";
 
 /**  Who answered a permission request or a question. */
 export type ResolvedBy = "user" | 

@@ -31,6 +31,11 @@ pub(crate) enum OrganizationCommand {
         folder: PathBuf,
         identity: Option<FolderIdentity>,
     },
+    PublishFolderIdentity {
+        folder_id: String,
+        expected_path: PathBuf,
+        identity: FolderIdentity,
+    },
     RenameChat {
         id: String,
         title: String,
@@ -92,6 +97,11 @@ impl OrganizationCommand {
                     + identity.as_ref().map_or(0, FolderIdentity::bytes)
             }
             Self::RenameChat { id, title } => id.len() + title.len(),
+            Self::PublishFolderIdentity {
+                folder_id,
+                expected_path,
+                identity,
+            } => folder_id.len() + expected_path.as_os_str().len() + identity.bytes(),
             Self::PinChat { id, .. } | Self::ArchiveChat { id, .. } => id.len(),
             Self::MoveChat {
                 id,
@@ -160,6 +170,15 @@ pub(crate) fn execute(
         OrganizationCommand::RenameChat { id, title } => {
             changed(conn.execute("UPDATE chats SET title=?2,title_source='manual',updated_at=?3,device_id=?4 WHERE id=?1 AND deleted=0", params![id,title,now,device])?)?;
             id
+        }
+        OrganizationCommand::PublishFolderIdentity {
+            folder_id,
+            expected_path,
+            identity,
+        } => {
+            let _: i64=conn.query_row("SELECT 1 FROM project_folders pf JOIN projects p ON p.id=pf.project_id JOIN folder_locations fl ON fl.folder_id=pf.id AND fl.device_id=?2 WHERE pf.id=?1 AND pf.deleted=0 AND p.deleted=0 AND pf.kind='local' AND fl.path=?3",params![folder_id,device,expected_path.to_string_lossy()],|row|row.get(0))?;
+            update_identity(conn, device, now, &folder_id, Some(&identity))?;
+            folder_id
         }
         OrganizationCommand::PinChat { id, pinned } => {
             changed(conn.execute(
@@ -407,6 +426,40 @@ fn snapshot(
 mod tests {
     use super::*;
     use crate::chatstore::test_support::TestDb;
+    #[test]
+    fn publication_identity_changes_only_the_reviewed_existing_device_mapping() {
+        let db = TestDb::new();
+        let chat = db.chat("/owned/repo");
+        let id: String = db
+            .conn()
+            .query_row("SELECT folder_id FROM chats WHERE id=?1", [chat], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let command = |path: &str| OrganizationCommand::PublishFolderIdentity {
+            folder_id: id.clone(),
+            expected_path: path.into(),
+            identity: FolderIdentity::Git {
+                remote: "https://github.com/fixture/project".into(),
+                default_branch: None,
+            },
+        };
+        assert!(execute(db.conn(), "dev", 2, command("/wrong")).is_err());
+        assert!(execute(db.conn(), "other", 2, command("/owned/repo")).is_err());
+        let result = execute(db.conn(), "dev", 2, command("/owned/repo")).unwrap();
+        assert_eq!(result.projects[0].folders[0].id, id);
+        assert_eq!(result.projects[0].folders[0].kind, FolderKind::Git);
+        assert_eq!(
+            result.projects[0].folders[0].path.as_deref(),
+            Some("/owned/repo")
+        );
+        assert!(execute(db.conn(), "dev", 3, command("/owned/repo")).is_err());
+        let count: i64 = db
+            .conn()
+            .query_row("SELECT COUNT(*) FROM project_folders", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
 
     #[test]
     fn portable_identity_updates_preserve_folder_id_and_device_local_paths() {

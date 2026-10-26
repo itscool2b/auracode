@@ -3,6 +3,7 @@ import type { FolderLocationReview, FolderResolution, ProjectFolder } from "../.
 import { type FolderResolutionApi, folderResolutionApi } from "../../lib/folderResolution";
 import { CloneProject } from "./CloneProject";
 import "./folder-resolver.css";
+import { RepositoryPublisher } from "./RepositoryPublisher";
 
 /** Mount under the active profile and key by profile ID. Only explicit Search reads code roots. */
 export function FolderResolver({
@@ -129,6 +130,18 @@ export function FolderResolver({
           {notice}
         </p>
       ))}
+      {value?.folder.kind === "local" && value.folder.path && (
+        <RepositoryPublisher
+          folderId={folderId}
+          onPublished={async () => {
+            const token = generation.current;
+            const next = await api.resolution(folderId, false);
+            if (generation.current !== token) return;
+            setValue(next);
+            await onLocated(next.folder);
+          }}
+        />
+      )}
       {value?.folder.kind === "git" && (
         <>
           <p className="setup-path">{remote}</p>

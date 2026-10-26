@@ -30,6 +30,7 @@ mod policy;
 #[cfg(feature = "account-sync")]
 mod preservation;
 mod project_tools;
+mod repository_publication;
 mod search;
 mod spawner;
 #[cfg(feature = "account-sync")]

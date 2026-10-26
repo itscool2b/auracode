@@ -6,6 +6,7 @@ mod git;
 mod identity;
 mod initialize;
 mod inspect;
+mod publication;
 mod publish;
 mod records;
 mod recovery;
@@ -41,6 +42,7 @@ pub struct GitWorkspaces {
     registry: Arc<LeftoverRegistry>,
     root: PathBuf,
     records: records::Backend,
+    publication_records: records::Backend,
     gate: tokio::sync::Mutex<()>,
     prepared: std::sync::Mutex<HashMap<String, create::Prepared>>,
     actions: std::sync::Mutex<HashMap<String, actions::PreparedAction>>,
@@ -48,6 +50,7 @@ pub struct GitWorkspaces {
     pull_requests: std::sync::Mutex<HashMap<String, publish::PreparedPullRequest>>,
     setups: std::sync::Mutex<HashMap<String, setup::Prepared>>,
     initializations: std::sync::Mutex<HashMap<String, initialize::Prepared>>,
+    publications: std::sync::Mutex<HashMap<String, publication::Prepared>>,
 }
 
 impl GitWorkspaces {
@@ -61,7 +64,12 @@ impl GitWorkspaces {
         } else {
             records::Backend::Local
         };
-        Self::with_records(profile, env, registry, backend)
+        let publications = if profile.meta.kind == crate::profile::ProfileKind::Account {
+            records::Backend::Locked
+        } else {
+            records::Backend::Local
+        };
+        Self::with_records(profile, env, registry, backend, publications)
     }
 
     #[cfg(feature = "account-sync")]
@@ -76,16 +84,26 @@ impl GitWorkspaces {
                 "An account worktree key requires an Account profile.".into(),
             ));
         }
-        let legacy = profile.dir.join("worktrees/registry.json");
-        match std::fs::symlink_metadata(&legacy) {
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
-            Err(error) => return Err(error.into()),
-            Ok(_) => return Err(GitError::Message("Existing worktree metadata needs an explicit encrypted import. It was left unchanged.".into())),
+        for name in ["registry.json", "publications.json"] {
+            let legacy = profile.dir.join("worktrees").join(name);
+            match std::fs::symlink_metadata(&legacy) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+                Err(error) => return Err(error.into()),
+                Ok(_) => return Err(GitError::Message(
+                    "Existing worktree metadata needs an explicit encrypted import. It was left unchanged.".into()
+                )),
+            }
         }
         let file = crate::profile_files::EncryptedRecord::open(
             &profile.dir.join("metadata"),
             "worktree-registry",
             8 * 1024 * 1024,
+            key.clone(),
+        )?;
+        let publications = crate::profile_files::EncryptedRecord::open(
+            &profile.dir.join("metadata"),
+            "repository-publications",
+            1024 * 1024,
             key,
         )?;
         Ok(Self::with_records(
@@ -93,6 +111,7 @@ impl GitWorkspaces {
             env,
             registry,
             records::Backend::Encrypted(file),
+            records::Backend::Encrypted(publications),
         ))
     }
 
@@ -101,12 +120,14 @@ impl GitWorkspaces {
         env: Arc<EnvResolver>,
         registry: Arc<LeftoverRegistry>,
         records: records::Backend,
+        publication_records: records::Backend,
     ) -> Arc<Self> {
         Arc::new(Self {
             env,
             registry,
             root: profile.dir.join("worktrees"),
             records,
+            publication_records,
             gate: tokio::sync::Mutex::new(()),
             prepared: std::sync::Mutex::new(HashMap::new()),
             actions: std::sync::Mutex::new(HashMap::new()),
@@ -114,6 +135,7 @@ impl GitWorkspaces {
             pull_requests: std::sync::Mutex::new(HashMap::new()),
             setups: std::sync::Mutex::new(HashMap::new()),
             initializations: std::sync::Mutex::new(HashMap::new()),
+            publications: std::sync::Mutex::new(HashMap::new()),
         })
     }
 

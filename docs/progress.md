@@ -2301,3 +2301,31 @@ The broad process test command passed the new tests but later hit Application Co
 an unrelated supervisor test binary with zero matching tests. It was not bypassed or retried. The
 focused library run passed after adding the bounded-tail assertion. Final platform acceptance remains
 pending. Integrated reset command bindings were also regenerated in this checkpoint.
+### Explicit private repository publication
+
+Mapped local-only folders now expose reviewed Publish to GitHub. Rust requires a regular Git root with
+an existing commit, resolves the chosen user or organization through the user's GitHub CLI, and shows
+the exact repository, private visibility, branch and commit before any remote mutation. Non-Git and
+unborn repositories point to explicit initialization/commit work. No staging, automatic commits or
+vendor credential reads are added. The implementation follows the official
+[gh API command contract](https://cli.github.com/manual/gh_api) and
+[GitHub repository endpoints](https://docs.github.com/en/rest/repos/repos).
+
+Creation and push intent are saved before execution in a bounded recovery journal, encrypted for Account
+profiles. Unknown create/push outcomes stop for a new review. Recovery checks the pinned repository ID,
+private visibility and branch commit; a missing response never causes an automatic create retry or
+branch overwrite. Git pushes only the reviewed commit with an absent-branch lease, verifies its effective
+destination, and adds origin only after confirmation. The index and uncommitted files remain unchanged.
+Portable folder identity updates use the reviewed folder ID and device path rather than creating a new
+folder. Recovery drafts survive restart; no sign-in or GitHub read occurs merely by mounting the UI.
+
+Focused Windows tests passed for HTTP status handling, uncertain creation/push recovery, identity and
+visibility changes, native origin preservation, mixed index/worktree state, empty-repository guidance,
+device mapping CAS and encrypted recovery with plaintext-layout refusal. The production push path was
+also exercised against a disposable local bare repository: its absent-branch lease rejected a second
+commit while preserving the first. Eleven matching Account-feature tests plus the added no-commit test,
+ordinary native bindings export, core/desktop all-target Clippy, TypeScript and Biome passed. Chromium
+and WebKit passed explicit review, private confirmation, uncertain-result retry, reopened journal and
+post-publication refresh failure checks. No GitHub repository, remote branch, real login or paid agent
+call was created during development. Integrated UI placement, native macOS qualification and complete
+M7 acceptance remain pending.
