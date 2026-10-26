@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { RebindProfilePanel } from "../components/settings/RebindProfilePanel";
+import { RemoveAccountPanel } from "../components/settings/RemoveAccountPanel";
 import { ResetSyncPanel } from "../components/settings/ResetSyncPanel";
 import type { AccountStatus } from "../lib/account/bindings";
 import type { AccountRebindApi } from "../lib/account/rebind";
+import type { AccountRemovalApi } from "../lib/account/removal";
 import type { AccountResetApi } from "../lib/account/reset";
 import "../styles.css";
 import "../ui-tokens.css";
@@ -25,6 +27,49 @@ const initial: AccountStatus = {
 };
 function Preview() {
   const [status, setStatus] = useState(initial);
+  const [localActive, setLocalActive] = useState(mode !== "remove-account");
+  const [removalCalls, setRemovalCalls] = useState({ list: 0, preview: 0, apply: 0, cancel: 0 });
+  const [removalApi] = useState<AccountRemovalApi>(() => {
+    let pending = false;
+    let removed = false;
+    let attempts = 0;
+    return {
+      list: async () => {
+        setRemovalCalls((value) => ({ ...value, list: value.list + 1 }));
+        return removed
+          ? []
+          : [{ profile_id: "synthetic-profile", display_name: "Retained account", pending }];
+      },
+      preview: async (profile_id) => {
+        setRemovalCalls((value) => ({ ...value, preview: value.preview + 1 }));
+        return {
+          token: "synthetic-review",
+          profile_id,
+          display_name: "Retained account",
+          other_profiles: 1,
+          pending_changes: null,
+          resuming: pending,
+        };
+      },
+      apply: async (token, confirmation) => {
+        if (token !== "synthetic-review" || confirmation !== "REMOVE")
+          throw new Error("Review required");
+        setRemovalCalls((value) => ({ ...value, apply: value.apply + 1 }));
+        if (++attempts === 1) {
+          pending = true;
+          throw new Error("Removal did not finish. Review the pending removal to continue.");
+        }
+        pending = false;
+        removed = true;
+        return { ...initial, access: "signed_out" };
+      },
+      cancel: async () => {
+        setRemovalCalls((value) => ({ ...value, cancel: value.cancel + 1 }));
+        pending = false;
+        return initial;
+      },
+    };
+  });
   const [calls, setCalls] = useState({ review: 0, confirm: 0, retry: 0, cancel: 0 });
   const [rebindCalls, setRebindCalls] = useState({ list: 0, restore: 0 });
   const [rebindApi] = useState<AccountRebindApi>(() => {
@@ -94,7 +139,14 @@ function Preview() {
       <div className="account-panel">
         <h1>Account recovery</h1>
         <h2>Your account</h2>
-        {mode === "rebind" ? (
+        {mode?.startsWith("remove") ? (
+          <RemoveAccountPanel
+            api={removalApi}
+            localActive={localActive}
+            onLocal={async () => setLocalActive(true)}
+            onStatus={setStatus}
+          />
+        ) : mode === "rebind" ? (
           <RebindProfilePanel api={rebindApi} onStatus={setStatus} />
         ) : (
           <ResetSyncPanel
@@ -105,6 +157,7 @@ function Preview() {
           />
         )}
         <output aria-label="Rebind calls">{JSON.stringify(rebindCalls)}</output>
+        <output aria-label="Removal calls">{JSON.stringify(removalCalls)}</output>
         <output aria-label="Bound profile">{status.profile_id}</output>
         <output aria-label="Reset calls">{JSON.stringify(calls)}</output>
         <output aria-label="Account access">{status.access}</output>

@@ -7,6 +7,8 @@ struct Memory {
     values: StdMutex<HashMap<VaultEntry, Vec<u8>>>,
     writes: StdMutex<usize>,
     fail_entry: StdMutex<Option<VaultEntry>>,
+    fail_remove: StdMutex<bool>,
+    fail_write_at: StdMutex<Option<usize>>,
 }
 impl SecretStore for Memory {
     fn load(&self, entry: &VaultEntry) -> aura_sync::vault::Result<Option<Zeroizing<Vec<u8>>>> {
@@ -19,6 +21,9 @@ impl SecretStore for Memory {
             .map(Zeroizing::new))
     }
     fn save(&self, entry: &VaultEntry, bytes: &[u8]) -> aura_sync::vault::Result<()> {
+        if *self.fail_write_at.lock().unwrap() == Some(*self.writes.lock().unwrap() + 1) {
+            return Err(VaultError::Write);
+        }
         if self.fail_entry.lock().unwrap().as_ref() == Some(entry) {
             return Err(VaultError::Write);
         }
@@ -30,9 +35,276 @@ impl SecretStore for Memory {
         Ok(())
     }
     fn remove(&self, entry: &VaultEntry) -> aura_sync::vault::Result<()> {
+        if *self.fail_remove.lock().unwrap() {
+            return Err(VaultError::Write);
+        }
         self.values.lock().unwrap().remove(entry);
         Ok(())
     }
+}
+
+#[tokio::test]
+async fn removal_requires_local_and_explicit_review_then_retains_receipt_through_key_failure() {
+    let dir = tempfile::tempdir().unwrap();
+    let profiles = profiles(&dir);
+    profiles.open_active().unwrap();
+    let vault = Arc::new(Memory::default());
+    seed_key(&vault);
+    let accounts = Accounts::open(api(), vault.clone(), profiles.clone())
+        .await
+        .unwrap();
+    accounts.inner.lock().await.account = Account::restore(api(), "account", vault.clone(), 100)
+        .await
+        .unwrap();
+    let profile = accounts.local_profile().await.unwrap().profile;
+    let other = profiles
+        .create(ProfileKind::Account, "Other workspace")
+        .unwrap();
+    std::fs::write(other.db_path(), b"unrelated retained ciphertext").unwrap();
+    std::fs::write(profile.db_path(), b"selected synthetic ciphertext").unwrap();
+    profiles.set_active(&profile.meta.id).unwrap();
+    assert!(
+        accounts
+            .prepare_removal(&profile.meta.id, 100)
+            .await
+            .is_err()
+    );
+    profiles.set_active("local").unwrap();
+    let review = accounts
+        .prepare_removal(&profile.meta.id, 100)
+        .await
+        .unwrap();
+    assert!(
+        accounts
+            .remove_from_device(&review.token, "wrong")
+            .await
+            .is_err()
+    );
+    assert!(profile.db_path().exists());
+    std::fs::write(profile.dir.join("new-content"), b"arrived after review").unwrap();
+    assert!(
+        accounts
+            .remove_from_device(&review.token, "REMOVE")
+            .await
+            .is_err()
+    );
+    assert!(profile.db_path().exists());
+    accounts.cancel_removal(&review.token).await.unwrap();
+    assert!(accounts.inner.lock().await.index.removal.is_none());
+    let review = accounts
+        .prepare_removal(&profile.meta.id, 100)
+        .await
+        .unwrap();
+    *vault.fail_remove.lock().unwrap() = true;
+    let failure = accounts
+        .remove_from_device(&review.token, "REMOVE")
+        .await
+        .unwrap_err();
+    assert!(failure.message.contains("may already be erased"));
+    assert!(!profile.dir.exists());
+    assert!(accounts.local_profile().await.is_err());
+    assert!(accounts.cancel_removal(&review.token).await.is_err());
+    assert!(
+        vault
+            .load(&VaultEntry::new(ORIGIN, "account").unwrap())
+            .unwrap()
+            .is_some()
+    );
+    drop(accounts);
+    let accounts = Accounts::open(api(), vault.clone(), profiles.clone())
+        .await
+        .unwrap();
+    assert!(accounts.removal_candidates().await.unwrap()[0].pending);
+    let review = accounts
+        .prepare_removal(&profile.meta.id, 100)
+        .await
+        .unwrap();
+    assert!(review.resuming);
+    *vault.fail_remove.lock().unwrap() = false;
+    accounts
+        .remove_from_device(&review.token, "REMOVE")
+        .await
+        .unwrap();
+    assert!(accounts.removal_candidates().await.unwrap().is_empty());
+    assert!(
+        vault
+            .load(&VaultEntry::new(ORIGIN, "account").unwrap())
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        std::fs::read(other.db_path()).unwrap(),
+        b"unrelated retained ciphertext"
+    );
+    assert_eq!(profiles.open_active().unwrap().meta.id, "local");
+}
+
+#[tokio::test]
+async fn removal_retries_index_acknowledgements_after_staging_and_after_key_erasure() {
+    for fail_at in [2, 5] {
+        let dir = tempfile::tempdir().unwrap();
+        let profiles = profiles(&dir);
+        profiles.open_active().unwrap();
+        let vault = Arc::new(Memory::default());
+        seed_key(&vault);
+        let accounts = Accounts::open(api(), vault.clone(), profiles.clone())
+            .await
+            .unwrap();
+        accounts.inner.lock().await.account =
+            Account::restore(api(), "account", vault.clone(), 100)
+                .await
+                .unwrap();
+        let profile = accounts.local_profile().await.unwrap().profile;
+        std::fs::write(profile.db_path(), b"selected synthetic ciphertext").unwrap();
+        let review = accounts
+            .prepare_removal(&profile.meta.id, 100)
+            .await
+            .unwrap();
+        *vault.fail_write_at.lock().unwrap() = Some(*vault.writes.lock().unwrap() + fail_at);
+        assert!(
+            accounts
+                .remove_from_device(&review.token, "REMOVE")
+                .await
+                .is_err()
+        );
+        assert!(!profile.dir.exists());
+        assert!(accounts.inner.lock().await.index.removal.is_some());
+        drop(accounts);
+        *vault.fail_write_at.lock().unwrap() = None;
+        let accounts = Accounts::open(api(), vault.clone(), profiles.clone())
+            .await
+            .unwrap();
+        let review = accounts
+            .prepare_removal(&profile.meta.id, 100)
+            .await
+            .unwrap();
+        accounts
+            .remove_from_device(&review.token, "REMOVE")
+            .await
+            .unwrap();
+        assert!(accounts.inner.lock().await.index.removal.is_none());
+        assert!(
+            vault
+                .load(&VaultEntry::new(ORIGIN, "account").unwrap())
+                .unwrap()
+                .is_none()
+        );
+    }
+}
+
+#[tokio::test]
+async fn removal_preserves_files_when_receipt_cannot_save_or_profile_is_owned() {
+    let dir = tempfile::tempdir().unwrap();
+    let profiles = profiles(&dir);
+    profiles.open_active().unwrap();
+    let vault = Arc::new(Memory::default());
+    seed_key(&vault);
+    let accounts = Accounts::open(api(), vault.clone(), profiles.clone())
+        .await
+        .unwrap();
+    accounts.inner.lock().await.account = Account::restore(api(), "account", vault.clone(), 100)
+        .await
+        .unwrap();
+    let profile = accounts.local_profile().await.unwrap().profile;
+    std::fs::write(profile.db_path(), b"preserve selected ciphertext").unwrap();
+    let review = accounts
+        .prepare_removal(&profile.meta.id, 100)
+        .await
+        .unwrap();
+    *vault.fail_entry.lock().unwrap() = Some(accounts.index_entry.clone());
+    assert!(
+        accounts
+            .remove_from_device(&review.token, "REMOVE")
+            .await
+            .is_err()
+    );
+    assert!(accounts.inner.lock().await.index.removal.is_none());
+    assert!(profile.db_path().exists());
+    *vault.fail_entry.lock().unwrap() = None;
+    let owner = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(profile.dir.join("owner.lock"))
+        .unwrap();
+    owner.try_lock().unwrap();
+    let review = accounts
+        .prepare_removal(&profile.meta.id, 100)
+        .await
+        .unwrap();
+    assert!(
+        accounts
+            .remove_from_device(&review.token, "REMOVE")
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        std::fs::read(profile.db_path()).unwrap(),
+        b"preserve selected ciphertext"
+    );
+    assert!(
+        vault
+            .load(&VaultEntry::new(ORIGIN, "account").unwrap())
+            .unwrap()
+            .is_some()
+    );
+    accounts.cancel_removal(&review.token).await.unwrap();
+    drop(owner);
+}
+
+#[tokio::test]
+async fn removal_prepared_resume_rechecks_staged_content_before_deletion() {
+    let dir = tempfile::tempdir().unwrap();
+    let profiles = profiles(&dir);
+    profiles.open_active().unwrap();
+    let vault = Arc::new(Memory::default());
+    seed_key(&vault);
+    let accounts = Accounts::open(api(), vault.clone(), profiles.clone())
+        .await
+        .unwrap();
+    accounts.inner.lock().await.account = Account::restore(api(), "account", vault.clone(), 100)
+        .await
+        .unwrap();
+    let profile = accounts.local_profile().await.unwrap().profile;
+    let review = accounts
+        .prepare_removal(&profile.meta.id, 100)
+        .await
+        .unwrap();
+    *vault.fail_write_at.lock().unwrap() = Some(*vault.writes.lock().unwrap() + 2);
+    assert!(
+        accounts
+            .remove_from_device(&review.token, "REMOVE")
+            .await
+            .is_err()
+    );
+    let staged = dir
+        .path()
+        .join("profiles/.account-removals")
+        .join(&review.token)
+        .join("data");
+    std::fs::write(staged.join("late-file"), b"unreviewed data").unwrap();
+    *vault.fail_write_at.lock().unwrap() = None;
+    let review = accounts
+        .prepare_removal(&profile.meta.id, 100)
+        .await
+        .unwrap();
+    assert!(
+        accounts
+            .remove_from_device(&review.token, "REMOVE")
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        std::fs::read(staged.join("late-file")).unwrap(),
+        b"unreviewed data"
+    );
+    assert!(
+        vault
+            .load(&VaultEntry::new(ORIGIN, "account").unwrap())
+            .unwrap()
+            .is_some()
+    );
 }
 
 #[tokio::test]
@@ -291,6 +563,46 @@ async fn explicit_rebinding_proves_key_identity_and_preserves_queued_edits_acros
 }
 
 #[tokio::test]
+async fn explicit_rebinding_refuses_future_schema_without_rewriting_database_or_index() {
+    let dir = tempfile::tempdir().unwrap();
+    let profiles = profiles(&dir);
+    profiles.open_active().unwrap();
+    let vault = Arc::new(Memory::default());
+    seed_key(&vault);
+    let restored = Account::restore(api(), "account", vault.clone(), 100)
+        .await
+        .unwrap()
+        .unwrap();
+    let (key, _) = restored.local_key_handle().unwrap();
+    let retained = retained_database(&profiles, "account", &key);
+    {
+        let (store, _) = crate::store::Store::open_encrypted(
+            &retained,
+            Arc::new(key.database_key("account", &retained.meta.id).unwrap()),
+        )
+        .unwrap();
+        store
+            .conn()
+            .pragma_update(None, "user_version", crate::store::SCHEMA_VERSION + 1)
+            .unwrap();
+    }
+    let before = std::fs::read(retained.db_path()).unwrap();
+    let accounts = Accounts::open(api(), vault.clone(), profiles)
+        .await
+        .unwrap();
+    accounts.inner.lock().await.account = Some(restored);
+    let writes = *vault.writes.lock().unwrap();
+    let failure = accounts
+        .rebind_profile(&retained.meta.id, 300)
+        .await
+        .unwrap_err();
+    assert!(failure.message.contains("newer auracode"));
+    assert_eq!(std::fs::read(retained.db_path()).unwrap(), before);
+    assert_eq!(*vault.writes.lock().unwrap(), writes);
+    assert!(accounts.status().await.unwrap().profile_id.is_none());
+}
+
+#[tokio::test]
 async fn opening_and_status_never_create_profile_or_contact_service() {
     let dir = tempfile::tempdir().unwrap();
     let vault = Arc::new(Memory::default());
@@ -382,7 +694,7 @@ async fn index_rejects_duplicate_profile_bindings_and_future_version() {
     let profile = crate::ids::new_id();
     for value in [
         serde_json::json!({"version":1,"accounts":{"one":profile,"two":profile}}),
-        serde_json::json!({"version":2,"accounts":{}}),
+        serde_json::json!({"version":3,"accounts":{}}),
     ] {
         let bytes = serde_json::to_vec(&value).unwrap();
         vault.save(&entry, &bytes).unwrap();

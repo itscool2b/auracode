@@ -180,3 +180,19 @@ pub struct AccountSignOut {
     /// False means the local session is removed, but remote revocation could not be confirmed.
     pub server_revoked: bool,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct AccountRemovalCandidate {
+    pub profile_id: String,
+    pub display_name: String,
+    pub pending: bool,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct AccountRemovalReview {
+    pub token: String,
+    pub profile_id: String,
+    pub display_name: String,
+    pub other_profiles: u32,
+    pub pending_changes: Option<u32>,
+    pub resuming: bool,
+}

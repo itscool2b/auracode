@@ -9,6 +9,8 @@ fn export_account_bindings() {
         .register::<AccountVaultStatus>()
         .register::<AccountResetStatus>()
         .register::<AccountResetReview>()
+        .register::<AccountRemovalCandidate>()
+        .register::<AccountRemovalReview>()
         .register::<AccountStatus>()
         .register::<SignInChallenge>()
         .register::<RecoverySetup>()

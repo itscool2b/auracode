@@ -27,6 +27,21 @@ export type AccountFailure = {
 
 export type AccountFailureCode = "invalid_input" | "invalid_state" | "offline" | "timed_out" | "unauthorized" | "deleted" | "forbidden" | "invalid_code" | "conflict" | "quota" | "rate_limited" | "delivery_failed" | "unavailable" | "not_found" | "protocol" | "secure_storage" | "local_storage" | "key_mismatch";
 
+export type AccountRemovalCandidate = {
+	profile_id: string,
+	display_name: string,
+	pending: boolean,
+};
+
+export type AccountRemovalReview = {
+	token: string,
+	profile_id: string,
+	display_name: string,
+	other_profiles: number,
+	pending_changes: number | null,
+	resuming: boolean,
+};
+
 export type AccountResetReview = {
 	id: string,
 	key_version: number,

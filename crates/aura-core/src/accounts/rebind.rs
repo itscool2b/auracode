@@ -160,6 +160,15 @@ fn verify_and_rebind(
         Connection::open_with_flags(path.join("aura.encrypted.db"), flags).map_err(|_| denied())?;
     let db_key = key.database_key(account, id).map_err(error::crypto)?;
     aura_sync::database::configure(&mut conn, &db_key).map_err(|_| denied())?;
+    let schema: u32 = conn
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(|_| denied())?;
+    if schema > crate::store::SCHEMA_VERSION {
+        return Err(error::failure(
+            AccountFailureCode::LocalStorage,
+            "This workspace was saved by a newer auracode version. Update auracode before restoring its binding. Nothing was replaced.",
+        ));
+    }
     conn.busy_timeout(Duration::from_secs(5))
         .map_err(|_| denied())?;
     conn.execute_batch("PRAGMA trusted_schema=OFF")

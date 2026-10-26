@@ -19,6 +19,10 @@ export const commands = {
 	accountResetReview: () => typedError<AccountResetReview, AccountFailure>(__TAURI_INVOKE("account_reset_review")),
 	accountResetConfirm: (reviewId: string, confirmation: string, retained: boolean) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_confirm", { reviewId, confirmation, retained })),
 	accountRebindProfile: (profileId: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_rebind_profile", { profileId })),
+	accountRemoveCandidates: () => typedError<AccountRemovalCandidate[], AccountFailure>(__TAURI_INVOKE("account_remove_candidates")),
+	accountRemovePreview: (profileId: string) => typedError<AccountRemovalReview, AccountFailure>(__TAURI_INVOKE("account_remove_preview", { profileId })),
+	accountRemoveApply: (token: string, confirmation: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_remove_apply", { token, confirmation })),
+	accountRemoveCancel: (token: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_remove_cancel", { token })),
 	accountResetRetry: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_retry")),
 	accountResetCancel: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_cancel")),
 	accountRequestCode: (email: string, turnstileToken: string) => typedError<SignInChallenge, AccountFailure>(__TAURI_INVOKE("account_request_code", { email, turnstileToken })),
@@ -329,6 +333,21 @@ export type AccountFailure = {
 };
 
 export type AccountFailureCode = "invalid_input" | "invalid_state" | "offline" | "timed_out" | "unauthorized" | "deleted" | "forbidden" | "invalid_code" | "conflict" | "quota" | "rate_limited" | "delivery_failed" | "unavailable" | "not_found" | "protocol" | "secure_storage" | "local_storage" | "key_mismatch";
+
+export type AccountRemovalCandidate = {
+	profile_id: string,
+	display_name: string,
+	pending: boolean,
+};
+
+export type AccountRemovalReview = {
+	token: string,
+	profile_id: string,
+	display_name: string,
+	other_profiles: number,
+	pending_changes: number | null,
+	resuming: boolean,
+};
 
 export type AccountResetReview = {
 	id: string,

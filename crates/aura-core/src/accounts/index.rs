@@ -51,12 +51,15 @@ pub(super) fn acquire(root: &std::path::Path) -> Result<std::fs::File> {
 pub(super) struct Index {
     version: u8,
     pub accounts: BTreeMap<String, Option<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub removal: Option<super::removal::Receipt>,
 }
 impl Default for Index {
     fn default() -> Self {
         Self {
             version: 1,
             accounts: BTreeMap::new(),
+            removal: None,
         }
     }
 }
@@ -81,7 +84,10 @@ impl Index {
                 return Ok(Self::default());
             };
             let index: Self = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-            if index.version != 1 || index.accounts.len() > LIMIT {
+            if !(1..=2).contains(&index.version)
+                || index.accounts.len() > LIMIT
+                || (index.version == 1 && index.removal.is_some())
+            {
                 return Err(invalid());
             }
             let mut profiles = std::collections::HashSet::new();
@@ -94,13 +100,22 @@ impl Index {
                     }
                 }
             }
+            if index
+                .removal
+                .as_ref()
+                .is_some_and(|receipt| !receipt.valid(&index))
+            {
+                return Err(invalid());
+            }
             Ok(index)
         })
         .await
         .map_err(|_| invalid())?
     }
     pub async fn save(&self, store: Arc<dyn SecretStore>, entry: VaultEntry) -> Result<()> {
-        let bytes = Zeroizing::new(serde_json::to_vec(self).map_err(|_| invalid())?);
+        let mut saved = self.clone();
+        saved.version = 2;
+        let bytes = Zeroizing::new(serde_json::to_vec(&saved).map_err(|_| invalid())?);
         tokio::task::spawn_blocking(move || store.save(&entry, &bytes).map_err(error::vault))
             .await
             .map_err(|_| invalid())?

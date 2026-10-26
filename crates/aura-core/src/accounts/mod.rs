@@ -21,6 +21,7 @@ mod index;
 mod network;
 pub mod passphrase;
 mod rebind;
+mod removal;
 mod reset;
 pub use audit::audit_profile;
 use index::Index;
@@ -40,6 +41,7 @@ struct Inner {
     challenge: Option<(String, Instant)>,
     recovery: Option<PendingRecovery>,
     reset: Option<reset::PendingSetup>,
+    removal: Option<removal::Review>,
 }
 struct PendingRecovery {
     id: String,
@@ -83,6 +85,7 @@ impl Accounts {
                 challenge: None,
                 recovery: None,
                 reset: None,
+                removal: None,
             }),
         })
     }
@@ -100,6 +103,14 @@ impl Accounts {
     /// Select a remembered account by its local profile only, without contacting the server.
     pub async fn restore_profile(&self, profile: &str, now: i64) -> Result<AccountStatus> {
         let mut inner = self.action()?;
+        if inner
+            .index
+            .removal
+            .as_ref()
+            .is_some_and(|receipt| receipt.profile_id == profile)
+        {
+            return Err(error::state());
+        }
         let account = inner
             .index
             .accounts
@@ -150,6 +161,17 @@ impl Accounts {
             .verify_auth(challenge, code)
             .await
             .map_err(error::api)?;
+        if inner
+            .index
+            .removal
+            .as_ref()
+            .is_some_and(|receipt| receipt.account_id == verified.user_id)
+        {
+            return Err(error::failure(
+                AccountFailureCode::InvalidState,
+                "Finish this account's pending local removal before signing in again.",
+            ));
+        }
         inner.challenge = None;
         let mut index = inner.index.clone();
         index.ensure(&verified.user_id)?;
@@ -353,6 +375,17 @@ impl Accounts {
     }
 }
 fn account(inner: &mut Inner) -> Result<&mut Account> {
+    if inner.index.removal.as_ref().is_some_and(|receipt| {
+        inner
+            .account
+            .as_ref()
+            .is_some_and(|account| account.id() == receipt.account_id)
+    }) {
+        return Err(error::failure(
+            AccountFailureCode::InvalidState,
+            "Finish or cancel this account's pending local removal before using it.",
+        ));
+    }
     inner.account.as_mut().ok_or_else(error::state)
 }
 fn millis(seconds: i64) -> Result<i64> {

@@ -126,6 +126,40 @@ try {
       assert.equal(await page.getByLabel("Bound profile").textContent(), "");
       await page.getByRole("button", { name: "Restore workspace binding" }).click();
       await page.getByLabel("Bound profile").filter({ hasText: "synthetic-profile" }).waitFor();
+      await page.goto(`${url}?mode=remove-account`);
+      const removalCalls = async () =>
+        JSON.parse(await page.getByLabel("Removal calls").textContent());
+      assert.deepEqual(await removalCalls(), { list: 0, preview: 0, apply: 0, cancel: 0 });
+      assert.equal(
+        await page.getByRole("button", { name: "Review accounts on this device" }).count(),
+        0,
+      );
+      await page.getByRole("button", { name: "Switch to Local before removing" }).click();
+      await page.getByRole("button", { name: "Review accounts on this device" }).click();
+      await page.getByRole("button", { name: "Review removal", exact: true }).click();
+      const erase = page.getByRole("button", { name: "Permanently remove from device" });
+      assert.equal(await erase.isDisabled(), true);
+      await page.getByRole("button", { name: "Close review" }).click();
+      assert.equal((await removalCalls()).apply, 0);
+      await page.getByRole("button", { name: "Review removal", exact: true }).click();
+      await page.getByLabel("I understand that local data and key access will be lost").check();
+      assert.equal(await erase.isDisabled(), true);
+      await page.getByLabel("Type REMOVE to erase this workspace and key").fill("REMOVE");
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      await page.screenshot({ path: resolve(out, `${name}-removal.png`), fullPage: true });
+      await erase.click();
+      await page.getByRole("alert").waitFor();
+      await page.getByRole("button", { name: "Review pending removal" }).click();
+      await page.getByRole("button", { name: "Cancel unstarted removal" }).click();
+      assert.equal((await removalCalls()).cancel, 1);
+      await page.getByRole("button", { name: "Review removal", exact: true }).click();
+      await page.getByLabel("I understand that local data and key access will be lost").check();
+      await page.getByLabel("Type REMOVE to erase this workspace and key").fill("REMOVE");
+      await erase.click();
+      await page
+        .getByText("No mapped Account workspaces remain in this data folder.", { exact: true })
+        .waitFor();
+      assert.equal((await removalCalls()).apply, 2);
       assert.deepEqual(errors, []);
       console.log(
         `${name}: explicit destructive review, cancel, retained failure, exact retry and committed local completion passed`,

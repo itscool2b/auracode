@@ -157,6 +157,20 @@ textarea.account-secret {
   justify-content: flex-end;
   margin-top: 24px;
 }
+.account-removal-body {
+  display: grid;
+  gap: 16px;
+  font-size: 12px;
+}
+.account-removal-body :is(p, h3, .account-check) {
+  margin: 0;
+}
+.account-removal-body .ui-input {
+  width: 100%;
+}
+.account-removal-body code {
+  overflow-wrap: anywhere;
+}
 .account-profiles {
   padding: 0;
   list-style: none;

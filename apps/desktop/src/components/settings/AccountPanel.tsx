@@ -17,6 +17,7 @@ import { AccountVault } from "./AccountVault";
 import { AccountVerification } from "./AccountVerification";
 import { KeepAsLocalPanel } from "./KeepAsLocalPanel";
 import { RebindProfilePanel } from "./RebindProfilePanel";
+import { RemoveAccountPanel } from "./RemoveAccountPanel";
 import { ResetSyncPanel } from "./ResetSyncPanel";
 import { SignOutDialog } from "./SignOutDialog";
 import "./account.css";
@@ -36,6 +37,7 @@ export function AccountPanel({
   recoveryOnly = false,
   recoveryProfileId = null,
   recoveryActionLabel = "Unlock selected account",
+  initialEmail = "",
 }: {
   readonly api?: AccountApi;
   readonly deviceName?: string;
@@ -44,6 +46,7 @@ export function AccountPanel({
   readonly recoveryOnly?: boolean;
   readonly recoveryProfileId?: string | null;
   readonly recoveryActionLabel?: string;
+  readonly initialEmail?: string;
   readonly Verification?: ComponentType<{
     onToken: (token: string) => void;
     origin?: VerificationOrigin;
@@ -57,7 +60,7 @@ export function AccountPanel({
   const [signOutReview, setSignOutReview] = useState(false);
   const [showVault, setShowVault] = useState(false);
   const [generation, setGeneration] = useState(0);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [proof, setProof] = useState("");
   const [verificationAttempt, setVerificationAttempt] = useState(0);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
@@ -731,6 +734,14 @@ export function AccountPanel({
           allowReview={!status.local_key_available}
           disabled={locked}
           onStatus={(value) => setStatus(value)}
+        />
+      ) : null}
+      {!recoveryOnly ? (
+        <RemoveAccountPanel
+          localActive={activeProfileId === "local"}
+          disabled={locked}
+          onLocal={() => switchProfile("local")}
+          onStatus={setStatus}
         />
       ) : null}
       {!recoveryOnly && signOutReview ? (
