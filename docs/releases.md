@@ -99,7 +99,13 @@ deleted automatically. A valid stage contains:
 - `releases/<version>/`, with copied packages and signatures.
 - `release-plan.json` and `COMPLETE`, local preparation records that are not public release objects.
 
-`verify` reads the staged bytes again and compares every generated manifest and checksum. A later
+Before verification, set `AURACODE_UPDATER_PUBLIC_KEY` from the independently trusted release
+configuration, using the same public key embedded in the application. Never derive that trust input
+from the stage being checked. Missing or mismatched pins fail verification. The website build uses
+this same environment variable when verifying `AURACODE_RELEASE_STAGE`.
+
+`verify` reads the staged bytes again and compares every generated manifest and checksum. Artifact
+opens refuse leaf symlinks atomically, including a link substituted after the initial path checks. A later
 change to the original build directory cannot change the copied stage. It does not establish
 platform trust, provenance or authorization to publish. Do not upload a whole scratch directory.
 Only the reviewed public object list above belongs in the release bucket. Upload immutable versioned

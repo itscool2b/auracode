@@ -51,7 +51,7 @@ fn staging_manifests_have_a_separate_prefix_and_visible_channel() {
     plan.channel = Channel::Staging;
     let stage = temp.path().join("stage");
     prepare(&plan, &artifacts, &stage).unwrap();
-    verify(&stage).unwrap();
+    verify(&stage, &plan.public_key).unwrap();
     let catalog: Value =
         serde_json::from_slice(&fs::read(stage.join("downloads.json")).unwrap()).unwrap();
     assert_eq!(catalog["release"]["channel"], "staging");
@@ -73,7 +73,7 @@ fn complete_stage_has_exact_target_urls_and_no_private_paths() {
     let plan = plan(&artifacts);
     let stage = temp.path().join("stage");
     prepare(&plan, &artifacts, &stage).unwrap();
-    verify(&stage).unwrap();
+    verify(&stage, &plan.public_key).unwrap();
     let latest: Value =
         serde_json::from_slice(&fs::read(stage.join("latest.json")).unwrap()).unwrap();
     assert_eq!(latest["platforms"].as_object().unwrap().len(), 6);
@@ -99,7 +99,32 @@ fn complete_stage_has_exact_target_urls_and_no_private_paths() {
     assert!(!stage.join("PREPARATION_INCOMPLETE").exists());
     // Later changes to inputs cannot replace the signed bytes already staged.
     fs::write(artifacts.join("auracode-x64.exe"), b"changed source").unwrap();
-    verify(&stage).unwrap();
+    verify(&stage, &plan.public_key).unwrap();
+}
+
+#[test]
+fn verification_requires_an_independently_pinned_key() {
+    let temp = tempfile::tempdir().unwrap();
+    let artifacts = temp.path().join("artifacts");
+    let plan = plan(&artifacts);
+    let stage = temp.path().join("stage");
+    prepare(&plan, &artifacts, &stage).unwrap();
+    for expected in ["", "  ", "different-trusted-release-key"] {
+        let error = verify(&stage, expected).unwrap_err().to_string();
+        assert!(error.contains("independently pinned updater public key"));
+    }
+    verify(&stage, &plan.public_key).unwrap();
+
+    // The CLI must never silently use the key from the stage it is checking.
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_aura-release"))
+        .args(["verify", stage.to_str().unwrap()])
+        .env_remove("AURACODE_UPDATER_PUBLIC_KEY")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let error = String::from_utf8(output.stderr).unwrap();
+    assert!(error.contains("trusted release configuration"));
+    assert!(!error.contains(&plan.public_key));
 }
 
 #[test]
@@ -143,7 +168,7 @@ fn signatures_reject_modified_bytes_wrong_version_missing_version_and_duplicate_
         assert!(stage.join("PREPARATION_INCOMPLETE").exists());
         assert!(!stage.join("COMPLETE").exists());
         assert!(!stage.join("latest.json").exists());
-        assert!(verify(&stage).is_err());
+        assert!(verify(&stage, &plan.public_key).is_err());
     }
 }
 
@@ -222,7 +247,7 @@ fn verification_detects_staged_payload_and_manifest_changes() {
         let stage = temp.path().join("stage");
         prepare(&plan, &artifacts, &stage).unwrap();
         fs::write(stage.join(file), b"changed").unwrap();
-        assert!(verify(&stage).is_err(), "{file}");
+        assert!(verify(&stage, &plan.public_key).is_err(), "{file}");
     }
 }
 

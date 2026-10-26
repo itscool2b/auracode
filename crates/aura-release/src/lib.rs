@@ -9,6 +9,7 @@ use std::{
 
 use anyhow::{Context, Result, bail, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
+use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsSyncExt};
 use minisign_verify::{PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -237,7 +238,10 @@ fn open_regular(root: &Path, name: &str, limit: u64) -> Result<File> {
         fs::canonicalize(&path)?.parent() == Some(root),
         "Artifact resolves outside its directory"
     );
-    let file = File::open(&path)?;
+    let directory = cap_std::fs::Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
+    let mut options = cap_std::fs::OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No).nonblock(true);
+    let file = directory.open_with(name, &options)?.into_std();
     let metadata = file.metadata()?;
     ensure!(
         metadata.is_file() && metadata.len() > 0 && metadata.len() <= limit,
@@ -468,7 +472,11 @@ pub fn prepare(plan: &ReleasePlan, artifacts: &Path, destination: &Path) -> Resu
 }
 
 /// Re-verifies staged bytes and every generated manifest before any external publication step.
-pub fn verify(destination: &Path) -> Result<()> {
+pub fn verify(destination: &Path, expected_public_key: &str) -> Result<()> {
+    ensure!(
+        !expected_public_key.trim().is_empty(),
+        "An independently pinned updater public key is required"
+    );
     let root = fs::canonicalize(destination)?;
     ensure!(
         !root.join("PREPARATION_INCOMPLETE").exists(),
@@ -476,6 +484,10 @@ pub fn verify(destination: &Path) -> Result<()> {
     );
     bounded(&root, "COMPLETE", 1024)?;
     let plan = read_plan(&root.join("release-plan.json"))?;
+    ensure!(
+        plan.public_key.trim() == expected_public_key.trim(),
+        "Release stage does not match the independently pinned updater public key"
+    );
     let payload = fs::canonicalize(root.join("releases").join(&plan.version))?;
     ensure!(
         payload.starts_with(&root),

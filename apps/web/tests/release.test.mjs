@@ -36,6 +36,7 @@ await mkdir(artifacts);
 const fixture = JSON.parse(
   await readFile(join(repo, "crates/aura-release/tests/fixtures/signatures.json"), "utf8"),
 );
+env.AURACODE_UPDATER_PUBLIC_KEY = fixture.public_key;
 const entries = [
   ["macos_universal_dmg", "auracode-universal.dmg"],
   ["macos_universal_updater", "auracode.app.tar.gz"],

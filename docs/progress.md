@@ -2001,3 +2001,11 @@ tightening phase validation. Native locator/store tests are added but could not 
 Control blocked num-traits and libsqlite3-sys build scripts with error 4551. Desktop switch and typed
 startup recovery wiring remain pending; no real configuration, credentials or agents were accessed.
 
+### Independent release verification trust
+Release verification now requires the updater public key from trusted release configuration, instead
+of accepting the mutable staged plan as its own trust anchor. The CLI and website build fail without
+that independent pin. Artifact handles also refuse leaf links atomically during open. All ten release
+regressions and all-target Clippy passed. Chromium and WebKit verified the synthetic download stage,
+including all architecture links without JavaScript and rejection of changed staged bytes. No real
+signing key, installer, publication or hosted CI job was involved.
+

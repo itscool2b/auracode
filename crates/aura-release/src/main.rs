@@ -16,7 +16,9 @@ fn main() -> anyhow::Result<()> {
             );
         }
         [command, destination] if command == "verify" => {
-            aura_release::verify(Path::new(destination))?;
+            let expected_key = env::var("AURACODE_UPDATER_PUBLIC_KEY")
+                .map_err(|_| anyhow::anyhow!("Set AURACODE_UPDATER_PUBLIC_KEY from the trusted release configuration before verifying a stage"))?;
+            aura_release::verify(Path::new(destination), &expected_key)?;
             println!("Staged artifacts, signatures, version bindings and manifests match.");
         }
         _ => anyhow::bail!(
