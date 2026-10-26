@@ -31,6 +31,11 @@ pub trait AcpDialect: Send + Sync + 'static {
     fn mode_change_requires_idle(&self) -> bool {
         false
     }
+    /// Whether a refused mode change is worth sending again after a short wait: the agent was
+    /// still applying an earlier change.
+    fn mode_change_retryable(&self, _error: &RpcError) -> bool {
+        false
+    }
     /// Keep a `ReplaySummary` while load or resume replays.
     fn replay_may_hold_unseen_work(&self) -> bool {
         false
@@ -236,6 +241,19 @@ impl AcpDialect for Hermes {
     /// Hermes answers -32603 and posts an agent message when its mode changes mid-turn.
     fn mode_change_requires_idle(&self) -> bool {
         true
+    }
+
+    /// Hermes 0.22.5 refuses a mode change that reaches its gateway before the previous one has
+    /// landed (-32603 with `details: "stale_generation"`); the same change goes through once it
+    /// has.
+    fn mode_change_retryable(&self, error: &RpcError) -> bool {
+        error.code == codes::INTERNAL_ERROR
+            && error
+                .data
+                .as_ref()
+                .and_then(|data| data.get("details"))
+                .and_then(serde_json::Value::as_str)
+                == Some("stale_generation")
     }
 
     /// Its gateway outlives the viewer, so a turn can finish while auracode is away.
@@ -610,6 +628,26 @@ mod tests {
             .auth_command(&terminal("login", &["login"]), &launch, &EnvMap::new())
             .expect("a command");
         assert_eq!(command.argv, ["/opt/bin/agent", "--acp", "login"]);
+    }
+
+    #[test]
+    fn only_hermes_stale_generation_refusals_are_retried() {
+        let error = |code: i64, data: Option<serde_json::Value>| RpcError {
+            code,
+            message: "Internal error".into(),
+            data,
+        };
+        let stale = error(
+            codes::INTERNAL_ERROR,
+            Some(serde_json::json!({"details": "stale_generation"})),
+        );
+        assert!(Hermes.mode_change_retryable(&stale));
+        assert!(!Hermes.mode_change_retryable(&error(codes::INTERNAL_ERROR, None)));
+        assert!(!Hermes.mode_change_retryable(&error(
+            codes::INVALID_PARAMS,
+            Some(serde_json::json!({"details": "stale_generation"}))
+        )));
+        assert!(!Generic.mode_change_retryable(&stale));
     }
 
     #[test]

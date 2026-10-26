@@ -82,6 +82,11 @@ pub const REPLAY_REPLY_BYTES: usize = 64 * 1024;
 /// stdout ended while the process lives: this long for it to exit before the tree is killed.
 pub const EXIT_AFTER_EOF_GRACE: Duration = Duration::from_secs(2);
 
+/// A mode change the dialect calls retryable goes out again up to this often, waiting
+/// `MODE_RETRY_WAIT` times the attempt before each.
+pub const MODE_RETRIES: u32 = 3;
+pub const MODE_RETRY_WAIT: Duration = Duration::from_millis(250);
+
 /// The reason a resume falls back to a new session when the agent can continue none.
 pub const CANNOT_CONTINUE: &str = "this agent can't continue earlier sessions";
 
@@ -455,6 +460,8 @@ struct AutonomyOp {
     at_once: bool,
     /// The count of `SetAutonomy` commands this op belongs to: a later one replaces it.
     generation: u64,
+    /// How often its current mode change was sent again after a retryable refusal.
+    retries: u32,
 }
 
 impl AutonomyOp {
@@ -473,6 +480,7 @@ impl AutonomyOp {
             reply,
             at_once,
             generation,
+            retries: 0,
         }
     }
 }
@@ -612,6 +620,11 @@ struct Session {
     hand_picked: Option<String>,
     ops: VecDeque<Op>,
     op_busy: bool,
+    /// An autonomy op whose refused mode change goes out again at this time; later ops wait.
+    mode_retry: Option<(Instant, AutonomyOp)>,
+    /// A prompt that arrived while mode or option changes were on their way: it goes out once
+    /// they land, so it never runs under the agent's previous mode.
+    waiting_prompt: Option<(String, Vec<PromptPart>)>,
     /// Mode changes parked until the turn ends (dialects that change mode only while idle).
     after_turn: Vec<Op>,
     /// Commands that arrived before `Ready`, with when they arrived.
@@ -691,6 +704,8 @@ impl Session {
             hand_picked: None,
             ops: VecDeque::new(),
             op_busy: false,
+            mode_retry: None,
+            waiting_prompt: None,
             after_turn: Vec::new(),
             held,
             dropped_before_ready: 0,
@@ -835,6 +850,7 @@ impl Session {
         consider(self.cancel_deadline);
         consider(self.eof_grace_deadline());
         consider(self.exit_wait_deadline);
+        consider(self.mode_retry.as_ref().map(|(at, _)| *at));
         next
     }
 
@@ -858,7 +874,15 @@ impl Session {
             DriverCommand::Shutdown { plan } => self.begin_close(End::Closed, plan),
             DriverCommand::Prompt { turn, parts } => self.on_prompt(turn.turn_id, &parts),
             DriverCommand::Interrupt => {
-                if self
+                if let Some((turn_id, _)) = self.waiting_prompt.take() {
+                    // It never reached the agent.
+                    self.outbox.push(DriverEvent::TurnEnded {
+                        turn_id,
+                        stop_reason: StopReason::Cancelled,
+                        usage: None,
+                        error: None,
+                    });
+                } else if self
                     .prompt
                     .as_ref()
                     .is_some_and(|prompt| !prompt.cancelling)
@@ -959,6 +983,15 @@ impl Session {
         }
         if self.commands_deadline.is_some_and(|at| at <= now) {
             self.flush_commands();
+        }
+        if self.mode_retry.as_ref().is_some_and(|(at, _)| *at <= now)
+            && let Some((_, op)) = self.mode_retry.take()
+        {
+            self.op_busy = false;
+            if self.phase == Phase::Running {
+                self.step_autonomy(op);
+                self.pump_ops();
+            }
         }
         if self.cancel_deadline.is_some_and(|at| at <= now) {
             self.close_process();
@@ -1584,7 +1617,7 @@ impl Session {
             self.outbox.push(not_ready(turn_id));
             return;
         }
-        if self.prompt.is_some() {
+        if self.prompt.is_some() || self.waiting_prompt.is_some() {
             self.outbox.push(DriverEvent::TurnEnded {
                 turn_id,
                 stop_reason: StopReason::Error,
@@ -1609,6 +1642,12 @@ impl Session {
                     return;
                 }
             }
+        }
+        // Sent now, it would run under the agent's previous mode (and Hermes refuses a mode change
+        // that races a prompt), so it waits for the changes queued before it.
+        if self.ops_pending() {
+            self.waiting_prompt = Some((turn_id, parts.to_vec()));
+            return;
         }
         let session_id = self.session_id.clone().unwrap_or_default();
         for event in self.mapper.begin_turn(&turn_id, Instant::now()) {
@@ -1907,7 +1946,7 @@ impl Session {
     fn pump_ops(&mut self) {
         while self.phase == Phase::Running && !self.op_busy {
             let Some(op) = self.ops.pop_front() else {
-                return;
+                break;
             };
             match op {
                 Op::Ready => self.become_ready(),
@@ -1915,6 +1954,17 @@ impl Session {
                 Op::Autonomy(op) => self.step_autonomy(op),
             }
         }
+        if self.phase == Phase::Running
+            && !self.ops_pending()
+            && let Some((turn_id, parts)) = self.waiting_prompt.take()
+        {
+            self.on_prompt(turn_id, &parts);
+        }
+    }
+
+    /// Mode or option changes still on their way to the agent.
+    fn ops_pending(&self) -> bool {
+        self.op_busy || !self.ops.is_empty() || self.mode_retry.is_some()
     }
 
     fn mode_option_id(&self) -> Option<String> {
@@ -2328,6 +2378,20 @@ impl Session {
                 }
             }
             Err(_) if !current => {}
+            Err(Failure::Rpc(error))
+                if op.retries < MODE_RETRIES && self.dialect.mode_change_retryable(&error) =>
+            {
+                // The same change again, after a wait; ops queued behind it keep waiting.
+                op.retries += 1;
+                if in_effect {
+                    op.in_effect = Some(candidate);
+                } else {
+                    op.candidates.push_front(candidate);
+                }
+                let at = Instant::now() + MODE_RETRY_WAIT * op.retries;
+                self.mode_retry = Some((at, op));
+                self.op_busy = true;
+            }
             Err(failure) => {
                 op.reason = Some(failure_message(&failure, &self.setup));
                 self.step_autonomy(op);
@@ -2482,8 +2546,24 @@ impl Session {
         self.op_busy = false;
         self.autonomy_settling = false;
         self.ops.clear();
+        self.mode_retry = None;
         self.after_turn.clear();
         self.held.clear();
+        if let Some((turn_id, _)) = self.waiting_prompt.take() {
+            // Rule: every prompt ends once; this one never reached the agent.
+            let closed = matches!(self.end, Some(End::Closed));
+            self.outbox.push(DriverEvent::TurnEnded {
+                turn_id,
+                stop_reason: if closed {
+                    StopReason::Cancelled
+                } else {
+                    StopReason::Error
+                },
+                usage: None,
+                error: (!closed)
+                    .then(|| internal("The agent stopped before this prompt went out.")),
+            });
+        }
         if !self.ready {
             let dropped = self.outbox.drop_held();
             self.dropped_before_ready = self.dropped_before_ready.saturating_add(dropped);

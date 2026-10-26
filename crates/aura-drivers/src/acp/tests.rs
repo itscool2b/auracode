@@ -1681,7 +1681,7 @@ async fn a_parked_mode_change_that_fails_leaves_the_state_of_the_mode_hermes_kep
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_parked_mode_change_waits_for_a_turn_that_began_before_it_could_go_out() {
+async fn a_prompt_waits_for_the_changes_queued_before_it() {
     let mut harness = ready_hermes_full_auto().await;
     harness.prompt("T1", "one");
     let (first, _) = harness.request("session/prompt").await;
@@ -1695,17 +1695,38 @@ async fn a_parked_mode_change_waits_for_a_turn_that_began_before_it_could_go_out
     let (set_model, _) = harness.request("session/set_model").await;
     harness.reply(&first, json!({"stopReason": "end_turn"}));
     harness.events_until(is_turn_ended).await;
-    // The next queued prompt starts before the model change is answered.
+    // The next prompt waits for both changes: sent now, it would run under the previous mode
+    // (recorded with Hermes 0.22.5, which also refused the mode change that raced it).
     harness.prompt("T2", "two");
-    let (second, _) = harness.request("session/prompt").await;
-    harness.reply(&set_model, json!({}));
-    assert_eq!(model.await.expect("answered"), Ok(()));
-    // The parked mode change waits again: Hermes refuses mode changes mid-turn.
     tokio::time::sleep(Duration::from_millis(10)).await;
     harness.no_line();
-    harness.reply(&second, json!({"stopReason": "end_turn"}));
-    let (_, params) = harness.request("session/set_mode").await;
+    harness.reply(&set_model, json!({}));
+    assert_eq!(model.await.expect("answered"), Ok(()));
+    let (set_mode, params) = harness.request("session/set_mode").await;
     assert_eq!(params["modeId"], "default");
+    harness.no_line();
+    harness.reply(&set_mode, json!({}));
+    let (_, params) = harness.request("session/prompt").await;
+    assert_eq!(params["prompt"][0]["text"], "two");
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_interrupted_waiting_prompt_ends_cancelled_and_never_goes_out() {
+    let mut harness = ready_hermes_full_auto().await;
+    let mode = set_option(&harness, "mode", "default");
+    let (set_mode, _) = harness.request("session/set_mode").await;
+    harness.prompt("T", "work");
+    harness.command(DriverCommand::Interrupt);
+    let events = harness.events_until(is_turn_ended).await;
+    assert!(events.iter().any(|event| matches!(
+        event,
+        DriverEvent::TurnEnded { turn_id, stop_reason: StopReason::Cancelled, error: None, .. }
+            if turn_id == "T"
+    )));
+    harness.reply(&set_mode, json!({}));
+    assert_eq!(mode.await.expect("answered"), Ok(()));
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    harness.no_line();
 }
 
 #[tokio::test(start_paused = true)]
