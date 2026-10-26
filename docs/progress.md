@@ -2609,3 +2609,20 @@ identify this as the standard x64 runner. All gates, features and deadlines rema
 unsigned Build workflow retains its existing host and universal macOS target. Intel CI execution
 does not replace Apple Silicon device acceptance. Local workflow regressions, workflow lint, Biome
 and instruction parity pass; no workflow was dispatched, cancelled or rerun for this change.
+
+### Public website and HTTPS
+
+The tested dark website is live at `https://auracode.si` through its independent Rust Worker.
+All 48 public files match the local build; nine HEAD routes, CSP/cache headers and missing-asset
+handling pass. HTTP redirects to HTTPS preserve paths and queries. The production API remains
+unrouted and returns 404; no account or installer availability is claimed. Resource and deployment
+IDs are recorded in `infra/README.md`. The live landing, preview download and preview sign-in screens
+were visually inspected. Preview Turnstile loaded without submitting an email or completing a
+manual challenge; its third-party console diagnostics are not evidence of delivery acceptance.
+
+The real installed Claude Code basic smoke also passed seven checks using Haiku at low effort and
+one `ok` response. Hermes rejected the historical `nous/welcome` choice before any prompt because
+its current catalog no longer offers it; its catalog also exposes no effort option. With the
+advertised `openai-codex:gpt-6-luna` choice and no unsupported effort override, its single-response
+smoke passed all six checks, including streamed `ok`, normal completion and session-scoped usage.
+Only those three minimal real responses were sent. Final package and CI results remain pending.

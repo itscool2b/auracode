@@ -75,11 +75,29 @@ SHA-256 `7fea5f5a1ed14314a3fac9d81f3037e8375a9a4db3b535fe546813fc83a41eeb`.
 
 All 48 public files matched the local tested build byte-for-byte over live HTTPS. Nine page HEAD
 requests, missing-asset 404, security headers, auth `no-store` and API route precedence passed.
-Evidence is in ignored `target/live-preview-verification.json`. Production website/API publication
-and actual email/Turnstile/device acceptance remain pending.
+Evidence is in ignored `target/live-preview-verification.json`. Production website publication is
+recorded below; public API activation and actual email/Turnstile/device acceptance remain pending.
 
 Universal SSL is enabled. An active Let's Encrypt certificate covers `auracode.si` and
 `*.auracode.si`, expires 2027-01-22 and is renewed by Cloudflare. No registrar certificate is needed.
+
+## Production website
+
+The same tested public modules are deployed as `auracode-web`, deployment
+`c200b10b3b3544408ea91257a70c79a0`, with the website hashes recorded above. The Worker has no
+application bindings, and development and version preview URLs are disabled. The production route
+`auracode.si/*` is `dfbdf5b588f1445c9999b14ef75fd319`. The originless proxied apex A record is
+`17d49baeed498e13185721a83493ee8d`, pointing to documentation-only address `192.0.2.1`; the Worker
+answers these requests without an origin server.
+
+All 48 public files matched the local tested build over `https://auracode.si`. Nine page HEAD
+responses, security headers and missing-asset refusal passed. The closed `/api/v1/config` route
+returns plain 404 rather than website HTML. Evidence is in ignored
+`target/live-production-verification.json`. The live landing page was visually inspected in the
+browser. Installers remain unpublished and the production account API is not publicly routed.
+
+The zone's `always_use_https` setting is enabled and verified. HTTP requests to the apex, a nested
+download path with a query string, and the preview host returned 301 to the same HTTPS URL.
 
 ## Production preparation, public API route inactive
 
