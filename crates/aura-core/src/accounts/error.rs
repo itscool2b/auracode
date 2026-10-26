@@ -53,6 +53,7 @@ pub(super) fn api(error: ApiError) -> AccountFailure {
         ApiError::Unauthorized => Code::Unauthorized,
         ApiError::Deleted => Code::Deleted,
         ApiError::Forbidden => Code::Forbidden,
+        ApiError::InviteRequired => Code::InviteRequired,
         ApiError::InvalidCode => Code::InvalidCode,
         ApiError::Conflict => Code::Conflict,
         ApiError::Quota => Code::Quota,

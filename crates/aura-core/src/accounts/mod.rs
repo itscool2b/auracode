@@ -423,6 +423,7 @@ fn snapshot(inner: &Inner) -> Result<AccountStatus> {
         Access::SignedOut => (AccountAccess::SignedOut, None, None),
         Access::Expired => (AccountAccess::Expired, None, None),
         Access::Denied => (AccountAccess::Denied, None, None),
+        Access::InviteRequired => (AccountAccess::InviteRequired, None, None),
         Access::Deleted => (AccountAccess::Deleted, None, None),
     };
     Ok(AccountStatus {

@@ -32,6 +32,7 @@ pub enum Access {
     SignedOut,
     Expired,
     Denied,
+    InviteRequired,
     Deleted,
 }
 #[derive(Debug, thiserror::Error)]
@@ -621,6 +622,8 @@ impl Account {
         self.check(now).await?;
         if self.access == Access::Ready {
             Ok(())
+        } else if self.access == Access::InviteRequired {
+            Err(ApiError::InviteRequired.into())
         } else {
             Err(AccountError::State)
         }
@@ -659,6 +662,12 @@ impl Account {
             Err(ApiError::Forbidden) => {
                 self.clear_session(Access::Denied).await?;
                 Err(ApiError::Forbidden.into())
+            }
+            Err(ApiError::InviteRequired) => {
+                // Invitation removal restricts cloud operations, not retained decryption keys
+                // or the authenticated session used for export, sign-out and account management.
+                self.access = Access::InviteRequired;
+                Err(ApiError::InviteRequired.into())
             }
             result => result.map_err(AccountError::from),
         }

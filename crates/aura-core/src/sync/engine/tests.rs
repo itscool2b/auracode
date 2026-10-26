@@ -69,6 +69,7 @@ struct FakeNetwork {
     blocked: Notify,
     block: bool,
     denied: bool,
+    invite_required: bool,
 }
 impl Network for FakeNetwork {
     fn request<'a>(
@@ -86,6 +87,12 @@ impl Network for FakeNetwork {
                     return Err(failure(
                         AccountFailureCode::Forbidden,
                         "This synthetic device was revoked.",
+                    ));
+                }
+                if self.invite_required {
+                    return Err(failure(
+                        AccountFailureCode::InviteRequired,
+                        "Cloud access requires an invitation. Local data is retained.",
                     ));
                 }
                 if self
@@ -296,6 +303,34 @@ async fn revocation_stops_automatic_requests_until_explicit_resume() {
     );
     called(&network, 1).await;
     assert_eq!(engine.status().state, AccountSyncState::Paused);
+    engine.trigger();
+    tokio::time::advance(Duration::from_secs(600)).await;
+    assert_eq!(network.connects.load(Ordering::SeqCst), 1);
+    engine.resume();
+    called(&network, 2).await;
+    assert!(engine.close(Duration::from_secs(1)).await);
+    tokio::time::resume();
+    assert!(store.shutdown(Duration::from_secs(5)).await);
+}
+
+#[tokio::test]
+async fn invitation_removal_pauses_automatic_requests_until_explicit_resume() {
+    let (_dir, store, identity) =
+        fixture(Arc::new(AccountKey::generate().unwrap()), "device").await;
+    tokio::time::pause();
+    let network = Arc::new(FakeNetwork {
+        invite_required: true,
+        ..Default::default()
+    });
+    let engine = SyncEngine::start(
+        store.clone(),
+        network.clone(),
+        identity,
+        &tokio::runtime::Handle::current(),
+    );
+    called(&network, 1).await;
+    assert_eq!(engine.status().state, AccountSyncState::Paused);
+    assert!(engine.status().message.unwrap().contains("invitation"));
     engine.trigger();
     tokio::time::advance(Duration::from_secs(600)).await;
     assert_eq!(network.connects.load(Ordering::SeqCst), 1);

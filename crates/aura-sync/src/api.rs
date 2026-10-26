@@ -31,6 +31,10 @@ pub enum ApiError {
     Deleted,
     #[error("This device is not approved or the request is not allowed.")]
     Forbidden,
+    #[error(
+        "Cloud accounts, sync and transfers are invite-only during private preview. Local use remains free and works offline."
+    )]
+    InviteRequired,
     #[error("The code is invalid or expired.")]
     InvalidCode,
     #[error("The item changed. Fetch it before retrying.")]
@@ -138,9 +142,10 @@ impl ApiClient {
             .and_then(|value| value.parse::<u32>().ok())
             .unwrap_or(60)
             .clamp(1, 86_400);
-        // Revocation and policy responses do not depend on a potentially huge/malformed body.
-        // In particular, every 401 must halt the caller's authenticated sync state.
-        if status >= 300 && !matches!(status, 400 | 503) {
+        // Every 401 halts authenticated sync regardless of its body. Only a bounded, exact
+        // invite_required code distinguishes retained account management access from other 403s.
+        // Deletion also requires the exact account_deleted code before changing retained state.
+        if status >= 300 && !matches!(status, 400 | 403 | 410 | 503) {
             return Err(failure(status, None, retry));
         }
         let limit = if status >= 300 { 16 * 1024 } else { MAX_BODY };
@@ -148,12 +153,26 @@ impl ApiClient {
             .content_length()
             .is_some_and(|length| length > limit as u64)
         {
-            return Err(ApiError::Protocol);
+            return Err(if status == 403 {
+                ApiError::Forbidden
+            } else {
+                ApiError::Protocol
+            });
         }
         let mut bytes = Zeroizing::new(Vec::new());
-        while let Some(chunk) = response.chunk().await.map_err(network)? {
+        while let Some(chunk) = response.chunk().await.map_err(|error| {
+            if status == 403 {
+                ApiError::Forbidden
+            } else {
+                network(error)
+            }
+        })? {
             if bytes.len().saturating_add(chunk.len()) > limit {
-                return Err(ApiError::Protocol);
+                return Err(if status == 403 {
+                    ApiError::Forbidden
+                } else {
+                    ApiError::Protocol
+                });
             }
             bytes.extend_from_slice(&chunk);
         }
@@ -635,6 +654,7 @@ fn network(error: reqwest::Error) -> ApiError {
 fn failure(status: u16, code: Option<&str>, retry: u32) -> ApiError {
     match status {
         401 => ApiError::Unauthorized,
+        403 if code == Some("invite_required") => ApiError::InviteRequired,
         403 => ApiError::Forbidden,
         404 => ApiError::NotFound,
         409 => ApiError::Conflict,

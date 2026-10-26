@@ -59,6 +59,7 @@ pub enum AccountAccess {
     Ready,
     Expired,
     Denied,
+    InviteRequired,
     Deleted,
 }
 
@@ -148,6 +149,7 @@ pub enum AccountFailureCode {
     Unauthorized,
     Deleted,
     Forbidden,
+    InviteRequired,
     InvalidCode,
     Conflict,
     Quota,

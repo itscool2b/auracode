@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn invitation_denial_requires_exact_status_and_code() {
+    assert_eq!(
+        failure(403, Some("invite_required"), 0),
+        ApiError::InviteRequired
+    );
+    assert_eq!(failure(403, None, 0), ApiError::Forbidden);
+    assert_eq!(failure(403, Some("forbidden"), 0), ApiError::Forbidden);
+    assert_eq!(
+        failure(401, Some("invite_required"), 0),
+        ApiError::Unauthorized
+    );
+    assert_eq!(
+        failure(503, Some("invite_required"), 0),
+        ApiError::Unavailable
+    );
+}
+
+#[test]
 fn deleted_requires_the_exact_status_and_error_code() {
     assert_eq!(failure(410, Some("account_deleted"), 0), ApiError::Deleted);
     assert_eq!(failure(410, None, 0), ApiError::Protocol);
@@ -147,6 +165,43 @@ async fn redirects_errors_and_server_messages_do_not_escape_transport_policy() {
             retry_after_seconds: 60
         })
     ));
+}
+
+#[tokio::test]
+async fn bounded_wire_errors_distinguish_invitation_and_deletion_without_trusting_messages() {
+    for (status, body, expected) in [
+        (
+            "403 Forbidden",
+            "{\"error\":\"invite_required\",\"message\":\"untrusted detail\"}",
+            ApiError::InviteRequired,
+        ),
+        (
+            "403 Forbidden",
+            "malformed untrusted detail",
+            ApiError::Forbidden,
+        ),
+        (
+            "410 Gone",
+            "{\"error\":\"account_deleted\",\"message\":\"untrusted detail\"}",
+            ApiError::Deleted,
+        ),
+        ("410 Gone", "{\"error\":\"unknown\"}", ApiError::Protocol),
+        ("410 Gone", "malformed untrusted detail", ApiError::Protocol),
+    ] {
+        let (client, _) = server(status, "", body);
+        let error = client.keys(&token()).await.unwrap_err();
+        assert_eq!(error, expected);
+        assert!(!error.to_string().contains("untrusted detail"));
+    }
+    let oversized = format!(
+        "{{\"error\":\"invite_required\",\"message\":\"{}\"}}",
+        "x".repeat(16 * 1024)
+    );
+    let (client, _) = server("403 Forbidden", "", &oversized);
+    assert_eq!(
+        client.keys(&token()).await.unwrap_err(),
+        ApiError::Forbidden
+    );
 }
 
 #[tokio::test]

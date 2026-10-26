@@ -256,6 +256,7 @@ fn error_state(error: &AccountFailure) -> AccountSyncState {
         | AccountFailureCode::NotFound => AccountSyncState::Offline,
         AccountFailureCode::Unauthorized
         | AccountFailureCode::Forbidden
+        | AccountFailureCode::InviteRequired
         | AccountFailureCode::InvalidState
         | AccountFailureCode::Quota
         | AccountFailureCode::RateLimited => AccountSyncState::Paused,
@@ -330,6 +331,7 @@ async fn run(
                     error.code,
                     AccountFailureCode::Unauthorized
                         | AccountFailureCode::Forbidden
+                        | AccountFailureCode::InviteRequired
                         | AccountFailureCode::InvalidState
                 );
                 failures = failures.saturating_add(1);

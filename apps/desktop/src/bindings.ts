@@ -314,7 +314,7 @@ export const SMOKE_CHAT_CHECKS = ["chats-screen","pick-folder","create-chat","pi
 export const SMOKE_CHAT_REOPEN_CHECKS = ["reopen-list","reopen-no-start","reopen-history","reopen-interrupted","reopen-held","reopen-blob","reopen-resume","reopen-send-queued"] as const;
 
 /* Types */
-export type AccountAccess = "signed_out" | "verification_required" | "needs_device" | "needs_first_key" | "pending_approval" | "verify_account_key" | "ready" | "expired" | "denied" | "deleted";
+export type AccountAccess = "signed_out" | "verification_required" | "needs_device" | "needs_first_key" | "pending_approval" | "verify_account_key" | "ready" | "expired" | "denied" | "invite_required" | "deleted";
 
 export type AccountConfiguration = {
 	service_origin: string,
@@ -339,7 +339,7 @@ export type AccountFailure = {
 	retry_after_seconds: number | null,
 };
 
-export type AccountFailureCode = "invalid_input" | "invalid_state" | "offline" | "timed_out" | "unauthorized" | "deleted" | "forbidden" | "invalid_code" | "conflict" | "quota" | "rate_limited" | "delivery_failed" | "unavailable" | "not_found" | "protocol" | "secure_storage" | "local_storage" | "key_mismatch";
+export type AccountFailureCode = "invalid_input" | "invalid_state" | "offline" | "timed_out" | "unauthorized" | "deleted" | "forbidden" | "invite_required" | "invalid_code" | "conflict" | "quota" | "rate_limited" | "delivery_failed" | "unavailable" | "not_found" | "protocol" | "secure_storage" | "local_storage" | "key_mismatch";
 
 export type AccountRemovalCandidate = {
 	profile_id: string,

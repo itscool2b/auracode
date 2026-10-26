@@ -443,6 +443,41 @@ async fn auth_rejection_and_local_expiry_stop_network_without_deleting_the_data_
 }
 
 #[tokio::test]
+async fn invitation_denial_pauses_sync_and_retains_the_session_and_data_key() {
+    let (mut account, store) = account().await;
+    ready(&mut account).await;
+    let fingerprint = account.key_fingerprint().unwrap();
+    let stored = store.load(&account.entry).unwrap();
+    let (wire, done) = script(vec![(
+        "GET /api/v1/sync?after=0 ",
+        "403 Forbidden",
+        serde_json::json!({"error":"invite_required", "message":"untrusted detail"}),
+    )]);
+    account.api = wire;
+    assert!(matches!(
+        account.pull(0, 100).await,
+        Err(AccountError::Api(ApiError::InviteRequired))
+    ));
+    assert_eq!(account.access(), &Access::InviteRequired);
+    assert!(account.bundle.session.is_some());
+    assert_eq!(account.key_fingerprint().unwrap(), fingerprint);
+    assert_eq!(store.load(&account.entry).unwrap(), stored);
+    // Repeated cloud operations do not send another request until explicit refresh rechecks access.
+    assert!(matches!(
+        account.pull(0, 100).await,
+        Err(AccountError::Api(ApiError::InviteRequired))
+    ));
+    assert_eq!(done.join().unwrap().len(), 1);
+    let restored = Account::restore(api(), &account.id, store, 100)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(restored.access(), &Access::VerificationRequired);
+    assert!(restored.bundle.session.is_some());
+    assert_eq!(restored.key_fingerprint().unwrap(), fingerprint);
+}
+
+#[tokio::test]
 async fn lost_blob_upload_acknowledgement_accepts_only_exact_existing_ciphertext() {
     for substituted in [false, true] {
         let (mut account, _) = account().await;

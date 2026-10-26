@@ -750,6 +750,9 @@ fn index_namespace_cannot_alias_remote_account_or_other_data_root() {
 
 #[test]
 fn cooldown_errors_are_structured_and_recovery_debug_is_redacted() {
+    let invite = error::api(aura_sync::api::ApiError::InviteRequired);
+    assert_eq!(invite.code, AccountFailureCode::InviteRequired);
+    assert!(invite.message.contains("invite-only"));
     let failure = error::api(aura_sync::api::ApiError::DeliveryFailed {
         retry_after_seconds: 75,
     });

@@ -1,5 +1,6 @@
 //! Account-bound HTTP adapter. Tokens stay inside the account state machine and auth failures clear
-//! its session before the scheduler is told to pause. Another selected account is never substituted.
+//! its session before the scheduler is told to pause. Invitation restrictions preserve the session
+//! for account management. Another selected account is never substituted.
 use super::*;
 use crate::sync::{
     SyncIdentity,
@@ -28,6 +29,9 @@ impl Network for Accounts {
                 NetworkRequest::Connect => {
                     if account.access() == &Access::VerificationRequired {
                         account.connect(now).await.map_err(error::account)?;
+                    }
+                    if account.access() == &Access::InviteRequired {
+                        return Err(error::api(aura_sync::api::ApiError::InviteRequired));
                     }
                     if account.access() != &Access::Ready {
                         return Err(error::state());
