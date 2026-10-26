@@ -293,6 +293,12 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   remained. Unix cleanup now retains exact escaped identities after incomplete cleanup, including
   a clean application close. Failed process-table reads no longer count as an empty group. Two
   registry regressions cover retention and later successful cleanup; Linux execution awaits CI.
+- Explicit supervisor launch overrides now preserve driver flags and native executable paths.
+  Inspection uses the same scrub-then-override order, while the Linux login environment stays local.
+  Overrides are bounded, Debug/error output omits values, and secret literals are registered before
+  spawning. All-target process Clippy passes; the focused regression executable compiled but Windows
+  Application Control blocked execution (4551). Linux inspection/launch consistency remains a CI
+  requirement. The bridge and deployment are still gated.
 - The Rust Linux supervisor endpoint now handles bounded control frames, raw agent lines, parent
   leases, EOF/signals, malformed input, queued-prompt disposal and redacted exit diagnostics through
   the existing process services. Read-only inspection supplies executable paths, canonical cwd and

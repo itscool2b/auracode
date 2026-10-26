@@ -43,6 +43,7 @@ async fn start(mode: &str, spare_daemon: bool) -> Rig {
         program: testbin().to_string_lossy().into_owned(),
         args: vec![mode.into(), pidfile.to_string_lossy().into_owned()],
         cwd: folder.path().to_string_lossy().into_owned(),
+        set_env: Default::default(),
         daemons: if spare_daemon {
             vec![DaemonMatch {
                 program: Some("aura-testbin".into()),

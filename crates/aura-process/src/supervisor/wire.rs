@@ -7,6 +7,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+use super::environment::LaunchEnvironment;
 use crate::{DaemonMatch, ExitInfo, MAX_LINE_BYTES};
 
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -21,12 +22,15 @@ pub struct LaunchRequest {
     pub program: String,
     pub args: Vec<String>,
     pub cwd: String,
+    #[serde(default)]
+    pub set_env: LaunchEnvironment,
     pub daemons: Vec<DaemonMatch>,
     pub max_line_bytes: usize,
 }
 
 impl LaunchRequest {
     pub fn validate(&self) -> io::Result<()> {
+        self.set_env.validate()?;
         let plain = |value: &str| !value.contains('\0');
         if self.protocol != PROTOCOL_VERSION
             || !self.program.starts_with('/')

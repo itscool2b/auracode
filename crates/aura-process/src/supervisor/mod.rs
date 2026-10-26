@@ -16,6 +16,7 @@ use crate::{
     STDERR_TAIL_SHOWN_BYTES, STDOUT_CHANNEL_BYTES, ShutdownPlan, SpawnSpec, StdoutItem,
 };
 
+pub mod environment;
 pub mod inspect;
 pub mod wire;
 use wire::{Ended, Frame, LaunchRequest, Oversized, PROTOCOL_VERSION, Ready, Tag, invalid};
@@ -148,13 +149,16 @@ where
     }
     let request: LaunchRequest = first.decode()?;
     request.validate()?;
+    context.redactor.set_secrets(crate::secret_values(
+        &request.set_env.effective(&context.env).vars,
+    ));
     let spec = SpawnSpec {
         launch: LaunchSpec {
             label: "WSL agent".into(),
             program: request.program.into(),
             args: request.args.into_iter().map(Into::into).collect(),
             cwd: ProcessCwd::ChatFolder,
-            set_env: Vec::new(),
+            set_env: request.set_env.entries(),
             daemons: request.daemons,
             startup_timeout: lease,
         },

@@ -6,6 +6,7 @@ use std::io;
 
 use serde::{Deserialize, Serialize};
 
+use super::environment::LaunchEnvironment;
 use super::wire::{PROTOCOL_VERSION, invalid};
 use crate::ResolvedEnv;
 
@@ -14,12 +15,15 @@ use crate::ResolvedEnv;
 pub struct InspectRequest {
     pub protocol: u32,
     pub cwd: String,
+    #[serde(default)]
+    pub set_env: LaunchEnvironment,
     /// Bare executable names selected by the catalog. Discovery never executes them.
     pub executables: Vec<String>,
 }
 
 impl InspectRequest {
     pub fn validate(&self) -> io::Result<()> {
+        self.set_env.validate()?;
         if self.protocol != PROTOCOL_VERSION
             || !self.cwd.starts_with('/')
             || self.cwd.contains('\0')
@@ -62,7 +66,7 @@ pub fn inspect(request: &InspectRequest, env: &ResolvedEnv) -> io::Result<HostIn
     request.validate()?;
     #[cfg(target_os = "linux")]
     {
-        linux(request, env)
+        linux(request, &request.set_env.effective(env))
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -160,6 +164,7 @@ mod tests {
         let mut request = InspectRequest {
             protocol: PROTOCOL_VERSION,
             cwd: "/workspace".into(),
+            set_env: LaunchEnvironment::default(),
             executables: vec!["claude".into()],
         };
         request.validate().expect("valid");
@@ -198,11 +203,16 @@ mod tests {
         let request = InspectRequest {
             protocol: PROTOCOL_VERSION,
             cwd: alias.to_string_lossy().into_owned(),
+            set_env: LaunchEnvironment(vec![("CODEX_HOME".into(), "./PreparedConfig".into())]),
             executables: Vec::new(),
         };
         let result = inspect(&request, &env).expect("inspection");
         assert_eq!(result.canonical_cwd, dir.path().to_string_lossy());
         assert!(result.config_roots["claude"].ends_with("/NewConfig"));
+        assert_eq!(
+            result.config_roots["codex"],
+            dir.path().join("PreparedConfig").to_string_lossy()
+        );
         let body = serde_json::to_string(&result).expect("json");
         assert!(!body.contains("ANTHROPIC_API_KEY"));
         assert!(!body.contains("private-value"));

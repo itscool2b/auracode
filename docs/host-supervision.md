@@ -25,7 +25,7 @@ The output queue also has count and byte budgets. Malformed headers fail before 
 
 | Parent request | Behavior |
 | --- | --- |
-| Launch | Exactly one explicit Linux program, argv, cwd, daemon rules and output cap; no shell interpolation or automatic retry. |
+| Launch | Exactly one explicit Linux program, argv, cwd, reviewed environment overrides, daemon rules and output cap; no shell interpolation or automatic retry. |
 | Stdin | One agent protocol line; newline-bearing frames are rejected. |
 | CloseStdin | Ends only agent stdin, while ownership and the lease remain active. |
 | Heartbeat | Renews the 15-second parent lease. |
@@ -41,6 +41,12 @@ complete transcript delivery. Unconfirmed process cleanup leaves recovery record
 instance rather than claiming success or forgetting the process identities.
 
 Inspection preserves Linux path case and resolves symlink aliases without reading config files.
+It uses the same scrub-then-override environment as launch. Only `LaunchSpec.set_env` values may
+be sent from the parent; the Linux login environment is never exported. Override validation and
+Debug output omit values, and secret overrides join the Linux log redactor before process spawn.
+The bridge must bind inspection and launch to one connection and recheck the effective cwd and
+configuration realm after final driver overrides. Separate helper connections can resolve different
+login environments and must not authorize a previously inspected realm.
 The bridge must translate Windows drive paths using the actual distribution's `wslpath`, since
 custom automount settings can change the mount root. Do not assume `/mnt/c` or normalize Linux
 configuration roots with Windows case folding.

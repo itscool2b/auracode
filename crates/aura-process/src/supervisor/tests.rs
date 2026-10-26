@@ -15,6 +15,7 @@ fn request() -> LaunchRequest {
         program: "/usr/bin/agent".into(),
         args: vec!["stdio".into()],
         cwd: "/workspace".into(),
+        set_env: environment::LaunchEnvironment::default(),
         daemons: Vec::new(),
         max_line_bytes: 1024,
     }
@@ -50,6 +51,13 @@ async fn start() -> Rig {
 }
 
 async fn start_with_shutdown(shutdown: Option<tokio::sync::watch::Receiver<bool>>) -> Rig {
+    start_with_request(request(), shutdown).await
+}
+
+async fn start_with_request(
+    request: LaunchRequest,
+    shutdown: Option<tokio::sync::watch::Receiver<bool>>,
+) -> Rig {
     let (spawner, mut agents) = FakeSpawner::new();
     let (client, server) = tokio::io::duplex(4096);
     let (reader, writer) = tokio::io::split(server);
@@ -64,7 +72,7 @@ async fn start_with_shutdown(shutdown: Option<tokio::sync::watch::Receiver<bool>
     let (mut output, mut input) = tokio::io::split(client);
     wire::write_frame(
         &mut input,
-        &Frame::json(Tag::Launch, &request()).expect("frame"),
+        &Frame::json(Tag::Launch, &request).expect("frame"),
     )
     .await
     .expect("launch");
@@ -83,6 +91,42 @@ async fn start_with_shutdown(shutdown: Option<tokio::sync::watch::Receiver<bool>
         agent,
         spawner,
     }
+}
+
+#[tokio::test(start_paused = true)]
+async fn launch_preserves_overrides_and_redacts_their_secret_values() {
+    let mut request = request();
+    request.set_env = environment::LaunchEnvironment(vec![
+        ("CLAUDE_CODE_SDK_READS_SESSION_STATE".into(), "1".into()),
+        ("CLAUDE_CODE_EXECUTABLE".into(), "/home/test/agent".into()),
+        (
+            "PRIVATE_TOKEN".into(),
+            "a-private-test-override-value".into(),
+        ),
+    ]);
+    let expected = request.set_env.clone();
+    let mut rig = start_with_request(request, None).await;
+    assert_eq!(
+        environment::LaunchEnvironment::try_from(&rig.agent.spec.launch).expect("overrides"),
+        expected
+    );
+    rig.agent
+        .stderr
+        .send("a-private-test-override-value".into())
+        .expect("stderr");
+    // Let the fake stderr pump feed its tail before requesting cleanup.
+    tokio::task::yield_now().await;
+    wire::write_frame(&mut rig.input, &Frame::empty(Tag::Stop))
+        .await
+        .expect("stop");
+    let ended = finish(&mut rig).await;
+    assert!(!ended.stderr_tail.contains("a-private-test-override-value"));
+    assert!(
+        ended.stderr_tail.contains("<REDACTED>"),
+        "{}",
+        ended.stderr_tail
+    );
+    rig.task.await.expect("join").expect("serve");
 }
 
 #[tokio::test(start_paused = true)]
