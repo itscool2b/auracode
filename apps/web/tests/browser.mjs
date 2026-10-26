@@ -15,6 +15,7 @@ const mime = {
   ".js": "text/javascript",
   ".css": "text/css",
   ".png": "image/png",
+  ".webp": "image/webp",
   ".woff2": "font/woff2",
   ".woff": "font/woff",
   ".json": "application/json",
@@ -66,6 +67,14 @@ try {
       });
       await page.goto(base);
       await page.getByRole("heading", { name: "One window for your coding agents" }).waitFor();
+      await page.waitForFunction(() => {
+        const image = document.querySelector(".product-frame img");
+        return image?.complete && image.naturalWidth > 0;
+      });
+      assert.match(
+        await page.locator(".product-frame img").evaluate((image) => image.currentSrc),
+        /desktop-dark-\d+\.webp$/,
+      );
       await page.screenshot({ path: join(artifacts, `${name}-home.png`), fullPage: true });
       assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
       let axe = await new AxeBuilder({ page })
@@ -105,8 +114,10 @@ try {
           }),
       );
       let verifications = 0;
+      let inviteDenied = true;
       await page.route("**/api/v1/auth/challenges", async (route) => {
         assert.equal(route.request().postDataJSON().client_kind, "browser");
+        if (inviteDenied) return route.fulfill({ status: 403, json: { error: "invite_required" } });
         await route.fulfill({
           json: { challenge_id: "synthetic", expires_in: 600, resend_after: 60 },
         });
@@ -119,6 +130,22 @@ try {
             : { json: { user_id: "test", csrf_token: "synthetic-csrf", token: null } },
         );
       });
+      await page.goto(`${base}/signup`);
+      await page.getByRole("heading", { name: "Invited sign-in" }).waitFor();
+      await page.getByLabel("Email address").fill("uninvited@example.invalid");
+      await page.getByRole("button", { name: "Send a code" }).click();
+      await page.getByRole("alert").filter({ hasText: "invite-only" }).waitFor();
+      assert.equal(await page.getByLabel("Six-digit code").count(), 0);
+      assert.equal(
+        await page.getByRole("link", { name: "Explore the free Local app" }).getAttribute("href"),
+        "/download",
+      );
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      await page.screenshot({
+        path: join(artifacts, `${name}-invite-required.png`),
+        fullPage: true,
+      });
+      inviteDenied = false;
       await page.goto(`${base}/signin`);
       await page.getByLabel("Email address").fill("person@example.invalid");
       await page.getByRole("button", { name: "Send a code" }).click();
@@ -146,6 +173,7 @@ try {
         revoked_at: null,
       };
       let revoked = false;
+      let restricted = false;
       await page.route("**/api/v1/auth/session", (route) =>
         route.fulfill({
           json: {
@@ -176,7 +204,11 @@ try {
         }),
       );
       await page.route("**/api/v1/devices", (route) =>
-        route.fulfill({ json: { devices: [{ ...device, revoked_at: revoked ? now : null }] } }),
+        route.fulfill(
+          restricted
+            ? { status: 403, json: { error: "invite_required" } }
+            : { json: { devices: [{ ...device, revoked_at: revoked ? now : null }] } },
+        ),
       );
       await page.route("**/api/v1/devices/d", async (route) => {
         assert.equal(route.request().method(), "DELETE");
@@ -202,6 +234,27 @@ try {
       await page.getByText("Revoked", { exact: true }).waitFor();
       await page.getByRole("dialog").waitFor({ state: "hidden" });
       assert.equal(revoked, true);
+      restricted = true;
+      await page.reload();
+      await page.getByRole("status").filter({ hasText: "Cloud access is paused" }).waitFor();
+      assert.equal(
+        await page.getByRole("link", { name: "Download encrypted archive" }).getAttribute("href"),
+        "/api/v1/account/export",
+      );
+      assert.equal(
+        await page.getByRole("button", { name: "Sign out ↗", exact: true }).isEnabled(),
+        true,
+      );
+      assert.equal(await page.getByRole("button", { name: "Change email" }).count(), 0);
+      assert.equal(await page.getByText("No devices connected yet.", { exact: true }).count(), 0);
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      await page.screenshot({
+        path: join(artifacts, `${name}-cloud-restricted.png`),
+        fullPage: true,
+      });
+      restricted = false;
+      await page.reload();
+      await page.getByRole("heading", { name: "person@example.invalid" }).waitFor();
       await page
         .locator("#security")
         .getByRole("button", { name: "Delete account", exact: true })

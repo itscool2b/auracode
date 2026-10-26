@@ -64,7 +64,7 @@ export function ProfileStatus({
       : "Profile unavailable";
   const detail = accountId
     ? [
-        "Encrypted account workspace",
+        "Encrypted account workspace · Private cloud preview",
         status?.message,
         status?.last_sync_at
           ? `Last synced ${new Date(status.last_sync_at).toLocaleString()}`

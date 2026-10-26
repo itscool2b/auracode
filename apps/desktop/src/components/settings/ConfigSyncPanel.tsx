@@ -109,8 +109,9 @@ export function ConfigSyncPanel({
       <section className="settings-section config-sync-empty">
         <h2>Your setup, on every device</h2>
         <p>
-          Open your Account workspace to review and sync agent instructions, skills and settings.
-          Your Local workspace stays on this computer.
+          Configuration sync is part of the invite-only cloud preview. Sign in with your invited
+          email and open your Account workspace to review agent instructions, skills and settings.
+          Local use is free and stays on this computer.
         </p>
         <button type="button" className="ui-button" onClick={onAccount}>
           Open Account settings <ArrowRight size={14} />
@@ -122,7 +123,7 @@ export function ConfigSyncPanel({
       <div className="config-sync-toolbar">
         <p>
           Choose what to sync once. Selected items stay in sync automatically; conflicts need your
-          review. Credentials stay on each device.
+          review. Cloud sync requires preview access. Credentials stay on each device.
         </p>
         <button
           type="button"

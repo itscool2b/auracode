@@ -50,20 +50,27 @@ export default function Home() {
           <a className="button" href="/download">
             Get auracode <span aria-hidden="true">↓</span>
           </a>
-          <a className="button secondary" href="/signup">
-            Create account
+          <a className="button secondary" href="/signin">
+            Invited sign-in
           </a>
         </div>
-        <p className="caption">Windows + macOS · No account needed for local work</p>
+        <p className="caption">Windows + macOS · Local is free and works offline</p>
       </section>
       <figure className="product-frame">
-        <img
-          src="/images/desktop-dark.png"
-          width="1440"
-          height="900"
-          alt="The auracode desktop: project navigation, an agent response with code, and a composer with agent and autonomy controls."
-          fetchPriority="high"
-        />
+        <picture>
+          <source
+            type="image/webp"
+            srcSet="/images/desktop-dark-480.webp 480w, /images/desktop-dark-960.webp 960w, /images/desktop-dark-1440.webp 1440w"
+            sizes="(max-width: 620px) calc(100vw - 60px), (max-width: 900px) calc(100vw - 76px), (max-width: 1232px) calc(100vw - 60px), 1172px"
+          />
+          <img
+            src="/images/desktop-dark.png"
+            width="1440"
+            height="900"
+            alt="The auracode desktop: project navigation, an agent response with code, and a composer with agent and autonomy controls."
+            fetchPriority="high"
+          />
+        </picture>
         <figcaption>THE REAL APP · DEVELOPMENT PREVIEW</figcaption>
       </figure>
       <section className="agents-section">
@@ -99,7 +106,7 @@ export default function Home() {
           [
             "03",
             "Carry your work with you.",
-            "Optional sync encrypts workspace content on your device. Approval and a recovery key keep access in your hands.",
+            "Cloud sync and transfers are invite-only during private preview. Content is encrypted on your device before it leaves.",
           ],
         ].map(([n, title, text]) => (
           <article key={n}>
@@ -115,7 +122,7 @@ export default function Home() {
         <a className="button" href="/download">
           Explore downloads <span aria-hidden="true">↗</span>
         </a>
-        <p className="caption">Public releases and cloud account service are being prepared.</p>
+        <p className="caption">Local needs no account. Cloud access is by invitation.</p>
       </section>
     </main>
   );

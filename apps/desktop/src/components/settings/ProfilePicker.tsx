@@ -55,7 +55,8 @@ export function ProfilePicker({
     <section className="settings-section" aria-labelledby="profile-title">
       <h2 id="profile-title">Your profiles</h2>
       <p className="account-notice">
-        Each profile has its own projects, chats and drafts. Local stays on this computer.
+        Each profile has its own projects, chats and drafts. Local is free and stays on this
+        computer. Cloud profiles require an invitation during private preview.
       </p>
       {!profiles && !error ? <p role="status">Loading profiles…</p> : null}
       <ul className="account-profiles">

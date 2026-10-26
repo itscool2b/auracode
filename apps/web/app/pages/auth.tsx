@@ -12,17 +12,17 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
     <main id="main" className="auth-page">
       <section className="auth-intro">
         <Mark />
-        <p className="eyebrow">YOUR WORK, WITH YOU</p>
-        <h1>{signup ? "A home for your workspace." : "Pick up where you left off."}</h1>
+        <p className="eyebrow">INVITE-ONLY CLOUD PREVIEW</p>
+        <h1>{signup ? "Your invitation starts here." : "Pick up where you left off."}</h1>
         <p>
-          Sign in for optional encrypted sync and device management. Local work always stays
-          available without an account.
+          Cloud accounts, encrypted sync and transfers are invite-only during private preview. The
+          Local desktop app is free and works offline without an account.
         </p>
         <a className="text-link" href="/download">
-          Just here for the app? Download ↗
+          Explore the Local app ↗
         </a>
       </section>
-      <section className="auth-panel" aria-label={signup ? "Create account" : "Sign in"}>
+      <section className="auth-panel" aria-label="Invited sign-in">
         <noscript>
           <p>
             JavaScript is required for secure code verification. Downloads and public information
@@ -51,8 +51,12 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
           </>
         ) : (
           <>
-            <h2>{signup ? "Create your account" : "Welcome back"}</h2>
-            <p>We’ll email you a one-time code. No password to remember.</p>
+            <h2>Invited sign-in</h2>
+            <p>Use the email address on your invitation. We’ll send a one-time code.</p>
+            <p className="caption">
+              Already have an account? You can still sign in to manage or export it if your cloud
+              preview access has ended.
+            </p>
             {prefill !== null ? (
               <CodeForm initialEmail={prefill} onSuccess={setEmail} />
             ) : (

@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { api, type Challenge } from "./api";
+import { ApiError, api, type Challenge } from "./api";
 import { Turnstile } from "./turnstile";
 import { Notice } from "./ui";
 export function CodeForm({
@@ -18,6 +18,7 @@ export function CodeForm({
   const [challenge, setChallenge] = useState<(Challenge & { started: number }) | null>(null);
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
+  const [inviteRequired, setInviteRequired] = useState(false);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [captcha, setCaptcha] = useState(0);
@@ -39,6 +40,7 @@ export function CodeForm({
     if (busy) return;
     setBusy(true);
     setError("");
+    setInviteRequired(false);
     try {
       if (challenge) {
         await api(
@@ -63,7 +65,13 @@ export function CodeForm({
       }
     } catch (error) {
       setError((error as Error).message);
-      if (!challenge) {
+      const denied = error instanceof ApiError && error.code === "invite_required";
+      setInviteRequired(denied);
+      if (denied) {
+        setChallenge(null);
+        setCode("");
+      }
+      if (!challenge || denied) {
         setToken("");
         setCaptcha((v) => v + 1);
       }
@@ -118,6 +126,11 @@ export function CodeForm({
         </>
       )}
       {error && <Notice error>{error}</Notice>}
+      {inviteRequired && mode === "signin" ? (
+        <a className="text-link" href="/download">
+          Explore the free Local app ↗
+        </a>
+      ) : null}
       <button
         type="submit"
         className="button full"

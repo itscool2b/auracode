@@ -16,6 +16,7 @@ export default function AccountPage() {
   const [error, setError] = useState("");
   const [signedOut, setSignedOut] = useState(false);
   const [deleted, setDeleted] = useState(false);
+  const [inviteRequired, setInviteRequired] = useState(false);
   const [busy, setBusy] = useState(false);
   const [emailForm, setEmailForm] = useState(false);
   const [action, setAction] = useState<Action | null>(null);
@@ -27,17 +28,33 @@ export default function AccountPage() {
       const [session, result, devices] = await Promise.all([
         api<SessionResponse>("/auth/session"),
         api<{ account: Account }>("/account"),
-        api<{ devices: Device[] }>("/devices"),
+        api<{ devices: Device[] }>("/devices").then(
+          (value) => ({ ...value, restricted: false }),
+          (error) => {
+            if (error instanceof ApiError && error.code === "invite_required")
+              return { devices: [] as Device[], restricted: true };
+            throw error;
+          },
+        ),
       ]);
       setData({ account: result.account, devices: devices.devices, session });
       setSignedOut(false);
       setDeleted(false);
+      setInviteRequired(devices.restricted);
+      if (devices.restricted) setEmailForm(false);
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.code === "account_deleted")) {
         setData(null);
         setSignedOut(true);
         setDeleted(error.code === "account_deleted");
-      } else setError((error as Error).message);
+      } else {
+        if (error instanceof ApiError && error.code === "invite_required") {
+          setInviteRequired(true);
+          setAction(null);
+          setEmailForm(false);
+        }
+        setError((error as Error).message);
+      }
     }
   }, []);
   useEffect(() => {
@@ -67,7 +84,14 @@ export default function AccountPage() {
         setData(null);
         setSignedOut(true);
         setDeleted(error.code === "account_deleted");
-      } else setError((error as Error).message);
+      } else {
+        if (error instanceof ApiError && error.code === "invite_required") {
+          setInviteRequired(true);
+          setAction(null);
+          setEmailForm(false);
+        }
+        setError((error as Error).message);
+      }
     } finally {
       setBusy(false);
     }
@@ -75,6 +99,13 @@ export default function AccountPage() {
   const fresh = !!data && Date.now() / 1000 - data.session.session.created_at <= 300;
   return (
     <Page eyebrow="ACCOUNT" title={data ? "Your workspace, connected." : "Your account."}>
+      {inviteRequired && data ? (
+        <Notice>
+          Cloud access is paused. Accounts, sync and transfers are invite-only during private
+          preview. You can still export your encrypted archive or sign out below. Your Local app
+          remains free and works offline.
+        </Notice>
+      ) : null}
       {error && (
         <Notice error>
           {error}{" "}
@@ -90,7 +121,7 @@ export default function AccountPage() {
               <h2>This account was deleted.</h2>
               <p>
                 Your retained local projects and chats stay on your devices. Open auracode to review
-                a Local copy. Creating another account starts fresh cloud storage.
+                a Local copy. Any new cloud account requires an invitation and starts fresh storage.
               </p>
               <div className="actions">
                 <a className="button" href="auracode://signin">
@@ -99,8 +130,8 @@ export default function AccountPage() {
                 <a className="button secondary" href="/download">
                   Download the app
                 </a>
-                <a className="text-link" href="/signup">
-                  Create an account
+                <a className="text-link" href="/signin">
+                  Invited sign-in
                 </a>
               </div>
             </>
@@ -136,7 +167,9 @@ export default function AccountPage() {
               <p className="eyebrow">01 / PROFILE</p>
               <h2>{data.account.email}</h2>
               <p>Your email is used for sign-in codes and account access.</p>
-              {emailForm ? (
+              {inviteRequired ? (
+                <p className="caption">Email changes require cloud preview access.</p>
+              ) : emailForm ? (
                 <div className="inline-form">
                   <CodeForm
                     mode="email"
@@ -174,7 +207,9 @@ export default function AccountPage() {
                 Approve new devices in the desktop app. Revocation stops future cloud access; it
                 cannot erase data already downloaded.
               </p>
-              {data.devices.length === 0 ? (
+              {inviteRequired ? (
+                <p className="empty">Device management requires cloud preview access.</p>
+              ) : data.devices.length === 0 ? (
                 <div className="empty">
                   <p>No devices connected yet.</p>
                   <a

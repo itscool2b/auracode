@@ -2,17 +2,24 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AccountPanel } from "../components/settings/AccountPanel";
-import type { AccountApi } from "../lib/account/api";
+import { type AccountApi, AccountCommandError } from "../lib/account/api";
 import type { AccountDevice, AccountStatus } from "../lib/account/bindings";
 import "../components/settings/settings.css";
 
 const stage = new URLSearchParams(location.search).get("stage");
 let state: AccountStatus = {
-  access: stage === "deleted" ? "deleted" : stage === "pending" ? "pending_approval" : "signed_out",
+  access:
+    stage === "restricted"
+      ? "invite_required"
+      : stage === "deleted"
+        ? "deleted"
+        : stage === "pending"
+          ? "pending_approval"
+          : "signed_out",
   account_id: "fixture-account",
   device_id: "fixture-device",
-  profile_id: stage === "deleted" ? "fixture-profile" : null,
-  local_key_available: stage === "deleted",
+  profile_id: stage === "deleted" || stage === "restricted" ? "fixture-profile" : null,
+  local_key_available: stage === "deleted" || stage === "restricted",
   approval_code: "THIS-DEVICE-1234",
   fingerprint: "1234 5678 90AB CDEF 1234 5678 90AB CDEF",
   sync: {
@@ -58,6 +65,13 @@ const next = (access: AccountStatus["access"]) => {
 let prepared = false;
 let verified = false;
 let registered = stage === "pending";
+const invitationError = () =>
+  new AccountCommandError({
+    code: "invite_required",
+    message:
+      "Cloud accounts, sync and transfers are invite-only during private preview. Local use remains free and works offline.",
+    retry_after_seconds: null,
+  });
 const api: AccountApi = {
   config: async () => ({
     service_origin: "https://auracode.si",
@@ -66,15 +80,19 @@ const api: AccountApi = {
   status: async () => structuredClone(state),
   requestCode: async (_email, proof) => {
     if (proof !== "synthetic-proof") throw new Error("Verification proof is required.");
+    if (stage === "invite-request") throw invitationError();
     return { id: "fixture-challenge", expires_in: 600, resend_after: 1 };
   },
   verifyCode: async (_challenge, code) => {
+    if (stage === "invite-verify") throw invitationError();
     if (code !== "123456") throw new Error("That code is invalid.");
     verified = true;
     return next("verification_required");
   },
-  refresh: async () =>
-    next(registered ? "verify_account_key" : verified ? "needs_device" : "signed_out"),
+  refresh: async () => {
+    if (stage === "restricted") throw invitationError();
+    return next(registered ? "verify_account_key" : verified ? "needs_device" : "signed_out");
+  },
   register: async () => {
     registered = true;
     return next("needs_first_key");

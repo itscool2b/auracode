@@ -16,8 +16,8 @@ export default function Changelog() {
           <h3>Account and sync foundation</h3>
           <p>
             The Rust cloud API implements email-code sign-in, device approval, encrypted record
-            sync, private file storage and account controls. Preview deployment, email delivery
-            qualification and end-to-end acceptance are still pending.
+            sync, private file storage and account controls. Cloud accounts, sync and transfers are
+            invite-only during private preview. Local desktop use needs no invitation.
           </p>
           <h3>Release status</h3>
           <p>

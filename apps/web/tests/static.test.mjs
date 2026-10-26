@@ -18,6 +18,15 @@ test("public pages are prerendered, dark and usable without JavaScript", async (
   assert.match(downloads, /Not published/);
   assert.doesNotMatch(downloads, /href="[^"]+\.(exe|dmg)"/);
   await access(new URL("images/desktop-dark.png", root));
+  for (const width of [480, 960, 1440])
+    await access(new URL(`images/desktop-dark-${width}.webp`, root));
+  const home = await readFile(new URL("index.html", root), "utf8");
+  assert.match(home, /<picture><source[^>]*type="image\/webp"/);
+  assert.match(
+    home,
+    /desktop-dark-480.webp 480w, \/images\/desktop-dark-960.webp 960w, \/images\/desktop-dark-1440.webp 1440w/,
+  );
+  assert.match(home, /sizes="\(max-width: 620px\) calc\(100vw - 60px\)/);
 });
 test("static CSP authorizes only the emitted inline framework scripts", async () => {
   const headers = await readFile(new URL("_headers", root), "utf8");
@@ -47,5 +56,15 @@ test("static CSP authorizes only the emitted inline framework scripts", async ()
           path,
         );
     }
+  }
+});
+
+test("cloud entry pages explain invitation access while Local remains free", async () => {
+  for (const path of ["", "signin/", "signup/"]) {
+    const html = await readFile(new URL(`${path}index.html`, root), "utf8");
+    assert.match(html, /invite-only|INVITE-ONLY/);
+    assert.match(html, /free/);
+    assert.doesNotMatch(html, /Create (?:your |an )?account/);
+    assert.doesNotMatch(html, /open.source|Choose a plan|Subscribe now/i);
   }
 });

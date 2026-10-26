@@ -4,7 +4,7 @@ export default function Terms() {
   return (
     <Page eyebrow="TERMS / PRE-RELEASE DRAFT" title="A clear place to start.">
       <article className="prose">
-        <p className="lead">The public service is not open yet.</p>
+        <p className="lead">Cloud access is an invite-only private preview.</p>
         <p>
           These product terms are a draft, not final launch terms. Operator identification, contact
           details, applicable rights and legal review are required before public accounts or
@@ -25,6 +25,10 @@ export default function Terms() {
         </p>
         <h2>Account and recovery</h2>
         <p>
+          Cloud accounts, sync and transfers require an invited email address. There is no paid
+          access tier. Local desktop use remains free and needs no invitation.
+        </p>
+        <p>
           Keep access to your verified email, approved devices and recovery key secure. The service
           cannot recover encrypted content without a valid device key or recovery secret. Revoking a
           device stops future cloud access, but cannot erase its existing local copies.
@@ -37,8 +41,8 @@ export default function Terms() {
         </p>
         <h2>Local use</h2>
         <p>
-          The base desktop app works without an account or network connection. Agent providers may
-          still need a connection for their own services.
+          The Local desktop app is free and works without an account or network connection. Agent
+          providers may still need a connection for their own services.
         </p>
         <a className="text-link" href="/privacy">
           Read the privacy notice ↗

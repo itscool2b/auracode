@@ -155,6 +155,14 @@ export function AccountPanel({
     } catch (failure) {
       if (mounted.current) {
         setError(errorMessage(failure));
+        if (failure instanceof AccountCommandError && failure.code === "invite_required") {
+          setChallenge(null);
+          setCode("");
+          setProof("");
+          setVerificationAttempt((value) => value + 1);
+          const current = await api.status().catch(() => null);
+          if (mounted.current && current) setStatus(current);
+        }
         if (failure instanceof AccountCommandError && failure.retryAfter !== null)
           setRetryAt(Date.now() + Math.min(Math.max(failure.retryAfter, 0), 86400) * 1000);
       }
@@ -175,7 +183,9 @@ export function AccountPanel({
   const locked = busy || remaining > 0;
   const wrongRecoveryAccount =
     recoveryOnly &&
-    (status?.access === "ready" || status?.access === "deleted") &&
+    (status?.access === "ready" ||
+      status?.access === "deleted" ||
+      status?.access === "invite_required") &&
     (!recoveryProfileId || status.profile_id !== recoveryProfileId);
   const signedOut =
     status &&
@@ -236,7 +246,7 @@ export function AccountPanel({
         <p className="account-description">
           {recoveryOnly
             ? "Sign in to the existing account that owns the saved configuration. Account and device changes stay unavailable until recovery finishes."
-            : "Keep working locally, or connect your own devices with encrypted sync."}
+            : "Local is free and works offline. Cloud accounts, encrypted sync and transfers are invite-only during private preview."}
         </p>
         {!status && !error ? <p role="status">Reading account status…</p> : null}
         {signedOut ? (
@@ -249,8 +259,8 @@ export function AccountPanel({
                   : "Sign in to auracode"}
             </h3>
             <p>
-              Your coding agents keep their own accounts. This account is for your auracode
-              workspace.
+              Use the email address on your invitation. Your coding agents keep their own accounts;
+              this sign-in is for your auracode workspace.
             </p>
             {challenge ? (
               <form
@@ -346,6 +356,38 @@ export function AccountPanel({
                 </button>
               </form>
             )}
+          </div>
+        ) : null}
+        {status?.access === "invite_required" ? (
+          <div className="settings-group account-card">
+            <h3>Cloud access requires an invitation</h3>
+            <p>
+              Cloud sync and transfers are paused. Your session and any saved encryption keys stay
+              on this device. Local is free and works offline.
+            </p>
+            {status.local_key_available ? (
+              <p>Your retained encrypted workspace remains available for local work and exports.</p>
+            ) : null}
+            <div className="account-actions">
+              {status.local_key_available && status.profile_id !== activeProfileId ? (
+                <button
+                  className="ui-button"
+                  type="button"
+                  disabled={locked || wrongRecoveryAccount}
+                  onClick={() => void run(onActivate)}
+                >
+                  Open retained account workspace
+                </button>
+              ) : null}
+              <button
+                className="ui-button"
+                type="button"
+                disabled={locked}
+                onClick={() => void run(() => update(api.refresh()))}
+              >
+                Check cloud access
+              </button>
+            </div>
           </div>
         ) : null}
         {status?.access === "verification_required" ? (

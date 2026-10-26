@@ -20,6 +20,9 @@ export async function checkAccount(browser, url, out, engine) {
     page.setDefaultTimeout(12_000);
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(`${url}/?preview=account`);
+    await page
+      .getByText("Cloud accounts, encrypted sync and transfers are invite-only", { exact: false })
+      .waitFor();
     await page.getByLabel("Email address").fill("fixture@example.invalid");
     const send = page.getByRole("button", { name: "Send sign-in code" });
     assert.equal(await send.isDisabled(), true);
@@ -100,6 +103,39 @@ export async function checkAccount(browser, url, out, engine) {
     await signOut.getByRole("button", { name: "Stay signed in" }).click();
     await page.getByText("This device is approved", { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
+    for (const stage of ["invite-request", "invite-verify"]) {
+      await page.goto(`${url}/?preview=account&stage=${stage}`);
+      await page.getByLabel("Email address").fill("fixture@example.invalid");
+      await page.getByRole("button", { name: "Complete synthetic verification" }).click();
+      await page.getByRole("button", { name: "Send sign-in code" }).click();
+      if (stage === "invite-verify") {
+        await page.getByLabel("Code sent to fixture@example.invalid").fill("123456");
+        await page.getByRole("button", { name: "Verify code", exact: true }).click();
+      }
+      await page.getByRole("alert").filter({ hasText: "invite-only" }).waitFor();
+      await page.getByLabel("Email address").waitFor();
+      assert.equal(await page.getByLabel("Code sent to fixture@example.invalid").count(), 0);
+      assert.equal(
+        await page.getByRole("button", { name: "Send sign-in code" }).isDisabled(),
+        true,
+      );
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      await page.screenshot({ path: resolve(out, `${engine}-${stage}.png`) });
+    }
+    await page.goto(`${url}/?preview=account&stage=restricted&active=fixture-profile`);
+    await page.getByRole("heading", { name: "Cloud access requires an invitation" }).waitFor();
+    await page
+      .getByText("Your retained encrypted workspace remains available", { exact: false })
+      .waitFor();
+    await page.getByRole("button", { name: "Check cloud access" }).click();
+    await page.getByRole("alert").filter({ hasText: "invite-only" }).waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: "Sign out", exact: true }).isEnabled(),
+      true,
+    );
+    assert.equal(await page.getByRole("button", { name: "Register this device" }).count(), 0);
+    assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+    await page.screenshot({ path: resolve(out, `${engine}-cloud-restricted.png`) });
     assert.deepEqual(errors, []);
   } finally {
     await context.close();

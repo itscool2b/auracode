@@ -1,6 +1,6 @@
 import { AuthPage } from "./auth";
 export const meta = () => [
-  { title: "Create account · auracode" },
+  { title: "Private preview · auracode" },
   { name: "robots", content: "noindex" },
 ];
 export default function SignUp() {

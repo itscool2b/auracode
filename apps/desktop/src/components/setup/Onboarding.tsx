@@ -332,14 +332,15 @@ export function Onboarding({
             {step === "account" ? (
               <>
                 <p className="setup-intro">
-                  Your projects and chats work offline. Add an Account when you want encrypted sync
-                  across your devices, or continue with Local.
+                  Local is free and works offline without an account. Cloud accounts, encrypted sync
+                  and transfers are invite-only during private preview.
                 </p>
                 <button type="button" className="setup-button" onClick={onAccount}>
                   Open Account
                 </button>
                 <p className="setup-footnote">
-                  Continue locally. Setup never signs in to an agent or sends a prompt.
+                  Have an invitation? Sign in with your invited email. You can also continue with
+                  Local.
                 </p>
               </>
             ) : null}

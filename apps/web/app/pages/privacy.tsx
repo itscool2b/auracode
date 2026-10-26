@@ -4,7 +4,7 @@ export default function Privacy() {
   return (
     <Page eyebrow="PRIVACY / PRE-RELEASE NOTICE" title="Your work stays yours.">
       <article className="prose">
-        <p className="lead">Local work needs no account. Cloud sync is optional.</p>
+        <p className="lead">Local work needs no account. Cloud access is invite-only.</p>
         <p>
           This notice describes the implemented design as of October 26, 2026. Operator identity,
           legal contact details and jurisdiction-specific terms require review before the account
@@ -17,12 +17,13 @@ export default function Privacy() {
           according to their own services and policies. auracode does not copy your agent credential
           files into its cloud service.
         </p>
-        <h2>If you create an account</h2>
+        <h2>If you accept an invitation</h2>
         <p>
           The Rust account service stores your email, account identifier, hashed session tokens,
-          device names and public keys, approval state, storage totals and timestamps. Sign-in codes
-          expire after ten minutes and are stored as protected verifiers, not readable codes.
-          Sessions expire after 30 days unless revoked sooner.
+          device names and public keys, approval state, storage totals and timestamps. Cloud
+          accounts, sync and transfers are limited to invited email addresses during private
+          preview. Sign-in codes expire after ten minutes and are stored as protected verifiers, not
+          readable codes. Sessions expire after 30 days unless revoked sooner.
         </p>
         <h2>Optional encrypted sync</h2>
         <p>

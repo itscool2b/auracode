@@ -11,10 +11,12 @@ import type {
 
 export class AccountCommandError extends Error {
   readonly retryAfter: number | null;
+  readonly code: AccountFailure["code"];
   constructor(failure: AccountFailure) {
     super(failure.message);
     this.name = "AccountCommandError";
     this.retryAfter = failure.retry_after_seconds;
+    this.code = failure.code;
   }
 }
 
