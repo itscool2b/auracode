@@ -885,3 +885,12 @@ provisioned SPF, DKIM, DMARC and return-path DNS as ready. No email was sent; de
 plan eligibility still need qualification. Continuation preview refreshes now discard superseded
 async responses when the dialog changes intent or closes. The synthetic preview session status is
 explicitly typed for transitions after stopping. Both changes join the combined verification batch.
+### M3 setup persistence foundation, 2026-10-26
+
+- Added a profile-owned Rust setup store for step, motion, first project and completion. Atomic
+  writes precede acknowledgments; revisions reject stale views, and failed writes keep memory
+  unchanged. Damaged preferences are preserved; future-version preferences are not overwritten.
+- Desktop commands lazily load the store only while this process owns the profile. No agent
+  commands, account requests or credential reads are part of this path. Bindings are generated.
+- Four focused persistence tests and desktop binding export pass on Windows. Core and desktop
+  library Clippy pass. M3 interface and native platform acceptance remain in progress.

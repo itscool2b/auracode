@@ -74,6 +74,8 @@ pub struct AppState {
     pub pages: Arc<Pages>,
     /// Unlogged terminal sessions, owned by the window that explicitly opened them.
     pub terminals: aura_core::terminal::Terminals,
+    /// Lazily loaded setup preferences, available only while this process owns the profile.
+    pub onboarding: Option<Arc<crate::onboarding::SetupService>>,
     /// The background check after a session that did not close the database. Started once the
     /// window is shown, closed at exit before the store.
     pub integrity: IntegrityCheck,
@@ -96,6 +98,10 @@ impl AppState {
         launch: LaunchOptions,
         app_version: String,
     ) -> AppState {
+        let onboarding = chats
+            .as_ref()
+            .and(booted.profile_dir.clone())
+            .map(|dir| Arc::new(crate::onboarding::SetupService::new(dir)));
         let mut notices = booted.notices;
         notices.extend(launch.notices());
         let info = AppInfo {
@@ -126,6 +132,7 @@ impl AppState {
             quit: Arc::default(),
             pages: Arc::default(),
             terminals: Default::default(),
+            onboarding,
             integrity: IntegrityCheck::new(booted.integrity_check),
             demos: DemoSessions::default(),
             launch,

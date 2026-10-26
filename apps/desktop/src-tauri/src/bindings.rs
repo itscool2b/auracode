@@ -40,6 +40,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::conversation::ContinuationResult>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
+            crate::onboarding::setup_snapshot,
+            crate::onboarding::setup_apply,
             commands::start_demo_stream,
             commands::cancel_demo_stream,
             commands::window_ready,

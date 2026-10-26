@@ -29,6 +29,7 @@ pub mod glass;
 pub mod integrity;
 pub mod launch;
 pub mod native_shell;
+pub mod onboarding;
 pub mod os;
 pub mod reveal;
 pub mod search_commands;

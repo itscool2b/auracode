@@ -11,6 +11,8 @@ export const commands = {
 	 *  mode, notices, and the fatal startup error if there was one. Never fails.
 	 */
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
+	setupSnapshot: () => typedError<SetupSnapshot, AppError>(__TAURI_INVOKE("setup_snapshot")),
+	setupApply: (revision: number, action: SetupAction) => typedError<SetupSnapshot, AppError>(__TAURI_INVOKE("setup_apply", { revision, action })),
 	/**
 	 *  Starts a scripted mock-agent turn and streams its frames over `channel` (one `EventBatch` at
 	 *  most every 16 ms, each under 8 KiB). Returns the session id the frames carry, for
@@ -90,6 +92,16 @@ export const commands = {
 	composerSaveDraft: (chatId: string, input: ComposerInput) => typedError<null, AppError>(__TAURI_INVOKE("composer_save_draft", { chatId, input })),
 	/**  Every chat, newest activity first. */
 	chatsList: () => typedError<ChatSummary[], AppError>(__TAURI_INVOKE("chats_list")),
+	workspaceSnapshot: (filter: WorkspaceFilter) => typedError<WorkspaceSnapshot, AppError>(__TAURI_INVOKE("workspace_snapshot", { filter })),
+	projectCreate: (request: ProjectCreate) => typedError<ProjectSummary, AppError>(__TAURI_INVOKE("project_create", { request })),
+	projectUpdate: (projectId: string, input: ProjectInput) => typedError<ProjectSummary, AppError>(__TAURI_INVOKE("project_update", { projectId, input })),
+	projectAddFolder: (projectId: string, path: string) => typedError<ProjectFolder, AppError>(__TAURI_INVOKE("project_add_folder", { projectId, path })),
+	chatRename: (chatId: string, title: string) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_rename", { chatId, title })),
+	chatPin: (chatId: string, pinned: boolean) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_pin", { chatId, pinned })),
+	chatArchive: (chatId: string, archived: boolean) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_archive", { chatId, archived })),
+	chatMove: (chatId: string, request: ChatMove) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_move", { chatId, request })),
+	chatCreatePreview: (folderId: string) => typedError<ChatCreatePreview, AppError>(__TAURI_INVOKE("chat_create_preview", { folderId })),
+	chatProjectCreate: (request: ProjectChatCreate) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_project_create", { request })),
 	/**
 	 *  Creates a chat with `agent_id` in `folder` (an absolute path) and starts its agent. Creating a
 	 *  chat whose agent `needs_download` is the consent to download its adapter.
@@ -216,6 +228,8 @@ export type AgentInstallation = {
 /**  Actions this exact detected installation can perform through reviewed vendor commands. */
 export type AgentMaintenance = {
 	auth_status: boolean,
+	/**  A reviewed interactive vendor login command can run in the explicit terminal sheet. */
+	login_available: boolean,
 	/**
 	 *  `None` enables the explicit update action. Otherwise this explains the owning channel or
 	 *  missing helper; the UI must not offer an update for that installation.
@@ -755,6 +769,10 @@ export type LimitWindow = {
 	resets_at: number | null,
 };
 
+export type MotionPreference = 
+/**  Full motion still honors the operating system's reduced-motion setting. */
+"full" | "reduced" | "off";
+
 export type NoticeLevel = "info" | "warning" | "error";
 
 /**  What [`Store::open`] had to do. Paths are strings so the UI can show them as they are. */
@@ -987,6 +1005,25 @@ export type SessionStatus =
 "failed" | 
 /**  The agent needs its own sign-in; never a live process. */
 "auth_required";
+
+export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" };
+
+export type SetupPreferences = {
+	revision: number,
+	step: SetupStep,
+	motion: MotionPreference,
+	completed: boolean,
+	first_project_id: string | null,
+};
+
+export type SetupSnapshot = {
+	preferences: SetupPreferences,
+	/**  Stable for this process, even when React remounts or the webview reloads. */
+	cold_start: boolean,
+	notice: string | null,
+};
+
+export type SetupStep = "welcome" | "agents" | "account" | "motion" | "project";
 
 export type SlashCommand = {
 	name: string,
