@@ -12,6 +12,7 @@ Desktop.ini
 # Local project instructions and assistant state, never part of the public source.
 /AGENTS.md
 /CLAUDE.md
+/HANDOFF.private.md
 /.codex/
 /.claude/
 

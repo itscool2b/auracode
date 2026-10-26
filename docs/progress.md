@@ -2681,3 +2681,27 @@ host-scoped Cloudflare configuration rule now disables that injection on the ape
 an HTML fetch confirms the beacon is absent. The CSP was not weakened. Responsive product screenshot
 variants are now wired into the website, reducing the small-screen image from 70,006 to 6,662 bytes at
 480px while preserving larger variants for larger displays. No CI run was dispatched for these edits.
+
+### Claude Code handoff checkpoint
+
+The owner requested a handoff to Claude Code before final acceptance. Private continuation details
+are saved locally in ignored `HANDOFF.private.md`, referenced by the identical local instruction
+files. Use this integrated worktree and branch, not the older main checkout. No project license,
+publication visibility, PR, merge or signing decision was made.
+
+Root rebuilt the invitation API and all 23 compiled runtime tests passed. Both API environments now
+contain those exact modules and the private membership secret. Live preview denies an excluded
+address before creating any challenge; its user/session/challenge counts remain zero. Production
+API is staged but still unrouted. Both live websites still predate the newest invitation UI/assets.
+Deployment identifiers and hashes are recorded in infra/README.md. No real sign-in email was sent.
+
+Independent review found and fixed mounted desktop invitation recovery and website management
+during a device-service outage. The focused desktop/web typechecks and Chromium/WebKit suites,
+including accessibility checks, pass. Those reviewed fixes are integrated locally. The three real
+agent smoke runs' recorded owned process IDs are no longer running.
+
+Old-head CI 40380825667 completed with Windows test and Edge Driver preparation failures; macOS
+jobs were cancelled before runner acquisition. Concrete replay-golden and driver-banner fixes are
+being checkpointed separately. The identity-save regression's second Ready wait after restart
+remains under investigation. This is not a completed final verification. Old-head unsigned Build
+40380831571 passed universal macOS and Windows ARM64; Windows x64 was still running at handoff.

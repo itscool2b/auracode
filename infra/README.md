@@ -160,3 +160,15 @@ Cloudflare automatically injected an analytics beacon which the strict website C
 `http.host in {"auracode.si" "preview.auracode.si"}`. Readback verified the rule and a browser-agent
 HTML fetch found no injected analytics. Unrelated sites and security controls were not changed.
 See Cloudflare's [configuration-rule settings](https://developers.cloudflare.com/rules/configuration-rules/settings/).
+
+The invitation build was subsequently uploaded to both API environments. Preview deployment is
+`5e39dc99677c4f7fb58274accecedd1f`; production deployment is
+`08607e5f6a334bec9fc4697fcd25b36c`. Their tested Wasm is 1,086,146 bytes, SHA-256
+`4918d17be4919c1655b7c3f6261f48446b6681a01dd8f79aa6b8cf73a7760ef7`, and generated JavaScript is
+29,939 bytes, SHA-256 `ea31dab3f90ad2c749daf772d97706d3921dce396be22e2c7f8cb615657fcc1e`.
+Each environment has its own secret `CLOUD_ACCOUNT_ALLOWLIST` with the owner-approved membership;
+existing secrets were preserved without reading their values. All 23 compiled API runtime checks
+pass on these root-built modules. Live preview health/config return 200, unauthenticated account
+returns 401, and an excluded synthetic email receives 403 `invite_required` before any challenge.
+Preview user, session and challenge counts remain zero. Production API routing remains inactive.
+No real email was sent, and the websites still need the newest invitation UI/assets deployment.
