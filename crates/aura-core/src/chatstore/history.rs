@@ -488,7 +488,8 @@ mod tests {
         assert_eq!(seen, 51);
     }
 
-    /// History pages for a generated 10,000-turn chat typically take under 50 ms.
+    /// History pages for a generated 10,000-turn chat cost the same at any depth and typically
+    /// take under 50 ms in optimized builds.
     #[test]
     fn history_pages_of_a_10000_turn_chat_are_fast() {
         let db = TestDb::new();
@@ -562,16 +563,27 @@ mod tests {
             cursor = page.before_seq.expect("cursor");
         }
         assert!(times.len() >= 10_000 / 64, "{}", times.len());
-        // A page that scans the whole chat slows every page, so the typical page carries the
-        // budget. One wall-clock outlier on a shared CI runner running tests in parallel is
-        // scheduling noise, bounded only so a pathological page still fails.
-        times.sort();
-        let median = times[times.len() / 2];
-        let slowest = times[times.len() - 1];
+        // A page that scans from either end of the chat makes one end of the history slower than
+        // the other, whatever the machine, so that ratio is the portable check. The absolute 50 ms budget is for optimized builds; unoptimized test
+        // builds on shared CI runners get headroom. A single outlier is scheduling noise.
+        let quarter = times.len() / 4;
+        let median = |mut part: Vec<std::time::Duration>| {
+            part.sort();
+            part[part.len() / 2]
+        };
+        let newest = median(times[..quarter].to_vec());
+        let oldest = median(times[times.len() - quarter..].to_vec());
         assert!(
-            median < std::time::Duration::from_millis(50),
-            "the median page took {median:?}"
+            oldest.max(newest) <= oldest.min(newest) * 3 + std::time::Duration::from_millis(5),
+            "the oldest pages took {oldest:?}, the newest {newest:?}"
         );
+        let budget = if cfg!(debug_assertions) { 250 } else { 50 };
+        let typical = median(times.clone());
+        assert!(
+            typical < std::time::Duration::from_millis(budget),
+            "the median page took {typical:?}"
+        );
+        let slowest = times.iter().copied().max().unwrap_or_default();
         assert!(
             slowest < std::time::Duration::from_secs(1),
             "the slowest page took {slowest:?}"

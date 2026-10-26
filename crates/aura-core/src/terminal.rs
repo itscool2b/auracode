@@ -527,13 +527,7 @@ mod tests {
         let (_, running) = terminals.running("setup", &id).unwrap();
         assert!(!released.load(Ordering::Acquire));
         terminals.close("setup", &id).unwrap();
-        tokio::time::timeout(Duration::from_secs(10), async {
-            while !released.load(Ordering::Acquire) {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .unwrap();
+        released_after_cleanup(&released, Some(&running)).await;
         assert!(running.control.try_exited().is_some());
         assert!(running.control.shutdown().await.leftovers.is_empty());
     }
@@ -567,13 +561,7 @@ mod tests {
         assert!(!released.load(Ordering::Acquire));
         let (_, running) = terminals.running("main", &id).unwrap();
         terminals.drop_owner("main");
-        tokio::time::timeout(Duration::from_secs(10), async {
-            while !released.load(Ordering::Acquire) {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .unwrap();
+        released_after_cleanup(&released, Some(&running)).await;
         assert!(running.control.try_exited().is_some());
         assert!(running.control.shutdown().await.leftovers.is_empty());
     }
@@ -604,13 +592,11 @@ mod tests {
             )
             .await
             .unwrap();
-        tokio::time::timeout(Duration::from_secs(10), async {
-            while !released.load(Ordering::Acquire) {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .unwrap();
+        let running = terminals
+            .running("setup", &id)
+            .ok()
+            .map(|(_, running)| running);
+        released_after_cleanup(&released, running.as_ref()).await;
         assert!(matches!(
             terminals.read("setup", &id).await,
             Err(TerminalError::SetupTimedOut)
@@ -643,6 +629,33 @@ mod tests {
         ));
     }
 
+    /// The product sets no deadline on owned cleanup. A force stop allows about four seconds and
+    /// macOS reads its process table through `ps`, so a loaded runner gets a generous wait, and a
+    /// timeout reports what shutdown saw instead of a bare elapsed error.
+    async fn released_after_cleanup(released: &AtomicBool, running: Option<&Arc<Running>>) {
+        let started = std::time::Instant::now();
+        let waited = tokio::time::timeout(Duration::from_secs(30), async {
+            while !released.load(Ordering::Acquire) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        if waited.is_ok() {
+            return;
+        }
+        let detail = match running {
+            Some(running) => format!(
+                "exit {:?}; shutdown now {:?}",
+                running.control.try_exited(),
+                running.control.shutdown().await
+            ),
+            None => "no running handle".into(),
+        };
+        panic!(
+            "the guard was not released after {:?}: {detail}",
+            started.elapsed()
+        );
+    }
     #[test]
     fn terminal_child() {
         if std::env::var_os("AURACODE_TERMINAL_TEST_CHILD").is_none() {
