@@ -451,7 +451,7 @@ impl Agent {
         } else if prompt.contains("What was the last number you wrote") {
             said = session.last_number.to_string();
             chunk(&session.id, &said)?;
-        } else if prompt.contains("aura-perm.txt") || prompt.contains("Create it now.") {
+        } else if prompt.contains("aura-perm.txt") || prompt.contains("Create it now") {
             match self.write_file(&mut session, "aura-perm.txt", "", incoming)? {
                 Written::Yes => said = "done.".into(),
                 Written::Refused => said = "I did not create aura-perm.txt.".into(),

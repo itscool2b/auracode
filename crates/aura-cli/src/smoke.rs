@@ -97,6 +97,15 @@ const DEMO: Prompts = Prompts {
     files: "/echo resumed",
 };
 
+/// Hermes' Ask (`default`) asks before edits made with its file tools; a shell command such as
+/// `touch` goes to its own approval model instead, which lets harmless ones run. So its
+/// permission prompts name the file tool.
+const HERMES: Prompts = Prompts {
+    permission: "Create an empty file named aura-perm.txt in the current folder using your write_file tool, not the terminal, then reply done.",
+    permission_again: "Create it now with write_file.",
+    ..REAL
+};
+
 /// The files the real scenarios ask for.
 const PERM_FILE: &str = "aura-perm.txt";
 const AUTO_FILE: &str = "aura-auto.txt";
@@ -172,7 +181,13 @@ struct Smoke<'a> {
 
 impl Smoke<'_> {
     fn prompts(&self) -> &'static Prompts {
-        if self.demo { &DEMO } else { &REAL }
+        if self.demo {
+            &DEMO
+        } else if self.spec.dialect == "hermes" {
+            &HERMES
+        } else {
+            &REAL
+        }
     }
 
     async fn run(&mut self, args: &SmokeArgs) {
