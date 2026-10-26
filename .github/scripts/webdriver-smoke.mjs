@@ -50,9 +50,12 @@ export async function exerciseApp(driver, folder, save, checks = []) {
   const windows = await driver.command("GET", "/window/handles");
   assert.equal(windows.length, 1, "expected exactly one native app window");
   await driver.command("POST", "/window", { handle: windows[0] });
-  await driver.command("POST", "/window/rect", { width: 1200, height: 900 });
+  if (driver.capabilities?.setWindowRect === true)
+    await driver.command("POST", "/window/rect", { width: 1200, height: 900 });
   await until("visible native document", () =>
-    driver.script("return document.visibilityState === 'visible' && !!window.__TAURI_INTERNALS__"),
+    driver.script(
+      "return document.visibilityState === 'visible' && innerWidth > 0 && innerHeight > 0 && !!window.__TAURI_INTERNALS__",
+    ),
   );
   const url = await driver.command("GET", "/url");
   assert.match(

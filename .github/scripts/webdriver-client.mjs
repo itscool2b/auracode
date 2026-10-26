@@ -53,6 +53,7 @@ export class WebDriver {
     );
     assert.equal(typeof result?.sessionId, "string", "native session was not created");
     this.session = result.sessionId;
+    this.capabilities = result.capabilities;
     return result.capabilities;
   }
 

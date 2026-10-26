@@ -35,6 +35,7 @@ test("creates a real application capability and types through W3C element comman
     return { value: null };
   });
   await driver.open("C:\\owned\\auracode.exe");
+  assert.deepEqual(driver.capabilities, {});
   await driver.type('[data-testid="composer-input"]', "/echo hello");
   await driver.close();
   assert.deepEqual(received[0].body.capabilities.alwaysMatch["tauri:options"], {
@@ -187,6 +188,10 @@ test("the scenario drives create, typing, Stop and reload externally; only folde
   assert(calls.some((call) => call.click === '[data-testid="composer-stop"]'));
   assert(calls.some((call) => call.click === '[data-testid="chat-stop-session"]'));
   assert.equal(calls.filter((call) => call.path === "/refresh").length, 2);
+  assert(
+    !calls.some((call) => call.path === "/window/rect"),
+    "resize needs advertised driver support",
+  );
   assert.deepEqual(evidence, ["echo", "stopped", "reopened"]);
   assert(!calls.some((call) => /smoke_report|chat_send|runSmoke/.test(call.script ?? "")));
 });
@@ -202,4 +207,14 @@ test("a failed create check retains earlier evidence and cannot report success",
     /native typing failed/,
   );
   assert.deepEqual(checks, ["native-window", "create-demo-chat"]);
+});
+
+test("resizes the native window only when its driver advertises support", async () => {
+  const { driver, calls } = scenarioDriver();
+  driver.capabilities = { setWindowRect: true };
+  await exerciseApp(driver, "owned", async () => {});
+  assert.deepEqual(calls.find((call) => call.path === "/window/rect").body, {
+    width: 1200,
+    height: 900,
+  });
 });
