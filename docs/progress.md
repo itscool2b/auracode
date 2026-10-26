@@ -2571,3 +2571,19 @@ installations and displayed Local correctly. No vendor session, login or paid pr
 Visual inspection found the map label defect fixed in the preceding checkpoint. The disposable
 review instance was closed and its owned background process stopped; this inspection is not a
 substitute for the external WebDriver conversation gate or installed-package acceptance.
+
+### Native smoke checkpoint path correction
+
+The final native Codex smoke found that a long custom profile path could exceed Windows' legacy
+Git path limit while writing an app-owned checkpoint reference. Auracode correctly held the prompt;
+protocol evidence confirms no turn request reached the vendor. An isolated reproduction reported
+`Filename too long`. Checkpoint Git commands now set `core.longpaths=true` for that command only,
+without modifying user Git configuration or the working index. Independent review found no blocker.
+
+A new Windows regression captures and reads a checkpoint whose reference exceeds 260 UTF-16 units.
+It compiled, but Windows Application Control4551 blocked the unit-test executable before execution.
+No policy change or binary workaround was attempted. Core all-target Clippy and rustfmt pass.
+The ordinary application CLI rebuilt after the fix and the real installed Codex basic smoke passed
+all seven checks from an equally long isolated profile: GPT-6-Luna, low effort, one `ok` response,
+streaming, normal completion and turn-scoped usage. The earlier held prompt was cancelled by the
+smoke cleanup and never retried automatically. Final CI and unsigned bundles must include this fix.

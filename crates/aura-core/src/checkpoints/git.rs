@@ -124,6 +124,9 @@ impl Git {
             "-c".into(),
             "core.safecrlf=false".into(),
             "-c".into(),
+            // Profile paths plus checkpoint refs can exceed Windows' legacy path limit.
+            "core.longpaths=true".into(),
+            "-c".into(),
             "core.fsync=all".into(),
             "-c".into(),
             "core.quotePath=false".into(),

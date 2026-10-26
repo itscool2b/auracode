@@ -12,8 +12,16 @@ struct Rig {
 }
 
 fn rig() -> Rig {
+    rig_with_nested_data(0)
+}
+
+fn rig_with_nested_data(depth: usize) -> Rig {
     let dir = tempfile::tempdir().expect("fixture");
-    let profile = Profiles::new(DataRoot::at(dir.path().join("data")))
+    let mut data = dir.path().join("data");
+    for _ in 0..depth {
+        data = data.join("profile-with-a-long-parent-component");
+    }
+    let profile = Profiles::new(DataRoot::at(data))
         .open_active()
         .expect("profile");
     let work = dir.path().join("work");
@@ -34,6 +42,42 @@ fn rig() -> Rig {
         chat: crate::ids::new_id(),
         folder: crate::ids::new_id(),
     }
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn checkpoint_refs_work_beyond_the_legacy_windows_path_limit() {
+    let rig = rig_with_nested_data(4);
+    std::fs::write(rig.work.join("long-profile.txt"), "before\n").expect("fixture");
+    let checkpoint = rig
+        .service
+        .capture(&rig.chat, &rig.folder, &rig.work, &crate::ids::new_id())
+        .await
+        .expect("checkpoint in a deeply nested profile");
+    let reference = rig
+        .service
+        .root
+        .join(format!("{}.git", rig.folder))
+        .join("refs/aura")
+        .join(&rig.chat)
+        .join(&checkpoint.id);
+    assert!(reference.to_string_lossy().encode_utf16().count() > 260);
+    assert!(reference.is_file());
+    std::fs::write(rig.work.join("long-profile.txt"), "after\n").expect("edit");
+    let diff = rig
+        .service
+        .diff(
+            &rig.chat,
+            &rig.folder,
+            &rig.work,
+            &checkpoint.id,
+            "long-profile.txt",
+        )
+        .await
+        .expect("read the saved checkpoint");
+    assert_eq!(diff.before.as_deref(), Some("before\n"));
+    assert_eq!(diff.after.as_deref(), Some("after\n"));
+    assert!(!rig.work.join(".git").exists());
 }
 
 #[tokio::test]
