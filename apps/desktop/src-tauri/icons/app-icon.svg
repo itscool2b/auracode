@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>auracode</title>
+  <!-- Placeholder app icon: a glowing orb on a near-black tile. Original artwork; the tile follows
+       the macOS grid (an 824 px body inset 100 px, so the system shadow has room). -->
+  <defs>
+    <radialGradient id="tile-fill" cx="50%" cy="34%" r="78%">
+      <stop offset="0" stop-color="#17161f"/>
+      <stop offset="0.6" stop-color="#0b0b10"/>
+      <stop offset="1" stop-color="#050507"/>
+    </radialGradient>
+    <linearGradient id="tile-rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.03"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#f08c64" stop-opacity="0.62"/>
+      <stop offset="0.5" stop-color="#8c7dff" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#8c7dff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb-body" cx="40%" cy="36%" r="66%">
+      <stop offset="0" stop-color="#fff5ec"/>
+      <stop offset="0.16" stop-color="#ffd0b2"/>
+      <stop offset="0.42" stop-color="#e57a59"/>
+      <stop offset="0.72" stop-color="#7b3fc6"/>
+      <stop offset="1" stop-color="#170f38"/>
+    </radialGradient>
+    <radialGradient id="orb-tide" cx="72%" cy="74%" r="46%">
+      <stop offset="0" stop-color="#7fe3d2" stop-opacity="0.78"/>
+      <stop offset="1" stop-color="#7fe3d2" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb-rim" cx="50%" cy="50%" r="50%">
+      <stop offset="0.82" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#05030f" stop-opacity="0.55"/>
+    </radialGradient>
+    <filter id="soft-large" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="46"/>
+    </filter>
+    <filter id="soft-small" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+    <clipPath id="tile-clip">
+      <rect x="100" y="100" width="824" height="824" rx="186"/>
+    </clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#tile-fill)"/>
+  <g clip-path="url(#tile-clip)">
+    <circle cx="512" cy="522" r="338" fill="url(#halo)" filter="url(#soft-large)"/>
+    <circle cx="512" cy="512" r="238" fill="url(#orb-body)"/>
+    <circle cx="512" cy="512" r="238" fill="url(#orb-tide)"/>
+    <circle cx="512" cy="512" r="238" fill="url(#orb-rim)"/>
+    <ellipse cx="446" cy="418" rx="104" ry="62" fill="#ffffff" fill-opacity="0.38" filter="url(#soft-small)"/>
+  </g>
+  <rect x="101" y="101" width="822" height="822" rx="185" fill="none" stroke="url(#tile-rim)" stroke-width="2"/>
+</svg>

@@ -1,0 +1,80 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/desktop/src-tauri"]
+# Spikes are throwaway experiments with their own Cargo projects.
+exclude = ["docs/spikes"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# The floor of the locked dependency graph: rusqlite_migration 2.6.0 declares 1.95, the highest
+# in Cargo.lock (Tauri declares 1.90). Cargo refuses to build a package that declares more than the
+# running rustc, and resolver 3 prefers dependency versions that build on this one, so keep it at
+# the true floor: raise it in the same change as the dependency update or the code that needs more.
+rust-version = "1.95"
+authors = ["itscool2b"]
+license = "LicenseRef-Proprietary"
+repository = "https://github.com/itscool2b/auracode"
+publish = false
+
+[workspace.dependencies]
+# internal
+aura-protocol = { path = "crates/aura-protocol" }
+aura-core = { path = "crates/aura-core" }
+aura-drivers = { path = "crates/aura-drivers" }
+
+# async + errors + logging
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "fs"] }
+thiserror = "2.0.21"
+anyhow = "1.0.104"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+
+# data
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+uuid = { version = "1.29.0", features = ["v7", "serde"] }
+rusqlite = { version = "0.40.2", features = ["bundled", "backup"] }
+rusqlite_migration = "2.6.0"
+dirs = "6"
+tempfile = "3"
+
+# typed IPC (tauri-specta pins specta exactly)
+specta = { version = "=2.0.0-rc.26", features = ["derive", "serde_json"] }
+specta-typescript = "=0.0.13"
+tauri-specta = { version = "=2.0.0-rc.26", features = ["derive", "typescript"] }
+
+# tauri
+tauri = { version = "2.12.5", features = [] }
+tauri-build = { version = "2.7.4", features = [] }
+tauri-plugin-opener = "2.7.2"
+tauri-plugin-window-state = "2.5.0"
+tauri-plugin-single-instance = "2.5.4"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "warn"
+# No `unwrap()` or `expect()` on paths that can fail at runtime: return the error instead. CI's
+# `-D warnings` turns these into errors. Tests may use both (see clippy.toml).
+unwrap_used = "warn"
+expect_used = "warn"
+
+[profile.dev]
+# Faster incremental builds for the app shell; dependencies get a light optimisation so
+# SQLite and serde aren't painfully slow in debug.
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 1
+
+[profile.release]
+# Unwind (not abort) so a panic inside one session task is contained instead of killing every
+# running agent turn.
+panic = "unwind"
+lto = "thin"
+codegen-units = 4
+strip = "debuginfo"

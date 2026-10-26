@@ -1,0 +1,18 @@
+[package]
+name = "aura-protocol"
+description = "Shared vocabulary between the auracode core, the desktop UI, and the sync API"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+specta.workspace = true
+
+[lints]
+workspace = true

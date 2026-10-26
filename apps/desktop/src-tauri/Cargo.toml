@@ -1,0 +1,61 @@
+[package]
+name = "auracode-desktop"
+description = "The auracode desktop shell: Tauri window, typed commands and channels over aura-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+default-run = "auracode"
+
+# The library holds everything (so tests and the bindings export can reach it); the binary only
+# calls `run`. They have different names on purpose: a bin and a lib that share a name collide on
+# Windows debug artifacts.
+[lib]
+name = "auracode_desktop"
+path = "src/lib.rs"
+
+[[bin]]
+name = "auracode"
+path = "src/main.rs"
+
+[build-dependencies]
+# Embeds the Windows application manifest in test binaries too (build.rs). Already in the tree
+# through tauri-build's resource compiler, at this version.
+embed-resource = "3.0.12"
+tauri-build.workspace = true
+
+[dependencies]
+aura-core.workspace = true
+aura-drivers.workspace = true
+aura-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+specta.workspace = true
+specta-typescript.workspace = true
+tauri.workspace = true
+tauri-plugin-opener.workspace = true
+tauri-plugin-single-instance.workspace = true
+tauri-plugin-window-state.workspace = true
+tauri-specta.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+# Same release aura-drivers uses: its `run_script` takes a `CancellationToken`.
+tokio-util = "0.7.20"
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# Already in the tree through tao and window-vibrancy; it reads the real build number (Mica needs
+# build 22000+) without the compatibility shims that make GetVersionEx lie.
+windows-version = "0.1.7"
+
+[dev-dependencies]
+tempfile.workspace = true
+# Paused time makes the window fallback and the demo stream tests instant and deterministic.
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

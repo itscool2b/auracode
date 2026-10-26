@@ -1,0 +1,6 @@
+# Built from sampler.c and winctl.swift next to measure.py, which looks for them here.
+/sampler
+/winctl
+# Raw measurement output (JSON, top and sampler logs, app logs): attach it to a report instead.
+/runs/
+/render-power-results/

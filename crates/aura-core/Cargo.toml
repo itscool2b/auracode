@@ -1,0 +1,45 @@
+[package]
+name = "aura-core"
+description = "Device identity, the app data layout, profiles, and the per-profile SQLite store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+dirs.workspace = true
+# Fallible (io::Result) instead of panicking when the OS refuses, so a broken hostname lookup
+# degrades to "This device" rather than taking the app down.
+hostname = "0.4.2"
+rusqlite.workspace = true
+rusqlite_migration.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+specta.workspace = true
+# Only for the `#[specta(type = specta_typescript::Number)]` marker on Unix-ms fields: specta's
+# TypeScript exporter rejects `i64` otherwise. Pure Rust, no Tauri.
+specta-typescript.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# The ACL calls that make `profiles\` private to the user (fsutil::restrict_to_owner). Raw bindings,
+# already in the tree through tempfile and dirs, rather than the heavier `windows` crate.
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

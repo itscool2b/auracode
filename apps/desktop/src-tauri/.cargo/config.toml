@@ -1,0 +1,9 @@
+# Cargo reads this file only for commands run from this directory (or below it), which is where
+# `tauri dev` and `tauri build` run cargo; commands from the repository root (CI) never see it.
+
+# Dev builds on macOS are signed with the local signing identity just before they run, so they
+# carry the same designated requirement as bundles instead of a new ad-hoc one per build. Without
+# the identity the build runs as before, with a hint. Test binaries pass through untouched. See
+# ../README.md.
+[target.'cfg(target_os = "macos")']
+runner = ["../scripts/macos-signing.sh", "run"]

@@ -1,0 +1,23 @@
+[package]
+name = "spike-doc-check"
+description = "Checks the M0 spike docs against the code, lockfiles, workflows and generated bindings they cite"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+license = "LicenseRef-Proprietary"
+
+# Standalone on purpose, like the spikes it checks: the root manifest excludes docs/spikes. It has
+# no dependencies, so its lockfile only ever names this package.
+[workspace]
+
+# Mirrors the main workspace's lints (this crate is outside it), plus expect_used.
+[lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "warn"
+unwrap_used = "warn"
+expect_used = "warn"

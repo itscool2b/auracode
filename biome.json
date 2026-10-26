@@ -1,0 +1,36 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "**",
+      "!**/target",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/src-tauri/gen",
+      "!**/bindings.ts",
+      "!**/pnpm-lock.yaml",
+      "!docs/spikes/**/target"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": { "quoteStyle": "double", "semicolons": "always", "trailingCommas": "all" }
+  },
+  "markdown": { "formatter": { "enabled": false } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "correctness": { "noUnusedImports": "error", "noUnusedVariables": "error" },
+      "suspicious": { "noExplicitAny": "error" },
+      "a11y": { "preset": "recommended" }
+    }
+  },
+  "assist": { "enabled": true, "actions": { "source": { "organizeImports": "on" } } }
+}

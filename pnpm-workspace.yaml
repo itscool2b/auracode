@@ -1,0 +1,16 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "services/*"
+
+onlyBuiltDependencies:
+  - "@biomejs/biome"
+  - esbuild
+
+# pnpm 12 reads its settings here and ignores them in .npmrc.
+# Refuse to install on a Node.js outside `engines` in package.json (the range Vite 8 and Vitest 5
+# support) instead of failing later inside the toolchain.
+engineStrict: true
+# pnpm's default, recorded in pnpm-lock.yaml; stated so a changed default cannot break
+# `pnpm install --frozen-lockfile`.
+autoInstallPeers: true

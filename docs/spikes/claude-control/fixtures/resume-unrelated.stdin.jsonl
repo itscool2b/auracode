@@ -1,0 +1,5 @@
+{"after_stdout_line":0,"message":{"request":{"hooks":null,"subtype":"initialize"},"request_id":"req_1_spike","type":"control_request"},"t_ms":0}
+{"after_stdout_line":9,"message":{"request":{"subtype":"get_context_usage"},"request_id":"req_2_spike","type":"control_request"},"t_ms":1525}
+{"after_stdout_line":12,"message":{"message":{"content":"/usage","role":"user"},"parent_tool_use_id":null,"session_id":"default","type":"user","uuid":"01a16d19-63e7-737a-8631-c065bb8eeca6"},"t_ms":2026}
+{"after_stdout_line":21,"message":{"request":{"mode":"bypassPermissions","subtype":"set_permission_mode"},"request_id":"req_3_spike","type":"control_request"},"t_ms":5081}
+{"after_stdout_line":22,"message":{"request":{"mode":"default","subtype":"set_permission_mode"},"request_id":"req_4_spike","type":"control_request"},"t_ms":5083}

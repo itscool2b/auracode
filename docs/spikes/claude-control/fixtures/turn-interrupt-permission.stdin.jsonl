@@ -1,0 +1,5 @@
+{"after_stdout_line":0,"message":{"request":{"hooks":null,"subtype":"initialize"},"request_id":"req_1_spike","type":"control_request"},"t_ms":0}
+{"after_stdout_line":9,"message":{"request":{"detail":"summary","subtype":"get_context_usage"},"request_id":"req_2_spike","type":"control_request"},"t_ms":798}
+{"after_stdout_line":10,"message":{"message":{"content":"Use the Bash tool to run exactly this command: touch spike-pending.txt","role":"user"},"parent_tool_use_id":null,"session_id":"default","type":"user","uuid":"01a16d1d-0954-709e-9519-d0470414b7b7"},"t_ms":877}
+{"after_stdout_line":35,"message":{"request":{"subtype":"interrupt"},"request_id":"req_3_spike","type":"control_request"},"t_ms":2542}
+{"after_stdout_line":45,"message":{"response":{"request_id":"702737b1-11ac-4439-b39d-73faa72e262c","response":{"behavior":"allow","updatedInput":{"command":"touch spike-pending.txt","description":"Create empty file spike-pending.txt"}},"subtype":"success"},"type":"control_response"},"t_ms":4569}

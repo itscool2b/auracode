@@ -1,0 +1,203 @@
+/*
+ * Aura design tokens.
+ *
+ * Dark-first. In the desktop app the window itself is transparent and the OS draws the glass behind
+ * it (Liquid Glass on macOS 26+, vibrancy on older macOS, Mica on Windows 11), so surfaces here are
+ * translucent whites layered on that native material, not opaque greys. `--aura-base` is the opaque
+ * near-black for places with no native glass: the website, Windows 10, and Linux.
+ *
+ * JS mirrors of the numeric tokens (radii, durations, z layers) live in tokens.ts and motion.ts;
+ * tokens.test.ts fails if the two drift apart.
+ */
+
+/*
+ * The accent colours are registered so they can be transitioned: switching agents cross-fades every
+ * accent-tinted surface instead of snapping. Unregistered custom properties cannot interpolate.
+ */
+@property --aura-accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #9db7c9;
+}
+
+@property --aura-accent-2 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #25485a;
+}
+
+@property --aura-glow {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #8fc5c0;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Base */
+  --aura-base: #07070a;
+  --aura-base-raised: #0e0e13;
+  /* Laid over native glass so text keeps its contrast on bright wallpapers. */
+  --aura-window-tint: rgb(7 7 10 / 0.42);
+
+  /* Text, strongest to faintest */
+  --aura-text-1: rgb(255 255 255 / 0.94);
+  --aura-text-2: rgb(255 255 255 / 0.66);
+  --aura-text-3: rgb(255 255 255 / 0.44);
+  --aura-text-4: rgb(255 255 255 / 0.28);
+  --aura-text-on-accent: #0a0a0d;
+
+  /* Surface fills: translucent whites that sit on the native glass */
+  --aura-fill-1: rgb(255 255 255 / 0.035);
+  --aura-fill-2: rgb(255 255 255 / 0.06);
+  --aura-fill-3: rgb(255 255 255 / 0.09);
+  --aura-fill-hover: rgb(255 255 255 / 0.05);
+  --aura-fill-pressed: rgb(255 255 255 / 0.08);
+  --aura-fill-selected: rgb(255 255 255 / 0.1);
+  /* Under small blurred overlays, so they stay legible over busy content. */
+  --aura-overlay-scrim: rgb(12 12 16 / 0.62);
+
+  /* Hairlines */
+  --aura-hairline: 1px;
+  --aura-border-1: rgb(255 255 255 / 0.06);
+  --aura-border-2: rgb(255 255 255 / 0.1);
+  --aura-border-3: rgb(255 255 255 / 0.16);
+  --aura-border-strong: rgb(255 255 255 / 0.24);
+
+  /* Shadows: each pairs a tight contact shadow with a wide ambient one */
+  --aura-shadow-1: 0 1px 2px rgb(0 0 0 / 0.18), 0 6px 18px rgb(0 0 0 / 0.14);
+  --aura-shadow-2: 0 2px 4px rgb(0 0 0 / 0.22), 0 12px 32px rgb(0 0 0 / 0.24);
+  --aura-shadow-3: 0 3px 8px rgb(0 0 0 / 0.28), 0 22px 56px rgb(0 0 0 / 0.38);
+
+  /*
+   * Elevations 1..3: fill, a top-to-bottom gradient hairline, an inner top highlight, and the outer
+   * shadow. Higher elevations are brighter, crisper, and cast further.
+   */
+  --aura-elev-1-fill: rgb(255 255 255 / 0.035);
+  --aura-elev-1-hairline-top: rgb(255 255 255 / 0.1);
+  --aura-elev-1-hairline-bottom: rgb(255 255 255 / 0.035);
+  --aura-elev-1-highlight: inset 0 1px 0 rgb(255 255 255 / 0.035);
+  --aura-elev-1-shadow: var(--aura-shadow-1);
+
+  --aura-elev-2-fill: rgb(255 255 255 / 0.06);
+  --aura-elev-2-hairline-top: rgb(255 255 255 / 0.14);
+  --aura-elev-2-hairline-bottom: rgb(255 255 255 / 0.05);
+  --aura-elev-2-highlight: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --aura-elev-2-shadow: var(--aura-shadow-2);
+
+  --aura-elev-3-fill: rgb(255 255 255 / 0.09);
+  --aura-elev-3-hairline-top: rgb(255 255 255 / 0.2);
+  --aura-elev-3-hairline-bottom: rgb(255 255 255 / 0.07);
+  --aura-elev-3-highlight: inset 0 1px 0 rgb(255 255 255 / 0.07);
+  --aura-elev-3-shadow: var(--aura-shadow-3);
+
+  /* Radii. Squircle corners use the same numbers through squirclePath(). */
+  --aura-radius-xs: 6px;
+  --aura-radius-sm: 8px;
+  --aura-radius-md: 12px;
+  --aura-radius-lg: 16px;
+  --aura-radius-xl: 22px;
+  --aura-radius-2xl: 28px;
+  --aura-radius-pill: 9999px;
+
+  /* Blur radii. Constant by rule: blur is never animated, only transform and opacity are. */
+  --aura-blur-overlay: 24px;
+  --aura-blur-field: 64px;
+
+  /* Motion */
+  --aura-duration-instant: 90ms;
+  --aura-duration-fast: 150ms;
+  --aura-duration-base: 240ms;
+  --aura-duration-slow: 380ms;
+  --aura-duration-slower: 620ms;
+  --aura-duration-ambient: 1400ms;
+  /* Opacity-only fades. Kept under reduced motion: they carry state without moving anything. */
+  --aura-duration-fade: 200ms;
+
+  --aura-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --aura-ease-emphasized: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --aura-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --aura-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --aura-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  /*
+   * The `snappy` spring from motion.ts (stiffness 520, damping 38) sampled into linear(), for CSS
+   * transitions that should match Motion's springs. Tuned for about --aura-duration-slow.
+   */
+  --aura-ease-spring: linear(
+    0,
+    0.055 4.5%,
+    0.179 9.1%,
+    0.328 13.6%,
+    0.476 18.2%,
+    0.609 22.7%,
+    0.72 27.3%,
+    0.808 31.8%,
+    0.875 36.4%,
+    0.924 40.9%,
+    0.958 45.5%,
+    0.98 50%,
+    0.995 54.5%,
+    1.003 59.1%,
+    1.007 63.6%,
+    1.009 68.2%,
+    1.009 72.7%,
+    1.008 77.3%,
+    1.007 81.8%,
+    1.005 86.4%,
+    1.004 90.9%,
+    1.003 95.5%,
+    1
+  );
+  /* How far a message block rises while it fades in. */
+  --aura-rise-distance: 6px;
+
+  /* Agent accent. The active agent's brand overrides these (see brandCssVariables()). */
+  --aura-accent: #9db7c9;
+  --aura-accent-2: #25485a;
+  --aura-glow: #8fc5c0;
+  /*
+   * Derived from the accent. A custom property resolves var() on the element that declares it, and
+   * descendants inherit the resolved value, so these follow an accent overridden further down only
+   * where they are declared again: brandCssVariables() re-declares them beside the accent it sets.
+   */
+  --aura-accent-soft: color-mix(in oklab, var(--aura-accent) 18%, transparent);
+  --aura-focus-ring: color-mix(in oklab, var(--aura-accent) 72%, white);
+
+  /* Status */
+  --aura-warning: #f5b544;
+  --aura-danger: #ff5a52;
+  --aura-success: #4cd497;
+  --aura-info: #6aa8ff;
+
+  /* Z layers, bottom to top */
+  --aura-z-field: 0;
+  --aura-z-content: 1;
+  --aura-z-sticky: 10;
+  --aura-z-sidebar: 20;
+  --aura-z-composer: 30;
+  --aura-z-dropdown: 100;
+  --aura-z-popover: 200;
+  --aura-z-modal: 300;
+  --aura-z-toast: 400;
+  --aura-z-tooltip: 500;
+  --aura-z-boot: 1000;
+}
+
+/*
+ * Reduced motion: anything that moves becomes effectively instant. 1ms rather than 0 so
+ * transitionend still fires for code that waits on it. Opacity fades keep a short duration.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --aura-duration-instant: 1ms;
+    --aura-duration-fast: 1ms;
+    --aura-duration-base: 1ms;
+    --aura-duration-slow: 1ms;
+    --aura-duration-slower: 1ms;
+    --aura-duration-ambient: 1ms;
+    --aura-duration-fade: 160ms;
+    --aura-ease-spring: var(--aura-ease-standard);
+    --aura-rise-distance: 0px;
+  }
+}
