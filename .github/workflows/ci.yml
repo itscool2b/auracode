@@ -10,6 +10,11 @@ on:
         type: boolean
         default: false
         required: false
+      encrypted_storage:
+        description: Verify SQLCipher and account sync on both platforms (enable for final verification)
+        type: boolean
+        default: false
+        required: false
 
 permissions:
   contents: read
@@ -324,6 +329,60 @@ jobs:
       - name: Keep a cancelled build out of the cache
         if: cancelled()
         run: echo "CACHE_ON_FAILURE=false" >> "$GITHUB_ENV"
+  encrypted-storage:
+    name: encrypted storage (${{ matrix.os }})
+    if: inputs.encrypted_storage
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+          components: clippy
+      - name: Select native Windows Perl for vendored OpenSSL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $nativePerl = $null
+          foreach ($candidate in @(Get-Command perl.exe -All -CommandType Application -ErrorAction SilentlyContinue)) {
+            $platform = & $candidate.Source -e 'print $^O'
+            if ($LASTEXITCODE -eq 0 -and "$platform" -eq 'MSWin32') {
+              $nativePerl = $candidate.Source
+              break
+            }
+          }
+          if (-not $nativePerl) { throw 'The Windows runner needs native Perl for vendored OpenSSL; Git/MSYS Perl is unsupported.' }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value ("OPENSSL_SRC_PERL=" + $nativePerl)
+      - name: Cache encrypted build
+        id: ready
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: encrypted-storage
+          cache-on-failure: true
+      - name: Test SQLCipher and sync client
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: cargo test -p aura-sync --features sqlcipher --lib --locked
+      - name: Test encrypted core store
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: cargo test -p aura-core --features account-sync store:: --lib --locked
+      - name: Test core sync ledger
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: cargo test -p aura-core --features account-sync sync::tests --lib --locked
+      - name: Clippy sync client with SQLCipher
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: cargo clippy -p aura-sync --features sqlcipher --all-targets --locked -- -D warnings
+      - name: Clippy core with account sync
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: cargo clippy -p aura-core --features account-sync --all-targets --locked -- -D warnings
   bindings-parity:
     name: generated binding parity
     needs: [bindings, rust]

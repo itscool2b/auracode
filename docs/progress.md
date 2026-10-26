@@ -1160,3 +1160,14 @@ is a backend checkpoint, not M4 completion. No real-repository mutation, paid pr
 - Added explicit signed-updater build configuration that requires supplied signing material. Keys,
   platform signing, release publication, native upgrade/signature acceptance and interface wiring
   remain pending. The bootstrap run is still not final verification.
+
+### Optional encrypted-storage integration gates, 2026-10-26
+
+- Added an explicit `encrypted_storage` workflow input for Windows/macOS SQLCipher client tests,
+  encrypted core store and sync ledger tests, plus feature-enabled Clippy. Commands and prerequisites
+  were coordinated with the M7 owner. Final verification must enable this gate.
+- Windows selects only an installed native Perl for vendored OpenSSL and fails if unavailable.
+  No tool installation, credentials, keychain reads or CI dispatch were performed here. Workflow
+  pin/runner checks and instruction parity pass; hosted feature-matrix execution remains pending.
+- Matched root's workflow correction by removing `save-if` from the Rust cache action. GitHub does
+  not permit the earlier status function in that action input. The cancellation safeguard remains.

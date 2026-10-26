@@ -4,6 +4,15 @@ CI is manual. Routine commits do not dispatch checks. Reserve the planned integr
 the final run for a coherent source checkpoint, then rerun affected gates when fixing failures.
 Linux and WSL acceptance are deferred.
 
+The separate `encrypted_storage` boolean enables the SQLCipher/account-sync test and Clippy matrix
+on both platforms. Enable it for the integrated M7 checkpoint and final verification. It is separate
+from the default workspace build because SQLCipher is an optional Cargo feature. These tests use
+synthetic keys and temporary profiles; they never query the real keychain or account credentials.
+On Windows, the workflow selects an installed native Perl reporting `MSWin32` for vendored OpenSSL.
+It fails explicitly if none exists, rather than falling back to Git/MSYS Perl or changing host policy.
+The hosted [Windows runner inventory](https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md)
+lists Perl; macOS uses the existing CommonCrypto SQLCipher backend.
+
 ## Recovering generated bindings
 
 The `CI` workflow has one optional boolean, `refresh_bindings`, defaulting to `false`.
