@@ -583,6 +583,27 @@ fn command(
 /// The spike's wrapper stack: `KillOnDrop` everywhere; Unix adds `ResetSigmask` and a group of its
 /// own (a session of its own for helpers that ask for one); Windows adds `CREATE_NO_WINDOW` and a
 /// kill-on-close job object, for every agent and helper.
+/// Some descriptors cannot be created close-on-exec atomically, such as a PTY pair from `openpty`.
+/// Creating and marking them happens under the write side, and every spawn holds the read side,
+/// so no child forked by another thread inherits one in between. An inherited PTY slave would
+/// keep that terminal's output open for the child's whole life and stall its cleanup.
+static INHERITANCE: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
+/// Held while spawning a child.
+pub(crate) fn inheritable_marked() -> std::sync::RwLockReadGuard<'static, ()> {
+    INHERITANCE
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Held while creating descriptors that are not yet close-on-exec.
+#[cfg(unix)]
+pub(crate) fn creating_inheritable() -> std::sync::RwLockWriteGuard<'static, ()> {
+    INHERITANCE
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 pub(crate) fn wrap(command: tokio::process::Command, new_session: bool) -> CommandWrap {
     let mut wrapped = CommandWrap::from(command);
     wrapped.wrap(KillOnDrop);
@@ -629,7 +650,11 @@ fn start(
     let mut wrapped = wrap(command, new_session);
     let mut attempt = 0;
     loop {
-        match wrapped.spawn() {
+        let spawned = {
+            let _marked = inheritable_marked();
+            wrapped.spawn()
+        };
+        match spawned {
             Ok(child) => return Ok(child),
             Err(source)
                 if source.kind() == io::ErrorKind::ExecutableFileBusy && attempt < BUSY_RETRIES =>

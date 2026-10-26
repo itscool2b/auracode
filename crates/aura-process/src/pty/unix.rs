@@ -133,12 +133,17 @@ pub(super) fn prepare(
     vars: &EnvMap,
     size: PtySize,
 ) -> io::Result<Prepared> {
-    let pair = openpty(Some(&dimensions(size)), None).map_err(io::Error::from)?;
     // openpty does not promise close-on-exec. Neither the original slave nor master belongs in
-    // the child's inherited descriptor table after its three standard handles are installed.
-    for descriptor in [&pair.master, &pair.slave] {
-        fcntl(descriptor, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)).map_err(io::Error::from)?;
-    }
+    // the child's inherited descriptor table after its three standard handles are installed,
+    // nor in any other child spawned concurrently before they are marked.
+    let pair = {
+        let _creating = crate::spawn::creating_inheritable();
+        let pair = openpty(Some(&dimensions(size)), None).map_err(io::Error::from)?;
+        for descriptor in [&pair.master, &pair.slave] {
+            fcntl(descriptor, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)).map_err(io::Error::from)?;
+        }
+        pair
+    };
     let master = File::from(pair.master);
     let flags = fcntl(&master, FcntlArg::F_GETFL).map_err(io::Error::from)?;
     fcntl(
@@ -161,7 +166,10 @@ pub(super) fn prepare(
         .stderr(slave);
     let mut command = crate::spawn::wrap(command, true);
     command.wrap(ControllingTerminal);
-    let child = command.spawn()?;
+    let child = {
+        let _marked = crate::spawn::inheritable_marked();
+        command.spawn()?
+    };
     Ok(Prepared {
         child,
         input: Box::new(PtyIo(Arc::clone(&master))),
