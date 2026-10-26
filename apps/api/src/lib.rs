@@ -1,0 +1,9 @@
+//! Account and opaque sync API. Plaintext agent data and account encryption keys never enter it.
+
+pub mod crypto;
+pub mod policy;
+pub mod sql;
+pub mod types;
+
+#[cfg(target_arch = "wasm32")]
+mod edge;

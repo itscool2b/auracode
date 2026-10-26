@@ -3,9 +3,11 @@ packages:
   - "packages/*"
   - "services/*"
 
-onlyBuiltDependencies:
-  - "@biomejs/biome"
-  - esbuild
+# pnpm 11+ replaced onlyBuiltDependencies with explicit allowBuilds decisions.
+allowBuilds:
+  "@biomejs/biome": true
+  esbuild: true
+  "workerd@1.20261019.1": true
 
 # pnpm 12 reads its settings here and ignores them in .npmrc.
 # Refuse to install on a Node.js outside `engines` in package.json (the range Vite 8 and Vitest 5

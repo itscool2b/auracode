@@ -29,6 +29,27 @@ planned Windows/macOS integration gate. This is a saved implementation checkpoin
   Integrating those implementations and completing their product surfaces is the next work.
 - No CI was dispatched for these local checkpoints. Full product completion remains pending.
 
+## M6/M7 Rust cloud API checkpoint
+
+- Implemented Rust Worker auth, bounded email-code challenges, Turnstile verification, hash-only
+  sessions, browser Origin/CSRF checks, desktop-bound device registration and approval/recovery.
+- Added SQLite-compatible D1 migration, opaque encrypted record/chunk push/pull with monotonic cursors,
+  private R2 blob CAS with quota reservations, and retryable account/orphan cleanup. Cloud account
+  keys never enter this service. Contracts and deployment prerequisites are in docs/cloud-api-v1.md
+  and apps/api/README.md; the independent client owns E2E key handling and merge/application behavior.
+- Native Rust tests pass 23 cases, including actual shared SQL atomicity/authorization, quota rollback,
+  device bootstrap/approval expiry, recovery binding, revoked writes and blob CAS. Native all-target
+  and wasm32 Clippy pass. worker-build 0.8.7 produced the release Wasm and generated runtime shim.
+- Four local compiled-Worker runtime tests passed against isolated Miniflare D1/R2: concurrent code
+  consumption, browser CSRF/Origin, sync booleans/cursors and private blob CAS. External network
+  requests are blocked by the harness. Pinned Wrangler's production-config dry run passed without
+  deploying. Migrated obsolete pnpm build approvals to allowBuilds and approved the pinned workerd
+  tool required for these local tests; no host security policy was changed.
+- No cloud application, migration, email, account or CI run was deployed/executed. Preview runtime
+  tests, production Email Service onboarding, Turnstile/secrets, client integration and installed
+  acceptance remain pending. Retained-device sign-in rebind is the next protocol step; fresh login
+  currently requires explicit device approval or recovery. M5 signed release publication is separate.
+
 Current owner correction: Windows and macOS are the supported targets. Linux and WSL work and
 acceptance are deferred. Implementation checkpoints are committed locally with focused checks;
 the root task will run CI at major integration and final verification points.
