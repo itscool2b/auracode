@@ -40,7 +40,9 @@ extract or substitute a lone archive member. OpenCode major lines qualify separa
 
 `agy-stream` uses persistent JSONL input. It waits for the native conversation ID, sends each
 visible prompt in a `user` envelope, reconciles streamed response text with the final result and
-reports cumulative session usage. `grok-stream` starts one owned process per visible prompt with
+reports its first cumulative usage sample with session scope. Later samples from the same owned
+process report per-turn differences; a new process or decreased counters reset the baseline.
+Missing optional counters remain unknown. `grok-stream` starts one owned process per visible prompt with
 `-p` and a chosen `--session-id`, then `--resume` after the vendor confirms creation. Before that
 confirmation, readiness has no native ID, so stopping or failing the first prompt cannot save a
 fabricated resume target. Windows Grok requires a native executable because prompt text is an

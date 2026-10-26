@@ -40,6 +40,7 @@ mod process {
             &ProbeArgs {
                 agent: "grok-stream".into(),
                 env: vec![],
+                folder: None,
             },
             &machine.path("unused-folder"),
             false,

@@ -420,6 +420,11 @@ version-check regression. The permission smoke scenario explicitly skips unsuppo
 Combined verification and real-agent acceptance are still pending; no new paid calls were made.
 Grok text smoke expects native per-turn usage; the text fallbacks' logs are listed without claiming
 the ACP replay path supports them. Text fallback replay remains an explicit acceptance limitation.
+Agy text usage now keeps a baseline per owned process: the first sample retains session scope,
+subsequent totals become turn differences, and a restarted process begins a new baseline. A fake
+process regression covers two cumulative results and a resumed process. Combined CI found a
+missing field in the new no-prompt probe test constructor; that compile defect is corrected.
+The usage regression and corrected combined checkpoint still await CI execution.
 
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
