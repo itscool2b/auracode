@@ -16,6 +16,8 @@
 //!
 //! Step 10 (a Finder launch of a built app) stays manual. Each spawn leaves a protocol log, and the
 //! probe ends by naming each log with the `probe-*` fixture it can become.
+//! Restricted text fallbacks expose no control RPC; their free probe checks executable detection
+//! only and explicitly leaves native startup, auth, output and resume to an authorized smoke run.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -261,6 +263,13 @@ impl Probe<'_> {
                 self.report.fail("detect", "detection did not finish");
                 return;
             }
+        }
+        if spec.kind == DriverKind::Headless {
+            self.report.skip(
+                "1-9 controls",
+                "This text fallback has no control RPC. Only executable detection was checked; native startup, authentication, output and resume remain unverified. No chat or prompt was started.",
+            );
+            return;
         }
         if !args.env.is_empty() {
             self.report.info(

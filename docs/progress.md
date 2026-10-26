@@ -207,6 +207,14 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
 
 ## Decisions and constraints
 
+M1d integration checkpoint: Pi and the deferred ACP callbacks, qualified catalog recipes and
+restricted text fallbacks now coexist on `m1d-pi-agents`. Pi `5146ee5` passed complete Linux and
+Windows CI in run `40282637352`. Catalog merge resolution preserves all 14 entries and updates
+cross-package catalog assertions through the shared catalog. The free probe explicitly limits
+text fallbacks to executable detection and starts no chat or prompt, with a real fake-process
+version-check regression. The permission smoke scenario explicitly skips unsupported Ask modes.
+Combined verification and real-agent acceptance are still pending; no new paid calls were made.
+
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
   no-form plan auto-approval path and exposes only its enforceable Full auto autonomy. See
