@@ -167,15 +167,17 @@ export function ConversationDialog({
   };
   const agent = agents?.find((agent) => agent.id === preview?.agent_id);
   const label =
-    intent.type === "fresh_session"
-      ? "Use handoff in a fresh session"
-      : intent.type === "switch_agent"
-        ? `Switch to ${agent?.name ?? preview?.agent_id ?? "agent"}`
-        : intent.type === "fork"
-          ? "Create fork"
-          : intent.type === "edit"
-            ? "Send edited prompt"
-            : "Retry prompt";
+    intent.type === "continue_here"
+      ? "Continue here with this handoff"
+      : intent.type === "fresh_session"
+        ? "Use handoff in a fresh session"
+        : intent.type === "switch_agent"
+          ? `Switch to ${agent?.name ?? preview?.agent_id ?? "agent"}`
+          : intent.type === "fork"
+            ? "Create fork"
+            : intent.type === "edit"
+              ? "Send edited prompt"
+              : "Retry prompt";
   return (
     <Modal
       title={
@@ -214,6 +216,19 @@ export function ConversationDialog({
       ) : null}
       {intent.type === "history" && turns ? (
         <>
+          {turns.can_continue_here ? (
+            <div className="conversation-notice">
+              <p>This conversation has new history from another device.</p>
+              <button
+                type="button"
+                className="ui-button"
+                disabled={busy}
+                onClick={() => setIntent({ type: "continue_here" })}
+              >
+                Review and continue here
+              </button>
+            </div>
+          ) : null}
           <p className="conversation-notice">
             Choose a message to retry, edit, or continue in a new chat.
           </p>

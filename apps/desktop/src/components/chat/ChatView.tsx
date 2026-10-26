@@ -46,6 +46,7 @@ export function ChatView({
   const [gitOpen, setGitOpen] = useState(false);
   const [continuation, setContinuation] = useState<ConversationIntent | null>(null);
   const [handoff, setHandoff] = useState<PendingHandoff | null>(null);
+  const [canContinueHere, setCanContinueHere] = useState(false);
   const [handoffError, setHandoffError] = useState<string | null>(null);
   const [handoffLoaded, setHandoffLoaded] = useState(!transport.conversation);
   const [handoffRevision, setHandoffRevision] = useState(0);
@@ -86,11 +87,14 @@ export function ChatView({
     if (!transport.conversation || state.phase !== "live") return;
     let stale = false;
     setHandoffLoaded(false);
-    void transport.conversation
-      .pending(chatId)
-      .then((value) => {
+    void Promise.all([
+      transport.conversation.pending(chatId),
+      transport.conversation.turns(chatId, null),
+    ])
+      .then(([value, history]) => {
         if (!stale) {
           setHandoff(value);
+          setCanContinueHere(history.can_continue_here === true && value === null);
           setHandoffError(null);
           setHandoffLoaded(true);
         }
@@ -131,9 +135,11 @@ export function ChatView({
   const startSession = useCallback(
     (fresh: boolean) => {
       if (fresh && transport.conversation) setContinuation({ type: "fresh_session" });
+      else if (canContinueHere && transport.conversation)
+        setContinuation({ type: "continue_here" });
       else void store.start(fresh);
     },
-    [store, transport.conversation],
+    [store, transport.conversation, canContinueHere],
   );
 
   const actions = useMemo<TurnActions>(
@@ -240,6 +246,20 @@ export function ChatView({
             onLoadEarlier={() => void store.loadEarlier()}
           />
           <div className="chat-dock">
+            {canContinueHere ? (
+              <div className="conversation-notice" role="status">
+                <p>
+                  New history arrived from another device. Review the context before continuing.
+                </p>
+                <button
+                  type="button"
+                  className="ui-button"
+                  onClick={() => setContinuation({ type: "continue_here" })}
+                >
+                  Continue here
+                </button>
+              </div>
+            ) : null}
             {handoff ? (
               <details className="chat-handoff">
                 <summary>
@@ -325,7 +345,12 @@ export function ChatView({
             ) : null}
             <div className="chat-compose-slot" hidden={pendingPermissions.length > 0}>
               <Composer
-                blocked={!handoffLoaded || handoffError !== null || state.steeringPending}
+                blocked={
+                  !handoffLoaded ||
+                  canContinueHere ||
+                  handoffError !== null ||
+                  state.steeringPending
+                }
                 chatId={chatId}
                 contextApi={transport.composer}
                 agentName={agent?.name ?? state.chat.agent_name}

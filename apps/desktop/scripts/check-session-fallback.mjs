@@ -41,6 +41,25 @@ export async function checkSessionFallback(browser, url, out, engine) {
     assert.equal(await page.evaluate(() => window.steeringCalls.send), 0);
     await page.getByText("Review this change", { exact: true }).waitFor();
     await page.getByText("Next message includes a handoff to", { exact: false }).waitFor();
+    await page.goto(`${url}/?preview=steering&case=remote-history`);
+    await page.getByRole("button", { name: "Continue here", exact: true }).click();
+    await dialog.getByRole("button", { name: "Continue here with this handoff" }).waitFor();
+    assert.deepEqual(await page.evaluate(() => window.sessionRecoveryCalls), {
+      starts: 0,
+      previews: ["continue_here"],
+      applied: 0,
+    });
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "Continue here", exact: true }).click();
+    await dialog.getByRole("button", { name: "Continue here with this handoff" }).click();
+    await dialog.waitFor({ state: "hidden" });
+    await page.getByText("Next message includes a handoff to", { exact: false }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Continue here", exact: true }).count(), 0);
+    assert.equal(await page.evaluate(() => window.steeringCalls.send), 0);
+    assert.equal(await page.evaluate(() => window.sessionRecoveryCalls.starts), 0);
+    assert.equal(await page.evaluate(() => window.sessionRecoveryCalls.applied), 1);
+    assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+    await page.screenshot({ path: resolve(out, `${engine}-continue-here.png`) });
     assert.deepEqual(errors, []);
     console.log(
       `${engine}: missing native transcript opens review, cancel preserves source and confirmation waits for a prompt`,

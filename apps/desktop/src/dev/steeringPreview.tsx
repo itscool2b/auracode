@@ -29,6 +29,11 @@ function Preview() {
       ev.user("original", "Review this change"),
     ];
     if (scenario === "idle") events.push(ev.turnEnded("fixture-turn"));
+    if (scenario === "remote-history") {
+      events.push(ev.turnEnded("fixture-turn"));
+      status = "stopped";
+      turn = null;
+    }
     if (scenario === "missing-native") {
       events.push(
         ev.turnEnded("fixture-turn"),
@@ -122,15 +127,22 @@ function Preview() {
       });
     };
     const originalPreview = transport.conversation.preview;
+    const originalTurns = transport.conversation.turns;
+    transport.conversation.turns = async (id, before) => ({
+      ...(await originalTurns(id, before)),
+      can_continue_here: scenario === "remote-history",
+    });
     transport.conversation.preview = async (id, action) => {
       recovery.previews.push(action.type);
       const preview = await originalPreview(id, action);
-      return action.type === "fresh_session" ? { ...preview, agent_id: chat.agent_id } : preview;
+      return action.type === "fresh_session" || action.type === "continue_here"
+        ? { ...preview, agent_id: chat.agent_id }
+        : preview;
     };
     const originalPending = transport.conversation.pending;
     transport.conversation.pending = async (id) => {
       const pending = await originalPending(id);
-      return pending && recovery.previews.at(-1) === "fresh_session"
+      return pending && ["fresh_session", "continue_here"].includes(recovery.previews.at(-1) ?? "")
         ? { ...pending, agent_id: chat.agent_id }
         : pending;
     };

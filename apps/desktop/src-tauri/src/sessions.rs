@@ -252,6 +252,7 @@ pub struct ChatRuntime {
     pub(crate) account_config: Option<Arc<crate::account_config::AccountConfigServices>>,
     pub(crate) sync_identity: Option<aura_core::sync::SyncIdentity>,
     pub(crate) sync_engine: std::sync::OnceLock<Arc<aura_core::sync::engine::SyncEngine>>,
+    pub(crate) sync_history_error: std::sync::atomic::AtomicBool,
 }
 
 /// Process ownership and agent discovery belong to the app instance, not one profile. Reusing
@@ -503,6 +504,7 @@ pub(crate) fn start_profile_chats(
         account_config: None,
         sync_identity: None,
         sync_engine: std::sync::OnceLock::new(),
+        sync_history_error: std::sync::atomic::AtomicBool::new(false),
     })
 }
 

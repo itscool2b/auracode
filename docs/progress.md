@@ -2060,3 +2060,18 @@ complete M7 acceptance remain pending. No real account request or vendor prompt 
 The Git workspace dialog now offers explicit initialization for a non-Git folder. Review shows the canonical folder and initial branch with a one-use, expiring token. Confirmation rechecks the folder identity and refuses existing metadata, ancestor repositories, private agent roots and live folder ownership. Git generates metadata only in an owned temporary directory; publication creates a fresh `.git` through pinned no-follow directory handles. Working files remain unchanged, no index or first commit is created, and interrupted publication retains its incomplete marker for review. Profile admission and the folder reservation survive canceled IPC until the owned operation finishes.
 
 Five owned-temporary-directory service regressions and the live-folder admission regression passed on Windows. Core and desktop all-target Clippy, exact native binding export, TypeScript, Biome and instruction parity passed. Chromium and WebKit verified stop-before-review, cancellation, explicit confirmation, first-commit isolation refusal and a consumed stale review. The existing Git, relocation, recovery and pull request browser flows remain passing. The action error now survives a failed inspection refresh. No user repository was initialized, and no remote CI or paid agent was used. General project terminal/editor controls and native Windows/macOS acceptance remain pending.
+
+### Remote history desktop integration
+Successful Account exchanges now reconcile staged turns under current-profile admission before
+announcing completion, preserving the existing managed-configuration hook. Actual imported batches
+schedule another coalesced cycle; busy chats return without spinning. Import failures remain staged
+and produce a fixed visible error in both event and polled status without hiding network/revocation
+states. A later successful reconciliation clears that error.
+
+Chats with new remote history show Continue here, block composing until a visible handoff is reviewed,
+and keep that handoff visible until the next user message. Existing fresh-session recovery stays
+available. Both browser engines passed cancellation and confirmation without any native start or
+prompt, verified the resulting usable composer and passed accessibility. The rendered dark screen
+was inspected. The integrated Windows native build, all 13 focused profile tests, import-status
+regression and exact binding export passed. Local import, folder resolution, the final platform gates
+and complete M7 acceptance remain pending.
