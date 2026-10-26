@@ -1561,6 +1561,11 @@ Design Lab alone and cannot select a light appearance for the desktop or website
 
 ## Encrypted configuration sync boundary
 
+Schema 0009 adds the Account config merge-base store and encrypted blob transfer/reference queues.
+Local profiles leave these tables empty. The fresh-schema and indexed-foreign-key regressions pass;
+the config port implementation follows as a separate checkpoint. Setup remains device-local in
+schema 0008, and schema 0010 is reserved for accepted steering-input persistence.
+
 Added the Rust configuration port for account-bound encrypted snapshots, revision-checked publication,
 explicit tombstones and per-device merge bases. Logical IDs and snapshot metadata must be encrypted by
 the account runtime; no account key, token or vault handle enters the configuration crate. Oversized

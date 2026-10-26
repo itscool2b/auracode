@@ -66,7 +66,7 @@ use lock::OpenLock;
 use recovery::Recovery;
 
 /// The schema version this build reads and writes; equals the number of migrations.
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 
 /// Pre-migration backups kept per database. Enough to step back through several upgrades without
 /// letting a long-lived install fill the disk with copies.
@@ -92,6 +92,7 @@ static MIGRATIONS: [M<'static>; SCHEMA_VERSION as usize] = [
     M::up(include_str!("../migrations/0006_continuations.sql")).foreign_key_check(),
     M::up(include_str!("../migrations/0007_sync.sql")).foreign_key_check(),
     M::up(include_str!("../migrations/0008_worktree_setup.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0009_config_sync.sql")).foreign_key_check(),
 ];
 
 fn migrations() -> &'static [M<'static>] {
@@ -981,7 +982,7 @@ mod tests {
     use super::*;
     use std::collections::{BTreeSet, HashSet};
 
-    const TABLES: [&str; 12] = [
+    const TABLES: [&str; 15] = [
         "settings",
         "projects",
         "project_folders",
@@ -994,6 +995,9 @@ mod tests {
         "agent_cache",
         "queued_prompts",
         "worktree_setup",
+        "sync_config_device",
+        "sync_blobs",
+        "sync_blob_refs",
     ];
 
     /// The current schema version as SQLite reports it.
