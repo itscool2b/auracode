@@ -36,6 +36,8 @@ type Result<T> = std::result::Result<T, CryptoError>;
 pub struct AccountKey(Zeroizing<[u8; 32]>);
 pub struct RecoveryKey(Zeroizing<[u8; 32]>);
 pub struct DeviceKey(StaticSecret);
+#[cfg(feature = "sqlcipher")]
+pub struct DatabaseKey(Zeroizing<[u8; 32]>);
 macro_rules! secret_debug {
     ($type:ty) => {
         impl std::fmt::Debug for $type {
@@ -48,8 +50,27 @@ macro_rules! secret_debug {
 secret_debug!(AccountKey);
 secret_debug!(RecoveryKey);
 secret_debug!(DeviceKey);
+#[cfg(feature = "sqlcipher")]
+secret_debug!(DatabaseKey);
+#[cfg(feature = "sqlcipher")]
+impl DatabaseKey {
+    pub(crate) fn secret(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
 
 impl AccountKey {
+    /// A distinct local-profile key, recoverable from the retained account key and opaque profile
+    /// identity. It is never the raw record key and never serialized into a query or UI response.
+    #[cfg(feature = "sqlcipher")]
+    pub fn database_key(&self, account: &str, profile: &str) -> Result<DatabaseKey> {
+        identifier(account)?;
+        identifier(profile)?;
+        Ok(DatabaseKey(derive(
+            self.0.as_ref(),
+            &json_context(&("auracode-profile-database-v1", account, profile))?,
+        )?))
+    }
     pub fn generate() -> Result<Self> {
         Ok(Self(random()?))
     }

@@ -132,3 +132,34 @@ Sources: [keyring-core](https://docs.rs/keyring-core/latest/keyring_core/),
 [macOS store](https://docs.rs/apple-native-keyring-store/latest/apple_native_keyring_store/), and
 [Argon2 key derivation](https://docs.rs/argon2/latest/argon2/).
 
+## Local account database keys
+
+The optional `aura-sync/sqlcipher` feature supplies a SQLCipher 4 keying primitive. A database key
+is a separate 32-byte HKDF output from the account key, using the fixed salt above and compact JSON
+info `["auracode-profile-database-v1", account_id, profile_id]`. It is never substituted for a record
+key. `sqlite3_key` receives bytes directly; key material never enters SQL text or diagnostic errors.
+Connections disable SQLCipher logging, enable its memory protection, and use in-memory temporary
+storage before any application schema query. A schema read validates the key. An incorrect key and
+a damaged encrypted header are intentionally the same error and must never trigger plaintext
+recovery, migration, replacement, or an empty profile.
+
+Every account connection and backup destination needs explicit keying. SQLCipher supports encrypted
+to encrypted online backups, including `user_version`; opening a destination without its key is not
+an encrypted backup. Keying an existing plaintext database does not convert it. Any future Local
+import needs a separately reviewed explicit export path. Unkeyed Local connections remain ordinary
+SQLite and require no sign-in. Profile opening, migration and recovery must enforce these rules in
+core; this primitive alone does not make an account profile safe to use.
+
+The pinned `libsqlite3-sys` 0.38.2 bundles SQLCipher 4.14.0. Windows builds use vendored OpenSSL;
+macOS uses the platform CommonCrypto provider selected by its build script. MSVC OpenSSL builds need
+native Perl. The local Windows qualification used official portable Strawberry Perl 5.42.3.1 in an
+ignored build-tools directory, verified SHA256
+`6a081a811781c30aca51dbc036afd93092af91e3297901f02c17043795a10690`, with only `OPENSSL_SRC_PERL`
+set for the build process. No installer, global PATH change, or policy change was used. Missing debug
+PDB warnings from the vendored OpenSSL static library do not affect the passing runtime tests.
+macOS execution is still required before claiming platform qualification.
+
+Sources: [SQLCipher API](https://www.zetetic.net/sqlcipher/sqlcipher-api/),
+[encrypted online backup support](https://discuss.zetetic.net/t/using-the-sqlite-online-backup-api/2631/4),
+and [OpenSSL Perl requirements](https://github.com/openssl/openssl/blob/master/NOTES-PERL.md).
+

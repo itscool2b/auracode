@@ -4,6 +4,8 @@ pub mod account;
 pub mod api;
 pub mod clock;
 pub mod crypto;
+#[cfg(feature = "sqlcipher")]
+pub mod database;
 pub mod merge;
 pub mod vault;
 pub mod wire;

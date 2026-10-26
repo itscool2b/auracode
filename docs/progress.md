@@ -980,3 +980,16 @@ read/write was performed.
   SQLCipher account profiles and desktop integration are the next required work; no real config,
   credential store, cloud state or existing database was read or modified.
 
+# M7 SQLCipher storage primitive (2026-10-26)
+
+- Added an optional SQLCipher feature with a profile-specific derived key, byte-only key installation,
+  disabled cipher logging, memory protection and schema validation. Wrong keys report a static error
+  without repairing, replacing or converting the original database. The shared default rusqlite
+  declaration remains unchanged, and unkeyed Local databases remain ordinary SQLite.
+- All 37 focused aura-sync tests pass on Windows, including encrypted reopen, wrong-key preservation,
+  plaintext preservation and keyed online backups retaining data and schema version. Feature-enabled
+  all-target Clippy passes. Windows compilation used checksum-verified official portable Perl inside
+  the ignored build directory for vendored OpenSSL, with no global installation or policy bypass.
+- Core profile opening, backup/recovery key propagation, durable sync transactions and macOS runtime
+  qualification remain pending. No existing profile or database was opened or changed by these tests.
+
