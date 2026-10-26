@@ -47,6 +47,7 @@ fn setup() -> SessionSetup {
             resolved_at_ms: 0,
         }),
         resume: None,
+        native_start: Default::default(),
         autonomy: Autonomy::Ask,
         desired: BTreeMap::new(),
         timings: DriverTimings::STANDARD,
@@ -189,6 +190,38 @@ async fn handshake_uses_thread_identity_and_advertises_only_implemented_capabili
     );
     assert_eq!(request["params"]["threadId"], "thread-1");
     assert!(request["params"].get("developerInstructions").is_none());
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn unsupported_native_startup_and_rewind_are_rejected_explicitly() {
+    let (spawner, mut ends) = FakeSpawner::new();
+    let (_tx, commands) = mpsc::unbounded_channel();
+    let (events, _rx) = event_channel();
+    let mut settings = setup();
+    settings.native_start.fork = true;
+    let result = Box::new(CodexDriver::new())
+        .run(DriverContext {
+            commands,
+            events,
+            spawner: Arc::new(Quiet(Arc::clone(&spawner))),
+            setup: settings,
+        })
+        .await;
+    assert!(matches!(result, DriverExit::StartFailed(_)));
+    assert!(spawner.controls().is_empty());
+    assert!(ends.try_recv().is_err());
+
+    let mut h = Harness::start().await;
+    h.ready().await;
+    let (reply, result) = tokio::sync::oneshot::channel();
+    h.tx.send(DriverCommand::RewindFiles {
+        user_message_id: "checkpoint".into(),
+        dry_run: true,
+        reply,
+    })
+    .unwrap();
+    assert!(result.await.unwrap().is_err());
     h.stop().await;
 }
 

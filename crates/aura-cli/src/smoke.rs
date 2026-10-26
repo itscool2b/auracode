@@ -999,8 +999,8 @@ impl Smoke<'_> {
             return;
         }
         let mut lines = vec!["Protocol logs, and the fixture each can become:".to_owned()];
-        let fixture_folder = if self.spec.kind == DriverKind::Claude {
-            "claude".to_owned()
+        let fixture_folder = if matches!(self.spec.kind, DriverKind::Claude | DriverKind::Codex) {
+            self.spec.id.to_owned()
         } else {
             format!("acp/{}", self.spec.id)
         };

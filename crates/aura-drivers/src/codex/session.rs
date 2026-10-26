@@ -929,6 +929,11 @@ impl Session {
                 let _ = reply.send(Ok(state));
             }
             DriverCommand::Shutdown { .. } => {}
+            DriverCommand::RewindFiles { reply, .. } => {
+                let _ = reply.send(Err(protocol_error(
+                    "Native Codex file rewind is not supported.",
+                )));
+            }
         }
     }
     fn refresh_limits(&mut self) {
@@ -1049,6 +1054,11 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         spawner,
         setup,
     } = ctx;
+    if setup.native_start != crate::driver::NativeStartOptions::default() {
+        return DriverExit::StartFailed(protocol_error(
+            "Native startup overrides are not supported by the Codex driver yet.",
+        ));
+    }
     if !setup.add_dirs.is_empty() {
         return DriverExit::StartFailed(protocol_error(
             "Additional directories are not supported by the native Codex driver yet.",

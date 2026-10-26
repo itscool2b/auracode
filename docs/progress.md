@@ -20,10 +20,10 @@ Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b 
 
 ## Remaining, in order
 
-M1c is being implemented independently on `m1c-codex-native` from M1b checkpoint `08c19b1`.
+M1c is being implemented independently on `m1c-codex-native`, rebased onto M1b checkpoint `cfb67db`.
 The native Codex driver uses an owned stdio app-server, initializes once, persists the native thread
 ID, separates turn completion from idle, and handles approvals, grouped questions, model/effort
-settings and account quota updates. Initial verification covers 30 native unit tests, seven synthetic
+settings and account quota updates. Initial verification covers 31 native unit tests, seven synthetic
 and three recorded native replay fixtures, and conformance to the installed Codex 0.162.1 generated schema. Existing ACP
 and Claude fixtures remain unchanged. No real prompts, credential/config inspection or vendor update
 were used. This is a work checkpoint, not milestone acceptance.
@@ -41,7 +41,10 @@ diff context, and inherited automatic approval reviewers. The driver explicitly 
 at thread open and every turn, and fails startup if the effective reviewer remains automatic.
 Review fixes have passed the native tests and all frozen replay/schema checks; a separate verification
 of these fixes is still pending. Malformed completion/input metadata fails safely and quota state is
-bounded across repeated updates.
+bounded across repeated updates. The final M1b startup/identity/rewind contracts are integrated;
+Codex rejects unsupported startup overrides before spawning and returns an explicit error for rewind.
+Post-integration native tests, all 91 replay fixtures, schema conformance, generated bindings and
+targeted Clippy pass.
 
 The native Codex free probe passed on Windows with installed 0.162.1: 20 checks passed, none failed,
 and six were explicitly skipped. It verified initialization ordering, authoritative thread ID,
@@ -62,7 +65,7 @@ tests; its real permission turn remains part of prompted verification.
 
 M1c requirements still pending: opt-in prompted verification, generated
 schema verification for the historical 0.164.0 baseline, independent verification of review fixes,
-and integration with later M1b contract fixes. Steer, fork, image attachments,
+and final combined verification. Steer, fork, image attachments,
 additional directories, rewind and secret input are explicitly unavailable until their complete
 core/UI and attachment paths exist. Unsupported MCP elicitation is cancelled with a visible notice.
 Native thread listing has no user-facing library seam yet. No M1c PR has been opened.
