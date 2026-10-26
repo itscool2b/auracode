@@ -2329,3 +2329,21 @@ and WebKit passed explicit review, private confirmation, uncertain-result retry,
 post-publication refresh failure checks. No GitHub repository, remote branch, real login or paid agent
 call was created during development. Integrated UI placement, native macOS qualification and complete
 M7 acceptance remain pending.
+
+### Integrated publishing and preview API update
+
+The publication control is available through Change location for mapped Local folders. It now uses
+the dark project dialog layout, including wrapping paths/commits and compact confirmation controls.
+Native combined command export and TypeScript pass. Both browser engines pass publication recovery,
+accessibility and narrow-dialog checks; screenshots were inspected. The accessibility run caught a
+skipped heading level, which was corrected. Reset and publication checks join the final manual CI gate.
+
+The compiled Worker passes all thirteen runtime cases, now including cross-account cancellation
+isolation, cancellation winning before reset, cancellation after committed reset, and preserving newly
+uploaded records on retry. Using the owner's requested Cloudflare connector, a fresh preview database
+backup was downloaded and verified, migrations 0004/0005 were applied, and the tested Rust Worker was
+deployed with platform secrets preserved. The migration ledger, zero-user count and foreign keys were
+checked. Live preview health/configuration return 200/no-store, missing authentication returns 401 and
+foreign Origin returns 403. Exact deployment and backup hashes are recorded in infra/README.md.
+Website static upload and signed-in multi-device acceptance remain pending. No real sign-in, email,
+account deletion/reset, GitHub publication or production data mutation occurred.

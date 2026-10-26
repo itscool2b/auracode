@@ -1,8 +1,10 @@
 /** Synthetic publication only. All GitHub and Git operations are fake in this entry. */
 import "../styles.css";
 import "../ui-tokens.css";
+import "../orbit-shell.css";
 import "../components/setup/setup.css";
 import { createRoot } from "react-dom/client";
+import { Modal } from "../components/chat/Modal";
 import { RepositoryPublisher } from "../components/setup/RepositoryPublisher";
 import type { RepositoryPublicationApi } from "../lib/repositoryPublication";
 
@@ -53,7 +55,7 @@ Object.assign(window, { publicationFixture: { calls: () => [...calls] } });
 const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
-    <main className="setup-shell" style={{ overflow: "auto", padding: 40 }}>
+    <Modal title="Repository settings" onClose={() => {}}>
       <RepositoryPublisher
         folderId="folder"
         api={api}
@@ -62,5 +64,5 @@ if (root)
           if (mode === "refresh") throw new Error("refresh failed");
         }}
       />
-    </main>,
+    </Modal>,
   );

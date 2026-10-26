@@ -149,6 +149,30 @@ test("lost-key reset consumes a fresh review once and preserves uploads after a 
     recovery_envelope: wrap(true),
     recovery_verifier: Buffer.alloc(32, 7).toString("base64url"),
   };
+  const cancelInput = { review_id: review.id };
+  // Another account cannot cancel or learn the owner of a receipt.
+  const unrelated = await request("/sync/reset/cancel", "POST", cancelInput);
+  assert.equal(unrelated.status, 200);
+  assert.deepEqual(await unrelated.json(), { outcome: "absent", key_version: 1 });
+  // A retained same-account session can arbitrate cancellation after a client restart/sign-in.
+  const cancelled = await request("/sync/reset/cancel", "POST", cancelInput, {
+    Authorization: `Bearer ${old}`,
+  });
+  assert.equal(cancelled.status, 200);
+  assert.deepEqual(await cancelled.json(), { outcome: "cancelled", key_version: 7 });
+  assert.deepEqual(await (await call("/sync/reset/cancel", cancelInput)).json(), {
+    outcome: "cancelled",
+    key_version: 7,
+  });
+  assert.equal((await call("/sync/reset", input)).status, 409);
+  assert.equal(
+    (await db.prepare("SELECT key_version FROM user_keys WHERE user_id='reset-account'").first())
+      .key_version,
+    7,
+  );
+  const replacementReview = await call("/sync/reset/review", {});
+  assert.equal(replacementReview.status, 200);
+  input.review_id = (await replacementReview.json()).review.id;
   assert.equal((await call("/sync/reset", { ...input, confirmation: "" })).status, 400);
   const reset = await call("/sync/reset", input);
   assert.equal(reset.status, 200, await reset.clone().text());
@@ -167,6 +191,9 @@ test("lost-key reset consumes a fresh review once and preserves uploads after a 
     key_version: 8,
   };
   assert.equal((await call("/sync", { records: [record] })).status, 200);
+  const committed = await call("/sync/reset/cancel", { review_id: input.review_id });
+  assert.equal(committed.status, 200);
+  assert.deepEqual(await committed.json(), { outcome: "committed", key_version: 8 });
   assert.equal((await call("/sync/reset", input)).status, 200);
   assert.equal(
     (

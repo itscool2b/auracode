@@ -1,0 +1,53 @@
+.repository-publisher,
+.repository-publisher form {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  color: var(--o-text-2);
+  font: 400 13px / 1.65 var(--o-sans);
+}
+.repository-publisher h3,
+.repository-publisher p,
+.repository-publisher ul,
+.repository-publisher dl {
+  margin: 0;
+}
+.repository-publisher h3 {
+  color: var(--o-text-1);
+  font-size: 14px;
+  font-weight: 500;
+}
+.repository-publisher dl {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px 12px;
+}
+.repository-publisher dt {
+  color: var(--o-text-3);
+}
+.repository-publisher dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.repository-publisher ul {
+  padding-left: 16px;
+}
+.repository-publisher li + li {
+  margin-top: 8px;
+}
+.repository-publisher footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.repository-publisher button {
+  min-height: 32px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+.repository-publisher [role="status"],
+.repository-publisher [role="alert"] {
+  overflow-wrap: anywhere;
+}

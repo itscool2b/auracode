@@ -1,15 +1,19 @@
 /** Real browser, production component, synthetic native responses. No remote request. */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const vite = resolve(dirname(require.resolve("vite/package.json")), "bin/vite.js");
 const origin = "http://127.0.0.1:1467";
+const out = resolve(app, "../../target/repository-publication-browser");
+await mkdir(out, { recursive: true });
 const server = spawn(
   process.execPath,
   [vite, "--host", "127.0.0.1", "--port", "1467", "--strictPort"],
@@ -72,6 +76,17 @@ try {
         });
         await confirm.waitFor();
         assert.deepEqual(await calls(), ["local-draft", "remote-review"]);
+        if (scenario === "normal") {
+          assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+          await page.screenshot({ path: resolve(out, `${engine}-review.png`) });
+          await page.setViewportSize({ width: 390, height: 800 });
+          assert.equal(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            true,
+          );
+          await page.screenshot({ path: resolve(out, `${engine}-review-mobile.png`) });
+          await page.setViewportSize({ width: 1100, height: 850 });
+        }
         await confirm.click();
         if (scenario === "uncertain") {
           await page.getByRole("status").filter({ hasText: "did not confirm" }).waitFor();

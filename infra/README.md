@@ -34,9 +34,16 @@ SHA-256 `309d1516f5d4f4f792b17106f7b761312f848c634e3028d70e6eb8ed39df7398`.
 All 29 statements succeeded; migration tracking lists all three files, foreign-key checks return no
 violations, and the database contains zero users.
 
+On 2026-10-26, preview migrations 0004 and 0005 were applied through the Cloudflare connector after
+downloading a fresh 6525-byte backup to `target/backups/auracode-preview-before-reset-deletion.sql`.
+Backup SHA-256: `64f20f22a8d01a804cbf8881760e6f70af4eb770f56cc6f94158acfa0bbd2db3`.
+All five migrations are recorded, foreign-key checks are clean and the database still has zero users.
+
 The real compiled Rust Worker is deployed as `auracode-api-preview`, using the preview D1 and R2,
 the sender-restricted email binding and disabled observability. Its WASM artifact SHA-256 is
-`ab614304a96015270a6eec16bc9615f48c51d744e4c536dd27c03f7a2e310e6e`.
+`2ea77875999f5bd52ee6bd1b2ee45293d864bdceb399f64f5663fe5e5996fcbe`.
+The connector uploaded verified binary WASM and its generated module, preserving platform secrets;
+deployment `cae8aeed9aef4352bb0cb6a9d08e79c6` includes reset cancellation and deletion receipts.
 Workers.dev and version preview URLs remain disabled. The route is `preview.auracode.si/api/*`,
 with the configured five-minute cleanup trigger and an originless proxied DNS record.
 A separate managed Turnstile widget permits only `preview.auracode.si`; its public site key is
@@ -46,10 +53,14 @@ A separate managed Turnstile widget permits only `preview.auracode.si`; its publ
 Live preview checks pass: health and public configuration return 200 with `no-store`, an unauthenticated
 account request returns 401, and a foreign browser Origin returns 403. Actual email delivery, browser
 challenge completion, signed-in device sync and live revocation/cleanup acceptance remain pending.
-The compiled Rust API previously passed twelve local runtime cases, including failed email binding,
-Turnstile rejection/replay, cookies, revocation and scheduled ciphertext cleanup. No email was sent.
+The compiled Rust API passes thirteen local runtime cases, including failed email binding,
+Turnstile rejection/replay, cookies, revocation, reset/cancel arbitration, retained deletion receipts
+and scheduled ciphertext cleanup. Live health/configuration and access rejection checks passed again
+after the deployment. No email was sent.
 
 The website's fresh production build is ready (48 static assets). Its Cloudflare upload-session
 registration succeeded, but the documented JWT-authenticated asset upload returned Unauthorized.
 No website Worker or catch-all route was deployed, and no alternative access path was used after
 that denial. Static-site deployment remains pending a supported authenticated upload path.
+The owner's requested connector was checked: its documented request helper cannot provide the
+separate JWT Authorization header required by the Static Assets upload API.

@@ -4,6 +4,7 @@ import {
   type RepositoryPublicationApi,
   repositoryPublicationApi,
 } from "../../lib/repositoryPublication";
+import "./repository-publisher.css";
 
 /** All GitHub reads start with the explicit review button. No automatic auth or remote writes. */
 export function RepositoryPublisher({
@@ -117,8 +118,8 @@ export function RepositoryPublisher({
       </button>
     );
   return (
-    <section className="setup-clone-review" aria-labelledby={title}>
-      <h4 id={title}>Publish a private repository</h4>
+    <section className="repository-publisher" aria-labelledby={title}>
+      <h3 id={title}>Publish a private repository</h3>
       <p className="setup-footnote">
         Uses GitHub CLI's existing sign-in. Review contacts GitHub; only confirmation creates a
         repository and publishes committed history. Uncommitted files stay on this device.
