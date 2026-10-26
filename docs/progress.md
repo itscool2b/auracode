@@ -2742,3 +2742,13 @@ website Worker modules are 20,473 bytes JS (unchanged glue, SHA-256 `7fea5f5a…
 Wasm (SHA-256 `e926c1c6…`). They are not deployed: this session's Cloudflare connector is authorized
 for a different account and has no upload operation. Both live websites still serve the earlier build.
 API source is unchanged since the staged invitation build, so its recorded artifacts remain current.
+
+The long-checkpoint regression ran for the first time in this session (Application Control had
+blocked its binary before) and failed. Git rejects a `GIT_DIR` longer than `PATH_MAX - 40` bytes,
+220 on Windows, regardless of `core.longpaths`; the fixture's repository path itself crossed that.
+Checkpoints now refuse such a repository before running Git, with a message pointing to
+`AURACODE_DATA_DIR`, and leave the working folder untouched. The regression measures the deepest
+profile Git accepts and still proves refs beyond 260 characters work. Default data folders are far
+below the limit. The local full Rust run otherwise passed fmt, all-target Clippy and 1,843 tests;
+Application Control blocked the `setup_bindings`, `auracode_api` and `demo_agent` test binaries, so
+those rely on CI.
