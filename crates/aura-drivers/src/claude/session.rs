@@ -606,7 +606,7 @@ impl Session {
                 &self.init,
             )));
         self.outbox.push_back(DriverEvent::Ready(ReadyInfo {
-            native_session_id: self.native_id.clone(),
+            native_session_id: Some(self.native_id.clone()),
             agent_name: Some("Claude Code".into()),
             agent_version: self.init["claude_code_version"].as_str().map(str::to_owned),
             capabilities: Capabilities {

@@ -168,6 +168,12 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   for oversized committed block arrays. These follow-up changes require their own CI run. No
   real prompts have been sent, and M1d acceptance remains pending.
 
+- Driver readiness now permits an absent native ID until a vendor creates a transcript on the
+  first visible prompt. Core stores no fabricated resume target and claims the confirmed ID only
+  when reported, holding queued work until its checked database write succeeds. Existing drivers
+  retain their known IDs. Regressions cover two initially anonymous sessions, failed first prompts,
+  restart without a resume target and the durable save barrier for an initially absent ID.
+
 ## Decisions and constraints
 
 - Rust owns backend logic. TypeScript remains for React and necessary platform/build glue.

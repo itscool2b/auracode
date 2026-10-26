@@ -151,7 +151,7 @@ impl Harness {
         loop {
             if let DriverEvent::Ready(info) = self.event().await {
                 let args = &self.end.spec.launch.args;
-                assert_eq!(info.native_session_id, self.native_id());
+                assert_eq!(info.native_session_id.as_deref(), Some(self.native_id()));
                 assert_eq!(
                     info.resumed,
                     if args.iter().any(|arg| arg == "--fork-session")

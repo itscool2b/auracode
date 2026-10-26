@@ -1367,7 +1367,7 @@ impl Session {
         self.ready = true;
         self.outbox.push(DriverEvent::Status(DriverStatus::Ready));
         let info = ReadyInfo {
-            native_session_id: self.session_id.clone().unwrap_or_default(),
+            native_session_id: self.session_id.clone(),
             agent_name: self
                 .init
                 .agent_title

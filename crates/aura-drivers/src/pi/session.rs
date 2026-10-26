@@ -316,7 +316,7 @@ impl Session {
             .push_back(DriverEvent::RunState { idle: self.idle });
         self.ready = true;
         self.outbox.push_back(DriverEvent::Ready(ReadyInfo {
-            native_session_id: self.native_id.clone(),
+            native_session_id: Some(self.native_id.clone()),
             agent_name: Some("Pi".into()),
             agent_version: None,
             spawn_id: self.spawn_id.clone(),

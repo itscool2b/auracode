@@ -114,7 +114,7 @@ fn driver(second_turn: bool) -> (ScriptedDriver, ScriptHandle) {
     let mut steps = vec![
         Step::Emit(DriverEvent::RunState { idle: true }),
         Step::Emit(DriverEvent::Ready(ReadyInfo {
-            native_session_id: "native-session".into(),
+            native_session_id: Some("native-session".into()),
             agent_name: None,
             agent_version: None,
             capabilities: Capabilities::default(),
