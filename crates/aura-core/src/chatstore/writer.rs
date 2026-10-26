@@ -194,6 +194,10 @@ pub(crate) enum Request {
         new: NewChat,
         reply: oneshot::Sender<Result<ChatRecord, StoreError>>,
     },
+    ExportMarkdown {
+        chat_id: String,
+        reply: oneshot::Sender<Result<String, StoreError>>,
+    },
     Chats {
         reply: oneshot::Sender<Result<Vec<ChatRecord>, StoreError>>,
     },
@@ -674,6 +678,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::Chats { .. }) => "chats",
         Work::Request(Request::Search { .. }) => "search",
         Work::Request(Request::LoadChat { .. }) => "load_chat",
+        Work::Request(Request::ExportMarkdown { .. }) => "export_markdown",
         Work::Request(Request::ReadBlob { .. }) => "read_blob",
         Work::Request(Request::Acknowledge { .. }) => "acknowledge_recovery",
         #[cfg(test)]
@@ -1381,6 +1386,9 @@ impl Writer {
             }
             Request::LoadChat { chat_id, reply } => {
                 let _ = reply.send(self.load_chat(&chat_id));
+            }
+            Request::ExportMarkdown { chat_id, reply } => {
+                let _ = reply.send(self.read(|conn| super::export::markdown(conn, &chat_id)));
             }
             Request::ReadBlob {
                 sha256,

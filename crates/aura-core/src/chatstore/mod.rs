@@ -28,6 +28,7 @@ pub(crate) mod blobs;
 pub(crate) mod compact;
 pub(crate) mod composer;
 pub(crate) mod conversation;
+mod export;
 pub(crate) mod files;
 pub(crate) mod history;
 #[cfg(feature = "account-sync")]
@@ -480,6 +481,19 @@ impl ChatStore {
         }
         self.request(Request::LoadChat { chat_id, reply }, answer)
             .await?
+    }
+
+    /// A bounded Markdown snapshot of saved events, serialized by the profile writer.
+    pub async fn export_markdown(&self, chat_id: &str) -> Result<String, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        self.request(
+            Request::ExportMarkdown {
+                chat_id: chat_id.to_owned(),
+                reply,
+            },
+            answer,
+        )
+        .await?
     }
 
     /// One page of a blob's text, ending on a character boundary.

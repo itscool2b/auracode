@@ -2104,3 +2104,11 @@ Chromium and WebKit passed unknown and nonzero-count review, cancellation, confi
 accessibility alongside the existing account/device flows. TypeScript and Biome passed. No account
 request or credential operation ran during these synthetic checks.
 
+### Readable export core checkpoint
+The Rust profile writer can now produce a bounded Markdown snapshot of one saved conversation.
+It joins message deltas within their original turns, preserves unsupported saved events in fenced
+blocks, excludes other chats and labels attachment/blob and unsaved-draft limits explicitly. Source
+and output limits fail without returning a partial export. Two focused Windows regressions passed
+with Account encryption enabled. Native save-file publication and the visible export action are
+still being implemented; the website's desktop export promise is not yet fully satisfied.
+
