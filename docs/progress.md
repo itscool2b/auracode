@@ -1214,3 +1214,9 @@ No security controls were changed. Source evidence is Git 2.54
 [read-tree](https://github.com/git/git/blob/v2.54.0/builtin/read-tree.c) and
 [native merge](https://github.com/git/git/blob/v2.54.0/builtin/merge.c), plus the
 [no-overwrite-ignore contract](https://git-scm.com/docs/git-merge).
+Native drivers now accept an authoritative bounded attachment reader in session setup. Claude,
+Codex, ACP and Pi retain their existing text payloads and resolve imported images in memory; reader
+failures never fall back to plaintext disk files. Three focused payload tests and driver/core/CLI
+all-target Clippy pass, including the account feature. The encrypted reader is ready for the
+account writer, which is the next integration step. No real agent was invoked.
+

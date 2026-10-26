@@ -201,6 +201,7 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
     }
     Ok(SessionSetup {
         attachment_dir: None,
+        attachment_reader: None,
         chat_id: "replay".into(),
         launch: replay_launch(if pi {
             "pi"

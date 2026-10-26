@@ -37,6 +37,7 @@ unicode-segmentation = "1.13.3"
 uuid.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 # The ACP schema, for the conformance tests only: auracode has no runtime dependency on the SDK.
 agent-client-protocol-schema = { version = "=1.12.0", features = ["unstable"] }
 aura-process = { workspace = true, features = ["testing"] }

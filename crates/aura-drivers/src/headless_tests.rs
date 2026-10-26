@@ -98,6 +98,7 @@ impl AgentSpawner for Quiet {
 fn setup(family: Family) -> SessionSetup {
     SessionSetup {
         attachment_dir: None,
+        attachment_reader: None,
         chat_id: "chat".into(),
         agent_id: if family == Family::Agy {
             "agy-stream"

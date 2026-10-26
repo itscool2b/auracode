@@ -1513,6 +1513,7 @@ mod tests {
     fn setup(autonomy: Autonomy, desired: BTreeMap<String, ConfigValue>) -> SessionSetup {
         SessionSetup {
             attachment_dir: None,
+            attachment_reader: None,
             chat_id: "chat".into(),
             agent_id: "mock".into(),
             dialect: "mock".into(),

@@ -64,6 +64,7 @@ mod tests {
     fn setup(dialect: &str) -> SessionSetup {
         SessionSetup {
             attachment_dir: None,
+            attachment_reader: None,
             chat_id: "chat".into(),
             agent_id: dialect.into(),
             dialect: dialect.into(),

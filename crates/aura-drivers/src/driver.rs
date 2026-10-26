@@ -121,6 +121,9 @@ fn is_false(value: &bool) -> bool {
 pub struct SessionSetup {
     /// Private, app-owned blob directory. Never an arbitrary source file or agent credential path.
     pub attachment_dir: Option<PathBuf>,
+    /// Account profiles resolve encrypted bytes in memory. An installed reader is authoritative:
+    /// errors never fall back to opening plaintext files in attachment_dir.
+    pub attachment_reader: Option<Arc<dyn crate::attachments::AttachmentReader>>,
     pub chat_id: String,
     pub agent_id: String,
     pub dialect: String,
@@ -834,6 +837,7 @@ mod tests {
         vars.insert("ANTHROPIC_API_KEY".into(), "sk-ant-secret".into());
         let mut setup = SessionSetup {
             attachment_dir: None,
+            attachment_reader: None,
             chat_id: "c".into(),
             agent_id: "hermes".into(),
             dialect: "hermes".into(),

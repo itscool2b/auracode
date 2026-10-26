@@ -32,6 +32,14 @@ impl std::fmt::Debug for EncryptedFiles {
             .finish_non_exhaustive()
     }
 }
+impl aura_drivers::attachments::AttachmentReader for EncryptedFiles {
+    fn read(&self, hash: &str, limit: usize) -> Result<Vec<u8>, String> {
+        if self.purpose != Purpose::Attachment {
+            return Err("This file store cannot supply attachments.".into());
+        }
+        self.read(hash, limit).map_err(|_| "The encrypted attachment could not be read or verified. Attach the original file again.".into())
+    }
+}
 impl EncryptedFiles {
     /// Select only an auracode-owned private profile directory while holding its ownership guard.
     /// Existing plaintext files or another key's marker are preserved and require explicit import.

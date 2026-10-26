@@ -592,6 +592,7 @@ async fn execute(mut args: Args) -> Result<(), String> {
         }
         let mut setup = SessionSetup {
             attachment_dir: None,
+            attachment_reader: None,
             chat_id: new_id(),
             agent_id: "claude".into(),
             dialect: "claude".into(),
