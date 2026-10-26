@@ -23,6 +23,7 @@ pub mod accounts;
 pub mod bindings;
 pub mod boot;
 pub mod changes_commands;
+pub mod chat_export;
 pub mod clone_commands;
 pub mod commands;
 pub mod composer_commands;

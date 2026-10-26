@@ -10,6 +10,7 @@ import { chromium, webkit } from "playwright";
 import { checkAccount } from "./check-account.mjs";
 import { checkAccountVerification } from "./check-account-verification.mjs";
 import { checkConfigSync } from "./check-config-sync.mjs";
+import { checkDataTransfer } from "./check-data-transfer.mjs";
 import { checkGitReview } from "./check-git-review.mjs";
 import { checkProfiles } from "./check-profiles.mjs";
 import { checkProjectTools } from "./check-project-tools.mjs";
@@ -140,6 +141,7 @@ try {
         .waitFor();
       await checkGitReview(page, url, out, engine);
       await checkProjectTools(page, url, out, engine);
+      await checkDataTransfer(page, url, out, engine);
       await checkAccountVerification(browser, url, out, engine);
       await checkAccount(browser, url, out, engine);
       await checkProfiles(browser, url, out, engine);

@@ -55,6 +55,7 @@ tauri-plugin-updater = { version = "=2.14.0", default-features = false, features
 tokio-util = "0.7.20"
 tracing.workspace = true
 tracing-subscriber.workspace = true
+tempfile.workspace = true
 
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 keepawake = "=0.6.1"
@@ -69,7 +70,6 @@ windows-version = "0.1.7"
 # The quit, page-load and signal tests run the session manager on fake processes and scripted drivers.
 aura-drivers = { workspace = true, features = ["testing"] }
 aura-process = { workspace = true, features = ["testing"] }
-tempfile.workspace = true
 # Paused time makes the window fallback and the demo stream tests instant and deterministic.
 tokio = { workspace = true, features = ["test-util"] }
 

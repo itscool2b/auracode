@@ -8,6 +8,7 @@ import { type SetupApi, setMotionPreference, setupApi } from "../../lib/setup";
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
 import { AccountPanel } from "./AccountPanel";
 import { ConfigSyncPanel } from "./ConfigSyncPanel";
+import { LocalImportPanel } from "./LocalImportPanel";
 import { ProfilePicker } from "./ProfilePicker";
 import { UpdatePanel } from "./UpdatePanel";
 import "./settings.css";
@@ -173,6 +174,7 @@ export function SettingsScreen({
   onLibrary,
   onSetup,
   onDiagnostics,
+  onImported,
   setup = setupApi,
   updates = updatesApi,
   reveal = revealDataDir,
@@ -183,6 +185,7 @@ export function SettingsScreen({
   readonly onLibrary?: () => void;
   readonly onSetup: () => void;
   readonly onDiagnostics: () => void;
+  readonly onImported?: () => Promise<void>;
   readonly setup?: SetupApi;
   readonly updates?: UpdatesApi;
   readonly reveal?: () => Promise<void>;
@@ -280,6 +283,9 @@ export function SettingsScreen({
                 deviceName={info.device?.name ?? "My computer"}
                 activeProfileId={info.profile?.id ?? null}
               />
+              {info.profile?.kind === "account" && !info.profile_locked && onImported ? (
+                <LocalImportPanel key={info.profile.id} onImported={onImported} />
+              ) : null}
             </>
           ) : null}
           {page === "configuration" ? (

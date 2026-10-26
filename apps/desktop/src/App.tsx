@@ -363,6 +363,9 @@ export function App({
         {view === "settings" ? (
           <SettingsScreen
             info={info}
+            onImported={async () => {
+              await Promise.all([chats.reloadChats(), workspace?.refresh()]);
+            }}
             onBack={() => setView("chats")}
             onAgents={() => setView("agents")}
             onLibrary={() => setView("library")}

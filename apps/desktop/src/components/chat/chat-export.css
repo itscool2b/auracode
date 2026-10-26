@@ -1,0 +1,16 @@
+.chat-export-content {
+  display: grid;
+  gap: 16px;
+  color: var(--o-text-2);
+  line-height: 1.7;
+}
+.chat-export-content p {
+  margin: 0;
+}
+.chat-export-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}

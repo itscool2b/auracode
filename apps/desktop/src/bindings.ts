@@ -115,6 +115,7 @@ export const commands = {
 	cloneStatus: (id: string) => typedError<CloneRecord, AppError>(__TAURI_INVOKE("clone_status", { id })),
 	cloneHistory: (parent: string) => typedError<CloneRecord[], AppError>(__TAURI_INVOKE("clone_history", { parent })),
 	localImportPreview: () => typedError<LocalImportPreview, AppError>(__TAURI_INVOKE("local_import_preview")),
+	chatExportMarkdown: (chatId: string) => typedError<string | null, AppError>(__TAURI_INVOKE("chat_export_markdown", { chatId })),
 	localImportApply: (selected: LocalImportSelection[]) => typedError<LocalImportResult, AppError>(__TAURI_INVOKE("local_import_apply", { selected })),
 	terminalRead: (terminalId: string) => typedError<TerminalChunk, AppError>(__TAURI_INVOKE("terminal_read", { terminalId })),
 	terminalWrite: (terminalId: string, bytes: number[]) => typedError<null, AppError>(__TAURI_INVOKE("terminal_write", { terminalId, bytes })),

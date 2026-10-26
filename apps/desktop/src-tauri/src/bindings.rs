@@ -115,6 +115,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::clone_commands::clone_status,
             crate::clone_commands::clone_history,
             crate::local_import_commands::local_import_preview,
+            crate::chat_export::chat_export_markdown,
             crate::local_import_commands::local_import_apply,
             terminal::terminal_read,
             terminal::terminal_write,

@@ -54,6 +54,10 @@ if (container) {
       void import("./dev/projectToolsPreview").then(({ mountProjectToolsPreview }) =>
         mountProjectToolsPreview(container),
       );
+    else if (mode === "data-transfer")
+      void import("./dev/dataTransferPreview").then(({ mountDataTransferPreview }) =>
+        mountDataTransferPreview(container),
+      );
     else if (mode === "git")
       void import("./dev/gitPreview").then(({ mountGitPreview }) => mountGitPreview(container));
     else if (mode === "settings")

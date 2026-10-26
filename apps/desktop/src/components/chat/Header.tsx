@@ -7,6 +7,7 @@ import type { ChatState } from "../../lib/chat/chatStore";
 import { contextLabel, costLabel, folderStateLabel, statusWord } from "../../lib/chat/present";
 import { hasProcess } from "../../lib/chat/transcript";
 import { inTauri } from "../../lib/ipc";
+import { ChatExportDialog } from "./ChatExportDialog";
 import { projectName } from "./ChatList";
 import { FolderContext } from "./FolderContext";
 import { Popover } from "./Popover";
@@ -49,6 +50,7 @@ export function Header({
   readonly changesOpen?: boolean;
 }) {
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const { session } = state;
   const chat = listed ?? state.chat;
   const status = session?.status ?? chat?.status ?? "stopped";
@@ -159,6 +161,11 @@ export function Header({
           <FolderContext key={chat.id} chatId={chat.id} status={status} />
         ) : null}
         <div className="ui-row">
+          {chat && inTauri() ? (
+            <button type="button" className="ui-button" onClick={() => setExportOpen(true)}>
+              Export chat
+            </button>
+          ) : null}
           {onHistory ? (
             <button type="button" className="ui-button" onClick={onHistory}>
               Conversation history
@@ -214,6 +221,9 @@ export function Header({
           </span>
         ) : null}
       </Popover>
+      {exportOpen && chat ? (
+        <ChatExportDialog key={chat.id} chatId={chat.id} onClose={() => setExportOpen(false)} />
+      ) : null}
     </header>
   );
 }

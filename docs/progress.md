@@ -2165,3 +2165,9 @@ the schema foreign-key check, ordinary native bindings export, desktop TypeScrip
 passed on Windows. Core and desktop all-target Clippy passed after a minimal existing profile-command
 lint correction agreed with its owner. No real Local profile, vendor login, network request or paid
 prompt was used. Remote folder resolution, macOS and complete M7 acceptance remain pending.
+
+### Readable chat export and Local import entry points
+
+Chat details now offers an explicit readable Markdown export. The review explains plaintext disclosure, saved-message scope, incomplete running turns and excluded attachment payloads. Rust reads a bounded writer-ordered snapshot and opens the native save dialog; the renderer never receives the conversation payload or supplies a filesystem path. A profile lease survives canceled IPC through final publication. Saving stages a synced temporary file beside the selected destination and publishes without replacing existing files. Canceling creates no export; failed publication removes temporary plaintext.
+
+The unlocked active Account settings now mounts the Local project review keyed by profile ID. An explicit import refreshes both the workspace and chat list, with failures shown without automatically retrying the import. Focused native save/no-overwrite/cleanup tests, exact generated bindings, TypeScript and core/desktop all-target Clippy passed on Windows. Chromium and WebKit passed review, cancellation, selection, already-imported refusal, stale-review recovery, empty Local state, export success/cancel/error, accessibility and narrow viewport checks. The rendered dark dialogs were inspected. Both flows join the existing settings browser gate. Native macOS and complete release acceptance remain pending; no real user chat, profile or account was exported or imported.
