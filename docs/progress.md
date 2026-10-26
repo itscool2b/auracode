@@ -133,8 +133,11 @@ Live Claude acceptance on Windows, with the installed native 2.1.310 CLI:
 
 Parallel M2a work is on `m2a-orbit`. Orbit geometry, its SVG renderer and mark styles now live in
 `@auracode/ui/orbit`, with the Design Lab consuming that same implementation. All 352 Design Lab
-tests, UI/Lab typechecks and the Lab build pass after extraction. Desktop integration, both themes,
-power-aware live animation and browser accessibility/visual checks remain pending.
+tests, UI/Lab typechecks and the Lab build pass after extraction. The live mark now shares one
+animation clock, keeps bounded state history without losing orbital phase, and stops scheduling
+frames when settled, hidden, offscreen or under reduced motion. Tool completion ripples finish
+before idle; reduced-motion success expires with one timer. All 183 UI tests and its typecheck pass.
+Desktop integration, both themes and browser accessibility/visual checks remain pending.
 
 - Rust owns backend logic. TypeScript remains for React and necessary platform/build glue.
 - D1 and Cloudflare Email Service replace Neon/Postgres, Neon Auth, Hyperdrive, and Resend.
