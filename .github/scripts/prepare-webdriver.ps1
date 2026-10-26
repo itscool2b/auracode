@@ -13,7 +13,7 @@ function Select-WebViewVersion([string[]] $Versions) {
 }
 
 function Assert-WebDriverVersion([string] $RuntimeVersion, [string] $DriverOutput) {
-    if ($RuntimeVersion -notmatch '^\d+\.\d+\.\d+\.\d+$' -or $DriverOutput -notmatch '^MSEdgeDriver (\d+\.\d+\.\d+\.\d+)\b') {
+    if ($RuntimeVersion -notmatch '^\d+\.\d+\.\d+\.\d+$' -or $DriverOutput.Trim() -notmatch '^(?:Microsoft Edge WebDriver|MSEdgeDriver) (\d+\.\d+\.\d+\.\d+)\b') {
         throw 'The WebView2 or Microsoft Edge Driver version is invalid.'
     }
     $driverVersion = $Matches[1]

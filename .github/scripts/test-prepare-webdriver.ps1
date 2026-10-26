@@ -11,7 +11,9 @@ Assert-Throws { Select-WebViewVersion @() }
 Assert-Throws { Select-WebViewVersion @('155.0.1.2', '156.0.1.2') }
 Assert-Throws { Select-WebViewVersion @('../driver') }
 if ((Assert-WebDriverVersion '155.0.1.2' 'MSEdgeDriver 155.0.1.3 (fixture)') -ne '155.0.1.3') { throw 'Compatible patch versions were refused.' }
+if ((Assert-WebDriverVersion '155.0.1.2' 'Microsoft Edge WebDriver 155.0.1.3 (fixture)') -ne '155.0.1.3') { throw 'The official driver version banner was refused.' }
 Assert-Throws { Assert-WebDriverVersion '155.0.1.2' 'MSEdgeDriver 155.0.2.1' }
+Assert-Throws { Assert-WebDriverVersion '155.0.1.2' 'Microsoft Edge WebDriver 155.0.2.1 (fixture)' }
 Assert-Throws { Assert-WebDriverVersion '155.0.1.2' 'other tool 155.0.1.2' }
 Assert-Throws { Assert-WebDriverVersion '../driver' 'MSEdgeDriver 155.0.1.2' }
 $temporaryRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
