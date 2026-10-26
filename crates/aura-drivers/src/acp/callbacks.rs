@@ -42,6 +42,7 @@ enum FieldKind {
     Boolean,
     Choices {
         values: Vec<String>,
+        options: Vec<UiQuestionOption>,
         multiple: bool,
         other_key: Option<String>,
     },
@@ -107,6 +108,7 @@ impl UiCall {
                             values,
                             multiple,
                             other_key,
+                            ..
                         } => {
                             if let Some(text) = &answer.text {
                                 content.insert(other_key.clone()?, Value::String(text.clone()));
@@ -319,15 +321,53 @@ fn cursor_plan(params: &Value) -> Result<UiCall, &'static str> {
         .and_then(Value::as_str)
         .unwrap_or("Cursor plan");
     let overview = params.get("overview").and_then(Value::as_str).unwrap_or("");
+    let mut context = format!("{name}\n\n{overview}\n\n{plan}");
+    if let Some(todos) = params.get("todos") {
+        append_plan_todos(&mut context, todos)?;
+    }
+    if let Some(phases) = params.get("phases") {
+        for phase in phases.as_array().ok_or("Invalid plan phases.")? {
+            let name = phase
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or("Invalid plan phase name.")?;
+            context.push_str(&format!("\n\nPhase: {name}"));
+            append_plan_todos(
+                &mut context,
+                phase.get("todos").ok_or("Missing phase tasks.")?,
+            )?;
+        }
+    }
     Ok(UiCall {
         prompt: UiPrompt::Confirm {
             message: format!(
                 "Approve {name} and start implementation? Review the full plan above before approving."
             ),
         },
-        context: Some(format!("{name}\n\n{overview}\n\n{plan}")),
+        context: Some(context),
         response: Response::CursorPlan,
     })
+}
+
+fn append_plan_todos(context: &mut String, value: &Value) -> Result<(), &'static str> {
+    for todo in value.as_array().ok_or("Invalid plan tasks.")? {
+        let content = todo
+            .get("content")
+            .and_then(Value::as_str)
+            .ok_or("Invalid plan task text.")?;
+        let status = todo
+            .get("status")
+            .and_then(Value::as_str)
+            .ok_or("Invalid plan task status.")?;
+        if !matches!(
+            status,
+            "pending" | "in_progress" | "completed" | "cancelled"
+        ) {
+            return Err("Unsupported plan task status.");
+        }
+        context.push_str(&format!("\n\n- {content} ({status})"));
+    }
+    Ok(())
 }
 
 fn form(params: &Value) -> Result<UiCall, &'static str> {
@@ -410,32 +450,42 @@ fn form(params: &Value) -> Result<UiCall, &'static str> {
         }
         let (options, multi_select, allow_free_text) = match &kind {
             FieldKind::Text => (Vec::new(), false, true),
-            FieldKind::Boolean => (vec!["Yes".into(), "No".into()], false, false),
+            FieldKind::Boolean => (
+                vec![
+                    UiQuestionOption {
+                        label: "Yes".into(),
+                        description: String::new(),
+                    },
+                    UiQuestionOption {
+                        label: "No".into(),
+                        description: String::new(),
+                    },
+                ],
+                false,
+                false,
+            ),
             FieldKind::Choices {
-                values,
+                options,
                 multiple,
                 other_key,
-            } => (values.clone(), *multiple, other_key.is_some()),
+                ..
+            } => (options.clone(), *multiple, other_key.is_some()),
         };
         questions.push(UiQuestion {
             id: key.clone(),
-            header: property
-                .get("description")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .into(),
-            question: property
-                .get("title")
-                .and_then(Value::as_str)
-                .unwrap_or(key)
-                .into(),
-            options: options
-                .into_iter()
-                .map(|label| UiQuestionOption {
-                    label,
-                    description: String::new(),
-                })
-                .collect(),
+            header: String::new(),
+            question: match property.get("description").and_then(Value::as_str) {
+                Some(description) if !description.is_empty() => format!(
+                    "{}\n\n{description}",
+                    property.get("title").and_then(Value::as_str).unwrap_or(key)
+                ),
+                _ => property
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .unwrap_or(key)
+                    .into(),
+            },
+            options,
             multi_select,
             allow_free_text,
         });
@@ -449,8 +499,12 @@ fn form(params: &Value) -> Result<UiCall, &'static str> {
     }
     let prompt = if fields.len() == 1 && fields[0].kind == FieldKind::Text {
         UiPrompt::Input {
-            message,
-            placeholder: Some(questions[0].header.clone()).filter(|text| !text.is_empty()),
+            message: if questions[0].question == message || questions[0].question == fields[0].key {
+                message
+            } else {
+                format!("{message}\n\n{}", questions[0].question)
+            },
+            placeholder: None,
         }
     } else {
         UiPrompt::Questions { message, questions }
@@ -487,9 +541,14 @@ fn property_kind(property: &Map<String, Value>) -> Result<FieldKind, &'static st
             Ok(FieldKind::Boolean)
         }
         Some("string") if !property.contains_key("items") => {
+            if property.contains_key("enumNames") && !property.contains_key("enum") {
+                return Err("enumNames requires enum values.");
+            }
             if property.contains_key("enum") || property.contains_key("oneOf") {
+                let (values, options) = choices(property)?;
                 Ok(FieldKind::Choices {
-                    values: choices(property)?,
+                    values,
+                    options,
                     multiple: false,
                     other_key: None,
                 })
@@ -509,8 +568,10 @@ fn property_kind(property: &Map<String, Value>) -> Result<FieldKind, &'static st
             {
                 return Err("Unsupported array item constraints.");
             }
+            let (values, options) = choices(items)?;
             Ok(FieldKind::Choices {
-                values: choices(items)?,
+                values,
+                options,
                 multiple: true,
                 other_key: None,
             })
@@ -519,7 +580,9 @@ fn property_kind(property: &Map<String, Value>) -> Result<FieldKind, &'static st
     }
 }
 
-fn choices(property: &Map<String, Value>) -> Result<Vec<String>, &'static str> {
+fn choices(
+    property: &Map<String, Value>,
+) -> Result<(Vec<String>, Vec<UiQuestionOption>), &'static str> {
     if property.contains_key("enum")
         && (property.contains_key("oneOf") || property.contains_key("anyOf"))
     {
@@ -559,5 +622,58 @@ fn choices(property: &Map<String, Value>) -> Result<Vec<String>, &'static str> {
     if values.is_empty() || values.len() > MAX_OPTIONS || unique.len() != values.len() {
         return Err("Invalid or duplicate form choices.");
     }
-    Ok(values)
+    let options = if let Some(names) = property.get("enumNames") {
+        if !property.contains_key("enum") {
+            return Err("enumNames requires enum values.");
+        }
+        let names = names.as_array().ok_or("Invalid choice labels.")?;
+        if names.len() != values.len() {
+            return Err("Choice labels do not match their values.");
+        }
+        names
+            .iter()
+            .map(|name| {
+                Some(UiQuestionOption {
+                    label: name.as_str()?.into(),
+                    description: String::new(),
+                })
+            })
+            .collect::<Option<Vec<_>>>()
+            .ok_or("Invalid choice labels.")?
+    } else if let Some(rows) = property
+        .get("oneOf")
+        .or_else(|| property.get("anyOf"))
+        .and_then(Value::as_array)
+    {
+        rows.iter()
+            .zip(&values)
+            .map(|(row, value)| {
+                let label = match row.get("title") {
+                    None => Some(value.as_str()),
+                    Some(title) => title.as_str(),
+                }?;
+                let description = match row.get("description") {
+                    None => Some(""),
+                    Some(text) => text.as_str(),
+                }?;
+                Some(UiQuestionOption {
+                    label: label.into(),
+                    description: description.into(),
+                })
+            })
+            .collect::<Option<Vec<_>>>()
+            .ok_or("Invalid choice labels.")?
+    } else {
+        values
+            .iter()
+            .map(|value| UiQuestionOption {
+                label: value.clone(),
+                description: String::new(),
+            })
+            .collect()
+    };
+    if options.iter().any(|option| option.label.is_empty()) {
+        return Err("Empty choice label.");
+    }
+    Ok((values, options))
 }

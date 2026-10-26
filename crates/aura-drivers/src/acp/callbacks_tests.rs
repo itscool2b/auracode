@@ -1,7 +1,60 @@
 use super::callbacks::*;
 use super::dialect::DialectReply;
-use aura_protocol::{UiAnswer, UiQuestionAnswer};
+use aura_protocol::{UiAnswer, UiPrompt, UiQuestionAnswer};
 use serde_json::{Value, json};
+
+#[test]
+fn form_choice_labels_and_descriptions_preserve_native_answer_values() {
+    for property in [
+        json!({"type":"string", "oneOf":[{"const":"native_yes", "title":"Approve changes", "description":"Write the proposed files"}]}),
+        json!({"type":"string", "enum":["native_yes"], "enumNames":["Approve changes"]}),
+    ] {
+        let has_description = property.get("oneOf").is_some();
+        let call = call(
+            "elicitation/create",
+            json!({"mode":"form","sessionId":"s","message":"Review",
+            "requestedSchema":{"type":"object","properties":{"choice":property}}}),
+            false,
+        );
+        let UiPrompt::Questions { questions, .. } = &call.prompt else {
+            panic!("questions");
+        };
+        assert_eq!(questions[0].options[0].label, "Approve changes");
+        assert_eq!(
+            questions[0].options[0].description,
+            if has_description {
+                "Write the proposed files"
+            } else {
+                ""
+            }
+        );
+        assert_eq!(
+            call.answer(&UiAnswer::Questions {
+                answers: vec![UiQuestionAnswer {
+                    question_id: "choice".into(),
+                    selected: vec![0],
+                    text: None,
+                }]
+            }),
+            Some(json!({"action":"accept","content":{"choice":"native_yes"}}))
+        );
+    }
+}
+
+#[test]
+fn plan_approval_displays_separate_tasks_and_phases_before_confirmation() {
+    let call = call(
+        "cursor/create_plan",
+        json!({"toolCallId":"p", "plan":"Overview only",
+        "todos":[{"id":"t","content":"Remove obsolete files","status":"pending"}],
+        "phases":[{"name":"Verification", "todos":[{"id":"v","content":"Run tests","status":"pending"}]}]}),
+        true,
+    );
+    let context = call.context.unwrap();
+    assert!(context.contains("Remove obsolete files"));
+    assert!(context.contains("Verification"));
+    assert!(context.contains("Run tests"));
+}
 
 fn call(method: &str, params: Value, cursor: bool) -> UiCall {
     match request(method, &params, cursor) {

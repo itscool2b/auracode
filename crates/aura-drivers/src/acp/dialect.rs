@@ -29,6 +29,9 @@ pub trait AcpDialect: Send + Sync + 'static {
     /// appends a last resort itself.
     fn autonomy_candidates(&self, requested: Autonomy) -> Vec<AutonomyCandidate>;
     fn prompt_usage_scope(&self) -> UsageScope;
+    fn prompt_usage(&self, result: &serde_json::Value) -> Option<wire::WireUsage> {
+        result.get("usage").and_then(wire::WireUsage::parse)
+    }
     fn form_elicitation(&self) -> bool {
         false
     }
@@ -148,6 +151,34 @@ impl AcpDialect for Vendor {
     }
     fn form_elicitation(&self) -> bool {
         self.0 == "omp"
+    }
+    fn prompt_usage(&self, result: &serde_json::Value) -> Option<wire::WireUsage> {
+        if self.0 != "grok" {
+            return result.get("usage").and_then(wire::WireUsage::parse);
+        }
+        // Grok's pinned PromptUsage is a prompt-wide ledger under _meta.usage. Its input
+        // includes both cache buckets; sibling _meta token fields describe only the last call.
+        let value = result.pointer("/_meta/usage")?;
+        let read = value
+            .get("cachedReadTokens")
+            .map(serde_json::Value::as_u64)
+            .unwrap_or(Some(0))?;
+        let write = value
+            .get("cacheCreationTokens")
+            .map(serde_json::Value::as_u64)
+            .unwrap_or(Some(0))?;
+        Some(wire::WireUsage {
+            input: value
+                .get("inputTokens")?
+                .as_u64()?
+                .checked_sub(read.checked_add(write)?)?,
+            output: value.get("outputTokens")?.as_u64()?,
+            cached_read: Some(read),
+            cached_write: Some(write),
+            thought: value
+                .get("reasoningTokens")
+                .and_then(serde_json::Value::as_u64),
+        })
     }
     fn on_request(&self, method: &str, params: &serde_json::Value) -> DialectReply {
         match self.0 {
@@ -631,6 +662,24 @@ mod tests {
         }
         assert_eq!(dialect_for("some-new-agent").id(), "generic");
         assert_eq!(dialect_for("mock").id(), "generic");
+    }
+
+    #[test]
+    fn grok_usage_ignores_last_call_fields_and_rejects_invalid_cache_totals() {
+        let grok = dialect_for("grok");
+        assert!(
+            grok.prompt_usage(&serde_json::json!({"_meta":{"inputTokens":99,"outputTokens":4}}))
+                .is_none()
+        );
+        for usage in [
+            serde_json::json!({"inputTokens":1,"outputTokens":4,"cachedReadTokens":2}),
+            serde_json::json!({"inputTokens":10,"outputTokens":4,"cacheCreationTokens":"bad"}),
+        ] {
+            assert!(
+                grok.prompt_usage(&serde_json::json!({"_meta":{"usage":usage}}))
+                    .is_none()
+            );
+        }
     }
 
     #[test]

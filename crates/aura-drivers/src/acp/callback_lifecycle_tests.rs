@@ -29,6 +29,72 @@ async fn ready_vendor(dialect: &str) -> Harness {
     h
 }
 
+#[tokio::test(start_paused = true)]
+async fn cursor_notifications_use_normal_turn_mapping_and_never_reply() {
+    let mut h = ready_vendor("cursor").await;
+    h.prompt("T", "visible");
+    let (prompt_id, _) = h.request("session/prompt").await;
+    h.send(json!({"jsonrpc":"2.0", "method":"cursor/task", "params":{
+        "toolCallId":"task1", "description":"Explore", "prompt":"Visible delegation", "subagentType":"explore"}}));
+    let events = h
+        .events_until(|event| {
+            matches!(
+                event,
+                DriverEvent::Event {
+                    event: AuraEvent::ToolCall(_),
+                    ..
+                }
+            )
+        })
+        .await;
+    assert!(events.iter().any(|event| matches!(event, DriverEvent::Event { turn:Some(turn), event:AuraEvent::ToolCall(call) }
+        if turn == "T" && call.tool_call_id == "T.task1" && call.raw_input.as_ref().unwrap()["prompt"] == "Visible delegation")));
+    h.send(json!({"jsonrpc":"2.0", "method":"cursor/update_todos", "params":{
+        "toolCallId":"todos", "merge":false, "todos":[{"id":"a","content":"Review","status":"pending"}]}}));
+    h.events_until(|event| {
+        matches!(
+            event,
+            DriverEvent::Event {
+                event: AuraEvent::PlanUpdated { .. },
+                ..
+            }
+        )
+    })
+    .await;
+    h.no_line();
+    h.reply(&prompt_id, json!({"stopReason":"end_turn"}));
+    h.events_until(|event| matches!(event, DriverEvent::TurnEnded { .. }))
+        .await;
+    h.exit_with(0);
+    h.eof();
+    h.finish().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn grok_uses_prompt_ledger_and_omp_reports_each_turn_without_subtraction() {
+    for dialect in ["grok", "omp"] {
+        let mut h = ready_vendor(dialect).await;
+        for turn in ["T1", "T2"] {
+            h.prompt(turn, "visible");
+            let (id, _) = h.request("session/prompt").await;
+            h.reply(&id, if dialect == "grok" {
+                json!({"stopReason":"end_turn", "_meta":{"inputTokens":999,"usage":{
+                    "inputTokens":100,"outputTokens":12,"cachedReadTokens":30,"cacheCreationTokens":10,"reasoningTokens":3}}})
+            } else {
+                json!({"stopReason":"end_turn", "usage":{"inputTokens":60,"outputTokens":12,"cachedReadTokens":30,"cachedWriteTokens":10}})
+            });
+            let events = h
+                .events_until(|event| matches!(event, DriverEvent::TurnEnded { .. }))
+                .await;
+            assert!(events.iter().any(|event| matches!(event, DriverEvent::TurnEnded { usage:Some(usage), .. }
+                if usage.input_tokens == 60 && usage.output_tokens == 12 && usage.scope == aura_protocol::UsageScope::Turn)));
+        }
+        h.exit_with(0);
+        h.eof();
+        h.finish().await;
+    }
+}
+
 async fn ui(h: &mut Harness) -> UiRequest {
     h.events_until(|event| matches!(event, DriverEvent::UiRequest { .. }))
         .await
