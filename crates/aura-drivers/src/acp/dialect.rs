@@ -17,6 +17,7 @@ use aura_process::{EnvMap, LaunchSpec};
 use aura_protocol::session::AuthCommand;
 use aura_protocol::{AutoAnswer, Autonomy, ToolKind, UsageScope};
 
+use super::callbacks::{self, UiCall};
 use super::wire;
 use crate::driver::DriverEvent;
 use crate::jsonrpc::{RpcError, codes};
@@ -28,6 +29,12 @@ pub trait AcpDialect: Send + Sync + 'static {
     /// appends a last resort itself.
     fn autonomy_candidates(&self, requested: Autonomy) -> Vec<AutonomyCandidate>;
     fn prompt_usage_scope(&self) -> UsageScope;
+    fn form_elicitation(&self) -> bool {
+        false
+    }
+    fn autonomy_levels(&self) -> Vec<Autonomy> {
+        vec![Autonomy::FullAuto, Autonomy::AutoEdit, Autonomy::Ask]
+    }
     fn mode_change_requires_idle(&self) -> bool {
         false
     }
@@ -87,6 +94,7 @@ pub enum DialectReply {
     NotMine,
     Respond(serde_json::Value),
     Error { code: i64, message: String },
+    Deferred(Box<UiCall>),
 }
 
 /// The dialect for `id`; unknown ids get the generic dialect.
@@ -95,7 +103,80 @@ pub fn dialect_for(id: &str) -> Box<dyn AcpDialect> {
         "hermes" => Box::new(Hermes),
         "claude-acp" => Box::new(ClaudeAcp),
         "codex-acp" => Box::new(CodexAcp),
+        "cursor" => Box::new(Vendor("cursor")),
+        "omp" => Box::new(Vendor("omp")),
+        "antigravity" => Box::new(Vendor("antigravity")),
+        "grok" => Box::new(Vendor("grok")),
+        "opencode" | "opencode-v2" => Box::new(Vendor("opencode")),
         _ => Box::new(Generic),
+    }
+}
+
+/// ACP v1 families whose protocol remains the generic client's, with explicit UI extensions.
+#[derive(Debug, Clone, Copy)]
+pub struct Vendor(&'static str);
+
+impl AcpDialect for Vendor {
+    fn id(&self) -> &'static str {
+        self.0
+    }
+    fn autonomy_candidates(&self, requested: Autonomy) -> Vec<AutonomyCandidate> {
+        if self.0 == "omp" {
+            return vec![candidate(
+                None,
+                AutoAnswer::All,
+                Some(
+                    "oh-my-pi controls tool execution. Its ACP interface does not provide a general Ask or Auto-edit boundary; extension questions and plan approval always wait for you.",
+                ),
+            )];
+        }
+        Generic.autonomy_candidates(requested)
+    }
+    fn autonomy_levels(&self) -> Vec<Autonomy> {
+        if self.0 == "omp" {
+            vec![Autonomy::FullAuto]
+        } else {
+            Generic.autonomy_levels()
+        }
+    }
+    fn prompt_usage_scope(&self) -> UsageScope {
+        UsageScope::Session
+    }
+    fn form_elicitation(&self) -> bool {
+        self.0 == "omp"
+    }
+    fn on_request(&self, method: &str, params: &serde_json::Value) -> DialectReply {
+        match self.0 {
+            "cursor" => callbacks::request(method, params, true),
+            "omp" => callbacks::request(method, params, false),
+            _ => DialectReply::NotMine,
+        }
+    }
+    fn auth_command(
+        &self,
+        method: &wire::AuthMethod,
+        launch: &LaunchSpec,
+        env: &EnvMap,
+    ) -> Option<AuthCommand> {
+        if self.0 == "cursor" && method.id == "cursor_login" {
+            return Some(command(
+                method,
+                vec![
+                    launch.program.to_string_lossy().into_owned(),
+                    "login".into(),
+                ],
+            ));
+        }
+        Generic.auth_command(method, launch, env)
+    }
+    fn agent_label(&self) -> Option<&'static str> {
+        Some(match self.0 {
+            "cursor" => "Cursor",
+            "omp" => "oh-my-pi",
+            "antigravity" => "Antigravity",
+            "grok" => "Grok Build",
+            _ => "OpenCode",
+        })
     }
 }
 
