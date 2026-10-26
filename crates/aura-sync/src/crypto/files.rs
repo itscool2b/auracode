@@ -21,6 +21,7 @@ pub enum Purpose {
     Attachment,
     DeadLetter,
     Checkpoint,
+    Metadata,
 }
 impl Purpose {
     fn label(self) -> &'static str {
@@ -28,6 +29,7 @@ impl Purpose {
             Self::Attachment => "attachment",
             Self::DeadLetter => "dead_letter",
             Self::Checkpoint => "checkpoint",
+            Self::Metadata => "metadata",
         }
     }
 }

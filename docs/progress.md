@@ -1351,3 +1351,10 @@ live destinations and changed conversations. Core, CLI and desktop all-target Cl
 export pass. No migration is needed. The relocation Tauri commands and generated DTOs are included
 for frontend integration. Optional bring-changes/setup, PR creation, missing
 worktree recreation and macOS execution remain pending. No remote CI, push, agent prompt or login ran.
+The integrated M4 ownership/recovery registry and setup preferences now have explicit encrypted
+Account backends. Mutable records authenticate existing ciphertext before atomic replacement, retain
+corrupt/future versions and refuse plaintext fallback. Twenty-four focused Windows tests pass,
+including M4 create/retire/merge/recovery behavior, keyed registry reopening and setup revision/error
+behavior. Default and account-feature core all-target Clippy pass. The activation audit is recorded
+in `docs/account-storage-audit.md`; production profile switching, sync scheduling and IPC remain next.
+

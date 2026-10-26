@@ -98,6 +98,8 @@ pub enum SetupError {
 
 pub struct OnboardingStore {
     path: PathBuf,
+    #[cfg(feature = "account-sync")]
+    encrypted: Option<crate::profile_files::EncryptedRecord>,
     record: Mutex<Record>,
     cold_start: bool,
     notice: Option<String>,
@@ -106,6 +108,21 @@ pub struct OnboardingStore {
 impl OnboardingStore {
     /// Call only while holding this profile's owner lock. Missing files begin at Welcome.
     pub fn open(profile_dir: &Path) -> Result<Self, SetupError> {
+        // Preserve the directory-based Local API, but never let an Account caller silently choose
+        // plaintext setup storage. Only auracode's bounded profile metadata is examined.
+        if let Some(value) = read(&profile_dir.join("profile.json"))? {
+            let profile: crate::profile::ProfileMeta =
+                serde_json::from_value(value).map_err(|_| {
+                    SetupError::Invalid(
+                        "The profile metadata must be repaired before opening setup.",
+                    )
+                })?;
+            if profile.kind == crate::profile::ProfileKind::Account {
+                return Err(SetupError::Invalid(
+                    "Unlock this account's setup preferences first.",
+                ));
+            }
+        }
         let path = profile_dir.join("onboarding.json");
         let mut notice = None;
         let record = match read(&path)? {
@@ -134,10 +151,85 @@ impl OnboardingStore {
         };
         Ok(Self {
             path,
+            #[cfg(feature = "account-sync")]
+            encrypted: None,
             cold_start: !record.boot_seen,
             record: Mutex::new(record),
             notice,
         })
+    }
+
+    #[cfg(feature = "account-sync")]
+    pub fn open_account(
+        profile: &crate::profile::Profile,
+        key: std::sync::Arc<aura_sync::crypto::files::ProfileFileKey>,
+    ) -> Result<Self, SetupError> {
+        if profile.meta.kind != crate::profile::ProfileKind::Account {
+            return Err(SetupError::Invalid(
+                "An account setup key requires an Account profile.",
+            ));
+        }
+        let path = profile.dir.join("onboarding.json");
+        match std::fs::symlink_metadata(&path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(crate::CoreError::io(&path)(error).into()),
+            Ok(_) => {
+                return Err(SetupError::Invalid(
+                    "Existing setup preferences need an explicit encrypted import. They were retained.",
+                ));
+            }
+        }
+        let file = crate::profile_files::EncryptedRecord::open(
+            &profile.dir.join("metadata"),
+            "onboarding",
+            MAX_BYTES as usize,
+            key,
+        )
+        .map_err(crate::CoreError::io(&path))?;
+        let record = match file.read().map_err(crate::CoreError::io(&path))? {
+            None => Record::default(),
+            Some(bytes) => {
+                let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| {
+                    SetupError::Invalid("The encrypted setup record is invalid and was retained.")
+                })?;
+                if value
+                    .get("version")
+                    .and_then(serde_json::Value::as_u64)
+                    .is_some_and(|version| version > u64::from(VERSION))
+                {
+                    return Err(SetupError::NewerVersion);
+                }
+                let record: Record = serde_json::from_value(value).map_err(|_| {
+                    SetupError::Invalid("The encrypted setup record is invalid and was retained.")
+                })?;
+                if record.version != VERSION {
+                    return Err(SetupError::Invalid(
+                        "The encrypted setup version is unsupported and was retained.",
+                    ));
+                }
+                record
+            }
+        };
+        Ok(Self {
+            path,
+            encrypted: Some(file),
+            cold_start: !record.boot_seen,
+            record: Mutex::new(record),
+            notice: None,
+        })
+    }
+
+    fn save(&self, record: &Record) -> Result<(), SetupError> {
+        #[cfg(feature = "account-sync")]
+        if let Some(file) = &self.encrypted {
+            let bytes = serde_json::to_vec(record)
+                .map_err(|_| SetupError::Invalid("Setup preferences could not be encoded."))?;
+            file.write(&bytes)
+                .map_err(crate::CoreError::io(&self.path))?;
+            return Ok(());
+        }
+        write_json_atomic(&self.path, record)?;
+        Ok(())
     }
 
     /// Marks the boot seen only when the interface asks for setup, never in headless runs.
@@ -149,7 +241,7 @@ impl OnboardingStore {
         if !record.boot_seen {
             let mut next = record.clone();
             next.boot_seen = true;
-            write_json_atomic(&self.path, &next)?;
+            self.save(&next)?;
             *record = next;
         }
         Ok(self.view(&record))
@@ -185,7 +277,7 @@ impl OnboardingStore {
         next.preferences.revision = revision
             .checked_add(1)
             .ok_or(SetupError::Invalid("Setup revision limit reached."))?;
-        write_json_atomic(&self.path, &next)?;
+        self.save(&next)?;
         *record = next;
         Ok(self.view(&record))
     }
@@ -331,6 +423,83 @@ mod tests {
         assert_eq!(
             std::fs::read(&path).unwrap(),
             br#"{"version":2,"future":true}"#
+        );
+    }
+    #[cfg(feature = "account-sync")]
+    #[test]
+    fn account_preferences_reopen_encrypted_and_reject_plaintext_or_unknown_formats() {
+        use crate::profile::{Profile, ProfileKind, ProfileMeta};
+        use aura_sync::crypto::AccountKey;
+        let temp = tempfile::tempdir().unwrap();
+        let profile = Profile {
+            meta: ProfileMeta {
+                id: "profile".into(),
+                kind: ProfileKind::Account,
+                display_name: "Account".into(),
+                created_at: 0,
+            },
+            dir: temp.path().to_path_buf(),
+        };
+        write_json_atomic(&profile.meta_path(), &profile.meta).unwrap();
+        assert!(OnboardingStore::open(&profile.dir).is_err());
+        let key = std::sync::Arc::new(
+            AccountKey::generate()
+                .unwrap()
+                .profile_file_key("account", "profile")
+                .unwrap(),
+        );
+        let store = OnboardingStore::open_account(&profile, key.clone()).unwrap();
+        store.snapshot().unwrap();
+        store
+            .apply(
+                0,
+                SetupAction::Project {
+                    project_id: "synthetic private project".into(),
+                },
+            )
+            .unwrap();
+        store
+            .apply(
+                1,
+                SetupAction::Motion {
+                    value: MotionPreference::Off,
+                },
+            )
+            .unwrap();
+        let reopened = OnboardingStore::open_account(&profile, key.clone())
+            .unwrap()
+            .snapshot()
+            .unwrap();
+        assert!(!reopened.cold_start);
+        assert_eq!(
+            reopened.preferences.first_project_id.as_deref(),
+            Some("synthetic private project")
+        );
+        assert_eq!(reopened.preferences.motion, MotionPreference::Off);
+        assert!(!profile.dir.join("onboarding.json").exists());
+        for entry in std::fs::read_dir(profile.dir.join("metadata")).unwrap() {
+            let bytes = std::fs::read(entry.unwrap().path()).unwrap();
+            assert!(
+                !bytes
+                    .windows(b"synthetic private project".len())
+                    .any(|part| part == b"synthetic private project")
+            );
+        }
+        let file = store.encrypted.as_ref().unwrap();
+        file.write(br#"{"version":999,"future":true}"#).unwrap();
+        assert!(matches!(
+            OnboardingStore::open_account(&profile, key.clone()),
+            Err(SetupError::NewerVersion)
+        ));
+        assert_eq!(
+            file.read().unwrap().unwrap(),
+            br#"{"version":999,"future":true}"#
+        );
+        std::fs::write(profile.dir.join("onboarding.json"), b"legacy").unwrap();
+        assert!(OnboardingStore::open_account(&profile, key).is_err());
+        assert_eq!(
+            std::fs::read(profile.dir.join("onboarding.json")).unwrap(),
+            b"legacy"
         );
     }
 }

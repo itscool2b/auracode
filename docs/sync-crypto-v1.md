@@ -175,7 +175,7 @@ one authenticated empty chunk. Exact ciphertext length is checked before decrypt
 
 Chunk `i` uses the starting nonce plus `i`, as unsigned big-endian addition modulo 2^192. Its compact
 JSON AAD is `["auracode-profile-file-v1", purpose, object_id, total_plaintext_length, i]`. Purposes
-are `attachment`, `dead_letter`, and `checkpoint`. A file has at most 1024 distinct nonces; all 192
+are `attachment`, `dead_letter`, `checkpoint`, and `metadata`. A file has at most 1024 distinct nonces; all 192
 starting bits are random for every new write. The reader authenticates chunk zero before exposing
 the length, then authenticates every requested chunk before returning any bytes. A failed later
 chunk returns no partial range. Reading a range does not claim unread chunks have been verified.
@@ -215,4 +215,12 @@ Explicit revert still mutates the user's chosen working files and preserves race
 copies under `.auracode-revert-<token>` in that working folder. Those are user workspace files, not
 encrypted profile copies. This boundary preserves newer external edits if a file changes during
 rename and is disclosed by the existing revert preview. Account profile snapshots remain encrypted.
+
+Small mutable metadata uses the same codec with the separate `metadata` purpose, in the private
+`metadata/` directory. Worktree ownership/recovery uses object `worktree-registry` (8 MiB maximum),
+and setup preferences use `onboarding` (16 KiB). Every replacement authenticates the existing record,
+writes and syncs a fresh ciphertext-only temporary file, then atomically renames it over the previous
+record. A failure before publication leaves the prior record intact. Corrupt or future metadata is
+preserved rather than replaced by defaults. The profile ownership lock and each service's gate
+serialize mutations. Local profiles keep their existing plaintext JSON formats.
 
