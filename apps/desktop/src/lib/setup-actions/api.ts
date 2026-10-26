@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { TerminalTransport } from "../terminal";
 import { terminalTransport } from "../terminal";
-import type { AgentInstallReview } from "./bindings";
+import type { AgentInstallReview, CloneInput, CloneRecord, CloneReview } from "./bindings";
 
 async function call<T>(command: string, args: Record<string, unknown>): Promise<T> {
   try {
@@ -32,4 +32,21 @@ export const installApi: InstallApi = {
         cols: size.cols,
       }),
   }),
+};
+
+export interface CloneApi {
+  review(input: CloneInput): Promise<CloneReview>;
+  cancelReview(id: string): Promise<void>;
+  start(id: string): Promise<CloneRecord>;
+  cancel(id: string): Promise<void>;
+  status(id: string): Promise<CloneRecord>;
+  history(parent: string): Promise<CloneRecord[]>;
+}
+export const cloneApi: CloneApi = {
+  review: (input) => call("clone_review", { input }),
+  cancelReview: (id) => call("clone_cancel_review", { id }),
+  start: (id) => call("clone_start", { id }),
+  cancel: (id) => call("clone_cancel", { id }),
+  status: (id) => call("clone_status", { id }),
+  history: (parent) => call("clone_history", { parent }),
 };

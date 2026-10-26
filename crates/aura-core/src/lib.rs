@@ -34,6 +34,7 @@
 pub mod accounts;
 pub mod chatstore;
 pub mod checkpoints;
+pub mod cloning;
 mod conversation;
 pub mod device;
 pub mod error;

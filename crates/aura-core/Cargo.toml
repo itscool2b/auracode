@@ -31,6 +31,7 @@ serde.workspace = true
 serde_json.workspace = true
 # Content addresses of blobs and the hashes of agent replies.
 sha2.workspace = true
+same-file = "1.0.6"
 specta.workspace = true
 # Only for the `#[specta(type = specta_typescript::Number)]` marker on Unix-ms fields: specta's
 # TypeScript exporter rejects `i64` otherwise. Pure Rust, no Tauri.

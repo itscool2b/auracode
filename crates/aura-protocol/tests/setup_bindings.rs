@@ -2,8 +2,11 @@
 
 #[test]
 fn export_setup_action_bindings() {
-    let types =
-        specta::Types::default().register::<aura_protocol::setup_actions::AgentInstallReview>();
+    let types = specta::Types::default()
+        .register::<aura_protocol::setup_actions::AgentInstallReview>()
+        .register::<aura_protocol::setup_actions::CloneInput>()
+        .register::<aura_protocol::setup_actions::CloneReview>()
+        .register::<aura_protocol::setup_actions::CloneRecord>();
     let generated = specta_typescript::Typescript::default()
         .header("// Generated from aura-protocol. Run cargo test -p aura-protocol export_setup_action_bindings. Do not edit.")
         .export(&types, specta_serde::Format).expect("setup action DTOs export");

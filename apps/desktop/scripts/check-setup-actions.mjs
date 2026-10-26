@@ -86,6 +86,45 @@ try {
         .getByText("The installer changed. Review the installation again.", { exact: true })
         .waitFor();
       assert.deepEqual(await calls(), ["review", "reserve", "start", "close"]);
+      const cloneReview = async (query = "") => {
+        await page.goto(`${url}${query}`);
+        assert.deepEqual(await calls(), []);
+        await page.getByRole("button", { name: "Clone from GitHub", exact: true }).click();
+        assert.deepEqual(await calls(), [], "Opening clone never starts native work");
+        await page
+          .getByRole("textbox", { name: "GitHub repository" })
+          .fill("https://github.com/owner/repo");
+        await page.getByRole("button", { name: /Choose parent folder/ }).click();
+        await page.getByRole("textbox", { name: "New folder name" }).fill("repo");
+        await page.getByRole("button", { name: "Review clone", exact: true }).click();
+      };
+      await cloneReview();
+      await page.getByRole("button", { name: "Start clone", exact: true }).waitFor();
+      assert.deepEqual(await calls(), ["clone-history", "clone-review"]);
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).analyze()).violations,
+        [],
+        `${engine} clone review accessibility`,
+      );
+      await page.screenshot({ path: resolve(out, `${engine}-clone-review.png`) });
+      await page.getByRole("button", { name: "Close clone", exact: true }).click();
+      assert.deepEqual(await calls(), ["clone-history", "clone-review", "clone-cancel"]);
+      await cloneReview();
+      await page.getByRole("button", { name: "Start clone", exact: true }).click();
+      await page.getByRole("button", { name: "Cancel clone", exact: true }).click();
+      await page
+        .getByText("Clone canceled. Its partial folder and recovery record were retained.", {
+          exact: true,
+        })
+        .waitFor();
+      assert.equal((await calls()).filter((call) => call === "clone-start").length, 1);
+      await cloneReview("?ready");
+      await page.getByRole("button", { name: "Start clone", exact: true }).click();
+      await page.getByRole("button", { name: "Use this folder", exact: true }).click();
+      assert.ok((await calls()).includes("clone-use-folder"));
+      await cloneReview("?existing");
+      await page.getByRole("alert").waitFor();
+      assert.ok(!(await calls()).includes("clone-start"));
       assert.deepEqual(errors, []);
       console.log(
         `${engine}: passive mount/review, explicit start, close cancellation, stale review rejection and accessibility passed`,

@@ -13,6 +13,7 @@
 
 mod actor;
 mod changes;
+mod cloning;
 mod composer;
 mod config_library;
 mod conversation;

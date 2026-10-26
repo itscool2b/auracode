@@ -21,6 +21,7 @@ pub mod accounts;
 pub mod bindings;
 pub mod boot;
 pub mod changes_commands;
+pub mod clone_commands;
 pub mod commands;
 pub mod composer_commands;
 pub mod config_library;
@@ -188,6 +189,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     #[cfg(windows)]
     app.manage(window::WebviewVisibility::default());
     app.manage(Arc::new(config_library::LibraryService::default()));
+    app.manage(Arc::new(aura_core::cloning::Clones::default()));
     native_shell::setup(app.handle());
     let account_app = app.handle().clone();
     rt.spawn(async move {
@@ -275,6 +277,9 @@ fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
     let chats = state.chats();
     sessions::page_load(&state.pages, webview.label(), payload.event(), |owner| {
         state.terminals.drop_owner(owner);
+        if let Some(clones) = webview.try_state::<Arc<aura_core::cloning::Clones>>() {
+            clones.drop_owner(owner);
+        }
         if let Some(chats) = chats {
             chats.manager.drop_owner(owner);
         }
@@ -313,6 +318,9 @@ fn on_event(app: &tauri::AppHandle, event: RunEvent) {
             }
         }
         RunEvent::Exit => {
+            if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
+                clones.cancel_all();
+            }
             if let Some(shell) = app.try_state::<Arc<native_shell::NativeShell>>() {
                 shell.shutdown();
             }
@@ -340,6 +348,9 @@ fn on_exit_requested(app: &tauri::AppHandle, code: Option<i32>, api: &tauri::Exi
         ExitRequest::StartQuit => {
             api.prevent_exit();
             state.terminals.close_all();
+            if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
+                clones.cancel_all();
+            }
             // The last window closing asks without a code; that is a normal quit.
             let code = code.unwrap_or(0);
             let app = app.clone();

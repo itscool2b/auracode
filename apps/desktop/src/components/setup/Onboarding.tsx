@@ -12,6 +12,7 @@ import { type SetupApi, setMotionPreference, setupApi } from "../../lib/setup";
 import type { WorkspaceStore } from "../../lib/workspace";
 import { projectName } from "../chat/ChatList";
 import { AgentRoster } from "./AgentsScreen";
+import { CloneProject } from "./CloneProject";
 import { NightPanel, primaryAgents } from "./NightPanel";
 import "./setup.css";
 
@@ -445,10 +446,15 @@ export function Onboarding({
                     <Check size={14} /> {project.name} is ready.
                   </p>
                 ) : null}
-                <p className="setup-footnote">
-                  Clone from GitHub is not available in setup yet. Clone a repository with your own
-                  tools, then choose its folder.
-                </p>
+                <CloneProject
+                  disabled={busy || !workspace}
+                  pickParent={() => transport.pickFolder()}
+                  onFolder={(path) => {
+                    setFolder(path);
+                    setName(projectName(path));
+                    setProject(null);
+                  }}
+                />
               </>
             ) : null}
             {saved?.notice ? (

@@ -568,3 +568,65 @@ html[data-motion="off"] * {
 .setup-install-review ul {
   padding-left: 20px;
 }
+.setup-clone-dialog {
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  margin: auto;
+  padding: 28px;
+  overflow: auto;
+  color: var(--o-ink);
+  background: var(--o-pane);
+  border: 1px solid var(--o-line-strong);
+  border-radius: var(--o-r-lg, 12px);
+  font: 13px / 1.6 var(--o-sans);
+  color-scheme: dark;
+}
+.setup-clone-dialog::backdrop {
+  background: rgb(0 0 0 / 65%);
+}
+.setup-clone-dialog header,
+.setup-clone-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.setup-clone-dialog h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+.setup-clone-dialog form,
+.setup-clone-review,
+.setup-clone-result {
+  margin-top: 24px;
+}
+.setup-clone-dialog .setup-field {
+  margin: 16px 0;
+}
+.setup-clone-dialog p,
+.setup-clone-dialog ul {
+  margin: 12px 0;
+}
+.setup-clone-dialog ul {
+  padding-left: 20px;
+}
+.setup-clone-dialog dl {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 10px;
+}
+.setup-clone-dialog dd {
+  margin: 0;
+  font-family: var(--o-mono);
+  overflow-wrap: anywhere;
+}
+.setup-clone-history {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--o-line);
+}
+.setup-clone-history li {
+  margin-bottom: 18px;
+}

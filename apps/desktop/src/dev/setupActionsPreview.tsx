@@ -6,8 +6,10 @@ import "../components/setup/setup.css";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { TerminalChunk } from "../bindings";
+import { CloneProject } from "../components/setup/CloneProject";
 import { InstallAgent } from "../components/setup/InstallAgent";
-import type { InstallApi } from "../lib/setup-actions/api";
+import type { CloneApi, InstallApi } from "../lib/setup-actions/api";
+import type { CloneRecord } from "../lib/setup-actions/bindings";
 
 if (import.meta.env.DEV) {
   const calls: string[] = [];
@@ -63,6 +65,61 @@ if (import.meta.env.DEV) {
       },
     }),
   };
+  let clone: CloneRecord | null = null;
+  const cloneApi: CloneApi = {
+    review: async (input) => {
+      calls.push("clone-review");
+      if (new URLSearchParams(location.search).has("existing"))
+        throw new Error(
+          "The destination already exists. Choose another new folder name; its contents were left unchanged.",
+        );
+      return {
+        id: "clone-id",
+        remote: input.remote,
+        parent: input.parent,
+        destination: `${input.parent}/${input.name}`,
+        notices: [
+          "Creates a new folder. Existing folders are refused.",
+          "No sign-in runs here. Partial files are retained if canceled.",
+        ],
+      };
+    },
+    cancelReview: async () => {
+      calls.push("clone-cancel-review");
+    },
+    start: async () => {
+      calls.push("clone-start");
+      clone = {
+        id: "clone-id",
+        remote: "https://github.com/owner/repo",
+        parent: "C:/fixture",
+        destination: "C:/fixture/repo",
+        journal: "C:/fixture/.auracode-clone-id",
+        state: "running",
+        detail: "Cloning the repository.",
+      };
+      return { ...clone };
+    },
+    status: async () => {
+      if (!clone) throw new Error("No fixture clone.");
+      if (new URLSearchParams(location.search).has("ready")) {
+        clone.state = "ready";
+        clone.detail = "Repository cloned. Choose Use this folder to add it to your project.";
+      }
+      return { ...clone };
+    },
+    cancel: async () => {
+      calls.push("clone-cancel");
+      if (clone) {
+        clone.state = "canceled";
+        clone.detail = "Clone canceled. Its partial folder and recovery record were retained.";
+      }
+    },
+    history: async () => {
+      calls.push("clone-history");
+      return [];
+    },
+  };
   Object.assign(window, { setupActionsFixture: { calls: () => [...calls] } });
   function Preview() {
     const [mounted, setMounted] = useState(true);
@@ -80,6 +137,11 @@ if (import.meta.env.DEV) {
         <button type="button" onClick={() => setMounted(false)}>
           Leave setup
         </button>
+        <CloneProject
+          api={cloneApi}
+          pickParent={async () => "C:/fixture"}
+          onFolder={() => calls.push("clone-use-folder")}
+        />
       </main>
     );
   }

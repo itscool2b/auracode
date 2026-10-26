@@ -1641,3 +1641,33 @@ application, secret-free MCP extraction and desktop orchestration remain pending
   chain. Ordinary shutdown retains its original idempotent behavior.
 - Passed all three focused control tests, including real Shared-future pending/unknown/leftover/
   confirmed states, plus all-target aura-process Clippy. No native or vendor processes were run.
+
+### M3 owned GitHub clone checkpoint (2026-10-26)
+
+- Implemented separate Rust clone review, start, cancellation, status and recovery history, plus the
+  first-project dialog. Only bounded GitHub HTTPS/SSH repository URLs are accepted. The user picks
+  a parent and a new portable name; atomic directory creation refuses every existing destination.
+- Git runs with isolated configuration, no hooks/templates/custom filters/submodules or credential
+  prompts, and strict SSH host verification. Public HTTPS and already-configured private SSH are
+  explicit UI choices through the pasted URL. No GitHub CLI sign-in is attempted. Raw helper output
+  is bounded, unlogged and classified without exposing it. Startup is limited to 15 seconds and
+  cloning to ten minutes. Stop reaches owned processes only, retains folder reservations through
+  confirmed cleanup, and uses the separately tested explicit shutdown-retry seam.
+- Started/outcome records are flushed beside the selected destination, outside profile metadata.
+  Interrupted and canceled partial files remain for inspection. No clone recovery action deletes
+  files or reuses an existing target. A started receipt alone never proves target ownership: a
+  collision before create can leave a receipt for an independently created path. Outcome is not
+  exposed as Ready until its recovery record is durable.
+- Added six focused Rust cases for strict URL/name validation, one-use/page ownership and canceled
+  admission, existing-target refusal, interrupted/canceled recovery and bounded error redaction.
+  These await integrated native execution because the existing io-lifetimes build script is blocked
+  by Application Control 4551. The expanded pure protocol source compiled, but Application Control
+  also blocked the rebuilt existing setup DTO exporter executable. No executable was relocated or
+  changed to bypass policy, and bindings were not handwritten. Exact clone DTO generation and full
+  TypeScript/native verification remain pending the authorized integrated export environment.
+- Passed Biome plus Chromium and WebKit clone review/no-start, cancellation, ready-folder selection,
+  existing-target refusal and accessibility checks. Existing onboarding persistence/demo/storage-
+  retry browser checks passed on both engines. Inspected the actual dark clone review screenshot.
+  Independent read-only review found the cached-shutdown report issue, fixed in 8567390, and no
+  confirmed overwrite blocker. No real remote clone, installer, auth command, model prompt, push or
+  CI dispatch was run. Clone source is reviewable; native/binding acceptance is still pending.
