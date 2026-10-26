@@ -190,7 +190,13 @@ async fn smoke_tracks_the_next_prompt_until_native_run_idle() {
     let release = async {
         tokio::time::timeout(TIMINGS.start, handle.wait_for(CommandMatch::Prompt))
             .await
-            .expect("first prompt");
+            .unwrap_or_else(|error| {
+                panic!(
+                    "first prompt: {error:?}; commands: {:?}; smoke output: {}",
+                    handle.commands(),
+                    captured.text()
+                )
+            });
         let chat = headless.manager.chats().await.expect("chats").remove(0);
         let (queued, mut queue_rx) = tokio::sync::mpsc::unbounded_channel();
         let attached = headless
