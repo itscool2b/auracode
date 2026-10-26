@@ -86,8 +86,18 @@ impl NativeSessionScope {
     }
 }
 
-/// Normalize lexical aliases without opening the provider's configuration or credential files.
+/// Resolve directory aliases using metadata only. A new configuration directory may not exist
+/// yet, so resolve its nearest existing ancestor before normalizing the remaining components.
+/// No provider configuration or credential file is read.
 fn normalize_path(path: PathBuf) -> PathBuf {
+    let path = path
+        .ancestors()
+        .find_map(|ancestor| {
+            std::fs::canonicalize(ancestor)
+                .ok()
+                .and_then(|root| path.strip_prefix(ancestor).ok().map(|tail| root.join(tail)))
+        })
+        .unwrap_or(path);
     let mut normalized = PathBuf::new();
     for component in path.components() {
         match component {
@@ -98,7 +108,71 @@ fn normalize_path(path: PathBuf) -> PathBuf {
             other => normalized.push(other.as_os_str()),
         }
     }
-    normalized
+    #[cfg(windows)]
+    {
+        fold_windows_path(normalized)
+    }
+    #[cfg(not(windows))]
+    {
+        normalized
+    }
+}
+
+/// Claim keys conservatively treat Windows paths as case insensitive, including a not-yet-created
+/// suffix. Windows' invariant casing preserves UTF-16 paths without a lossy UTF-8 conversion.
+#[cfg(windows)]
+#[allow(unsafe_code)] // The OS casing API has no safe standard-library equivalent.
+fn fold_windows_path(path: PathBuf) -> PathBuf {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use windows_sys::Win32::Globalization::{
+        LCMAP_UPPERCASE, LCMapStringEx, LOCALE_NAME_INVARIANT,
+    };
+
+    let source = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    let Ok(length) = i32::try_from(source.len()) else {
+        return path;
+    };
+    // SAFETY: the source is live for both calls, its length is explicit, and the first call only
+    // queries the required output length. Optional NLS arguments are null.
+    let required = unsafe {
+        LCMapStringEx(
+            LOCALE_NAME_INVARIANT,
+            LCMAP_UPPERCASE,
+            source.as_ptr(),
+            length,
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null(),
+            std::ptr::null(),
+            0,
+        )
+    };
+    if required <= 0 {
+        let mut fallback = path.into_os_string();
+        fallback.make_ascii_uppercase();
+        return fallback.into();
+    }
+    let mut output = vec![0_u16; required as usize];
+    // SAFETY: the output buffer has the length returned above, and neither buffer is moved or
+    // mutated for the duration of the call.
+    let written = unsafe {
+        LCMapStringEx(
+            LOCALE_NAME_INVARIANT,
+            LCMAP_UPPERCASE,
+            source.as_ptr(),
+            length,
+            output.as_mut_ptr(),
+            required,
+            std::ptr::null(),
+            std::ptr::null(),
+            0,
+        )
+    };
+    if written <= 0 {
+        return path;
+    }
+    output.truncate(written as usize);
+    OsString::from_wide(&output).into()
 }
 
 /// The live agents of every chat.
@@ -327,6 +401,50 @@ mod tests {
         assert_eq!(
             native,
             NativeSessionScope::local("claude-acp", "local", &env, &launch, Path::new("/work"))
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_case_aliases_cannot_claim_the_same_native_session_twice() {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("Répo");
+        std::fs::create_dir(&folder).unwrap();
+        let env = ResolvedEnv {
+            vars: [(EnvKey::from("CLAUDE_CONFIG_DIR"), "NewConfig".into())].into(),
+            source: EnvSource::Fallback {
+                reason: "test".into(),
+            },
+            warnings: Vec::new(),
+            resolved_at_ms: 0,
+        };
+        let first = NativeSessionScope::local("claude", "local", &env, &launch(), &folder);
+        let alias = PathBuf::from(folder.to_str().unwrap().to_uppercase());
+        let second = NativeSessionScope::local("claude-acp", "local", &env, &launch(), &alias);
+        let live = LiveAgents::new(12);
+        assert!(live.claim(&first, "session", "one"));
+        assert!(!live.claim(&second, "session", "two"));
+        assert_eq!(
+            normalize_path(folder.join("NEWCONFIG")),
+            first.config_dir.unwrap()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_symlinks_share_a_claim_but_distinct_case_sensitive_paths_do_not() {
+        let temp = tempfile::tempdir().unwrap();
+        let real = temp.path().join("real");
+        let alias = temp.path().join("alias");
+        std::fs::create_dir(&real).unwrap();
+        std::os::unix::fs::symlink(&real, &alias).unwrap();
+        assert_eq!(
+            normalize_path(real.join("new")),
+            normalize_path(alias.join("new"))
+        );
+        assert_ne!(
+            normalize_path(real.join("New")),
+            normalize_path(real.join("new"))
         );
     }
 }
