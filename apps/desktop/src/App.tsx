@@ -14,6 +14,8 @@ import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
 import { Sidebar } from "./components/Sidebar";
 import { StressView } from "./components/StressView";
+import { AgentsScreen } from "./components/setup/AgentsScreen";
+import { Onboarding } from "./components/setup/Onboarding";
 import type { AppStore } from "./lib/chat/appStore";
 import type { Transport } from "./lib/chat/transport";
 import { errorMessage } from "./lib/errors";
@@ -36,7 +38,7 @@ type Boot =
   | { readonly status: "failed"; readonly message: string };
 
 /** The chats (the default), the M0 home (the info card and the demo stream), or the stress view. */
-type View = "chats" | "diagnostics" | "stress";
+type View = "chats" | "diagnostics" | "stress" | "setup" | "agents";
 
 /**
  * Switching views ends the current stream: the shell stops it (so it does not keep streaming into
@@ -60,7 +62,8 @@ export function App({
   readonly workspace?: WorkspaceStore;
 }) {
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
-  const [view, setView] = useState<View>("chats");
+  const [view, setView] = useState<View>("setup");
+  const [restartSetup, setRestartSetup] = useState(false);
   const [openChatRequest, setOpenChatRequest] = useState<{ id: string }>();
   useEffect(
     () =>
@@ -89,6 +92,7 @@ export function App({
           setStressAutoStart(true);
           setView("stress");
         }
+        if (info.launch.type === "smoke") setView("chats");
         setBoot({ status: "ready", info });
       },
       (error: unknown) => {
@@ -224,6 +228,32 @@ export function App({
   // The field drifts only while something streams; idle, it holds still and costs nothing.
   const auraPaused = !running && view === "diagnostics";
 
+  if (view === "setup")
+    return (
+      <Onboarding
+        app={chats}
+        transport={transport}
+        workspace={workspace}
+        restart={restartSetup}
+        onDone={() => {
+          setRestartSetup(false);
+          setView("chats");
+        }}
+        onDemo={() => setView("diagnostics")}
+      />
+    );
+  if (view === "agents")
+    return (
+      <AgentsScreen
+        app={chats}
+        transport={transport}
+        onBack={() => setView("chats")}
+        onSetup={() => {
+          setRestartSetup(true);
+          setView("setup");
+        }}
+      />
+    );
   if (view === "chats") {
     return (
       <ChatsScreen
@@ -234,6 +264,7 @@ export function App({
         info={info}
         onRecoveryDismissed={onRecoveryDismissed}
         onDiagnostics={() => setView("diagnostics")}
+        onAgents={() => setView("agents")}
       />
     );
   }

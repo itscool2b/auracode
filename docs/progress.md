@@ -894,3 +894,21 @@ explicitly typed for transitions after stopping. Both changes join the combined 
   commands, account requests or credential reads are part of this path. Bindings are generated.
 - Four focused persistence tests and desktop binding export pass on Windows. Core and desktop
   library Clippy pass. M3 interface and native platform acceptance remain in progress.
+
+### M3 dark setup and Agents interface, 2026-10-26
+
+- Connected the real desktop to the Rust setup store, a skippable cold/warm intro, keyboard-driven
+  mission checklist, passive native detection, motion preferences, existing project/folder commands,
+  and an Agents screen with the existing explicit update/sign-in terminal controls. Notification
+  navigation and smoke/stress launches bypass setup. Missing agents link to checked official guides.
+- Shared the actual Orbit globe between product and design reference; removed the lab onboarding's
+  appearance selector and simulated account-success claim. Inspected the original Grok Console flow
+  and rendered Chromium/WebKit screenshots. Narrow panes omit clipped globe labels.
+- Chromium and WebKit checks pass for progression, stored motion/step, skip/restart, intro bypass and
+  warm start, passive detection, no-agent demo, accessibility, and a failed setup write after project
+  creation without duplicate creation on retry. Workspace typechecks, desktop build, shared UI 184
+  tests, and Orbit 52 tests pass. Native core setup tests and desktop binding export passed earlier.
+- Broader desktop Vitest reports five pre-existing old-base failures: TerminalSheet's SSR document
+  assumption and four stale screen assertions. These untouched root-owned tests remain pending.
+  M3 remains pending reviewed new-agent installation, native window/drop/terminal acceptance, final
+  globe-to-dock polish and enabled account/clone flows. Details and sources: docs/onboarding.md.

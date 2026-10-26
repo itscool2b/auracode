@@ -21,7 +21,12 @@ installDraftQuit();
 const container = document.getElementById("root");
 if (container) {
   if (import.meta.env.DEV && new URLSearchParams(location.search).has("preview")) {
-    void import("./dev/preview").then(({ mountPreview }) => mountPreview(container));
+    const mode = new URLSearchParams(location.search).get("preview");
+    if (mode === "setup" || mode === "agents")
+      void import("./dev/setupPreview").then(({ mountSetupPreview }) =>
+        mountSetupPreview(container),
+      );
+    else void import("./dev/preview").then(({ mountPreview }) => mountPreview(container));
   } else
     createRoot(container).render(
       <StrictMode>

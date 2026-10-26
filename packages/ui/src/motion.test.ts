@@ -5,6 +5,7 @@ import {
   durations,
   easings,
   prefersReducedMotion,
+  setMotionPreference,
   springs,
   subscribeReducedMotion,
   usePrefersReducedMotion,
@@ -68,6 +69,20 @@ describe("durations and easings", () => {
 });
 
 describe("reduced motion", () => {
+  it("applies the saved app preference and notifies mounted marks without an OS event", () => {
+    let changes = 0;
+    const stop = subscribeReducedMotion(() => {
+      changes++;
+    });
+    setMotionPreference("off");
+    expect(prefersReducedMotion()).toBe(true);
+    setMotionPreference("off");
+    expect(changes).toBe(1);
+    setMotionPreference("full");
+    expect(prefersReducedMotion()).toBe(false);
+    expect(changes).toBe(2);
+    stop();
+  });
   it("reads as false where there is no window", () => {
     expect(prefersReducedMotion()).toBe(false);
   });

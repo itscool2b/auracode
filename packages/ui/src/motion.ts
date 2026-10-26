@@ -59,6 +59,16 @@ export const easings = {
 export const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 let reducedMotionList: MediaQueryList | null | undefined;
+let appMotion: "full" | "reduced" | "off" = "full";
+const appListeners = new Set<() => void>();
+
+/** Apply the persisted application preference. Full never overrides the OS accessibility setting. */
+export function setMotionPreference(value: "full" | "reduced" | "off"): void {
+  if (appMotion === value) return;
+  appMotion = value;
+  if (typeof document !== "undefined") document.documentElement.dataset.motion = value;
+  for (const listener of appListeners) listener();
+}
 
 /** The shared MediaQueryList, created once; null where there is no `matchMedia` (SSR, tests). */
 function reducedMotionMedia(): MediaQueryList | null {
@@ -72,15 +82,18 @@ function reducedMotionMedia(): MediaQueryList | null {
 
 /** Whether the user asked for reduced motion. False where it cannot be known (SSR). */
 export function prefersReducedMotion(): boolean {
-  return reducedMotionMedia()?.matches ?? false;
+  return appMotion !== "full" || (reducedMotionMedia()?.matches ?? false);
 }
 
 /** Calls `onChange` whenever the preference flips; returns the unsubscribe function. */
 export function subscribeReducedMotion(onChange: () => void): () => void {
   const media = reducedMotionMedia();
-  if (!media) return () => {};
-  media.addEventListener("change", onChange);
-  return () => media.removeEventListener("change", onChange);
+  appListeners.add(onChange);
+  media?.addEventListener("change", onChange);
+  return () => {
+    appListeners.delete(onChange);
+    media?.removeEventListener("change", onChange);
+  };
 }
 
 /*

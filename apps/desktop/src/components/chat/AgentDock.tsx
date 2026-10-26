@@ -23,6 +23,7 @@ export function AgentDock({
   chats,
   onChoose,
   onDiagnostics,
+  onAgents,
   transport,
   onRefresh,
 }: {
@@ -30,6 +31,7 @@ export function AgentDock({
   readonly chats: readonly ChatSummary[] | null;
   readonly onChoose: (agentId: string) => void;
   readonly onDiagnostics: () => void;
+  readonly onAgents?: () => void;
   readonly transport?: Transport;
   readonly onRefresh?: () => void;
 }) {
@@ -37,7 +39,13 @@ export function AgentDock({
   return (
     <div className="chat-sidebar-footer">
       <h2 className="chat-section-label">
-        Agents{" "}
+        {onAgents ? (
+          <button type="button" onClick={onAgents} className="setup-text-button">
+            Agents
+          </button>
+        ) : (
+          "Agents"
+        )}{" "}
         <span>
           {ready}/{agents?.length ?? 0}
         </span>

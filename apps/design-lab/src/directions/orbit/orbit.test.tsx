@@ -233,7 +233,7 @@ describe("onboarding", () => {
     // Every agent has its row from the first frame; the ones still being looked for say so.
     expect(shown).toContain("Looking for Cursor Looking for Grok Build");
     expect(shown).toContain("Agents 5/7 · Live");
-    expect(shown).toContain("Agents run on this Mac. auracode never sees their keys.");
+    expect(shown).toContain("Agents run on this device. auracode never sees their keys.");
   });
 
   it("settles on what can be installed once the scan is done", () => {

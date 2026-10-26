@@ -27,6 +27,7 @@ export function ChatsScreen({
   info,
   onRecoveryDismissed,
   onDiagnostics,
+  onAgents,
   workspace,
   openChatRequest,
 }: {
@@ -36,6 +37,7 @@ export function ChatsScreen({
   /** The shell acknowledged the database repair, so its notice goes for good. */
   readonly onRecoveryDismissed: () => void;
   readonly onDiagnostics: () => void;
+  readonly onAgents?: () => void;
   readonly workspace?: WorkspaceStore;
   readonly openChatRequest?: { id: string };
 }) {
@@ -118,6 +120,7 @@ export function ChatsScreen({
           agents={snapshot.agents}
           chats={snapshot.chats}
           onDiagnostics={onDiagnostics}
+          onAgents={onAgents}
           onChoose={(agentId) => {
             const next = new NewChatDraft(transport);
             next.chooseAgent(agentId);
