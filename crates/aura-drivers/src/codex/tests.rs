@@ -856,3 +856,6 @@ async fn an_unanswered_callback_is_cancelled_before_turn_completion() {
     assert!(matches!(h.event().await, DriverEvent::TurnEnded { .. }));
     h.stop().await;
 }
+
+#[path = "tests/model_recovery.rs"]
+mod model_recovery;

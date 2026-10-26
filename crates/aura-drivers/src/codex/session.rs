@@ -12,7 +12,7 @@ use aura_process::{
 use aura_protocol::session::{AuthCommand, AuthPrompt, ConfigValue};
 use aura_protocol::{
     AuraEvent, Autonomy, Capabilities, ErrorKind, LimitWindow, NoticeLevel, StopReason, TokenUsage,
-    UiPrompt, UiRequest, UsageScope,
+    UiAnswer, UiPrompt, UiRequest, UsageScope,
 };
 use futures::future::BoxFuture;
 use serde_json::{Value, json};
@@ -101,6 +101,12 @@ struct Callback {
     body: requests::Callback,
 }
 
+struct ModelRecovery {
+    failure: DriverError,
+    request_id: Option<String>,
+    model: Option<String>,
+}
+
 struct Session {
     rpc: RpcOut,
     log: ProtocolLog,
@@ -120,6 +126,8 @@ struct Session {
     ready: bool,
     opened: bool,
     models_done: bool,
+    model_recovery: Option<ModelRecovery>,
+    model_recovery_attempted: bool,
     models: Vec<wire::Model>,
     cursors: BTreeSet<String>,
     model: String,
@@ -287,11 +295,103 @@ impl Session {
         self.outbox
             .push_back(DriverEvent::Status(DriverStatus::Opening));
         self.request(method, params, Purpose::Open);
+        if self.models_done {
+            return;
+        }
         self.request(
             "model/list",
             json!({"includeHidden":false}),
             Purpose::Models,
         );
+    }
+    fn waiting_for_model_recovery(&self) -> bool {
+        self.model_recovery
+            .as_ref()
+            .is_some_and(|recovery| recovery.request_id.is_some())
+    }
+    fn offer_model_recovery(&mut self) {
+        if !self.models_done || self.waiting_for_model_recovery() {
+            return;
+        }
+        let Some(mut recovery) = self.model_recovery.take() else {
+            return;
+        };
+        let defaults = self
+            .models
+            .iter()
+            .filter(|model| model.is_default)
+            .collect::<Vec<_>>();
+        let Some(default) = defaults.first().filter(|_| defaults.len() == 1) else {
+            self.fail(recovery.failure);
+            return;
+        };
+        if matches!(self.setup.desired.get("model"), Some(ConfigValue::Choice { value }) if value == &default.model || value == &default.id)
+        {
+            self.fail(recovery.failure);
+            return;
+        }
+        let model = default.model.clone();
+        let request_id = format!("{}.model-recovery", self.spawn_id);
+        let reason = recovery
+            .failure
+            .message
+            .chars()
+            .take(1536)
+            .collect::<String>();
+        let shown = model.chars().take(256).collect::<String>();
+        recovery.request_id = Some(request_id.clone());
+        recovery.model = Some(model);
+        self.model_recovery = Some(recovery);
+        self.outbox.push_back(DriverEvent::UiRequest { turn: None, request: UiRequest {
+            request_id,
+            prompt: UiPrompt::Select {
+                message: format!("Codex could not open this session: {reason}\n\nYou can try its advertised default model, {shown}. This may not fix the reported error. Your saved thread and queued prompts stay intact. Only opening is retried; no prompt is resent. The model changes only after opening succeeds."),
+                options: vec![format!("Use {shown} and retry opening once"), "Keep current model and stop".into()],
+            },
+        }});
+    }
+    fn answer_model_recovery(&mut self, request_id: &str, answer: &Option<UiAnswer>) -> bool {
+        if !self
+            .model_recovery
+            .as_ref()
+            .is_some_and(|recovery| recovery.request_id.as_deref() == Some(request_id))
+        {
+            return false;
+        }
+        if !matches!(answer, None | Some(UiAnswer::Select { index: 0 | 1 })) {
+            return true;
+        }
+        let Some(recovery) = self.model_recovery.take() else {
+            return true;
+        };
+        self.outbox.push_back(DriverEvent::UiWithdrawn {
+            request_id: request_id.into(),
+        });
+        if !matches!(answer, Some(UiAnswer::Select { index: 0 })) {
+            self.fail(recovery.failure);
+            return true;
+        }
+        let Some(model) = recovery.model else {
+            self.fail(recovery.failure);
+            return true;
+        };
+        self.model_recovery_attempted = true;
+        self.setup.desired.insert(
+            "model".into(),
+            ConfigValue::Choice {
+                value: model.clone(),
+            },
+        );
+        self.setup.desired.remove("effort");
+        self.notice(format!("You chose Codex's advertised default model, {model}. Retrying session opening once; saved prompts remain queued until it succeeds."));
+        self.init_deadline = Instant::now()
+            + self
+                .setup
+                .timings
+                .open_ceiling
+                .min(self.setup.launch.startup_timeout);
+        self.open();
+        true
     }
     fn incoming(&mut self, incoming: Incoming) {
         match incoming {
@@ -342,12 +442,21 @@ impl Session {
                     return;
                 }
                 match pending.purpose {
+                    Purpose::Open if !self.model_recovery_attempted => {
+                        self.model_recovery = Some(ModelRecovery {
+                            failure: error(ErrorKind::AgentError, err.message),
+                            request_id: None,
+                            model: None,
+                        });
+                        self.offer_model_recovery();
+                    }
                     Purpose::Models => {
                         self.models.clear();
                         self.models_done = true;
                         self.notice(
                             "Codex could not list its models. The current model remains available.",
                         );
+                        self.offer_model_recovery();
                         self.ready();
                     }
                     Purpose::Limits => {
@@ -466,6 +575,7 @@ impl Session {
                         );
                     } else {
                         self.models_done = true;
+                        self.offer_model_recovery();
                         self.ready();
                     }
                 }
@@ -473,6 +583,7 @@ impl Session {
                     self.models.clear();
                     self.models_done = true;
                     self.notice("Codex returned an invalid model list.");
+                    self.offer_model_recovery();
                     self.ready();
                 }
             },
@@ -790,6 +901,13 @@ impl Session {
         }
     }
     fn withdraw_all(&mut self) {
+        if let Some(recovery) = self.model_recovery.take() {
+            if let Some(request_id) = recovery.request_id {
+                self.outbox
+                    .push_back(DriverEvent::UiWithdrawn { request_id });
+            }
+            self.fail(recovery.failure);
+        }
         for key in self.callbacks.keys().cloned().collect::<Vec<_>>() {
             self.withdraw(&key, true);
         }
@@ -948,6 +1066,9 @@ impl Session {
                 }
             }
             DriverCommand::RespondUi { request_id, answer } => {
+                if self.answer_model_recovery(&request_id, &answer) {
+                    return;
+                }
                 let result = self
                     .callbacks
                     .get(&request_id)
@@ -1072,7 +1193,11 @@ impl Session {
     }
     fn expire(&mut self) {
         let now = Instant::now();
-        if !self.ready && now >= self.init_deadline && self.failure.is_none() {
+        if !self.ready
+            && !self.waiting_for_model_recovery()
+            && now >= self.init_deadline
+            && self.failure.is_none()
+        {
             self.fail(error(
                 ErrorKind::StartTimeout,
                 "Codex did not open the thread before its deadline.",
@@ -1094,7 +1219,7 @@ impl Session {
                     let _ = reply.send(SteerResult::Unconfirmed { message: message.into() });
                     self.fail(error(ErrorKind::AgentError, message));
                 },
-                Purpose::Models=>{self.models.clear();self.models_done=true;self.notice("Codex did not return its model list before the deadline.");self.ready();},
+                Purpose::Models=>{self.models.clear();self.models_done=true;self.notice("Codex did not return its model list before the deadline.");self.offer_model_recovery();self.ready();},
                 Purpose::Limits=>{self.limits_dirty=false;self.notice("Codex did not refresh usage limits before the deadline.");},
                 _=>self.fail(error(ErrorKind::AgentError,"Codex did not acknowledge an operation before its deadline. The session was stopped to avoid uncertain state.")),
             }
@@ -1172,6 +1297,8 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         ready: false,
         opened: false,
         models_done: false,
+        model_recovery: None,
+        model_recovery_attempted: false,
         models: Vec::new(),
         cursors: BTreeSet::new(),
         model: String::new(),
@@ -1245,7 +1372,13 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
             .pending
             .values()
             .map(|p| p.deadline)
-            .chain((!s.ready && s.failure.is_none() && !requested_close).then_some(s.init_deadline))
+            .chain(
+                (!s.ready
+                    && !s.waiting_for_model_recovery()
+                    && s.failure.is_none()
+                    && !requested_close)
+                    .then_some(s.init_deadline),
+            )
             .chain(closing.map(|c| c.0))
             .chain(drain_deadline.filter(|_| !full && !eof))
             .min()

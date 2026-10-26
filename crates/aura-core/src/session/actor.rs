@@ -3295,6 +3295,25 @@ impl ChatActor {
             .agent_session
             .as_ref()
             .is_some_and(|session| session.native_session_id == info.native_session_id);
+        // Codex can apply a user-approved startup model recovery. Persist only the effective
+        // choices reported before this successful Ready, never the attempted failed override.
+        if spec.kind == aura_protocol::DriverKind::Codex {
+            for option in &self.options {
+                if matches!(
+                    option.category,
+                    ConfigCategory::Model | ConfigCategory::Effort
+                ) && let ConfigKind::Select { current, .. } = &option.kind
+                    && !current.is_empty()
+                {
+                    self.desired.insert(
+                        option.id.clone(),
+                        ConfigValue::Choice {
+                            value: current.clone(),
+                        },
+                    );
+                }
+            }
+        }
         let config_json = serde_json::to_string(&self.desired).ok();
         let (model, effort) = (
             self.option_value(ConfigCategory::Model),

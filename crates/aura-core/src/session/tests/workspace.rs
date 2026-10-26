@@ -366,3 +366,182 @@ async fn workspace_reads_saved_projects_while_saving_is_paused() {
     );
     free_disk(&rig.store);
 }
+#[tokio::test]
+async fn codex_startup_recovery_is_always_asked_and_saves_only_successful_effective_model() {
+    use aura_drivers::driver::LoggedCommand;
+    use aura_protocol::session::{ConfigCategory, ConfigKind, ConfigOption, ConfigValue};
+    use aura_protocol::{UiAnswer, UiPrompt, UiRequest};
+    let effective = ConfigOption {
+        id: "model".into(),
+        name: "Model".into(),
+        description: None,
+        category: ConfigCategory::Model,
+        kind: ConfigKind::Select {
+            current: "vendor-default".into(),
+            choices: vec![],
+        },
+        pending: None,
+    };
+    let (driver, handle) = ScriptedDriver::new(vec![
+        Step::Expect(CommandMatch::RespondUi {
+            request_id: Some("model-recovery".into()),
+        }),
+        Step::Emit(DriverEvent::Options(vec![effective])),
+        ready_step("recovered-model"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::EndTurn {
+            stop_reason: StopReason::EndTurn,
+            usage: None,
+            error: None,
+        },
+        Step::Expect(CommandMatch::Shutdown),
+    ]);
+    let mut spec = aura_agents::get("mock").unwrap().clone();
+    spec.kind = aura_protocol::DriverKind::Codex;
+    let rig = rig_with_spec(
+        aura_drivers::testing::ScriptedDriverFactory::new(vec![driver]),
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+        spec,
+    );
+    let project = project(&rig, "Recovery").await;
+    let chat = rig
+        .manager
+        .chat_project_create(ProjectChatCreate {
+            agent_id: "mock".into(),
+            folder_id: project.folders[0].id.clone(),
+            allow_busy_folder: false,
+        })
+        .await
+        .unwrap();
+    let id = &chat.chat.id;
+    let sink = Arc::new(Sink::default());
+    rig.manager.attach(id, sink.clone()).await.unwrap();
+    let ack = rig
+        .manager
+        .send(id, "one visible saved prompt".into())
+        .await
+        .unwrap();
+    assert!(ack.queued);
+    handle.emit(DriverEvent::UiRequest {
+        turn: None,
+        request: UiRequest {
+            request_id: "model-recovery".into(),
+            prompt: UiPrompt::Select {
+                message: "Try the advertised default?".into(),
+                options: vec!["Use default".into(), "Keep original".into()],
+            },
+        },
+    });
+    eventually("startup recovery question", || lock(&sink.frames).iter().flat_map(|frame| &frame.events).any(|event| matches!(event, AuraEvent::UiRequest(request) if request.request_id == "model-recovery"))).await;
+    assert!(!handle.commands().iter().any(|command| matches!(
+        command,
+        LoggedCommand::RespondUi { .. } | LoggedCommand::Prompt { .. }
+    )));
+    rig.manager
+        .respond_ui(id, "model-recovery", Some(UiAnswer::Select { index: 0 }))
+        .await
+        .unwrap();
+    handle.wait_for(CommandMatch::Prompt).await;
+    rig.manager.stop(id).await.unwrap();
+    status(&rig, id, SessionStatus::Stopped).await;
+    rig.manager.conversation_turns(id, None).await.unwrap();
+    let saved = rig.store.load_chat_inner(id).await.unwrap().unwrap();
+    let config: std::collections::BTreeMap<String, ConfigValue> = serde_json::from_str(
+        saved
+            .agent_session
+            .as_ref()
+            .unwrap()
+            .config_json
+            .as_deref()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config.get("model"),
+        Some(&ConfigValue::Choice {
+            value: "vendor-default".into()
+        })
+    );
+    assert_eq!(
+        handle
+            .commands()
+            .iter()
+            .filter(|command| matches!(command, LoggedCommand::Prompt { .. }))
+            .count(),
+        1
+    );
+    rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
+#[tokio::test]
+async fn failed_codex_startup_recovery_keeps_project_model_and_queued_text() {
+    use aura_protocol::{UiAnswer, UiPrompt, UiRequest};
+    let (driver, handle) = ScriptedDriver::new(vec![
+        Step::Expect(CommandMatch::RespondUi {
+            request_id: Some("model-recovery".into()),
+        }),
+        Step::Exit(DriverExit::StartFailed(aura_drivers::driver::DriverError {
+            kind: aura_protocol::ErrorKind::AgentError,
+            message: "The reviewed retry also failed.".into(),
+            detail: None,
+        })),
+    ]);
+    let mut spec = aura_agents::get("mock").unwrap().clone();
+    spec.kind = aura_protocol::DriverKind::Codex;
+    let rig = rig_with_spec(
+        aura_drivers::testing::ScriptedDriverFactory::new(vec![driver]),
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+        spec,
+    );
+    let project = project(&rig, "Failed recovery").await;
+    let chat = rig
+        .manager
+        .chat_project_create(ProjectChatCreate {
+            agent_id: "mock".into(),
+            folder_id: project.folders[0].id.clone(),
+            allow_busy_folder: false,
+        })
+        .await
+        .unwrap();
+    let id = &chat.chat.id;
+    let sink = Arc::new(Sink::default());
+    rig.manager.attach(id, sink.clone()).await.unwrap();
+    assert!(
+        rig.manager
+            .send(id, "retained visible prompt".into())
+            .await
+            .unwrap()
+            .queued
+    );
+    handle.emit(DriverEvent::UiRequest {
+        turn: None,
+        request: UiRequest {
+            request_id: "model-recovery".into(),
+            prompt: UiPrompt::Select {
+                message: "Try the advertised default?".into(),
+                options: vec!["Use default".into(), "Keep original".into()],
+            },
+        },
+    });
+    eventually("recovery card", || lock(&sink.frames).iter().flat_map(|frame| &frame.events).any(|event| matches!(event, AuraEvent::UiRequest(request) if request.request_id == "model-recovery"))).await;
+    rig.manager
+        .respond_ui(id, "model-recovery", Some(UiAnswer::Select { index: 0 }))
+        .await
+        .unwrap();
+    status(&rig, id, SessionStatus::Failed).await;
+    rig.manager.conversation_turns(id, None).await.unwrap();
+    let saved = rig.store.load_chat_inner(id).await.unwrap().unwrap();
+    assert!(saved.agent_session.is_none());
+    assert_eq!(saved.initial_model.as_deref(), Some("small"));
+    assert_eq!(saved.queue.len(), 1);
+    assert_eq!(saved.queue[0].text, "retained visible prompt");
+    assert!(
+        !handle
+            .commands()
+            .iter()
+            .any(|command| matches!(command, aura_drivers::driver::LoggedCommand::Prompt { .. }))
+    );
+    rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}

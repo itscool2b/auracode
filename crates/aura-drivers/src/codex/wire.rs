@@ -74,6 +74,8 @@ pub struct TurnResponse {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Model {
+    #[serde(default)]
+    pub is_default: bool,
     pub id: String,
     pub model: String,
     pub display_name: String,
