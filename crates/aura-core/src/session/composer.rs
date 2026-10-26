@@ -204,11 +204,9 @@ impl SessionManager {
             .rt
             .spawn_blocking(move || {
                 let mut display = input.text.clone();
-                let mut parts = if input.text.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![PromptPart::Text { text: input.text }]
-                };
+                // Keep the user's editable text distinct from attached file contents, including
+                // attachment-only prompts. Continuations preserve every subsequent part verbatim.
+                let mut parts = vec![PromptPart::Text { text: input.text }];
                 let mut payload_bytes = display.len();
                 let mut image_bytes = 0usize;
                 let mut seen = HashSet::new();

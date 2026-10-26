@@ -14,10 +14,9 @@ export interface ChangesTransport {
   revert(chatId: string, token: string): Promise<RevertResult>;
 }
 export const changesApi: ChangesTransport = {
-  snapshot: async (chat, turn) => settle(await commands.chatChanges(chat, turn)),
-  diff: async (chat, checkpoint, path) =>
-    settle(await commands.chatChangeDiff(chat, checkpoint, path)),
+  snapshot: async (chat, turn) => settle(commands.chatChanges(chat, turn)),
+  diff: async (chat, checkpoint, path) => settle(commands.chatChangeDiff(chat, checkpoint, path)),
   preview: async (chat, checkpoint, paths) =>
-    settle(await commands.checkpointRevertPreview(chat, checkpoint, paths)),
-  revert: async (chat, token) => settle(await commands.checkpointRevert(chat, token)),
+    settle(commands.checkpointRevertPreview(chat, checkpoint, paths)),
+  revert: async (chat, token) => settle(commands.checkpointRevert(chat, token)),
 };

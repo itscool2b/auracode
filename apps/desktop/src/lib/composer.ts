@@ -22,11 +22,11 @@ export interface ComposerTransport {
 }
 
 export const composerApi: ComposerTransport = {
-  draft: async (id) => settle(await commands.composerDraft(id)),
-  saveDraft: async (id, input) => settle(await commands.composerSaveDraft(id, input)),
-  pick: async (id) => settle(await commands.composerPick(id)),
-  import: async (id, path) => settle(await commands.composerImport(id, path)),
-  paste: async (id, bytes) => settle(await commands.composerPaste(id, bytes)),
-  mentions: async (id, query) => settle(await commands.composerMentions(id, query)),
-  send: async (id, input) => settle(await commands.composerSend(id, input)),
+  draft: async (id) => settle(commands.composerDraft(id)),
+  saveDraft: async (id, input) => settle(commands.composerSaveDraft(id, input)),
+  pick: async (id) => settle(commands.composerPick(id)),
+  import: async (id, path) => settle(commands.composerImport(id, path)),
+  paste: async (id, bytes) => settle(commands.composerPaste(id, bytes)),
+  mentions: async (id, query) => settle(commands.composerMentions(id, query)),
+  send: async (id, input) => settle(commands.composerSend(id, input)),
 };
