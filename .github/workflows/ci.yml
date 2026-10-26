@@ -108,13 +108,16 @@ jobs:
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: pnpm test
 
-      - name: Build and verify the Rust cloud runtime
+      - name: Build and verify the Rust API and static website runtimes
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        timeout-minutes: 20
         run: |
           rustup target add wasm32-unknown-unknown
           cargo install worker-build --version 0.8.7 --locked
           pnpm --filter @auracode/api worker:build
           pnpm --filter @auracode/api worker:test
+          pnpm --filter @auracode/web-worker worker:build
+          pnpm --filter @auracode/web-worker worker:test
 
       - name: Install browser test engines
         id: browsers
@@ -123,14 +126,17 @@ jobs:
 
       - name: Check Orbit in Chromium and WebKit
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
         run: pnpm --filter @auracode/desktop check:orbit
 
       - name: Check settings and explicit update controls
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 15
         run: pnpm --filter @auracode/desktop check:settings
 
       - name: Check Library, account vault and configuration recovery
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
         run: |
           pnpm --filter @auracode/desktop exec node scripts/check-library.mjs
           pnpm --filter @auracode/desktop exec node scripts/check-config-recovery.mjs
@@ -141,8 +147,24 @@ jobs:
           pnpm --filter @auracode/desktop exec node scripts/check-workspace-removal.mjs
           pnpm --filter @auracode/desktop exec node scripts/check-agent-installations.mjs
 
+      - name: Check explicit installer and clone actions
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: pnpm --filter @auracode/desktop exec node scripts/check-setup-actions.mjs
+
+      - name: Check active profile and cached sync status
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: pnpm --filter @auracode/desktop exec node scripts/check-profile-status.mjs
+
+      - name: Check explicit chat sign-in recovery
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: pnpm --filter @auracode/desktop exec node scripts/check-chat-auth.mjs
+
       - name: Check website accounts and verified release downloads
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
         run: |
           pnpm --filter @auracode/web test:release
           pnpm --filter @auracode/web test:browser
@@ -161,6 +183,9 @@ jobs:
             target/repository-publication-browser
             target/workspace-removal-browser
             target/agent-installations-browser
+            target/setup-actions-browser
+            target/profile-status-browser
+            target/chat-auth-browser
             target/web-checks
             target/release-preview-*/*.png
           retention-days: 7
@@ -183,6 +208,7 @@ jobs:
 
       - name: Check setup in Chromium and WebKit
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
         run: pnpm --filter @auracode/desktop check:setup
       - name: Keep setup browser evidence
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
@@ -213,6 +239,7 @@ jobs:
       - name: Test the CI scripts
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: |
+          node --test .github/scripts/acceptance-gates.test.mjs .github/scripts/webdriver-smoke.test.mjs
           bash .github/scripts/test.sh
           bash .github/scripts/test-export-bindings.sh
   powershell:
@@ -228,13 +255,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: docs/spikes/render-power
+          sparse-checkout: |
+            docs/spikes/render-power
+            .github/scripts
       - name: Test the render-power suite (Windows PowerShell 5.1)
         run: powershell -NoProfile -ExecutionPolicy Bypass -File docs/spikes/render-power/test-render-power.ps1
 
       - name: Test the render-power suite (PowerShell 7)
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: pwsh -NoProfile -File docs/spikes/render-power/test-render-power.ps1
+
+      - name: Test WebDriver provisioning without network or native executables
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        shell: pwsh
+        run: ./.github/scripts/test-prepare-webdriver.ps1
 
   rust:
     name: rust (${{ matrix.os }})
@@ -379,6 +413,37 @@ jobs:
           binary=target/debug/auracode
           if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
           bash .github/scripts/run-smoke.sh "$binary" chat
+      - name: Install pinned external WebDriver bridge (Windows)
+        id: webdriver-tools
+        if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' && runner.os == 'Windows' }}
+        timeout-minutes: 10
+        run: cargo install tauri-driver --version 2.1.0 --locked --root "$RUNNER_TEMP/webdriver-tools"
+      - name: Prepare matching Microsoft Edge Driver (Windows)
+        id: webdriver-native
+        if: ${{ !cancelled() && steps.webdriver-tools.outcome == 'success' }}
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./.github/scripts/prepare-webdriver.ps1 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'webdriver-native')
+      - name: External WebDriver smoke of the real Windows app
+        if: ${{ !cancelled() && steps.webdriver-native.outcome == 'success' }}
+        timeout-minutes: 8
+        env:
+          NATIVE_DRIVER: ${{ steps.webdriver-native.outputs.native_driver }}
+          EXPECTED_WEBVIEW_VERSION: ${{ steps.webdriver-native.outputs.webview_version }}
+        run: >-
+          node .github/scripts/webdriver-smoke.mjs "$GITHUB_WORKSPACE/target/debug/auracode.exe"
+          "$RUNNER_TEMP/webdriver-tools/bin/tauri-driver.exe" "$NATIVE_DRIVER"
+          "$RUNNER_TEMP/webdriver-evidence"
+      - name: Keep external Windows WebDriver evidence
+        if: ${{ !cancelled() && steps.webdriver-tools.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-webdriver-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/webdriver-evidence
+            ${{ runner.temp }}/webdriver-native/versions.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: Keep native smoke evidence
         if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

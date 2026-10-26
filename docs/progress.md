@@ -2527,3 +2527,26 @@ not need to purchase an SSL certificate from the domain registrar.
 A separate W3C WebDriver harness now drives the actual embedded desktop binary through pinned tauri-driver 2.1.0 and a qualified Microsoft EdgeDriver. It uses a fresh disposable profile, home, WebView data and project. Only initial project creation uses native IPC to avoid the system folder picker. External window selection, ordinary onboarding skip, mock chat creation, key entry, visible echo output, interruption, explicit session stop and retained history after webview reload are independently checked. No embedded smoke verdict is used. Version matching, bounded requests/evidence, a watchdog and the driver's owned Windows Job Object constrain the run. Workflow provisioning is a separate coordinated change.
 
 Eight synthetic harness tests pass, including real loopback W3C request handling, malformed/error responses, polling expiry, runtime mismatch, profile/configuration isolation, optional window-resize capability and the external scenario's command boundary. Targeted Biome and instruction parity pass. These tests do not establish a native WebDriver pass. Local native execution was deliberately not attempted because Application Control already blocks the executable; the actual Windows gate remains pending in the planned final integration batch. No paid agent, authentication, CI dispatch or owner configuration mutation occurred.
+### Final acceptance workflow audit
+
+The final CI now runs the previously unwired installer/clone, active-profile status and chat sign-in
+browser checks, with their screenshots retained. Onboarding was already covered; the settings
+aggregator already runs account/profile/configuration, Git/setup, steering, questions and continuation
+checks. Browser steps have explicit deadlines. A local regression checks every desktop acceptance
+script is reachable from the workflow, the existing SQLCipher feature chain, and unsigned Build's
+exact Rust-binding check and absence of signing-secret requirements. Existing suite flags and the
+explicit final encrypted-storage input are preserved.
+
+Windows external WebDriver acceptance is wired into the existing native job after app compilation.
+Provisioning pins tauri-driver 2.1.0, reads documented WebView2 runtime version metadata, downloads
+the exact matching Microsoft driver, validates its signature/version and retains version/hash evidence.
+It never updates the installed runtime or substitutes the Edge browser version. New pure provisioning
+tests cover ambiguous/malformed versions, compatible patch versions, exact bounded archive extraction
+and overwrite refusal without downloading or executing native tools. The final runtime batch also
+includes the new Rust static website Worker beside the existing API Worker.
+
+Five local workflow regressions, pure PowerShell provisioning checks, existing binding-export gate
+regressions, pinned-action workflow lint, Biome and instruction parity pass. The newly wired installer
+and clone review gate passed Chromium and WebKit with synthetic IO and accessibility checks. Actual
+external Windows WebDriver, package compilation and native device acceptance are still pending the
+final qualified run. No CI dispatch, push, runtime installation, paid agent or real sign-in occurred.

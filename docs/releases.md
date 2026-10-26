@@ -150,6 +150,7 @@ build prerequisite process. Do not change platform policy if an executable is de
 ```sh
 pnpm install --frozen-lockfile
 node .github/scripts/check-instructions.mjs
+node --test .github/scripts/acceptance-gates.test.mjs
 cargo fmt --all --check
 cargo test --workspace --all-features --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
@@ -160,10 +161,17 @@ pnpm test
 pnpm --filter @auracode/desktop check:orbit
 pnpm --filter @auracode/desktop check:settings
 pnpm --filter @auracode/desktop check:setup
+pnpm --filter @auracode/desktop exec node scripts/check-setup-actions.mjs
+pnpm --filter @auracode/desktop exec node scripts/check-profile-status.mjs
+pnpm --filter @auracode/desktop exec node scripts/check-chat-auth.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-library.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-config-recovery.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-account-vault.mjs
+pnpm --filter @auracode/desktop exec node scripts/check-account-reset.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-folder-resolution.mjs
+pnpm --filter @auracode/desktop exec node scripts/check-repository-publication.mjs
+pnpm --filter @auracode/desktop exec node scripts/check-workspace-removal.mjs
+pnpm --filter @auracode/desktop exec node scripts/check-agent-installations.mjs
 pnpm --filter @auracode/web test:release
 pnpm --filter @auracode/web test:browser
 pnpm --filter @auracode/desktop tauri build --debug --no-bundle
@@ -185,6 +193,26 @@ prove vendor compatibility, packaged installation or independent external WebDri
 its result JSON and logs. The settings browser gate also runs Git reviews, setup, account/profile
 controls, configuration sync, explicit steering and missing-transcript recovery in Chromium and
 WebKit. Those use synthetic commands and do not replace native acceptance.
+
+The final CI keeps each browser gate bounded and checks that every desktop acceptance script is
+reachable directly or through an aggregator. Enable `encrypted_storage` for the final dispatch:
+desktop tests already enable Account SQLCipher through their dependency features, while this job also
+tests the encrypted libraries in isolation. Leave `refresh_bindings` off for the final gate after
+committing exact generated output. The unsigned Build workflow separately refuses stale bindings
+before compiling the frontend and does not request updater signing material.
+
+The same Windows Rust job then runs an independent external WebDriver check against its embedded
+debug app, using the built-in mock agent and an isolated disposable profile. It pins `tauri-driver`
+2.1.0 and downloads Microsoft Edge Driver for the installed WebView2 runtime, validates its Microsoft
+signature and version, and records the version/hash evidence. Ambiguous or missing runtimes fail
+qualification instead of installing or updating browser software. The test performs real external
+clicks and typing, observes output, interrupts a turn and reopens persisted history; it retains bounded
+logs, a result report and screenshots without uploading the profile. This follows the official
+[Tauri WebDriver setup](https://v2.tauri.app/develop/tests/webdriver/manual-setup/) and Microsoft's
+[WebView2 driver requirement](https://learn.microsoft.com/en-us/microsoft-edge/webview2/how-to/webdriver).
+The workflow is prepared, but only a successful hosted run qualifies that native gate. macOS remains
+covered by the existing native app smoke and WebKit browser tests, with actual device acceptance
+tracked separately.
 
 Unsigned package compilation uses the existing manual `Build` matrix. Individual qualified hosts can
 use the same explicit targets locally:
