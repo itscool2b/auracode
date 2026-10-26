@@ -9,6 +9,7 @@ export class ApiError extends Error {
 }
 const messages: Record<string, string> = {
   unauthorized: "Your session has expired. Sign in again.",
+  account_deleted: "This account was deleted. Retained local work is still available in auracode.",
   forbidden: "This action needs verification. Sign in with a fresh code and try again.",
   invalid_code: "That code is invalid or expired. Check all six digits or request another code.",
   rate_limited: "Too many attempts. Wait a minute before trying again.",

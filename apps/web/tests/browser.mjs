@@ -123,6 +123,7 @@ try {
       await page.getByLabel("Email address").fill("person@example.invalid");
       await page.getByRole("button", { name: "Send a code" }).click();
       await page.getByLabel("Six-digit code").waitFor();
+      await page.waitForFunction(() => document.activeElement?.id === "code");
       assert.equal(await page.evaluate(() => document.activeElement?.id), "code");
       await page.getByLabel("Six-digit code").fill("000000");
       await page.getByRole("button", { name: "Verify and sign in" }).click();
@@ -211,6 +212,30 @@ try {
         true,
       );
       await page.keyboard.press("Escape");
+      await page.route("**/api/v1/account", (route) =>
+        route.fulfill({ status: 410, json: { error: "account_deleted" } }),
+      );
+      await page
+        .locator("#security")
+        .getByRole("button", { name: "Delete account", exact: true })
+        .click();
+      await confirm.getByLabel("person@example.invalid").fill("person@example.invalid");
+      await confirm.getByRole("button", { name: "Delete account", exact: true }).click();
+      await page.getByRole("heading", { name: "This account was deleted." }).waitFor();
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+      assert.equal(await page.locator("#security").count(), 0);
+      await page.reload();
+      await page.getByRole("heading", { name: "This account was deleted." }).waitFor();
+      assert.equal(await page.getByRole("button", { name: "Reload account" }).count(), 0);
+      assert.equal(
+        await page.getByRole("link", { name: "Open auracode", exact: true }).getAttribute("href"),
+        "auracode://signin",
+      );
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      await page.screenshot({
+        path: join(artifacts, `${name}-account-deleted.png`),
+        fullPage: true,
+      });
       assert.deepEqual(failures, []);
       const nojs = await browser.newContext({ javaScriptEnabled: false });
       const staticPage = await nojs.newPage();

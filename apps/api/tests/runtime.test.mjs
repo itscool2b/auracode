@@ -504,6 +504,11 @@ test("browser verification emits a protected cookie and never returns its sessio
 
 test("account deletion immediately revokes access and scheduled cleanup only purges its owned ciphertext", async () => {
   const value = Buffer.alloc(32, 50).toString("base64url");
+  const browserToken = Buffer.alloc(32, 51).toString("base64url");
+  const revokedToken = Buffer.alloc(32, 52).toString("base64url");
+  const expiredToken = Buffer.alloc(32, 53).toString("base64url");
+  const unknownToken = Buffer.alloc(32, 54).toString("base64url");
+  const csrf = verifier("csrf", [browserToken]);
   await db.batch([
     db
       .prepare(
@@ -523,12 +528,56 @@ test("account deletion immediately revokes access and scheduled cleanup only pur
     .prepare("UPDATE sessions SET created_at=? WHERE token_hash=?")
     .bind(now, hash(value))
     .run();
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO sessions(token_hash,user_id,client_kind,csrf_hash,created_at,expires_at) VALUES(?,'cleanup-account','browser',?,?,?)",
+      )
+      .bind(hash(browserToken), hash(csrf), now, now + 1000),
+    db
+      .prepare(
+        "INSERT INTO sessions(token_hash,user_id,client_kind,csrf_hash,created_at,expires_at,revoked_at) VALUES(?,'cleanup-account','desktop','csrf',?,?,?)",
+      )
+      .bind(hash(revokedToken), now - 100, now + 1000, now - 1),
+    db
+      .prepare(
+        "INSERT INTO sessions(token_hash,user_id,client_kind,csrf_hash,created_at,expires_at) VALUES(?,'cleanup-account','desktop','csrf',?,?)",
+      )
+      .bind(hash(expiredToken), now - 100, now - 1),
+  ]);
   const bucket = await runtime.getR2Bucket("BLOBS");
   await bucket.put("cleanup-account/owned", "synthetic ciphertext");
   await bucket.put("foreign/keep", "foreign ciphertext");
   assert.equal((await call("/account", "DELETE")).status, 200);
-  assert.equal((await call("/account")).status, 401);
-  assert.equal((await call("/sync")).status, 401);
+  const deleted = await call("/account");
+  assert.equal(deleted.status, 410);
+  assert.equal((await deleted.json()).error, "account_deleted");
+  assert.equal((await call("/sync")).status, 410);
+  for (const token of [revokedToken, expiredToken, unknownToken, browserToken]) {
+    assert.equal(
+      (await request("/account", "GET", undefined, { Authorization: `Bearer ${token}` })).status,
+      401,
+    );
+  }
+  const browserCall = (headers = {}, method = "DELETE") =>
+    runtime.dispatchFetch("https://auracode.test/api/v1/account", {
+      method,
+      headers: { Cookie: `__Host-auracode=${browserToken}`, ...headers },
+    });
+  assert.equal((await browserCall({}, "GET")).status, 410);
+  assert.equal((await browserCall()).status, 403);
+  assert.equal(
+    (await browserCall({ Origin: "https://foreign.invalid", "X-Auracode-CSRF": csrf })).status,
+    403,
+  );
+  assert.equal(
+    (await browserCall({ Origin: "https://auracode.test", "X-Auracode-CSRF": "wrong" })).status,
+    403,
+  );
+  assert.equal(
+    (await browserCall({ Origin: "https://auracode.test", "X-Auracode-CSRF": csrf })).status,
+    410,
+  );
   const worker = await runtime.getWorker();
   assert.equal((await worker.scheduled({ cron: "*/5 * * * *" })).outcome, "ok");
   assert.equal(await bucket.get("cleanup-account/owned"), null);
@@ -550,4 +599,19 @@ test("account deletion immediately revokes access and scheduled cleanup only pur
   await worker.scheduled({ cron: "*/5 * * * *" });
   assert.equal(await bucket.get("cleanup-account/late"), null);
   assert.ok(await bucket.get("foreign/keep"));
+  // Receipts survive removal of the account's sessions, but expire without identifying the account.
+  assert.equal((await call("/account")).status, 410);
+  await db
+    .prepare("UPDATE account_deletion_receipts SET deleted_at=?,expires_at=? WHERE token_hash=?")
+    .bind(now - 2, now - 1, hash(value))
+    .run();
+  assert.equal((await call("/account")).status, 401);
+  await worker.scheduled({ cron: "*/5 * * * *" });
+  assert.equal(
+    await db
+      .prepare("SELECT COUNT(*) AS n FROM account_deletion_receipts WHERE token_hash=?")
+      .bind(hash(value))
+      .first("n"),
+    0,
+  );
 });

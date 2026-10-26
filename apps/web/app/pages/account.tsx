@@ -15,6 +15,7 @@ export default function AccountPage() {
   } | null>(null);
   const [error, setError] = useState("");
   const [signedOut, setSignedOut] = useState(false);
+  const [deleted, setDeleted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [emailForm, setEmailForm] = useState(false);
   const [action, setAction] = useState<Action | null>(null);
@@ -29,10 +30,13 @@ export default function AccountPage() {
         api<{ devices: Device[] }>("/devices"),
       ]);
       setData({ account: result.account, devices: devices.devices, session });
+      setSignedOut(false);
+      setDeleted(false);
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
+      if (error instanceof ApiError && (error.status === 401 || error.code === "account_deleted")) {
         setData(null);
         setSignedOut(true);
+        setDeleted(error.code === "account_deleted");
       } else setError((error as Error).message);
     }
   }, []);
@@ -55,9 +59,15 @@ export default function AccountPage() {
       if (path.includes("logout") || path === "/account") {
         setData(null);
         setSignedOut(true);
+        setDeleted(path === "/account");
       } else await reload();
     } catch (error) {
-      setError((error as Error).message);
+      if (error instanceof ApiError && (error.status === 401 || error.code === "account_deleted")) {
+        setAction(null);
+        setData(null);
+        setSignedOut(true);
+        setDeleted(error.code === "account_deleted");
+      } else setError((error as Error).message);
     } finally {
       setBusy(false);
     }
@@ -75,10 +85,33 @@ export default function AccountPage() {
       )}
       {signedOut ? (
         <section className="prose">
-          <p>You’re signed out. Your local projects and chats remain on your devices.</p>
-          <a className="button" href="/signin">
-            Sign in
-          </a>
+          {deleted ? (
+            <>
+              <h2>This account was deleted.</h2>
+              <p>
+                Your retained local projects and chats stay on your devices. Open auracode to review
+                a Local copy. Creating another account starts fresh cloud storage.
+              </p>
+              <div className="actions">
+                <a className="button" href="auracode://signin">
+                  Open auracode
+                </a>
+                <a className="button secondary" href="/download">
+                  Download the app
+                </a>
+                <a className="text-link" href="/signup">
+                  Create an account
+                </a>
+              </div>
+            </>
+          ) : (
+            <>
+              <p>You’re signed out. Your local projects and chats remain on your devices.</p>
+              <a className="button" href="/signin">
+                Sign in
+              </a>
+            </>
+          )}
         </section>
       ) : !data ? (
         <p role="status">Loading your account…</p>
