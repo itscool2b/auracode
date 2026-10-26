@@ -2762,3 +2762,28 @@ only the HMAC-keyed IP counter. Both clients already reset verification after `i
 The rebuilt API passes all 23 runtime tests and native/Wasm Clippy (JS unchanged, Wasm 1,087,289
 bytes, SHA-256 `9d545e66…`). The live preview API and staged production API still run the earlier
 order and need this build uploaded once Cloudflare access to the auracode account is available.
+
+### Final CI batch 40394617240 and fixes
+
+Unsigned Build 40394621310 passed universal macOS, Windows ARM64 and Windows x64. CI failed:
+
+- Lint: a corepack download of pnpm and the Playwright browser download both timed out. The
+  website Worker build now uses the installed pnpm; the browser download was transient.
+- macOS (first macOS execution of this branch, Intel runners): file locks were released only by
+  closing. A child forked by another thread shares the lock's open file description until its
+  exec, so a just-closed store, profile owner or other lock could still look held. That made two
+  encrypted migrations refuse to upgrade and the local import see its source still owned. Every
+  advisory lock now uses `aura_process::locked_file::LockedFile`, which unlocks on drop, with
+  regression tests that duplicate the descriptor as fork does.
+- macOS terminal cleanup timed out. `openpty` descriptors were marked close-on-exec only after
+  creation, so a concurrently spawned shell could keep another terminal's slave open. PTY creation
+  now holds the write side of a process-wide guard whose read side every spawn holds. This Unix
+  path could not be compiled locally because Application Control blocks the needed build scripts.
+- The 10,000-turn history check now budgets the median page under 50 ms and the worst under 1 s;
+  one 161 ms page on a shared runner was scheduling noise.
+- Windows external WebDriver ran natively for the first time. The app window opened but session
+  creation timed out with matching 155.0.4283.62 driver and runtime. The cause is not yet known;
+  the gate now records a runner desktop capture and a direct verbose native-driver attempt.
+
+Rust fmt and Clippy pass for default and all-features configurations. Focused lock, store,
+checkpoint and process tests pass locally; macOS and WebDriver outcomes await the next CI run.
