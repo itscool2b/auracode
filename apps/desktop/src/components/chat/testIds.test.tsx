@@ -233,7 +233,7 @@ describe("the automation attributes of the chat screens", () => {
       { tag: "select", requested: "ask", "native-mode": "ask", saving: "false" },
     ]);
     expect(marked(html, "picker-option")).toEqual([
-      { tag: "select", "option-id": "model", saving: "false" },
+      { tag: "div", "option-id": "model", saving: "false", value: "a" },
       { tag: "input", "option-id": "fast", saving: "true" },
     ]);
   });

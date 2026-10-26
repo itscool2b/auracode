@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { focusPickerChoice } from "./PickerChoices";
 
 /** A native disclosure with outside-click and Escape dismissal, retaining keyboard focus. */
 export function Popover({
@@ -6,14 +7,34 @@ export function Popover({
   trigger,
   children,
   className = "",
+  shortcut,
+  triggerLabel,
 }: {
   readonly label: string;
   readonly trigger: ReactNode;
   readonly children: ReactNode;
   readonly className?: string;
+  readonly shortcut?: string;
+  readonly triggerLabel?: string;
 }) {
   const root = useRef<HTMLDetailsElement>(null);
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!shortcut) return;
+    const toggle = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !(event.metaKey || event.ctrlKey) || event.key !== shortcut)
+        return;
+      if (document.querySelector("dialog[open]")) return;
+      event.preventDefault();
+      const element = root.current;
+      if (!element) return;
+      element.open = !element.open;
+      if (element.open) focusPickerChoice(element);
+      else element.querySelector("summary")?.focus();
+    };
+    document.addEventListener("keydown", toggle);
+    return () => document.removeEventListener("keydown", toggle);
+  }, [shortcut]);
   useEffect(() => {
     if (!open) return;
     const outside = (event: PointerEvent) => {
@@ -40,7 +61,11 @@ export function Popover({
       className={`chat-popover ${className}`}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <summary aria-label={label} title={label}>
+      <summary
+        aria-label={triggerLabel ?? label}
+        title={label}
+        aria-keyshortcuts={shortcut ? `Control+${shortcut} Meta+${shortcut}` : undefined}
+      >
         {trigger}
       </summary>
       <section className="chat-popover-panel" aria-label={label}>

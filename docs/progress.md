@@ -1029,3 +1029,21 @@ uncommitted changes, setup copies/commands, merge/PR/discard/recovery and macOS 
 No agent prompt, login, real-repository mutation, push or CI dispatch ran. Protocol references are the
 official [Git worktree](https://git-scm.com/docs/git-worktree) and
 [Git status porcelain v2](https://git-scm.com/docs/git-status) documentation.
+
+## Picker and integrated UI verification
+
+The model/effort picker now uses the chosen Grok row treatment, native agent-supplied descriptions,
+selection marks, effort ticks, and three keyboard-navigable columns. Cmd/Ctrl+. opens it, arrow keys
+move between rows and columns, and numeric shortcuts choose available effort levels. Choice changes
+retain the existing acknowledged/pending protocol. The synthetic fixture now exercises real option
+transitions. Mobbin screens 5df7b658-498f-4145-b78d-0fe9d6460441 and
+3025b711-877d-4927-8e9b-21076781be06 were inspected; light reference material does not introduce a
+product theme. Dark remains the only product mode.
+
+The combined desktop Vitest batch passed 304 tests and exposed five old-layout/server-render
+failures. Those were fixed, and affected files pass their focused reruns. Chromium exercised picker
+keyboard changes and found a visible-label mismatch; spacing and accessible names now agree, and
+its focused accessibility rerun reports zero violations. The full browser run reached the picker
+before that correction; remaining combined checks continue in the planned integration run. Core
+all-target compilation passes with integrated onboarding, encrypted-profile seams and M4 service.
+Windows/macOS generated bindings and native checks remain pending. No paid-agent prompt ran.

@@ -19,6 +19,7 @@ import {
   frame,
   historyPage,
   items,
+  lists,
   numbered,
   sessionInfo,
 } from "../lib/chat/testing";
@@ -32,6 +33,8 @@ const AGENT: AgentEntry = {
   launch: "claude",
   needs_download: false,
   last_verified: "2026-10-26",
+  installation: null,
+  latest_release: null,
 };
 
 /** Driver golden events receive only the actor's turn boundaries needed by the real chat store. */
@@ -332,6 +335,51 @@ function Preview() {
     const initialHistory = before === null ? history : history.slice(before);
     let receive: ((batch: EventBatch) => void) | null = null;
     let currentStatus: SessionStatus = status;
+    let choices = lists(1, {
+      options: [
+        {
+          id: "model",
+          name: "Model",
+          category: "model",
+          description: null,
+          pending: null,
+          kind: {
+            type: "select",
+            current: "sonnet",
+            choices: [
+              {
+                value: "sonnet",
+                name: "Sonnet",
+                description: "Balanced coding and reasoning",
+                group: null,
+              },
+              {
+                value: "haiku",
+                name: "Haiku",
+                description: "Fast answers and smaller tasks",
+                group: null,
+              },
+            ],
+          },
+        },
+        {
+          id: "effort",
+          name: "Effort",
+          category: "effort",
+          description: null,
+          pending: null,
+          kind: {
+            type: "select",
+            current: "medium",
+            choices: [
+              { value: "low", name: "Low", description: null, group: null },
+              { value: "medium", name: "Medium", description: null, group: null },
+              { value: "high", name: "High", description: null, group: null },
+            ],
+          },
+        },
+      ],
+    });
     const publish = (updates: AuraEvent[]) => {
       receive?.(frame("preview", seq, updates));
       seq += updates.length;
@@ -339,6 +387,19 @@ function Preview() {
     publishPreview.current = publish;
     return withPreviewContext(
       new FakeTransport({
+        lists: async () => choices,
+        setOption: async (_chatId, id, value) => {
+          choices = {
+            ...choices,
+            revision: choices.revision + 1,
+            options: choices.options.map((option) =>
+              option.id === id && option.kind.type === "select" && value.type === "choice"
+                ? { ...option, kind: { ...option.kind, current: value.value } }
+                : option,
+            ),
+          };
+          return choices;
+        },
         attach: async (chatId, onFrame) => {
           receive = onFrame;
           return attachResult(

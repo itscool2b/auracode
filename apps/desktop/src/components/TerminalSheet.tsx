@@ -170,7 +170,7 @@ export function TerminalSheet({
                 ? "The terminal closed without an exit status."
                 : `The vendor command exited with code ${state.exitCode}.`;
 
-  return createPortal(
+  const content = (
     <dialog
       ref={dialog}
       className="orbit-theme terminal-sheet"
@@ -247,7 +247,7 @@ export function TerminalSheet({
           Start sign-in
         </button>
       </footer>
-    </dialog>,
-    document.body,
+    </dialog>
   );
+  return typeof document === "undefined" ? content : createPortal(content, document.body);
 }

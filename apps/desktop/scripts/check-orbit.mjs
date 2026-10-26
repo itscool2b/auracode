@@ -456,6 +456,39 @@ async function inspect(engine, launcher) {
     }
 
     await page.goto(`${url}/?preview=settled`);
+    await page.locator('[data-test-phase="live"]').waitFor();
+    await page.keyboard.press("Control+.");
+    await page.locator(".chat-model-popover[open]").waitFor();
+    await page.keyboard.press("ArrowRight");
+    assert.equal(
+      await page
+        .locator('[data-picker-value="sonnet"]')
+        .evaluate((node) => node === document.activeElement),
+      true,
+    );
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(
+      () =>
+        document.querySelector('[data-picker-value="haiku"]')?.getAttribute("aria-pressed") ===
+        "true",
+    );
+    await page.keyboard.press("3");
+    await page.waitForFunction(
+      () =>
+        document.querySelector('[data-picker-value="high"]')?.getAttribute("aria-pressed") ===
+        "true",
+    );
+    const pickerScan = await new AxeBuilder({ page }).include(".chat-model-popover").analyze();
+    assert.deepEqual(pickerScan.violations, [], "Picker accessibility");
+    await page.screenshot({ path: resolve(out, `${engine}-picker-dark.png`) });
+    await page.keyboard.press("Escape");
+    assert.equal(
+      await page
+        .locator(".chat-model-popover > summary")
+        .evaluate((node) => node === document.activeElement),
+      true,
+    );
     await page.getByRole("button", { name: "Attach a file", exact: true }).click();
     await page.getByText("interface-notes.md", { exact: true }).waitFor();
     await page.getByTestId("composer-input").fill("Review @Sidebar");

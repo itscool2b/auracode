@@ -488,6 +488,14 @@ async function waitAttention(chatId: string, want: boolean): Promise<void> {
 
 /** Chooses `value` in a select and waits until the page took it. */
 async function choose(select: HTMLElement | null, what: string, value: string): Promise<void> {
+  const row = select?.querySelector<HTMLButtonElement>(
+    `button[data-picker-value="${CSS.escape(value)}"]`,
+  );
+  if (row) {
+    await waitFor(`${what} to be enabled`, () => !row.disabled);
+    click(row, what);
+    return;
+  }
   if (!(select instanceof HTMLSelectElement)) throw new StepError(`${what} is not on the page`);
   await waitFor(`${what} to be enabled`, () => !select.disabled);
   if (![...select.options].some((option) => option.value === value)) {
@@ -702,7 +710,7 @@ async function chatScenario(
     await waitFor(
       "the Model picker to keep Mock Smart",
       () =>
-        (pickerOption("model") as HTMLSelectElement | null)?.value === "mock-smart" &&
+        attr(pickerOption("model"), "value") === "mock-smart" &&
         attr(pickerOption("model"), "saving") === "false",
     );
     return "the Model picker kept mock-smart once the agent answered";

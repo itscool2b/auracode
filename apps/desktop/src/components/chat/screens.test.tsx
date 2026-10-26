@@ -30,7 +30,7 @@ const noop = (): void => {};
 
 function buttons(html: string): { label: string; disabled: boolean }[] {
   return [...html.matchAll(/<button([^>]*)>(.*?)<\/button>/g)].map((match) => ({
-    label: (match[2] ?? "").replace(/<[^>]+>/g, ""),
+    label: match[1]?.match(/aria-label="([^"]+)"/)?.[1] ?? (match[2] ?? "").replace(/<[^>]+>/g, ""),
     disabled: (match[1] ?? "").includes("disabled"),
   }));
 }
@@ -105,7 +105,7 @@ describe("New chat", () => {
     expect(html).toContain(
       '<option value="hermes" disabled="">hermes: hermes --version failed.</option>',
     );
-    expect(html).toContain("Not available here:");
+    expect(html).toContain("Other agents");
     // Nothing chosen yet: Create waits for an agent and a folder.
     expect(buttons(html).find((b) => b.label === "Create")?.disabled).toBe(true);
     expect(buttons(html).find((b) => b.label === "Refresh agents")?.disabled).toBe(false);
@@ -191,7 +191,7 @@ describe("the chat list", () => {
     );
     expect(html).toContain("Fix the test");
     expect(html).toContain("New chat</span>");
-    expect(html).toContain("Demo agent · Working");
+    expect(html).toContain("Demo agent · Waiting for your answer");
     expect(html).toContain("folder missing");
     expect(html).toContain("folder not allowed");
     expect(html).toContain('aria-label="Waiting for your answer"');
@@ -288,7 +288,7 @@ describe("the header", () => {
       />,
     );
     expect(detected).toContain("Claude Code 2.1.310 via claude-agent-acp 0.95.0");
-    expect(detected).toContain('title="/bin/claude"');
+    expect(detected).toContain('class="ui-mono">/bin/claude</span>');
     expect(html).toContain("Context 12k of 200k · $0.0200");
     expect(html).toContain("/Users/me/code/app");
   });
@@ -332,9 +332,9 @@ describe("the pickers", () => {
         />,
       );
     const stopped = render("stopped");
-    expect(stopped.match(/<select[^>]*disabled/g)).toHaveLength(1);
+    expect(stopped.match(/<button[^>]*data-picker-value[^>]*disabled/g)).toHaveLength(2);
     expect(stopped).toMatch(/<input[^>]*type="checkbox"[^>]*disabled/);
-    expect(stopped).toContain("Full auto: changes are not checkpointed yet.");
+    expect(stopped).toContain("A local checkpoint is saved before each turn.");
     expect(stopped).toContain("(pending: Smart)");
     expect(stopped.indexOf("Model")).toBeLessThan(stopped.indexOf("Fast mode"));
     const ready = render("ready");
@@ -360,7 +360,7 @@ describe("the pickers", () => {
       />,
     );
     expect(html).toContain('<option value="ask" selected="">Ask</option>');
-    expect(html).toContain('<option value="smart" selected="">Smart</option>');
+    expect(html).toMatch(/data-picker-value="smart" aria-pressed="true"/);
     expect(html).not.toMatch(/<input[^>]*checked/);
     expect(html.match(/\(saving…\)/g)).toHaveLength(3);
     // Nothing on its way: the lists' own values.
@@ -374,7 +374,7 @@ describe("the pickers", () => {
         onSetOption={noop}
       />,
     );
-    expect(settledHtml).toContain('<option value="fast" selected="">Fast</option>');
+    expect(settledHtml).toMatch(/data-picker-value="fast" aria-pressed="true"/);
     expect(settledHtml).toMatch(/<input[^>]*checked/);
     expect(settledHtml).not.toContain("(saving…)");
   });
@@ -504,11 +504,11 @@ describe("turns and the transcript", () => {
     expect(html).toContain("$0.0123");
     const recovered = renderToStaticMarkup(<TurnView segment={second} actions={ACTIONS} />);
     expect(recovered).toContain("Interrupted when auracode closed");
-    expect(buttons(recovered).map((b) => b.label)).toEqual(["Receipt", "Resume session"]);
+    expect(buttons(recovered).map((b) => b.label)).toEqual(["Copy turn receipt", "Resume session"]);
     const live = renderToStaticMarkup(
       <TurnView segment={second} actions={{ ...ACTIONS, canResume: false }} />,
     );
-    expect(buttons(live)).toEqual([{ label: "Receipt", disabled: false }]);
+    expect(buttons(live)).toEqual([{ label: "Copy turn receipt", disabled: false }]);
   });
 
   it("partial_turn_page: Load earlier, and the marker of a turn the page cut", async () => {

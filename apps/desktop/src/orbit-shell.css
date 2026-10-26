@@ -1193,7 +1193,11 @@
   }
   .chat-model-columns[data-columns="three"] {
     display: grid;
-    grid-template-columns: 1.3fr 1.2fr 1fr;
+    grid-template-columns: 1.3fr 1.4fr 0.9fr;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
   }
   .chat-model-columns > section {
     min-width: 0;
@@ -1203,6 +1207,9 @@
     max-height: 290px;
     overflow: auto;
     margin: 8px -6px;
+    padding: 0;
+    border: 0;
+    min-width: 0;
   }
   .chat-agent-choices > button {
     display: flex;
@@ -1225,6 +1232,91 @@
     display: block;
     font-size: 12px;
     font-weight: 500;
+  }
+  .chat-agent-choices > button > span {
+    flex: 1;
+  }
+  .chat-agent-choices kbd,
+  .picker-choices kbd {
+    font: 10px var(--font-mono);
+    color: var(--o-text-3);
+  }
+  .picker-choices {
+    display: grid;
+    max-height: 274px;
+    overflow: auto;
+    margin: 6px -6px;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+  .picker-choices > button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    min-height: 44px;
+    padding: 8px;
+    text-align: left;
+    border-radius: 10px;
+    color: var(--o-text-2);
+  }
+  .picker-choices > button[aria-pressed="true"] {
+    background: var(--o-selected);
+    color: var(--o-text-1);
+  }
+  .picker-choices > button:focus-visible {
+    box-shadow: inset 2px 0 0 var(--o-ink);
+  }
+  .picker-choices > button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .picker-choice-copy {
+    min-width: 0;
+    flex: 1;
+  }
+  .picker-choice-copy strong {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .picker-choice-copy small {
+    display: block;
+    overflow: hidden;
+    margin-top: 3px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    color: var(--o-text-3);
+  }
+  .picker-option-label {
+    font-size: 10px;
+    color: var(--o-text-3);
+  }
+  .picker-effort-ticks {
+    display: flex;
+    gap: 2px;
+    max-width: 30px;
+    overflow: hidden;
+  }
+  .picker-effort-ticks i {
+    width: 2px;
+    height: 8px;
+    flex-shrink: 0;
+    background: var(--o-text-4);
+  }
+  .picker-effort-ticks i[data-filled="true"] {
+    background: var(--o-ink);
+  }
+  .picker-key-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 8px 2px;
+    border-top: 1px solid var(--o-rule);
+    font: 10px var(--font-mono);
+    color: var(--o-text-3);
   }
   .chat-agent-choices small {
     display: block;

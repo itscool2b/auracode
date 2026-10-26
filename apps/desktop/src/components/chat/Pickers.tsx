@@ -10,7 +10,20 @@ import type {
   SessionStatus,
 } from "../../bindings";
 import { AUTONOMIES, autonomyLabel, orderedOptions, pendingLabel } from "../../lib/chat/present";
+import { focusPickerChoice, movePickerFocus, PickerChoices } from "./PickerChoices";
 import { Popover } from "./Popover";
+
+const AGENT_KEYS: Readonly<Record<string, string>> = {
+  claude: "c",
+  codex: "x",
+  "grok-build": "g",
+  cursor: "u",
+  pi: "p",
+  "oh-my-pi": "m",
+  opencode: "o",
+  hermes: "h",
+  antigravity: "a",
+};
 
 /**
  * Autonomy (always enabled: it applies when the agent starts), with its note, the agent mode in
@@ -60,27 +73,87 @@ export function Pickers({
     <div className="chat-pickers">
       <Popover
         label="Agent and model"
+        triggerLabel={[
+          agent?.name ?? "Agent",
+          model && choiceLabel(model),
+          effort && choiceLabel(effort),
+          "Agent and model",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        shortcut="."
         className="chat-model-popover"
         trigger={
           <>
             <OrbitMark agent={agent?.id ?? "generic"} size={16} />
-            <strong>{agent?.name ?? "Agent"}</strong>
-            {model ? <span className="chat-pill-model">{choiceLabel(model)}</span> : null}
+            <strong>{agent?.name ?? "Agent"}</strong>{" "}
+            {model ? <span className="chat-pill-model">{choiceLabel(model)}</span> : null}{" "}
             {effort ? <span className="chat-pill-effort">{choiceLabel(effort)}</span> : null}
             <ChevronDown size={12} />
           </>
         }
       >
-        <div className="chat-model-columns" data-columns="three">
+        <fieldset
+          className="chat-model-columns"
+          aria-label="Agent, model and effort"
+          data-columns="three"
+          onKeyDown={(event) => {
+            if (
+              event.ctrlKey ||
+              event.metaKey ||
+              event.altKey ||
+              event.target instanceof HTMLSelectElement
+            )
+              return;
+            const columns = [
+              ...event.currentTarget.querySelectorAll<HTMLElement>(":scope > section"),
+            ];
+            const column = (event.target as HTMLElement).closest<HTMLElement>(
+              ".chat-model-columns > section",
+            );
+            const index = column ? columns.indexOf(column) : 0;
+            if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+              event.preventDefault();
+              const next =
+                columns[
+                  (index + (event.key === "ArrowRight" ? 1 : -1) + columns.length) % columns.length
+                ];
+              focusPickerChoice(next);
+            } else if (
+              /^[1-9]$/.test(event.key) &&
+              effort?.kind.type === "select" &&
+              optionsEnabled
+            ) {
+              const choice = effort.kind.choices[Number(event.key) - 1];
+              if (choice) {
+                event.preventDefault();
+                onSetOption(effort.id, { type: "choice", value: choice.value });
+              }
+            } else if (/^[a-z]$/i.test(event.key)) {
+              const row = event.currentTarget.querySelector<HTMLButtonElement>(
+                `button[data-agent-key="${event.key.toLowerCase()}"]:not(:disabled)`,
+              );
+              if (row) {
+                event.preventDefault();
+                row.focus();
+              }
+            }
+          }}
+        >
           <section>
             <h3>Agent</h3>
             {agents?.length && onChooseAgent ? (
-              <div className="chat-agent-choices">
+              <fieldset
+                className="chat-agent-choices"
+                aria-label="Agents"
+                onKeyDown={movePickerFocus}
+              >
                 {agents.map((entry) => (
                   <button
                     key={entry.id}
                     type="button"
                     aria-pressed={entry.id === agent?.id}
+                    data-agent-key={AGENT_KEYS[entry.id]}
                     disabled={entry.availability.state !== "ready"}
                     onClick={(event) => {
                       if (entry.id !== agent?.id) {
@@ -99,9 +172,10 @@ export function Pickers({
                           : entry.availability.state.replaceAll("_", " ")}
                       </small>
                     </span>
+                    {AGENT_KEYS[entry.id] ? <kbd>{AGENT_KEYS[entry.id]?.toUpperCase()}</kbd> : null}
                   </button>
                 ))}
-              </div>
+              </fieldset>
             ) : (
               <span className="chat-current-agent">
                 <OrbitMark agent={agent?.id ?? "generic"} size={20} />
@@ -166,10 +240,14 @@ export function Pickers({
               </details>
             ) : null}
           </section>
-        </div>
+        </fieldset>
+        <footer className="picker-key-legend">
+          ↑ ↓ move <span>← → column</span> <span>enter choose</span> <span>esc close</span>
+        </footer>
       </Popover>
       <Popover
         label="Autonomy"
+        triggerLabel={`${autonomyLabel(chosen)}. Autonomy`}
         className="chat-autonomy-popover"
         trigger={
           <>
@@ -273,6 +351,27 @@ function OptionPicker({
     );
   }
   const { choices, current } = option.kind;
+  if (option.category === "model" || option.category === "effort") {
+    return (
+      <div
+        className="ui-field"
+        data-testid="picker-option"
+        data-test-option-id={option.id}
+        data-test-saving={String(saving !== null)}
+        data-test-value={saving?.type === "choice" ? saving.value : current}
+      >
+        <span className="picker-option-label">{label}</span>
+        <PickerChoices
+          label={option.name}
+          choices={choices}
+          value={saving?.type === "choice" ? saving.value : current}
+          enabled={enabled}
+          effort={option.category === "effort"}
+          onChoose={(value) => onSet(option.id, { type: "choice", value })}
+        />
+      </div>
+    );
+  }
   const groups = [...new Set(choices.map((choice) => choice.group))];
   const render = (group: string | null) =>
     choices
