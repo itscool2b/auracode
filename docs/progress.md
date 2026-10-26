@@ -1832,3 +1832,12 @@ checkpoint: the network scheduler, blob transfer and transcript chunk import are
 - Settings now includes Account-only configuration inventory, paginated items, device-only controls, explicit per-item merge choices, four-version review, confirmed removals and encrypted receipt recovery. Expired/stale one-use reviews require a new review; partial results show recovery instead of success.
 - Both Chromium and WebKit pass the actual production component with synthetic responses: Local profile gating, no automatic apply, manual conflict choice, pagination, stale review, partial apply, explicit rollback, removal confirmation and accessibility. The dark Orbit review screenshot was inspected. Source formatting passes.
 - MCP manual choices retain all present devices' local setup requirement names. Codex plugin and marketplace declarations require a native vendor workflow. Two added integration regressions compile, but Windows Application Control blocked this new executable with error 4551 before execution; these tests remain pending for qualified execution. No policy workaround was attempted.
+### Bounded encrypted blob exchange
+
+The Account writer now exposes typed transfer work independently of HTTP. It releases config heads
+only after acknowledgement of the exact uploaded ciphertext, authenticates downloaded blobs against
+the requested item/head/content hash, and saves blob availability transactionally. Transfer snapshots
+bound uploads to one blob and downloads to four; queued requests have byte/batch limits. Replayed
+acknowledgements are idempotent, and a mismatched or truncated download leaves the snapshot unavailable.
+Both focused exchange regressions and core all-target Clippy pass on Windows. Network attachment and
+compacted transcript transfer remain in progress; this checkpoint made no network requests.

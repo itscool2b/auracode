@@ -8,10 +8,10 @@ use zeroize::Zeroizing;
 type PortResult<T> = std::result::Result<T, ConfigPortError>;
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Payload {
+pub(super) struct Payload {
     schema_version: u32,
-    id: String,
-    head: ConfigSnapshotHead,
+    pub(super) id: String,
+    pub(super) head: ConfigSnapshotHead,
     scope: ConfigScope,
 }
 
@@ -173,7 +173,7 @@ fn validate_id(context: &SyncContext, id: &str) -> PortResult<String> {
         .config_record_id(&context.identity.account, id)
         .map_err(|_| ConfigPortError::Invalid)
 }
-fn decode(context: &SyncContext, record: &EncryptedRecord) -> PortResult<Payload> {
+pub(super) fn decode(context: &SyncContext, record: &EncryptedRecord) -> PortResult<Payload> {
     decode_with(&context.identity, &context.key, record)
 }
 fn decode_with(
@@ -440,6 +440,13 @@ fn read_snapshot(
         &SealedPayload { nonce, ciphertext },
     )
     .map_err(|_| ConfigPortError::Invalid)?;
+    validate_blob(id, head, &bytes)
+}
+pub(super) fn validate_blob(
+    id: &str,
+    head: &ConfigSnapshotHead,
+    bytes: &[u8],
+) -> PortResult<Zeroizing<Vec<u8>>> {
     if bytes.len() < 4 {
         return Err(ConfigPortError::Invalid);
     }

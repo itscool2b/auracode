@@ -563,8 +563,13 @@ pub(crate) fn identifier(value: &str) -> Result<()> {
 pub(crate) fn encode(bytes: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
-pub(crate) fn decode(value: &str, max: usize) -> Result<Zeroizing<Vec<u8>>> {
-    if value.len() > max.div_ceil(3) * 4 {
+/// Decode canonical unpadded base64url with a caller-supplied byte bound before allocation.
+pub fn decode(value: &str, max: usize) -> Result<Zeroizing<Vec<u8>>> {
+    let encoded_limit = max
+        .div_ceil(3)
+        .checked_mul(4)
+        .ok_or(CryptoError::TooLarge)?;
+    if value.len() > encoded_limit {
         return Err(CryptoError::TooLarge);
     }
     let bytes = Zeroizing::new(

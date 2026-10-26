@@ -12,6 +12,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::store::Store;
 pub(crate) mod capture;
 pub(crate) mod config;
+pub mod exchange;
 pub mod journal;
 mod projection;
 
@@ -45,6 +46,8 @@ const MAX_CURSOR: u64 = (1 << 53) - 1;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
+    #[error("The account profile is closed or its sync writer is unavailable.")]
+    Unavailable,
     #[error(
         "The sync state could not be saved. Its previous cursor and outgoing edits are retained."
     )]
@@ -132,11 +135,7 @@ impl<'a> SyncLedger<'a> {
     /// Coalesced unsent heads, with a fixed wire batch bound. Unsupported items stay durable but are
     /// excluded until their newer schema can be processed. Never delete merely because HTTP sent.
     pub fn outgoing(&self) -> Result<Vec<EncryptedRecord>> {
-        let mut query = self.conn.prepare("SELECT o.record_json FROM sync_outbox o WHERE NOT EXISTS(SELECT 1 FROM sync_deferred d WHERE d.collection=o.collection AND d.id=o.id) AND (o.collection<>'config' OR EXISTS(SELECT 1 FROM sync_blob_refs r JOIN sync_blobs b ON b.id=r.blob_id WHERE r.collection=o.collection AND r.id=o.id AND b.uploaded=1)) ORDER BY o.hlc,o.collection,o.id LIMIT 32")?;
-        query
-            .query_map([], |row| row.get::<_, String>(0))?
-            .map(|row| decode_record(&row?))
-            .collect()
+        outgoing(self.conn)
     }
 
     /// The callback updates the application's projection inside this same transaction. An error or
@@ -278,6 +277,14 @@ impl<'a> SyncLedger<'a> {
             })
             .collect()
     }
+}
+
+fn outgoing(conn: &Connection) -> Result<Vec<EncryptedRecord>> {
+    let mut query = conn.prepare("SELECT o.record_json FROM sync_outbox o WHERE NOT EXISTS(SELECT 1 FROM sync_deferred d WHERE d.collection=o.collection AND d.id=o.id) AND (o.collection<>'config' OR EXISTS(SELECT 1 FROM sync_blob_refs r JOIN sync_blobs b ON b.id=r.blob_id WHERE r.collection=o.collection AND r.id=o.id AND b.uploaded=1)) ORDER BY o.hlc,o.collection,o.id LIMIT 32")?;
+    query
+        .query_map([], |row| row.get::<_, String>(0))?
+        .map(|row| decode_record(&row?))
+        .collect()
 }
 
 fn cursor(conn: &Connection) -> Result<u64> {

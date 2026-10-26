@@ -146,6 +146,11 @@ pub(crate) enum Request {
         reply: oneshot::Sender<Result<(), StoreError>>,
     },
     #[cfg(feature = "account-sync")]
+    SyncExchange {
+        command: crate::sync::exchange::Command,
+        reply: oneshot::Sender<crate::sync::Result<crate::sync::exchange::Reply>>,
+    },
+    #[cfg(feature = "account-sync")]
     Config {
         command: crate::sync::config::Command,
         reply:
@@ -474,6 +479,8 @@ fn work_bytes(work: &Work) -> usize {
         Work::Request(Request::Composer { command, .. }) => command.bytes(),
         #[cfg(feature = "account-sync")]
         Work::Request(Request::Config { command, .. }) => command.bytes(),
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::SyncExchange { command, .. }) => command.bytes(),
         Work::Request(Request::Search { query, .. }) => 256 + query.len(),
         Work::Request(_) => 256,
         #[cfg(test)]
@@ -652,6 +659,8 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::ConfigureSync { .. }) => "configure_sync",
         #[cfg(feature = "account-sync")]
         Work::Request(Request::Config { .. }) => "config_sync",
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::SyncExchange { .. }) => "sync_exchange",
         Work::Request(Request::Flush { .. }) => "flush",
         Work::Op(op) => op_name(op),
         Work::Request(Request::CreateChat { .. }) => "create_chat",
@@ -1239,6 +1248,16 @@ impl Writer {
                     Err(StoreError::Damaged(DAMAGED.into()))
                 } else {
                     self.write_tx(|conn| super::steering::execute(conn, now, command))
+                };
+                let _ = reply.send(result);
+            }
+            #[cfg(feature = "account-sync")]
+            Request::SyncExchange { command, reply } => {
+                let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {
+                    (Some(store), Some(context), Mode::Normal) => {
+                        crate::sync::exchange::execute(store, context, command)
+                    }
+                    _ => Err(crate::sync::SyncError::Unavailable),
                 };
                 let _ = reply.send(result);
             }

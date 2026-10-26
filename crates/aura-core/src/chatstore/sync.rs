@@ -7,6 +7,25 @@ use zeroize::Zeroizing;
 mod tests;
 
 impl ChatStore {
+    /// Encrypted transfer requests have the same FIFO ownership and profile binding as local edits.
+    /// Once queued, their transaction finishes even if a network task stops waiting for its reply.
+    pub async fn sync_exchange(
+        &self,
+        command: crate::sync::exchange::Command,
+    ) -> crate::sync::Result<crate::sync::exchange::Reply> {
+        use crate::sync::SyncError;
+        command.validate()?;
+        let (reply, answer) = oneshot::channel();
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| SyncError::Unavailable)?
+            .ok_or(SyncError::Unavailable)?;
+        self.shared.push(
+            Work::Request(Request::SyncExchange { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| SyncError::Unavailable)?
+    }
     /// Bound to this writer for its lifetime. Closing the profile invalidates every retained port;
     /// a new profile can never be selected through a port argument.
     pub fn config_sync_port(self: &Arc<Self>) -> Arc<dyn ConfigSyncPort> {
