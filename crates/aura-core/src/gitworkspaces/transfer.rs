@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 use aura_protocol::git::GitFileState;
 use cap_fs_ext::DirExt;
@@ -20,6 +20,7 @@ const PATH_LIMIT: usize = 5000;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Snapshot {
     files: BTreeMap<String, Option<Fingerprint>>,
+    protected: Vec<PathBuf>,
     pub(super) warnings: Vec<String>,
 }
 
@@ -33,7 +34,39 @@ fn file_error(error: impl std::fmt::Display) -> GitError {
     GitError::Message(error.to_string())
 }
 
-pub(super) fn snapshot(root: &Path, files: &[GitFileState]) -> Result<Snapshot> {
+pub(super) fn snapshot(
+    root: &Path,
+    files: &[GitFileState],
+    protected: &[PathBuf],
+) -> Result<Snapshot> {
+    let canonical_root = root.canonicalize()?;
+    let root = canonical_root.as_path();
+    let protected = protected
+        .iter()
+        .map(|path| {
+            let path = if path.is_absolute() {
+                path.clone()
+            } else {
+                root.join(path)
+            };
+            path.canonicalize().unwrap_or_else(|_| {
+                let mut normalized = PathBuf::new();
+                for component in path.components() {
+                    if component == Component::ParentDir {
+                        normalized.pop();
+                    } else if component != Component::CurDir {
+                        normalized.push(component);
+                    }
+                }
+                normalized
+            })
+        })
+        .collect::<Vec<_>>();
+    if protected.iter().any(|path| root.starts_with(path)) {
+        return Err(invalid(
+            "Agent configuration and app profile folders cannot supply worktree copies.",
+        ));
+    }
     let paths = files
         .iter()
         .flat_map(|file| std::iter::once(&file.path).chain(file.original_path.iter()))
@@ -45,6 +78,7 @@ pub(super) fn snapshot(root: &Path, files: &[GitFileState]) -> Result<Snapshot> 
     }
     let mut snapshot = Snapshot {
         files: BTreeMap::new(),
+        protected,
         warnings: Vec::new(),
     };
     let mut folded = BTreeSet::new();
@@ -56,7 +90,18 @@ pub(super) fn snapshot(root: &Path, files: &[GitFileState]) -> Result<Snapshot> 
                 "Changed filenames collide on a case-insensitive filesystem. Resolve the collision before bringing changes.",
             ));
         }
-        match scan::read(root, path) {
+        let read = if snapshot
+            .protected
+            .iter()
+            .any(|protected| root.join(path).starts_with(protected))
+        {
+            Err(crate::checkpoints::CheckpointError::Message(
+                "Protected root".into(),
+            ))
+        } else {
+            scan::read(root, path)
+        };
+        match read {
             Ok(value) => {
                 let fingerprint = value.map(|(fingerprint, _)| fingerprint);
                 bytes += fingerprint.as_ref().map_or(0, |value| value.bytes as usize);
@@ -160,6 +205,36 @@ mod tests {
     use super::*;
 
     #[test]
+    fn configured_provider_roots_are_excluded_before_copying_ordinary_filenames() {
+        let source = tempfile::tempdir().expect("source");
+        let custom = source.path().join("custom-provider-root");
+        std::fs::create_dir(&custom).expect("custom config");
+        std::fs::write(custom.join("ordinary.data"), b"owned sensitive fixture")
+            .expect("fixture only");
+        let files = vec![GitFileState {
+            path: "custom-provider-root/ordinary.data".into(),
+            index: "?".into(),
+            worktree: "?".into(),
+            original_path: None,
+        }];
+        let snapshot = snapshot(source.path(), &files, std::slice::from_ref(&custom))
+            .expect("bounded exclusion");
+        assert!(snapshot.files.is_empty());
+        assert!(
+            snapshot
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("ordinary.data"))
+        );
+        assert!(
+            contents(source.path(), &snapshot)
+                .expect("no protected reads")
+                .is_empty()
+        );
+        assert!(super::snapshot(&custom, &[], std::slice::from_ref(&custom)).is_err());
+    }
+
+    #[test]
     fn a_destination_edit_is_preserved_before_any_copy() {
         let source = tempfile::tempdir().expect("source");
         let destination_root = tempfile::tempdir().expect("destination");
@@ -172,7 +247,7 @@ mod tests {
             worktree: "M".into(),
             original_path: None,
         }];
-        let snapshot = snapshot(source.path(), &files).expect("snapshot");
+        let snapshot = snapshot(source.path(), &files, &[]).expect("snapshot");
         let contents = contents(source.path(), &snapshot).expect("contents");
         let baseline = destination(destination_root.path(), &contents).expect("baseline");
         std::fs::write(destination_root.path().join("file.txt"), b"newer work")

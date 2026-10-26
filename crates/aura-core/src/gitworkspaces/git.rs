@@ -14,6 +14,7 @@ use super::{GitError, Result};
 
 pub(super) struct Git {
     pub(super) program: PathBuf,
+    pub(super) protected: Vec<PathBuf>,
     env: Arc<ResolvedEnv>,
     registry: Arc<LeftoverRegistry>,
     hooks: PathBuf,
@@ -26,6 +27,37 @@ impl Git {
         hooks: PathBuf,
     ) -> Result<Self> {
         let mut env = (*env.get().await).clone();
+        let value = |name: &str| {
+            env.vars
+                .get(&EnvKey::from(name))
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+        };
+        let home = value("USERPROFILE").or_else(|| value("HOME"));
+        let mut protected = Vec::new();
+        for (variable, default) in [
+            ("CLAUDE_CONFIG_DIR", ".claude"),
+            ("CODEX_HOME", ".codex"),
+            ("PI_CODING_AGENT_DIR", ".pi/agent"),
+        ] {
+            if let Some(path) =
+                value(variable).or_else(|| home.as_ref().map(|home| home.join(default)))
+            {
+                protected.push(path);
+            }
+        }
+        if let Some(home) = home {
+            for suffix in [
+                ".claude.json",
+                ".pi",
+                ".omp",
+                ".grok",
+                ".config",
+                ".local/share",
+            ] {
+                protected.push(home.join(suffix));
+            }
+        }
         // An inherited alternate index, worktree, configuration injection or trace destination
         // must never redirect an operation away from the folder the user reviewed.
         env.vars.retain(|key, _| {
@@ -42,6 +74,7 @@ impl Git {
         })?;
         Ok(Self {
             program,
+            protected,
             env: Arc::new(env),
             registry,
             hooks,

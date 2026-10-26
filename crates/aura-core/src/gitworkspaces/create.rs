@@ -42,8 +42,14 @@ impl GitWorkspaces {
         let transfer = if input.bring_changes {
             let root = source.root.clone();
             let files = source.view.files.clone();
+            let protected = git
+                .protected
+                .iter()
+                .cloned()
+                .chain(self.root.parent().map(Path::to_path_buf))
+                .collect::<Vec<_>>();
             Some(
-                tokio::task::spawn_blocking(move || transfer::snapshot(&root, &files))
+                tokio::task::spawn_blocking(move || transfer::snapshot(&root, &files, &protected))
                     .await
                     .map_err(|_| invalid("Could not inspect working-file contents."))??,
             )
@@ -188,9 +194,15 @@ impl GitWorkspaces {
         let contents = if let Some(snapshot) = prepared.transfer {
             let root = current.root.clone();
             let files = current.view.files.clone();
+            let protected = git
+                .protected
+                .iter()
+                .cloned()
+                .chain(self.root.parent().map(Path::to_path_buf))
+                .collect::<Vec<_>>();
             Some(
                 tokio::task::spawn_blocking(move || {
-                    if transfer::snapshot(&root, &files)? != snapshot {
+                    if transfer::snapshot(&root, &files, &protected)? != snapshot {
                         return Err(invalid(
                             "Working-file contents changed after preview. Review isolation again.",
                         ));

@@ -1414,6 +1414,14 @@ exclusions and concurrent source/destination edits. The final copy checks and co
 all-target Clippy pass. DTOs are unchanged. Setup, PR creation and remaining M4 acceptance stay pending;
 no remote CI, push or real-agent work ran.
 
+A follow-up review added configured provider-root and app-profile exclusions to bringing changes.
+Custom CLAUDE_CONFIG_DIR, CODEX_HOME and PI_CODING_AGENT_DIR locations are resolved and bound into the
+source snapshot before file contents are read, even when their filenames look ordinary. Known home
+configuration locations are protected too. An owned temporary fixture verifies exclusion and rejects
+using a protected root itself as a source. The focused regression and current Git suite pass on
+Windows after a normal rebuild; the earlier test executable had been blocked by Application Control.
+Core, CLI and desktop all-target Clippy pass. No policy or security setting was changed.
+
 The PR helper foundation now accepts at most 1 MiB of stdin and closes it after writing, keeping
 reviewed bodies out of process arguments and temporary files. It preserves owned-tree cleanup,
 concurrent bounded output draining and timeout/cancellation behavior. Successful pipe delivery does
