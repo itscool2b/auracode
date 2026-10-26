@@ -1058,7 +1058,10 @@ impl Answer {
 /// session-scope ones (Hermes), the session total on a spawn's first turn and deltas after it
 /// (spec 5.5.4).
 pub fn expected_scope(spec: &AgentSpec, first_of_spawn: bool) -> UsageScope {
-    if matches!(spec.kind, DriverKind::Mock | DriverKind::Claude) {
+    if matches!(
+        spec.kind,
+        DriverKind::Mock | DriverKind::Claude | DriverKind::Codex
+    ) {
         return UsageScope::Turn;
     }
     match dialect_for(spec.dialect).prompt_usage_scope() {

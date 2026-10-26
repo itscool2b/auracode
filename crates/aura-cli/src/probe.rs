@@ -143,6 +143,9 @@ pub async fn run(
         .detector
         .spec(&args.agent)
         .ok_or_else(|| crate::unknown_agent(headless, &args.agent))?;
+    if spec.kind == DriverKind::Codex {
+        return Err(CliError::Message("The native Codex protocol probe is pending. Use the schema and replay tests; codex-acp retains its existing probe.".into()));
+    }
     let mut probe = Probe {
         headless,
         report: Report::new(out),
@@ -2319,6 +2322,16 @@ fn cheapest_of<'a>(choices: &[&'a ConfigChoice]) -> Option<&'a ConfigChoice> {
 /// The native modes an autonomy level may land on: the dialect's candidates (spec 5.5.2), the
 /// demo agent's own table for the demo agent.
 pub fn expected_modes(spec: &AgentSpec, level: Autonomy) -> Vec<Option<String>> {
+    if spec.kind == DriverKind::Codex {
+        return vec![Some(
+            match level {
+                Autonomy::FullAuto => "never",
+                Autonomy::AutoEdit => "on-request",
+                Autonomy::Ask => "untrusted",
+            }
+            .into(),
+        )];
+    }
     if spec.kind == DriverKind::Claude {
         return match level {
             Autonomy::FullAuto => {

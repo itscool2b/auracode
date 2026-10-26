@@ -173,6 +173,30 @@ fn build_catalog() -> Vec<AgentSpec> {
             last_verified: "adapter 0.95.0 with Claude Code 2.1.310",
         },
         AgentSpec {
+            id: "codex",
+            name: "Codex",
+            description: "Your Codex CLI, driven directly through its native app-server.",
+            kind: DriverKind::Codex,
+            dialect: "codex",
+            recipe: Recipe::NativeBinary {
+                user_binary: UserBinary {
+                    label: "Codex",
+                    program: "codex",
+                    env: "CODEX_PATH",
+                    version_args: &["--version"],
+                    min_version: "0.162.1",
+                },
+                args: &["app-server", "--listen", "stdio://"],
+            },
+            startup_timeout: START_TIMEOUT,
+            turns_survive_process: false,
+            daemons: vec![DaemonMatch {
+                program: Some("codex".into()),
+                args_in_order: vec!["app-server".into(), "daemon".into()],
+            }],
+            last_verified: "Codex 0.162.1 schema and fixtures (Windows); live verification pending",
+        },
+        AgentSpec {
             id: "codex-acp",
             name: "Codex (ACP)",
             description: "Your Codex CLI, driven through the codex-acp adapter.",
@@ -274,7 +298,17 @@ mod tests {
     #[test]
     fn the_catalog_lists_native_claude_before_its_compatibility_adapter() {
         let ids: Vec<&str> = catalog().iter().map(|spec| spec.id).collect();
-        assert_eq!(ids, ["hermes", "claude", "claude-acp", "codex-acp", "mock"]);
+        assert_eq!(
+            ids,
+            [
+                "hermes",
+                "claude",
+                "claude-acp",
+                "codex",
+                "codex-acp",
+                "mock"
+            ]
+        );
         assert_eq!(ids.iter().collect::<HashSet<_>>().len(), ids.len());
         assert_eq!(get("codex-acp").map(|spec| spec.name), Some("Codex (ACP)"));
         assert!(get("agent").is_none());

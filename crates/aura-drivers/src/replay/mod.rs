@@ -41,6 +41,7 @@ pub use golden::{assert_golden, golden_path};
 
 use crate::acp::AcpDriver;
 use crate::claude::ClaudeDriver;
+use crate::codex::CodexDriver;
 use crate::driver::{
     AgentDriver, AgentSpawner, DriverCommand, DriverContext, DriverEvent, DriverTimings,
     EventReceiver, LoggedCommand, NativeStartOptions, PermissionOutcome, SessionSetup, StopPlan,
@@ -107,6 +108,11 @@ impl AgentSpawner for ReplaySpawner {
 fn replay_launch(agent_id: &str) -> LaunchSpec {
     let (program, args, set_env): (&str, &[&str], &[(&str, &str)]) = match agent_id {
         "claude" => ("/opt/agents/bin/claude", &[], &[]),
+        "codex" => (
+            "/opt/agents/bin/codex",
+            &["app-server", "--listen", "stdio://"],
+            &[],
+        ),
         "hermes" => ("/opt/agents/bin/hermes", &["acp"], &[]),
         "claude-acp" => (
             "/opt/agents/bin/node",
@@ -275,7 +281,10 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
         }),
         setup,
     };
-    let driver: Box<dyn AgentDriver> = if native {
+    let codex = ctx.setup.agent_id == "codex" || ctx.setup.dialect == "codex";
+    let driver: Box<dyn AgentDriver> = if codex {
+        Box::new(CodexDriver::new())
+    } else if native {
         Box::new(ClaudeDriver::new())
     } else {
         Box::new(AcpDriver::new())
@@ -294,6 +303,7 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
         }
     };
     let mut agent = FakeAgent::new(end);
+    agent.strict_jsonrpc(codex);
     if native && let Some(recorded) = start["native_session_id"].as_str() {
         agent.native_session(recorded, &native_session);
     }

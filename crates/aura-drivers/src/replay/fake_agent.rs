@@ -53,6 +53,7 @@ pub(crate) struct FakeAgent {
     /// Recorded request id (as JSON text) to the live id the driver used.
     ids: HashMap<String, Value>,
     native: NativeCorrelation,
+    strict_jsonrpc: bool,
     /// The agent's requests by id (as JSON text), in the order made.
     requests: Vec<(String, AgentRequest)>,
     pub(crate) mismatches: Vec<String>,
@@ -68,6 +69,7 @@ impl FakeAgent {
             eof_sent: false,
             ids: HashMap::new(),
             native: NativeCorrelation::default(),
+            strict_jsonrpc: false,
             requests: Vec::new(),
             mismatches: Vec::new(),
         }
@@ -77,6 +79,10 @@ impl FakeAgent {
         self.native
             .sessions
             .insert(recorded.into(), Value::String(live.into()));
+    }
+
+    pub(crate) fn strict_jsonrpc(&mut self, enabled: bool) {
+        self.strict_jsonrpc = enabled;
     }
 
     fn mismatch(&mut self, record: usize, what: String) {
@@ -124,6 +130,7 @@ impl FakeAgent {
             let recorded = message.get("id").map(Value::to_string).unwrap_or_default();
             match self.ids.get(&recorded) {
                 Some(live) => message["id"] = live.clone(),
+                None if self.strict_jsonrpc => {}
                 None => self.mismatch(
                     record,
                     format!("a reply to request {recorded}, which the driver never sent"),
@@ -141,6 +148,12 @@ impl FakeAgent {
                     orphaned: false,
                 },
             ));
+        }
+        if self.strict_jsonrpc
+            && message["method"] == "serverRequest/resolved"
+            && let Some(id) = message.pointer("/params/requestId")
+        {
+            self.answer_request(id);
         }
         self.line(FakeLine::Line(message.to_string()));
     }
@@ -364,7 +377,17 @@ impl FakeAgent {
             }
             _ => {}
         }
-        if let Some(method) = method
+        if self.strict_jsonrpc {
+            let mut normalized = expected.clone();
+            if expected_kind == "request" {
+                normalized["id"] = actual["id"].clone();
+            }
+            if normalized != *actual {
+                found.push(format!(
+                    "Codex payload differs: expected {normalized}, received {actual}"
+                ));
+            }
+        } else if let Some(method) = method
             && COMPARED_PARAMS.contains(&method)
             && expected.get("params") != actual.get("params")
         {

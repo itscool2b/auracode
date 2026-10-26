@@ -818,7 +818,17 @@ mod tests {
         let detector = live();
         let entries = detector.detect_all(true).await;
         let ids: Vec<&str> = entries.iter().map(|entry| entry.id.as_str()).collect();
-        assert_eq!(ids, ["hermes", "claude", "claude-acp", "codex-acp", "mock"]);
+        assert_eq!(
+            ids,
+            [
+                "hermes",
+                "claude",
+                "claude-acp",
+                "codex",
+                "codex-acp",
+                "mock"
+            ]
+        );
         let reasons: Vec<Availability> = entries
             .iter()
             .map(|entry| entry.availability.clone())
@@ -834,6 +844,9 @@ mod tests {
                 },
                 Availability::Missing {
                     reason: "Node.js 22 or newer is required (found none).".into()
+                },
+                Availability::Missing {
+                    reason: "codex was not found on your PATH.".into()
                 },
                 Availability::Missing {
                     reason: "Node.js 22 or newer is required (found none).".into()

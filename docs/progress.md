@@ -20,6 +20,21 @@ Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b 
 
 ## Remaining, in order
 
+M1c is being implemented independently on `m1c-codex-native` from M1b checkpoint `08c19b1`.
+The native Codex driver uses an owned stdio app-server, initializes once, persists the native thread
+ID, separates turn completion from idle, and handles approvals, grouped questions, model/effort
+settings and account quota updates. Initial verification covers 20 native unit tests, seven synthetic
+native replay fixtures and conformance to the installed Codex 0.162.1 generated schema. Existing ACP
+and Claude fixtures remain unchanged. No real prompts, credential/config inspection or vendor update
+were used. This is a work checkpoint, not milestone acceptance.
+
+M1c requirements still pending: native CLI probe integration and opt-in live verification, generated
+schema verification for the historical 0.164.0 baseline, frontend and complete workspace gates,
+independent review, and integration with later M1b contract fixes. Steer, fork, image attachments,
+additional directories, rewind and secret input are explicitly unavailable until their complete
+core/UI and attachment paths exist. Unsupported MCP elicitation is cancelled with a visible notice.
+Native thread listing has no user-facing library seam yet. No M1c PR has been opened.
+
 M1b is in progress on `m1b-claude-native`. Native discovery, driver dispatch, transcript mapping,
 permissions, multi-question UI, run-idle gating and shared native-session ownership are implemented.
 Native live verification, recorded fixture curation, review fixes and local workspace gates are
