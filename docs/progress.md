@@ -20,6 +20,14 @@ Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b 
 
 ## Remaining, in order
 
+M1b is in progress on `m1b-claude-native`. The native envelope parser preserves control requests,
+responses, cancellations, hooks and stream frames, and rejects malformed controls without putting
+their contents in diagnostics. It passes recorded Claude fixtures and six new parser tests.
+Standalone subscription details are now redacted from complete and truncated protocol logs.
+Validation passed: 163 process unit tests, 267 driver/conformance/replay tests, and targeted Clippy.
+The native driver is not registered or usable yet; session lifecycle, controls, UI integration and
+real-agent acceptance tests remain outstanding. The foundation is in PR #4 and has not been merged.
+
 1. M1b: native Claude driver, protocol replay, session readiness, permissions/questions, smoke tests.
 2. M1c: native Codex app-server driver and generated-schema compatibility.
 3. M1d: native Pi and remaining ACP integrations.
