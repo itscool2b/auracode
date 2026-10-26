@@ -156,6 +156,116 @@ async function freePort() {
   return port;
 }
 
+/** Ends a process this harness started, with every descendant it launched. */
+async function stopTree(child) {
+  if (child.exitCode !== null || child.signalCode !== null || !child.pid) return;
+  const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
+    windowsHide: true,
+    stdio: "ignore",
+  });
+  await new Promise((done) => {
+    killer.once("exit", done);
+    killer.once("error", done);
+  });
+  const deadline = Date.now() + 10_000;
+  while (child.exitCode === null && child.signalCode === null && Date.now() < deadline)
+    await delay(50);
+}
+
+/** The runner's visible desktop, to show a dialog or blank window that no session can report. */
+export async function captureDesktop(path) {
+  const script = [
+    "Add-Type -AssemblyName System.Windows.Forms, System.Drawing",
+    "$b = [System.Windows.Forms.SystemInformation]::VirtualScreen",
+    "$bitmap = New-Object System.Drawing.Bitmap $b.Width, $b.Height",
+    "$graphics = [System.Drawing.Graphics]::FromImage($bitmap)",
+    "$graphics.CopyFromScreen($b.Left, $b.Top, 0, 0, $bitmap.Size)",
+    "$bitmap.Save($env:AURACODE_DESKTOP_CAPTURE, [System.Drawing.Imaging.ImageFormat]::Png)",
+  ].join("; ");
+  const child = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
+    env: { ...process.env, AURACODE_DESKTOP_CAPTURE: path },
+    windowsHide: true,
+    stdio: "ignore",
+  });
+  const exit = await Promise.race([
+    new Promise((done) => {
+      child.once("exit", done);
+      child.once("error", () => done(-1));
+    }),
+    delay(20_000).then(() => "timed out"),
+  ]);
+  await stopTree(child);
+  if (exit !== 0) throw new Error(`desktop capture ${exit}`);
+  return path;
+}
+
+/**
+ * One session attempt straight against the native driver, with its own verbose log. tauri-driver
+ * discards that driver's output, so this separates a proxy failure from a WebView2 attach failure.
+ * Runs only after the proxied attempt and its processes have ended.
+ */
+export async function directSession({ application, nativePath, env, cwd, artifacts }) {
+  const port = await freePort();
+  const log = join(artifacts, "msedgedriver.log");
+  const child = spawn(
+    nativePath,
+    [`--port=${port}`, "--host=127.0.0.1", "--verbose", `--log-path=${log}`],
+    // tauri-driver sets these for the native driver and so for the app it starts.
+    {
+      env: { ...env, TAURI_AUTOMATION: "true", TAURI_WEBVIEW_AUTOMATION: "true" },
+      cwd,
+      windowsHide: true,
+      stdio: "ignore",
+    },
+  );
+  const native = new WebDriver(`http://127.0.0.1:${port}`);
+  const started = Date.now();
+  try {
+    await until(
+      "direct native driver",
+      async () => {
+        try {
+          return (await native.request("GET", "/status", undefined, 2_000))?.ready;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 15_000 },
+    );
+    const result = await native.request(
+      "POST",
+      "/session",
+      {
+        capabilities: {
+          alwaysMatch: {
+            browserName: "webview2",
+            "ms:edgeChromium": true,
+            "ms:edgeOptions": { binary: application, args: [] },
+          },
+        },
+      },
+      60_000,
+    );
+    native.session = result?.sessionId ?? null;
+    return {
+      opened: Boolean(native.session),
+      seconds: (Date.now() - started) / 1000,
+      browserVersion: result?.capabilities?.browserVersion ?? null,
+      log: "msedgedriver.log",
+    };
+  } catch (error) {
+    return {
+      opened: false,
+      seconds: (Date.now() - started) / 1000,
+      error: String(error?.message ?? error),
+      log: "msedgedriver.log",
+    };
+  } finally {
+    await native.close().catch(() => {});
+    await stopTree(child);
+  }
+}
+
 export async function run(args) {
   assert.equal(process.platform, "win32", "this gate needs Windows WebView2");
   assert.equal(
@@ -254,6 +364,11 @@ export async function run(args) {
   } catch (error) {
     report.error = error.stack ?? String(error);
     if (driver.session) await evidence("failure").catch(() => {});
+    else
+      report.desktop = await captureDesktop(join(artifacts, "desktop.png")).then(
+        () => "desktop.png",
+        (failure) => failure.message,
+      );
   } finally {
     try {
       await driver.close();
@@ -277,6 +392,9 @@ export async function run(args) {
     clearTimeout(watchdog);
     process.removeListener("SIGINT", stopOnSignal);
     process.removeListener("SIGTERM", stopOnSignal);
+    // Diagnosis only. It never turns a failed gate into a pass.
+    if (report.runtime === null && !report.cleanup)
+      report.direct = await directSession({ application, nativePath, env, cwd: root, artifacts });
     await writeFile(join(artifacts, "driver.log"), log);
     await writeFile(join(artifacts, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   }
