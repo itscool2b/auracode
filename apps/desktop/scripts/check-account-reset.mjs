@@ -108,6 +108,24 @@ try {
       await page.goto(`${origin}/?preview=account&stage=deleted&active=fixture-profile`);
       await page.getByRole("button", { name: "Review Keep as Local" }).waitFor();
       assert.equal(await page.getByRole("dialog").count(), 0);
+      await page.goto(`${url}?mode=rebind`);
+      await page.getByRole("button", { name: "Choose existing workspace" }).waitFor();
+      assert.deepEqual(JSON.parse(await page.getByLabel("Rebind calls").textContent()), {
+        list: 0,
+        restore: 0,
+      });
+      await page.getByRole("button", { name: "Choose existing workspace" }).click();
+      assert.equal(
+        await page.getByRole("button", { name: "Restore workspace binding" }).isDisabled(),
+        true,
+      );
+      assert.equal(await page.locator("option[value='local']").count(), 0);
+      await page.getByLabel("Existing Account workspace").selectOption("synthetic-profile");
+      await page.getByRole("button", { name: "Restore workspace binding" }).click();
+      await page.getByRole("alert").waitFor();
+      assert.equal(await page.getByLabel("Bound profile").textContent(), "");
+      await page.getByRole("button", { name: "Restore workspace binding" }).click();
+      await page.getByLabel("Bound profile").filter({ hasText: "synthetic-profile" }).waitFor();
       assert.deepEqual(errors, []);
       console.log(
         `${name}: explicit destructive review, cancel, retained failure, exact retry and committed local completion passed`,

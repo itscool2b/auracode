@@ -18,6 +18,7 @@ pub mod exchange;
 pub mod journal;
 pub mod managed_config;
 mod projection;
+pub(crate) mod rebind;
 pub(crate) mod transcript;
 
 /// An unlocked Account writer's identity and encryption authority. Never exported through IPC.

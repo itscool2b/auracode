@@ -2347,3 +2347,9 @@ checked. Live preview health/configuration return 200/no-store, missing authenti
 foreign Origin returns 403. Exact deployment and backup hashes are recorded in infra/README.md.
 Website static upload and signed-in multi-device acceptance remain pending. No real sign-in, email,
 account deletion/reset, GitHub publication or production data mutation occurred.
+### Existing Account workspace binding recovery
+
+- Added explicit selection of an existing Account profile after recovering its account key into a new secure store. Matching account, key generation and fingerprint are verified against the existing encrypted database before its binding is saved; missing/empty/wrong-key profiles are preserved and refused.
+- Changed device registrations reissue queued envelopes with new sender clocks while retaining field clocks and ciphertext payload contents. Config records receive a matching encrypted header and fresh blob; old immutable blobs remain available to existing reviews and merge bases.
+- Strict profile ownership, no-follow file opens, retained file identities and the native transition gate prevent restoring an open or mismatched recovery profile. Secure-store save failures remain retryable without discarding queued edits or cursors.
+- Ten core Account tests and the config header/blob regression pass with SQLCipher, including reset binding failure recovery. Chromium and WebKit cover explicit workspace selection, wrong-key failure and retry. The native full command binding export remains an integrated gate.

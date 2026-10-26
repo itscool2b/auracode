@@ -20,6 +20,7 @@ mod error;
 mod index;
 mod network;
 pub mod passphrase;
+mod rebind;
 mod reset;
 pub use audit::audit_profile;
 use index::Index;
@@ -292,6 +293,7 @@ impl Accounts {
         let mut inner = self.action()?;
         inner.challenge = None;
         inner.recovery = None;
+        inner.reset = None;
         let result = account(&mut inner)?
             .sign_out()
             .await

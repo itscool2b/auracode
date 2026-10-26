@@ -16,6 +16,7 @@ import { Modal } from "../chat/Modal";
 import { AccountVault } from "./AccountVault";
 import { AccountVerification } from "./AccountVerification";
 import { KeepAsLocalPanel } from "./KeepAsLocalPanel";
+import { RebindProfilePanel } from "./RebindProfilePanel";
 import { ResetSyncPanel } from "./ResetSyncPanel";
 import { SignOutDialog } from "./SignOutDialog";
 import "./account.css";
@@ -715,6 +716,14 @@ export function AccountPanel({
         {showVault ? "Close secure storage" : "Secure storage"}
       </button>
       {showVault ? <AccountVault onUnlocked={() => setGeneration((value) => value + 1)} /> : null}
+      {status?.local_key_available && !status.profile_id ? (
+        <RebindProfilePanel
+          key={status.account_id}
+          profileId={recoveryOnly ? recoveryProfileId : null}
+          disabled={locked}
+          onStatus={setStatus}
+        />
+      ) : null}
       {!recoveryOnly && status?.account_id && status.access !== "deleted" ? (
         <ResetSyncPanel
           key={status.account_id}

@@ -58,6 +58,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::accounts::account_reset_status,
             crate::accounts::account_reset_review,
             crate::accounts::account_reset_confirm,
+            crate::accounts::account_rebind_profile,
             crate::accounts::account_reset_retry,
             crate::accounts::account_reset_cancel,
             crate::accounts::account_request_code,

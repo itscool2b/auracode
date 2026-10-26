@@ -349,6 +349,51 @@ pub async fn account_status(state: State<'_, AppState>) -> Result<AccountStatus,
 }
 #[tauri::command]
 #[specta::specta]
+pub async fn account_rebind_profile(
+    state: State<'_, AppState>,
+    profile_id: String,
+) -> Result<AccountStatus, AccountFailure> {
+    let permit = state.transition.clone().try_lock_owned().map_err(|_| {
+        failure(
+            AccountFailureCode::Unavailable,
+            "Another profile operation is in progress.",
+        )
+    })?;
+    let info = state.app_info();
+    admit(
+        state.quit.is_quitting(),
+        info.profile_switching,
+        info.config_profile_recovery.as_ref(),
+        AccountAction::RecoverAccess,
+    )?;
+    if info
+        .config_profile_recovery
+        .as_ref()
+        .is_some_and(|pending| pending.owner_profile.as_deref() != Some(profile_id.as_str()))
+        || (state.chats().is_some()
+            && info
+                .profile
+                .as_ref()
+                .is_some_and(|profile| profile.id == profile_id))
+    {
+        return Err(failure(
+            AccountFailureCode::InvalidState,
+            "Close this workspace before restoring its secure-store binding. Configuration recovery can restore only its owning Account.",
+        ));
+    }
+    let service = state.accounts.clone();
+    owned(permit, async move {
+        service
+            .get()
+            .await?
+            .rebind_profile(&profile_id, aura_core::time::now_millis().max(0) as u64)
+            .await
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn account_reset_status(
     state: State<'_, AppState>,
 ) -> Result<AccountResetStatus, AccountFailure> {

@@ -5,6 +5,52 @@ use crate::{
 };
 use std::sync::Arc;
 
+#[test]
+fn device_rebinding_reissues_config_header_and_blob_without_losing_old_review_snapshot() {
+    let (_temp, mut store, context) = fixture();
+    let id = "a".repeat(64);
+    let old = publish_one(&mut store, &context, &id, None, b"retained config snapshot");
+    let wire = validate_id(&context, &id).unwrap();
+    let mut current = context.clone();
+    current.identity.device = "replacement-device".into();
+    let mut clock = Clock::new(&current.identity.device).unwrap();
+    let tx = store.conn_mut().transaction().unwrap();
+    crate::sync::rebind::outgoing_for_device(
+        &tx,
+        &current.identity,
+        &current.key,
+        &mut clock,
+        crate::time::now_millis() as u64,
+    )
+    .unwrap();
+    tx.commit().unwrap();
+    let record = head(store.conn(), "config", &wire).unwrap().unwrap();
+    assert_eq!(
+        record.hlc.parse::<Hlc>().unwrap().device(),
+        "replacement-device"
+    );
+    let payload = decode(&current, &record).unwrap();
+    assert_eq!(payload.head.revision, record.hlc);
+    assert_ne!(payload.head.blob_id, old.blob_id);
+    assert_eq!(
+        &*read_snapshot(store.conn(), &current, &id, &payload.head).unwrap(),
+        b"retained config snapshot"
+    );
+    assert_eq!(
+        &*read_snapshot(store.conn(), &context, &id, &old).unwrap(),
+        b"retained config snapshot"
+    );
+    let uploaded: i32 = store
+        .conn()
+        .query_row(
+            "SELECT uploaded FROM sync_blobs WHERE id=?1",
+            [payload.head.blob_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(uploaded, 0);
+}
+
 fn fixture() -> (tempfile::TempDir, Store, SyncContext) {
     fixture_with(Arc::new(AccountKey::generate().unwrap()), "device")
 }

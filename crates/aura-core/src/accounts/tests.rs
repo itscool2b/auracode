@@ -46,9 +46,14 @@ async fn reset_detaches_old_profile_durably_before_ack_and_never_reuses_its_ciph
     std::fs::write(old.db_path(), b"synthetic old ciphertext").unwrap();
     let vault = Arc::new(Memory::default());
     let account_entry = VaultEntry::new(ORIGIN, "account").unwrap();
-    let key = aura_sync::crypto::AccountKey::restore(&[7; 32]).unwrap();
+    seed_key(&vault);
+    let restored = Account::restore(api(), "account", vault.clone(), 100)
+        .await
+        .unwrap()
+        .unwrap();
+    let (key, _) = restored.local_key_handle().unwrap();
     let recovery = aura_sync::crypto::RecoveryKey::generate().unwrap();
-    let device = aura_sync::crypto::DeviceKey::restore(&[3; 32]).unwrap();
+    let device = aura_sync::crypto::DeviceKey::generate().unwrap();
     let pending = serde_json::json!({"version":8,"request":{
         "review_id":"receipt","confirmation":"RESET SYNC",
         "wrapped_key":aura_sync::crypto::wrap_device(&key,"account","device",8,&device.public_key()).unwrap(),
@@ -139,6 +144,150 @@ fn seed_key(vault: &Memory) {
     vault
         .save(&VaultEntry::new(ORIGIN, "account").unwrap(), &bytes)
         .unwrap();
+}
+
+fn retained_database(profiles: &Profiles, account: &str, key: &AccountKey) -> Profile {
+    let profile = profiles
+        .create(ProfileKind::Account, "Retained account")
+        .unwrap();
+    let db_key = Arc::new(key.database_key(account, &profile.meta.id).unwrap());
+    let (mut store, _) = crate::store::Store::open_encrypted(&profile, db_key).unwrap();
+    let identity = crate::sync::SyncIdentity {
+        account: account.into(),
+        device: "old-device".into(),
+        key_version: 1,
+    };
+    crate::sync::SyncLedger::new(&mut store, identity, key)
+        .unwrap()
+        .edit_metadata("chats", "saved", 100, |_, metadata, clock| {
+            metadata.fields.insert(
+                "title".into(),
+                aura_sync::merge::Stamped {
+                    clock: clock.clone(),
+                    value: aura_sync::merge::FieldValue::Present(serde_json::json!(
+                        "retained queued title"
+                    )),
+                },
+            );
+            Ok(())
+        })
+        .unwrap();
+    store
+        .conn()
+        .execute(
+            "UPDATE sync_state SET last_hlc='0000000000100:0000000007:old-device',pull_cursor=27",
+            [],
+        )
+        .unwrap();
+    profile
+}
+
+#[tokio::test]
+async fn explicit_rebinding_proves_key_identity_and_preserves_queued_edits_across_index_failure() {
+    let dir = tempfile::tempdir().unwrap();
+    let profiles = profiles(&dir);
+    profiles.open_active().unwrap();
+    let vault = Arc::new(Memory::default());
+    seed_key(&vault);
+    let restored = Account::restore(api(), "account", vault.clone(), 100)
+        .await
+        .unwrap()
+        .unwrap();
+    let (key, _) = restored.local_key_handle().unwrap();
+    let retained = retained_database(&profiles, "account", &key);
+    let wrong = retained_database(&profiles, "other", &key);
+    let empty = profiles.create(ProfileKind::Account, "Empty").unwrap();
+    let accounts = Accounts::open(api(), vault.clone(), profiles.clone())
+        .await
+        .unwrap();
+    accounts.inner.lock().await.account = Account::restore(api(), "account", vault.clone(), 100)
+        .await
+        .unwrap();
+    assert!(accounts.rebind_profile(&wrong.meta.id, 100).await.is_err());
+    assert!(accounts.rebind_profile(&empty.meta.id, 100).await.is_err());
+    assert!(!empty.db_path().exists());
+    assert!(accounts.rebind_profile("../outside", 100).await.is_err());
+    *vault.fail_entry.lock().unwrap() = Some(accounts.index_entry.clone());
+    assert!(
+        accounts
+            .rebind_profile(&retained.meta.id, 100)
+            .await
+            .is_err()
+    );
+    assert!(accounts.status().await.unwrap().profile_id.is_none());
+    *vault.fail_entry.lock().unwrap() = None;
+    let status = accounts
+        .rebind_profile(&retained.meta.id, 100)
+        .await
+        .unwrap();
+    assert_eq!(
+        status.profile_id.as_deref(),
+        Some(retained.meta.id.as_str())
+    );
+    let (mut store, _) = crate::store::Store::open_encrypted(
+        &retained,
+        Arc::new(key.database_key("account", &retained.meta.id).unwrap()),
+    )
+    .unwrap();
+    let identity = crate::sync::SyncIdentity {
+        account: "account".into(),
+        device: "device".into(),
+        key_version: 1,
+    };
+    crate::sync::SyncLedger::new(&mut store, identity, &key).unwrap();
+    let (device, hlc, cursor): (String, String, i64) = store
+        .conn()
+        .query_row(
+            "SELECT device_id,last_hlc,pull_cursor FROM sync_state",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(device, "device");
+    assert_eq!(cursor, 27);
+    assert!(
+        hlc.parse::<aura_sync::clock::Hlc>().unwrap()
+            > "0000000000100:0000000007:old-device".parse().unwrap()
+    );
+    let json = store
+        .conn()
+        .query_row("SELECT record_json FROM sync_outbox", [], |row| {
+            row.get::<_, String>(0)
+        })
+        .unwrap();
+    let record: aura_sync::wire::EncryptedRecord = serde_json::from_str(&json).unwrap();
+    // The server requires the outer HLC device to equal the authenticated current device.
+    assert_eq!(
+        record
+            .hlc
+            .parse::<aura_sync::clock::Hlc>()
+            .unwrap()
+            .device(),
+        "device"
+    );
+    let plain = aura_sync::crypto::open_record(
+        &key,
+        &aura_sync::crypto::RecordContext {
+            account: "account",
+            collection: &record.collection,
+            id: &record.id,
+            key_version: record.key_version,
+            hlc: &record.hlc,
+            deleted: record.deleted,
+        },
+        &aura_sync::crypto::SealedPayload {
+            nonce: record.nonce,
+            ciphertext: record.ciphertext,
+        },
+    )
+    .unwrap();
+    let metadata: aura_sync::merge::Metadata = serde_json::from_slice(&plain).unwrap();
+    assert!(
+        metadata.fields["title"].value
+            == aura_sync::merge::FieldValue::Present(serde_json::json!("retained queued title"))
+    );
+    assert_eq!(metadata.fields["title"].clock.device(), "old-device");
+    assert_eq!(profiles.list().unwrap().len(), 4);
 }
 
 #[tokio::test]

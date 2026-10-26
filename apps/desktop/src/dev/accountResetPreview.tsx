@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
+import { RebindProfilePanel } from "../components/settings/RebindProfilePanel";
 import { ResetSyncPanel } from "../components/settings/ResetSyncPanel";
 import type { AccountStatus } from "../lib/account/bindings";
+import type { AccountRebindApi } from "../lib/account/rebind";
 import type { AccountResetApi } from "../lib/account/reset";
 import "../styles.css";
 import "../ui-tokens.css";
@@ -24,6 +26,30 @@ const initial: AccountStatus = {
 function Preview() {
   const [status, setStatus] = useState(initial);
   const [calls, setCalls] = useState({ review: 0, confirm: 0, retry: 0, cancel: 0 });
+  const [rebindCalls, setRebindCalls] = useState({ list: 0, restore: 0 });
+  const [rebindApi] = useState<AccountRebindApi>(() => {
+    let attempts = 0;
+    return {
+      list: async () => {
+        setRebindCalls((value) => ({ ...value, list: value.list + 1 }));
+        return [
+          {
+            id: "synthetic-profile",
+            kind: "account",
+            display_name: "Retained account",
+            created_at: 1,
+          },
+          { id: "local", kind: "local", display_name: "Local", created_at: 1 },
+        ];
+      },
+      restore: async (id) => {
+        setRebindCalls((value) => ({ ...value, restore: value.restore + 1 }));
+        if (++attempts === 1)
+          throw new Error("The key does not match. Existing files were preserved.");
+        return { ...initial, access: "ready", profile_id: id, local_key_available: true };
+      },
+    };
+  });
   const [api] = useState<AccountResetApi>(() => {
     let pending = mode === "pending" || mode === "committed";
     return {
@@ -68,12 +94,18 @@ function Preview() {
       <div className="account-panel">
         <h1>Account recovery</h1>
         <h2>Your account</h2>
-        <ResetSyncPanel
-          api={api}
-          access={status.access}
-          allowReview={!status.local_key_available}
-          onStatus={setStatus}
-        />
+        {mode === "rebind" ? (
+          <RebindProfilePanel api={rebindApi} onStatus={setStatus} />
+        ) : (
+          <ResetSyncPanel
+            api={api}
+            access={status.access}
+            allowReview={!status.local_key_available}
+            onStatus={setStatus}
+          />
+        )}
+        <output aria-label="Rebind calls">{JSON.stringify(rebindCalls)}</output>
+        <output aria-label="Bound profile">{status.profile_id}</output>
         <output aria-label="Reset calls">{JSON.stringify(calls)}</output>
         <output aria-label="Account access">{status.access}</output>
       </div>
