@@ -43,6 +43,7 @@ pub struct OpenResponse {
     #[serde(default)]
     pub reasoning_effort: Option<String>,
     pub approval_policy: Value,
+    pub approvals_reviewer: String,
     pub sandbox: Value,
 }
 
@@ -122,7 +123,7 @@ mod tests {
         );
         let open: OpenResponse = serde_json::from_value(json!({
             "thread":{"id":"thread-1","sessionId":"different-session-tree","status":{"type":"idle"},"future":true},
-            "model":"model-a","approvalPolicy":"on-request","sandbox":{"type":"workspaceWrite"}
+            "model":"model-a","approvalPolicy":"on-request","approvalsReviewer":"user","sandbox":{"type":"workspaceWrite"}
         })).unwrap();
         assert_eq!(open.thread.id, "thread-1");
         assert!(open.thread.status.idle());

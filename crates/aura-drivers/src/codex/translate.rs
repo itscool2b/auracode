@@ -1,7 +1,7 @@
 //! Native item streams mapped to the shared transcript vocabulary.
 use aura_protocol::{
-    AuraEvent, PlanEntry, PlanStatus, ToolCall, ToolContent, ToolKind, ToolStatus, ToolUpdate,
-    Truncation, UsageInfo,
+    AuraEvent, PermissionRequest, PlanEntry, PlanStatus, ToolCall, ToolContent, ToolKind,
+    ToolStatus, ToolUpdate, Truncation, UsageInfo,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -13,15 +13,17 @@ struct Item {
     complete: bool,
     tool: bool,
     thought_raw: Option<bool>,
-    summary_index: Option<u64>,
+    thought_index: Option<u64>,
     output: String,
     output_bytes: usize,
+    approval: Option<ToolContent>,
 }
 
 pub(super) struct Translator {
     prefix: String,
     items: BTreeMap<String, Item>,
     overflow: bool,
+    approval_bytes: usize,
 }
 impl Translator {
     pub fn new(prefix: String) -> Self {
@@ -29,6 +31,7 @@ impl Translator {
             prefix,
             items: BTreeMap::new(),
             overflow: false,
+            approval_bytes: 0,
         }
     }
     fn id(&self, native: &str) -> String {
@@ -46,9 +49,19 @@ impl Translator {
     pub fn finish_turn(&mut self) {
         self.items.clear();
         self.overflow = false;
+        self.approval_bytes = 0;
     }
     pub fn overflowed(&self) -> bool {
         self.overflow
+    }
+    pub fn enrich_permission(&self, native: &str, request: &mut PermissionRequest) {
+        let id = self.id(native);
+        if let Some(item) = self.items.get(&id).filter(|item| item.tool) {
+            request.tool_call_id = Some(id);
+            if let Some(content) = &item.approval {
+                request.content.push(content.clone());
+            }
+        }
     }
     pub fn notification(&mut self, method: &str, params: &Value) -> Vec<AuraEvent> {
         let mut events = Vec::new();
@@ -68,26 +81,29 @@ impl Translator {
                 let thought = method != "item/agentMessage/delta";
                 let id = self.id(native);
                 let state = self.items.entry(id.clone()).or_default();
+                if state.complete {
+                    return events;
+                }
                 if thought {
                     let raw = method == "item/reasoning/textDelta";
                     if state.thought_raw.is_some_and(|selected| selected != raw) {
                         return events;
                     }
                     state.thought_raw = Some(raw);
-                    if !raw {
-                        let index = params["summaryIndex"].as_u64().unwrap_or(0);
-                        if state
-                            .summary_index
-                            .is_some_and(|previous| previous != index)
-                        {
-                            events.push(AuraEvent::ThoughtDelta {
-                                thought_id: id.clone(),
-                                text: "\n".into(),
-                            });
-                            state.emitted += 1;
-                        }
-                        state.summary_index = Some(index);
+                    let index = params[if raw { "contentIndex" } else { "summaryIndex" }]
+                        .as_u64()
+                        .unwrap_or(0);
+                    if state
+                        .thought_index
+                        .is_some_and(|previous| previous != index)
+                    {
+                        events.push(AuraEvent::ThoughtDelta {
+                            thought_id: id.clone(),
+                            text: "\n".into(),
+                        });
+                        state.emitted = state.emitted.saturating_add(1);
                     }
+                    state.thought_index = Some(index);
                 }
                 if !state.complete {
                     state.emitted = state.emitted.saturating_add(text.len());
@@ -193,7 +209,63 @@ impl Translator {
                         } else {
                             ToolStatus::InProgress
                         };
-                        let content = content(item);
+                        let mut content = content(item);
+                        if item["type"] == "fileChange" && !content.is_empty() {
+                            if let Some(ToolContent::Text { text, .. }) = &state.approval {
+                                self.approval_bytes =
+                                    self.approval_bytes.saturating_sub(text.len());
+                            }
+                            let budget = (64 * 1024)
+                                .min((4 * 1024 * 1024_usize).saturating_sub(self.approval_bytes));
+                            let mut preview = String::new();
+                            let mut total_bytes = 0usize;
+                            for part in &content {
+                                if let ToolContent::Text { text, .. } = part {
+                                    if total_bytes > 0 {
+                                        total_bytes = total_bytes.saturating_add(1);
+                                        if preview.len() < budget {
+                                            preview.push('\n');
+                                        }
+                                    }
+                                    total_bytes = total_bytes.saturating_add(text.len());
+                                    let mut end =
+                                        budget.saturating_sub(preview.len()).min(text.len());
+                                    while !text.is_char_boundary(end) {
+                                        end -= 1;
+                                    }
+                                    preview.push_str(&text[..end]);
+                                }
+                            }
+                            self.approval_bytes += preview.len();
+                            state.approval = Some(ToolContent::Text {
+                                truncated: (preview.len() < total_bytes).then_some(Truncation {
+                                    total_bytes: total_bytes as u64,
+                                    blob: None,
+                                }),
+                                text: preview,
+                            });
+                        }
+                        if content.is_empty() && state.output_bytes > 0 {
+                            let truncated =
+                                (state.output_bytes > state.output.len()).then_some(Truncation {
+                                    total_bytes: state.output_bytes as u64,
+                                    blob: None,
+                                });
+                            content.push(if item["type"] == "commandExecution" {
+                                ToolContent::Terminal {
+                                    output: state.output.clone(),
+                                    exit_code: item["exitCode"]
+                                        .as_i64()
+                                        .and_then(|code| i32::try_from(code).ok()),
+                                    truncated,
+                                }
+                            } else {
+                                ToolContent::Text {
+                                    text: state.output.clone(),
+                                    truncated,
+                                }
+                            });
+                        }
                         if !state.tool {
                             state.tool = true;
                             events.push(AuraEvent::ToolCall(ToolCall {
@@ -503,5 +575,74 @@ mod tests {
         let mut translator = Translator::new("spawn".into());
         let events=translator.notification("item/completed",&json!({"item":{"type":"commandExecution","id":"cmd","command":"test","status":"future"}}));
         assert!(matches!(&events[0],AuraEvent::ToolCall(call) if call.status==ToolStatus::Pending));
+    }
+
+    #[test]
+    fn raw_reasoning_block_boundaries_match_the_completed_snapshot() {
+        let mut translator = Translator::new("spawn".into());
+        let mut events = translator.notification(
+            "item/reasoning/textDelta",
+            &json!({"itemId":"r","contentIndex":0,"delta":"ab"}),
+        );
+        events.extend(translator.notification(
+            "item/reasoning/textDelta",
+            &json!({"itemId":"r","contentIndex":1,"delta":"cd"}),
+        ));
+        events.extend(translator.notification(
+            "item/completed",
+            &json!({"item":{"type":"reasoning","id":"r","summary":[],"content":["ab","cd"]}}),
+        ));
+        let text: String = events
+            .iter()
+            .filter_map(|event| match event {
+                AuraEvent::ThoughtDelta { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(text, "ab\ncd");
+        assert!(matches!(
+            events.last(),
+            Some(AuraEvent::ThoughtCompleted { .. })
+        ));
+        assert!(
+            translator
+                .notification(
+                    "item/reasoning/textDelta",
+                    &json!({"itemId":"r","contentIndex":2,"delta":"late"})
+                )
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn completion_without_output_retains_the_streamed_preview() {
+        for (kind, delta_method) in [
+            ("commandExecution", "item/commandExecution/outputDelta"),
+            ("fileChange", "item/fileChange/outputDelta"),
+        ] {
+            let mut translator = Translator::new("spawn".into());
+            translator.notification(
+                "item/started",
+                &json!({"item":{"id":"tool","type":kind,"status":"inProgress"}}),
+            );
+            translator.notification(
+                delta_method,
+                &json!({"itemId":"tool","delta":"important output"}),
+            );
+            let events = translator.notification("item/completed", &json!({"item":{"id":"tool","type":kind,"status":"completed","aggregatedOutput":null,"exitCode":0,"changes":[]}}));
+            let AuraEvent::ToolUpdate(update) = &events[0] else {
+                panic!("tool update")
+            };
+            let content = update.content.as_ref().unwrap();
+            if kind == "commandExecution" {
+                assert!(
+                    matches!(&content[0], ToolContent::Terminal {output,exit_code:Some(0),..} if output == "important output")
+                );
+            } else {
+                assert!(
+                    matches!(&content[0], ToolContent::Text {text,..} if text == "important output")
+                );
+            }
+        }
     }
 }

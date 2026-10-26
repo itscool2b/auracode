@@ -261,8 +261,7 @@ impl Session {
     }
     fn open(&mut self) {
         let (approval, sandbox, _) = options::policies(self.setup.autonomy);
-        let mut params =
-            json!({"cwd":self.setup.agent_folder,"approvalPolicy":approval,"sandbox":sandbox});
+        let mut params = json!({"cwd":self.setup.agent_folder,"approvalPolicy":approval,"approvalsReviewer":"user","sandbox":sandbox});
         if let Some(ConfigValue::Choice { value }) = self.setup.desired.get("model") {
             params["model"] = json!(value);
         }
@@ -370,6 +369,10 @@ impl Session {
                                 | wire::ThreadStatus::SystemError
                         ) =>
                 {
+                    if open.approvals_reviewer != "user" {
+                        self.fail(protocol_error("Codex did not keep approval decisions with the user. The owned session was stopped before accepting prompts."));
+                        return;
+                    }
                     if self
                         .setup
                         .resume
@@ -539,8 +542,9 @@ impl Session {
                 }
             }
             "turn/completed" => {
-                if let Ok(turn) = serde_json::from_value::<wire::Turn>(params["turn"].clone()) {
-                    self.completed(turn);
+                match serde_json::from_value::<wire::Turn>(params["turn"].clone()) {
+                    Ok(turn) => self.completed(turn),
+                    Err(_) => self.fail(protocol_error("Codex returned a malformed turn completion. The owned session was stopped to avoid uncertain state.")),
                 }
             }
             "serverRequest/resolved" => {
@@ -655,6 +659,16 @@ impl Session {
             return;
         }
         let native_turn = params["turnId"].as_str().map(str::to_owned);
+        if native_turn.as_ref().is_none_or(String::is_empty)
+            || params["itemId"].as_str().is_none_or(str::is_empty)
+            || (method == "item/tool/requestUserInput" && !params["isBlocking"].is_boolean())
+        {
+            self.reject(
+                id,
+                "Codex sent a callback without valid item, turn or input metadata.",
+            );
+            return;
+        }
         self.next_callback += 1;
         let key = format!("{}.request.{}", self.spawn_id, self.next_callback);
         let turn = self
@@ -682,7 +696,10 @@ impl Session {
                     return;
                 }
             }
-        } else if let Some((body, request)) = requests::approval(method, &params, key.clone()) {
+        } else if let Some((body, mut request)) = requests::approval(method, &params, key.clone()) {
+            if let Some(item) = params["itemId"].as_str() {
+                self.translator.enrich_permission(item, &mut request);
+            }
             (
                 body,
                 DriverEvent::Permission {
@@ -813,7 +830,7 @@ impl Session {
                     }
                 }
                 let (approval, _, sandbox) = options::policies(self.setup.autonomy);
-                let mut params = json!({"threadId":self.thread,"input":input,"model":self.model,"cwd":self.setup.agent_folder,"approvalPolicy":approval,"sandboxPolicy":sandbox,"clientUserMessageId":turn.turn_id});
+                let mut params = json!({"threadId":self.thread,"input":input,"model":self.model,"cwd":self.setup.agent_folder,"approvalPolicy":approval,"approvalsReviewer":"user","sandboxPolicy":sandbox,"clientUserMessageId":turn.turn_id});
                 if let Some(effort) = self.effort.as_ref().or_else(|| {
                     self.models
                         .iter()
@@ -925,17 +942,12 @@ impl Session {
     fn limits(&mut self, value: Value) {
         if let Some(buckets) = value["rateLimitsByLimitId"].as_object() {
             for (key, bucket) in buckets.iter().take(32) {
-                self.limits.insert(key.clone(), bucket.clone());
+                self.merge_limit_bucket(key, bucket);
             }
         } else if value["rateLimits"].is_object() {
             let bucket = &value["rateLimits"];
-            let key = bucket["limitId"].as_str().unwrap_or("codex").to_owned();
-            let current = self.limits.entry(key).or_insert_with(|| json!({}));
-            if let (Some(current), Some(update)) = (current.as_object_mut(), bucket.as_object()) {
-                for (key, value) in update {
-                    current.insert(key.clone(), value.clone());
-                }
-            }
+            let key = bucket["limitId"].as_str().unwrap_or("codex");
+            self.merge_limit_bucket(key, bucket);
         }
         let mut windows = Vec::new();
         for (key, bucket) in &self.limits {
@@ -966,6 +978,24 @@ impl Session {
                 turn: None,
                 event: AuraEvent::LimitsUpdated { windows },
             });
+        }
+    }
+    fn merge_limit_bucket(&mut self, key: &str, bucket: &Value) {
+        if key.len() > 128 || (!self.limits.contains_key(key) && self.limits.len() >= 32) {
+            return;
+        }
+        let current = self.limits.entry(key.into()).or_insert_with(|| json!({}));
+        if let Some(name) = bucket["limitName"].as_str() {
+            current["limitName"] = json!(name.chars().take(256).collect::<String>());
+        }
+        for name in ["primary", "secondary"] {
+            if let Some(window) = bucket.get(name) {
+                current[name] = if window.is_null() {
+                    Value::Null
+                } else {
+                    json!({"usedPercent":window["usedPercent"].as_f64(), "windowDurationMins":window["windowDurationMins"].as_i64(), "resetsAt":window["resetsAt"].as_i64()})
+                };
+            }
         }
     }
     fn expire(&mut self) {

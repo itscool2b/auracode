@@ -1,7 +1,7 @@
 //! Callback payloads are kept separate from their displayed, normalized copies.
 use aura_protocol::{
-    PermissionOption, PermissionOptionKind, PermissionRequest, ToolKind, UiAnswer, UiQuestion,
-    UiQuestionOption,
+    PermissionOption, PermissionOptionKind, PermissionRequest, ToolContent, ToolKind, UiAnswer,
+    UiQuestion, UiQuestionOption,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -86,6 +86,12 @@ pub(super) fn questions(params: &Value) -> Result<Vec<UiQuestion>, &'static str>
     let mut ids = BTreeSet::new();
     let mut result = Vec::new();
     for item in items {
+        if ["isSecret", "isOther"]
+            .iter()
+            .any(|field| item.get(field).is_some_and(|value| !value.is_boolean()))
+        {
+            return Err("Codex sent malformed question flags.");
+        }
         if item["isSecret"].as_bool().unwrap_or(false) {
             return Err(
                 "Secret input is not supported here. Continue this request in the Codex CLI.",
@@ -189,6 +195,18 @@ pub(super) fn approval(
         kind,
     })
     .collect();
+    let content = ["reason", "grantRoot"]
+        .into_iter()
+        .filter_map(|field| {
+            params[field]
+                .as_str()
+                .filter(|text| !text.is_empty())
+                .map(|text| ToolContent::Text {
+                    text: format!("{field}: {text}"),
+                    truncated: None,
+                })
+        })
+        .collect();
     Some((
         Callback::Approval { permissions },
         PermissionRequest {
@@ -197,7 +215,7 @@ pub(super) fn approval(
             title,
             kind: Some(kind),
             raw_input: Some(params.clone()),
-            content: Vec::new(),
+            content,
             locations: Vec::new(),
             options,
             truncated: None,
@@ -248,6 +266,11 @@ mod tests {
             )
             .is_err()
         );
+        for field in ["isSecret", "isOther"] {
+            let mut params = json!({"questions":[{"id":"q","question":"Value"}]});
+            params["questions"][0][field] = json!("true");
+            assert!(questions(&params).is_err());
+        }
     }
 
     #[test]

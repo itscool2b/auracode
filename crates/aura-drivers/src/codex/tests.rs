@@ -127,7 +127,8 @@ impl Harness {
         let models = self.wire().await;
         assert_eq!(models["method"], "model/list");
         self.send(json!({"id":models["id"],"result":{"data":[{"id":"m","model":"model-a","displayName":"Model A","defaultReasoningEffort":"medium","supportedReasoningEfforts":[{"reasoningEffort":"medium","description":"Balanced"},{"reasoningEffort":"high","description":"High"}]}],"nextCursor":null}}));
-        self.send(json!({"id":open["id"],"result":{"thread":{"id":"thread-1","sessionId":"tree-1","status":{"type":"idle"},"cliVersion":"0.162.1"},"model":"model-a","approvalPolicy":"untrusted","sandbox":{"type":"workspaceWrite"}}}));
+        assert_eq!(open["params"]["approvalsReviewer"], "user");
+        self.send(json!({"id":open["id"],"result":{"thread":{"id":"thread-1","sessionId":"tree-1","status":{"type":"idle"},"cliVersion":"0.162.1"},"model":"model-a","approvalPolicy":"untrusted","approvalsReviewer":"user","sandbox":{"type":"workspaceWrite"}}}));
         loop {
             if let DriverEvent::Ready(info) = self.event().await {
                 return info;
@@ -150,6 +151,7 @@ impl Harness {
         self.prompt();
         let request = self.wire().await;
         assert_eq!(request["method"], "turn/start");
+        assert_eq!(request["params"]["approvalsReviewer"], "user");
         self.send(json!({"id":request["id"],"result":{"turn":{"id":"turn-1","status":"inProgress","items":[]}}}));
         self.send(json!({"method":"turn/started","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"inProgress","items":[]}}}));
     }
@@ -187,6 +189,66 @@ async fn handshake_uses_thread_identity_and_advertises_only_implemented_capabili
     );
     assert_eq!(request["params"]["threadId"], "thread-1");
     assert!(request["params"].get("developerInstructions").is_none());
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn malformed_completion_stops_the_session_instead_of_leaving_a_stuck_turn() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.begin().await;
+    h.send(
+        json!({"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1"}}}),
+    );
+    let mut failed = false;
+    while let Some(event) = timeout(Duration::from_secs(12), h.events.recv())
+        .await
+        .unwrap()
+    {
+        failed |= matches!(
+            event,
+            DriverEvent::Event {
+                event: AuraEvent::Error {
+                    kind: aura_protocol::ErrorKind::ProtocolError,
+                    ..
+                },
+                ..
+            }
+        );
+    }
+    assert!(failed);
+    assert!(matches!(h.run.await.unwrap(), DriverExit::Crashed { .. }));
+}
+
+#[tokio::test(start_paused = true)]
+async fn quota_updates_bound_distinct_buckets_and_input_requests_require_blocking_metadata() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.begin().await;
+    h.send(json!({"id":"bad-question","method":"item/tool/requestUserInput","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"item-1","questions":[{"id":"q","header":"Q","question":"Which?"}]}}));
+    let rejected = h.wire().await;
+    assert_eq!(rejected["id"], "bad-question");
+    assert!(rejected["error"].is_object());
+    for n in 0..100 {
+        h.send(json!({"method":"account/rateLimits/updated","params":{"rateLimits":{"limitId":format!("bucket-{n}"),"primary":{"usedPercent":n,"windowDurationMins":300,"resetsAt":123},"unknownMetadata":"discard me"}}}));
+    }
+    h.send(json!({"method":"thread/name/updated","params":{"threadId":"thread-1","threadName":"barrier"}}));
+    let mut largest = 0;
+    loop {
+        match h.event().await {
+            DriverEvent::Event {
+                event: AuraEvent::LimitsUpdated { windows },
+                ..
+            } => {
+                largest = largest.max(windows.len());
+                assert!(windows.len() <= 32);
+            }
+            DriverEvent::Title(Some(title)) if title == "barrier" => break,
+            DriverEvent::UiRequest { .. } => panic!("malformed question became user input"),
+            _ => {}
+        }
+    }
+    assert!(largest > 1);
     h.stop().await;
 }
 
@@ -426,6 +488,52 @@ async fn rejected_permission_mode_never_retries_or_sends_a_hidden_prompt() {
     while let Ok(line) = h.end.from_client.try_recv() {
         assert!(!line.contains("turn/start"));
     }
+}
+
+#[tokio::test(start_paused = true)]
+async fn inherited_automatic_reviewer_cannot_masquerade_as_ask() {
+    let mut h = Harness::start().await;
+    let init = h.wire().await;
+    h.send(json!({"id":init["id"],"result":{"userAgent":"codex/0.162.1"}}));
+    h.wire().await;
+    let open = h.wire().await;
+    assert_eq!(open["params"]["approvalsReviewer"], "user");
+    h.wire().await;
+    let mut reply: Value = include_str!("../../tests/fixtures/codex/basic.jsonl")
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .find(|row| row["d"] == "in" && row["msg"]["result"]["thread"].is_object())
+        .unwrap()["msg"]
+        .clone();
+    reply["id"] = open["id"].clone();
+    reply["result"]["approvalsReviewer"] = json!("auto_review");
+    h.send(reply);
+    while let Some(event) = h.events.recv().await {
+        assert!(!matches!(event, DriverEvent::Ready(_)));
+    }
+    assert!(matches!(h.run.await.unwrap(), DriverExit::StartFailed(_)));
+}
+
+#[tokio::test(start_paused = true)]
+async fn file_approval_names_only_its_matching_tool_and_keeps_reason_context() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.begin().await;
+    for (id, path) in [("file-one", "one.rs"), ("file-two", "two.rs")] {
+        h.send(json!({"method":"item/started","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":id,"type":"fileChange","status":"inProgress","changes":[{"path":path,"kind":{"type":"update","move_path":null},"diff":format!("+content for {path}")}]}}}));
+    }
+    h.send(json!({"id":"approve-two","method":"item/fileChange/requestApproval","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"file-two","startedAtMs":1,"grantRoot":"/work","reason":"Requested update"}}));
+    loop {
+        if let DriverEvent::Permission { request, .. } = h.event().await {
+            assert_eq!(request.tool_call_id.as_deref(), Some("file-two"));
+            let shown = serde_json::to_string(&request.content).unwrap();
+            assert!(shown.contains("two.rs") && shown.contains("+content for two.rs"));
+            assert!(shown.contains("Requested update") && shown.contains("/work"));
+            assert!(!shown.contains("one.rs"));
+            break;
+        }
+    }
+    h.stop().await;
 }
 
 #[tokio::test(start_paused = true)]
