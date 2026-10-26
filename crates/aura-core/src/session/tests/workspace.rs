@@ -29,6 +29,85 @@ fn waiting_driver(native: &str) -> (ScriptedDriver, aura_drivers::testing::Scrip
     ])
 }
 
+struct ObserveModel {
+    inner: ScriptedDriver,
+    seen: Arc<Mutex<Option<aura_protocol::session::ConfigValue>>>,
+}
+impl AgentDriver for ObserveModel {
+    fn run(self: Box<Self>, ctx: DriverContext) -> BoxFuture<'static, DriverExit> {
+        *lock(&self.seen) = ctx.setup.desired.get("model").cloned();
+        Box::new(self.inner).run(ctx)
+    }
+}
+
+#[tokio::test]
+async fn project_default_model_reaches_startup_and_saved_session_settings_take_precedence() {
+    use aura_protocol::session::ConfigValue;
+    let seen = Arc::new(Mutex::new(None));
+    let (inner, _) = waiting_driver("project-default");
+    let rig = rig_with(
+        Arc::new(OneDriver(Mutex::new(Some(Box::new(ObserveModel {
+            inner,
+            seen: Arc::clone(&seen),
+        }))))),
+        WriterConfig::STANDARD,
+        Knobs::STANDARD,
+    );
+    let project = project(&rig, "Default model").await;
+    let chat = rig
+        .manager
+        .chat_project_create(ProjectChatCreate {
+            agent_id: "mock".into(),
+            folder_id: project.folders[0].id.clone(),
+            allow_busy_folder: false,
+        })
+        .await
+        .unwrap();
+    status(&rig, &chat.chat.id, SessionStatus::Ready).await;
+    assert_eq!(
+        *lock(&seen),
+        Some(ConfigValue::Choice {
+            value: "small".into()
+        })
+    );
+    rig.manager.stop(&chat.chat.id).await.unwrap();
+    status(&rig, &chat.chat.id, SessionStatus::Stopped).await;
+    rig.manager
+        .conversation_turns(&chat.chat.id, None)
+        .await
+        .unwrap();
+    let mut updated = input("Default model");
+    updated.default_model = Some("different".into());
+    rig.manager
+        .project_update(&project.id, updated)
+        .await
+        .unwrap();
+    let saved = rig
+        .store
+        .load_chat_inner(&chat.chat.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved.initial_model, None);
+    let config: std::collections::BTreeMap<String, ConfigValue> = serde_json::from_str(
+        saved
+            .agent_session
+            .as_ref()
+            .unwrap()
+            .config_json
+            .as_deref()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config.get("model"),
+        Some(&ConfigValue::Choice {
+            value: "small".into()
+        })
+    );
+    rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
 #[tokio::test]
 async fn projects_update_clear_optional_values_and_reuse_device_folder() {
     let rig = rig(vec![], WriterConfig::STANDARD, Knobs::STANDARD);

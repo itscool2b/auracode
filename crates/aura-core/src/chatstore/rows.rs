@@ -190,12 +190,18 @@ pub(crate) fn load_chat(
         None => 1,
     };
     let agent_session = latest_agent_session(conn, chat_id)?;
+    let initial_model = if agent_session.is_none() {
+        conn.query_row("SELECT p.default_model FROM chats c JOIN projects p ON p.id=c.project_id WHERE c.id=?1 AND p.deleted=0 AND (p.default_agent IS NULL OR p.default_agent=c.active_agent)",[chat_id],|row| row.get::<_,Option<String>>(0)).optional()?.flatten()
+    } else {
+        None
+    };
     let queue = queued(conn, chat_id)?;
     let replay_check = match &agent_session {
         Some(session) => replay_check(conn, session)?,
         None => None,
     };
     Ok(Some(ChatLoad {
+        initial_model,
         continuation: super::conversation::pending(conn, chat_id)?,
         chat,
         next_seq,
@@ -866,6 +872,45 @@ pub(crate) mod tests {
         assert_eq!(check.native_session_id, "native");
         assert_eq!(check.turns, 1);
         assert_eq!(check.last_reply_sha256, hasher.finish());
+    }
+
+    #[test]
+    fn project_default_model_does_not_cross_agent_boundaries() {
+        let db = TestDb::new();
+        let chat = db.chat("/work");
+        let conn = db.conn();
+        conn.execute(
+            "UPDATE projects SET default_agent='different',default_model='vendor-model'",
+            [],
+        )
+        .unwrap();
+        assert_eq!(
+            load_chat(conn, "dev", &chat, 0)
+                .unwrap()
+                .unwrap()
+                .initial_model,
+            None
+        );
+        conn.execute("UPDATE projects SET default_agent='mock'", [])
+            .unwrap();
+        assert_eq!(
+            load_chat(conn, "dev", &chat, 0)
+                .unwrap()
+                .unwrap()
+                .initial_model
+                .as_deref(),
+            Some("vendor-model")
+        );
+        conn.execute("UPDATE projects SET default_agent=NULL", [])
+            .unwrap();
+        assert_eq!(
+            load_chat(conn, "dev", &chat, 0)
+                .unwrap()
+                .unwrap()
+                .initial_model
+                .as_deref(),
+            Some("vendor-model")
+        );
     }
 
     #[test]

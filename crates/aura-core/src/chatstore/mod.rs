@@ -761,6 +761,8 @@ pub struct ChatRecord {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChatLoad {
     pub(crate) continuation: Option<conversation::PendingContinuation>,
+    /// A project default for a chat that has never established an agent session.
+    pub initial_model: Option<String>,
     pub chat: ChatRecord,
     pub next_seq: u32,
     pub next_turn_ordinal: u32,

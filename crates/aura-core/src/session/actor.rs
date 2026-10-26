@@ -546,6 +546,7 @@ impl ChatActor {
         load: ChatLoad,
     ) -> ChatActor {
         let ChatLoad {
+            initial_model,
             continuation,
             chat,
             next_seq,
@@ -566,11 +567,7 @@ impl ChatActor {
         let autonomy = agent_session
             .as_ref()
             .map_or_else(Autonomy::default, |session| session.autonomy);
-        let desired = agent_session
-            .as_ref()
-            .and_then(|session| session.config_json.as_deref())
-            .and_then(|json| serde_json::from_str(json).ok())
-            .unwrap_or_default();
+        let desired = initial_options(agent_session.as_ref(), initial_model);
         let store = Arc::clone(&shared.deps.store);
         let replay_check = replay_check.filter(|_| {
             !continuation
@@ -1162,7 +1159,7 @@ impl ChatActor {
             self.replay_check = load.replay_check.filter(|_| !self.continuation.as_ref().is_some_and(|value| value.force_fresh || value.native_start.fork));
             self.spec = self.shared.deps.detector.spec(&self.chat.agent_id);
             self.autonomy = self.agent_session.as_ref().map_or_else(Autonomy::default, |session| session.autonomy);
-            self.desired = self.agent_session.as_ref().and_then(|session| session.config_json.as_deref()).and_then(|json| serde_json::from_str(json).ok()).unwrap_or_default();
+            self.desired = initial_options(self.agent_session.as_ref(), load.initial_model);
             self.autonomy_state = stopped_autonomy(self.autonomy, None);
             self.options.clear();
             self.commands.clear();
@@ -4209,6 +4206,22 @@ impl Drop for ChatActor {
     fn drop(&mut self) {
         self.cancel_checkpoint();
     }
+}
+
+fn initial_options(
+    session: Option<&AgentSessionRow>,
+    initial_model: Option<String>,
+) -> BTreeMap<String, ConfigValue> {
+    let mut desired: BTreeMap<String, ConfigValue> = session
+        .and_then(|session| session.config_json.as_deref())
+        .and_then(|json| serde_json::from_str(json).ok())
+        .unwrap_or_default();
+    if session.is_none()
+        && let Some(value) = initial_model
+    {
+        desired.insert("model".into(), ConfigValue::Choice { value });
+    }
+    desired
 }
 
 /// The autonomy state while no agent runs (nothing is auto-answered).
