@@ -199,6 +199,40 @@ export async function captureDesktop(path) {
 }
 
 /**
+ * While a session is still pending: which WebView2 processes run with which switches, and where
+ * any DevTools port file was written. Edge WebDriver reads the port from its own profile folder.
+ */
+async function webviewEvidence(path, roots) {
+  const script = [
+    "$names = 'auracode.exe', 'msedgewebview2.exe', 'msedgedriver.exe'",
+    "$processes = Get-CimInstance Win32_Process | Where-Object { $names -contains $_.Name } |",
+    "  Select-Object ProcessId, ParentProcessId, Name, CommandLine",
+    "$ports = $env:AURACODE_EVIDENCE_ROOTS -split ';' | Where-Object { $_ -and (Test-Path $_) } |",
+    "  ForEach-Object { Get-ChildItem -LiteralPath $_ -Recurse -Force -Filter DevToolsActivePort -ErrorAction SilentlyContinue } |",
+    "  Select-Object FullName, LastWriteTimeUtc",
+    "@{ processes = @($processes); ports = @($ports) } | ConvertTo-Json -Depth 4 |",
+    "  Set-Content -LiteralPath $env:AURACODE_EVIDENCE_PATH -Encoding utf8",
+  ].join("\n");
+  const child = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
+    env: {
+      ...process.env,
+      AURACODE_EVIDENCE_PATH: path,
+      AURACODE_EVIDENCE_ROOTS: roots.join(";"),
+    },
+    windowsHide: true,
+    stdio: "ignore",
+  });
+  await Promise.race([
+    new Promise((done) => {
+      child.once("exit", done);
+      child.once("error", done);
+    }),
+    delay(30_000),
+  ]);
+  await stopTree(child);
+}
+
+/**
  * One session attempt straight against the native driver, with its own verbose log. tauri-driver
  * discards that driver's output, so this separates a proxy failure from a WebView2 attach failure.
  * Runs only after the proxied attempt and its processes have ended.
@@ -219,6 +253,7 @@ export async function directSession({ application, nativePath, env, cwd, artifac
   );
   const native = new WebDriver(`http://127.0.0.1:${port}`);
   const started = Date.now();
+  let probe = Promise.resolve();
   try {
     await until(
       "direct native driver",
@@ -230,6 +265,15 @@ export async function directSession({ application, nativePath, env, cwd, artifac
         }
       },
       { timeout: 15_000 },
+    );
+    // Edge WebDriver gives up and stops the app after 60 seconds, so look while it still runs.
+    probe = delay(40_000).then(() =>
+      webviewEvidence(join(artifacts, "webview.json"), [
+        process.env.TEMP,
+        process.env.LOCALAPPDATA,
+        env.LOCALAPPDATA,
+        cwd,
+      ]),
     );
     const result = await native.request(
       "POST",
@@ -260,6 +304,7 @@ export async function directSession({ application, nativePath, env, cwd, artifac
       log: "msedgedriver.log",
     };
   } finally {
+    await probe.catch(() => {});
     await native.close().catch(() => {});
     await stopTree(child);
   }
