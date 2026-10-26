@@ -103,6 +103,9 @@ pub fn update_command(
             let expected = match provider {
                 "claude" => "@anthropic-ai/claude-code",
                 "codex" => "@openai/codex",
+                "pi" => "@earendil-works/pi-coding-agent",
+                "omp" => "@oh-my-pi/pi-coding-agent",
+                "grok" => "@xai-official/grok",
                 _ => return Err(MaintenanceError::Unsupported),
             };
             if package != expected {
@@ -320,6 +323,18 @@ mod tests {
         assert_eq!(
             update_command(&installed, &EnvMap::new()),
             Err(MaintenanceError::UnknownChannel)
+        );
+        installed.agent_id = "pi".into();
+        installed.provider = "pi".into();
+        installed.channel = InstallChannel::Npm {
+            package: "@earendil-works/pi-coding-agent".into(),
+        };
+        installed.launch_path = "/home/user/.bun/bin/pi".into();
+        installed.resolved_path = Some("/home/user/.bun/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js".into());
+        assert_eq!(
+            update_command(&installed, &EnvMap::new()),
+            Err(MaintenanceError::UnknownChannel),
+            "a Bun global package must not be handed to npm"
         );
     }
 

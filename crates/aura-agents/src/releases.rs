@@ -81,11 +81,31 @@ enum Selector {
     NpmTag,
     Github,
     Homebrew,
+    AcpRegistry(&'static str),
 }
 
 impl ReleaseSource {
     /// URLs and JSON selectors come from reviewed providers, never native response payloads.
     pub fn for_installation(installation: &AgentInstallation) -> Option<Self> {
+        let registry_id = match installation.agent_id.as_str() {
+            "antigravity" => Some("antigravity-acp"),
+            "cursor" => Some("cursor"),
+            "grok" | "grok-stream" => Some("grok-build"),
+            "opencode" => Some("opencode"),
+            "opencode-v2" => Some("opencode-v2"),
+            _ => None,
+        };
+        if !matches!(
+            installation.channel,
+            InstallChannel::Bundled { .. } | InstallChannel::Homebrew { .. }
+        ) && let Some(id) = registry_id
+        {
+            return Some(Self {
+                url: "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json".into(),
+                label: "ACP Registry".into(),
+                selector: Selector::AcpRegistry(id),
+            });
+        }
         let provider = crate::installation::provider_namespace(&installation.agent_id);
         match &installation.channel {
             InstallChannel::Homebrew { formula } if matches!(formula.as_str(), "claude-code" | "claude-code@latest" | "codex") => {
@@ -97,6 +117,7 @@ impl ReleaseSource {
                 "claude" => Some(Self { url: "https://registry.npmjs.org/-/package/@anthropic-ai%2fclaude-code/dist-tags".into(), label: "npm latest".into(), selector: Selector::NpmTag }),
                 "codex" => Some(Self { url: "https://api.github.com/repos/openai/codex/releases/latest".into(), label: "GitHub stable release".into(), selector: Selector::Github }),
                 "pi" => Some(Self { url: "https://registry.npmjs.org/-/package/@earendil-works%2fpi-coding-agent/dist-tags".into(), label: "npm latest".into(), selector: Selector::NpmTag }),
+                "omp" => Some(Self { url: "https://registry.npmjs.org/-/package/@oh-my-pi%2fpi-coding-agent/dist-tags".into(), label: "npm latest".into(), selector: Selector::NpmTag }),
                 _ => None,
             }
         }
@@ -118,6 +139,20 @@ impl ReleaseSource {
             Selector::Homebrew => value["versions"]["stable"]
                 .as_str()
                 .or_else(|| value["version"].as_str())?,
+            Selector::AcpRegistry(id) => {
+                if value["version"] != "1.0.0" {
+                    return None;
+                }
+                let mut entries = value["agents"]
+                    .as_array()?
+                    .iter()
+                    .filter(|agent| agent["id"] == id);
+                let entry = entries.next()?;
+                if entries.next().is_some() {
+                    return None;
+                }
+                entry["version"].as_str()?
+            }
         };
         if raw.is_empty()
             || raw.len() > 128
@@ -128,6 +163,13 @@ impl ReleaseSource {
             return None;
         }
         crate::catalog::parse_version(raw).map(|_| raw.into())
+    }
+
+    fn cache_key(&self) -> String {
+        match self.selector {
+            Selector::AcpRegistry(id) => format!("{}#{id}", self.url),
+            _ => self.url.clone(),
+        }
     }
 }
 
@@ -164,7 +206,7 @@ impl Cached {
     }
 }
 
-/// Cache one entry per reviewed public URL. Requests share an entry lock; independent providers
+/// Cache one entry per reviewed source and selector. Requests share an entry lock; independent providers
 /// do not block each other. Failed refreshes retain their last known version.
 pub struct ReleaseCache {
     fetcher: Arc<dyn Fetcher>,
@@ -252,7 +294,7 @@ impl ReleaseCache {
             .entries
             .lock()
             .await
-            .entry(source.url.clone())
+            .entry(source.cache_key())
             .or_default()
             .clone();
         let mut cached = entry.lock().await;
@@ -390,6 +432,49 @@ mod tests {
             label: "fixture".into(),
             selector,
         }
+    }
+
+    struct RegistryFetcher;
+    impl Fetcher for RegistryFetcher {
+        fn fetch<'a>(
+            &'a self,
+            _url: &'a str,
+            _etag: Option<&'a str>,
+        ) -> BoxFuture<'a, Result<FetchReply, ()>> {
+            Box::pin(async {
+                Ok(FetchReply::Document { etag: Some("same-document".into()), bytes: br#"{"version":"1.0.0","agents":[{"id":"opencode","version":"1.19.4"},{"id":"opencode-v2","version":"2.1.4"}]}"#.to_vec() })
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn registry_selectors_keep_separate_versions_in_one_shared_document() {
+        let root = tempfile::tempdir().unwrap();
+        let cache = ReleaseCache {
+            fetcher: Arc::new(RegistryFetcher),
+            path: root.path().join("releases.json"),
+            entries: Mutex::new(BTreeMap::new()),
+            save: Mutex::new(()),
+        };
+        let one = source(Selector::AcpRegistry("opencode"));
+        let two = source(Selector::AcpRegistry("opencode-v2"));
+        assert_eq!(
+            cache.refresh(&one, 1).await.version.as_deref(),
+            Some("1.19.4")
+        );
+        assert_eq!(
+            cache.refresh(&two, 2).await.version.as_deref(),
+            Some("2.1.4")
+        );
+        assert_eq!(
+            cache.refresh(&one, 3).await.version.as_deref(),
+            Some("1.19.4")
+        );
+        assert!(one.parse(br#"{"version":"1.0.0","agents":[{"id":"opencode","version":"1.0.0"},{"id":"opencode","version":"9.0.0"}]}"#).is_none());
+        assert!(
+            one.parse(br#"{"version":"2.0.0","agents":[{"id":"opencode","version":"1.0.0"}]}"#)
+                .is_none()
+        );
     }
 
     #[test]

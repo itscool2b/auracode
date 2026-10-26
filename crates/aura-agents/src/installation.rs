@@ -95,6 +95,9 @@ pub fn classify_channel(agent_id: &str, resolved_path: &str) -> InstallChannel {
     let package = match provider {
         "claude" => Some(["@anthropic-ai", "claude-code"]),
         "codex" => Some(["@openai", "codex"]),
+        "pi" => Some(["@earendil-works", "pi-coding-agent"]),
+        "omp" => Some(["@oh-my-pi", "pi-coding-agent"]),
+        "grok" => Some(["@xai-official", "grok"]),
         _ => None,
     };
     if let Some(package) = package.filter(|package| {
@@ -152,6 +155,29 @@ pub fn verification(found: &str, verified: Option<(&str, &str)>) -> VersionVerif
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pi_omp_and_grok_keep_their_distinct_reviewed_package_owners() {
+        for (agent, package) in [
+            ("pi", "@earendil-works/pi-coding-agent"),
+            ("omp", "@oh-my-pi/pi-coding-agent"),
+            ("grok", "@xai-official/grok"),
+        ] {
+            assert_eq!(
+                classify_channel(agent, &format!("/prefix/lib/node_modules/{package}/cli.js")),
+                InstallChannel::Npm {
+                    package: package.into()
+                }
+            );
+        }
+        assert_eq!(
+            classify_channel(
+                "pi",
+                "/prefix/lib/node_modules/@oh-my-pi/pi-coding-agent/cli.js"
+            ),
+            InstallChannel::Unknown
+        );
+    }
 
     #[test]
     fn known_package_and_vendor_layouts_are_classified_without_changing_launch_paths() {

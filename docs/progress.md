@@ -323,6 +323,16 @@ replacing the binary during the first verification. Four fake maintenance integr
 export, targeted all-target Clippy, desktop typecheck and 289 desktop tests pass. No real updater or
 authentication command ran. Interactive vendor login remains pending a qualified terminal sheet.
 
+Public release metadata now includes the [official ACP registry](https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json)
+for Antigravity ACP, Cursor, Grok and distinct OpenCode V1/V2 entries. Only reviewed IDs and version
+fields are consumed; distribution commands and download URLs are not executed. Cache keys retain
+the selector so two agents in one registry document cannot overwrite each other's versions.
+Reviewed npm package owners now cover Pi, OMP and Grok, while local dependencies and Bun global
+layouts are still refused by the npm updater. The package names are supported by the registry,
+[OMP's pinned package manifest](https://github.com/can1357/oh-my-pi/blob/v18.12.6/packages/coding-agent/package.json)
+and [Pi's pinned CLI documentation](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/cli.md).
+The 39 agent unit tests and all-target agent Clippy pass. No package or agent was installed or updated.
+
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
   no-form plan auto-approval path and exposes only its enforceable Full auto autonomy. See
