@@ -795,7 +795,14 @@ mod tests {
             plan("chat", Some(&folder), Some("gpt-cli"), false),
             Some(Err(setup_error(
                 Some(SmokeScenario::Agent),
-                "AURACODE_SMOKE_AGENT=\"gpt-cli\" is not an agent auracode knows (hermes, claude, claude-acp, codex, codex-acp, mock)."
+                &format!(
+                    "AURACODE_SMOKE_AGENT=\"gpt-cli\" is not an agent auracode knows ({}).",
+                    aura_agents::catalog()
+                        .iter()
+                        .map(|spec| spec.id)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             )))
         );
         for value in ["1", "chat-reopen"] {

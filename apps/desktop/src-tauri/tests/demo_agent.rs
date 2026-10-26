@@ -404,14 +404,10 @@ mod end_to_end {
         let ids: Vec<&str> = agents.iter().map(|agent| agent.id.as_str()).collect();
         assert_eq!(
             ids,
-            [
-                "hermes",
-                "claude",
-                "claude-acp",
-                "codex",
-                "codex-acp",
-                "mock"
-            ],
+            aura_agents::catalog()
+                .iter()
+                .map(|spec| spec.id)
+                .collect::<Vec<_>>(),
             "the catalog"
         );
         for agent in &agents {

@@ -1,5 +1,7 @@
 # M1d ACP contract baseline
 
+**Status:** pending real vendor qualification and final CI.
+
 This implementation uses ACP v1, with the existing schema development dependency pinned to
 `agent-client-protocol-schema = 1.12.0`. No authentication, credential/config reads, model prompts
 or real-agent runs were performed for this subtask. Installation and authenticated qualification
@@ -89,6 +91,14 @@ Each callback is bounded to 64 KiB; at most 32 can remain pending, each with at 
 and 64 choices per question. Unsupported request types continue to receive method-not-found.
 
 ## Verification status
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Pure adapters and fake transports | pass | Last executed driver suite passed 362 tests; six native identity tests passed. |
+| Core regression suite | pass | Complete core suite passed after optional readiness. |
+| Rust formatting and targeted Clippy | pass | Core, drivers and agents all-target checks passed. |
+| Final callback regressions and branch CI | pending | Newly linked local test executables were blocked by Application Control; branch CI is the execution fallback. |
+| Installation, authentication and real vendor smoke | pending | No real agent runs or credential/config reads were performed. |
 
 Pure callback tests cover exact answer shapes, invalid/duplicate choices, full plan preservation,
 OMP boolean/choice/free-text conversion, unsupported types and unsupported constraints. Fake-pipe
