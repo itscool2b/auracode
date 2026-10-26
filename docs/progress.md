@@ -1220,3 +1220,9 @@ failures never fall back to plaintext disk files. Three focused payload tests an
 all-target Clippy pass, including the account feature. The encrypted reader is ready for the
 account writer, which is the next integration step. No real agent was invoked.
 
+The first integrated Windows run exposed stale image-capability expectations from before composer
+imports were implemented. The Codex handshake assertion and 25 Claude/Codex replay goldens now
+expect the supported image payload path. Reviewed golden changes are only `images: false` to
+`images: true`; the focused handshake and all three replay gates pass locally without updating
+goldens during verification. Recorded wire inputs and ACP goldens are unchanged.
+

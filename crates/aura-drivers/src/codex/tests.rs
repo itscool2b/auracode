@@ -181,7 +181,7 @@ async fn handshake_uses_thread_identity_and_advertises_only_implemented_capabili
     assert!(
         !ready.capabilities.steer
             && !ready.capabilities.fork
-            && !ready.capabilities.images
+            && ready.capabilities.images
             && !ready.capabilities.add_dirs
     );
     h.prompt();

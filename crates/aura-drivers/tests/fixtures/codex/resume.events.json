@@ -91,7 +91,7 @@
         "agent_name": "Codex",
         "agent_version": "0.162.1",
         "capabilities": {
-          "images": false,
+          "images": true,
           "steer": false,
           "interrupt": true,
           "resume": true,
