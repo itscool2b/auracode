@@ -18,6 +18,7 @@ mod live;
 mod login;
 mod normalize;
 mod policy;
+mod search;
 mod spawner;
 #[cfg(test)]
 mod tests;

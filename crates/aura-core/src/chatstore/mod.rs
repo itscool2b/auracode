@@ -29,6 +29,7 @@ pub(crate) mod history;
 pub(crate) mod organization;
 mod recover;
 pub(crate) mod rows;
+pub(crate) mod search;
 #[cfg(test)]
 pub(crate) mod test_support;
 mod writer;
@@ -83,6 +84,34 @@ impl fmt::Debug for ChatStore {
 }
 
 impl ChatStore {
+    pub(crate) async fn search(
+        &self,
+        query: String,
+        include_archived: bool,
+    ) -> Result<aura_protocol::search::SearchResults, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if self.is_paused() {
+            return self
+                .saved(
+                    writer::SavedRead::Search {
+                        query,
+                        include_archived,
+                        reply,
+                    },
+                    answer,
+                )
+                .await?;
+        }
+        self.request(
+            Request::Search {
+                query,
+                include_archived,
+                reply,
+            },
+            answer,
+        )
+        .await?
+    }
     pub(crate) async fn composer(
         &self,
         command: composer::ComposerCommand,

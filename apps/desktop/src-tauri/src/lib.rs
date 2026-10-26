@@ -30,6 +30,7 @@ pub mod launch;
 pub mod native_shell;
 pub mod os;
 pub mod reveal;
+pub mod search_commands;
 pub mod sessions;
 pub mod smoke;
 pub mod state;

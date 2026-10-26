@@ -33,6 +33,7 @@ export function ChatList({
   onChatOptions,
   archived = false,
   onShowArchived,
+  onSearch,
 }: {
   readonly chats: readonly ChatSummary[] | null;
   readonly error: string | null;
@@ -45,6 +46,7 @@ export function ChatList({
   readonly onChatOptions?: (chat: ChatSummary) => void;
   readonly archived?: boolean;
   readonly onShowArchived?: () => void;
+  readonly onSearch?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -85,10 +87,11 @@ export function ChatList({
   const waiting = filtered.filter((chat) => chat.needs_attention);
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      if (event.defaultPrevented || !(event.metaKey || event.ctrlKey) || event.altKey) return;
       if (event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setSearching(true);
+        if (onSearch) onSearch();
+        else setSearching(true);
       } else if (event.key.toLowerCase() === "n") {
         event.preventDefault();
         onNewChat();
@@ -96,7 +99,7 @@ export function ChatList({
     };
     window.addEventListener("keydown", keys);
     return () => window.removeEventListener("keydown", keys);
-  }, [onNewChat]);
+  }, [onNewChat, onSearch]);
   useEffect(() => {
     if (searching) search.current?.focus();
   }, [searching]);
@@ -116,8 +119,8 @@ export function ChatList({
         <button
           type="button"
           className="chat-nav-action"
-          onClick={() => setSearching((value) => !value)}
-          aria-expanded={searching}
+          onClick={() => (onSearch ? onSearch() : setSearching((value) => !value))}
+          aria-expanded={onSearch ? undefined : searching}
         >
           <Search size={16} />
           <span>Search</span>

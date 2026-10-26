@@ -49,6 +49,7 @@ import {
   statusSubscribe,
   storageStatus,
 } from "../ipc";
+import { type SearchTransport, searchApi } from "../search";
 
 /**
  * Everything the chat screens ask of the shell. The stores take this interface, so Vitest drives
@@ -56,6 +57,7 @@ import {
  * wrappers throw `CommandError`s with the shell's codes.
  */
 export interface Transport {
+  readonly search?: SearchTransport;
   readonly changes?: import("../changes").ChangesTransport;
   readonly composer?: ComposerTransport;
   agentMaintenance(agentId: string): Promise<AgentMaintenance>;
@@ -97,6 +99,7 @@ export interface Transport {
 
 /** The shell, through the typed command wrappers. */
 export const tauriTransport: Transport = {
+  search: searchApi,
   changes: changesApi,
   composer: composerApi,
   agentMaintenance,

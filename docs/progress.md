@@ -820,3 +820,16 @@ A focused Chromium accessibility scan of the panel passed with no violations, an
 restoration passed. Biome and rustfmt pass apart from existing CSS ordering warnings. The combined
 browser regression is prepared for the integration batch. Native command bindings, real checkpoint
 UI acceptance on Windows/macOS, and broader milestone checks remain pending. No remote CI or push.
+
+## Local search and command palette
+
+Rust now exposes bounded project/chat metadata search and literal-prefix FTS over completed messages,
+with accent folding, archived opt-in, deleted-row filtering and plain-text snippets. Reads use the
+profile writer and its saved-data path when saving is paused. The dark command palette opens from
+Search or Cmd/Ctrl+K, supports keyboard selection and scope filters, and adds project-file mentions
+to the existing draft. Available workspace commands use the same real actions as the main UI.
+
+Core all-target compilation passes after reconciling the combined Cargo lockfile. The search regression
+and integrated browser checks are queued for the verification batch. A focused Chromium interaction
+found no browser errors; its one near-threshold contrast finding was corrected. Production bindings
+and full platform acceptance remain pending. No CI dispatch or push.

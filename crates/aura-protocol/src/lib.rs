@@ -17,6 +17,7 @@ pub mod agents;
 pub mod changes;
 pub mod composer;
 mod lenient;
+pub mod search;
 pub mod session;
 pub mod workspace;
 

@@ -55,6 +55,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::env_status,
             commands::env_refresh,
             commands::pick_folder,
+            crate::search_commands::workspace_search,
             crate::composer_commands::composer_pick,
             crate::composer_commands::composer_import,
             crate::composer_commands::composer_paste,

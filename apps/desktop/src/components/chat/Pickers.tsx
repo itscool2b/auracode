@@ -14,7 +14,7 @@ import { Popover } from "./Popover";
 
 /**
  * Autonomy (always enabled: it applies when the agent starts), with its note, the agent mode in
- * effect, and the missing safety net while Full auto is chosen; then one select or checkbox per
+ * effect, and the checkpoint behavior while Full auto is chosen; then one select or checkbox per
  * option the agent offers, enabled while the agent is ready or working, pending values marked. A
  * change on its way (up to 35 s) shows the value asked for, marked "saving", instead of snapping
  * back to the old one.

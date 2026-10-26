@@ -8,6 +8,7 @@ import type { AgentEntry, AuraEvent, EventBatch, SessionStatus } from "../bindin
 import { AgentDock } from "../components/chat/AgentDock";
 import { ChatList } from "../components/chat/ChatList";
 import { ChatView } from "../components/chat/ChatView";
+import { CommandPalette } from "../components/chat/CommandPalette";
 import { NewChat } from "../components/chat/NewChat";
 import { NewChatDraft } from "../lib/chat/appStore";
 import {
@@ -266,6 +267,7 @@ function Preview() {
     ? requested
     : "settled";
   const systemTheme = useOrbitTheme();
+  const [palette, setPalette] = useState(false);
   const [selected, setSelected] = useState<string | null>(mode === "new" ? null : "preview");
   const status: SessionStatus =
     mode === "thinking" ||
@@ -374,6 +376,7 @@ function Preview() {
     <div className="chat-app orbit-theme" data-theme={systemTheme} data-glass="none">
       <aside className="chat-sidebar" aria-label="Sidebar">
         <ChatList
+          onSearch={() => setPalette(true)}
           chats={[
             chat,
             chatSummary("older", {
@@ -416,6 +419,22 @@ function Preview() {
           />
         )}
       </main>
+      {palette ? (
+        <CommandPalette
+          transport={transport}
+          chatId={selected}
+          onClose={() => setPalette(false)}
+          onChat={() => setSelected("preview")}
+          commands={[
+            {
+              id: "new",
+              title: "New chat",
+              detail: "Choose an agent and project",
+              run: () => setSelected(null),
+            },
+          ]}
+        />
+      ) : null}
     </div>
   );
 }

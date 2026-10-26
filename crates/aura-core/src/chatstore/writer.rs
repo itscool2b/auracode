@@ -142,6 +142,11 @@ pub(crate) enum Work {
 
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
+    Search {
+        query: String,
+        include_archived: bool,
+        reply: oneshot::Sender<Result<aura_protocol::search::SearchResults, StoreError>>,
+    },
     Composer {
         command: super::composer::ComposerCommand,
         reply: oneshot::Sender<Result<super::composer::ComposerReply, StoreError>>,
@@ -180,6 +185,11 @@ pub(crate) enum Request {
 
 /// A read served from saved data, outside the FIFO, even while the writer is stalled.
 pub(crate) enum SavedRead {
+    Search {
+        query: String,
+        include_archived: bool,
+        reply: oneshot::Sender<Result<aura_protocol::search::SearchResults, StoreError>>,
+    },
     CheckpointContext {
         chat_id: String,
         turn_id: Option<String>,
@@ -435,6 +445,7 @@ fn work_bytes(work: &Work) -> usize {
         Work::Op(op) => op_bytes(op),
         Work::Request(Request::Organization { command, .. }) => command.bytes(),
         Work::Request(Request::Composer { command, .. }) => command.bytes(),
+        Work::Request(Request::Search { query, .. }) => 256 + query.len(),
         Work::Request(_) => 256,
         #[cfg(test)]
         Work::Test(_) => 256,
@@ -614,6 +625,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::Composer { .. }) => "composer",
         Work::Request(Request::CheckpointContext { .. }) => "checkpoint_context",
         Work::Request(Request::Chats { .. }) => "chats",
+        Work::Request(Request::Search { .. }) => "search",
         Work::Request(Request::LoadChat { .. }) => "load_chat",
         Work::Request(Request::ReadBlob { .. }) => "read_blob",
         Work::Request(Request::Acknowledge { .. }) => "acknowledge_recovery",
@@ -1180,6 +1192,14 @@ impl Writer {
 
     fn answer_request(&mut self, request: Request) {
         match request {
+            Request::Search {
+                query,
+                include_archived,
+                reply,
+            } => {
+                let _ = reply
+                    .send(self.read(|conn| super::search::execute(conn, &query, include_archived)));
+            }
             Request::Composer { command, reply } => {
                 let dir = self.attachments.clone();
                 let now = now_millis();
@@ -1344,6 +1364,14 @@ impl Writer {
     /// Serves a read from saved data.
     fn serve_saved(&mut self, read: SavedRead) {
         match read {
+            SavedRead::Search {
+                query,
+                include_archived,
+                reply,
+            } => {
+                let _ = reply
+                    .send(self.read(|conn| super::search::execute(conn, &query, include_archived)));
+            }
             SavedRead::CheckpointContext {
                 chat_id,
                 turn_id,

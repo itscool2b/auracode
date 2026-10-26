@@ -7,10 +7,12 @@ export function Modal({
   title,
   onClose,
   children,
+  className = "",
 }: {
   readonly title: string;
   readonly onClose: () => void;
   readonly children: ReactNode;
+  readonly className?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const label = useId();
@@ -22,7 +24,7 @@ export function Modal({
   return createPortal(
     <dialog
       ref={dialog}
-      className="orbit-theme chat-modal"
+      className={`orbit-theme chat-modal ${className}`}
       data-theme="dark"
       aria-labelledby={label}
       onKeyDown={(event) => {

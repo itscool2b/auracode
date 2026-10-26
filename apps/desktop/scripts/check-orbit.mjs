@@ -456,10 +456,10 @@ async function inspect(engine, launcher) {
     }
 
     await page.goto(`${url}/?preview=settled`);
-    await page.getByRole("button", { name: "Attach file", exact: true }).click();
+    await page.getByRole("button", { name: "Attach a file", exact: true }).click();
     await page.getByText("interface-notes.md", { exact: true }).waitFor();
     await page.getByTestId("composer-input").fill("Review @Sidebar");
-    await page.getByRole("option", { name: "src/components/Sidebar.tsx" }).click();
+    await page.getByRole("button", { name: "src/components/Sidebar.tsx", exact: true }).click();
     await page.getByRole("button", { name: "Changes", exact: true }).click();
     await page.getByRole("table", { name: "File line changes" }).waitFor();
     const changeScan = await new AxeBuilder({ page })

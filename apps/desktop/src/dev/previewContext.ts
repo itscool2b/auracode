@@ -3,10 +3,11 @@ import type { ComposerInput } from "../bindings";
 import type { ChangesTransport } from "../lib/changes";
 import type { Transport } from "../lib/chat/transport";
 import type { ComposerTransport } from "../lib/composer";
+import type { SearchTransport } from "../lib/search";
 
 export function withPreviewContext<T extends Transport>(
   transport: T,
-): T & { composer: ComposerTransport; changes: ChangesTransport } {
+): T & { composer: ComposerTransport; changes: ChangesTransport; search: SearchTransport } {
   let input: ComposerInput = { text: "", attachments: [], mentions: [] };
   const attachment = {
     id: "preview-context",
@@ -104,5 +105,21 @@ export function withPreviewContext<T extends Transport>(
       return { applied, error: null, recovery_paths: [] };
     },
   };
-  return Object.assign(transport, { composer, changes });
+  const search: SearchTransport = {
+    search: async (query) => ({
+      chats: [
+        {
+          id: "preview",
+          title: "Make the sidebar easier to scan",
+          project: "auracode",
+          snippet: "Keep the active chat visible when project groups collapse.",
+          archived: false,
+        },
+      ].filter((chat) =>
+        `${chat.title} ${chat.snippet}`.toLowerCase().includes(query.toLowerCase()),
+      ),
+      projects: [],
+    }),
+  };
+  return Object.assign(transport, { composer, changes, search });
 }

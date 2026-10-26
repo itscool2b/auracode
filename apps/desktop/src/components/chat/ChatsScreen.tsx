@@ -10,6 +10,7 @@ import { Banners } from "./Banners";
 import { ChatActionsDialog } from "./ChatActionsDialog";
 import { ChatList } from "./ChatList";
 import { ChatView } from "./ChatView";
+import { CommandPalette } from "./CommandPalette";
 import { NewChat } from "./NewChat";
 import { ProjectDialog } from "./ProjectDialog";
 
@@ -53,6 +54,7 @@ export function ChatsScreen({
     null,
   );
   const [chatOptions, setChatOptions] = useState<string | null>(null);
+  const [palette, setPalette] = useState(false);
   const chatIds = snapshot.chats?.map((chat) => chat.id).join(",") ?? "";
   useEffect(() => {
     if (openChatRequest) setSelected(openChatRequest.id);
@@ -94,6 +96,7 @@ export function ChatsScreen({
           <PanelLeft size={16} />
         </button>
         <ChatList
+          onSearch={transport.search ? () => setPalette(true) : undefined}
           chats={displayed}
           error={organization.error ?? snapshot.chatsError}
           organization={organization.data}
@@ -157,6 +160,69 @@ export function ChatsScreen({
           />
         )}
       </main>
+      {palette ? (
+        <CommandPalette
+          transport={transport}
+          chatId={selected}
+          onClose={() => setPalette(false)}
+          onChat={setSelected}
+          onProject={
+            workspace
+              ? (id) => {
+                  const project = organization.data?.projects.find((project) => project.id === id);
+                  if (project) setProjectDialog({ project });
+                }
+              : undefined
+          }
+          commands={[
+            {
+              id: "new",
+              title: "New chat",
+              detail: "Choose an agent and project",
+              run: () => {
+                setSelected(null);
+                setDraft(new NewChatDraft(transport));
+              },
+            },
+            ...(workspace
+              ? [
+                  {
+                    id: "project",
+                    title: "New project",
+                    detail: "Add a folder to your workspace",
+                    run: () => setProjectDialog({ project: null }),
+                  },
+                  {
+                    id: "archived",
+                    title: archived ? "Show active chats" : "Show archived chats",
+                    detail: "Change the sidebar view",
+                    run: () => setArchived((value) => !value),
+                  },
+                ]
+              : []),
+            {
+              id: "agents",
+              title: "Refresh agents",
+              detail: "Check installed agent availability",
+              run: () => {
+                void app.refreshAgents();
+              },
+            },
+            {
+              id: "sidebar",
+              title: collapsed ? "Expand sidebar" : "Collapse sidebar",
+              detail: "Make room for the conversation",
+              run: () => setCollapsed((value) => !value),
+            },
+            {
+              id: "diagnostics",
+              title: "Open diagnostics",
+              detail: "Storage and app information",
+              run: onDiagnostics,
+            },
+          ]}
+        />
+      ) : null}
       {projectDialog && workspace ? (
         <ProjectDialog
           project={projectDialog.project}
