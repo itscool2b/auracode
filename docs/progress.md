@@ -1558,3 +1558,12 @@ The integrated native publisher has also received independent source review with
 MCP per-entry configuration copy/rollback passed a separate independent review before integration.
 Production Orbit tokens are unconditionally dark; historical light values are scoped to the archived
 Design Lab alone and cannot select a light appearance for the desktop or website.
+
+## Encrypted configuration sync boundary
+
+Added the Rust configuration port for account-bound encrypted snapshots, revision-checked publication,
+explicit tombstones and per-device merge bases. Logical IDs and snapshot metadata must be encrypted by
+the account runtime; no account key, token or vault handle enters the configuration crate. Oversized
+items remain explicitly skipped, and partial applies retain their previous merge base. Migration 0009
+is reserved for the account port's encrypted configuration storage. `cargo check -p aura-config` passes.
+The merge, apply and desktop integration remain in progress.

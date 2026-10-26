@@ -7,6 +7,7 @@ mod inventory;
 mod mcp;
 mod mcp_document;
 mod safe_fs;
+pub mod sync;
 
 use std::path::PathBuf;
 
