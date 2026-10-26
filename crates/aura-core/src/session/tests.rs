@@ -4,6 +4,7 @@
 mod checkpoints;
 mod conversation;
 mod workspace;
+mod worktree_guards;
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -121,6 +122,7 @@ fn rig_with(drivers: Arc<dyn DriverFactory>, config: WriterConfig, knobs: Knobs)
     );
     let manager = SessionManager::with_knobs(
         ManagerDeps {
+            worktrees: None,
             store: Arc::clone(&store),
             checkpoints: None,
             env,

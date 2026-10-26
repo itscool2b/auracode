@@ -82,6 +82,13 @@ const ANSWERED_REMEMBERED: usize = 64;
 
 /// A message for a chat's actor. Every reply is a oneshot.
 pub(crate) enum ChatMsg {
+    ReserveGit {
+        id: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    ReleaseGit {
+        id: String,
+    },
     Conversation {
         command: crate::chatstore::conversation::ConversationCommand,
         reply: oneshot::Sender<
@@ -193,6 +200,8 @@ impl ChatMsg {
     /// Answers the message with `error` (a chat that does not exist, a store that is gone).
     fn refuse(self, error: SessionError) {
         match self {
+            ChatMsg::ReserveGit { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::ReleaseGit { .. } => {}
             ChatMsg::Conversation { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Continue { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::CheckpointContext { reply, .. } => drop(reply.send(Err(error))),
@@ -472,6 +481,7 @@ pub(crate) struct ChatActor {
     progress: Option<mpsc::UnboundedReceiver<String>>,
     in_flight: FuturesUnordered<BoxFuture<'static, Done>>,
     organizing: bool,
+    git_reservation: Option<String>,
     checkpointing: Option<(String, AbortHandle)>,
     generation: u64,
     /// Generations force-stopped or crashed whose processes or task still wind down, with how many
@@ -582,6 +592,7 @@ impl ChatActor {
             progress: None,
             in_flight: FuturesUnordered::new(),
             organizing: false,
+            git_reservation: None,
             checkpointing: None,
             generation: 0,
             retiring: Vec::new(),
@@ -689,6 +700,40 @@ impl ChatActor {
 
     fn on_msg(&mut self, msg: ChatMsg) {
         match msg {
+            ChatMsg::ReserveGit { id, reply } => {
+                let result = if self.organizing
+                    || self.driver.is_some()
+                    || self.preparing.is_some()
+                    || !self.retiring.is_empty()
+                    || self.checkpointing.is_some()
+                    || self.turn.is_some()
+                    || !self.queue.is_empty()
+                    || self.pending_start.is_some()
+                    || self.native_identity_pending.is_some()
+                    || self.quitting
+                    || self.shared.is_shutting_down()
+                {
+                    Err(SessionError::Organization("Stop affected chats and clear their queued prompts before changing Git worktrees.".into()))
+                } else if self.store.is_paused() {
+                    Err(SessionError::StorageUnavailable(
+                        "Wait for saving to resume before changing Git worktrees.".into(),
+                    ))
+                } else {
+                    self.organizing = true;
+                    self.git_reservation = Some(id.clone());
+                    Ok(())
+                };
+                if reply.send(result).is_err() && self.git_reservation.as_deref() == Some(&id) {
+                    self.git_reservation = None;
+                    self.organizing = false;
+                }
+            }
+            ChatMsg::ReleaseGit { id } => {
+                if self.git_reservation.as_deref() == Some(&id) {
+                    self.git_reservation = None;
+                    self.organizing = false;
+                }
+            }
             ChatMsg::Conversation { command, reply } => self.conversation_read(command, reply),
             ChatMsg::Continue {
                 apply,

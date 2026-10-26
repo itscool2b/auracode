@@ -37,6 +37,14 @@ async fn rig() -> Rig {
     )
     .await
     .expect("fixture line ending setting");
+    for (key, value) in [
+        ("user.name", "Fixture"),
+        ("user.email", "fixture@localhost"),
+    ] {
+        git.run(&work, git::args(&["config", key, value]), 8192)
+            .await
+            .expect("fixture identity");
+    }
     std::fs::write(work.join("file.txt"), "initial\n").expect("file");
     git.run(&work, git::args(&["add", "--", "file.txt"]), 8192)
         .await
@@ -64,6 +72,223 @@ async fn rig() -> Rig {
         service,
         git,
     }
+}
+
+async fn isolated(rig: &Rig) -> aura_protocol::git::ManagedWorktree {
+    let preview = rig
+        .service
+        .isolation_preview(
+            "chat",
+            &rig.work,
+            IsolationInput {
+                slug: "feature".into(),
+                bring_changes: false,
+            },
+        )
+        .await
+        .expect("preview");
+    let result = rig
+        .service
+        .isolation_apply("chat", &preview.token)
+        .await
+        .expect("isolate");
+    assert_eq!(result.worktree.state, WorktreeState::Ready);
+    result.worktree
+}
+
+async fn commit_file(rig: &Rig, path: &Path, text: &str) {
+    std::fs::write(path.join("file.txt"), text).expect("edit");
+    rig.git
+        .run(path, git::args(&["add", "--", "file.txt"]), 8192)
+        .await
+        .expect("stage fixture");
+    rig.git
+        .run(
+            path,
+            git::args(&[
+                "-c",
+                "commit.gpgSign=false",
+                "commit",
+                "-m",
+                "owned fixture change",
+            ]),
+            8192,
+        )
+        .await
+        .expect("commit fixture");
+}
+
+#[tokio::test]
+async fn merge_preserves_recovery_and_refuses_a_dirty_or_changed_target() {
+    use aura_protocol::git::WorktreeAction;
+    let rig = rig().await;
+    let worktree = isolated(&rig).await;
+    commit_file(&rig, Path::new(&worktree.path), "isolated result\n").await;
+    let action = WorktreeAction::Merge {
+        message: "Merge reviewed changes".into(),
+    };
+    std::fs::write(rig.work.join("untracked.txt"), "keep").expect("owned untracked");
+    assert!(
+        rig.service
+            .action_preview("chat", &worktree.id, action.clone())
+            .await
+            .expect_err("dirty")
+            .to_string()
+            .contains("clean index")
+    );
+    std::fs::remove_file(rig.work.join("untracked.txt")).expect("remove owned fixture");
+    let stale = rig
+        .service
+        .action_preview("chat", &worktree.id, action.clone())
+        .await
+        .expect("preview");
+    std::fs::write(rig.work.join("file.txt"), "late user edit").expect("late edit");
+    assert!(
+        rig.service
+            .action_apply("chat", &stale.token)
+            .await
+            .expect_err("late edit")
+            .to_string()
+            .contains("changed after")
+    );
+    assert_eq!(
+        std::fs::read_to_string(rig.work.join("file.txt")).expect("kept"),
+        "late user edit"
+    );
+    std::fs::write(rig.work.join("file.txt"), "initial\n").expect("restore owned fixture");
+    let before = rig
+        .service
+        .inspect(&rig.work)
+        .await
+        .expect("before")
+        .head
+        .expect("head");
+    let preview = rig
+        .service
+        .action_preview("chat", &worktree.id, action)
+        .await
+        .expect("preview");
+    assert!(preview.conflicts.is_empty());
+    assert!(preview.changes.contains("file.txt"));
+    let result = rig
+        .service
+        .action_apply("chat", &preview.token)
+        .await
+        .expect("merge");
+    assert!(result.error.is_none(), "{:?}", result.error);
+    assert_eq!(result.worktree.state, WorktreeState::Ready);
+    assert_eq!(
+        std::fs::read_to_string(rig.work.join("file.txt")).expect("merged"),
+        "isolated result\n"
+    );
+    let after = rig.service.inspect(&rig.work).await.expect("after");
+    assert!(after.files.is_empty());
+    assert_eq!(after.head, result.commit);
+    let recovery = git::text(
+        &rig.git
+            .run(
+                &rig.work,
+                vec!["rev-parse".into(), result.recovery.into()],
+                128,
+            )
+            .await
+            .expect("recovery"),
+    )
+    .expect("oid");
+    assert_eq!(recovery, before);
+    assert!(!rig.work.join(".git/HEAD.lock").exists());
+}
+
+#[tokio::test]
+async fn merge_conflicts_leave_both_indexes_and_files_unchanged() {
+    use aura_protocol::git::WorktreeAction;
+    let rig = rig().await;
+    let worktree = isolated(&rig).await;
+    commit_file(&rig, Path::new(&worktree.path), "isolated change\n").await;
+    commit_file(&rig, &rig.work, "direct change\n").await;
+    let index = std::fs::read(rig.work.join(".git/index")).expect("index");
+    let preview = rig
+        .service
+        .action_preview(
+            "chat",
+            &worktree.id,
+            WorktreeAction::Merge {
+                message: "merge".into(),
+            },
+        )
+        .await
+        .expect("conflict preview");
+    assert_eq!(preview.conflicts, vec!["file.txt"]);
+    assert!(
+        rig.service
+            .action_apply("chat", &preview.token)
+            .await
+            .expect_err("conflict")
+            .to_string()
+            .contains("conflicts")
+    );
+    assert_eq!(
+        std::fs::read(rig.work.join(".git/index")).expect("same index"),
+        index
+    );
+    assert_eq!(
+        std::fs::read_to_string(rig.work.join("file.txt")).expect("direct"),
+        "direct change\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(Path::new(&worktree.path).join("file.txt")).expect("isolated"),
+        "isolated change\n"
+    );
+    assert!(!rig.work.join(".git/MERGE_HEAD").exists());
+}
+
+#[tokio::test]
+async fn discard_retires_owned_directory_with_ignored_bytes_and_rejects_external_paths() {
+    use aura_protocol::git::WorktreeAction;
+    let rig = rig().await;
+    let worktree = isolated(&rig).await;
+    let path = Path::new(&worktree.path);
+    std::fs::write(path.join(".gitignore"), "retained.data\n").expect("ignore fixture");
+    std::fs::write(path.join("retained.data"), [0, 255, 7, 3]).expect("opaque owned bytes");
+    let preview = rig
+        .service
+        .action_preview("chat", &worktree.id, WorktreeAction::Discard)
+        .await
+        .expect("discard preview");
+    let result = rig
+        .service
+        .action_apply("chat", &preview.token)
+        .await
+        .expect("retire");
+    assert!(result.error.is_none(), "{:?}", result.error);
+    assert_eq!(result.worktree.state, WorktreeState::Retired);
+    assert!(!path.exists());
+    assert_eq!(
+        std::fs::read(Path::new(&result.recovery).join("retained.data"))
+            .expect("all bytes retained"),
+        [0, 255, 7, 3]
+    );
+    assert!(
+        rig.service
+            .action_preview("chat", &worktree.id, WorktreeAction::Discard)
+            .await
+            .is_err()
+    );
+    let mut records = rig.service.read_records().expect("records");
+    records[0].path = rig.work.to_string_lossy().into_owned();
+    records[0].state = WorktreeState::Ready;
+    rig.service
+        .write_records(records)
+        .expect("owned corrupt registry fixture");
+    assert!(
+        rig.service
+            .action_preview("chat", &worktree.id, WorktreeAction::Discard)
+            .await
+            .expect_err("outside ownership")
+            .to_string()
+            .contains("app-owned")
+    );
+    assert!(rig.work.join("file.txt").exists());
 }
 
 #[tokio::test]

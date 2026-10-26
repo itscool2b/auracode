@@ -15,6 +15,7 @@ mod actor;
 mod changes;
 mod composer;
 mod conversation;
+mod gitworkspaces;
 mod live;
 mod login;
 mod normalize;
@@ -72,6 +73,7 @@ const FOLDER_NOT_ALLOWED: &str = "auracode isn't allowed to open this folder. Al
 /// Everything the manager runs on. Every constructor that spawns tasks takes `rt`, because Tauri's
 /// `setup` hook and run-event callbacks run outside any Tokio context.
 pub struct ManagerDeps {
+    pub worktrees: Option<Arc<crate::gitworkspaces::GitWorkspaces>>,
     pub store: Arc<ChatStore>,
     /// Production enables checkpoints; deterministic driver-only test rigs may omit the service.
     pub checkpoints: Option<Arc<crate::checkpoints::Checkpoints>>,

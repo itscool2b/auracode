@@ -43,6 +43,9 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::git::IsolationPreview>()
         .typ::<aura_protocol::git::IsolationResult>()
         .typ::<aura_protocol::git::ManagedWorktree>()
+        .typ::<aura_protocol::git::WorktreeAction>()
+        .typ::<aura_protocol::git::WorktreeActionPreview>()
+        .typ::<aura_protocol::git::WorktreeActionResult>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
             crate::onboarding::setup_snapshot,

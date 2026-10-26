@@ -1100,3 +1100,26 @@ cannot quarantine ciphertext. Local paths are unchanged. Legacy or multiple cand
 cause an explicit import/restore error before any account database is opened. Focused Windows tests
 preserve both paths byte-for-byte in this case; no existing user profile was read or migrated.
 
+## M4 guarded merge and retirement checkpoint
+
+The worktree service now prepares merges with Git merge-tree and reports conflict paths without
+changing either working tree. Apply requires clean source and target state and retains both previous
+and prepared commits under recovery refs before changing files. A HEAD lock protects the two-tree
+checkout; the branch update compares its expected old commit. A failed checkout or ref update keeps
+the prepared commit and an explicit RecoveryRequired journal entry instead of resetting user work.
+Git helpers request fsync for durable objects and refs. Discard moves only a validated app-owned,
+non-link worktree into the profile's retained directory through Git worktree move. All ignored and
+uncommitted bytes, and the branch, remain recoverable; it never recursively deletes the folder.
+
+SessionManager wrappers reserve canonical source/worktree folders and affected chat actors. Live,
+starting, retiring, paused-saving and held-queue states refuse mutation. An owned task retains those
+reservations after an IPC caller disconnects and releases them only after the operation has finished
+journaling. Production receives the optional GitWorkspaces dependency; isolated protocol fixtures
+leave it disabled. The native updater's idle admission must also count these folder reservations.
+
+All 305 core unit tests pass on Windows. The nine owned-repository tests also passed after recovery
+ref durability was added, and two actor tests cover held queues, live agents and release of the start
+guard. Core/CLI all-target Clippy passes. Generated desktop bindings cover action/result DTOs. Root UI
+integration and independent merge-race review remain pending, as do relocation, native cwd handoff,
+bringing uncommitted files, explicit setup, PR creation, recovery controls and macOS execution. This
+is a backend checkpoint, not M4 completion. No real-repository mutation, paid prompt, push or CI ran.

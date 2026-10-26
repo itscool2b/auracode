@@ -182,6 +182,13 @@ impl Headless {
             rt.clone(),
         );
         let manager = SessionManager::new(ManagerDeps {
+            worktrees: checkpoints.then(|| {
+                aura_core::gitworkspaces::GitWorkspaces::new(
+                    &profile,
+                    Arc::clone(&env),
+                    Arc::clone(&registry),
+                )
+            }),
             checkpoints: checkpoints.then(|| {
                 aura_core::checkpoints::Checkpoints::new(
                     &profile,

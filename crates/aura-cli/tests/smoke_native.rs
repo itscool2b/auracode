@@ -41,6 +41,7 @@ async fn headless(machine: &Machine, driver: ScriptedDriver) -> Headless {
     let redactor = Arc::new(Redactor::standard());
     let (spawner, _) = FakeSpawner::new();
     headless.manager = SessionManager::new(ManagerDeps {
+        worktrees: None,
         checkpoints: None,
         store: Arc::clone(&headless.store),
         env: Arc::clone(&headless.env),

@@ -46,9 +46,13 @@ pub struct IsolationPreview {
 pub enum WorktreeState {
     Creating,
     Ready,
+    Merging,
+    Retiring,
     RecoveryRequired,
     Missing,
     Retired,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -68,4 +72,31 @@ pub struct ManagedWorktree {
 pub struct IsolationResult {
     pub worktree: ManagedWorktree,
     pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum WorktreeAction {
+    Merge { message: String },
+    Discard,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeActionPreview {
+    pub token: String,
+    pub worktree: ManagedWorktree,
+    pub action: WorktreeAction,
+    pub target: Option<GitWorkspace>,
+    pub changes: String,
+    pub conflicts: Vec<String>,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeActionResult {
+    pub worktree: ManagedWorktree,
+    pub recovery: String,
+    pub commit: Option<String>,
+    pub error: Option<String>,
 }

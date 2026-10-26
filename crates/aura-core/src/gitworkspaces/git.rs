@@ -63,6 +63,8 @@ impl Git {
             "core.fsmonitor=false".into(),
             "-c".into(),
             "core.quotePath=false".into(),
+            "-c".into(),
+            "core.fsync=all".into(),
         ];
         command.extend(args);
         let output = run_helper(

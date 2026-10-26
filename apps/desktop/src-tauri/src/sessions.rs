@@ -395,6 +395,11 @@ pub fn start_chats(
         }
     });
     let manager = SessionManager::new(ManagerDeps {
+        worktrees: Some(aura_core::gitworkspaces::GitWorkspaces::new(
+            &profile,
+            Arc::clone(&env),
+            Arc::clone(&registry),
+        )),
         checkpoints: Some(aura_core::checkpoints::Checkpoints::new(
             &profile,
             Arc::clone(&env),

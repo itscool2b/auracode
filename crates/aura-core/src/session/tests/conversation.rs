@@ -432,6 +432,7 @@ async fn reopen_manager(rig: &mut Rig) {
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
     let deps = rig.manager.deps();
     let manager = SessionManager::new(ManagerDeps {
+        worktrees: deps.worktrees.clone(),
         store: Arc::clone(&deps.store),
         checkpoints: deps.checkpoints.clone(),
         env: Arc::clone(&deps.env),

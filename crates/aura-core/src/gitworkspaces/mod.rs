@@ -1,5 +1,6 @@
 //! Explicit local worktree lifecycle. No operation calls an agent or infers user confirmation.
 
+mod actions;
 mod create;
 mod git;
 mod inspect;
@@ -33,6 +34,7 @@ pub struct GitWorkspaces {
     root: PathBuf,
     gate: tokio::sync::Mutex<()>,
     prepared: std::sync::Mutex<HashMap<String, create::Prepared>>,
+    actions: std::sync::Mutex<HashMap<String, actions::PreparedAction>>,
 }
 
 impl GitWorkspaces {
@@ -47,6 +49,7 @@ impl GitWorkspaces {
             root: profile.dir.join("worktrees"),
             gate: tokio::sync::Mutex::new(()),
             prepared: std::sync::Mutex::new(HashMap::new()),
+            actions: std::sync::Mutex::new(HashMap::new()),
         })
     }
 

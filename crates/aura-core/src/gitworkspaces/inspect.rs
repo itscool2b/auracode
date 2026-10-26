@@ -13,6 +13,7 @@ pub(super) struct Inspection {
     pub(super) view: GitWorkspace,
     pub(super) root: PathBuf,
     pub(super) common: PathBuf,
+    pub(super) git_dir: PathBuf,
     pub(super) fingerprint: String,
 }
 
@@ -131,6 +132,7 @@ pub(super) async fn inspect(git: &Git, folder: &Path) -> Result<Inspection> {
         view,
         root,
         common,
+        git_dir: gitdir,
         fingerprint: format!("{:x}", hash.finalize()),
     })
 }
