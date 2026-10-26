@@ -60,6 +60,8 @@ const CREDENTIAL_SUFFIXES: &[&str] = &[
 const IDENTITY_KEYS: &[&str] = &[
     "account",
     "authstatus",
+    // Native Claude's get_usage returns the plan outside the account object.
+    "subscriptiontype",
     "oauthaccount",
     "organization",
     "organizationname",
@@ -725,6 +727,24 @@ mod tests {
                 "maxTokens": 4096,
             })
         );
+    }
+
+    #[test]
+    fn native_usage_hides_standalone_subscription_in_complete_and_cut_frames() {
+        let redactor = Redactor::standard();
+        for key in ["subscription_type", "subscriptionType", "SUBSCRIPTION-TYPE"] {
+            let mut value = json!({"response": {key: "max", "utilization": 12.5}});
+            redactor.redact_value(&mut value);
+            assert_eq!(value["response"][key], "<REDACTED>");
+            assert_eq!(value["response"]["utilization"], 12.5);
+
+            let raw = format!(r#"{{"response":{{"{key}":"max","utilization":12.5"#);
+            let expected = format!(r#"{{"response":{{"{key}":"<REDACTED>","utilization":12.5"#);
+            assert_eq!(redactor.redact_json_text(&raw), expected);
+
+            let cut = format!(r#"{{"response":{{"{key}":"ma"#);
+            assert!(!redactor.redact_json_text(&cut).contains("ma"));
+        }
     }
 
     #[test]
