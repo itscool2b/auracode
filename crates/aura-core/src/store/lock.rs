@@ -41,6 +41,33 @@ pub(super) struct OpenLock {
     hold: Hold,
 }
 
+/// A child forked by another thread shares this process's lock file description until its exec,
+/// so closing our descriptor alone can leave the lock held after we are done. Unlocking releases
+/// it for every descriptor at once, and the next open here then sees no other opener.
+fn release(file: &File) {
+    if let Err(error) = file.unlock() {
+        tracing::warn!(%error, "could not release the open lock");
+    }
+}
+
+impl Drop for OpenLock {
+    fn drop(&mut self) {
+        if let Some(file) = &self.file {
+            release(file);
+        }
+    }
+}
+
+/// The shared hold an open store keeps for its whole life.
+#[derive(Debug)]
+pub(super) struct StoreHold(File);
+
+impl Drop for StoreHold {
+    fn drop(&mut self) {
+        release(&self.0);
+    }
+}
+
 /// `<db>.lock`
 pub(super) fn lock_path(db_path: &Path) -> PathBuf {
     fsutil::with_suffix(db_path, ".lock")
@@ -110,10 +137,10 @@ impl OpenLock {
     /// may slip in between; it then finds a healthy, migrated database and leaves it alone. Returns
     /// `None` when there is nothing to keep (no locking here) or the shared hold can't be had, in
     /// which case the store still works, just without protection from repairs by others.
-    pub(super) fn into_store_hold(self, timeout: Duration) -> Option<File> {
-        let file = self.file?;
+    pub(super) fn into_store_hold(mut self, timeout: Duration) -> Option<StoreHold> {
+        let file = self.file.take()?;
         match self.hold {
-            Hold::Shared => Some(file),
+            Hold::Shared => Some(StoreHold(file)),
             Hold::Unavailable => None,
             Hold::Exclusive => {
                 if let Err(error) = file.unlock() {
@@ -123,7 +150,7 @@ impl OpenLock {
                 let deadline = Instant::now() + timeout;
                 loop {
                     match file.try_lock_shared() {
-                        Ok(()) => return Some(file),
+                        Ok(()) => return Some(StoreHold(file)),
                         Err(TryLockError::WouldBlock) if Instant::now() < deadline => {
                             std::thread::sleep(POLL);
                         }
@@ -224,5 +251,31 @@ mod tests {
         let (hold, waited) = waiter.join().expect("thread").expect("second");
         assert_eq!(hold, Hold::Exclusive);
         assert!(waited >= Duration::from_millis(100), "{waited:?}");
+    }
+
+    /// A child forked by another thread holds a copy of the lock descriptor until its exec.
+    /// `try_clone` duplicates the descriptor the same way, onto the same open file description.
+    #[test]
+    fn an_inherited_descriptor_does_not_keep_a_closed_store_locked() {
+        let (_dir, db) = db();
+        let opening = OpenLock::acquire(&db, Duration::from_millis(100)).expect("first");
+        let inherited = opening
+            .file
+            .as_ref()
+            .expect("lock file")
+            .try_clone()
+            .expect("dup");
+        let kept = opening
+            .into_store_hold(Duration::from_millis(100))
+            .expect("a shared hold for the store");
+        let child = kept.0.try_clone().expect("dup");
+        drop(kept);
+        let next = OpenLock::acquire(&db, Duration::from_millis(100)).expect("next");
+        assert_eq!(
+            next.hold(),
+            Hold::Exclusive,
+            "a closed store may migrate its database"
+        );
+        drop((inherited, child));
     }
 }

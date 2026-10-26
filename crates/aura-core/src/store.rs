@@ -182,7 +182,7 @@ pub struct Store {
     /// the database is in use (see `store/lock.rs`). Declared after `conn` because fields drop in
     /// declaration order: the connection must finish closing (and checkpointing) before another
     /// process may repair or migrate the file.
-    _lock: Option<File>,
+    _lock: Option<lock::StoreHold>,
 }
 
 impl Store {
