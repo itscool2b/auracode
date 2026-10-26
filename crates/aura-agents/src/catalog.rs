@@ -194,7 +194,7 @@ fn build_catalog() -> Vec<AgentSpec> {
                 program: Some("codex".into()),
                 args_in_order: vec!["app-server".into(), "daemon".into()],
             }],
-            last_verified: "Codex 0.162.1 schema and fixtures (Windows); live verification pending",
+            last_verified: "Codex 0.162.1 free controls and fixtures (Windows); prompted verification pending",
         },
         AgentSpec {
             id: "codex-acp",

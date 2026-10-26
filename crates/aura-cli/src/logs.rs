@@ -12,7 +12,14 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 /// The methods that open a session: their `params.cwd` is the chat folder.
-pub const OPEN_METHODS: [&str; 3] = ["session/new", "session/load", "session/resume"];
+pub const OPEN_METHODS: [&str; 6] = [
+    "session/new",
+    "session/load",
+    "session/resume",
+    "thread/start",
+    "thread/resume",
+    "thread/fork",
+];
 
 /// The current log files in a chat's log folder, oldest spawn first: logs are named after UUIDv7
 /// spawn ids, which sort by time. Rotated parts are left out ([`read`] reads them with their log).
@@ -249,8 +256,13 @@ pub fn has_prompt(records: &[Value]) -> bool {
     commands(records).any(|command| command["type"] == "prompt")
         || records.iter().any(|record| {
             direction(record) == Some("out")
-                && message(record)
-                    .is_some_and(|msg| msg["type"] == "user" || msg["method"] == "session/prompt")
+                && message(record).is_some_and(|msg| {
+                    msg["type"] == "user"
+                        || matches!(
+                            msg["method"].as_str(),
+                            Some("session/prompt" | "turn/start" | "turn/steer")
+                        )
+                })
         })
 }
 

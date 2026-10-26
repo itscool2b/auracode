@@ -41,9 +41,17 @@ Review fixes have passed the native tests and all frozen replay/schema checks; a
 of these fixes is still pending. Malformed completion/input metadata fails safely and quota state is
 bounded across repeated updates.
 
-M1c requirements still pending: native CLI probe integration and opt-in live verification, generated
-schema verification for the historical 0.164.0 baseline, frontend and complete workspace gates,
-independent review, and integration with later M1b contract fixes. Steer, fork, image attachments,
+The native Codex free probe passed on Windows with installed 0.162.1: 20 checks passed, none failed,
+and six were explicitly skipped. It verified initialization ordering, authoritative thread ID,
+native model discovery, staged next-turn settings, idle interrupt, owned shutdown, interrupted
+startup and restart. Three protocol logs prove no prompt or steer was sent. Resume and actual
+turn-setting application remain unverified by this free probe. Full workspace Rust tests and Clippy,
+rustfmt, pinned pnpm 12.15.0 checks (813 frontend tests, 19 existing skips), and both frontend builds
+pass. The generated vendor schema is excluded from formatting to preserve its recorded hash.
+
+M1c requirements still pending: opt-in prompted verification, generated
+schema verification for the historical 0.164.0 baseline, independent verification of review fixes,
+and integration with later M1b contract fixes. Steer, fork, image attachments,
 additional directories, rewind and secret input are explicitly unavailable until their complete
 core/UI and attachment paths exist. Unsupported MCP elicitation is cancelled with a visible notice.
 Native thread listing has no user-facing library seam yet. No M1c PR has been opened.
