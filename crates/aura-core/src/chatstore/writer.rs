@@ -147,6 +147,10 @@ pub(crate) enum Request {
         include_archived: bool,
         reply: oneshot::Sender<Result<aura_protocol::search::SearchResults, StoreError>>,
     },
+    Conversation {
+        command: super::conversation::ConversationCommand,
+        reply: oneshot::Sender<Result<super::conversation::ConversationReply, StoreError>>,
+    },
     Composer {
         command: super::composer::ComposerCommand,
         reply: oneshot::Sender<Result<super::composer::ComposerReply, StoreError>>,
@@ -624,6 +628,8 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::Organization { .. }) => "organization",
         Work::Request(Request::Composer { .. }) => "composer",
         Work::Request(Request::CheckpointContext { .. }) => "checkpoint_context",
+
+        Work::Request(Request::Conversation { .. }) => "conversation",
         Work::Request(Request::Chats { .. }) => "chats",
         Work::Request(Request::Search { .. }) => "search",
         Work::Request(Request::LoadChat { .. }) => "load_chat",
@@ -1192,6 +1198,18 @@ impl Writer {
 
     fn answer_request(&mut self, request: Request) {
         match request {
+            Request::Conversation { command, reply } => {
+                let device = self.device_id.clone();
+                let now = now_millis();
+                let result = if !command.writes() {
+                    self.read(|conn| super::conversation::execute(conn, &device, now, command))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| super::conversation::execute(conn, &device, now, command))
+                };
+                let _ = reply.send(result);
+            }
             Request::Search {
                 query,
                 include_archived,

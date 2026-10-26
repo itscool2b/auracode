@@ -25,6 +25,7 @@
 pub(crate) mod blobs;
 pub(crate) mod compact;
 pub(crate) mod composer;
+pub(crate) mod conversation;
 pub(crate) mod history;
 pub(crate) mod organization;
 mod recover;
@@ -111,6 +112,29 @@ impl ChatStore {
             answer,
         )
         .await?
+    }
+    pub(crate) async fn conversation(
+        &self,
+        command: conversation::ConversationCommand,
+    ) -> Result<conversation::ConversationReply, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if !command.writes() {
+            return self
+                .request(Request::Conversation { command, reply }, answer)
+                .await?;
+        }
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::Conversation { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
     }
     pub(crate) async fn composer(
         &self,
@@ -614,6 +638,7 @@ pub struct ChatRecord {
 /// Everything a chat actor starts from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChatLoad {
+    pub(crate) continuation: Option<conversation::PendingContinuation>,
     pub chat: ChatRecord,
     pub next_seq: u32,
     pub next_turn_ordinal: u32,
@@ -635,6 +660,7 @@ pub struct ReplayCheck {
 /// An `agent_sessions` row.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AgentSessionRow {
+    pub capabilities: Option<aura_protocol::Capabilities>,
     pub host: aura_protocol::agents::AgentHost,
     pub id: String,
     pub chat_id: String,
@@ -653,6 +679,7 @@ pub struct AgentSessionRow {
 /// The fields of an [`AgentSessionRow`] to change; `None` keeps a field.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AgentSessionPatch {
+    pub capabilities: Option<aura_protocol::Capabilities>,
     pub native_session_id: Option<String>,
     pub model: Option<String>,
     pub effort: Option<String>,
@@ -664,6 +691,7 @@ pub struct AgentSessionPatch {
 /// A `turns` row as it starts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TurnRow {
+    pub continuation_prefix: Option<String>,
     pub checkpoint_ref: Option<String>,
     pub parts: Vec<aura_protocol::PromptPart>,
     pub id: String,
@@ -1140,6 +1168,7 @@ mod tests {
         };
         Op::BeginTurn {
             turn: TurnRow {
+                continuation_prefix: None,
                 checkpoint_ref: None,
                 parts: Vec::new(),
                 id: "t1".into(),
@@ -1983,6 +2012,7 @@ mod tests {
                 &tx,
                 "dev",
                 &TurnRow {
+                    continuation_prefix: None,
                     checkpoint_ref: None,
                     parts: Vec::new(),
                     id: "t1".into(),
@@ -2078,6 +2108,7 @@ mod tests {
             store,
             Op::BeginTurn {
                 turn: TurnRow {
+                    continuation_prefix: None,
                     checkpoint_ref: None,
                     parts: Vec::new(),
                     id: "t1".into(),

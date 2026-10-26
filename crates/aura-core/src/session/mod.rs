@@ -14,6 +14,7 @@
 mod actor;
 mod changes;
 mod composer;
+mod conversation;
 mod live;
 mod login;
 mod normalize;
@@ -229,6 +230,7 @@ pub(crate) struct Shared {
     folders: Mutex<HashMap<PathBuf, FolderCheck>>,
     /// Serializes busy-folder preflight and project chat creation/moves.
     organization: tokio::sync::Mutex<()>,
+    continuations: Mutex<HashMap<String, conversation::PreparedContinuation>>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
     #[cfg(test)]
     slow_folder: Mutex<Option<(PathBuf, Duration, Arc<AtomicU64>)>>,
@@ -342,6 +344,7 @@ impl SessionManager {
                     shutting_down: AtomicBool::new(false),
                     folders: Mutex::new(HashMap::new()),
                     organization: tokio::sync::Mutex::new(()),
+                    continuations: Mutex::new(HashMap::new()),
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
                 }),

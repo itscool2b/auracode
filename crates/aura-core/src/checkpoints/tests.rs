@@ -83,6 +83,15 @@ async fn non_git_checkpoint_preserves_bytes_ignores_and_reports_changes() {
     assert_eq!(diff.before.as_deref(), Some("first\r\nsecond\r\n"));
     assert_eq!(diff.after.as_deref(), Some("changed\n"));
     assert!(!diff.binary && !diff.truncated);
+    let stat = rig
+        .service
+        .diff_stat(&rig.chat, &rig.folder, &rig.work, &checkpoint.id)
+        .await
+        .expect("git stat");
+    assert!(
+        stat.contains("text.txt") && stat.contains("3 files changed"),
+        "{stat}"
+    );
 }
 
 #[tokio::test]
@@ -154,6 +163,10 @@ fn paths_reject_traversal_git_metadata_and_windows_streams() {
         ".git/config",
         "sub/.GIT/index",
         "line\nname",
+        ".ssh/id_rsa",
+        "nested/AUTH.JSON",
+        ".env.local",
+        "signing/private.KEY",
     ] {
         assert!(scan::validate(path).is_err(), "{path}");
     }
@@ -296,6 +309,17 @@ async fn changed_preview_is_rejected_before_any_file_is_modified() {
 #[tokio::test]
 async fn agent_config_and_oversized_files_are_excluded_without_becoming_deletions() {
     let rig = rig();
+    std::fs::create_dir(rig.work.join(".ssh")).expect("owned private-directory fixture");
+    for path in [
+        ".ssh/id_rsa",
+        "auth.json",
+        ".env",
+        ".env.local",
+        "private.pem",
+    ] {
+        std::fs::write(rig.work.join(path), "synthetic fixture only, never read")
+            .expect("owned private fixture");
+    }
     std::fs::create_dir(rig.work.join(".codex")).expect("owned config fixture");
     std::fs::write(
         rig.work.join(".codex/auth.json"),

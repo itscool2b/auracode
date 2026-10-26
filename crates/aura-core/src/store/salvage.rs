@@ -1055,7 +1055,7 @@ mod tests {
     use std::fs;
 
     /// Every table of the current schema the copy must have, whatever was damaged.
-    const TABLES: [&str; 12] = [
+    const TABLES: [&str; 15] = [
         "settings",
         "projects",
         "project_folders",
@@ -1068,6 +1068,9 @@ mod tests {
         "agent_cache",
         "message_fts",
         "queued_prompts",
+        "composer_attachments",
+        "composer_drafts",
+        "chat_continuations",
     ];
 
     struct Fixture {
@@ -1579,9 +1582,11 @@ mod tests {
             }
             if index == leaves.len() - 1 {
                 assert!(readable.contains("projects"), "{readable:?}");
+                // Later migrations can move FTS off the last schema leaf. Check the actual
+                // unreadable table set instead of assuming a fixed schema-page layout.
                 assert!(
-                    tables.iter().any(|lost| lost == "message_fts"),
-                    "{tables:?}"
+                    TABLES.iter().any(|table| !readable.contains(*table)),
+                    "{readable:?}"
                 );
             }
         }

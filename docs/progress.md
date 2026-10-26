@@ -839,3 +839,27 @@ Core all-target compilation passes after reconciling the combined Cargo lockfile
 and integrated browser checks are queued for the verification batch. A focused Chromium interaction
 found no browser errors; its one near-threshold contrast finding was corrected. Production bindings
 and full platform acceptance remain pending. No CI dispatch or push.
+
+## Conversation continuation backend checkpoint
+
+Migration 0006 saves explicit continuation state, links forks to their source, and persists actual
+native capabilities. The bounded preview lists the exact handoff and retained prompt before apply;
+it never sends a model prompt. Retry/edit retain the original transcript. Switch-back resumes the
+selected agent's saved session when its recorded capability, host and cwd permit it, with only the
+missing turns in the visible handoff. Latest-turn Claude and Pi forks use the supported native fork
+startup and a distinct session ID. Other forks use a new chat and visible context. Earlier-turn native
+truncate/fork mappings and native Codex fork remain unavailable until qualified end to end.
+
+Confirmed handoffs survive actor reconstruction and are consumed atomically with the begun turn.
+Image references copy only source-chat metadata selected from a saved turn; a missing image aborts
+the transaction. Preview tokens expire, are single use, and reject intervening conversation changes.
+Continuations require stopped agents and no queued prompts. Ambiguous legacy attachment-only prompts
+cannot be edited safely and show a reason; unchanged retry remains available. File context includes a
+bounded real Git diff stat computed from the private checkpoint trees, without accessing the user's
+index. Checkpoint exclusions now also reject known credential and private-key paths before reads.
+
+All 294 core unit tests pass locally on Windows, including continuation recovery, exact context,
+attachment rollback, native fork identity, checkpoint/index protection and migration salvage. Core
+and CLI all-target Clippy and the desktop binding export pass. No real-agent prompt, vendor login,
+push or CI dispatch ran. UI integration, macOS execution, project default-model application, portable
+Git folder identity, missing-native-transcript fallback and M4 Git lifecycle remain pending.

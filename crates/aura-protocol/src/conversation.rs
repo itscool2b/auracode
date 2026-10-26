@@ -47,6 +47,7 @@ pub struct ContinuationPreview {
     pub agent_id: String,
     pub creates_chat: bool,
     pub resumes_native: bool,
+    pub uses_native_fork: bool,
     /// Exact bounded context shown before confirmation and included in the next visible prompt.
     pub handoff: String,
     /// Retry/edit prompt, including the visible labels/text for retained attachments and mentions.

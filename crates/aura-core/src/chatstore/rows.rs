@@ -196,6 +196,7 @@ pub(crate) fn load_chat(
         None => None,
     };
     Ok(Some(ChatLoad {
+        continuation: super::conversation::pending(conn, chat_id)?,
         chat,
         next_seq,
         next_turn_ordinal,
@@ -211,14 +212,28 @@ pub(crate) fn latest_agent_session(
     conn: &Connection,
     chat_id: &str,
 ) -> rusqlite::Result<Option<AgentSessionRow>> {
+    let agent: Option<String> = conn.query_row(
+        "SELECT active_agent FROM chats WHERE id=?1",
+        [chat_id],
+        |row| row.get(0),
+    )?;
+    agent_session_for(conn, chat_id, agent.as_deref().unwrap_or(""))
+}
+
+pub(crate) fn agent_session_for(
+    conn: &Connection,
+    chat_id: &str,
+    agent_id: &str,
+) -> rusqlite::Result<Option<AgentSessionRow>> {
     conn.prepare_cached(
         "SELECT id, chat_id, agent_id, native_session_id, model, effort, autonomy, config_json, cwd, \
-         created_at, updated_at, host FROM agent_sessions WHERE chat_id = ?1 ORDER BY created_at DESC, id DESC LIMIT 1",
+         created_at, updated_at, host, capabilities_json FROM agent_sessions WHERE chat_id = ?1 AND agent_id = ?2 ORDER BY created_at DESC, id DESC LIMIT 1",
     )?
-    .query_row(params![chat_id], |row| {
+    .query_row(params![chat_id, agent_id], |row| {
         let autonomy: Option<String> = row.get(6)?;
         let cwd: String = row.get(8)?;
         Ok(AgentSessionRow {
+            capabilities: row.get::<_,Option<String>>(12)?.and_then(|json| serde_json::from_str(&json).ok()),
             host: parse_session_host(&row.get::<_, String>(11)?),
             id: row.get(0)?,
             chat_id: row.get(1)?,
@@ -371,7 +386,7 @@ pub(crate) fn insert_agent_session(
 ) -> rusqlite::Result<()> {
     conn.prepare_cached(
         "INSERT INTO agent_sessions (id, chat_id, agent_id, native_session_id, model, effort, autonomy, cwd, \
-         created_at, updated_at, device_id, config_json, host) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+         created_at, updated_at, device_id, config_json, host, capabilities_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
     )?
     .execute(params![
         row.id,
@@ -387,7 +402,9 @@ pub(crate) fn insert_agent_session(
         device_id,
         row.config_json,
         serde_json::to_string(&row.host).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
+        row.capabilities.as_ref().map(serde_json::to_string).transpose().map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
     ])?;
+    conn.execute("UPDATE chat_continuations SET pending_json=json_set(pending_json,'$.force_fresh',json('false'),'$.resume_source',NULL,'$.native_start',json('{}')) WHERE chat_id=?1", [&row.chat_id])?;
     Ok(())
 }
 
@@ -401,7 +418,7 @@ pub(crate) fn update_agent_session(
     conn.prepare_cached(
         "UPDATE agent_sessions SET native_session_id = COALESCE(?2, native_session_id), \
          model = COALESCE(?3, model), effort = COALESCE(?4, effort), autonomy = COALESCE(?5, autonomy), \
-         config_json = COALESCE(?6, config_json), updated_at = ?7, device_id = ?8 WHERE id = ?1",
+         config_json = COALESCE(?6, config_json), updated_at = ?7, device_id = ?8, capabilities_json=COALESCE(?9,capabilities_json) WHERE id = ?1",
     )?
     .execute(params![
         id,
@@ -412,6 +429,7 @@ pub(crate) fn update_agent_session(
         patch.config_json,
         patch.updated_at,
         device_id,
+        patch.capabilities.as_ref().map(serde_json::to_string).transpose().map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
     ])?;
     Ok(())
 }
@@ -443,7 +461,7 @@ pub(crate) fn begin_turn(
 ) -> rusqlite::Result<()> {
     conn.prepare_cached(
         "INSERT INTO turns (id, chat_id, agent_session_id, seq, status, started_at, device_id, prompt_id, \
-         first_event_seq, prompt_parts_json, checkpoint_ref) VALUES (?1, ?2, ?3, ?4, 'running', ?5, ?6, ?7, ?8, ?9, ?10)",
+         first_event_seq, prompt_parts_json, checkpoint_ref, continuation_prefix) VALUES (?1, ?2, ?3, ?4, 'running', ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
     )?
     .execute(params![
         turn.id,
@@ -456,7 +474,9 @@ pub(crate) fn begin_turn(
         turn.first_event_seq,
         serde_json::to_string(&turn.parts).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
         turn.checkpoint_ref,
+        turn.continuation_prefix,
     ])?;
+    conn.execute("UPDATE chat_continuations SET pending_json=json_set(pending_json,'$.handoff','') WHERE chat_id=?1", [&turn.chat_id])?;
     append_events(conn, device_id, &turn.chat_id, rows)?;
     conn.prepare_cached("DELETE FROM queued_prompts WHERE id = ?1")?
         .execute(params![turn.prompt_id])?;
@@ -738,6 +758,7 @@ pub(crate) mod tests {
         assert_eq!(empty.agent_session, None);
 
         let session = AgentSessionRow {
+            capabilities: None,
             host: Default::default(),
             id: "s1".into(),
             chat_id: chat.clone(),
@@ -756,6 +777,7 @@ pub(crate) mod tests {
             conn,
             "dev",
             &TurnRow {
+                continuation_prefix: None,
                 checkpoint_ref: None,
                 parts: Vec::new(),
                 id: "t1".into(),

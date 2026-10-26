@@ -82,6 +82,18 @@ const ANSWERED_REMEMBERED: usize = 64;
 
 /// A message for a chat's actor. Every reply is a oneshot.
 pub(crate) enum ChatMsg {
+    Conversation {
+        command: crate::chatstore::conversation::ConversationCommand,
+        reply: oneshot::Sender<
+            Result<crate::chatstore::conversation::ConversationReply, SessionError>,
+        >,
+    },
+    Continue {
+        apply: Box<crate::chatstore::conversation::ApplyContinuation>,
+        prompt: Option<(String, Vec<PromptPart>)>,
+        reply:
+            oneshot::Sender<Result<aura_protocol::conversation::ContinuationResult, SessionError>>,
+    },
     CheckpointContext {
         turn_id: Option<String>,
         reply: oneshot::Sender<Result<(ChatRecord, Option<String>), SessionError>>,
@@ -181,6 +193,8 @@ impl ChatMsg {
     /// Answers the message with `error` (a chat that does not exist, a store that is gone).
     fn refuse(self, error: SessionError) {
         match self {
+            ChatMsg::Conversation { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::Continue { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::CheckpointContext { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Revert { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Organize { reply, .. } => drop(reply.send(Err(error))),
@@ -347,6 +361,18 @@ struct NativeIdentitySave {
 
 /// What an `in_flight` future completes.
 enum Done {
+    Conversation {
+        result: Result<crate::chatstore::conversation::ConversationReply, SessionError>,
+        reply: oneshot::Sender<
+            Result<crate::chatstore::conversation::ConversationReply, SessionError>,
+        >,
+    },
+    Continued {
+        result: Result<Box<ChatLoad>, SessionError>,
+        prompt: Option<(String, Vec<PromptPart>)>,
+        reply:
+            oneshot::Sender<Result<aura_protocol::conversation::ContinuationResult, SessionError>>,
+    },
     CheckpointContext {
         result: Result<(ChatRecord, Option<String>), SessionError>,
         reply: oneshot::Sender<Result<(ChatRecord, Option<String>), SessionError>>,
@@ -455,6 +481,7 @@ pub(crate) struct ChatActor {
     /// How many generations retire, for the preparation of a start to wait on.
     winding_down: watch::Sender<usize>,
     agent_session: Option<AgentSessionRow>,
+    continuation: Option<crate::chatstore::conversation::PendingContinuation>,
     autonomy: Autonomy,
     autonomy_state: AutonomyState,
     desired: BTreeMap<String, ConfigValue>,
@@ -499,6 +526,7 @@ impl ChatActor {
         load: ChatLoad,
     ) -> ChatActor {
         let ChatLoad {
+            continuation,
             chat,
             next_seq,
             next_turn_ordinal,
@@ -524,7 +552,13 @@ impl ChatActor {
             .and_then(|json| serde_json::from_str(json).ok())
             .unwrap_or_default();
         let store = Arc::clone(&shared.deps.store);
+        let replay_check = replay_check.filter(|_| {
+            !continuation
+                .as_ref()
+                .is_some_and(|value| value.force_fresh || value.native_start.fork)
+        });
         ChatActor {
+            continuation,
             batcher: FrameBatcher::new(chat_id.clone()).starting_at(next_seq),
             batched_bytes: 0,
             chat_id,
@@ -655,6 +689,12 @@ impl ChatActor {
 
     fn on_msg(&mut self, msg: ChatMsg) {
         match msg {
+            ChatMsg::Conversation { command, reply } => self.conversation_read(command, reply),
+            ChatMsg::Continue {
+                apply,
+                prompt,
+                reply,
+            } => self.continue_chat(apply, prompt, reply),
             ChatMsg::CheckpointContext { turn_id, reply } => {
                 self.flush();
                 let barrier = if self.store.is_paused() {
@@ -929,6 +969,157 @@ impl ChatActor {
             .min()
     }
 
+    fn conversation_read(
+        &mut self,
+        command: crate::chatstore::conversation::ConversationCommand,
+        reply: oneshot::Sender<
+            Result<crate::chatstore::conversation::ConversationReply, SessionError>,
+        >,
+    ) {
+        if command.writes() || self.store.is_paused() {
+            let _ = reply.send(Err(SessionError::StorageUnavailable(
+                "Wait for saving to resume before reviewing a continuation.".into(),
+            )));
+            return;
+        }
+        self.flush();
+        let (saved, barrier) = oneshot::channel();
+        self.queue_op(Op::Barrier(saved));
+        let store = Arc::clone(&self.store);
+        let rt = self.shared.deps.rt.clone();
+        self.in_flight.push(
+            async move {
+                let result = match await_reply(&rt, barrier, Duration::from_secs(5)).await {
+                    Ok(()) => store
+                        .conversation(command)
+                        .await
+                        .map_err(|error| storage_error(&error)),
+                    Err(_) => Err(SessionError::StorageUnavailable(
+                        "The conversation is still saving. Try again.".into(),
+                    )),
+                };
+                Done::Conversation { result, reply }
+            }
+            .boxed(),
+        );
+    }
+
+    fn continue_chat(
+        &mut self,
+        apply: Box<crate::chatstore::conversation::ApplyContinuation>,
+        prompt: Option<(String, Vec<PromptPart>)>,
+        reply: oneshot::Sender<
+            Result<aura_protocol::conversation::ContinuationResult, SessionError>,
+        >,
+    ) {
+        if self.organizing
+            || self.driver.is_some()
+            || self.preparing.is_some()
+            || !self.retiring.is_empty()
+            || self.checkpointing.is_some()
+            || self.turn.is_some()
+            || !self.queue.is_empty()
+            || self.pending_start.is_some()
+            || self.native_identity_pending.is_some()
+            || self.quitting
+            || self.shared.is_shutting_down()
+        {
+            let _ = reply.send(Err(SessionError::Organization(
+                "Stop the chat and clear queued prompts before continuing from history.".into(),
+            )));
+            return;
+        }
+        if self.store.is_paused() {
+            let _ = reply.send(Err(SessionError::StorageUnavailable(
+                "Wait for saving to resume before changing the conversation.".into(),
+            )));
+            return;
+        }
+        self.organizing = true;
+        self.flush();
+        let (saved, barrier) = oneshot::channel();
+        self.queue_op(Op::Barrier(saved));
+        let store = Arc::clone(&self.store);
+        let rt = self.shared.deps.rt.clone();
+        self.in_flight.push(
+            async move {
+                let result = async {
+                    await_reply(&rt, barrier, Duration::from_secs(5))
+                        .await
+                        .map_err(|_| {
+                            SessionError::StorageUnavailable(
+                                "The conversation is still saving. Try again.".into(),
+                            )
+                        })?;
+                    let result = store
+                        .conversation(crate::chatstore::conversation::ConversationCommand::Apply(
+                            apply,
+                        ))
+                        .await
+                        .map_err(|error| storage_error(&error))?;
+                    let crate::chatstore::conversation::ConversationReply::Applied(load) = result
+                    else {
+                        return Err(SessionError::Internal(
+                            "The continuation result was invalid.".into(),
+                        ));
+                    };
+                    Ok(load)
+                }
+                .await;
+                Done::Continued {
+                    result,
+                    prompt,
+                    reply,
+                }
+            }
+            .boxed(),
+        );
+    }
+
+    fn continued(
+        &mut self,
+        result: Result<Box<ChatLoad>, SessionError>,
+        prompt: Option<(String, Vec<PromptPart>)>,
+        reply: oneshot::Sender<
+            Result<aura_protocol::conversation::ContinuationResult, SessionError>,
+        >,
+    ) {
+        self.organizing = false;
+        let result = result.and_then(|load| {
+            let id = load.chat.id.clone();
+            if id != self.chat_id {
+                self.push(AuraEvent::Notice { level: NoticeLevel::Info, message: format!("Created a fork linked to this conversation: {id}. This source conversation is unchanged.") }, None);
+                self.flush();
+                return Ok(aura_protocol::conversation::ContinuationResult { chat_id: id, prompt: None });
+            }
+            self.chat = load.chat;
+            self.agent_session = load.agent_session;
+            self.continuation = load.continuation;
+            self.replay_check = load.replay_check.filter(|_| !self.continuation.as_ref().is_some_and(|value| value.force_fresh || value.native_start.fork));
+            self.spec = self.shared.deps.detector.spec(&self.chat.agent_id);
+            self.autonomy = self.agent_session.as_ref().map_or_else(Autonomy::default, |session| session.autonomy);
+            self.desired = self.agent_session.as_ref().and_then(|session| session.config_json.as_deref()).and_then(|json| serde_json::from_str(json).ok()).unwrap_or_default();
+            self.autonomy_state = stopped_autonomy(self.autonomy, None);
+            self.options.clear();
+            self.commands.clear();
+            self.capabilities = None;
+            self.native_session_id = None;
+            self.agent_name = None;
+            self.agent_version = None;
+            self.usage = None;
+            self.limits = None;
+            self.last_error = None;
+            self.auth = None;
+            self.conflict = false;
+            self.set_status(SessionStatus::Stopped, Some("Continuation saved. The next prompt includes its visible handoff.".into()));
+            self.push(AuraEvent::Notice { level: NoticeLevel::Info, message: format!("Continuing with {}. Earlier messages remain intact; the reviewed context will appear in the next user prompt.",self.chat.agent_id) }, None);
+            self.flush();
+            let ack = prompt.map(|(text,parts)| self.send(text,parts)).transpose()?;
+            Ok(aura_protocol::conversation::ContinuationResult { chat_id: id, prompt: ack })
+        });
+        let _ = reply.send(result);
+    }
+
     fn revert(
         &mut self,
         token: String,
@@ -1071,11 +1262,16 @@ impl ChatActor {
             ));
         }
         let limit = self.shared.deps.limits.max_prompt_bytes;
-        if text.len() > limit {
-            return Err(SessionError::PromptTooLarge {
-                bytes: text.len(),
-                limit,
+        let bytes = text.len()
+            + self.continuation.as_ref().map_or(0, |value| {
+                if value.handoff.is_empty() {
+                    0
+                } else {
+                    value.handoff.len() + 32
+                }
             });
+        if bytes > limit {
+            return Err(SessionError::PromptTooLarge { bytes, limit });
         }
         if self.batcher.next_seq() > SEQ_LIMIT {
             return Err(SessionError::Internal(
@@ -1288,10 +1484,29 @@ impl ChatActor {
 
     fn dispatch_prepared(
         &mut self,
-        prompt: Prompt,
+        mut prompt: Prompt,
         turn_id: String,
         checkpoint_ref: Option<String>,
     ) {
+        if self.driver.is_none() {
+            return;
+        }
+        let continuation_prefix = if let Some(continuation) = &mut self.continuation
+            && !continuation.handoff.is_empty()
+        {
+            let handoff = std::mem::take(&mut continuation.handoff);
+            let prefix = format!("{handoff}\n\nCurrent user prompt\n");
+            prompt.text = format!("{prefix}{}", prompt.text);
+            prompt.parts.insert(
+                0,
+                PromptPart::Text {
+                    text: prefix.clone(),
+                },
+            );
+            Some(prefix)
+        } else {
+            None
+        };
         let Some(driver) = &mut self.driver else {
             return;
         };
@@ -1304,6 +1519,7 @@ impl ChatActor {
         let tag: Arc<str> = Arc::from(turn_id.as_str());
         let started_at = now_millis();
         self.begun = Some(TurnRow {
+            continuation_prefix,
             checkpoint_ref,
             parts: prompt.parts.clone(),
             id: turn_id.clone(),
@@ -1658,6 +1874,11 @@ impl ChatActor {
 
     /// Starts the agent. `explicit` (`chat_start`): a full slot is an error; otherwise a card.
     fn start(&mut self, fresh: bool, explicit: bool) -> Result<(), SessionError> {
+        let fresh = fresh
+            || self
+                .continuation
+                .as_ref()
+                .is_some_and(|value| value.force_fresh);
         if self.organizing {
             return Err(SessionError::Organization(
                 "Wait for the chat change to finish.".into(),
@@ -1809,7 +2030,18 @@ impl ChatActor {
         let Some(spec) = self.spec.clone() else {
             return;
         };
-        let resume = if fresh {
+        let native_start = self
+            .continuation
+            .as_ref()
+            .map(|value| value.native_start.clone())
+            .unwrap_or_default();
+        let resume = if let Some(source) = self
+            .continuation
+            .as_ref()
+            .and_then(|value| value.resume_source.clone())
+        {
+            Some(source)
+        } else if fresh {
             None
         } else {
             self.agent_session
@@ -1823,7 +2055,12 @@ impl ChatActor {
             &prepared.launch,
             &self.chat.folder,
         );
-        if let Some(id) = &resume
+        let claim_id = if native_start.fork {
+            native_start.new_session_id.as_ref()
+        } else {
+            resume.as_ref()
+        };
+        if let Some(id) = claim_id
             && !self.shared.live.claim(&native_scope, id, &self.chat_id)
         {
             let message =
@@ -1857,7 +2094,7 @@ impl ChatActor {
             launch: prepared.launch,
             env: prepared.env,
             resume: resume.clone(),
-            native_start: Default::default(),
+            native_start,
             autonomy: self.autonomy,
             desired: self.desired.clone(),
             timings: DriverTimings::STANDARD,
@@ -2068,6 +2305,7 @@ impl ChatActor {
             self.queue_op(Op::UpdateAgentSession {
                 id,
                 patch: AgentSessionPatch {
+                    capabilities: None,
                     native_session_id: None,
                     model: None,
                     effort: None,
@@ -2179,6 +2417,14 @@ impl ChatActor {
 
     fn on_done(&mut self, done: Done) {
         match done {
+            Done::Conversation { result, reply } => {
+                drop(reply.send(result));
+            }
+            Done::Continued {
+                result,
+                prompt,
+                reply,
+            } => self.continued(result, prompt, reply),
             Done::CheckpointContext { result, reply } => {
                 drop(reply.send(result));
             }
@@ -2448,6 +2694,7 @@ impl ChatActor {
         self.queue_op(Op::UpdateAgentSession {
             id,
             patch: AgentSessionPatch {
+                capabilities: None,
                 native_session_id: None,
                 model: None,
                 effort: None,
@@ -2726,6 +2973,11 @@ impl ChatActor {
             return;
         }
         driver.ready = true;
+        if let Some(continuation) = &mut self.continuation {
+            continuation.force_fresh = false;
+            continuation.resume_source = None;
+            continuation.native_start = Default::default();
+        }
         driver.spawn_id = Some(info.spawn_id.clone());
         let now = now_millis();
         let same_session = self
@@ -2742,10 +2994,12 @@ impl ChatActor {
                 session.updated_at = now;
                 session.autonomy = self.autonomy;
                 session.config_json = config_json.clone();
+                session.capabilities = Some(info.capabilities.clone());
                 let id = session.id.clone();
                 self.queue_op(Op::UpdateAgentSession {
                     id,
                     patch: AgentSessionPatch {
+                        capabilities: Some(info.capabilities.clone()),
                         native_session_id: None,
                         model,
                         effort,
@@ -2757,6 +3011,7 @@ impl ChatActor {
             }
             _ => {
                 let row = AgentSessionRow {
+                    capabilities: Some(info.capabilities.clone()),
                     host: self.chat.agent_host.clone(),
                     id: new_id(),
                     chat_id: self.chat_id.clone(),

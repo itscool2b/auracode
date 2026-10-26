@@ -68,10 +68,36 @@ pub(super) fn validate(path: &str) -> Result<()> {
             .components()
             .any(|part| !matches!(part, Component::Normal(_)))
         || path.split('/').any(|part| {
-            [".git", ".claude", ".codex", ".pi", ".omp", ".grok"]
-                .iter()
-                .any(|name| part.eq_ignore_ascii_case(name))
+            [
+                ".git",
+                ".claude",
+                ".codex",
+                ".pi",
+                ".omp",
+                ".grok",
+                ".hermes",
+                ".ssh",
+                ".gnupg",
+                ".aws",
+                ".azure",
+                "keychains",
+                "credentials",
+                "credentials.json",
+                "auth.json",
+                "auth.toml",
+                ".npmrc",
+                ".netrc",
+                "id_rsa",
+                "id_ed25519",
+                ".env",
+            ]
+            .iter()
+            .any(|name| part.eq_ignore_ascii_case(name))
                 || part.starts_with(".auracode-revert-")
+                || part.to_ascii_lowercase().starts_with(".env.")
+                || [".key", ".pem", ".p12", ".keychain-db"]
+                    .iter()
+                    .any(|suffix| part.to_ascii_lowercase().ends_with(suffix))
         })
     {
         return Err(CheckpointError::Message(

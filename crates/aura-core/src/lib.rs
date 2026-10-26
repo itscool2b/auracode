@@ -32,6 +32,7 @@
 
 pub mod chatstore;
 pub mod checkpoints;
+mod conversation;
 pub mod device;
 pub mod error;
 pub mod ids;

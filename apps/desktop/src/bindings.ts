@@ -81,6 +81,13 @@ export const commands = {
 	 *  (`AURACODE_SMOKE_FOLDER`) at once: automation cannot click through a system dialog.
 	 */
 	pickFolder: () => typedError<string | null, AppError>(__TAURI_INVOKE("pick_folder")),
+	composerPick: (chatId: string) => typedError<ComposerAttachment | null, AppError>(__TAURI_INVOKE("composer_pick", { chatId })),
+	composerImport: (chatId: string, path: string) => typedError<ComposerAttachment, AppError>(__TAURI_INVOKE("composer_import", { chatId, path })),
+	composerPaste: (chatId: string, bytes: number[]) => typedError<ComposerAttachment, AppError>(__TAURI_INVOKE("composer_paste", { chatId, bytes })),
+	composerMentions: (chatId: string, query: string) => typedError<FileMention[], AppError>(__TAURI_INVOKE("composer_mentions", { chatId, query })),
+	composerSend: (chatId: string, input: ComposerInput) => typedError<PromptAck, AppError>(__TAURI_INVOKE("composer_send", { chatId, input })),
+	composerDraft: (chatId: string) => typedError<ComposerDraft, AppError>(__TAURI_INVOKE("composer_draft", { chatId })),
+	composerSaveDraft: (chatId: string, input: ComposerInput) => typedError<null, AppError>(__TAURI_INVOKE("composer_save_draft", { chatId, input })),
 	/**  Every chat, newest activity first. */
 	chatsList: () => typedError<ChatSummary[], AppError>(__TAURI_INVOKE("chats_list")),
 	/**
@@ -520,6 +527,25 @@ export type CheckpointSummary = {
 	warnings: string[],
 };
 
+export type ComposerAttachment = {
+	id: string,
+	name: string,
+	mime: string,
+	bytes: number,
+	image: boolean,
+};
+
+export type ComposerDraft = {
+	input: ComposerInput,
+	files: ComposerAttachment[],
+};
+
+export type ComposerInput = {
+	text: string,
+	attachments: string[],
+	mentions: string[],
+};
+
 /**  What an option controls, which decides where the UI shows it. */
 export type ConfigCategory = "model" | "effort" | "mode" | "model_config" | "other";
 
@@ -556,6 +582,7 @@ export type ContinuationPreview = {
 	agent_id: string,
 	creates_chat: boolean,
 	resumes_native: boolean,
+	uses_native_fork: boolean,
 	/**  Exact bounded context shown before confirmation and included in the next visible prompt. */
 	handoff: string,
 	/**
@@ -658,6 +685,11 @@ export type EventBatch = {
 	chat_id: string,
 	seq_start: number,
 	events: AuraEvent[],
+};
+
+export type FileMention = {
+	path: string,
+	directory: boolean,
 };
 
 export type FolderKind = "local" | "git";

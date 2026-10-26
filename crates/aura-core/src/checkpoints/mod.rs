@@ -111,80 +111,7 @@ impl Checkpoints {
             tokio::task::spawn_blocking(move || scan::collect(&root_copy, &paths, Some(&copies)))
                 .await
                 .map_err(|_| CheckpointError::Message("Checkpoint scanning failed.".into()))??;
-        let mut files = BTreeMap::new();
-        // Batches keep Windows' command line below its limit. Paths with long names are allowed,
-        // so index updates are chunked by their actual argument length below.
-        for chunk in scanned.copies.chunks(64) {
-            let mut args = vec![
-                "hash-object".into(),
-                "--no-filters".into(),
-                "-w".into(),
-                "--".into(),
-            ];
-            args.extend(chunk.iter().map(|(_, path)| path.as_os_str().to_owned()));
-            let output = operation
-                .git
-                .run(&operation.repo, &root, &operation.index, args, 64 * 42)
-                .await?;
-            let ids = output
-                .split(|byte| *byte == b'\n')
-                .filter(|line| !line.is_empty())
-                .map(git::oid)
-                .collect::<Result<Vec<_>>>()?;
-            if ids.len() != chunk.len() {
-                return Err(CheckpointError::Message(
-                    "Git did not save every checkpoint file.".into(),
-                ));
-            }
-            for ((path, _), oid) in chunk.iter().zip(ids) {
-                let fingerprint = scanned
-                    .files
-                    .get(path)
-                    .ok_or_else(|| {
-                        CheckpointError::Message("Checkpoint file metadata was lost.".into())
-                    })?
-                    .clone();
-                files.insert(path.clone(), SavedFile { fingerprint, oid });
-            }
-        }
-        let mut args = vec!["update-index".into(), "--add".into()];
-        let mut arg_bytes = 0;
-        for (path, file) in &files {
-            let entry = format!("{:o},{},{}", file.fingerprint.mode, file.oid, path);
-            if arg_bytes + entry.len() > 12_000 && args.len() > 2 {
-                operation
-                    .git
-                    .run(
-                        &operation.repo,
-                        &root,
-                        &operation.index,
-                        std::mem::replace(&mut args, vec!["update-index".into(), "--add".into()]),
-                        4096,
-                    )
-                    .await?;
-                arg_bytes = 0;
-            }
-            arg_bytes += entry.len() + 16;
-            args.extend(["--cacheinfo".into(), entry.into()]);
-        }
-        if args.len() > 2 {
-            operation
-                .git
-                .run(&operation.repo, &root, &operation.index, args, 4096)
-                .await?;
-        }
-        let tree = git::oid(
-            &operation
-                .git
-                .run(
-                    &operation.repo,
-                    &root,
-                    &operation.index,
-                    vec!["write-tree".into()],
-                    128,
-                )
-                .await?,
-        )?;
+        let (files, tree) = Self::write_tree(&operation, &root, &scanned, None).await?;
         let commit = git::oid(
             &operation
                 .git
@@ -238,6 +165,137 @@ impl Checkpoints {
         )
         .map_err(|error| CheckpointError::Message(error.to_string()))?;
         Ok(summary)
+    }
+
+    async fn write_tree(
+        operation: &Operation,
+        root: &Path,
+        scanned: &scan::Scan,
+        retained: Option<&BTreeMap<String, SavedFile>>,
+    ) -> Result<(BTreeMap<String, SavedFile>, String)> {
+        let mut files = retained.cloned().unwrap_or_default();
+        // Batches keep Windows' command line below its limit. Paths with long names are allowed,
+        // so index updates are chunked by their actual argument length below.
+        for chunk in scanned.copies.chunks(64) {
+            let mut args = vec![
+                "hash-object".into(),
+                "--no-filters".into(),
+                "-w".into(),
+                "--".into(),
+            ];
+            args.extend(chunk.iter().map(|(_, path)| path.as_os_str().to_owned()));
+            let output = operation
+                .git
+                .run(&operation.repo, root, &operation.index, args, 64 * 42)
+                .await?;
+            let ids = output
+                .split(|byte| *byte == b'\n')
+                .filter(|line| !line.is_empty())
+                .map(git::oid)
+                .collect::<Result<Vec<_>>>()?;
+            if ids.len() != chunk.len() {
+                return Err(CheckpointError::Message(
+                    "Git did not save every checkpoint file.".into(),
+                ));
+            }
+            for ((path, _), oid) in chunk.iter().zip(ids) {
+                let fingerprint = scanned
+                    .files
+                    .get(path)
+                    .ok_or_else(|| {
+                        CheckpointError::Message("Checkpoint file metadata was lost.".into())
+                    })?
+                    .clone();
+                files.insert(path.clone(), SavedFile { fingerprint, oid });
+            }
+        }
+        let mut args = vec!["update-index".into(), "--add".into()];
+        let mut arg_bytes = 0;
+        for (path, file) in &files {
+            let entry = format!("{:o},{},{}", file.fingerprint.mode, file.oid, path);
+            if arg_bytes + entry.len() > 12_000 && args.len() > 2 {
+                operation
+                    .git
+                    .run(
+                        &operation.repo,
+                        root,
+                        &operation.index,
+                        std::mem::replace(&mut args, vec!["update-index".into(), "--add".into()]),
+                        4096,
+                    )
+                    .await?;
+                arg_bytes = 0;
+            }
+            arg_bytes += entry.len() + 16;
+            args.extend(["--cacheinfo".into(), entry.into()]);
+        }
+        if args.len() > 2 {
+            operation
+                .git
+                .run(&operation.repo, root, &operation.index, args, 4096)
+                .await?;
+        }
+        let tree = git::oid(
+            &operation
+                .git
+                .run(
+                    &operation.repo,
+                    root,
+                    &operation.index,
+                    vec!["write-tree".into()],
+                    128,
+                )
+                .await?,
+        )?;
+        Ok((files, tree))
+    }
+
+    /// Computes Git's real stat against the saved checkpoint using only private object trees.
+    /// No user index, repository filters, external diff command or credential file is consulted.
+    pub async fn diff_stat(
+        &self,
+        chat_id: &str,
+        folder_id: &str,
+        folder: &Path,
+        checkpoint_id: &str,
+    ) -> Result<String> {
+        let _guard = self.gate.lock().await;
+        let manifest = self.load(chat_id, folder_id, folder, checkpoint_id)?;
+        let operation = self.operation(folder_id, &manifest.root, false).await?;
+        let copies = operation.scratch.path().join("stat-blobs");
+        std::fs::create_dir(&copies)?;
+        let current = self
+            .current_scan(&operation, &manifest, Some(copies))
+            .await?;
+        let retained = manifest
+            .files
+            .iter()
+            .filter(|(path, _)| current.excluded.contains(*path))
+            .map(|(path, file)| (path.clone(), file.clone()))
+            .collect();
+        let (_, tree) =
+            Self::write_tree(&operation, &manifest.root, &current, Some(&retained)).await?;
+        let bytes = operation
+            .git
+            .run(
+                &operation.repo,
+                &manifest.root,
+                &operation.index,
+                vec![
+                    "diff-tree".into(),
+                    "--stat".into(),
+                    "--no-ext-diff".into(),
+                    "--no-textconv".into(),
+                    "--no-renames".into(),
+                    "--no-commit-id".into(),
+                    "-r".into(),
+                    manifest.commit.into(),
+                    tree.into(),
+                ],
+                16 * 1024,
+            )
+            .await?;
+        Ok(String::from_utf8_lossy(&bytes).trim().to_owned())
     }
 
     pub async fn changes(
@@ -363,6 +421,26 @@ impl Checkpoints {
             "--exclude=.pi".into(),
             "--exclude=.omp".into(),
             "--exclude=.grok".into(),
+            "--exclude=.hermes".into(),
+            "--exclude=.ssh".into(),
+            "--exclude=.gnupg".into(),
+            "--exclude=.aws".into(),
+            "--exclude=.azure".into(),
+            "--exclude=keychains".into(),
+            "--exclude=credentials".into(),
+            "--exclude=credentials.json".into(),
+            "--exclude=auth.json".into(),
+            "--exclude=auth.toml".into(),
+            "--exclude=.npmrc".into(),
+            "--exclude=.netrc".into(),
+            "--exclude=id_rsa".into(),
+            "--exclude=id_ed25519".into(),
+            "--exclude=.env".into(),
+            "--exclude=.env.*".into(),
+            "--exclude=*.key".into(),
+            "--exclude=*.pem".into(),
+            "--exclude=*.p12".into(),
+            "--exclude=*.keychain-db".into(),
             "-z".into(),
         ];
         for protected in self.protected_paths(operation, root)? {
@@ -414,6 +492,15 @@ impl Checkpoints {
     }
 
     async fn current(&self, operation: &Operation, manifest: &Manifest) -> Result<scan::Scan> {
+        self.current_scan(operation, manifest, None).await
+    }
+
+    async fn current_scan(
+        &self,
+        operation: &Operation,
+        manifest: &Manifest,
+        copies: Option<PathBuf>,
+    ) -> Result<scan::Scan> {
         let mut paths = self.paths(operation, &manifest.root).await?;
         // A newly added ignore rule must not make a previously saved file appear deleted.
         paths.extend(manifest.files.keys().cloned());
@@ -434,7 +521,7 @@ impl Checkpoints {
         });
         let root = manifest.root.clone();
         tokio::task::spawn_blocking(move || {
-            let mut current = scan::collect(&root, &paths, None)?;
+            let mut current = scan::collect(&root, &paths, copies.as_deref())?;
             current.excluded.extend(excluded);
             Ok(current)
         })
