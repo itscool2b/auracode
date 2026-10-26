@@ -20,10 +20,11 @@ Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b 
 
 ## Remaining, in order
 
-M1b is in progress on `m1b-claude-native`. Native discovery, driver dispatch, transcript mapping,
+M1b is implemented and verified on `m1b-claude-native`. Native discovery, driver dispatch, transcript mapping,
 permissions, multi-question UI, run-idle gating and shared native-session ownership are implemented.
 Native live verification, recorded fixture curation, review fixes and local workspace gates are
-complete. CI and milestone installer builds are the remaining release gates before a PR.
+complete. Final Linux/Windows CI and milestone installer builds passed. The completed PR awaits
+owner review and merge authorization.
 Foundation PR #4 has not been merged.
 
 M1b acceptance checklist (unchecked items remain required):
@@ -39,7 +40,7 @@ M1b acceptance checklist (unchecked items remain required):
 - [x] Typed fork/resume-at startup and native rewind control with accurate capability reporting.
 - [x] Startup failure matrix, oversized frames, timeout/late-response reconciliation.
 - [x] Verify compatible installed native CLI with free controls before the minimal paid smoke.
-- [ ] Full workspace checks, frontend/build tests, CI, independent final review, completed PR.
+- [x] Full workspace checks, frontend/build tests, CI and independent final review.
 
 Observed checks during integration: core suite passed 327 Rust tests plus one doctest; the Questions
 UI passed 286 frontend tests (19 existing skips) and typecheck. New native tests reproduced and fixed
@@ -58,7 +59,7 @@ The actor still supplies default startup options; fork/resume-at UI belongs to M
 and fork/rewind capabilities remain unadvertised. This startup step passed 304 driver unit tests, four
 conformance tests, all 74 replay fixtures, targeted driver/core Clippy, and the mirrored instructions
 check. These initial checks made no paid calls. Subsequent live acceptance is recorded below.
-No M1b PR has been opened.
+The completed M1b PR is opened after the final verification below.
 
 Further review fixes and verification:
 
@@ -118,7 +119,12 @@ CI follow-up: Linux run `40276798121` exposed a smoke-start race. A delayed atta
 overwrite a newer live Ready header, causing the first prompt wait to time out. The CLI watcher now
 keeps a live header at or beyond the attach boundary; regressions cover both delayed snapshots and
 fresh snapshots replacing older events. The rebuilt Windows test executable was blocked by
-Application Control (4551), so this follow-up needs CI verification. No policy bypass was attempted.
+Application Control (4551). No policy bypass was attempted. Final CI run `40278038126` for `374dbf5`
+passed Linux and Windows Rust tests, Clippy, generated bindings, app streams and chat smoke tests,
+frontend lint and PowerShell checks. Independent review of the final watcher patch found no issues.
+Build run `40276797966` produced Windows and Linux installers from `cfb67db`; the subsequent watcher
+patch changes only the developer CLI, not the bundled app. macOS remains untested on this Windows
+host and was skipped by the milestone branch workflow. This does not claim macOS native acceptance.
 
 1. M1b: native Claude driver, protocol replay, session readiness, permissions/questions, smoke tests.
 2. M1c: native Codex app-server driver and generated-schema compatibility.
