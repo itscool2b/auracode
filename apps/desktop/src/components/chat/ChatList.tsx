@@ -1,6 +1,6 @@
-import { ChevronRight, Search, SquarePen } from "lucide-react";
+import { Archive, ChevronRight, Ellipsis, Pin, Plus, Search, SquarePen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { ChatSummary } from "../../bindings";
+import type { ChatSummary, ProjectSummary, WorkspaceSnapshot } from "../../bindings";
 import { folderStateLabel, statusWord } from "../../lib/chat/present";
 
 export function projectsOf(
@@ -27,12 +27,24 @@ export function ChatList({
   selected,
   onSelect,
   onNewChat,
+  organization,
+  onNewProject,
+  onProjectSettings,
+  onChatOptions,
+  archived = false,
+  onShowArchived,
 }: {
   readonly chats: readonly ChatSummary[] | null;
   readonly error: string | null;
   readonly selected: string | null;
   readonly onSelect: (chatId: string) => void;
   readonly onNewChat: () => void;
+  readonly organization?: WorkspaceSnapshot | null;
+  readonly onNewProject?: () => void;
+  readonly onProjectSettings?: (project: ProjectSummary) => void;
+  readonly onChatOptions?: (chat: ChatSummary) => void;
+  readonly archived?: boolean;
+  readonly onShowArchived?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -44,7 +56,32 @@ export function ChatList({
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
-  const projects = projectsOf(filtered);
+  const membership = new Map(organization?.chats.map((entry) => [entry.chat.id, entry]));
+  const projects = organization
+    ? organization.projects
+        .map((project) => ({
+          folder: project.id,
+          name: project.name,
+          color: project.color,
+          project,
+          chats: filtered
+            .filter((chat) => membership.get(chat.id)?.project_id === project.id)
+            .sort(
+              (a, b) => Number(membership.get(b.id)?.pinned) - Number(membership.get(a.id)?.pinned),
+            ),
+        }))
+        .filter(
+          (project) =>
+            !query ||
+            project.chats.length > 0 ||
+            project.name.toLowerCase().includes(query.toLowerCase()),
+        )
+    : projectsOf(filtered).map((project) => ({
+        ...project,
+        name: projectName(project.folder),
+        color: null,
+        project: null,
+      }));
   const waiting = filtered.filter((chat) => chat.needs_attention);
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
@@ -132,7 +169,18 @@ export function ChatList({
           </section>
         ) : null}
         <h2 className="chat-section-label">
-          Projects <span>{projects.length}</span>
+          {archived ? "Archived" : "Projects"} <span>{projects.length}</span>
+          {onNewProject ? (
+            <button
+              type="button"
+              className="chat-icon-button"
+              title="New project"
+              aria-label="New project"
+              onClick={onNewProject}
+            >
+              <Plus size={13} />
+            </button>
+          ) : null}
         </h2>
         {chats !== null && all.length === 0 ? (
           <p className="chat-sidebar-empty">Your projects and chats will appear here.</p>
@@ -143,31 +191,62 @@ export function ChatList({
         <ul className="chat-projects">
           {projects.map((project, index) => (
             <li key={project.folder}>
-              <button
-                type="button"
-                className="chat-project-toggle"
-                title={project.folder}
-                aria-expanded={!folded.has(project.folder)}
-                onClick={() =>
-                  setFolded((current) => {
-                    const next = new Set(current);
-                    if (next.has(project.folder)) next.delete(project.folder);
-                    else next.add(project.folder);
-                    return next;
-                  })
-                }
-              >
-                <span className="chat-project-swatch" data-tone={index % 4}>
-                  <ChevronRight size={12} />
-                </span>
-                <span>{projectName(project.folder)}</span>
-                <small>{project.chats.length}</small>
-              </button>
+              <div className="chat-project-heading">
+                <button
+                  type="button"
+                  className="chat-project-toggle"
+                  title={project.folder}
+                  aria-expanded={!folded.has(project.folder)}
+                  onClick={() =>
+                    setFolded((current) => {
+                      const next = new Set(current);
+                      if (next.has(project.folder)) next.delete(project.folder);
+                      else next.add(project.folder);
+                      return next;
+                    })
+                  }
+                >
+                  <span
+                    className="chat-project-swatch"
+                    data-tone={index % 4}
+                    style={project.color ? { backgroundColor: project.color } : undefined}
+                  >
+                    <ChevronRight size={12} />
+                  </span>
+                  <span>{project.name}</span>
+                  <small>{project.chats.length}</small>
+                </button>
+                {onProjectSettings && project.project ? (
+                  <button
+                    type="button"
+                    className="chat-row-menu chat-icon-button"
+                    aria-label={`Settings for ${project.name}`}
+                    onClick={() => {
+                      if (project.project) onProjectSettings(project.project);
+                    }}
+                  >
+                    <Ellipsis size={14} />
+                  </button>
+                ) : null}
+              </div>
               {!folded.has(project.folder) ? (
                 <ul className="chat-chats">
                   {project.chats.map((chat) => (
-                    <li key={chat.id}>
+                    <li key={chat.id} className="chat-row-container">
                       <ChatRow chat={chat} selected={chat.id === selected} onSelect={onSelect} />
+                      {membership.get(chat.id)?.pinned ? (
+                        <Pin className="chat-pin-mark" size={10} aria-label="Pinned" />
+                      ) : null}
+                      {onChatOptions ? (
+                        <button
+                          type="button"
+                          className="chat-row-menu chat-icon-button"
+                          aria-label={`Options for ${chat.title ?? "New chat"}`}
+                          onClick={() => onChatOptions(chat)}
+                        >
+                          <Ellipsis size={14} />
+                        </button>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -176,6 +255,12 @@ export function ChatList({
           ))}
         </ul>
       </div>
+      {onShowArchived ? (
+        <button type="button" className="chat-nav-action" onClick={onShowArchived}>
+          <Archive size={15} />
+          <span>{archived ? "Back to projects" : "Archived chats"}</span>
+        </button>
+      ) : null}
     </nav>
   );
 }

@@ -4,6 +4,15 @@ Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b 
 
 ## Active integrated-product continuation
 
+Integration update: `737013f` brings the coherent M1e native agent catalog and Rust project
+organization into the UI branch. `6e58695` adds native shell behavior. Thin workspace commands,
+project create/edit/add-folder, chat rename/pin/archive/restore/move and busy-folder preflight are
+now wired locally. Stored default-model editing is withheld until its startup behavior is implemented.
+The next binding export was blocked while rustc loaded `tauri_macros` by Windows Code Integrity
+events 3077/3033 at 05:00 local time. No policy changes or relocation workaround was attempted.
+Generated workspace command bindings and their dependent TypeScript checks remain pending the
+planned Windows/macOS integration gate. This is a saved implementation checkpoint, not acceptance.
+
 - Owner corrections are authoritative: Windows/macOS only; batch implementation and CI; use the
   actual original Mobbin references; dark appearance only across desktop, onboarding and website.
 - Inspected Grok, SpaceXAI, Harvey, Aside and X Money screens and the selected Orbit lab. Evidence

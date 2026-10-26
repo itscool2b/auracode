@@ -82,7 +82,7 @@ export function toCommandError(rejection: unknown): CommandError {
 type CommandResult<T> = { status: "ok"; data: T } | { status: "error"; error: AppError };
 
 /** A fallible command: its value, or a thrown `CommandError`. */
-async function settle<T>(call: Promise<CommandResult<T>>): Promise<T> {
+export async function settle<T>(call: Promise<CommandResult<T>>): Promise<T> {
   let result: CommandResult<T>;
   try {
     result = await call;

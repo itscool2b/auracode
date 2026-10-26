@@ -1,14 +1,20 @@
 import { useOrbitTheme } from "@auracode/ui/orbit";
 import { PanelLeft } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import type { AppInfo } from "../../bindings";
+import type { AppInfo, ProjectSummary } from "../../bindings";
 import { type AppStore, NewChatDraft } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
+import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { AgentDock } from "./AgentDock";
 import { Banners } from "./Banners";
+import { ChatActionsDialog } from "./ChatActionsDialog";
 import { ChatList } from "./ChatList";
 import { ChatView } from "./ChatView";
 import { NewChat } from "./NewChat";
+import { ProjectDialog } from "./ProjectDialog";
+
+const noSubscribe = () => () => {};
+const emptyWorkspace = () => EMPTY_WORKSPACE;
 
 /**
  * The chats: the sidebar with New chat and the projects' chats, the banners, and the open chat
@@ -20,6 +26,8 @@ export function ChatsScreen({
   info,
   onRecoveryDismissed,
   onDiagnostics,
+  workspace,
+  openChatRequest,
 }: {
   readonly app: AppStore;
   readonly transport: Transport;
@@ -27,12 +35,40 @@ export function ChatsScreen({
   /** The shell acknowledged the database repair, so its notice goes for good. */
   readonly onRecoveryDismissed: () => void;
   readonly onDiagnostics: () => void;
+  readonly workspace?: WorkspaceStore;
+  readonly openChatRequest?: { id: string };
 }) {
   const snapshot = useSyncExternalStore(app.subscribe, app.getSnapshot, app.getSnapshot);
   const theme = useOrbitTheme();
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState(() => new NewChatDraft(transport));
   const [collapsed, setCollapsed] = useState(false);
+  const organization = useSyncExternalStore(
+    workspace?.subscribe ?? noSubscribe,
+    workspace?.getSnapshot ?? emptyWorkspace,
+    workspace?.getSnapshot ?? emptyWorkspace,
+  );
+  const [archived, setArchived] = useState(false);
+  const [projectDialog, setProjectDialog] = useState<{ project: ProjectSummary | null } | null>(
+    null,
+  );
+  const [chatOptions, setChatOptions] = useState<string | null>(null);
+  const chatIds = snapshot.chats?.map((chat) => chat.id).join(",") ?? "";
+  useEffect(() => {
+    if (openChatRequest) setSelected(openChatRequest.id);
+  }, [openChatRequest]);
+  // A new or externally created chat can also create a project. Live status text is merged below.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Membership refresh depends on the set of listed IDs, not each status update.
+  useEffect(() => {
+    void workspace?.refresh();
+  }, [workspace, chatIds]);
+  const liveById = new Map(snapshot.chats?.map((chat) => [chat.id, chat]));
+  const displayed = organization.data
+    ? organization.data.chats
+        .filter((entry) => entry.archived === archived)
+        .map((entry) => liveById.get(entry.chat.id) ?? entry.chat)
+    : snapshot.chats;
+  const optionsEntry = organization.data?.chats.find((entry) => entry.chat.id === chatOptions);
 
   useEffect(() => {
     app.start();
@@ -58,8 +94,14 @@ export function ChatsScreen({
           <PanelLeft size={16} />
         </button>
         <ChatList
-          chats={snapshot.chats}
-          error={snapshot.chatsError}
+          chats={displayed}
+          error={organization.error ?? snapshot.chatsError}
+          organization={organization.data}
+          archived={archived}
+          onShowArchived={workspace ? () => setArchived((value) => !value) : undefined}
+          onNewProject={workspace ? () => setProjectDialog({ project: null }) : undefined}
+          onProjectSettings={workspace ? (project) => setProjectDialog({ project }) : undefined}
+          onChatOptions={workspace ? (chat) => setChatOptions(chat.id) : undefined}
           selected={selected}
           onSelect={setSelected}
           onNewChat={() => {
@@ -91,6 +133,7 @@ export function ChatsScreen({
         />
         {selected === null ? (
           <NewChat
+            workspace={workspace}
             agents={snapshot.agents}
             refreshing={snapshot.agentsRefreshing}
             draft={draft}
@@ -98,6 +141,7 @@ export function ChatsScreen({
             onCreated={(chat) => {
               app.addChat(chat);
               setSelected(chat.id);
+              void workspace?.refresh();
             }}
           />
         ) : (
@@ -111,6 +155,28 @@ export function ChatsScreen({
           />
         )}
       </main>
+      {projectDialog && workspace ? (
+        <ProjectDialog
+          project={projectDialog.project}
+          store={workspace}
+          transport={transport}
+          agents={snapshot.agents}
+          onClose={() => setProjectDialog(null)}
+        />
+      ) : null}
+      {optionsEntry && workspace ? (
+        <ChatActionsDialog
+          entry={optionsEntry}
+          chat={liveById.get(optionsEntry.chat.id) ?? optionsEntry.chat}
+          store={workspace}
+          transport={transport}
+          onChanged={(chat) => {
+            app.addChat(chat);
+            void app.reloadChats();
+          }}
+          onClose={() => setChatOptions(null)}
+        />
+      ) : null}
     </div>
   );
 }

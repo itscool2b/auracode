@@ -1,5 +1,137 @@
 /* Orbit's product frame. The transcript remains in chat.css; these rules compose its real controls. */
 @layer components {
+  .chat-modal {
+    width: min(480px, calc(100vw - 48px));
+    max-height: calc(100vh - 64px);
+    margin: auto;
+    padding: 24px;
+    border: 1px solid var(--o-line-strong);
+    border-radius: 18px;
+    background: var(--o-raised);
+    color: var(--o-text-1);
+    font: 13px / 1.5 var(--o-sans);
+    box-shadow: var(--o-e3);
+  }
+  .chat-modal::backdrop {
+    background: rgb(0 0 0 / 0.65);
+  }
+  .chat-modal > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .chat-modal h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: var(--o-w-heading);
+  }
+  .chat-modal h3 {
+    font-size: 12px;
+    font-weight: var(--o-w-strong);
+    margin: 0 0 12px;
+  }
+  .chat-modal form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .chat-modal footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 10px;
+  }
+  .chat-dialog-section {
+    display: flex;
+    align-items: start;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-top: 1px solid var(--o-line);
+    padding-top: 16px;
+  }
+  .chat-dialog-section p,
+  .chat-dialog-section .ui-field {
+    width: 100%;
+  }
+  .chat-dialog-section p {
+    margin: 0;
+    color: var(--o-text-3);
+    font-size: 12px;
+  }
+  .chat-project-folders {
+    padding: 16px;
+    background: var(--o-well);
+    border-radius: 10px;
+  }
+  .chat-project-folders > div {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .chat-project-folders > div > span {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .chat-project-folders small {
+    color: var(--o-text-3);
+    word-break: break-all;
+  }
+  .chat-color-choices {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 0;
+    padding: 0;
+  }
+  .chat-color-choices legend {
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: var(--o-text-3);
+  }
+  .chat-color-choices label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .chat-color-choices span {
+    width: 12px;
+    height: 12px;
+    background: currentColor;
+  }
+  .chat-project-heading,
+  .chat-row-container {
+    position: relative;
+  }
+  .chat-project-heading .chat-project-toggle {
+    padding-right: 32px;
+  }
+  .chat-section-label > .chat-icon-button {
+    margin: -6px -6px -6px auto;
+  }
+  .chat-row-menu {
+    position: absolute;
+    right: 4px;
+    top: 2px;
+    width: 25px;
+    height: 25px;
+    opacity: 0;
+    background: var(--o-tray);
+  }
+  .chat-row-container:hover .chat-row-menu,
+  .chat-row-container:focus-within .chat-row-menu,
+  .chat-project-heading:hover .chat-row-menu,
+  .chat-project-heading:focus-within .chat-row-menu {
+    opacity: 1;
+  }
+  .chat-pin-mark {
+    position: absolute;
+    left: 13px;
+    top: 10px;
+    color: var(--o-text-3);
+    pointer-events: none;
+  }
   .chat-compose-slot[hidden] {
     display: none;
   }

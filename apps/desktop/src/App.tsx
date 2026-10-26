@@ -19,6 +19,7 @@ import type { Transport } from "./lib/chat/transport";
 import { errorMessage } from "./lib/errors";
 import { useStream } from "./lib/hooks";
 import { getAppInfo, inTauri, sendSmokeReport, windowReady } from "./lib/ipc";
+import { subscribeNativeNavigation } from "./lib/nativeNavigation";
 import { LATE_NOTICE_CHECKS_MS, withLateNotices } from "./lib/notices";
 import { afterPaint, whenPainted } from "./lib/ready";
 import { isRunning, type StreamStore } from "./lib/session";
@@ -26,6 +27,7 @@ import { runSmoke, type SmokeHooks } from "./lib/smoke";
 import { runChatSmoke } from "./lib/smokeChat";
 import { activityOf } from "./lib/stream";
 import { DEFAULT_STRESS } from "./lib/stress";
+import type { WorkspaceStore } from "./lib/workspace";
 
 type Boot =
   | { readonly status: "loading" }
@@ -50,13 +52,24 @@ export function App({
   store,
   chats,
   transport,
+  workspace,
 }: {
   readonly store: StreamStore;
   readonly chats: AppStore;
   readonly transport: Transport;
+  readonly workspace?: WorkspaceStore;
 }) {
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
   const [view, setView] = useState<View>("chats");
+  const [openChatRequest, setOpenChatRequest] = useState<{ id: string }>();
+  useEffect(
+    () =>
+      subscribeNativeNavigation((id) => {
+        setView("chats");
+        setOpenChatRequest({ id });
+      }),
+    [],
+  );
   const [stressConfig, setStressConfig] = useState<StressConfig>(DEFAULT_STRESS);
   const [stressAutoStart, setStressAutoStart] = useState(false);
   const [brandId, setBrandId] = useState<AgentBrandId>("claude-code");
@@ -214,6 +227,8 @@ export function App({
   if (view === "chats") {
     return (
       <ChatsScreen
+        workspace={workspace}
+        openChatRequest={openChatRequest}
         app={chats}
         transport={transport}
         info={info}

@@ -1,7 +1,19 @@
 import { OrbitMark } from "@auracode/ui/orbit";
-import { useId, useSyncExternalStore } from "react";
-import type { AgentAuthStatus, AgentEntry, AgentInstallation, ChatSummary } from "../../bindings";
+import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import type {
+  AgentAuthStatus,
+  AgentEntry,
+  AgentInstallation,
+  ChatCreatePreview,
+  ChatSummary,
+} from "../../bindings";
 import { agentChoice, type NewChatDraft } from "../../lib/chat/appStore";
+import { errorMessage } from "../../lib/errors";
+import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
+import { projectName } from "./ChatList";
+
+const noSubscribe = () => () => {};
+const emptyWorkspace = () => EMPTY_WORKSPACE;
 
 /** The download consent sentence of an agent whose first start downloads its adapter. */
 export function downloadNote(agent: AgentEntry): string | null {
@@ -88,14 +100,43 @@ export function NewChat({
   draft,
   onRefreshAgents,
   onCreated,
+  workspace,
 }: {
   readonly agents: readonly AgentEntry[] | null;
   readonly refreshing: boolean;
   readonly draft: NewChatDraft;
   readonly onRefreshAgents: () => void;
   readonly onCreated: (chat: ChatSummary) => void;
+  readonly workspace?: WorkspaceStore;
 }) {
   const state = useSyncExternalStore(draft.subscribe, draft.getSnapshot, draft.getSnapshot);
+  const organization = useSyncExternalStore(
+    workspace?.subscribe ?? noSubscribe,
+    workspace?.getSnapshot ?? emptyWorkspace,
+    workspace?.getSnapshot ?? emptyWorkspace,
+  );
+  const [folderId, setFolderId] = useState("");
+  const [preview, setPreview] = useState<ChatCreatePreview | null>(null);
+  const [allowBusy, setAllowBusy] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    setAllowBusy(false);
+    setPreview(null);
+    setPreviewError(null);
+    if (folderId && workspace)
+      void workspace.api.preview(folderId).then(
+        (value) => {
+          if (current) setPreview(value);
+        },
+        (error) => {
+          if (current) setPreviewError(errorMessage(error));
+        },
+      );
+    return () => {
+      current = false;
+    };
+  }, [folderId, workspace]);
   const agentId = useId();
   const selected = agents?.find((agent) => agent.id === state.agentId) ?? null;
   const unavailable = (agents ?? []).filter((agent) => !agentChoice(agent).enabled);
@@ -104,7 +145,8 @@ export function NewChat({
   const canCreate =
     selected !== null &&
     agentChoice(selected).enabled &&
-    state.folder !== null &&
+    (state.folder !== null || folderId !== "") &&
+    !organization.busy &&
     !state.creating &&
     state.maintenanceBusy !== "update";
   return (
@@ -114,9 +156,47 @@ export function NewChat({
       data-testid="new-chat"
       onSubmit={(event) => {
         event.preventDefault();
-        void draft.create().then((chat) => {
-          if (chat) onCreated(chat);
-        });
+        if (!workspace) {
+          void draft.create().then((chat) => {
+            if (chat) onCreated(chat);
+          });
+          return;
+        }
+        void workspace
+          .perform(async () => {
+            let destination = folderId;
+            if (!destination && state.folder) {
+              const existing = organization.data?.projects
+                .flatMap((project) => project.folders)
+                .find((folder) => folder.path === state.folder);
+              if (existing) destination = existing.id;
+              else {
+                const project = await workspace.api.createProject({
+                  project: {
+                    name: projectName(state.folder),
+                    color: null,
+                    default_agent: state.agentId,
+                    default_model: null,
+                  },
+                  folder: state.folder,
+                });
+                destination = project.folders[0]?.id ?? "";
+              }
+              setFolderId(destination);
+            }
+            if (!destination || !state.agentId) return null;
+            const checked = await workspace.api.preview(destination);
+            setPreview(checked);
+            if (checked.busy_chats.length > 0 && !allowBusy) return null;
+            return workspace.api.createChat({
+              folder_id: destination,
+              agent_id: state.agentId,
+              allow_busy_folder: allowBusy,
+            });
+          })
+          .then((entry) => {
+            if (entry) onCreated(entry.chat);
+          });
       }}
     >
       <div className="chat-welcome">
@@ -232,13 +312,42 @@ export function NewChat({
       ) : null}
       <div className="ui-field">
         <span>Folder</span>
+        {workspace && (organization.data?.projects.length ?? 0) > 0 ? (
+          <select
+            className="ui-select"
+            aria-label="Project folder"
+            value={folderId}
+            onChange={(event) => {
+              setFolderId(event.currentTarget.value);
+              const project = organization.data?.projects.find((item) =>
+                item.folders.some((folder) => folder.id === event.currentTarget.value),
+              );
+              if (project?.default_agent) draft.chooseAgent(project.default_agent);
+            }}
+          >
+            <option value="">Choose a different folder…</option>
+            {organization.data?.projects.map((project) => (
+              <optgroup key={project.id} label={project.name}>
+                {project.folders.map((folder) => (
+                  <option key={folder.id} value={folder.id} disabled={folder.folder_state !== "ok"}>
+                    {folder.display_name}
+                    {folder.folder_state !== "ok" ? " (unavailable on this device)" : ""}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        ) : null}
         <div className="ui-row">
           <button
             type="button"
             className="ui-button"
             data-testid="new-chat-pick-folder"
             disabled={state.picking}
-            onClick={() => void draft.chooseFolder()}
+            onClick={() => {
+              setFolderId("");
+              void draft.chooseFolder();
+            }}
           >
             {state.picking ? "Choosing…" : "Choose folder"}
           </button>
@@ -247,17 +356,36 @@ export function NewChat({
             data-testid="new-chat-folder"
             data-test-folder={state.folder ?? ""}
           >
-            {state.folder ?? "No folder chosen"}
+            {preview?.folder.path ?? state.folder ?? "No folder chosen"}
           </span>
         </div>
       </div>
+      {preview && preview.busy_chats.length > 0 ? (
+        <div className="chat-busy-warning">
+          <strong>This folder has active work</strong>
+          <p>{preview.busy_chats.map((chat) => chat.title ?? chat.agent_name).join(", ")}</p>
+          <label>
+            <input
+              type="checkbox"
+              checked={allowBusy}
+              onChange={(event) => setAllowBusy(event.currentTarget.checked)}
+            />{" "}
+            Start another chat in this folder. Agents may edit the same files.
+          </label>
+        </div>
+      ) : null}
+      {(previewError ?? organization.error) ? (
+        <p role="alert" className="ui-error">
+          {previewError ?? organization.error}
+        </p>
+      ) : null}
       <div className="ui-row">
         <button
           type="submit"
           className="ui-button"
           data-kind="primary"
           data-testid="new-chat-create"
-          disabled={!canCreate}
+          disabled={!canCreate || (preview !== null && preview.busy_chats.length > 0 && !allowBusy)}
         >
           {state.creating ? "Creating…" : "Create"}
         </button>

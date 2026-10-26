@@ -33,6 +33,7 @@ pub mod smoke;
 pub mod state;
 mod sync;
 pub mod window;
+pub mod workspace_commands;
 
 #[cfg(test)]
 mod config_checks;
