@@ -24,7 +24,7 @@ use std::path::PathBuf;
 use aura_core::device::{DeviceIdentity, DeviceLoad};
 use aura_core::owner::ProfileOwner;
 use aura_core::paths::DataRoot;
-use aura_core::profile::{ProfileMeta, Profiles};
+use aura_core::profile::{Profile, ProfileKind, ProfileMeta, Profiles};
 use aura_core::store::{OpenOutcome, Salvage, Store};
 use serde::Serialize;
 
@@ -86,6 +86,25 @@ pub fn startup() -> Booted {
 
 /// Runs the startup sequence on `root`.
 pub fn boot(root: aura_core::Result<DataRoot>) -> Booted {
+    boot_selected(root, None, None)
+}
+
+/// Prepare an explicit profile without changing state.json. The caller publishes that choice only
+/// after its keyed files, store and runtime are ready. All IO runs on a blocking worker.
+pub(crate) fn boot_profile(
+    root: DataRoot,
+    profile: Profile,
+    key: Option<std::sync::Arc<aura_sync::crypto::DatabaseKey>>,
+) -> Booted {
+    boot_selected(Ok(root), Some(profile), key)
+}
+
+fn boot_selected(
+    root: aura_core::Result<DataRoot>,
+    selected: Option<Profile>,
+    key: Option<std::sync::Arc<aura_sync::crypto::DatabaseKey>>,
+) -> Booted {
+    let preparing = selected.is_some();
     let mut booted = Booted {
         data_dir: None,
         device: None,
@@ -122,20 +141,43 @@ pub fn boot(root: aura_core::Result<DataRoot>) -> Booted {
         Err(error) => return booted.fail("load this device's identity", &error),
     }
 
-    let profile = match Profiles::new(root).open_active() {
+    let profile = match selected
+        .map(Ok)
+        .unwrap_or_else(|| Profiles::new(root).open_active())
+    {
         Ok(profile) => profile,
         Err(error) => return booted.fail("open your profile", &error),
     };
     booted.profile = Some(profile.meta.clone());
     booted.profile_dir = Some(profile.dir.clone());
 
+    // A saved Account selection is an unlock state, never a corrupt plaintext database. Startup
+    // can show the shell before reading auracode's vault and leave Local available explicitly.
+    if profile.meta.kind == ProfileKind::Account && key.is_none() {
+        return booted;
+    }
+
     match ProfileOwner::acquire(&profile) {
         Ok(owner) => booted.owner = Some(owner),
         Err(error) => return booted.fail("take ownership of your profile", &error),
     }
 
-    match Store::open(&profile) {
+    let opened = match key {
+        Some(key) => Store::open_encrypted(&profile, key),
+        None => Store::open(&profile),
+    };
+    match opened {
         Ok((store, info)) => {
+            if preparing && info.unclean_shutdown {
+                match store.check_integrity() {
+                    Ok(aura_core::store::Integrity::Ok) => {}
+                    Ok(aura_core::store::Integrity::Damaged { .. }) => {
+                        booted.fatal = Some("The selected profile needs database recovery. Existing data was preserved.".into());
+                        return booted;
+                    }
+                    Err(error) => return booted.fail("check the selected database", &error),
+                }
+            }
             match &info.outcome {
                 OpenOutcome::Created | OpenOutcome::Opened => {}
                 OpenOutcome::Migrated { from, to, backup } => {
@@ -156,7 +198,8 @@ pub fn boot(root: aura_core::Result<DataRoot>) -> Booted {
                     });
                 }
             }
-            booted.integrity_check = integrity::target(store.path(), info.unclean_shutdown);
+            booted.integrity_check =
+                integrity::target(store.path(), info.unclean_shutdown && !preparing);
             booted.db = Some(DbInfo {
                 path: info.path.display().to_string(),
                 schema_version: info.schema_version,

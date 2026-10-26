@@ -16,6 +16,17 @@ pub struct SetupService {
 }
 
 impl SetupService {
+    pub(crate) fn account(
+        profile: &aura_core::profile::Profile,
+        key: Arc<aura_sync::crypto::files::ProfileFileKey>,
+    ) -> Result<Self, AppError> {
+        Ok(Self {
+            profile_dir: profile.dir.clone(),
+            store: Mutex::new(Some(
+                OnboardingStore::open_account(profile, key).map_err(map_error)?,
+            )),
+        })
+    }
     pub fn new(profile_dir: PathBuf) -> Self {
         Self {
             profile_dir,
@@ -54,12 +65,7 @@ async fn run(
     state: &AppState,
     change: Option<(u32, SetupAction)>,
 ) -> Result<SetupSnapshot, AppError> {
-    let service = state.onboarding.as_ref().map(Arc::clone).ok_or_else(|| {
-        AppError::new(
-            AppErrorCode::StorageUnavailable,
-            "The profile is unavailable. Setup has not been changed.",
-        )
-    })?;
+    let service = state.onboarding()?;
     tauri::async_runtime::spawn_blocking(move || service.run(change))
         .await
         .map_err(|_| AppError::new(AppErrorCode::Internal, "Setup could not be loaded."))?

@@ -17,6 +17,7 @@ use crate::{
 };
 
 struct Pending {
+    generation: crate::state::ProfileGeneration,
     _slot: tokio::sync::OwnedSemaphorePermit,
     library: Arc<Library>,
     sources: Vec<Source>,
@@ -28,6 +29,15 @@ pub struct LibraryService {
     pending: Mutex<HashMap<String, Pending>>,
     mutation: Arc<tokio::sync::Mutex<()>>,
     previews: Arc<tokio::sync::Semaphore>,
+}
+
+impl LibraryService {
+    pub(crate) fn reset_profile(&self) {
+        self.pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
+    }
 }
 
 impl Default for LibraryService {
@@ -122,10 +132,8 @@ pub async fn library_copy_preview(
     revision: String,
     to_source: String,
 ) -> Result<CopyPreview, AppError> {
-    let roots = state
-        .sessions()?
-        .config_library_roots(folder_id.as_deref())
-        .await?;
+    let manager = state.sessions()?;
+    let roots = manager.config_library_roots(folder_id.as_deref()).await?;
     let service = Arc::clone(&service);
     service
         .pending
@@ -141,6 +149,7 @@ pub async fn library_copy_preview(
             )
         })?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _profile = manager;
         let library = Arc::new(Library::new(roots.sources.clone()).map_err(config_error)?);
         let prepared = library
             .prepare_copy(&item, &revision, &to_source)
@@ -160,6 +169,7 @@ pub async fn library_copy_preview(
         pending.insert(
             preview.id.clone(),
             Pending {
+                generation: _profile.generation(),
                 _slot: slot,
                 library,
                 sources: roots.sources,
@@ -190,13 +200,16 @@ pub async fn library_copy_apply(
     service: State<'_, Arc<LibraryService>>,
     id: String,
 ) -> Result<CopyResult, AppError> {
-    let manager = state.sessions()?.clone();
+    let manager = state.sessions()?;
     let pending = service
         .pending
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .remove(&id)
         .ok_or_else(|| config_error(aura_config::Error::Stale))?;
+    if !pending.generation.is_current() {
+        return Err(config_error(aura_config::Error::Stale));
+    }
     let gate = Arc::clone(&service.mutation);
     // Explicit apply outlives the initiating webview. Queued work still rechecks shutdown before
     // acquiring maintenance ownership, so a completed quit cannot release a deferred file write.
@@ -226,7 +239,7 @@ pub async fn library_copy_rollback(
     source_id: String,
     id: String,
 ) -> Result<CopyResult, AppError> {
-    let manager = state.sessions()?.clone();
+    let manager = state.sessions()?;
     let gate = Arc::clone(&service.mutation);
     tauri::async_runtime::spawn(async move {
         let _serial = gate.lock_owned().await;

@@ -1210,7 +1210,10 @@ impl Session {
             _ => {
                 let events = self.dialect.on_notification(method, params);
                 if events.is_empty() {
-                    tracing::debug!(method, "a notification auracode ignores");
+                    tracing::debug!(
+                        method_bytes = method.len(),
+                        "a notification auracode ignores"
+                    );
                 }
                 for event in events {
                     self.push(event);
@@ -1642,7 +1645,11 @@ impl Session {
         let update = match Update::parse(notification.update) {
             Ok(update) => update,
             Err(malformed) => {
-                tracing::debug!(tag = ?malformed.tag, reason = malformed.reason, "a malformed update was dropped");
+                tracing::debug!(
+                    tag_bytes = malformed.tag.as_ref().map(String::len),
+                    reason = malformed.reason,
+                    "a malformed update was dropped"
+                );
                 return;
             }
         };
@@ -1675,7 +1682,7 @@ impl Session {
         if let Update::Unknown(tag) = &update
             && self.unknown_tags.insert(tag.clone())
         {
-            tracing::info!(tag, "an update auracode does not know");
+            tracing::info!(tag_bytes = tag.len(), "an update auracode does not know");
         }
         match self.mapper.map(update, now) {
             Mapped::Events(events) => {
@@ -1867,7 +1874,10 @@ impl Session {
             Ok(value) => {
                 let reply = PromptReply::parse(&value);
                 if let Some(reason) = &reply.unknown_reason {
-                    tracing::info!(reason, "a stop reason auracode does not know");
+                    tracing::info!(
+                        reason_bytes = reason.len(),
+                        "a stop reason auracode does not know"
+                    );
                 }
                 if self.dialect.id() == "grok"
                     && value

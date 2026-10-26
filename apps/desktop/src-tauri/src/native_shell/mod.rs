@@ -4,7 +4,7 @@ mod model;
 #[cfg(any(windows, target_os = "macos"))]
 mod power;
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use aura_core::session::{SinkGone, StatusSink};
@@ -25,7 +25,8 @@ pub const OPEN_CHAT_EVENT: &str = "auracode-open-chat";
 pub struct NativeShell {
     activity: Mutex<Activity>,
     counts: watch::Sender<Counts>,
-    notices: mpsc::Sender<(String, Notice)>,
+    notices: mpsc::Sender<(u64, String, Notice)>,
+    profile_epoch: AtomicU64,
     stopped: watch::Sender<bool>,
     tray_ready: AtomicBool,
     pending_chat: Mutex<Option<String>>,
@@ -58,12 +59,22 @@ impl NativeShell {
     }
 }
 
-impl StatusSink for NativeShell {
-    fn send(&self, update: &ChatStatusUpdate) -> Result<(), SinkGone> {
-        if *self.stopped.borrow() {
+impl NativeShell {
+    fn reset_profile(&self) -> u64 {
+        let mut activity = lock(&self.activity);
+        let epoch = self.profile_epoch.fetch_add(1, Ordering::AcqRel) + 1;
+        *activity = Activity::default();
+        self.counts.send_replace(Counts::default());
+        *lock(&self.pending_chat) = None;
+        epoch
+    }
+
+    fn send_at(&self, epoch: u64, update: &ChatStatusUpdate) -> Result<(), SinkGone> {
+        let mut activity = lock(&self.activity);
+        if *self.stopped.borrow() || self.profile_epoch.load(Ordering::Acquire) != epoch {
             return Err(SinkGone);
         }
-        let (counts, notice) = lock(&self.activity).update(update);
+        let (counts, notice) = activity.update(update);
         self.counts.send_if_modified(|current| {
             if *current == counts {
                 false
@@ -77,7 +88,7 @@ impl StatusSink for NativeShell {
             // remains authoritative even if an extreme burst fills the notification queue.
             if self
                 .notices
-                .try_send((update.chat_id.clone(), notice))
+                .try_send((epoch, update.chat_id.clone(), notice))
                 .is_err()
             {
                 tracing::debug!("native notification queue is full; retaining the attention badge");
@@ -85,8 +96,31 @@ impl StatusSink for NativeShell {
         }
         Ok(())
     }
+}
+
+struct ProfileSink {
+    shell: Arc<NativeShell>,
+    epoch: u64,
+}
+impl StatusSink for ProfileSink {
+    fn send(&self, update: &ChatStatusUpdate) -> Result<(), SinkGone> {
+        self.shell.send_at(self.epoch, update)
+    }
     fn owner(&self) -> &str {
         OWNER
+    }
+}
+
+pub(crate) fn profile_changed(app: &tauri::AppHandle) {
+    let Some(shell) = app.try_state::<Arc<NativeShell>>() else {
+        return;
+    };
+    let epoch = shell.reset_profile();
+    if let Some(chats) = app.state::<AppState>().chats() {
+        chats.manager.status_subscribe(Arc::new(ProfileSink {
+            shell: shell.inner().clone(),
+            epoch,
+        }));
     }
 }
 
@@ -96,9 +130,9 @@ pub fn setup(app: &tauri::AppHandle) {
     #[cfg(any(windows, target_os = "macos"))]
     {
         let state = app.state::<AppState>();
-        let Some(chats) = state.chats().filter(|_| !state.launch.is_smoke()) else {
+        if state.launch.is_smoke() {
             return;
-        };
+        }
         let (counts, mut changes) = watch::channel(Counts::default());
         let (notices, mut notifications) = mpsc::channel(64);
         let (stopped, mut stopping) = watch::channel(false);
@@ -106,13 +140,19 @@ pub fn setup(app: &tauri::AppHandle) {
             activity: Mutex::new(Activity::default()),
             counts,
             notices,
+            profile_epoch: AtomicU64::new(0),
             stopped,
             tray_ready: AtomicBool::new(false),
             pending_chat: Mutex::new(None),
             notification_id: AtomicU32::new(0),
             power: Mutex::new(Some(power::Power::start())),
         });
-        chats.manager.status_subscribe(shell.clone());
+        if let Some(chats) = state.chats() {
+            chats.manager.status_subscribe(Arc::new(ProfileSink {
+                shell: shell.clone(),
+                epoch: 0,
+            }));
+        }
         app.manage(Arc::clone(&shell));
         match install_tray(app) {
             Ok(()) => shell.tray_ready.store(true, Ordering::Release),
@@ -139,7 +179,7 @@ pub fn setup(app: &tauri::AppHandle) {
                         update_tray(&app, counts);
                     }
                     notice = notifications.recv() => match notice {
-                        Some((chat, notice)) => show_notification(&app, &chat, notice),
+                        Some((epoch, chat, notice)) => show_notification(&app, epoch, &chat, notice),
                         None => break,
                     }
                 }
@@ -287,6 +327,21 @@ fn install_notification_actions(app: &tauri::AppHandle) {
             .and_then(serde_json::Value::as_str);
         if let Some(chat) = chat
             && let Some(shell) = handler_app.try_state::<Arc<NativeShell>>()
+            && action
+                .notification()
+                .and_then(|notice| notice.extra().get("profile_epoch"))
+                .and_then(serde_json::Value::as_u64)
+                == Some(shell.profile_epoch.load(Ordering::Acquire))
+            && action
+                .notification()
+                .and_then(|notice| notice.extra().get("profile_id"))
+                .and_then(serde_json::Value::as_str)
+                == handler_app
+                    .state::<AppState>()
+                    .app_info()
+                    .profile
+                    .as_ref()
+                    .map(|profile| profile.id.as_str())
         {
             shell.open_chat(&handler_app, chat);
         }
@@ -296,7 +351,7 @@ fn install_notification_actions(app: &tauri::AppHandle) {
 }
 
 #[cfg(any(windows, target_os = "macos"))]
-fn show_notification(app: &tauri::AppHandle, chat: &str, notice: Notice) {
+fn show_notification(app: &tauri::AppHandle, epoch: u64, chat: &str, notice: Notice) {
     use tauri_plugin_notification::NotificationExt;
     if app
         .try_state::<AppState>()
@@ -317,9 +372,14 @@ fn show_notification(app: &tauri::AppHandle, chat: &str, notice: Notice) {
     let Some(shell) = app.try_state::<Arc<NativeShell>>() else {
         return;
     };
-    if !lock(&shell.activity).notice_is_current(chat, notice) {
+    if shell.profile_epoch.load(Ordering::Acquire) != epoch
+        || !lock(&shell.activity).notice_is_current(chat, notice)
+    {
         return;
     }
+    let Some(profile) = app.state::<AppState>().app_info().profile else {
+        return;
+    };
     let id = (shell.notification_id.fetch_add(1, Ordering::Relaxed) % i32::MAX as u32 + 1) as i32;
     if let Err(error) = app
         .notification()
@@ -328,8 +388,50 @@ fn show_notification(app: &tauri::AppHandle, chat: &str, notice: Notice) {
         .title(notice.title())
         .body("Open auracode to view the chat.")
         .extra("chat_id", chat)
+        .extra("profile_epoch", epoch)
+        .extra("profile_id", profile.id)
         .show()
     {
         tracing::warn!(%error, "could not send a native notification");
+    }
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+
+    #[test]
+    fn switching_clears_navigation_and_refuses_old_profile_status_updates() {
+        let (counts, _) = watch::channel(Counts::default());
+        let (notices, _) = mpsc::channel(8);
+        let (stopped, _) = watch::channel(false);
+        let shell = NativeShell {
+            activity: Mutex::default(),
+            counts,
+            notices,
+            stopped,
+            profile_epoch: AtomicU64::new(0),
+            tray_ready: AtomicBool::new(false),
+            pending_chat: Mutex::new(Some("old-chat".into())),
+            notification_id: AtomicU32::new(0),
+            #[cfg(any(windows, target_os = "macos"))]
+            power: Mutex::new(None),
+        };
+        let update = ChatStatusUpdate {
+            chat_id: "old-chat".into(),
+            status: aura_protocol::SessionStatus::Running,
+            needs_attention: false,
+            title: None,
+            updated_at: 1,
+        };
+        shell.send_at(0, &update).unwrap();
+        assert_eq!(shell.active_work_count(), 1);
+        let epoch = shell.reset_profile();
+        assert_eq!(shell.active_work_count(), 0);
+        assert!(lock(&shell.pending_chat).is_none());
+        assert!(shell.send_at(0, &update).is_err());
+        assert_eq!(shell.active_work_count(), 0);
+        shell.send_at(epoch, &update).unwrap();
+        assert_eq!(shell.active_work_count(), 1);
     }
 }

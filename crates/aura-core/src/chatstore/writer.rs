@@ -141,6 +141,9 @@ pub(crate) enum Work {
 
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
+    Flush {
+        reply: oneshot::Sender<Result<(), StoreError>>,
+    },
     Search {
         query: String,
         include_archived: bool,
@@ -622,6 +625,7 @@ fn replace<T: PartialEq>(slot: &mut T, value: T) -> bool {
 
 fn work_name(work: &Work) -> &'static str {
     match work {
+        Work::Request(Request::Flush { .. }) => "flush",
         Work::Op(op) => op_name(op),
         Work::Request(Request::CreateChat { .. }) => "create_chat",
         Work::Request(Request::Organization { .. }) => "organization",
@@ -1194,6 +1198,14 @@ impl Writer {
 
     fn answer_request(&mut self, request: Request) {
         match request {
+            Request::Flush { reply } => {
+                let result = match self.mode {
+                    Mode::Normal if self.store.is_some() => Ok(()),
+                    Mode::Damaged => Err(StoreError::Damaged(DAMAGED.into())),
+                    _ => Err(StoreError::Closed),
+                };
+                let _ = reply.send(result);
+            }
             Request::Conversation { command, reply } => {
                 let device = self.device_id.clone();
                 let now = now_millis();

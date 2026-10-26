@@ -34,6 +34,7 @@ pub mod launch;
 pub mod native_shell;
 pub mod onboarding;
 pub mod os;
+pub mod profile_commands;
 pub mod reveal;
 pub mod search_commands;
 pub mod sessions;
@@ -188,6 +189,10 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     app.manage(window::WebviewVisibility::default());
     app.manage(Arc::new(config_library::LibraryService::default()));
     native_shell::setup(app.handle());
+    let account_app = app.handle().clone();
+    rt.spawn(async move {
+        profile_commands::restore_selected(account_app);
+    });
 
     #[cfg(unix)]
     {
@@ -325,7 +330,7 @@ fn on_exit_requested(app: &tauri::AppHandle, code: Option<i32>, api: &tauri::Exi
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    if state.chats().is_none() {
+    if state.chats().is_none() && !state.app_info().profile_switching {
         // Startup failed before the chats started: there is nothing to stop.
         return;
     }
@@ -359,9 +364,18 @@ async fn quit(app: tauri::AppHandle, code: i32) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
+    let _transition = state.transition.lock().await;
     if let Some(chats) = state.chats() {
-        let host = AppQuitHost { app: &app, chats };
+        let host = AppQuitHost {
+            app: &app,
+            chats: &chats,
+        };
         sessions::run_quit(&state.quit, &host, code).await;
+    } else {
+        // A pending unlock stopped before publishing a runtime. The transition is finished and
+        // there is no owned store left to drain.
+        state.quit.abandon();
+        app.exit(code);
     }
 }
 

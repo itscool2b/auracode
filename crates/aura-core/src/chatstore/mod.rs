@@ -496,6 +496,9 @@ impl ChatStore {
 
     /// Commits what is queued, then closes the connection. Returns whether everything was saved
     /// within `deadline`.
+    ///
+    /// Use [`Self::flush`] first when a reversible transition must verify pending writes before
+    /// beginning irreversible shutdown.
     pub async fn shutdown(&self, deadline: Duration) -> bool {
         let (done, finished) = std::sync::mpsc::channel();
         self.shared
@@ -505,6 +508,15 @@ impl ChatStore {
             .spawn_blocking(move || writer::wait_finished(&finished, limit))
             .await
             .unwrap_or(false)
+    }
+
+    /// Wait for every earlier FIFO write while keeping the writer open. A pause, failure or
+    /// timeout refuses the transition; cancellation never closes or drops queued work.
+    pub async fn flush(&self, deadline: Duration) -> Result<(), StoreError> {
+        let (reply, answer) = oneshot::channel();
+        tokio::time::timeout(deadline, self.request(Request::Flush { reply }, answer))
+            .await
+            .map_err(|_| self.timed_out())??
     }
 
     /// The same from any thread, with or without a runtime (`RunEvent::Exit`); never panics.
@@ -1014,6 +1026,47 @@ mod tests {
             }
         }
         lines
+    }
+
+    #[tokio::test]
+    async fn flush_commits_earlier_ops_and_a_timeout_does_not_close_the_writer() {
+        let fixture = start(WriterConfig::STANDARD);
+        let store = &fixture.store;
+        let chat = new_chat(store).await;
+        let held = hold(store);
+        send(
+            store,
+            Op::AppendEvents {
+                chat_id: chat.id.clone(),
+                rows: vec![notice(0, "saved before switch")],
+            },
+        )
+        .await;
+        assert!(store.flush(Duration::from_millis(10)).await.is_err());
+        drop(held);
+        store
+            .flush(Duration::from_secs(5))
+            .await
+            .expect("writer resumes without closing");
+        let read = Connection::open_with_flags(
+            fixture.profile.db_path(),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("independent reader");
+        let count: u32 = read
+            .query_row(
+                "SELECT count(*) FROM events WHERE chat_id=?1",
+                [&chat.id],
+                |row| row.get(0),
+            )
+            .expect("durable rows");
+        assert_eq!(count, 1);
+        drop(read);
+        assert!(store.shutdown(Duration::from_secs(5)).await);
+        assert!(matches!(
+            store.flush(Duration::from_secs(1)).await,
+            Err(StoreError::Closed)
+        ));
     }
 
     #[tokio::test]

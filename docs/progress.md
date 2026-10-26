@@ -1598,3 +1598,17 @@ The pure merge preserves first-link additions, merges independent setting keys a
 markers. Missing heads and unavailable items wait. File, tree, field, scope and payload validation
 reject unsafe paths, trust/credential fields and future schemas. Canonical encoding binds content to
 its exact item. Thirteen focused Rust regressions pass; scanner, reviewed apply and UI are pending.
+Guarded Account activation now prepares the keyed database, files, metadata and services before
+publishing the active profile. It drains admitted commands, flushes pending writes and refuses
+live agents, owned folder work or terminals. Failure preserves the current dataset and active
+pointer. Startup can show a locked Account profile while restoring only auracode's local key;
+Local stays available explicitly. Profile publication invalidates channels, native notification
+generations and cached Library previews. A bounded no-follow audit preserves and refuses known
+legacy plaintext locations. Unknown ACP fallback strings now log lengths only.
+
+Seven focused native profile/generation tests, eleven existing desktop state tests, the core audit
+regression and the writer flush regression pass on Windows. Core and desktop all-target Clippy pass.
+An ordinary native build now permits the full command exporter, which passed and regenerated the
+committed TypeScript without a policy workaround. Sync projection/scheduling, encrypted recovery
+browsing and macOS runtime qualification remain pending; no real account login was performed.
+

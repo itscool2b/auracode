@@ -80,6 +80,14 @@ struct Page {
 }
 
 impl Pages {
+    pub(crate) fn invalidate_all(&self) -> Vec<String> {
+        let mut pages = lock(&self.pages);
+        for page in pages.values_mut() {
+            page.generation.fetch_add(1, Ordering::AcqRel);
+            page.loading = true;
+        }
+        pages.keys().cloned().collect()
+    }
     fn token(&self, label: &str, settles: bool) -> PageToken {
         let mut pages = lock(&self.pages);
         let page = pages.entry(label.to_owned()).or_default();
@@ -240,6 +248,15 @@ pub struct ChatRuntime {
     pub registry: Arc<LeftoverRegistry>,
     /// Sentences that arrive after startup (the sweep's), shown with `app_info`'s notices.
     pub late_notices: Arc<Mutex<Vec<String>>>,
+    pub(crate) services: Arc<RuntimeServices>,
+}
+
+/// Process ownership and agent discovery belong to the app instance, not one profile. Reusing
+/// these avoids opening competing registry files when a macOS profile switch prepares its target.
+pub(crate) struct RuntimeServices {
+    registry: Arc<LeftoverRegistry>,
+    redactor: Arc<Redactor>,
+    outside: Outside,
 }
 
 impl std::fmt::Debug for ChatRuntime {
@@ -252,6 +269,7 @@ impl std::fmt::Debug for ChatRuntime {
 
 /// The parts of the chat runtime that reach outside auracode: the login shell, agent probes and
 /// adapter installs, real processes, agent drivers. Tests pass their own.
+#[derive(Clone)]
 pub struct Outside {
     pub env: Arc<EnvResolver>,
     pub detector: Arc<Detector>,
@@ -326,6 +344,17 @@ pub fn start_chats(
     rt: &Handle,
     outside: impl FnOnce(&Arc<LeftoverRegistry>, &Arc<Redactor>, &Path, &Handle) -> Outside,
 ) -> Option<ChatRuntime> {
+    start_profile_chats(booted, app_version, rt, outside, None, None)
+}
+
+pub(crate) fn start_profile_chats(
+    booted: &mut Booted,
+    app_version: &str,
+    rt: &Handle,
+    outside: impl FnOnce(&Arc<LeftoverRegistry>, &Arc<Redactor>, &Path, &Handle) -> Outside,
+    file_key: Option<Arc<aura_sync::crypto::files::ProfileFileKey>>,
+    reuse: Option<Arc<RuntimeServices>>,
+) -> Option<ChatRuntime> {
     if booted.fatal.is_some() {
         return None;
     }
@@ -341,8 +370,18 @@ pub fn start_chats(
         return None;
     };
     let profile = Profile { meta, dir };
-    let store = match ChatStore::start(store, owner, &profile, device.device_id.clone(), rt.clone())
-    {
+    let started = match &file_key {
+        Some(key) => ChatStore::start_account(
+            store,
+            owner,
+            &profile,
+            device.device_id.clone(),
+            rt.clone(),
+            key.clone(),
+        ),
+        None => ChatStore::start(store, owner, &profile, device.device_id.clone(), rt.clone()),
+    };
+    let store = match started {
         Ok(store) => store,
         Err(error) => {
             tracing::error!(%error, "the chat store could not start");
@@ -352,7 +391,11 @@ pub fn start_chats(
     };
 
     let run_dir = data_dir.join(RUN_DIR);
-    let registry = match LeftoverRegistry::open(&run_dir, rt.clone()) {
+    let registry = match reuse
+        .as_ref()
+        .map(|services| Ok(services.registry.clone()))
+        .unwrap_or_else(|| LeftoverRegistry::open(&run_dir, rt.clone()))
+    {
         Ok(registry) => registry,
         Err(error) => {
             tracing::warn!(%error, path = %run_dir.display(), "the leftover registry is unavailable; agents run without it");
@@ -362,49 +405,79 @@ pub fn start_chats(
     let late_notices = Arc::new(Mutex::new(Vec::new()));
     let own = registry.own().clone();
     let notices = Arc::clone(&late_notices);
-    rt.spawn(async move {
-        let report = sweep_stale(&run_dir, &own).await;
-        log_sweep(&report);
-        if let Some(notice) = sweep_notice(&report) {
-            lock(&notices).push(notice);
-        }
-    });
+    if reuse.is_none() {
+        rt.spawn(async move {
+            let report = sweep_stale(&run_dir, &own).await;
+            log_sweep(&report);
+            if let Some(notice) = sweep_notice(&report) {
+                lock(&notices).push(notice);
+            }
+        });
+    }
 
-    let redactor = Arc::new(Redactor::standard());
+    let services = reuse.unwrap_or_else(|| {
+        let redactor = Arc::new(Redactor::standard());
+        Arc::new(RuntimeServices {
+            outside: outside(&registry, &redactor, &data_dir, rt),
+            registry: registry.clone(),
+            redactor,
+        })
+    });
+    let redactor = services.redactor.clone();
     let Outside {
         env,
         detector,
         spawner,
         drivers,
-    } = outside(&registry, &redactor, &data_dir, rt);
+    } = services.outside.clone();
     let logs = LogFactory::new(
         profile.logs_dir().join("protocol"),
         Arc::clone(&redactor),
         rt.clone(),
     );
-    let pruning = logs.clone();
-    rt.spawn(async move {
-        let report = pruning.prune(RetentionPolicy::STANDARD).await;
-        if report.files_removed > 0 || !report.errors.is_empty() {
-            tracing::info!(
-                files = report.files_removed,
-                bytes = report.bytes_removed,
-                errors = report.errors.len(),
-                "pruned old protocol logs"
-            );
+    if file_key.is_none() {
+        let pruning = logs.clone();
+        rt.spawn(async move {
+            let report = pruning.prune(RetentionPolicy::STANDARD).await;
+            if report.files_removed > 0 || !report.errors.is_empty() {
+                tracing::info!(
+                    files = report.files_removed,
+                    bytes = report.bytes_removed,
+                    errors = report.errors.len(),
+                    "pruned old protocol logs"
+                );
+            }
+        });
+    }
+    let (worktrees, checkpoints) = if let Some(key) = &file_key {
+        let worktrees = aura_core::gitworkspaces::GitWorkspaces::new_account(
+            &profile,
+            env.clone(),
+            registry.clone(),
+            key.clone(),
+        );
+        let checkpoints = aura_core::checkpoints::Checkpoints::new_account(
+            &profile,
+            env.clone(),
+            registry.clone(),
+            key.clone(),
+        );
+        match (worktrees, checkpoints) {
+            (Ok(worktrees), Ok(checkpoints)) => (worktrees, checkpoints),
+            _ => {
+                booted.fatal = Some("The encrypted profile metadata could not be opened. Existing files were preserved.".into());
+                return None;
+            }
         }
-    });
+    } else {
+        (
+            aura_core::gitworkspaces::GitWorkspaces::new(&profile, env.clone(), registry.clone()),
+            aura_core::checkpoints::Checkpoints::new(&profile, env.clone(), registry.clone()),
+        )
+    };
     let manager = SessionManager::new(ManagerDeps {
-        worktrees: Some(aura_core::gitworkspaces::GitWorkspaces::new(
-            &profile,
-            Arc::clone(&env),
-            Arc::clone(&registry),
-        )),
-        checkpoints: Some(aura_core::checkpoints::Checkpoints::new(
-            &profile,
-            Arc::clone(&env),
-            Arc::clone(&registry),
-        )),
+        worktrees: Some(worktrees),
+        checkpoints: Some(checkpoints),
         store: Arc::clone(&store),
         env,
         spawner,
@@ -423,6 +496,7 @@ pub fn start_chats(
         manager,
         registry,
         late_notices,
+        services,
     })
 }
 

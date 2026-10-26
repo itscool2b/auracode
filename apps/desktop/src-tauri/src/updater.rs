@@ -384,6 +384,9 @@ pub async fn app_update_install(app: tauri::AppHandle) -> Result<UpdateStatus, U
 
 async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
     let state = app.state::<AppState>();
+    let _transition = state.transition.try_lock().map_err(|_| {
+        error("Wait for the profile transition to finish before installing an update.")
+    })?;
     let updates = app.state::<Updates>();
     available(&state)?;
     let _operation = updates.begin()?;
@@ -424,7 +427,10 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
     updates.phase(UpdatePhase::Installing, None);
     let outcome = sessions::run_quit(
         &state.quit,
-        &UpdateQuit(AppQuitHost { app: &app, chats }),
+        &UpdateQuit(AppQuitHost {
+            app: &app,
+            chats: &chats,
+        }),
         0,
     )
     .await;

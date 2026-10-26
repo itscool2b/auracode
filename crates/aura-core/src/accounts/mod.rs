@@ -15,8 +15,10 @@ use std::{
 };
 use tokio::sync::{Mutex, MutexGuard};
 use zeroize::Zeroizing;
+mod audit;
 mod error;
 mod index;
+pub use audit::audit_profile;
 use index::Index;
 pub type Result<T> = std::result::Result<T, AccountFailure>;
 

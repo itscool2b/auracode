@@ -11,12 +11,37 @@ export const commands = {
 	 *  mode, notices, and the fatal startup error if there was one. Never fails.
 	 */
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
+	accountConfig: () => typedError<AccountConfiguration, AccountFailure>(__TAURI_INVOKE("account_config")),
+	accountStatus: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_status")),
+	accountRequestCode: (email: string, turnstileToken: string) => typedError<SignInChallenge, AccountFailure>(__TAURI_INVOKE("account_request_code", { email, turnstileToken })),
+	accountVerifyCode: (challengeId: string, code: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_verify_code", { challengeId, code })),
+	accountRefresh: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_refresh")),
+	accountRegisterDevice: (name: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_register_device", { name })),
+	accountPrepareRecovery: () => typedError<RecoverySetup, AccountFailure>(__TAURI_INVOKE("account_prepare_recovery")),
+	accountCancelSetup: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_cancel_setup")),
+	accountConfirmRecovery: (setupId: string, retained: boolean) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_confirm_recovery", { setupId, retained })),
+	accountRecover: (recoveryKey: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_recover", { recoveryKey })),
+	accountConfirmFingerprint: (fingerprint: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_confirm_fingerprint", { fingerprint })),
+	accountDevices: () => typedError<AccountDevice[], AccountFailure>(__TAURI_INVOKE("account_devices")),
+	accountApproveDevice: (deviceId: string, verificationCode: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_approve_device", { deviceId, verificationCode })),
+	accountRevokeDevice: (deviceId: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_revoke_device", { deviceId })),
+	accountSignOut: () => typedError<AccountSignOut, AccountFailure>(__TAURI_INVOKE("account_sign_out")),
+	profilesList: () => typedError<ProfileMeta[], AppError>(__TAURI_INVOKE("profiles_list")),
+	accountActivate: () => typedError<AppInfo, AppError>(__TAURI_INVOKE("account_activate")),
+	profileActivate: (profileId: string) => typedError<AppInfo, AppError>(__TAURI_INVOKE("profile_activate", { profileId })),
 	appUpdateStatus: () => __TAURI_INVOKE<UpdateStatus>("app_update_status"),
 	appUpdateCheck: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_check")),
 	appUpdateDownload: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_download")),
 	appUpdateInstall: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_install")),
 	setupSnapshot: () => typedError<SetupSnapshot, AppError>(__TAURI_INVOKE("setup_snapshot")),
 	setupApply: (revision: number, action: SetupAction) => typedError<SetupSnapshot, AppError>(__TAURI_INVOKE("setup_apply", { revision, action })),
+	librarySnapshot: (folderId: string | null) => typedError<LibraryInventory, AppError>(__TAURI_INVOKE("library_snapshot", { folderId })),
+	libraryCopyHistory: (folderId: string | null) => typedError<LibraryCopyReceipt[], AppError>(__TAURI_INVOKE("library_copy_history", { folderId })),
+	libraryItemPreview: (folderId: string | null, item: LibraryItemRef, revision: string) => typedError<LibraryItemPreview, AppError>(__TAURI_INVOKE("library_item_preview", { folderId, item, revision })),
+	libraryCopyPreview: (folderId: string | null, item: LibraryItemRef, revision: string, toSource: string) => typedError<LibraryCopyPreview, AppError>(__TAURI_INVOKE("library_copy_preview", { folderId, item, revision, toSource })),
+	libraryCopyCancel: (id: string) => __TAURI_INVOKE<void>("library_copy_cancel", { id }),
+	libraryCopyApply: (id: string) => typedError<LibraryCopyResult, AppError>(__TAURI_INVOKE("library_copy_apply", { id })),
+	libraryCopyRollback: (folderId: string | null, sourceId: string, id: string) => typedError<LibraryCopyResult, AppError>(__TAURI_INVOKE("library_copy_rollback", { folderId, sourceId, id })),
 	/**
 	 *  Starts a scripted mock-agent turn and streams its frames over `channel` (one `EventBatch` at
 	 *  most every 16 ms, each under 8 KiB). Returns the session id the frames carry, for
@@ -218,6 +243,62 @@ export const SMOKE_CHAT_CHECKS = ["chats-screen","pick-folder","create-chat","pi
 export const SMOKE_CHAT_REOPEN_CHECKS = ["reopen-list","reopen-no-start","reopen-history","reopen-interrupted","reopen-held","reopen-blob","reopen-resume","reopen-send-queued"] as const;
 
 /* Types */
+export type AccountAccess = "signed_out" | "verification_required" | "needs_device" | "needs_first_key" | "pending_approval" | "verify_account_key" | "ready" | "expired" | "denied";
+
+export type AccountConfiguration = {
+	service_origin: string,
+	verification_url: string,
+};
+
+export type AccountDevice = {
+	id: string,
+	name: string,
+	platform: string,
+	verification_code: string,
+	current: boolean,
+	created_at: number,
+	last_seen: number,
+	approved_at: number | null,
+	revoked_at: number | null,
+};
+
+export type AccountFailure = {
+	code: AccountFailureCode,
+	message: string,
+	retry_after_seconds: number | null,
+};
+
+export type AccountFailureCode = "invalid_input" | "invalid_state" | "offline" | "timed_out" | "unauthorized" | "forbidden" | "invalid_code" | "conflict" | "quota" | "rate_limited" | "delivery_failed" | "unavailable" | "not_found" | "protocol" | "secure_storage" | "local_storage" | "key_mismatch";
+
+export type AccountSignOut = {
+	status: AccountStatus,
+	/**  False means the local session is removed, but remote revocation could not be confirmed. */
+	server_revoked: boolean,
+};
+
+export type AccountStatus = {
+	access: AccountAccess,
+	account_id: string | null,
+	device_id: string | null,
+	/**  An opaque local profile, available only after a locally trusted key exists. */
+	profile_id: string | null,
+	local_key_available: boolean,
+	/**  Computed from this device's own public key, never trusted from the server. */
+	approval_code: string | null,
+	/**  Compare this with the trusted approving device before confirming a new remote key. */
+	fingerprint: string | null,
+	sync: AccountSyncStatus,
+};
+
+export type AccountSyncState = "inactive" | "idle" | "syncing" | "offline" | "paused" | "error";
+
+export type AccountSyncStatus = {
+	state: AccountSyncState,
+	pending_changes: number | null,
+	last_sync_at: number | null,
+	message: string | null,
+};
+
 /**  The vendor's own local authentication check. This does not promise a successful paid request. */
 export type AgentAuthStatus = { state: "credentials_present" } | { state: "sign_in_required" } | { state: "unknown"; reason: string } | { state: "unsupported" };
 
@@ -344,6 +425,10 @@ export type AppInfo = {
 	device: DeviceIdentity | null,
 	/**  The active profile; `null` when startup failed before opening it. */
 	profile: ProfileMeta | null,
+	/**  The selected Account profile is waiting for its app-owned local key. */
+	profile_locked: boolean,
+	/**  Profile commands are temporarily unavailable while a reviewed switch is prepared. */
+	profile_switching: boolean,
 	/**  The profile database; `null` when startup failed before opening it. */
 	db: DbInfo | null,
 	/**  The native material behind the window. `none` means the UI must paint an opaque background. */
@@ -834,6 +919,86 @@ export type LatestRelease = {
  */
 export type LaunchMode = { type: "normal" } | { type: "smoke"; plan: SmokePlan } | { type: "stress"; config: StressConfig };
 
+export type LibraryCopyFile = {
+	path: string,
+	before_revision: string | null,
+	after_revision: string,
+	bytes: number,
+};
+
+export type LibraryCopyPreview = {
+	id: string,
+	from: LibraryItemRef,
+	to_source: string,
+	files: LibraryCopyFile[],
+	before_text: string | null,
+	after_text: string,
+	notices: string[],
+};
+
+export type LibraryCopyReceipt = {
+	id: string,
+	source_id: string,
+	kind: LibraryItemKind,
+	files: string[],
+	state: LibraryCopyState,
+};
+
+export type LibraryCopyResult = {
+	id: string,
+	source_id: string,
+	applied: string[],
+	recovery_required: boolean,
+	message: string | null,
+};
+
+export type LibraryCopyState = "complete" | "recovery_required" | "rolled_back";
+
+export type LibraryInventory = {
+	sources: LibrarySourceStatus[],
+	items: LibraryItem[],
+	notices: string[],
+};
+
+export type LibraryItem = {
+	item: LibraryItemRef,
+	provider: LibraryProvider,
+	scope: LibraryScope,
+	label: string,
+	relative_path: string,
+	revision: string,
+	bytes: number,
+	copy_blocked: string | null,
+};
+
+export type LibraryItemKind = "skill" | "instructions" | "mcp_server" | "plugin" | "package";
+
+export type LibraryItemPreview = {
+	item: LibraryItem,
+	text: string,
+	files: string[],
+	notices: string[],
+};
+
+export type LibraryItemRef = {
+	source_id: string,
+	kind: LibraryItemKind,
+	/**  A logical key, never a caller-selected filesystem path. */
+	key: string,
+};
+
+export type LibraryProvider = "claude" | "codex" | "pi" | "shared";
+
+export type LibraryScope = "user" | "project";
+
+export type LibrarySourceStatus = {
+	id: string,
+	provider: LibraryProvider,
+	scope: LibraryScope,
+	available: boolean,
+	message: string | null,
+};
+
 /**  One account rate-limit window (Claude's five-hour/weekly windows, Codex's primary/secondary). */
 export type LimitWindow = {
 	label: string,
@@ -1042,6 +1207,15 @@ export type QueuedPrompt = {
 	created_at: number,
 };
 
+/**
+ *  The recovery key is intentionally shown only in response to an explicit setup action. Keep it
+ *  in transient UI memory, never diagnostics, analytics, URLs or frontend persistence.
+ */
+export type RecoverySetup = {
+	id: string,
+	recovery_key: string,
+};
+
 /**  Who answered a permission request or a question. */
 export type ResolvedBy = "user" | 
 /**  The permission policy, under the chat's autonomy. */
@@ -1162,6 +1336,12 @@ export type SetupSnapshot = {
 };
 
 export type SetupStep = "welcome" | "agents" | "account" | "motion" | "project";
+
+export type SignInChallenge = {
+	id: string,
+	expires_in: number,
+	resend_after: number,
+};
 
 export type SlashCommand = {
 	name: string,
