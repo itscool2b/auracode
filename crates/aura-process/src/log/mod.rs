@@ -33,6 +33,7 @@
 //! `{"note":{"dropped":n}}` record marks the gap, at the latest when the log closes; an I/O error
 //! stops logging for that spawn with one warning. The env is never logged.
 
+mod bundle;
 mod redact;
 mod retention;
 mod writer;

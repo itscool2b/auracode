@@ -14,3 +14,20 @@
   gap: 8px;
   margin-top: 4px;
 }
+.debug-bundle-preview {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.debug-bundle-preview textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  border: 1px solid var(--o-line-strong);
+  border-radius: 8px;
+  background: var(--o-well);
+  color: var(--o-text-1);
+  padding: 12px;
+  font: 12px / 1.6 var(--font-mono, monospace);
+}

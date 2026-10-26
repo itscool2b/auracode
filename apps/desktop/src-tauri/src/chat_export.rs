@@ -10,6 +10,24 @@ use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
 #[specta::specta]
+pub async fn chat_debug_bundle(
+    state: State<'_, AppState>,
+    chat_id: String,
+) -> Result<String, AppError> {
+    let lease = state.sessions()?;
+    // Keep the profile admitted even if the renderer closes during the bounded read.
+    tokio::spawn(async move { lease.debug_bundle(&chat_id).await.map_err(AppError::from) })
+        .await
+        .map_err(|_| {
+            AppError::new(
+                AppErrorCode::Internal,
+                "The diagnostics task could not finish.",
+            )
+        })?
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn chat_export_markdown(
     webview: Webview,
     state: State<'_, AppState>,

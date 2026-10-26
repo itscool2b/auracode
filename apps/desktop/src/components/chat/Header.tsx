@@ -9,6 +9,7 @@ import { hasProcess } from "../../lib/chat/transcript";
 import { inTauri } from "../../lib/ipc";
 import { ChatExportDialog } from "./ChatExportDialog";
 import { projectName } from "./ChatList";
+import { DebugBundleDialog } from "./DebugBundleDialog";
 import { FolderContext } from "./FolderContext";
 import { Popover } from "./Popover";
 import { ProjectToolsDialog } from "./ProjectToolsDialog";
@@ -51,6 +52,7 @@ export function Header({
 }) {
   const [toolsOpen, setToolsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
   const { session } = state;
   const chat = listed ?? state.chat;
   const status = session?.status ?? chat?.status ?? "stopped";
@@ -162,9 +164,14 @@ export function Header({
         ) : null}
         <div className="ui-row">
           {chat && inTauri() ? (
-            <button type="button" className="ui-button" onClick={() => setExportOpen(true)}>
-              Export chat
-            </button>
+            <>
+              <button type="button" className="ui-button" onClick={() => setExportOpen(true)}>
+                Export chat
+              </button>
+              <button type="button" className="ui-button" onClick={() => setDebugOpen(true)}>
+                Copy debug bundle
+              </button>
+            </>
           ) : null}
           {onHistory ? (
             <button type="button" className="ui-button" onClick={onHistory}>
@@ -223,6 +230,9 @@ export function Header({
       </Popover>
       {exportOpen && chat ? (
         <ChatExportDialog key={chat.id} chatId={chat.id} onClose={() => setExportOpen(false)} />
+      ) : null}
+      {debugOpen && chat ? (
+        <DebugBundleDialog key={chat.id} chatId={chat.id} onClose={() => setDebugOpen(false)} />
       ) : null}
     </header>
   );

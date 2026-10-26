@@ -1004,6 +1004,18 @@ impl SessionManager {
         self.deps().logs.chat_dir(chat_id)
     }
 
+    /// Explicit, bounded diagnostics for a saved chat in this profile only.
+    pub async fn debug_bundle(&self, chat_id: &str) -> Result<String, SessionError> {
+        if !self.chats().await?.iter().any(|chat| chat.id == chat_id) {
+            return Err(SessionError::ChatNotFound(chat_id.to_owned()));
+        }
+        self.deps().logs.debug_bundle(chat_id).await.map_err(|_| {
+            SessionError::StorageUnavailable(
+                "The protocol log could not be read safely. Check its local permissions.".into(),
+            )
+        })
+    }
+
     /// Registers the webview's status channel (replacing its earlier one); returns its id.
     pub fn status_subscribe(&self, sink: Arc<dyn StatusSink>) -> String {
         let id = crate::ids::new_id();

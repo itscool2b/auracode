@@ -80,6 +80,34 @@ export async function checkDataTransfer(page, url, out, engine) {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: resolve(out, `${engine}-chat-export-mobile.png`) });
   await page.setViewportSize({ width: 1440, height: 900 });
+  await goto();
+  await page.getByRole("button", { name: "Copy debug bundle", exact: true }).click();
+  assert.deepEqual(await calls(), []);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  assert.deepEqual(await calls(), []);
+  await page.getByRole("button", { name: "Copy debug bundle", exact: true }).click();
+  await page.getByRole("button", { name: "Prepare preview" }).click();
+  const preview = page.getByRole("textbox", { name: "Bundle preview" });
+  await preview.waitFor();
+  assert.deepEqual(await calls(), ["debug:saved-chat"]);
+  await preview.fill("Reviewed diagnostics only");
+  assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+  await page.getByRole("button", { name: "Copy reviewed bundle" }).click();
+  await page.getByRole("status").filter({ hasText: "Copied to clipboard" }).waitFor();
+  assert.deepEqual(await calls(), ["debug:saved-chat", "copy:Reviewed diagnostics only"]);
+  await page.setViewportSize({ width: 390, height: 800 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: resolve(out, `${engine}-debug-bundle-mobile.png`) });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const mode of ["debug-error", "clipboard-error"]) {
+    await goto(`&${mode}`);
+    await page.getByRole("button", { name: "Copy debug bundle", exact: true }).click();
+    await page.getByRole("button", { name: "Prepare preview" }).click();
+    if (mode === "clipboard-error")
+      await page.getByRole("button", { name: "Copy reviewed bundle" }).click();
+    await page.getByRole("alert").waitFor();
+    assert.equal((await calls()).filter((call) => call.startsWith("debug:")).length, 1);
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

@@ -2285,3 +2285,19 @@ remains pending; no alternate authentication, new login request or live resource
 - Deleted accounts now show retained workspace guidance and mount Keep as Local only for the matching active unlocked Account. Opening the panel does not copy data.
 - Chromium and WebKit synthetic browser checks pass for review cancellation, confirmation failure, exact retry, pending cancellation, committed local completion and Deleted activation/mount boundaries. TypeScript, Biome and instruction parity pass. No live account, key, configuration or cloud data was used.
 - Explicit existing-profile key rebinding and reviewed removal from this device remain in progress.
+
+### Reviewed debug bundle
+
+The chat menu can prepare an editable debug preview before an explicit clipboard copy. Native Rust
+reads only that saved chat's newest owned protocol log, bounds discovery and the last MiB, refuses
+linked log directories/files, omits partial or invalid records and redacts complete records again.
+The preview discloses that messages, code and paths can remain. Nothing is uploaded or copied on mount.
+It includes app/platform versions and preserves existing logs without accessing vendor configuration.
+
+Focused redaction, path-scope and bounded-tail tests pass. Native command export, desktop TypeScript,
+process/desktop all-target Clippy and both browser engines pass. Browser checks cover cancel, editable
+copy, read/clipboard failure, accessibility and narrow layout; the rendered dialog was inspected.
+The broad process test command passed the new tests but later hit Application Control4551 launching
+an unrelated supervisor test binary with zero matching tests. It was not bypassed or retried. The
+focused library run passed after adding the bounded-tail assertion. Final platform acceptance remains
+pending. Integrated reset command bindings were also regenerated in this checkpoint.

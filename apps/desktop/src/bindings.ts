@@ -15,6 +15,11 @@ export const commands = {
 	accountStatus: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_status")),
 	accountVaultStatus: () => typedError<AccountVaultStatus, AccountFailure>(__TAURI_INVOKE("account_vault_status")),
 	accountVaultUnlock: (passphrase: string, create: boolean) => typedError<AccountVaultStatus, AccountFailure>(__TAURI_INVOKE("account_vault_unlock", { passphrase, create })),
+	accountResetStatus: () => typedError<AccountResetStatus, AccountFailure>(__TAURI_INVOKE("account_reset_status")),
+	accountResetReview: () => typedError<AccountResetReview, AccountFailure>(__TAURI_INVOKE("account_reset_review")),
+	accountResetConfirm: (reviewId: string, confirmation: string, retained: boolean) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_confirm", { reviewId, confirmation, retained })),
+	accountResetRetry: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_retry")),
+	accountResetCancel: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_cancel")),
 	accountRequestCode: (email: string, turnstileToken: string) => typedError<SignInChallenge, AccountFailure>(__TAURI_INVOKE("account_request_code", { email, turnstileToken })),
 	accountVerifyCode: (challengeId: string, code: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_verify_code", { challengeId, code })),
 	accountRefresh: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_refresh")),
@@ -118,6 +123,7 @@ export const commands = {
 	cloneHistory: (parent: string) => typedError<CloneRecord[], AppError>(__TAURI_INVOKE("clone_history", { parent })),
 	localImportPreview: () => typedError<LocalImportPreview, AppError>(__TAURI_INVOKE("local_import_preview")),
 	chatExportMarkdown: (chatId: string) => typedError<string | null, AppError>(__TAURI_INVOKE("chat_export_markdown", { chatId })),
+	chatDebugBundle: (chatId: string) => typedError<string, AppError>(__TAURI_INVOKE("chat_debug_bundle", { chatId })),
 	localImportApply: (selected: LocalImportSelection[]) => typedError<LocalImportResult, AppError>(__TAURI_INVOKE("local_import_apply", { selected })),
 	folderCodeRoots: () => typedError<string[], AppError>(__TAURI_INVOKE("folder_code_roots")),
 	folderSetCodeRoots: (roots: string[]) => typedError<string[], AppError>(__TAURI_INVOKE("folder_set_code_roots", { roots })),
@@ -314,6 +320,20 @@ export type AccountFailure = {
 };
 
 export type AccountFailureCode = "invalid_input" | "invalid_state" | "offline" | "timed_out" | "unauthorized" | "deleted" | "forbidden" | "invalid_code" | "conflict" | "quota" | "rate_limited" | "delivery_failed" | "unavailable" | "not_found" | "protocol" | "secure_storage" | "local_storage" | "key_mismatch";
+
+export type AccountResetReview = {
+	id: string,
+	key_version: number,
+	records: number,
+	blobs: number,
+	other_devices: number,
+	recovery_key: string,
+};
+
+export type AccountResetStatus = {
+	pending: boolean,
+	committed: boolean,
+};
 
 export type AccountSignOut = {
 	status: AccountStatus,

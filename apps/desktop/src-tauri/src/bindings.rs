@@ -123,6 +123,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::clone_commands::clone_history,
             crate::local_import_commands::local_import_preview,
             crate::chat_export::chat_export_markdown,
+            crate::chat_export::chat_debug_bundle,
             crate::local_import_commands::local_import_apply,
             crate::folder_resolution_commands::folder_code_roots,
             crate::folder_resolution_commands::folder_set_code_roots,

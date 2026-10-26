@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ChatExportDialog } from "../components/chat/ChatExportDialog";
+import { DebugBundleDialog } from "../components/chat/DebugBundleDialog";
 import { LocalImportPanel } from "../components/settings/LocalImportPanel";
 import type { LocalImportApi } from "../lib/localImport";
 
@@ -55,6 +56,7 @@ const api: LocalImportApi = {
 Object.assign(window, { dataTransferFixture: { calls: () => [...calls] } });
 function Fixture() {
   const [open, setOpen] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
   return (
     <main className="orbit-theme settings-content" data-theme="dark">
       <h1>Workspace transfer fixture</h1>
@@ -67,6 +69,25 @@ function Fixture() {
       <button type="button" className="ui-button" onClick={() => setOpen(true)}>
         Export chat
       </button>
+      <button type="button" className="ui-button" onClick={() => setDebugOpen(true)}>
+        Copy debug bundle
+      </button>
+      {debugOpen ? (
+        <DebugBundleDialog
+          chatId="saved-chat"
+          onClose={() => setDebugOpen(false)}
+          prepare={async (id) => {
+            calls.push(`debug:${id}`);
+            if (params.has("debug-error"))
+              throw new Error("The protocol log could not be read safely.");
+            return 'auracode debug bundle v1\nApp: 0.1.0\n{"token":"<REDACTED>","message":"Review this content"}\n';
+          }}
+          copy={async (text) => {
+            calls.push(`copy:${text}`);
+            if (params.has("clipboard-error")) throw new Error("Clipboard access was denied.");
+          }}
+        />
+      ) : null}
       {open ? (
         <ChatExportDialog
           chatId="saved-chat"
