@@ -2092,9 +2092,13 @@ impl ChatActor {
         session.updated_at = now;
         let row_id = session.id.clone();
         self.native_session_id = Some(native_id.clone());
-        if let Some(check) = &mut self.replay_check {
-            check.native_session_id = native_id.clone();
-        }
+        self.replay_check
+            .get_or_insert_with(|| ReplayCheck {
+                native_session_id: native_id.clone(),
+                turns: 0,
+                last_reply_sha256: None,
+            })
+            .native_session_id = native_id.clone();
         let (saved, acknowledgement) = oneshot::channel();
         self.queue_op(Op::SaveNativeIdentity {
             id: row_id,
@@ -2206,11 +2210,12 @@ impl ChatActor {
         if driver.ready || driver.stop != Stop::None {
             return;
         }
-        if !self
-            .shared
-            .live
-            .claim(&driver.native_scope, &info.native_session_id, &self.chat_id)
-        {
+        if info.native_session_id.as_ref().is_some_and(|native_id| {
+            !self
+                .shared
+                .live
+                .claim(&driver.native_scope, native_id, &self.chat_id)
+        }) {
             // Two processes on one native session would interleave one transcript.
             let message =
                 SessionError::Internal("this session is already open in another chat".into())
@@ -2242,9 +2247,10 @@ impl ChatActor {
         driver.ready = true;
         driver.spawn_id = Some(info.spawn_id.clone());
         let now = now_millis();
-        let same_session = self.agent_session.as_ref().is_some_and(|session| {
-            session.native_session_id.as_deref() == Some(info.native_session_id.as_str())
-        });
+        let same_session = self
+            .agent_session
+            .as_ref()
+            .is_some_and(|session| session.native_session_id == info.native_session_id);
         let config_json = serde_json::to_string(&self.desired).ok();
         let (model, effort) = (
             self.option_value(ConfigCategory::Model),
@@ -2273,7 +2279,7 @@ impl ChatActor {
                     id: new_id(),
                     chat_id: self.chat_id.clone(),
                     agent_id: spec.id.to_owned(),
-                    native_session_id: Some(info.native_session_id.clone()),
+                    native_session_id: info.native_session_id.clone(),
                     model,
                     effort,
                     autonomy: self.autonomy,
@@ -2298,18 +2304,23 @@ impl ChatActor {
             );
         }
         self.compare_replay(&info);
-        if self
-            .replay_check
-            .as_ref()
-            .is_none_or(|check| check.native_session_id != info.native_session_id)
-        {
-            self.replay_check = Some(ReplayCheck {
-                native_session_id: info.native_session_id.clone(),
-                turns: 0,
-                last_reply_sha256: None,
-            });
+        match info.native_session_id.as_ref() {
+            Some(native_id)
+                if self
+                    .replay_check
+                    .as_ref()
+                    .is_none_or(|check| &check.native_session_id != native_id) =>
+            {
+                self.replay_check = Some(ReplayCheck {
+                    native_session_id: native_id.clone(),
+                    turns: 0,
+                    last_reply_sha256: None,
+                });
+            }
+            None => self.replay_check = None,
+            _ => {}
         }
-        self.native_session_id = Some(info.native_session_id);
+        self.native_session_id = info.native_session_id;
         self.agent_name = info.agent_name;
         self.agent_version = info.agent_version;
         self.capabilities = Some(info.capabilities);
@@ -2334,7 +2345,7 @@ impl ChatActor {
         let Some(check) = &self.replay_check else {
             return;
         };
-        if check.native_session_id != info.native_session_id {
+        if Some(check.native_session_id.as_str()) != info.native_session_id.as_deref() {
             return;
         }
         let Some(reply) = &summary.last_reply else {

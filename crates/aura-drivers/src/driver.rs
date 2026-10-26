@@ -355,7 +355,9 @@ pub enum DriverStatus {
 /// The agent is up and its session open.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReadyInfo {
-    pub native_session_id: String,
+    /// None when the vendor creates its transcript only on the first visible prompt. The driver
+    /// reports NativeSessionId after the vendor confirms it, never a fabricated resume target.
+    pub native_session_id: Option<String>,
     pub agent_name: Option<String>,
     pub agent_version: Option<String>,
     pub capabilities: Capabilities,
@@ -788,7 +790,7 @@ mod tests {
             DriverEvent::Title(None),
             DriverEvent::Status(DriverStatus::Opening),
             DriverEvent::Ready(ReadyInfo {
-                native_session_id: "s".into(),
+                native_session_id: Some("s".into()),
                 agent_name: Some("Hermes".into()),
                 agent_version: None,
                 capabilities: Capabilities::default(),
