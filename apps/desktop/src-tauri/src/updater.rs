@@ -327,6 +327,15 @@ async fn bounded_response(
 /// Updates never accept the ordinary quit flow's option to discard unsaved work.
 struct UpdateQuit<H>(H);
 impl<H: QuitHost> QuitHost for UpdateQuit<H> {
+    fn owned_work_guard(&self) -> Option<Box<dyn Send + '_>> {
+        self.0.owned_work_guard()
+    }
+    async fn wait_owned_work(&self, deadline: Duration) -> bool {
+        self.0.wait_owned_work(deadline).await
+    }
+    fn owned_work_blocked(&self) {
+        self.0.owned_work_blocked();
+    }
     async fn flush_drafts(&self) -> bool {
         self.0.flush_drafts().await
     }

@@ -189,6 +189,7 @@ pub(crate) struct LiveAgents {
 struct Inner {
     quiescing: bool,
     maintenance: usize,
+    owned_draining: bool,
     slots: HashSet<String>,
     folders: HashMap<String, PathBuf>,
     mutations: HashSet<PathBuf>,
@@ -220,7 +221,7 @@ impl LiveAgents {
     /// Takes a slot for `chat` (idempotent); false when every slot is taken.
     pub(crate) fn acquire(&self, chat: &str) -> bool {
         let mut inner = self.lock();
-        if inner.quiescing {
+        if inner.quiescing || inner.owned_draining {
             return false;
         }
         if inner.slots.contains(chat) {
@@ -234,13 +235,15 @@ impl LiveAgents {
     }
 
     pub(crate) fn quiescing(&self) -> bool {
-        self.lock().quiescing
+        let inner = self.lock();
+        inner.quiescing || inner.owned_draining
     }
 
     /// Atomically excludes new starts and folder mutations while the caller prepares an update.
     pub(crate) fn try_quiesce(&self) -> bool {
         let mut inner = self.lock();
         if inner.quiescing
+            || inner.owned_draining
             || inner.maintenance > 0
             || !inner.slots.is_empty()
             || !inner.mutations.is_empty()
@@ -257,11 +260,29 @@ impl LiveAgents {
 
     pub(crate) fn try_maintenance(&self) -> Option<MaintenanceGuard<'_>> {
         let mut inner = self.lock();
-        if inner.quiescing {
+        if inner.quiescing || inner.owned_draining {
             return None;
         }
         inner.maintenance = inner.maintenance.checked_add(1)?;
         Some(MaintenanceGuard(self))
+    }
+
+    pub(crate) fn begin_owned_drain(&self) -> bool {
+        let mut inner = self.lock();
+        if inner.owned_draining {
+            return false;
+        }
+        inner.owned_draining = true;
+        true
+    }
+
+    pub(crate) fn end_owned_drain(&self) {
+        self.lock().owned_draining = false;
+    }
+
+    pub(crate) fn owned_work_count(&self) -> usize {
+        let inner = self.lock();
+        inner.maintenance.saturating_add(inner.mutations.len())
     }
 
     /// Gives `chat`'s slot back, and every native session it held.
@@ -316,6 +337,7 @@ impl LiveAgents {
     pub(crate) fn reserve_folder(&self, folder: &Path) -> bool {
         let mut inner = self.lock();
         if inner.quiescing
+            || inner.owned_draining
             || inner.mutations.contains(folder)
             || inner
                 .slots
@@ -392,6 +414,29 @@ mod tests {
         assert!(live.try_maintenance().is_none());
         live.resume_admission();
         assert!(live.try_maintenance().is_some());
+    }
+
+    #[test]
+    fn quit_drain_waits_existing_owners_and_blocks_new_work_until_released() {
+        let live = LiveAgents::new(4);
+        let maintenance = live.try_maintenance().unwrap();
+        let folder = Path::new("owned-folder");
+        assert!(live.reserve_folder(folder));
+        assert!(live.begin_owned_drain());
+        let drain = super::super::OwnedWorkDrain { live: &live };
+        assert!(!live.begin_owned_drain());
+        assert_eq!(live.owned_work_count(), 2);
+        assert!(live.try_maintenance().is_none());
+        assert!(!live.reserve_folder(Path::new("new-folder")));
+        assert!(!live.acquire("new-chat"));
+        assert!(!live.try_quiesce());
+        drop(maintenance);
+        assert_eq!(live.owned_work_count(), 1);
+        live.release_folder(folder);
+        assert_eq!(live.owned_work_count(), 0);
+        drop(drain);
+        assert!(live.try_maintenance().is_some());
+        assert!(live.acquire("new-chat"));
     }
 
     #[test]

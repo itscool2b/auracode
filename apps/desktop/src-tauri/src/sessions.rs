@@ -460,6 +460,8 @@ pub fn sweep_notice(report: &SweepReport) -> Option<String> {
 pub const QUIT_SESSIONS_DEADLINE: Duration = Duration::from_secs(8);
 /// The chat store's deadline when quitting, after the sessions.
 pub const QUIT_STORE_DEADLINE: Duration = Duration::from_secs(5);
+/// Ordinary quit keeps the app open if an owned file operation or vendor updater needs more time.
+pub const QUIT_OWNED_WORK_DEADLINE: Duration = Duration::from_secs(5);
 /// How much longer than a step's own deadline the quit flow waits for it. The sessions and the
 /// store keep their deadlines themselves; this bounds one that does not, since the window is
 /// hidden and every other exit request waits for the flow.
@@ -557,6 +559,14 @@ impl Quit {
 /// What the quit flow acts on: the window, the dialog, the sessions, the store, the registry and
 /// the app. The app's host is [`AppQuitHost`]; tests record calls.
 pub trait QuitHost: Send + Sync {
+    /// The opaque RAII guard blocks new owned work until this entire quit attempt ends.
+    fn owned_work_guard(&self) -> Option<Box<dyn Send + '_>> {
+        Some(Box::new(()))
+    }
+    fn wait_owned_work(&self, _deadline: Duration) -> impl Future<Output = bool> + Send {
+        async { true }
+    }
+    fn owned_work_blocked(&self) {}
     /// Save editor state while the database and webview are still available.
     fn flush_drafts(&self) -> impl Future<Output = bool> + Send {
         async { true }
@@ -645,15 +655,35 @@ pub enum QuitOutcome {
     },
 }
 
-/// The quit flow, after the first exit request was prevented: hide the window; when saving is
+/// The quit flow first drains owned file/vendor work without closing storage, keeping the app open
+/// on timeout. Once drained: hide the window; when saving is
 /// paused with unsaved data or work is active, ask first (keeping auracode open shows the window again and ends the
 /// quit); then stop every session within 8 s, commit and close the store within 5 s, delete the
 /// registry file, and exit with `code`. The next exit request passes ([`Quit::on_exit_requested`]).
 ///
 /// The window is hidden and every other exit request waits for this flow, so a step that overruns
-/// its deadline by [`QUIT_STEP_MARGIN`] is left behind and the flow carries on: `RunEvent::Exit`
-/// then kills whatever runs, and closes the store if it did not close here.
+/// a session/store deadline by [`QUIT_STEP_MARGIN`] is left behind and the flow carries on:
+/// `RunEvent::Exit` then kills owned agent processes and closes the store if it did not close here.
+/// The owned-file preflight never takes that forced path.
 pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutcome {
+    let Some(_owned_work) = host.owned_work_guard() else {
+        host.show_window();
+        host.owned_work_blocked();
+        quit.keep_running();
+        return QuitOutcome::Kept;
+    };
+    if !tokio::time::timeout(
+        QUIT_OWNED_WORK_DEADLINE,
+        host.wait_owned_work(QUIT_OWNED_WORK_DEADLINE),
+    )
+    .await
+    .unwrap_or(false)
+    {
+        host.show_window();
+        host.owned_work_blocked();
+        quit.keep_running();
+        return QuitOutcome::Kept;
+    }
     let drafts_saved = tokio::time::timeout(Duration::from_secs(3), host.flush_drafts())
         .await
         .unwrap_or(false);
@@ -732,6 +762,22 @@ pub struct AppQuitHost<'a> {
 }
 
 impl QuitHost for AppQuitHost<'_> {
+    fn owned_work_guard(&self) -> Option<Box<dyn Send + '_>> {
+        self.chats
+            .manager
+            .try_drain_owned_work()
+            .map(|guard| Box::new(guard) as Box<dyn Send>)
+    }
+
+    async fn wait_owned_work(&self, deadline: Duration) -> bool {
+        self.chats.manager.wait_owned_work(deadline).await
+    }
+
+    fn owned_work_blocked(&self) {
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+        self.app.dialog().message("A folder operation, configuration copy, or agent update is still finishing. auracode has stayed open to preserve that work. Try quitting again when it finishes.")
+            .title("Work is still finishing").buttons(MessageDialogButtons::Ok).show(|_| {});
+    }
     async fn flush_drafts(&self) -> bool {
         use tauri::{Emitter as _, Listener as _};
         let token = aura_core::ids::new_id();
@@ -1447,6 +1493,7 @@ mod tests {
         CloseStore(Duration),
         CloseRegistry,
         Exit(i32),
+        OwnedWorkBlocked,
     }
 
     /// Records every call; the store and the sessions are real when given, and either can be
@@ -1460,6 +1507,7 @@ mod tests {
         stuck_sessions: bool,
         stuck_store: bool,
         active_work: usize,
+        stuck_owned_work: bool,
     }
 
     impl FakeHost {
@@ -1473,6 +1521,7 @@ mod tests {
                 stuck_sessions: false,
                 stuck_store: false,
                 active_work: 0,
+                stuck_owned_work: false,
             }
         }
 
@@ -1486,6 +1535,27 @@ mod tests {
     }
 
     impl QuitHost for FakeHost {
+        fn owned_work_guard(&self) -> Option<Box<dyn Send + '_>> {
+            match &self.chats {
+                Some(chats) => chats
+                    .manager
+                    .try_drain_owned_work()
+                    .map(|guard| Box::new(guard) as Box<dyn Send>),
+                None => Some(Box::new(())),
+            }
+        }
+        async fn wait_owned_work(&self, deadline: Duration) -> bool {
+            if self.stuck_owned_work {
+                return std::future::pending().await;
+            }
+            match &self.chats {
+                Some(chats) => chats.manager.wait_owned_work(deadline).await,
+                None => true,
+            }
+        }
+        fn owned_work_blocked(&self) {
+            self.record(Call::OwnedWorkBlocked);
+        }
         async fn flush_drafts(&self) -> bool {
             self.drafts_saved
         }
@@ -1567,6 +1637,20 @@ mod tests {
             matches!(host.calls().as_slice(), [Call::Hide, Call::Ask(message), Call::Show] if message.contains("unsent draft"))
         );
         assert!(!quit.is_quitting());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn quit_keeps_storage_open_when_an_owned_mutation_cannot_finish_yet() {
+        let quit = Quit::default();
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+        let mut host = FakeHost::new(StorageStatus::default(), true);
+        host.stuck_owned_work = true;
+        let started = tokio::time::Instant::now();
+        assert_eq!(run_quit(&quit, &host, 0).await, QuitOutcome::Kept);
+        assert_eq!(started.elapsed(), QUIT_OWNED_WORK_DEADLINE);
+        assert_eq!(host.calls(), [Call::Show, Call::OwnedWorkBlocked]);
+        assert!(!quit.store_closed());
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
     }
 
     #[tokio::test]

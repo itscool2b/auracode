@@ -1368,3 +1368,14 @@ review-flow checks pass, including stopping a live session, both move directions
 merge conflicts, retirement/restoration and accessibility. Exact integrated binding regeneration
 and native macOS/Windows execution are part of the second combined checkpoint, still pending.
 
+## Native quit waits for owned file and vendor work
+
+Normal quit acquires an admission guard before waiting for owned Git/configuration mutations and
+vendor updates. It blocks new starts and mutations while existing owners finish, retains the guard
+through session/store closure and reopens admission on a cancelled quit. If owned work has not
+finished within five seconds, the window and database stay open with a visible message. The user
+can retry after the operation ends. There is no forced-discard shortcut for this preflight.
+Application update cleanup delegates the same guard. Forced OS termination relies on the durable
+operation journal. Eight desktop quit tests, the core admission/drain regression and core/desktop
+Clippy pass on Windows. No real vendor maintenance or native prompts ran.
+

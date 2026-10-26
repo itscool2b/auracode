@@ -83,6 +83,18 @@ impl Drop for IdleSessionGuard<'_> {
     }
 }
 
+/// Keeps new agent starts, Git mutations and vendor/configuration maintenance out of a quit flow.
+/// Existing owners finish normally. Cancellation reopens admission before permanent shutdown.
+pub struct OwnedWorkDrain<'a> {
+    live: &'a LiveAgents,
+}
+
+impl Drop for OwnedWorkDrain<'_> {
+    fn drop(&mut self) {
+        self.live.end_owned_drain();
+    }
+}
+
 /// Everything the manager runs on. Every constructor that spawns tasks takes `rt`, because Tauri's
 /// `setup` hook and run-event callbacks run outside any Tokio context.
 pub struct ManagerDeps {
@@ -999,6 +1011,27 @@ impl SessionManager {
         Some(IdleSessionGuard {
             live: &self.shared().live,
         })
+    }
+
+    /// A normal quit must acquire this gate before waiting, then retain it through store closure.
+    pub fn try_drain_owned_work(&self) -> Option<OwnedWorkDrain<'_>> {
+        self.shared()
+            .live
+            .begin_owned_drain()
+            .then(|| OwnedWorkDrain {
+                live: &self.shared().live,
+            })
+    }
+
+    /// Never cancels a Git mutation or vendor updater. The caller keeps the app open on timeout.
+    pub async fn wait_owned_work(&self, deadline: Duration) -> bool {
+        tokio::time::timeout(deadline, async {
+            while self.shared().live.owned_work_count() != 0 {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .is_ok()
     }
 
     /// Stops every live agent gracefully within `deadline`, then kills what is left. No new starts
