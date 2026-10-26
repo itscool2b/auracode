@@ -481,11 +481,11 @@ describe("turns and the transcript", () => {
     expect(html).toContain("$0.0123");
     const recovered = renderToStaticMarkup(<TurnView segment={second} actions={ACTIONS} />);
     expect(recovered).toContain("Interrupted when auracode closed");
-    expect(buttons(recovered).map((b) => b.label)).toEqual(["Resume session"]);
+    expect(buttons(recovered).map((b) => b.label)).toEqual(["Receipt", "Resume session"]);
     const live = renderToStaticMarkup(
       <TurnView segment={second} actions={{ ...ACTIONS, canResume: false }} />,
     );
-    expect(buttons(live)).toEqual([]);
+    expect(buttons(live)).toEqual([{ label: "Receipt", disabled: false }]);
   });
 
   it("partial_turn_page: Load earlier, and the marker of a turn the page cut", async () => {

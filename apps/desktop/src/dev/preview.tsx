@@ -52,6 +52,44 @@ function recorded(source: { events: readonly { type: string; data: unknown }[] }
 }
 
 function synthetic(mode: string): AuraEvent[] {
+  if (mode === "diff")
+    return [
+      ev.turnStarted("diff-turn"),
+      ev.user("diff-user", "Update the configuration."),
+      ev.toolCall("diff-tool", {
+        kind: "edit",
+        title: "Update src/settings.ts",
+        status: "completed",
+        content: [
+          {
+            type: "diff",
+            path: "src/settings.ts",
+            old_text: Array.from(
+              { length: 20 },
+              (_, index) => `const setting${index} = false;`,
+            ).join("\n"),
+            new_text: Array.from(
+              { length: 20 },
+              (_, index) => `const setting${index} = true;`,
+            ).join("\n"),
+            truncated: null,
+          },
+        ],
+      }),
+      ev.turnEnded("diff-turn"),
+    ];
+  if (mode === "long-prompt")
+    return [
+      ev.turnStarted("long-prompt"),
+      ev.user(
+        "long-prompt-user",
+        Array.from(
+          { length: 30 },
+          (_, index) => `Requirement ${index + 1}: preserve this entire prompt.`,
+        ).join("\n"),
+      ),
+      ev.turnEnded("long-prompt"),
+    ];
   if (mode === "partial-message")
     return [
       ev.turnStarted("long"),
@@ -184,6 +222,8 @@ function Preview() {
     "partial-history",
     "partial-message",
     "large-turn",
+    "long-prompt",
+    "diff",
     "recorded-thinking",
     "recorded-tools",
   ].includes(requested)

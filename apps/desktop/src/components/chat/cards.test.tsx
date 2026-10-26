@@ -311,6 +311,42 @@ describe("tool blocks and full outputs", () => {
     expect(content).toContain("the whole output");
   });
 
+  it.each(['{"new_text":{}}', '{"old_text":[],"new_text":"wrong"}', "null"])(
+    "a malformed diff blob preserves the inline content: %s",
+    (text) => {
+      const sha = "d".repeat(64);
+      const html = renderToStaticMarkup(
+        <ToolContentView
+          content={{
+            type: "diff",
+            path: "settings.ts",
+            old_text: "before",
+            new_text: "after",
+            truncated: { total_bytes: 50, blob: sha },
+          }}
+          blobs={
+            new Map([
+              [
+                sha,
+                {
+                  text,
+                  total: text.length,
+                  nextOffset: text.length,
+                  eof: true,
+                  loading: false,
+                  error: null,
+                },
+              ],
+            ])
+          }
+          onLoadBlob={noop}
+        />,
+      );
+      expect(html).toContain("before");
+      expect(html).toContain("after");
+    },
+  );
+
   it("load_full_output: a terminal output keeps its end while its full text pages in", () => {
     const sha = "f".repeat(64);
     // The full output is 30 bytes: 23 of start, then the end kept inline ("the end", 7 bytes).
@@ -354,14 +390,17 @@ describe("tool blocks and full outputs", () => {
     expect(pres(partial)).toEqual(["0123456789abcdefghij", "the end"]);
     expect(partial).toContain("3 bytes not loaded yet. The end of the output:");
     expect(partial).toContain("exit 1");
-    expect(buttons(partial)).toEqual([{ label: "Load more (20 of 30 bytes)", disabled: false }]);
+    expect(buttons(partial)).toEqual([
+      { label: "Copy output", disabled: false },
+      { label: "Load more (20 of 30 bytes)", disabled: false },
+    ]);
     // A permission card shows its content the same way.
     expect(pres(render(page(20), true))).toEqual(["0123456789abcdefghij", "the end"]);
     // Pages that reach into the end show it once, joined.
     expect(pres(render(page(25)))).toEqual([full]);
     const done = render(page(30, true));
     expect(pres(done)).toEqual([full]);
-    expect(buttons(done)).toEqual([]);
+    expect(buttons(done)).toEqual([{ label: "Copy output", disabled: false }]);
   });
 
   it("load_full_output: the end joins the pages at a byte offset, across multibyte characters", () => {

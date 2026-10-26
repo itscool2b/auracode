@@ -132,3 +132,36 @@
     stroke-dashoffset: 0;
   }
 }
+
+.o-copy-control {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.o-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--o-text-3, currentColor);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.o-copy:hover {
+  color: var(--o-text-1, currentColor);
+  background: var(--o-hover, transparent);
+}
+
+.o-copy-error {
+  color: var(--o-red, currentColor);
+  font-size: 12px;
+}

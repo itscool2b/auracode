@@ -1,10 +1,9 @@
-import { OrbitMark } from "@auracode/ui/orbit";
-import { useMemo } from "react";
+import { CopyButton, OrbitMark } from "@auracode/ui/orbit";
 import type { ToolContent, ToolLocation, Truncation } from "../../bindings";
 import type { BlobState } from "../../lib/chat/chatStore";
 import type { ToolDisplayStatus, ToolItem } from "../../lib/chat/transcript";
-import { diffLines } from "../../lib/diff";
 import { formatCount } from "../../lib/format";
+import { DiffBlock } from "./DiffBlock";
 import { useDisclosure } from "./DisclosureMemory";
 
 /** What a block needs to page a truncated output in through `chat_blob`. */
@@ -79,6 +78,7 @@ export function ToolBlock({
                   // biome-ignore lint/suspicious/noArrayIndexKey: an update replaces content as a whole.
                   key={index}
                   content={content}
+                  disclosureKey={`${tool.key}:${index}`}
                   blobs={blobs}
                   onLoadBlob={onLoadBlob}
                 />
@@ -156,9 +156,10 @@ function unkeptBytes(truncation: Truncation | null, blob: BlobState | undefined)
 /** One entry of a tool's (or a card's) content: text, a diff, or terminal output. */
 export function ToolContentView({
   content,
+  disclosureKey = "output",
   blobs,
   onLoadBlob,
-}: { readonly content: ToolContent } & BlobProps) {
+}: { readonly content: ToolContent; readonly disclosureKey?: string } & BlobProps) {
   const blob = content.truncated?.blob ? blobs.get(content.truncated.blob) : undefined;
   switch (content.type) {
     case "text": {
@@ -173,6 +174,13 @@ export function ToolContentView({
           <pre className="ui-pre" data-testid="tool-text">
             {blob?.text || content.text}
           </pre>
+          <div className="chat-output-actions">
+            <CopyButton
+              text={blob?.text || content.text}
+              label="Copy output"
+              caption="Copy output"
+            />
+          </div>
           {unkept > 0 ? (
             <p className="chat-marker">
               The remaining {formatCount(unkept)} bytes weren't kept: an output keeps its first 64
@@ -185,6 +193,10 @@ export function ToolContentView({
     }
     case "terminal": {
       const { head, between, tail } = terminalParts(content.output, content.truncated, blob);
+      const visible =
+        head === null || between === 0
+          ? (head ?? "") + tail
+          : `${head}\n[${between} bytes omitted]\n${tail}`;
       return (
         <div
           className="chat-command"
@@ -208,6 +220,9 @@ export function ToolContentView({
           {content.exit_code !== null ? (
             <span className="ui-muted ui-mono">exit {content.exit_code}</span>
           ) : null}
+          <div className="chat-output-actions">
+            <CopyButton text={visible} label="Copy output" caption="Copy output" />
+          </div>
           <FullOutput truncation={content.truncated} blob={blob} onLoadBlob={onLoadBlob} />
         </div>
       );
@@ -221,6 +236,7 @@ export function ToolContentView({
           data-test-truncated={String(content.truncated !== null)}
         >
           <DiffView
+            disclosureKey={disclosureKey}
             path={content.path}
             oldText={content.old_text}
             newText={content.new_text}
@@ -236,19 +252,30 @@ export function ToolContentView({
 function fullDiff(blob: BlobState | undefined): { old: string | null; new: string } | null {
   if (!blob?.eof) return null;
   try {
-    const parsed = JSON.parse(blob.text) as { old_text?: string | null; new_text?: string };
-    return { old: parsed.old_text ?? null, new: parsed.new_text ?? "" };
+    const parsed: unknown = JSON.parse(blob.text);
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      !("new_text" in parsed) ||
+      typeof parsed.new_text !== "string"
+    )
+      return null;
+    const old = "old_text" in parsed ? parsed.old_text : null;
+    if (old !== null && typeof old !== "string") return null;
+    return { old, new: parsed.new_text };
   } catch {
     return null;
   }
 }
 
 function DiffView({
+  disclosureKey,
   path,
   oldText,
   newText,
   blob,
 }: {
+  readonly disclosureKey: string;
   readonly path: string;
   readonly oldText: string | null;
   readonly newText: string;
@@ -257,22 +284,7 @@ function DiffView({
   const loaded = fullDiff(blob);
   const before = loaded ? loaded.old : oldText;
   const after = loaded ? loaded.new : newText;
-  const diff = useMemo(() => diffLines(before, after), [before, after]);
-  return (
-    <pre className="ui-pre">
-      <span className="ui-muted">{path}</span>
-      {"\n"}
-      {diff.lines.map((line, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: diff lines are positional.
-        <span key={index} className="chat-diff-line" data-op={line.op} data-test-op={line.op}>
-          {line.op === "add" ? "+ " : line.op === "remove" ? "- " : "  "}
-          {line.text}
-          {"\n"}
-        </span>
-      ))}
-      {diff.truncated ? "[too large to diff line by line]" : null}
-    </pre>
-  );
+  return <DiffBlock path={path} oldText={before} newText={after} disclosureKey={disclosureKey} />;
 }
 
 /**

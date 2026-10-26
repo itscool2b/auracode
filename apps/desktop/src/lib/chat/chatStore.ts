@@ -80,6 +80,8 @@ export interface ChatState {
   readonly transcript: Transcript;
   readonly hasMore: boolean;
   readonly loadingEarlier: boolean;
+  /** Advances only when an older page arrives, independently of live output. */
+  readonly historyRevision: number;
   readonly earlierError: string | null;
   /** Rows that did not parse (written by a newer build), across the loaded pages. */
   readonly skipped: number;
@@ -131,6 +133,7 @@ function initialState(chatId: string): ChatState {
     transcript: emptyTranscript(),
     hasMore: false,
     loadingEarlier: false,
+    historyRevision: 0,
     earlierError: null,
     skipped: 0,
     unsavedFrom: null,
@@ -558,6 +561,7 @@ export class ChatStore {
       transcript: applyEntries(emptyTranscript(this.#cut), this.#entries),
       hasMore: page.has_more,
       loadingEarlier: false,
+      historyRevision: this.#state.historyRevision + 1,
       skipped: this.#state.skipped + page.skipped,
     });
   }

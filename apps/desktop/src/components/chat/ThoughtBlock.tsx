@@ -6,15 +6,17 @@ import { useDisclosure } from "./DisclosureMemory";
 export function ThoughtBlock({
   item,
   active,
+  tail,
   agentId,
   agentName,
 }: {
   readonly item: ThoughtItem;
   readonly active: boolean;
+  readonly tail: boolean;
   readonly agentId: string;
   readonly agentName: string;
 }) {
-  const [open, setOpen] = useDisclosure(item.key, "thought", false);
+  const [open, setOpen] = useDisclosure(item.key, "thought", active && tail);
   return (
     <details
       className="chat-thought"

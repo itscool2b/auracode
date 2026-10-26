@@ -28,17 +28,19 @@ export function VirtualRows({
   scroller,
   stick,
   historyRevision,
+  historyError,
   captureHistory,
 }: {
   readonly rows: readonly TranscriptRow[];
   readonly leading?: ReactNode;
   readonly scroller: RefObject<HTMLDivElement | null>;
   readonly stick: RefObject<StickToBottom | null>;
-  readonly historyRevision: unknown;
+  readonly historyRevision: number;
+  readonly historyError: string | null;
   readonly captureHistory: RefObject<(() => void) | null>;
 }) {
-  const reading = useRef<{ anchor: ReadingAnchor; revision: unknown } | null>(null);
-  const settleFrame = useRef<number | null>(null);
+  const reading = useRef<{ anchor: ReadingAnchor; revision: number } | null>(null);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [leadingHeight, setLeadingHeight] = useState(0);
   const leadingRef = useCallback((node: HTMLDivElement | null) => {
@@ -78,8 +80,13 @@ export function VirtualRows({
       [retained],
     ),
   });
+  // A partial page may grow the anchor item itself. While restoring its visible text fragment,
+  // automatic row-size compensation would apply that same prefix height a second time.
+  virtual.shouldAdjustScrollPositionOnItemSizeChange =
+    reading.current && reading.current.revision !== historyRevision ? () => false : undefined;
   const total = virtual.getTotalSize();
   useLayoutEffect(() => {
+    if (historyError !== null) reading.current = null;
     captureHistory.current = () => {
       const anchor = scroller.current && captureReadingAnchor(scroller.current);
       reading.current = anchor ? { anchor, revision: historyRevision } : null;
@@ -102,17 +109,20 @@ export function VirtualRows({
       if (Math.abs(element.scrollTop - target) > 1) virtual.scrollToOffset(target);
       stick.current?.acknowledgeAdjustment();
     }
-    if (settleFrame.current !== null) cancelAnimationFrame(settleFrame.current);
-    settleFrame.current = requestAnimationFrame(() => {
-      settleFrame.current = requestAnimationFrame(() => {
-        reading.current = null;
-        settleFrame.current = null;
-      });
-    });
+    if (settleTimer.current !== null) clearTimeout(settleTimer.current);
+    // WebKit may deliver a ResizeObserver batch after the scroll write's first painted frames.
+    // Keep one anchor until measurements have been quiet; any reader gesture cancels it at once.
+    settleTimer.current = setTimeout(() => {
+      reading.current = null;
+      virtual.shouldAdjustScrollPositionOnItemSizeChange = undefined;
+      settleTimer.current = null;
+    }, 180);
   });
   useLayoutEffect(() => {
     const cancel = () => {
       reading.current = null;
+      virtual.shouldAdjustScrollPositionOnItemSizeChange = undefined;
+      if (settleTimer.current !== null) clearTimeout(settleTimer.current);
     };
     const element = scroller.current;
     for (const name of ["wheel", "touchmove", "keydown", "pointerdown"])
@@ -120,10 +130,10 @@ export function VirtualRows({
     return () => {
       for (const name of ["wheel", "touchmove", "keydown", "pointerdown"])
         element?.removeEventListener(name, cancel);
-      if (settleFrame.current !== null) cancelAnimationFrame(settleFrame.current);
+      if (settleTimer.current !== null) clearTimeout(settleTimer.current);
       captureHistory.current = null;
     };
-  }, [captureHistory, scroller]);
+  }, [captureHistory, scroller, virtual]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: measured height changes must follow the bottom only while the reader is pinned.
   useLayoutEffect(() => {
     stick.current?.follow();

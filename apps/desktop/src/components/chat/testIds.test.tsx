@@ -271,10 +271,20 @@ describe("the automation attributes of the chat screens", () => {
         tag: "section",
         kind: "turn",
         "turn-id": "t1",
+        "segment-key": "turn:t1",
+        prompt: "Do it",
         "stop-reason": "interrupted",
         recovered: "true",
       },
-      { tag: "section", kind: "outside", "turn-id": "", "stop-reason": "", recovered: "false" },
+      {
+        tag: "section",
+        kind: "outside",
+        "turn-id": "",
+        "segment-key": segments[1]?.key,
+        prompt: "",
+        "stop-reason": "",
+        recovered: "false",
+      },
     ]);
     expect(marked(html, "item")).toEqual([
       { tag: "div", kind: "user" },

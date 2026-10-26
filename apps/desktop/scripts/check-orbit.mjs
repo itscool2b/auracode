@@ -41,6 +41,15 @@ async function inspect(engine, launcher) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     await context.addInitScript(() => {
       window.__orbitFrames = 0;
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text) => {
+            if (window.__clipboardFail) throw new Error("Synthetic clipboard denial");
+            window.__copiedText = text;
+          },
+        },
+      });
       const request = window.requestAnimationFrame.bind(window);
       window.requestAnimationFrame = (callback) =>
         request((time) => {
@@ -58,6 +67,7 @@ async function inspect(engine, launcher) {
         "thinking",
         "permission",
         "error",
+        "diff",
         "recorded-thinking",
         "recorded-tools",
       ]) {
@@ -66,6 +76,7 @@ async function inspect(engine, launcher) {
           .locator(mode === "new" ? '[data-testid="new-chat"]' : '[data-test-phase="live"]')
           .waitFor();
         await page.evaluate(() => document.fonts.ready);
+        if (mode === "diff") await page.locator('[data-test-kind="tool"] summary').click();
         // Finish finite control transitions before testing text contrast or taking screenshots.
         await page.waitForTimeout(300);
         assert.equal(
@@ -102,7 +113,29 @@ async function inspect(engine, launcher) {
             /did not share its reasoning/,
           );
         }
+        if (mode === "diff") {
+          assert.equal(await page.locator(".chat-diff-table tbody tr").count(), 14);
+          await page.getByRole("button", { name: "Show 26 more lines", exact: true }).click();
+          assert.equal(await page.locator(".chat-diff-table tbody tr").count(), 40);
+          await page.getByRole("button", { name: "Copy path", exact: true }).click();
+          assert.equal(await page.evaluate(() => window.__copiedText), "src/settings.ts");
+        }
         if (mode === "settled") {
+          await page.getByRole("button", { name: "Copy code", exact: true }).click();
+          assert.equal(
+            await page.evaluate(() => window.__copiedText),
+            await page.locator(".code-block code").textContent(),
+            "copied code differs from its source",
+          );
+          await page.evaluate(() => {
+            window.__clipboardFail = true;
+          });
+          await page.getByRole("button", { name: "Copy turn receipt", exact: true }).click();
+          await page.getByRole("alert").filter({ hasText: "Could not copy." }).waitFor();
+          await page.evaluate(() => {
+            window.__clipboardFail = false;
+          });
+          await page.getByTestId("tool-group").click();
           const tool = page.locator('[data-test-kind="tool"] details').first();
           assert.equal(await tool.getAttribute("open"), null);
           await tool.locator("summary").focus();
@@ -119,6 +152,19 @@ async function inspect(engine, launcher) {
               exact: true,
             })
             .waitFor();
+          const rendered = await page.evaluate(async () => {
+            const { readFullTranscript } = await import("/src/lib/smokePage.ts");
+            return (await readFullTranscript()).map((turn) => ({
+              prompt: turn.prompt,
+              items: turn.items,
+            }));
+          });
+          assert.deepEqual(
+            rendered.map((turn) => turn.items),
+            [["thought", "tool:read:completed", "tool:execute:completed", "message"], ["message"]],
+            "native smoke reader lost virtual transcript pieces",
+          );
+          assert.equal(rendered[1].prompt, "A browser-only verification message");
         }
         // Reduced motion and settled views must consume no continuous animation frames.
         await page.waitForTimeout(100);
@@ -133,6 +179,21 @@ async function inspect(engine, launcher) {
         );
       }
     }
+
+    await page.goto(`${url}/?preview=long-prompt`);
+    const fold = page.getByRole("button", { name: "Show all", exact: true });
+    await fold.waitFor();
+    assert.equal(await page.locator(".chat-user").getAttribute("data-folded"), "true");
+    await fold.click();
+    assert.equal(await page.locator(".chat-user").getAttribute("data-folded"), "false");
+    await page.getByRole("button", { name: "Copy prompt", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    assert.match(
+      await page.evaluate(() => window.__copiedText),
+      /Requirement 30:/,
+      "copy omitted the folded prompt tail",
+    );
+    await page.getByRole("button", { name: "Show less", exact: true }).click();
 
     await page.goto(`${url}/?preview=history`);
     await page.locator('[data-test-phase="live"]').waitFor();
@@ -184,6 +245,7 @@ async function inspect(engine, launcher) {
     });
     const firstLoaded = page.locator('[data-test-turn-id="history-250"][data-part="0"]');
     await firstLoaded.waitFor();
+    await page.waitForTimeout(300);
     const beforePrepend = await firstLoaded.boundingBox();
     await page.getByTestId("load-earlier").click();
     await page.getByTestId("load-earlier").waitFor({ state: "detached" });
@@ -236,6 +298,21 @@ async function inspect(engine, launcher) {
     await page.goto(`${url}/?preview=large-turn`);
     await page.locator('[data-test-phase="live"]').waitFor();
     await page.waitForTimeout(400);
+    const group = page.getByTestId("tool-group");
+    assert.equal(
+      await group.getAttribute("aria-expanded"),
+      "false",
+      "completed tool group was not collapsed",
+    );
+    await group.focus();
+    await page.keyboard.press("Enter");
+    assert.equal(
+      await group.getAttribute("aria-expanded"),
+      "true",
+      "tool group did not open with the keyboard",
+    );
+    await page.getByTestId("jump-latest").click();
+    await page.waitForTimeout(300);
     assert.ok(
       (await page.locator('[data-test-kind="tool"]').count()) < 35,
       "one long turn mounted every tool",
@@ -288,7 +365,7 @@ async function inspect(engine, launcher) {
         .boundingBox();
       assert.ok(
         partialBefore && partialAfter && Math.abs(partialBefore.y - partialAfter.y) < 3,
-        "loading the earlier part of a turn moved the text being read",
+        `${engine}/${mode}: partial history moved text from ${partialBefore?.y} to ${partialAfter?.y}`,
       );
     }
 
@@ -347,7 +424,7 @@ async function inspect(engine, launcher) {
     const failures = results.filter((result) => result.violations.length > 0);
     assert.deepEqual(failures, [], `${engine} accessibility violations`);
     console.log(
-      `${engine}: 14 accessibility scans, recorded transcripts, bounded 500-turn history and 1,000-tool turn, prepend/append anchors, draft/disclosure/focus retention, keyboard controls, motion and minimum window passed`,
+      `${engine}: 16 accessibility scans, recorded transcripts, bounded 500-turn history and 1,000-tool turn, prepend/append anchors, draft/disclosure/focus retention, clipboard/folding/diff controls, motion and minimum window passed`,
     );
   } finally {
     await browser.close();

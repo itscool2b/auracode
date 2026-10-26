@@ -1,4 +1,5 @@
 import { easings } from "@auracode/ui";
+import { CopyButton } from "@auracode/ui/orbit";
 import { motion } from "motion/react";
 import { Fragment, memo, type ReactNode, useMemo, useRef } from "react";
 import {
@@ -86,10 +87,15 @@ function BlockView({ block }: { readonly block: Block }) {
       );
     case "code":
       return (
-        <pre {...mark} aria-busy={!block.closed}>
-          {block.lang !== "" ? <span className="code-lang">{block.lang}</span> : null}
-          <code>{block.code}</code>
-        </pre>
+        <div className="code-block">
+          <div className="code-header">
+            <span className="code-lang">{block.lang || "Code"}</span>
+            <CopyButton text={block.code} label="Copy code" />
+          </div>
+          <pre {...mark} aria-busy={!block.closed}>
+            <code>{block.code}</code>
+          </pre>
+        </div>
       );
     case "list": {
       const items = block.items.map((item, index) => (

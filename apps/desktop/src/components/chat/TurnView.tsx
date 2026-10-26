@@ -1,4 +1,4 @@
-import { OrbitMark } from "@auracode/ui/orbit";
+import { CopyButton, OrbitMark } from "@auracode/ui/orbit";
 import { Fragment, memo } from "react";
 import type { PlanEntry, UiAnswer } from "../../bindings";
 import type { RequestState } from "../../lib/chat/chatStore";
@@ -11,6 +11,7 @@ import { PermissionCard } from "./PermissionCard";
 import { QuestionCard } from "./QuestionCard";
 import { ThoughtBlock } from "./ThoughtBlock";
 import { type BlobProps, ToolBlock } from "./ToolBlock";
+import { UserMessage } from "./UserMessage";
 
 /** What the items of a turn act on. */
 export interface TurnActions extends BlobProps {
@@ -36,6 +37,7 @@ export const TurnView = memo(function TurnView({
   agentName = "Agent",
   active = false,
   part,
+  suppressByline = false,
 }: {
   readonly segment: RenderedSegment;
   readonly actions: TurnActions;
@@ -44,6 +46,7 @@ export const TurnView = memo(function TurnView({
   readonly active?: boolean;
   /** Virtual rows render one stable item or the footer; standalone previews render the whole turn. */
   readonly part?: number | "footer";
+  readonly suppressByline?: boolean;
 }) {
   const firstAgentItem = segment.items.findIndex((item) => item.kind !== "user");
   const selected = typeof part === "number" ? segment.items[part] : undefined;
@@ -63,12 +66,17 @@ export const TurnView = memo(function TurnView({
       data-part={part ?? "whole"}
       data-test-kind={segment.turnId === null ? "outside" : "turn"}
       data-test-turn-id={segment.turnId ?? ""}
+      data-test-segment-key={segment.key}
+      data-test-prompt={segment.items.find((item) => item.kind === "user")?.text ?? ""}
       data-test-stop-reason={segment.end?.stopReason ?? ""}
       data-test-recovered={String(segment.end?.recovered ?? false)}
     >
       {entries.map(({ item, index }) => {
         const byline =
-          index === firstAgentItem && segment.turnId !== null && !segment.partial ? (
+          index === firstAgentItem &&
+          segment.turnId !== null &&
+          !segment.partial &&
+          !suppressByline ? (
             <div className="chat-byline">
               <OrbitMark agent={agentId} size={16} label={agentName} />
               <span>{agentName}</span>
@@ -77,11 +85,7 @@ export const TurnView = memo(function TurnView({
         const content = (() => {
           switch (item.kind) {
             case "user":
-              return (
-                <div key={item.key} className="chat-user" data-testid="item" data-test-kind="user">
-                  {item.text}
-                </div>
-              );
+              return <UserMessage key={item.key} item={item} />;
             case "message":
               return (
                 <div
@@ -99,6 +103,7 @@ export const TurnView = memo(function TurnView({
                   key={item.key}
                   item={item}
                   active={active}
+                  tail={index === segment.items.length - 1}
                   agentId={agentId}
                   agentName={agentName}
                 />
@@ -183,7 +188,12 @@ export const TurnView = memo(function TurnView({
         <Plan entries={segment.plan} />
       ) : null}
       {footer ? (
-        <Footer segment={segment} canResume={actions.canResume} onStart={actions.onStart} />
+        <Footer
+          segment={segment}
+          agentName={agentName}
+          canResume={actions.canResume}
+          onStart={actions.onStart}
+        />
       ) : null}
     </section>
   );
@@ -218,10 +228,12 @@ function Plan({ entries }: { readonly entries: readonly PlanEntry[] }) {
 /** Why the turn ended, its tokens with their scope, how long it took, and the session's cost. */
 function Footer({
   segment,
+  agentName,
   canResume,
   onStart,
 }: {
   readonly segment: RenderedSegment;
+  readonly agentName: string;
   readonly canResume: boolean;
   readonly onStart: (fresh: boolean) => void;
 }) {
@@ -231,12 +243,21 @@ function Footer({
   if (end.usage !== null) parts.push(tokensLabel(end.usage));
   if (end.durationMs !== null) parts.push(formatDuration(end.durationMs));
   const cost = costLabel(segment.usage);
-  if (cost !== null) parts.push(cost);
+  if (cost !== null) parts.push(`${cost} session`);
+  const response = segment.items
+    .filter((item) => item.kind === "message")
+    .map((item) => item.text)
+    .join("\n\n");
+  const receipt = [agentName, ...parts].join("\n");
   return (
     <p className="chat-footer" data-testid="turn-footer">
       {parts.map((part) => (
         <span key={part}>{part}</span>
       ))}
+      <span className="chat-receipt-actions">
+        {response ? <CopyButton text={response} label="Copy response as Markdown" /> : null}
+        <CopyButton text={receipt} label="Copy turn receipt" caption="Receipt" />
+      </span>
       {end.recovered && end.stopReason === "interrupted" && canResume ? (
         <button
           type="button"

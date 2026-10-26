@@ -184,6 +184,25 @@ M2a still needs its remaining transcript refinements and final milestone review.
 passed Linux/Windows checks and the browser suite for the preceding `e1f3c67` checkpoint; macOS was
 skipped. The new virtualization checkpoint needs its own CI run.
 
+CI run `40286596525` for `95d73c8` found two regressions: the native chat smoke reader still
+expected a whole turn in one mounted element, and partial-page restoration could apply the same
+height correction twice. The smoke reader now walks the real scroll surface, opens tool groups,
+and assembles the rendered pieces by stable identity. Fragment restoration suppresses duplicate
+virtual row compensation until measurements settle, with immediate cancellation on reader input.
+A separate history revision prevents live frames from prematurely finishing a pending page load.
+Both Chromium and WebKit pass partial-turn and partial-message anchors, including repeated text.
+
+The next transcript checkpoint adds copy controls with truthful success/failure feedback, long-prompt
+folding, persistent grouped tool disclosures, and inline diffs with relative line numbers, change
+markers, totals, folding and explicit truncation. Response and receipt copying use only reported
+data; cumulative cost is labeled as session cost. Malformed full-diff payloads fall back to the
+retained preview. The smoke reader itself is exercised against the browser fixture.
+Local verification passes 832 frontend tests with 19 existing skips, both production builds,
+and 16 accessibility scans per browser plus clipboard, folding, diff and long-history checks.
+The attempted native rebuild was blocked by Windows Application Control (4551) at a Tauri build
+script; no bypass was attempted. Native chat/reopen verification remains pending on this checkpoint's
+CI run. Remaining M2a presentation work and final milestone review are still pending.
+
 - Rust owns backend logic. TypeScript remains for React and necessary platform/build glue.
 - D1 and Cloudflare Email Service replace Neon/Postgres, Neon Auth, Hyperdrive, and Resend.
 - Reuse the existing targeted environment scrub, not the handoff's older blanket prefix scrub.

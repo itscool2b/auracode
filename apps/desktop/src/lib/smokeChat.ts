@@ -18,6 +18,7 @@ import {
   firstDifference,
   one,
   pressEnter,
+  readFullTranscript,
   readTranscript,
   type SegmentShape,
   type SegmentView,
@@ -366,7 +367,7 @@ function turnOf(prompt: string): SegmentView | null {
 }
 
 async function waitTurnEnded(prompt: string, timeoutMs?: number): Promise<SegmentView> {
-  return waitFor(
+  await waitFor(
     `the turn for "${prompt}" to end`,
     () => {
       const found = turnOf(prompt);
@@ -374,6 +375,13 @@ async function waitTurnEnded(prompt: string, timeoutMs?: number): Promise<Segmen
     },
     timeoutMs,
   );
+  const turns = (await readFullTranscript()).filter(
+    (segment) => segment.kind === "turn" && segment.prompt === prompt,
+  );
+  const ended = turns.at(-1);
+  if (!ended)
+    throw new StepError(`the completed turn for "${prompt}" is absent after scrolling its history`);
+  return ended;
 }
 
 /** The turn's agent messages, joined. */
@@ -492,13 +500,13 @@ function pickerOption(id: string): HTMLElement | null {
 }
 
 /** The transcript as lines, to compare with a script. */
-function transcriptLines(): string[] {
-  return readTranscript().map(describeSegment);
+async function transcriptLines(): Promise<string[]> {
+  return (await readFullTranscript()).map(describeSegment);
 }
 
-function expectTranscript(want: readonly SegmentShape[]): string {
+async function expectTranscript(want: readonly SegmentShape[]): Promise<string> {
   const expected = want.map(describeSegment);
-  const difference = firstDifference(expected, transcriptLines());
+  const difference = firstDifference(expected, await transcriptLines());
   if (difference !== null) throw new StepError(difference);
   return `${expected.length} segments as the script says`;
 }
@@ -1070,8 +1078,8 @@ async function reopenScenario(
   });
 
   await checks.run("reopen-history", async () => {
-    await waitFor("the stored history", () => readTranscript().length >= CHAT_TRANSCRIPT.length);
-    return `the stored history renders ${expectTranscript([...CHAT_TRANSCRIPT, SEGMENTS.atQuit])}`;
+    await waitFor("the stored history", () => readTranscript().length > 0);
+    return `the stored history renders ${await expectTranscript([...CHAT_TRANSCRIPT, SEGMENTS.atQuit])}`;
   });
 
   await checks.run("reopen-interrupted", async () => {

@@ -2,10 +2,11 @@ import { OrbitMark } from "@auracode/ui/orbit";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { chatActivity, hasLiveLine } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
-import { renderCache } from "../../lib/chat/transcript";
+import { type RenderedItem, renderCache } from "../../lib/chat/transcript";
 import { useStickToBottom } from "../../lib/hooks";
 import type { StickToBottom } from "../../lib/stick";
 import { type DisclosureChoices, DisclosureMemory } from "./DisclosureMemory";
+import { ToolGroup } from "./ToolGroup";
 import { type TurnActions, TurnView } from "./TurnView";
 import { type TranscriptRow, VirtualRows } from "./VirtualRows";
 
@@ -28,6 +29,7 @@ export function Transcript({
 }) {
   const [render] = useState(renderCache);
   const [disclosures] = useState<DisclosureChoices>(() => new Map());
+  const [groups, setGroups] = useState<DisclosureChoices>(() => new Map());
   const segments = useMemo(() => render(state.transcript, live), [render, state.transcript, live]);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef<StickToBottom | null>(null);
@@ -100,7 +102,7 @@ export function Transcript({
     );
   for (const segment of segments) {
     const active = status === "running" && segment === last && segment.end === null;
-    for (const [index, item] of segment.items.entries())
+    const addItem = (index: number, item: RenderedItem, grouped = false) =>
       rows.push({
         key: JSON.stringify([segment.key, item.key]),
         estimate: item.kind === "message" ? 200 : item.kind === "user" ? 70 : 48,
@@ -117,9 +119,59 @@ export function Transcript({
             agentId={agentId}
             agentName={agentName}
             active={active}
+            suppressByline={grouped}
           />
         ),
       });
+    for (let index = 0; index < segment.items.length; index++) {
+      const item = segment.items[index];
+      if (!item) continue;
+      const tools: Extract<RenderedItem, { kind: "tool" }>[] = [];
+      if (item.kind === "tool") {
+        for (let next = index; next < segment.items.length; next++) {
+          const candidate = segment.items[next];
+          if (candidate?.kind !== "tool") break;
+          tools.push(candidate);
+        }
+      }
+      if (tools.length < 2) {
+        addItem(index, item);
+        continue;
+      }
+      const key = JSON.stringify([segment.key, "tool-group", item.key]);
+      const failed = tools.some((tool) => tool.display === "failed");
+      const phase = failed
+        ? "failed"
+        : tools.some((tool) => tool.display === "pending" || tool.display === "in_progress")
+          ? "running"
+          : "settled";
+      const choice = groups.get(key);
+      const expanded = choice?.phase === phase ? choice.open : failed;
+      rows.push({
+        key,
+        estimate: 32,
+        content: (
+          <ToolGroup
+            tools={tools}
+            expanded={expanded}
+            agentId={agentId}
+            agentName={agentName}
+            byline={
+              !segment.partial &&
+              index === segment.items.findIndex((candidate) => candidate.kind !== "user")
+            }
+            onToggle={() =>
+              setGroups((current) => new Map(current).set(key, { phase, open: !expanded }))
+            }
+          />
+        ),
+      });
+      if (expanded)
+        tools.forEach((tool, offset) => {
+          addItem(index + offset, tool, true);
+        });
+      index += tools.length - 1;
+    }
     if (segment.end !== null || (segment.plan?.length ?? 0) > 0)
       rows.push({
         key: JSON.stringify([segment.key, "footer"]),
@@ -176,7 +228,8 @@ export function Transcript({
             leading={leading}
             scroller={scroller}
             stick={stick}
-            historyRevision={state.transcript}
+            historyRevision={state.historyRevision}
+            historyError={state.earlierError}
             captureHistory={captureHistory}
           />
         </DisclosureMemory.Provider>
