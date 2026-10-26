@@ -2593,3 +2593,19 @@ smoke cleanup and never retried automatically. Final CI and unsigned bundles mus
 - Disabled and verified email-content previews on the existing Auracode sending domain. Downloaded/checksummed the empty production D1 export before applying migrations 0001 through 0005 with the preview-compatible tracker; all 35 statements succeeded, foreign keys are clean and user/session/device counts remain zero.
 - Created a separate production Turnstile widget and wrote its new secret plus a fresh 32-byte authentication HMAC directly into the production Worker secret bindings without returning or logging values. Uploaded the exact previously tested Rust API module bytes, verified production resource/origin/sender bindings, private R2, disabled development/preview endpoints and the five-minute cleanup schedule.
 - Production public API routing remains inactive pending root's source-gate confirmation. Root owns apex DNS and website activation. No emails, account authentication, user data, credential reads or billing changes were involved. Live auth/device acceptance and operator/legal/retention review remain unverified; details and nonsecret identifiers are in infra/README.md.
+
+### Final CI macOS runner availability
+
+Final run `40380825667` at `4b9a91c` completed Windows PowerShell and encrypted-storage tests and
+Clippy successfully. Its three macOS jobs were cancelled before acquiring a runner, with GitHub
+reporting hosted arm64 capacity constraints. This supplies no macOS acceptance evidence and is not
+a product-source failure. The standard Windows job is still running as this checkpoint is written.
+
+CI now explicitly selects the supported `macos-26-intel` pool for macOS checks, including frontend
+browsers, Rust, encrypted storage and binding parity. GitHub's
+[macOS 26 general-availability announcement](https://github.blog/changelog/2026-02-26-macos-26-is-now-generally-available-for-github-hosted-runners/)
+and [runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+identify this as the standard x64 runner. All gates, features and deadlines remain unchanged. The
+unsigned Build workflow retains its existing host and universal macOS target. Intel CI execution
+does not replace Apple Silicon device acceptance. Local workflow regressions, workflow lint, Biome
+and instruction parity pass; no workflow was dispatched, cancelled or rerun for this change.

@@ -67,7 +67,7 @@ test("browser gates have explicit deadlines and retain standalone evidence", () 
 });
 
 test("native desktop and isolated encrypted fixtures enable SQLCipher", () => {
-  assert.match(ci, /os: \[macos-26, windows-2025\]/u);
+  assert.match(ci, /os: \[macos-26-intel, windows-2025\]/u);
   assert.match(ci, /cargo test -p aura-sync --features sqlcipher --lib --locked/u);
   assert.match(ci, /cargo test -p aura-core --features account-sync --lib --locked/u);
   assert.match(
@@ -78,6 +78,13 @@ test("native desktop and isolated encrypted fixtures enable SQLCipher", () => {
     read("crates/aura-core/Cargo.toml"),
     /account-sync = \[[^\n]*"aura-sync\/sqlcipher"/u,
   );
+});
+
+test("CI uses supported Intel macOS runners without changing universal packaging", () => {
+  const labels = [...ci.matchAll(/\bmacos-26(?:-intel)?\b/gu)].map((match) => match[0]);
+  assert.ok(labels.length > 0);
+  assert.ok(labels.every((label) => label === "macos-26-intel"));
+  assert.match(build, /os: macos-26\s+target: universal-apple-darwin/u);
 });
 
 test("unsigned packages use exact bindings and need no release secret or updater artifact", () => {
