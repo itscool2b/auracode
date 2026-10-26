@@ -11,7 +11,7 @@ use crate::{
     profile::{Profile, ProfileKind},
 };
 
-mod apply;
+pub(crate) mod apply;
 pub(crate) use apply::Command;
 pub use apply::Reply;
 pub(crate) use apply::execute;
@@ -95,7 +95,7 @@ pub fn preview(profile: &Profile, device: &str) -> Result<LocalImportPreview> {
     ]})
 }
 
-fn describe(
+pub(crate) fn describe(
     conn: &Connection,
     device: &str,
     project: &str,
@@ -168,12 +168,12 @@ pub(crate) fn selection(values: &[LocalImportSelection]) -> Result<()> {
     }
     Ok(())
 }
-struct Table {
-    name: &'static str,
-    columns: &'static str,
+pub(crate) struct Table {
+    pub(crate) name: &'static str,
+    pub(crate) columns: &'static str,
     query: &'static str,
 }
-const TABLES: &[Table] = &[
+pub(crate) const TABLES: &[Table] = &[
     Table {
         name: "projects",
         columns: "id,name,color,icon,default_agent,default_model,sort_key,created_at,updated_at,device_id,deleted",
@@ -220,7 +220,7 @@ const TABLES: &[Table] = &[
         query: "SELECT d.chat_id,d.input_json,d.updated_at FROM composer_drafts d JOIN chats c ON c.id=d.chat_id WHERE c.project_id=?1 AND c.deleted=0 AND ?2 IS NOT NULL ORDER BY d.chat_id",
     },
 ];
-fn visit(
+pub(crate) fn visit(
     conn: &Connection,
     device: &str,
     project: &str,

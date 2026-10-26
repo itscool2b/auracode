@@ -135,7 +135,11 @@ pub(crate) fn execute(
     }
 }
 
-fn references(table: &str, values: &[Value], hashes: &mut BTreeSet<String>) -> Result<()> {
+pub(crate) fn references(
+    table: &str,
+    values: &[Value],
+    hashes: &mut BTreeSet<String>,
+) -> Result<()> {
     fn parts(json: &Value, hashes: &mut BTreeSet<String>) -> Result<()> {
         if let Value::Text(json) = json {
             let parts: Vec<PromptPart> =

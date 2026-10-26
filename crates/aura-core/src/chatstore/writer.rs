@@ -146,6 +146,13 @@ pub(crate) enum Request {
         reply: oneshot::Sender<Result<super::folder_resolution::Reply, StoreError>>,
     },
     #[cfg(feature = "account-sync")]
+    PreserveAccount {
+        command: crate::account_preservation::Command,
+        reply: oneshot::Sender<
+            crate::account_preservation::Result<crate::account_preservation::Reply>,
+        >,
+    },
+    #[cfg(feature = "account-sync")]
     LocalImport {
         command: crate::local_import::Command,
         reply:
@@ -498,6 +505,8 @@ fn work_bytes(work: &Work) -> usize {
         Work::Request(Request::SyncExchange { command, .. }) => command.bytes(),
         #[cfg(feature = "account-sync")]
         Work::Request(Request::LocalImport { .. }) => 64 * 1024,
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::PreserveAccount { .. }) => 64 * 1024,
         Work::Request(Request::Search { query, .. }) => 256 + query.len(),
         Work::Request(_) => 256,
         #[cfg(test)]
@@ -680,6 +689,8 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::SyncExchange { .. }) => "sync_exchange",
         #[cfg(feature = "account-sync")]
         Work::Request(Request::LocalImport { .. }) => "local_import",
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::PreserveAccount { .. }) => "preserve_account",
         Work::Request(Request::Flush { .. }) => "flush",
         Work::Op(op) => op_name(op),
         Work::Request(Request::CreateChat { .. }) => "create_chat",
@@ -1263,6 +1274,19 @@ impl Writer {
 
     fn answer_request(&mut self, request: Request) {
         match request {
+            #[cfg(feature = "account-sync")]
+            Request::PreserveAccount { command, reply } => {
+                let result = match (self.store.as_ref(), &self.mode) {
+                    (Some(store), Mode::Normal) => crate::account_preservation::execute(
+                        store,
+                        &self.files.attachments,
+                        &self.device_id,
+                        command,
+                    ),
+                    _ => Err(crate::account_preservation::PreservationError::AccountRequired),
+                };
+                let _ = reply.send(result);
+            }
             #[cfg(feature = "account-sync")]
             Request::LocalImport { command, reply } => {
                 let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {

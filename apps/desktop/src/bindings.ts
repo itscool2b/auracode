@@ -124,6 +124,8 @@ export const commands = {
 	folderResolution: (folderId: string, search: boolean) => typedError<FolderResolution, AppError>(__TAURI_INVOKE("folder_resolution", { folderId, search })),
 	folderLocateReview: (folderId: string, path: string) => typedError<FolderLocationReview, AppError>(__TAURI_INVOKE("folder_locate_review", { folderId, path })),
 	folderLocateApply: (review: FolderLocationReview) => typedError<ProjectFolder, AppError>(__TAURI_INVOKE("folder_locate_apply", { review })),
+	accountKeepLocalPreview: () => typedError<KeepLocalPreview, AppError>(__TAURI_INVOKE("account_keep_local_preview")),
+	accountKeepLocalApply: (token: string) => typedError<KeepLocalResult, AppError>(__TAURI_INVOKE("account_keep_local_apply", { token })),
 	terminalRead: (terminalId: string) => typedError<TerminalChunk, AppError>(__TAURI_INVOKE("terminal_read", { terminalId })),
 	terminalWrite: (terminalId: string, bytes: number[]) => typedError<null, AppError>(__TAURI_INVOKE("terminal_write", { terminalId, bytes })),
 	terminalResize: (terminalId: string, rows: number, cols: number) => typedError<null, AppError>(__TAURI_INVOKE("terminal_resize", { terminalId, rows, cols })),
@@ -1094,6 +1096,23 @@ export type IsolationPreview = {
 export type IsolationResult = {
 	worktree: ManagedWorktree,
 	warning: string | null,
+};
+
+export type KeepLocalPreview = {
+	token: string,
+	projects: number,
+	chats: number,
+	turns: number,
+	notices: string[],
+};
+
+export type KeepLocalResult = {
+	profile_id: string,
+	display_name: string,
+	projects: number,
+	chats: number,
+	turns: number,
+	missing_attachments: number,
 };
 
 /**  Public release metadata. Stale cached data remains visible during offline use. */

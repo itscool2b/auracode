@@ -124,6 +124,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::folder_resolution_commands::folder_resolution,
             crate::folder_resolution_commands::folder_locate_review,
             crate::folder_resolution_commands::folder_locate_apply,
+            crate::account_preservation_commands::account_keep_local_preview,
+            crate::account_preservation_commands::account_keep_local_apply,
             terminal::terminal_read,
             terminal::terminal_write,
             terminal::terminal_resize,

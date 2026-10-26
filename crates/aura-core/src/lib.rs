@@ -31,6 +31,8 @@
 //! thread ([`chatstore::ChatStore`]), and [`session::SessionManager`] runs the chats on top of it.
 
 #[cfg(feature = "account-sync")]
+pub mod account_preservation;
+#[cfg(feature = "account-sync")]
 pub mod accounts;
 pub mod chatstore;
 pub mod checkpoints;

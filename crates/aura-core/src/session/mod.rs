@@ -27,6 +27,8 @@ mod local_import;
 mod login;
 mod normalize;
 mod policy;
+#[cfg(feature = "account-sync")]
+mod preservation;
 mod project_tools;
 mod search;
 mod spawner;
@@ -275,6 +277,8 @@ pub(crate) struct Shared {
     organization: tokio::sync::Mutex<()>,
     continuations: Mutex<HashMap<String, conversation::PreparedContinuation>>,
     project_tools: Mutex<HashMap<String, project_tools::PreparedTools>>,
+    #[cfg(feature = "account-sync")]
+    preservation: Mutex<HashMap<String, preservation::Prepared>>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
     #[cfg(test)]
     slow_folder: Mutex<Option<(PathBuf, Duration, Arc<AtomicU64>)>>,
@@ -388,6 +392,8 @@ impl SessionManager {
                     shutting_down: AtomicBool::new(false),
                     folders: Mutex::new(HashMap::new()),
                     organization: tokio::sync::Mutex::new(()),
+                    #[cfg(feature = "account-sync")]
+                    preservation: Mutex::new(HashMap::new()),
                     continuations: Mutex::new(HashMap::new()),
                     project_tools: Mutex::new(HashMap::new()),
                     #[cfg(test)]

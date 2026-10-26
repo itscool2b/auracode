@@ -58,6 +58,10 @@ if (container) {
       void import("./dev/dataTransferPreview").then(({ mountDataTransferPreview }) =>
         mountDataTransferPreview(container),
       );
+    else if (mode === "keep-local")
+      void import("./dev/accountPreservationPreview").then(({ mountAccountPreservationPreview }) =>
+        mountAccountPreservationPreview(container),
+      );
     else if (mode === "git")
       void import("./dev/gitPreview").then(({ mountGitPreview }) => mountGitPreview(container));
     else if (mode === "settings")

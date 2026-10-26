@@ -14,6 +14,7 @@
 //! name they do not know as their fallback (`lenient.rs`).
 
 pub mod account;
+pub mod account_preservation;
 pub mod agents;
 pub mod changes;
 pub mod composer;
