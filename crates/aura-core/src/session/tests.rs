@@ -113,7 +113,7 @@ fn rig_with_spec(
     let rt = Handle::current();
     let store = ChatStore::start_with(store, owner, &profile, "device".into(), rt.clone(), config)
         .expect("store");
-    rig_from_store(dir, profile, folder, store, drivers, knobs)
+    rig_from_store(dir, profile, folder, store, drivers, knobs, spec)
 }
 
 fn rig_from_store(
@@ -123,6 +123,7 @@ fn rig_from_store(
     store: Arc<ChatStore>,
     drivers: Arc<dyn DriverFactory>,
     knobs: Knobs,
+    spec: aura_agents::AgentSpec,
 ) -> Rig {
     let rt = Handle::current();
     let mut vars = EnvMap::new();

@@ -72,7 +72,15 @@ async fn rig_account(drivers: Arc<dyn DriverFactory>) -> (Rig, SyncContext) {
     .unwrap();
     store.configure_sync(context.clone()).await.unwrap();
     (
-        rig_from_store(dir, profile, folder, store, drivers, Knobs::STANDARD),
+        rig_from_store(
+            dir,
+            profile,
+            folder,
+            store,
+            drivers,
+            Knobs::STANDARD,
+            aura_agents::get("mock").unwrap().clone(),
+        ),
         context,
     )
 }
