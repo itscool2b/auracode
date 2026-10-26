@@ -13,6 +13,11 @@ export const commands = {
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
 	accountConfig: () => typedError<AccountConfiguration, AccountFailure>(__TAURI_INVOKE("account_config")),
 	accountStatus: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_status")),
+	/**
+	 *  Read the published runtime only. The sidebar must never initialize a vault, authenticate or
+	 *  start network work just to identify its workspace. The profile and engine share one snapshot.
+	 */
+	accountSyncStatus: () => __TAURI_INVOKE<[string, AccountSyncStatus] | null>("account_sync_status"),
 	accountVaultStatus: () => typedError<AccountVaultStatus, AccountFailure>(__TAURI_INVOKE("account_vault_status")),
 	accountVaultUnlock: (passphrase: string, create: boolean) => typedError<AccountVaultStatus, AccountFailure>(__TAURI_INVOKE("account_vault_unlock", { passphrase, create })),
 	accountResetStatus: () => typedError<AccountResetStatus, AccountFailure>(__TAURI_INVOKE("account_reset_status")),

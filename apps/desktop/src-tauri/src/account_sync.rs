@@ -16,6 +16,36 @@ use std::{
 use tauri::{Emitter, Manager};
 
 pub const SYNC_CHANGED: &str = "account-sync-changed";
+
+/// Read the published runtime only. The sidebar must never initialize a vault, authenticate or
+/// start network work just to identify its workspace. The profile and engine share one snapshot.
+#[tauri::command]
+#[specta::specta]
+pub fn account_sync_status(
+    state: tauri::State<'_, AppState>,
+) -> Option<(String, AccountSyncStatus)> {
+    let runtime = lock(&state.runtime);
+    let profile = runtime.info.profile.as_ref()?;
+    if profile.kind != aura_core::profile::ProfileKind::Account {
+        return None;
+    }
+    let chats = runtime.chats.as_ref();
+    let mut status = chats.and_then(|chats| chats.sync_engine.get()).map_or_else(
+        || AccountSyncStatus {
+            state: AccountSyncState::Inactive,
+            pending_changes: None,
+            last_sync_at: None,
+            message: None,
+        },
+        |engine| engine.status(),
+    );
+    history_status(
+        &mut status,
+        chats.is_some_and(|chats| chats.sync_history_error.load(Ordering::Acquire)),
+    );
+    Some((profile.id.clone(), status))
+}
+
 struct TurnSink {
     engine: Weak<SyncEngine>,
     active: Mutex<HashSet<String>>,

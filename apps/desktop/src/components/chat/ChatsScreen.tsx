@@ -120,6 +120,7 @@ export function ChatsScreen({
           }}
         />
         <AgentDock
+          profile={info.profile}
           transport={transport}
           onRefresh={() => void app.refreshAgents()}
           agents={snapshot.agents}

@@ -1,0 +1,14 @@
+.chat-account-identity {
+  min-width: 0;
+}
+.chat-account-identity strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-account-identity small {
+  overflow-wrap: anywhere;
+}
+.chat-account-avatar {
+  flex-shrink: 0;
+}

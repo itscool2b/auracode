@@ -1,10 +1,10 @@
 import { OrbitMark } from "@auracode/ui/orbit";
-import { Settings2 } from "lucide-react";
-import type { AgentEntry, ChatSummary } from "../../bindings";
+import type { AgentEntry, ChatSummary, ProfileMeta } from "../../bindings";
 import { agentChoice } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
 import { AgentActions } from "./AgentActions";
 import { Popover } from "./Popover";
+import { ProfileStatus } from "./ProfileStatus";
 
 const CODES: Readonly<Record<string, string>> = {
   claude: "CC",
@@ -27,6 +27,7 @@ export function AgentDock({
   onSettings,
   transport,
   onRefresh,
+  profile = null,
 }: {
   readonly agents: readonly AgentEntry[] | null;
   readonly chats: readonly ChatSummary[] | null;
@@ -36,6 +37,7 @@ export function AgentDock({
   readonly onSettings?: () => void;
   readonly transport?: Transport;
   readonly onRefresh?: () => void;
+  readonly profile?: ProfileMeta | null;
 }) {
   const ready = agents?.filter((agent) => agentChoice(agent).enabled).length ?? 0;
   return (
@@ -101,25 +103,7 @@ export function AgentDock({
           );
         })}
       </div>
-      <div className="chat-account-row">
-        <span className="chat-account-avatar">L</span>
-        <span>
-          <strong>Local</strong>
-          <small>Stored on this device</small>
-        </span>
-        <button
-          type="button"
-          className="chat-icon-button"
-          aria-label={onSettings ? "Open settings" : "Open diagnostics"}
-          title={onSettings ? "Settings" : "Diagnostics"}
-          onClick={(event) => {
-            event.currentTarget.focus();
-            (onSettings ?? onDiagnostics)();
-          }}
-        >
-          <Settings2 size={16} />
-        </button>
-      </div>
+      <ProfileStatus profile={profile} onSettings={onSettings} onDiagnostics={onDiagnostics} />
     </div>
   );
 }

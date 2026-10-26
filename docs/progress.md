@@ -2442,3 +2442,18 @@ Added owned fake-protocol regressions for fresh/resumed startup, paginated metad
 Independent review found that reissuing an old queued config edit with the recovered device's sender clock could make it appear newer than a later edit from another device. Rebinding now preserves the encrypted content revision and immutable blob while resealing only the outer sender envelope. Config acceptance compares content revisions, and reissues the winning content under the current sender when an authoritative stale-content head has a later transport clock. Existing merge bases and pending reviews retain their exact revision and blob identity.
 
 All 42 core sync tests and account-sync all-target Clippy pass on Windows. New regressions cover a later remote edit after rebind, reverse convergence against stale content with a later transport clock, current-device sender validation and acknowledgement queue drain. No server schema, API DTO, actual account or credential store changed. This supersedes the earlier rebind checkpoint's fresh-config-blob behavior.
+### Active workspace identity and cached sync status
+
+The main sidebar now names the active Local or Account profile instead of always claiming Local.
+Account profiles show their native cached sync state and pending count; Local profiles do not call
+the account service or register sync listeners. The new getter reads only the published runtime,
+without opening a vault, authenticating or triggering network work. Settings remains the existing
+entry point for profile and sync controls. Subscription cleanup, profile IDs and live-event precedence
+prevent a delayed cache response or retired profile event from changing the current workspace label.
+
+Ten focused frontend tests, exact native binding export, desktop library Clippy, TypeScript, Biome
+and instruction parity passed. Chromium and WebKit passed Local/Account/paused states, settings
+navigation, delayed-response/profile-switch cases, accessibility and narrow layout; dark screenshots
+were inspected. Exact export also includes the previously integrated rebind/removal commands and the
+removal fixture's existing null-result correction. No real account, credential store, agent or network
+service was accessed. Native platform acceptance remains part of the final combined gate.
