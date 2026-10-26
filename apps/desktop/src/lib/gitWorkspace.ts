@@ -1,6 +1,7 @@
 import {
   commands,
   type IsolationInput,
+  type PullRequestInput,
   type WorktreeAction,
   type WorktreeDestination,
   type WorktreeRecoveryAction,
@@ -26,5 +27,9 @@ export const gitWorkspaceApi = {
     settle(commands.worktreeRelocationPreview(chatId, worktreeId, destination)),
   relocationApply: (chatId: string, token: string) =>
     settle(commands.worktreeRelocationApply(chatId, token)),
+  pullRequestPreview: (chatId: string, worktreeId: string, input: PullRequestInput) =>
+    settle(commands.worktreePrPreview(chatId, worktreeId, input)),
+  pullRequestApply: (chatId: string, token: string) =>
+    settle(commands.worktreePrApply(chatId, token)),
 };
 export type GitWorkspaceApi = typeof gitWorkspaceApi;

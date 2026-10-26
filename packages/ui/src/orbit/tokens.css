@@ -1,9 +1,9 @@
 /*
- * Orbit's tokens: docs/design/visual-language.md, section 3, for both themes.
+ * Orbit's tokens: docs/design/visual-language.md, section 3. The product is dark only.
  *
- * The app/site's .orbit-theme and the lab's scoped .o-root share these values. Each root
- * carries data-theme="light" or "dark". One temperature: warm paper in light, near-neutral
- * black in dark, one ink at alpha steps for text. Colour means four things and nothing else:
+ * The app/site's .orbit-theme always uses near-neutral black with one ink at alpha steps.
+ * The archived design lab retains its historical light exploration under its own selector.
+ * Colour means four things and nothing else:
  * orange (look here), green (done, added), red (failed, removed) and ink.
  */
 
@@ -83,7 +83,7 @@
 
 /* ---------------------------------------------------------------------------------- light */
 
-:is(.orbit-theme, [data-direction="orbit"] .o-root)[data-theme="light"] {
+[data-direction="orbit"] .o-root[data-theme="light"] {
   color-scheme: light;
 
   --o-tray: #f3f2ef;
@@ -180,7 +180,8 @@
 
 /* ----------------------------------------------------------------------------------- dark */
 
-:is(.orbit-theme, [data-direction="orbit"] .o-root)[data-theme="dark"] {
+.orbit-theme,
+[data-direction="orbit"] .o-root[data-theme="dark"] {
   color-scheme: dark;
 
   --o-tray: #000;

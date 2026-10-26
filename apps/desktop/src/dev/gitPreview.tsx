@@ -139,6 +139,36 @@ const api: GitWorkspaceApi = {
     currentFolder = relocationTarget;
     return { chat_id: "chat", prompt: null };
   },
+  pullRequestPreview: async (_chat, id, input) => {
+    calls.push("review-pr");
+    return {
+      token: "fixture-pr",
+      worktree_id: id,
+      repository: "fixture/orbit",
+      repository_url: "https://github.com/fixture/orbit",
+      head_branch: makeWorktree().branch,
+      head_commit: workspace.head ?? "",
+      base_branch: input.base_branch ?? "main",
+      title: input.title,
+      body: input.body,
+      will_push: true,
+      existing_url: null,
+      diff_stat: " src/app.ts | 2 +-",
+      warnings: ["Only the reviewed commit and PR text will be published."],
+      expires_at: Date.now() + 600_000,
+    };
+  },
+  pullRequestApply: async () => {
+    calls.push("apply-pr");
+    if (sessionStorage.getItem("git-stale"))
+      throw new Error("The repository changed after this review. Review it again before applying.");
+    return {
+      url: "https://github.com/fixture/orbit/pull/1",
+      created: true,
+      head_commit: workspace.head ?? "",
+      warning: null,
+    };
+  },
 };
 Object.assign(window, { gitFixture: { calls: () => [...calls] } });
 function Preview() {

@@ -4,6 +4,8 @@ import type {
   GitWorkspace,
   IsolationPreview,
   ManagedWorktree,
+  PullRequestPreview,
+  PullRequestResult,
   WorktreeActionPreview,
   WorktreeActionResult,
   WorktreeDestination,
@@ -20,6 +22,7 @@ type Preview =
   | { type: "isolate"; value: IsolationPreview }
   | { type: "action"; value: WorktreeActionPreview }
   | { type: "recovery"; value: WorktreeRecoveryPreview }
+  | { type: "pull_request"; value: PullRequestPreview }
   | { type: "relocate"; value: WorktreeRelocationPreview };
 
 function sameFolder(left: string, right: string): boolean {
@@ -100,6 +103,11 @@ export function GitDialog({
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [result, setResult] = useState<WorktreeActionResult | null>(null);
+  const [pullRequest, setPullRequest] = useState<PullRequestResult | null>(null);
+  const [prDraft, setPrDraft] = useState<ManagedWorktree | null>(null);
+  const [prTitle, setPrTitle] = useState(title);
+  const [prBody, setPrBody] = useState("");
+  const [prBase, setPrBase] = useState("");
   const [slug, setSlug] = useState(
     title
       .toLowerCase()
@@ -183,7 +191,13 @@ export function GitDialog({
       const chosen = preview;
       setPreview(null);
       try {
-        if (chosen.type === "isolate") {
+        if (chosen.type === "pull_request") {
+          const value = await api.pullRequestApply(chatId, chosen.value.token);
+          if (alive.current) {
+            setPullRequest(value);
+            setResult(null);
+          }
+        } else if (chosen.type === "isolate") {
           const value = await api.isolationApply(chatId, chosen.value.token);
           if (alive.current)
             setResult({
@@ -241,6 +255,21 @@ export function GitDialog({
       }
     });
   const blocked = busy || loading || live;
+  const reviewPullRequest = () =>
+    run(async () => {
+      if (!prDraft) return;
+      const value = await api.pullRequestPreview(chatId, prDraft.id, {
+        title: prTitle.trim(),
+        body: prBody,
+        base_branch: prBase.trim() || null,
+      });
+      if (alive.current) {
+        setPreview({ type: "pull_request", value });
+        setPrDraft(null);
+        setResult(null);
+        setPullRequest(null);
+      }
+    });
   const conflict = preview?.type === "action" && preview.value.conflicts.length > 0;
   return (
     <Modal
@@ -280,17 +309,47 @@ export function GitDialog({
             <h3>
               {preview.type === "isolate"
                 ? "Review isolation"
-                : preview.type === "relocate"
-                  ? "Review moving this chat"
-                  : preview.type === "recovery"
-                    ? preview.value.action === "restore"
-                      ? "Review restoration"
-                      : "Review recovery"
-                    : preview.value.action.type === "merge"
-                      ? "Review merge"
-                      : "Review retirement"}
+                : preview.type === "pull_request"
+                  ? "Review pull request"
+                  : preview.type === "relocate"
+                    ? "Review moving this chat"
+                    : preview.type === "recovery"
+                      ? preview.value.action === "restore"
+                        ? "Review restoration"
+                        : "Review recovery"
+                      : preview.value.action.type === "merge"
+                        ? "Review merge"
+                        : "Review retirement"}
             </h3>
-            {preview.type === "isolate" ? (
+            {preview.type === "pull_request" ? (
+              <>
+                <dl>
+                  <dt>Repository</dt>
+                  <dd>{preview.value.repository}</dd>
+                  <dt>Branch</dt>
+                  <dd>{preview.value.head_branch}</dd>
+                  <dt>Commit</dt>
+                  <dd>{preview.value.head_commit}</dd>
+                  <dt>Base</dt>
+                  <dd>{preview.value.base_branch}</dd>
+                  <dt>Publish</dt>
+                  <dd>
+                    {preview.value.will_push
+                      ? "Create the remote branch at this commit"
+                      : "Use the existing remote commit"}
+                  </dd>
+                  <dt>Title</dt>
+                  <dd>{preview.value.title}</dd>
+                </dl>
+                <h4>Description</h4>
+                <pre>{preview.value.body || "No description."}</pre>
+                <h4>Committed changes</h4>
+                <pre>{preview.value.diff_stat}</pre>
+                {preview.value.existing_url ? (
+                  <p>A matching pull request already exists. Confirmation returns its link.</p>
+                ) : null}
+              </>
+            ) : preview.type === "isolate" ? (
               <dl>
                 <dt>Branch</dt>
                 <dd>{preview.value.branch}</dd>
@@ -393,15 +452,19 @@ export function GitDialog({
               >
                 {preview.type === "isolate"
                   ? "Create isolated workspace"
-                  : preview.type === "relocate"
-                    ? "Move chat to reviewed folder"
-                    : preview.type === "recovery"
-                      ? preview.value.action === "restore"
-                        ? "Restore retained worktree"
-                        : "Reconcile reviewed state"
-                      : preview.value.action.type === "merge"
-                        ? "Merge reviewed changes"
-                        : "Retire and keep files"}
+                  : preview.type === "pull_request"
+                    ? preview.value.existing_url
+                      ? "Use existing pull request"
+                      : "Publish reviewed pull request"
+                    : preview.type === "relocate"
+                      ? "Move chat to reviewed folder"
+                      : preview.type === "recovery"
+                        ? preview.value.action === "restore"
+                          ? "Restore retained worktree"
+                          : "Reconcile reviewed state"
+                        : preview.value.action.type === "merge"
+                          ? "Merge reviewed changes"
+                          : "Retire and keep files"}
               </button>
             </div>
           </section>
@@ -447,6 +510,67 @@ export function GitDialog({
                   Review isolation
                 </button>
               </section>
+            ) : null}
+            {prDraft ? (
+              <form
+                className="git-section"
+                aria-label="Prepare pull request"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void reviewPullRequest();
+                }}
+              >
+                <h3>Prepare pull request</h3>
+                <p>
+                  {prDraft.branch}. Commit the intended work first. The next step reviews the exact
+                  repository and committed changes.
+                </p>
+                <label className="ui-field">
+                  Pull request title
+                  <input
+                    className="ui-input"
+                    value={prTitle}
+                    maxLength={256}
+                    required
+                    disabled={busy}
+                    onChange={(event) => setPrTitle(event.currentTarget.value)}
+                  />
+                </label>
+                <label className="ui-field">
+                  Description
+                  <textarea
+                    className="ui-input git-pr-body"
+                    value={prBody}
+                    maxLength={65536}
+                    disabled={busy}
+                    onChange={(event) => setPrBody(event.currentTarget.value)}
+                  />
+                </label>
+                <label className="ui-field">
+                  Base branch
+                  <input
+                    className="ui-input"
+                    placeholder="Repository default"
+                    value={prBase}
+                    maxLength={200}
+                    disabled={busy}
+                    onChange={(event) => setPrBase(event.currentTarget.value)}
+                  />
+                </label>
+                <div className="git-actions">
+                  <button
+                    className="ui-button"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setPrDraft(null)}
+                  >
+                    Cancel preparation
+                  </button>
+                  <button className="ui-button" type="submit" disabled={blocked || !prTitle.trim()}>
+                    Review pull request
+                  </button>
+                </div>
+              </form>
             ) : null}
             {worktrees.length ? (
               <section className="git-section">
@@ -501,6 +625,17 @@ export function GitDialog({
                       ) : null}
                       {tree.state === "ready" ? (
                         <div className="git-actions">
+                          <button
+                            className="ui-button"
+                            type="button"
+                            disabled={blocked || prDraft !== null}
+                            onClick={() => {
+                              setPrDraft(tree);
+                              setPullRequest(null);
+                            }}
+                          >
+                            Prepare pull request
+                          </button>
                           {workspace &&
                           (sameFolder(workspace.root, tree.source) ||
                             sameFolder(workspace.root, tree.path)) ? (
@@ -552,6 +687,20 @@ export function GitDialog({
             <p>{result.recovery}</p>
             <p className="git-path">{result.worktree.path}</p>
             {result.commit ? <code>{result.commit}</code> : null}
+          </section>
+        ) : null}
+        {pullRequest ? (
+          <section className="git-result" aria-label="Pull request result">
+            <h3>{pullRequest.created ? "Pull request created" : "Pull request ready"}</h3>
+            <a href={pullRequest.url} rel="noreferrer">
+              Open on GitHub
+            </a>
+            <p className="git-path">{pullRequest.head_commit}</p>
+            {pullRequest.warning ? (
+              <p className="git-warning" role="status">
+                {pullRequest.warning}
+              </p>
+            ) : null}
           </section>
         ) : null}
       </div>

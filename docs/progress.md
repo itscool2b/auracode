@@ -1546,3 +1546,15 @@ The newer account/Library command set still needs the final combined native bind
 - Chromium/WebKit tests now also cover MCP review and protected-entry rejection; focused TypeScript
   and Biome pass. Native desktop compilation, plugin installation/conversion and remaining Library
   acceptance stay pending. The Library back action is neutral for Settings integration.
+
+## Reviewed GitHub publication interface
+
+The Git dialog now prepares title, description and optional base, then displays the exact repository,
+head commit, remote-branch action and diff summary before publication. Confirmation uses the Rust
+one-use review; the resulting link is opened only by a separate user click. Chromium and WebKit pass
+the complete create/move/recover/publish presentation path and accessibility checks with synthetic
+commands, and desktop typechecking passes. No actual remote repository was changed by these tests.
+The integrated native publisher has also received independent source review with no blocking finding.
+MCP per-entry configuration copy/rollback passed a separate independent review before integration.
+Production Orbit tokens are unconditionally dark; historical light values are scoped to the archived
+Design Lab alone and cannot select a light appearance for the desktop or website.
