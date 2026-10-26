@@ -39,6 +39,11 @@ Run `node .github/scripts/check-instructions.mjs` before committing. CI rejects 
 ## Product and safety invariants
 
 - Follow `docs/plan.md` and the chosen Orbit language in `docs/design/visual-language.md`.
+- Verify visual work against the original handoff's exact Mobbin and official-site references:
+  SpaceXAI/Grok Bot, X Money, Harvey and Aside. Inspect actual screens before implementation;
+  written tokens and passing functional tests alone do not establish visual fidelity.
+- The current release targets Windows and macOS only. Linux and WSL development, acceptance,
+  installers and release work are deferred. Preserve existing portable code without expanding scope.
 - Run the user's own agent harnesses. Never read, copy, store, or proxy their credential files or
   keychain entries. Do not edit their real agent configuration as part of development.
 - No hidden prompts. Agent/device handoffs are visible to the user.
@@ -58,5 +63,8 @@ Run `node .github/scripts/check-instructions.mjs` before committing. CI rejects 
 - Do not add co-author trailers, generated-by text, or AI attribution to commits or PRs.
 - Use the pinned pnpm version, Rust stable at the workspace MSRV or newer, Biome, rustfmt, and Clippy.
   Regenerate and commit TypeScript bindings when their Rust source changes.
-- Run checks appropriate to the change, plus required milestone gates. Report unavailable platform
-  checks honestly and keep the milestone pending until its acceptance requirements are met.
+- Commit locally during implementation and batch remote pushes. Do not run CI for routine edits
+  or each checkpoint. Reserve CI for at most two planned integration checkpoints and the final
+  Windows/macOS verification, then fix failures and rerun affected gates until they pass.
+- Use focused local checks when they prevent costly rework. Run the full integrated test/build
+  suite at completion. Report unavailable platform checks honestly; never call an unverified gate done.

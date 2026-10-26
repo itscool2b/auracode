@@ -5,6 +5,10 @@ The owner revised the architecture on 2026-10-26: Rust owns backend logic, all a
 infrastructure lives on Cloudflare, and the root `AGENTS.md` and `CLAUDE.md` stay byte-identical.
 Orbit supersedes the original Aura visuals. `docs/progress.md` records implementation status and
 `infra/README.md` records provisioned resources. Historical machine facts below are not current discovery.
+The owner narrowed the current release to Windows and macOS and deferred Linux/WSL. CI is now
+reserved for a few deliberate integration checkpoints and the final verification, with failure
+fixes rerun as needed. Visual implementation must be checked against the exact original Mobbin
+and official-site references, including SpaceXAI/Grok Bot, X Money, Harvey and Aside.
 
 ## Context
 The user runs many coding agents (Claude Code, Codex, Antigravity, Pi / oh-my-pi, Cursor, Grok Build,

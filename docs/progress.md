@@ -143,6 +143,25 @@ host and was skipped by the milestone branch workflow. This does not claim macOS
 
 ## Decisions and constraints
 
+Owner correction on 2026-10-26: finish the full product, prioritize a usable integrated build,
+target Windows and macOS only, and defer Linux/WSL. Routine edits and checkpoint pushes must not
+launch CI. The workflows now require deliberate dispatch; the planned remaining gates are at most
+two major integration runs and a final full run, with focused reruns to repair failures.
+AGENTS.md and CLAUDE.md record the same policy. The visual baseline must come from the original
+handoff's actual references and chosen Orbit Lab, not the partially restyled M1a shell.
+The original reference image/catalog bundle is not in this machine's Downloads folder. Mobbin
+inspection has now confirmed Grok conversation layouts, Aside's browser frame, Harvey's product
+presentation, SpaceXAI's Grok Bot page and X Money's iOS account/send screens. Exact observations
+and links will guide the implementation; unrelated search results are excluded.
+
+CI `40290191800` for `5f10309` passed all 30 native chat checks on Windows and Linux, and the
+frontend/browser gates. Both reopen runs passed five checks, then the smoke reader tried to use
+an unmounted older tool. The local fix walks the actual scroll surface before interacting with
+that tool. A review also found focused controls could disappear when tool groups formed or
+finished; local changes preserve focused rows and explicit group expansion. The latest local
+frontend check and production build passed, and Chromium passed the expanded browser cases;
+WebKit was interrupted when the owner paused work. These changes are not yet fully verified.
+
 Parallel M2a work is on `m2a-orbit`. Orbit geometry, its SVG renderer and mark styles now live in
 `@auracode/ui/orbit`, with the Design Lab consuming that same implementation. All 352 Design Lab
 tests, UI/Lab typechecks and the Lab build pass after extraction. The live mark now shares one
