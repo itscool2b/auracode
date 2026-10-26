@@ -138,8 +138,11 @@
   white-space: pre-wrap;
 }
 .git-review h4 {
-  color: var(--o-signal-text);
+  color: var(--o-text-2);
   font-size: 12px;
+}
+.git-review .git-conflict-title {
+  color: var(--o-signal-text);
 }
 .git-review li {
   font: 11px / 1.7 var(--o-mono);

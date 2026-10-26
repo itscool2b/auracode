@@ -6,8 +6,10 @@ import type {
   ManagedWorktree,
   WorktreeActionPreview,
   WorktreeActionResult,
+  WorktreeDestination,
   WorktreeRecoveryAction,
   WorktreeRecoveryPreview,
+  WorktreeRelocationPreview,
 } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
 import type { GitWorkspaceApi } from "../../lib/gitWorkspace";
@@ -17,7 +19,17 @@ import "./git-dialog.css";
 type Preview =
   | { type: "isolate"; value: IsolationPreview }
   | { type: "action"; value: WorktreeActionPreview }
-  | { type: "recovery"; value: WorktreeRecoveryPreview };
+  | { type: "recovery"; value: WorktreeRecoveryPreview }
+  | { type: "relocate"; value: WorktreeRelocationPreview };
+
+function sameFolder(left: string, right: string): boolean {
+  const normalize = (value: string) => value.replaceAll("\\", "/").replace(/\/$/, "");
+  // Windows folder names are compared without case; macOS can be case-sensitive.
+  const windows = /^[a-z]:[\\/]/i.test(left);
+  return windows
+    ? normalize(left).toLowerCase() === normalize(right).toLowerCase()
+    : normalize(left) === normalize(right);
+}
 
 function Repository({ workspace }: { readonly workspace: GitWorkspace }) {
   return (
@@ -70,7 +82,7 @@ export function GitDialog({
   onStop,
   onClose,
   onChanged,
-  allowIsolation = false,
+  allowIsolation = true,
 }: {
   readonly chatId: string;
   readonly title: string;
@@ -175,12 +187,23 @@ export function GitDialog({
           if (alive.current)
             setResult({
               worktree: value.worktree,
-              recovery: value.warning ?? "The isolated worktree is ready.",
+              recovery:
+                value.warning ??
+                "The isolated worktree is ready. Review moving this chat when you are ready to use it.",
               commit: null,
               error:
                 value.worktree.state === "ready"
                   ? null
                   : (value.warning ?? "Review this worktree's recovery state."),
+            });
+        } else if (chosen.type === "relocate") {
+          await api.relocationApply(chatId, chosen.value.token);
+          if (alive.current)
+            setResult({
+              worktree: chosen.value.worktree,
+              recovery: `This chat now uses ${chosen.value.to}. Its visible handoff is ready in the composer. Nothing has been sent to the agent.`,
+              commit: null,
+              error: null,
             });
         } else if (chosen.type === "recovery") {
           const value = await api.recoveryApply(
@@ -208,12 +231,21 @@ export function GitDialog({
         setResult(null);
       }
     });
+  const reviewRelocation = (tree: ManagedWorktree, destination: WorktreeDestination) =>
+    run(async () => {
+      const value = await api.relocationPreview(chatId, tree.id, destination);
+      if (alive.current) {
+        setPreview({ type: "relocate", value });
+        setResult(null);
+      }
+    });
   const blocked = busy || loading || live;
   const conflict = preview?.type === "action" && preview.value.conflicts.length > 0;
   return (
     <Modal
       title="Git workspace"
       className="git-dialog"
+      closeDisabled={busy}
       onClose={() => {
         if (!busy) onClose();
       }}
@@ -247,13 +279,15 @@ export function GitDialog({
             <h3>
               {preview.type === "isolate"
                 ? "Review isolation"
-                : preview.type === "recovery"
-                  ? preview.value.action === "restore"
-                    ? "Review restoration"
-                    : "Review recovery"
-                  : preview.value.action.type === "merge"
-                    ? "Review merge"
-                    : "Review retirement"}
+                : preview.type === "relocate"
+                  ? "Review moving this chat"
+                  : preview.type === "recovery"
+                    ? preview.value.action === "restore"
+                      ? "Review restoration"
+                      : "Review recovery"
+                    : preview.value.action.type === "merge"
+                      ? "Review merge"
+                      : "Review retirement"}
             </h3>
             {preview.type === "isolate" ? (
               <dl>
@@ -264,6 +298,20 @@ export function GitDialog({
                 <dt>Starting commit</dt>
                 <dd>{preview.value.source.head}</dd>
               </dl>
+            ) : preview.type === "relocate" ? (
+              <>
+                <dl>
+                  <dt>Current folder</dt>
+                  <dd>{preview.value.from}</dd>
+                  <dt>Destination</dt>
+                  <dd>{preview.value.to}</dd>
+                </dl>
+                <h4>Context for your next prompt</h4>
+                <pre>{preview.value.handoff}</pre>
+                <p className="git-note">
+                  Your history stays in this chat. This move does not send a prompt.
+                </p>
+              </>
             ) : preview.type === "recovery" ? (
               <dl>
                 <dt>Worktree</dt>
@@ -300,7 +348,7 @@ export function GitDialog({
                 <pre>{preview.value.changes || "No file changes."}</pre>
                 {preview.value.conflicts.length > 0 ? (
                   <>
-                    <h4>Conflicts to resolve first</h4>
+                    <h4 className="git-conflict-title">Conflicts to resolve first</h4>
                     <ul>
                       {preview.value.conflicts.map((path) => (
                         <li key={path}>
@@ -338,13 +386,15 @@ export function GitDialog({
               >
                 {preview.type === "isolate"
                   ? "Create isolated workspace"
-                  : preview.type === "recovery"
-                    ? preview.value.action === "restore"
-                      ? "Restore retained worktree"
-                      : "Reconcile reviewed state"
-                    : preview.value.action.type === "merge"
-                      ? "Merge reviewed changes"
-                      : "Retire and keep files"}
+                  : preview.type === "relocate"
+                    ? "Move chat to reviewed folder"
+                    : preview.type === "recovery"
+                      ? preview.value.action === "restore"
+                        ? "Restore retained worktree"
+                        : "Reconcile reviewed state"
+                      : preview.value.action.type === "merge"
+                        ? "Merge reviewed changes"
+                        : "Retire and keep files"}
               </button>
             </div>
           </section>
@@ -352,10 +402,10 @@ export function GitDialog({
           <>
             {allowIsolation && workspace ? (
               <section className="git-section">
-                <h3>Isolate this chat</h3>
+                <h3>Create an isolated workspace</h3>
                 <p>
                   Work on a separate branch and folder. The source folder and its uncommitted
-                  changes stay in place.
+                  changes stay in place. Then review moving this chat into it.
                 </p>
                 <label className="ui-field">
                   Branch name
@@ -409,9 +459,14 @@ export function GitDialog({
                           </button>
                         </div>
                       ) : null}
-                      {["creating", "merging", "retiring", "recovery_required", "missing"].includes(
-                        tree.state,
-                      ) ? (
+                      {[
+                        "creating",
+                        "merging",
+                        "retiring",
+                        "restoring",
+                        "recovery_required",
+                        "missing",
+                      ].includes(tree.state) ? (
                         <div className="git-actions">
                           <button
                             type="button"
@@ -425,6 +480,25 @@ export function GitDialog({
                       ) : null}
                       {tree.state === "ready" ? (
                         <div className="git-actions">
+                          {workspace &&
+                          (sameFolder(workspace.root, tree.source) ||
+                            sameFolder(workspace.root, tree.path)) ? (
+                            <button
+                              type="button"
+                              className="ui-button"
+                              disabled={blocked}
+                              onClick={() =>
+                                void reviewRelocation(
+                                  tree,
+                                  sameFolder(workspace.root, tree.path) ? "direct" : "isolated",
+                                )
+                              }
+                            >
+                              {sameFolder(workspace.root, tree.path)
+                                ? "Review return to project folder"
+                                : "Review moving this chat"}
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="ui-button"

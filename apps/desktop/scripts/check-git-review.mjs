@@ -19,6 +19,18 @@ export async function checkGitReview(page, url, out, engine) {
   await page.screenshot({ path: resolve(out, `${engine}-isolation-review.png`) });
   await page.getByRole("button", { name: "Create isolated workspace" }).click();
   await page.getByRole("heading", { name: "Owned worktrees" }).waitFor();
+  await page.getByRole("button", { name: "Review moving this chat", exact: true }).click();
+  await page.getByRole("heading", { name: "Context for your next prompt" }).waitFor();
+  assert.equal(
+    await page.evaluate(() => window.gitFixture.calls().includes("apply-relocation")),
+    false,
+  );
+  assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+  await page.screenshot({ path: resolve(out, `${engine}-worktree-move.png`) });
+  await page.getByRole("button", { name: "Move chat to reviewed folder" }).click();
+  await page.getByRole("button", { name: "Review return to project folder", exact: true }).click();
+  await page.getByRole("button", { name: "Move chat to reviewed folder" }).click();
+  await page.getByRole("button", { name: "Review moving this chat", exact: true }).waitFor();
   await page.evaluate(() => sessionStorage.setItem("git-conflict", "yes"));
   await page.getByRole("button", { name: "Review merge", exact: true }).click();
   await page.getByRole("heading", { name: "Conflicts to resolve first" }).waitFor();
@@ -50,7 +62,14 @@ export async function checkGitReview(page, url, out, engine) {
   await page.getByRole("button", { name: "Review merge", exact: true }).waitFor();
   assert.deepEqual(
     await page.evaluate(() => window.gitFixture.calls().filter((call) => call.startsWith("apply"))),
-    ["apply-isolation", "apply-action", "apply-action", "apply-recovery"],
+    [
+      "apply-isolation",
+      "apply-relocation",
+      "apply-relocation",
+      "apply-action",
+      "apply-action",
+      "apply-recovery",
+    ],
   );
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Open Git workspace" }).waitFor();

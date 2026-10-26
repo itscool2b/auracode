@@ -1358,3 +1358,13 @@ including M4 create/retire/merge/recovery behavior, keyed registry reopening and
 behavior. Default and account-feature core all-target Clippy pass. The activation audit is recorded
 in `docs/account-storage-audit.md`; production profile switching, sync scheduling and IPC remain next.
 
+## Integrated folder movement interface
+
+The Git dialog now exposes separate workspace creation and chat relocation. Each move shows the
+exact current folder, destination and visible handoff before a one-use confirmation. Returning to
+the project folder preserves the isolated worktree. The interface refreshes chat state after an
+uncertain IPC outcome and prevents dismissal during an owned operation. Chromium and WebKit
+review-flow checks pass, including stopping a live session, both move directions, stale reviews,
+merge conflicts, retirement/restoration and accessibility. Exact integrated binding regeneration
+and native macOS/Windows execution are part of the second combined checkpoint, still pending.
+

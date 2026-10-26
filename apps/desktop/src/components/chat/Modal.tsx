@@ -8,11 +8,13 @@ export function Modal({
   onClose,
   children,
   className = "",
+  closeDisabled = false,
 }: {
   readonly title: string;
   readonly onClose: () => void;
   readonly children: ReactNode;
   readonly className?: string;
+  readonly closeDisabled?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const label = useId();
@@ -32,12 +34,18 @@ export function Modal({
       }}
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        if (!closeDisabled) onClose();
       }}
     >
       <header>
         <h2 id={label}>{title}</h2>
-        <button type="button" className="chat-icon-button" aria-label="Close" onClick={onClose}>
+        <button
+          type="button"
+          className="chat-icon-button"
+          aria-label="Close"
+          onClick={onClose}
+          disabled={closeDisabled}
+        >
           <X size={18} />
         </button>
       </header>

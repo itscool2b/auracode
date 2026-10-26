@@ -19,6 +19,8 @@ const workspace: GitWorkspace = {
 let worktrees: ManagedWorktree[] = [];
 let preview: WorktreeActionPreview | null = null;
 let sequence = 0;
+let currentFolder = workspace.root;
+let relocationTarget = "";
 const makeWorktree = (): ManagedWorktree => ({
   id: "worktree-one",
   chat_id: "chat",
@@ -32,7 +34,7 @@ const makeWorktree = (): ManagedWorktree => ({
   created_at: 1,
 });
 const api: GitWorkspaceApi = {
-  inspect: async () => structuredClone(workspace),
+  inspect: async () => ({ ...structuredClone(workspace), root: currentFolder }),
   list: async () => structuredClone(worktrees),
   isolationPreview: async (_chat, input) => {
     calls.push("review-isolation");
@@ -114,6 +116,28 @@ const api: GitWorkspaceApi = {
       commit: null,
       error: null,
     };
+  },
+  relocationPreview: async (_chat, _id, destination) => {
+    calls.push(`review-move-${destination}`);
+    const tree = worktrees[0] ?? makeWorktree();
+    relocationTarget = destination === "isolated" ? tree.path : tree.source;
+    return {
+      token: `relocation-${++sequence}`,
+      worktree: structuredClone(tree),
+      from: currentFolder,
+      to: relocationTarget,
+      handoff:
+        "Continue release readiness in the reviewed folder. Keep the existing changes and inspect the destination before editing.",
+      warnings: ["The next prompt starts a new native session with this visible context."],
+      expires_at: Date.now() + 600_000,
+    };
+  },
+  relocationApply: async () => {
+    calls.push("apply-relocation");
+    if (sessionStorage.getItem("git-stale"))
+      throw new Error("The repository changed after this review. Review it again before applying.");
+    currentFolder = relocationTarget;
+    return { chat_id: "chat", prompt: null };
   },
 };
 Object.assign(window, { gitFixture: { calls: () => [...calls] } });
