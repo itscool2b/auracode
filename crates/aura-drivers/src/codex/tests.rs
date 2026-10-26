@@ -436,6 +436,62 @@ async fn a_dropped_receiver_force_stops_even_when_stdout_is_backpressured() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn known_process_exit_drains_buffered_content_and_result_without_a_false_stdin_error() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.begin().await;
+    for _ in 0..1000 {
+        h.send(json!({"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"m","delta":"text"}}));
+    }
+    h.send(json!({"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}));
+    h.end.to_client.send(FakeLine::Eof).unwrap();
+    h.end
+        .exit
+        .send(aura_process::ExitInfo {
+            code: Some(0),
+            signal: None,
+            at_ms: 1,
+        })
+        .unwrap();
+    for _ in 0..100 {
+        tokio::task::yield_now().await;
+    }
+    tokio::time::advance(Duration::from_secs(5)).await;
+    let mut deltas = 0;
+    let mut ends = 0;
+    while let Some(event) = timeout(Duration::from_secs(12), h.events.recv())
+        .await
+        .unwrap()
+    {
+        match event {
+            DriverEvent::Event {
+                event: AuraEvent::MessageDelta { .. },
+                ..
+            } => deltas += 1,
+            DriverEvent::TurnEnded {
+                stop_reason: StopReason::EndTurn,
+                ..
+            } => ends += 1,
+            DriverEvent::Event {
+                event: AuraEvent::Error { message, .. },
+                ..
+            } => panic!("unexpected error: {message}"),
+            _ => {}
+        }
+    }
+    assert_eq!(deltas, 1000);
+    assert_eq!(ends, 1);
+    assert!(matches!(
+        h.run.await.unwrap(),
+        DriverExit::Crashed {
+            exit: Some(aura_process::ExitInfo { code: Some(0), .. }),
+            ..
+        }
+    ));
+    assert!(!*h.end.killed.borrow());
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_late_start_reply_cannot_finish_a_different_turn_or_change_its_identity() {
     let mut h = Harness::start().await;
     h.ready().await;

@@ -23,8 +23,8 @@ Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b 
 M1c is being implemented independently on `m1c-codex-native` from M1b checkpoint `08c19b1`.
 The native Codex driver uses an owned stdio app-server, initializes once, persists the native thread
 ID, separates turn completion from idle, and handles approvals, grouped questions, model/effort
-settings and account quota updates. Initial verification covers 28 native unit tests, seven synthetic
-native replay fixtures and conformance to the installed Codex 0.162.1 generated schema. Existing ACP
+settings and account quota updates. Initial verification covers 29 native unit tests, seven synthetic
+and three recorded native replay fixtures, and conformance to the installed Codex 0.162.1 generated schema. Existing ACP
 and Claude fixtures remain unchanged. No real prompts, credential/config inspection or vendor update
 were used. This is a work checkpoint, not milestone acceptance.
 
@@ -32,6 +32,8 @@ The driver now detects a closed asynchronous stdin writer after a send was accep
 owned process without waiting for its request timeout. Regression tests also verify outstanding
 callbacks are cancelled and withdrawn before a turn completes. This incorporates the shared process
 writer-closure seam from M1b commit `447fe72`.
+Known process exit is distinguished from an input failure so buffered final output still drains,
+including when the event receiver is backpressured. A 1,000-delta regression verifies this path.
 
 Independent review identified four M1c defects, now fixed with targeted regression tests: raw
 reasoning block boundaries, lost tool output when a final snapshot omits it, missing file-approval
@@ -48,6 +50,11 @@ startup and restart. Three protocol logs prove no prompt or steer was sent. Resu
 turn-setting application remain unverified by this free probe. Full workspace Rust tests and Clippy,
 rustfmt, pinned pnpm 12.15.0 checks (813 frontend tests, 19 existing skips), and both frontend builds
 pass. The generated vendor schema is excluded from formatting to preserve its recorded hash.
+The three free-probe recordings have curated fixture/golden pairs, with account usage and plan,
+installation identity, configured MCP names and incidental stderr sanitized. All 84 fixtures replay.
+Replay preserves the recorded Codex client version without weakening full payload comparison, and
+recognizes explicit startup cancellation without requiring a Ready event. The running vendor version
+also recognizes the installed binary's `Codex Desktop/0.162.1` user-agent spelling.
 
 M1c requirements still pending: opt-in prompted verification, generated
 schema verification for the historical 0.164.0 baseline, independent verification of review fixes,

@@ -249,13 +249,24 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
             .push("the fixture has no start note".into());
         return report;
     };
-    let setup = match setup_from_start(start) {
+    let mut setup = match setup_from_start(start) {
         Ok(setup) => setup,
         Err(reason) => {
             report.mismatches.push(reason);
             return report;
         }
     };
+    if setup.agent_id == "codex" || setup.dialect == "codex" {
+        // Keep strict native payload comparison while reproducing the recorded client identity.
+        if let Some(version) = fixture.records.iter().find_map(|record| match record {
+            FixtureRecord::Out(message) if message["method"] == "initialize" => message
+                .pointer("/params/clientInfo/version")
+                .and_then(Value::as_str),
+            _ => None,
+        }) {
+            setup.client_version = version.into();
+        }
+    }
     let spawn_id = start
         .get("spawn_id")
         .and_then(Value::as_str)

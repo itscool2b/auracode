@@ -53,17 +53,23 @@ fn auth_error(value: &Value) -> bool {
 }
 
 fn native_version(user_agent: &str) -> Option<String> {
-    user_agent.split_whitespace().find_map(|part| {
-        let version = part
-            .strip_prefix("codex_cli_rs/")
-            .or_else(|| part.strip_prefix("codex/"))?;
-        let fields: Vec<_> = version.split('.').collect();
-        (fields.len() == 3
-            && fields
-                .iter()
-                .all(|field| !field.is_empty() && field.bytes().all(|byte| byte.is_ascii_digit())))
-        .then(|| version.into())
-    })
+    let desktop = user_agent
+        .strip_prefix("Codex Desktop/")
+        .and_then(|tail| tail.split_whitespace().next());
+    desktop
+        .into_iter()
+        .chain(user_agent.split_whitespace().filter_map(|part| {
+            part.strip_prefix("codex_cli_rs/")
+                .or_else(|| part.strip_prefix("codex/"))
+        }))
+        .find_map(|version| {
+            let fields: Vec<_> = version.split('.').collect();
+            (fields.len() == 3
+                && fields.iter().all(|field| {
+                    !field.is_empty() && field.bytes().all(|byte| byte.is_ascii_digit())
+                }))
+            .then(|| version.into())
+        })
 }
 
 enum Purpose {
@@ -1170,7 +1176,11 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
             .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400));
         tokio::select! {
             _=writer.writer_closed(),if !s.stopping&&!process_done&&s.failure.is_none()=>{
-                s.fail(error(ErrorKind::AgentExited,"Codex stopped reading its input. The owned session was stopped."));
+                if let Some(info)=control.try_exited() {
+                    exited=Some(info);process_done=true;
+                } else {
+                    s.fail(error(ErrorKind::AgentExited,"Codex stopped reading its input. The owned session was stopped."));
+                }
             },
             command=commands.recv(),if !requested_close&&s.failure.is_none()&&!s.stopping&&!process_done=>match command {
                 None|Some(DriverCommand::Shutdown {..})=>{

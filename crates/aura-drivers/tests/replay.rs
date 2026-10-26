@@ -73,7 +73,14 @@ mod replay {
         if readies > 1 {
             violations.push(format!("{readies} Ready events"));
         }
-        if (readies == 0) != (exit_type == "start_failed") {
+        let cancelled_start = readies == 0
+            && exit_type == "closed"
+            && prompts.is_empty()
+            && fixture
+                .records
+                .iter()
+                .any(|record| matches!(record, FixtureRecord::Cmd(LoggedCommand::Shutdown)));
+        if (readies == 0) != (exit_type == "start_failed" || cancelled_start) {
             violations.push(format!("{readies} Ready events and the exit {exit_type}"));
         }
 
