@@ -80,6 +80,15 @@ Five pure transaction tests pass, covering outgoing edits, unmanaged conflicts, 
 identities, complete apply/rollback and a lost step acknowledgment preserving an unmanaged edit.
 Native regressions additionally cover encrypted recovery, strict locator ownership, both recovery
 directions, changed-content refusal, failed second-phase Account opening, native admission and an
-ambiguous startup pointer. Their local execution and exact Tauri binding export are pending because
-Windows Application Control refused dependency build scripts (4551). No policy workaround was used.
-The separate recovery presentation still needs its App integration before the feature is complete.
+ambiguous startup pointer. This isolated worktree's native build is blocked by Application Control
+(4551), but the integrated Windows build and exact Tauri export pass. Its first focused run passed
+12 of 13 profile tests; the remaining old assertion expected Account A to stay open after Account B
+failed. It now asserts the approved Local fallback, invalidated A handles and persistent A data.
+The parent integration will rerun that case. No policy workaround was used.
+
+`ConfigurationRecovery` uses the existing dark Orbit shell, exposes only explicit recovery actions
+and preserves failed-action errors. Its `locked` state disables recovery and accepts selected-account
+unlock controls through children. It must render before ordinary LockedProfile or chat controls;
+pending recovery offers no Local switch. Two component regressions and Chromium/WebKit browser tests
+pass, including zero actions on mount, success, retryable failure, locked/unavailable states and axe.
+App wiring and final combined verification remain with the parent integration.

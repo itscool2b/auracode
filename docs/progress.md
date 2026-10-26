@@ -2023,3 +2023,11 @@ not silently repaired to Local. Five additional native regression cases are pres
 executed under the local build-script policy block. Exact Tauri bindings and recovery UI integration
 remain pending; the M9 transition feature is not claimed complete.
 
+The separate dark ConfigurationRecovery screen is ready for App integration. Two component tests,
+Biome and Chromium/WebKit browser checks pass, including axe, explicit action only, retained errors,
+locked-account disablement and unavailable-record refusal. Its rendered screenshot was checked
+against the current Orbit frame. Integrated Windows native build/export passed. The first focused
+profile run passed 12/13; the stale A-to-B failure assertion is corrected to require Local fallback
+and invalidation while preserving A's encrypted receipt/head for reopen. Parent will rerun the native
+case and wire the screen before the final combined gate. No real configuration or account was used.
+

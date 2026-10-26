@@ -1,0 +1,43 @@
+.configuration-recovery {
+  min-height: 100%;
+  overflow: auto;
+  background: var(--o-pane);
+  color: var(--o-text-1);
+  font-family: var(--o-sans);
+}
+.configuration-recovery .settings-content {
+  padding-top: clamp(72px, 16vh, 160px);
+}
+.configuration-recovery-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  color: var(--o-signal-text);
+  font: 10px / 16px var(--o-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.configuration-recovery-action > p,
+.configuration-recovery header > p {
+  max-width: 60ch;
+  line-height: 1.7;
+}
+.configuration-recovery-action {
+  padding-top: 20px;
+  border-top: 1px solid var(--o-rule);
+  color: var(--o-text-2);
+  font-size: 13px;
+}
+.configuration-recovery-action > .ui-button {
+  margin-top: 16px;
+}
+.configuration-recovery-action [role="status"] {
+  color: var(--o-text-3);
+  font: 11px / 18px var(--o-mono);
+}
+@media (max-width: 560px) {
+  .configuration-recovery .settings-content {
+    padding-inline: 24px;
+  }
+}

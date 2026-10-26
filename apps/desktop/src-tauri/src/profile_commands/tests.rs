@@ -401,8 +401,14 @@ async fn account_config_services_are_keyed_persistent_and_invalidated_on_switch(
         .await
         .is_err()
     );
-    assert!(generation.is_current());
-    assert_eq!(retained.journal.read(&id).unwrap().as_slice(), content);
+    // A cross-Account request completes the separately encrypted A -> Local phase before opening
+    // B. A failure authenticating B therefore leaves Local selected and invalidates A's handles.
+    assert!(!generation.is_current());
+    assert_eq!(state.app_info().profile.unwrap().id, "local");
+    assert!(matches!(
+        retained.journal.read(&id),
+        Err(ConfigPortError::Unavailable)
+    ));
 
     activate(&state, local(local_profile), sessions::testing::outside)
         .await
