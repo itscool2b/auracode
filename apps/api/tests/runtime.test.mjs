@@ -242,6 +242,26 @@ test("account export streams ciphertext with a completion marker and no session 
   assert.equal(text.includes(token), false);
 });
 
+test("retained device lookup is targeted and scoped to its authenticated account", async () => {
+  const response = await request("/devices/device");
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).device.name, "Test PC");
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO users(id,email_key,email,created_at) VALUES('foreign','foreign','foreign@example.invalid',?)",
+      )
+      .bind(now),
+    db
+      .prepare(
+        "INSERT INTO devices(id,user_id,name,platform,public_key,verification_code,created_at,last_seen) VALUES('foreign-device','foreign','Other PC','windows','key','123456',?,?)",
+      )
+      .bind(now, now),
+  ]);
+  assert.equal((await request("/devices/foreign-device")).status, 404);
+  assert.equal((await request("/devices/unknown-device")).status, 404);
+});
+
 test("verified email change preserves account data, revokes other sessions and refuses proof replay", async () => {
   const primary = Buffer.alloc(32, 20).toString("base64url");
   const secondary = Buffer.alloc(32, 21).toString("base64url");

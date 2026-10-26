@@ -167,6 +167,11 @@ impl Api {
             (Method::Delete, path) if path.starts_with("/api/v1/devices/") => {
                 self.revoke_device(&identity, &path[16..]).await
             }
+            (Method::Get, path) if path.starts_with("/api/v1/devices/") => {
+                crate::policy::identifier(&path[16..])?;
+                let device:Option<crate::types::Device>=self.db.first("SELECT id,name,platform,public_key,verification_code,created_at,last_seen,approved_at,revoked_at FROM devices WHERE id=?1 AND user_id=?2",vec![json!(&path[16..]),json!(identity.session.user_id)]).await?;
+                json_response(json!({"device":device.ok_or(ApiError::NotFound)?}))
+            }
             (Method::Put, path) if path.starts_with("/api/v1/blobs/") => {
                 self.put_blob(request, &identity, &path[14..]).await
             }
