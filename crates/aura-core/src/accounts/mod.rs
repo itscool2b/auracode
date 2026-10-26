@@ -28,7 +28,7 @@ use index::Index;
 pub type Result<T> = std::result::Result<T, AccountFailure>;
 
 pub struct Accounts {
-    _owner: std::fs::File,
+    _owner: aura_process::locked_file::LockedFile,
     api: ApiClient,
     vault: Arc<dyn SecretStore>,
     index_entry: VaultEntry,

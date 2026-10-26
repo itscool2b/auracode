@@ -120,7 +120,7 @@ fn marker(receipt: &Receipt) -> Vec<u8> {
     )
     .into_bytes()
 }
-fn lock_owner(dir: &Dir) -> Result<std::fs::File> {
+fn lock_owner(dir: &Dir) -> Result<aura_process::locked_file::LockedFile> {
     let mut options = OpenOptions::new();
     options
         .read(true)
@@ -135,7 +135,7 @@ fn lock_owner(dir: &Dir) -> Result<std::fs::File> {
     if !file.metadata().map_err(|_| error::storage())?.is_file() || file.try_lock().is_err() {
         return Err(error::state());
     }
-    Ok(file)
+    Ok(aura_process::locked_file::LockedFile::new(file))
 }
 fn sync(dir: &Dir) -> Result<()> {
     #[cfg(unix)]

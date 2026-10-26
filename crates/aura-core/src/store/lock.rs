@@ -18,6 +18,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use aura_process::locked_file::LockedFile;
+
 use crate::error::{CoreError, InUseReason, Result};
 use crate::fsutil;
 
@@ -35,38 +37,16 @@ pub(super) enum Hold {
     Unavailable,
 }
 
+/// Locks are released explicitly, so a child forked during a spawn elsewhere in this process
+/// cannot keep a finished open or a closed store looking active to the next open here.
 #[derive(Debug)]
 pub(super) struct OpenLock {
-    file: Option<File>,
+    file: Option<LockedFile>,
     hold: Hold,
 }
 
-/// A child forked by another thread shares this process's lock file description until its exec,
-/// so closing our descriptor alone can leave the lock held after we are done. Unlocking releases
-/// it for every descriptor at once, and the next open here then sees no other opener.
-fn release(file: &File) {
-    if let Err(error) = file.unlock() {
-        tracing::warn!(%error, "could not release the open lock");
-    }
-}
-
-impl Drop for OpenLock {
-    fn drop(&mut self) {
-        if let Some(file) = &self.file {
-            release(file);
-        }
-    }
-}
-
 /// The shared hold an open store keeps for its whole life.
-#[derive(Debug)]
-pub(super) struct StoreHold(File);
-
-impl Drop for StoreHold {
-    fn drop(&mut self) {
-        release(&self.0);
-    }
-}
+pub(super) type StoreHold = LockedFile;
 
 /// `<db>.lock`
 pub(super) fn lock_path(db_path: &Path) -> PathBuf {
@@ -105,7 +85,7 @@ impl OpenLock {
 
     fn held(file: File, hold: Hold) -> OpenLock {
         OpenLock {
-            file: Some(file),
+            file: Some(LockedFile::new(file)),
             hold,
         }
     }
@@ -137,10 +117,10 @@ impl OpenLock {
     /// may slip in between; it then finds a healthy, migrated database and leaves it alone. Returns
     /// `None` when there is nothing to keep (no locking here) or the shared hold can't be had, in
     /// which case the store still works, just without protection from repairs by others.
-    pub(super) fn into_store_hold(mut self, timeout: Duration) -> Option<StoreHold> {
-        let file = self.file.take()?;
+    pub(super) fn into_store_hold(self, timeout: Duration) -> Option<StoreHold> {
+        let file = self.file?;
         match self.hold {
-            Hold::Shared => Some(StoreHold(file)),
+            Hold::Shared => Some(file),
             Hold::Unavailable => None,
             Hold::Exclusive => {
                 if let Err(error) = file.unlock() {
@@ -150,7 +130,7 @@ impl OpenLock {
                 let deadline = Instant::now() + timeout;
                 loop {
                     match file.try_lock_shared() {
-                        Ok(()) => return Some(StoreHold(file)),
+                        Ok(()) => return Some(file),
                         Err(TryLockError::WouldBlock) if Instant::now() < deadline => {
                             std::thread::sleep(POLL);
                         }
@@ -268,7 +248,7 @@ mod tests {
         let kept = opening
             .into_store_hold(Duration::from_millis(100))
             .expect("a shared hold for the store");
-        let child = kept.0.try_clone().expect("dup");
+        let child = kept.try_clone().expect("dup");
         drop(kept);
         let next = OpenLock::acquire(&db, Duration::from_millis(100)).expect("next");
         assert_eq!(

@@ -310,7 +310,7 @@ fn create_private(folder: &Path) -> Result<(), String> {
 
 /// Takes `folder/install.lock` exclusively, waiting for another process's install; the file is
 /// unlocked when the returned handle drops (with the future, if the start is interrupted).
-async fn lock(folder: &Path) -> Result<std::fs::File, String> {
+async fn lock(folder: &Path) -> Result<aura_process::locked_file::LockedFile, String> {
     let path = folder.join(LOCK);
     let file = std::fs::OpenOptions::new()
         .create(true)
@@ -320,13 +320,13 @@ async fn lock(folder: &Path) -> Result<std::fs::File, String> {
         .map_err(|error| format!("{} could not be opened: {error}", path.display()))?;
     loop {
         match file.try_lock() {
-            Ok(()) => return Ok(file),
+            Ok(()) => return Ok(aura_process::locked_file::LockedFile::new(file)),
             Err(std::fs::TryLockError::WouldBlock) => tokio::time::sleep(LOCK_RETRY).await,
             // A file system without locks: one install per process still holds.
             Err(std::fs::TryLockError::Error(error))
                 if error.kind() == io::ErrorKind::Unsupported =>
             {
-                return Ok(file);
+                return Ok(aura_process::locked_file::LockedFile::new(file));
             }
             Err(std::fs::TryLockError::Error(error)) => {
                 return Err(format!("{} could not be locked: {error}", path.display()));

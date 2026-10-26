@@ -134,6 +134,7 @@ fn verify_and_rebind(
     if !owner.metadata().map_err(|_| denied())?.is_file() || owner.try_lock().is_err() {
         return Err(denied());
     }
+    let _owner = aura_process::locked_file::LockedFile::new(owner);
     let db = regular(&dir, "aura.encrypted.db", false)?;
     if db.metadata().map_err(|_| denied())?.len() == 0 {
         return Err(denied());

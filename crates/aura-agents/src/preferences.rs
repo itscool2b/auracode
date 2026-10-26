@@ -70,6 +70,7 @@ pub(crate) fn save(
         .map_err(|_| "The executable preference lock could not be opened.")?;
     lock.try_lock()
         .map_err(|_| "Another auracode window is changing executable choices. Try again.")?;
+    let _lock = aura_process::locked_file::LockedFile::new(lock);
     let mut selections = read(path)?;
     match selected {
         Some(value) => {

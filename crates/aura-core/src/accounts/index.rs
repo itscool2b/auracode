@@ -19,7 +19,7 @@ pub(super) fn entry(origin: &str, root: &std::path::Path) -> Result<VaultEntry> 
 
 /// The index is replaced atomically in the vault, but its read-modify-write cycle also needs one
 /// owner across processes. An empty operational lock reveals no account or profile metadata.
-pub(super) fn acquire(root: &std::path::Path) -> Result<std::fs::File> {
+pub(super) fn acquire(root: &std::path::Path) -> Result<aura_process::locked_file::LockedFile> {
     use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
     use cap_std::fs::{Dir, OpenOptions};
     let dir =
@@ -44,7 +44,7 @@ pub(super) fn acquire(root: &std::path::Path) -> Result<std::fs::File> {
         return Err(error::storage());
     }
     file.try_lock().map_err(|_| error::failure(aura_protocol::account::AccountFailureCode::LocalStorage, "Another auracode instance is using accounts in this data folder, or the folder does not support ownership locks."))?;
-    Ok(file)
+    Ok(aura_process::locked_file::LockedFile::new(file))
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

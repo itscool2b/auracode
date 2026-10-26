@@ -22,6 +22,7 @@ pub mod control;
 pub mod env;
 pub mod host;
 pub mod io;
+pub mod locked_file;
 pub mod log;
 pub mod ptable;
 pub mod pty;
