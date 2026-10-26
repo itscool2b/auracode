@@ -169,9 +169,16 @@ fn npm_global_prefix(installation: &AgentInstallation) -> Option<String> {
     let resolved = installation.resolved_path.as_deref()?.replace('\\', "/");
     let (root, _) = resolved.split_once("/node_modules/")?;
     let root = root.strip_suffix("/lib").unwrap_or(root);
+    // Detection canonicalizes the package entry, while PATH can retain a short Windows directory
+    // name (hosted runners use RUNNER~1), a junction, or a lexical alias. Compare the same directory
+    // identity before deciding that a reviewed global package is a project-local dependency.
+    let launch_parent = std::path::Path::new(&installation.launch_path)
+        .parent()
+        .and_then(|parent| std::fs::canonicalize(parent).ok())
+        .and_then(|parent| parent.into_os_string().into_string().ok());
     let launch = installation.launch_path.replace('\\', "/");
     let (parent, _) = launch.rsplit_once('/')?;
-    let parent = normalized(parent);
+    let parent = normalized(launch_parent.as_deref().unwrap_or(parent));
     (parent == normalized(root) || parent == normalized(&format!("{root}/bin")))
         .then(|| root.into())
 }
@@ -340,6 +347,40 @@ mod tests {
             Err(MaintenanceError::UnknownChannel),
             "a Bun global package must not be handed to npm"
         );
+    }
+
+    #[test]
+    fn global_npm_prefix_compares_canonical_directory_identity() {
+        let fixture = tempfile::tempdir().unwrap();
+        let prefix = fixture.path().join("prefix");
+        let package = prefix.join("node_modules/@openai/codex/bin");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::write(package.join("codex.js"), "synthetic package").unwrap();
+        let mut installed = installation(InstallChannel::Npm {
+            package: "@openai/codex".into(),
+        });
+        installed.launch_path = prefix
+            .join("../prefix/codex.cmd")
+            .to_string_lossy()
+            .into_owned();
+        installed.resolved_path = Some(
+            std::fs::canonicalize(package.join("codex.js"))
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+        );
+        let expected = std::fs::canonicalize(&prefix).unwrap();
+        assert_eq!(
+            npm_global_prefix(&installed).map(|prefix| normalized(&prefix)),
+            Some(normalized(&expected.to_string_lossy())),
+        );
+        // A canonicalized local .bin still cannot acquire permission for a global npm update.
+        std::fs::create_dir_all(prefix.join("node_modules/.bin")).unwrap();
+        installed.launch_path = prefix
+            .join("node_modules/.bin/codex.cmd")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(npm_global_prefix(&installed), None);
     }
 
     #[test]

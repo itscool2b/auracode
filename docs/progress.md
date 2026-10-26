@@ -1100,6 +1100,15 @@ cannot quarantine ciphertext. Local paths are unchanged. Legacy or multiple cand
 cause an explicit import/restore error before any account database is opened. Focused Windows tests
 preserve both paths byte-for-byte in this case; no existing user profile was read or migrated.
 
+## Windows npm maintenance path identity
+
+The first integrated hosted Windows run exposed a mismatch between a PATH shim's lexical parent
+and the package entry's canonical directory. Maintenance now canonicalizes the launch parent before
+comparing the global npm prefix, covering Windows short directory names and other path aliases.
+The deterministic temporary-directory regression also confirms that a project-local node_modules/.bin
+still cannot become a global npm update. This changes path metadata checks only; no actual npm update,
+agent prompt, credential access or CI dispatch is part of the fix.
+
 ## M4 guarded merge and retirement checkpoint
 
 The worktree service now prepares merges with Git merge-tree and reports conflict paths without
