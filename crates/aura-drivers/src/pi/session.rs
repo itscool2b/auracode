@@ -447,7 +447,7 @@ impl Session {
                 let Some(prompt) = ui::prompt(&frame) else {
                     self.send(ui::response(&frame, None));
                     self.notice(
-                        "Pi requested an unsupported editor or malformed dialog; it was cancelled.",
+                        "Pi requested an unsupported, oversized or malformed dialog; it was cancelled.",
                     );
                     return;
                 };

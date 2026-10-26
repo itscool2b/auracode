@@ -507,6 +507,47 @@ async fn extension_dialog_timeout_withdraws_and_late_answer_is_ignored() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn oversized_dialog_is_cancelled_without_a_partial_question() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.send(json!({"type":"extension_ui_request","id":"oversized","method":"select",
+        "title":"Choose","options":[format!("{} allow", "x".repeat(64)), format!("{} deny", "x".repeat(64))]}));
+    assert_eq!(
+        h.wire().await,
+        json!({"type":"extension_ui_response","id":"oversized","cancelled":true})
+    );
+    loop {
+        match h.event().await {
+            DriverEvent::UiRequest { .. } => panic!("a truncated question must never be shown"),
+            DriverEvent::Event {
+                event: aura_protocol::AuraEvent::Notice { message, .. },
+                ..
+            } if message.contains("oversized") => break,
+            _ => {}
+        }
+    }
+    h.send(
+        json!({"type":"extension_ui_request","id":"small","method":"confirm","title":"Continue?"}),
+    );
+    loop {
+        if let DriverEvent::UiRequest { request, .. } = h.event().await {
+            assert_eq!(request.request_id, "small");
+            break;
+        }
+    }
+    h.tx.send(DriverCommand::RespondUi {
+        request_id: "small".into(),
+        answer: Some(aura_protocol::UiAnswer::Confirm { yes: false }),
+    })
+    .unwrap();
+    assert_eq!(
+        h.wire().await,
+        json!({"type":"extension_ui_response","id":"small","confirmed":false})
+    );
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
 async fn malformed_initial_state_fails_without_ready() {
     let mut h = Harness::start().await;
     let query = h.wire().await;

@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 
 pub fn prompt(frame: &Value) -> Option<UiPrompt> {
     let title = text(frame, "title").unwrap_or("Pi extension");
-    match text(frame, "method")? {
+    let prompt = match text(frame, "method")? {
         "confirm" => Some(UiPrompt::Confirm {
             message: match text(frame, "message") {
                 Some(message) => format!("{title}\n\n{message}"),
@@ -33,6 +33,33 @@ pub fn prompt(frame: &Value) -> Option<UiPrompt> {
         // The current product input has no editable prefill/multiline contract. Cancelling is
         // honest; presenting an empty input would silently lose the editor's original content.
         _ => None,
+    }?;
+    fits_display(&prompt).then_some(prompt)
+}
+
+fn fits_display(prompt: &UiPrompt) -> bool {
+    // Core caps question messages and labels before display. Never ask for an answer to a
+    // shortened dialog; leave room for the request id and event envelope within its 7 KiB cap.
+    let message_fits =
+        |message: &str| serde_json::to_string(message).is_ok_and(|json| json.len() <= 2048);
+    if !serde_json::to_vec(prompt).is_ok_and(|json| json.len() <= 6000) {
+        return false;
+    }
+    match prompt {
+        UiPrompt::Confirm { message } => message_fits(message),
+        UiPrompt::Select { message, options } => {
+            message_fits(message) && options.iter().all(|option| option.chars().count() <= 64)
+        }
+        UiPrompt::Input {
+            message,
+            placeholder,
+        } => {
+            message_fits(message)
+                && placeholder
+                    .as_ref()
+                    .is_none_or(|text| text.chars().count() <= 256)
+        }
+        _ => false,
     }
 }
 pub fn response(frame: &Value, answer: Option<UiAnswer>) -> Value {
@@ -77,5 +104,36 @@ mod tests {
             true
         );
         assert!(prompt(&json!({"method":"editor","prefill":"important"})).is_none());
+    }
+
+    #[test]
+    fn dialogs_that_core_would_truncate_are_rejected_before_display() {
+        for frame in [
+            json!({"method":"confirm","title":"Approve","message":"x".repeat(2048)}),
+            json!({"method":"confirm","title":"\\\"".repeat(600)}),
+            json!({"method":"select","title":"Choose","options":["x".repeat(65)]}),
+            json!({"method":"input","title":"Name","placeholder":"x".repeat(257)}),
+            json!({"method":"select","title":"Choose","options":vec!["x".repeat(64); 100]}),
+        ] {
+            assert!(prompt(&frame).is_none(), "oversized dialog was accepted");
+        }
+    }
+
+    #[test]
+    fn display_limits_preserve_unicode_labels_and_native_answers() {
+        let label = "界".repeat(64);
+        let frame = json!({"method":"select","title":"Choose","options":[label]});
+        let Some(UiPrompt::Select { options, .. }) = prompt(&frame) else {
+            panic!("a complete 64-character label fits");
+        };
+        assert_eq!(options, vec![label.clone()]);
+        assert_eq!(
+            response(&frame, Some(UiAnswer::Select { index: 0 }))["value"],
+            label
+        );
+        assert!(
+            prompt(&json!({"method":"input","title":"Name","placeholder":"界".repeat(256)}))
+                .is_some()
+        );
     }
 }
