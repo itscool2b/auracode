@@ -142,7 +142,11 @@ export function Transcript({
     for (let index = 0; index < segment.items.length; index++) {
       const item = segment.items[index];
       if (!item) continue;
-      if (item.kind === "permission" && dockedRequests?.has(item.request.request_id)) continue;
+      if (
+        (item.kind === "permission" || item.kind === "question") &&
+        dockedRequests?.has(item.request.request_id)
+      )
+        continue;
       if (item.kind === "user")
         prompt = { key: JSON.stringify([segment.key, item.key]), text: item.text };
       const tools: Extract<RenderedItem, { kind: "tool" }>[] = [];

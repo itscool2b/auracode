@@ -15,6 +15,7 @@ import { checkDataTransfer } from "./check-data-transfer.mjs";
 import { checkGitReview } from "./check-git-review.mjs";
 import { checkProfiles } from "./check-profiles.mjs";
 import { checkProjectTools } from "./check-project-tools.mjs";
+import { checkQuestions } from "./check-questions.mjs";
 import { checkSessionFallback } from "./check-session-fallback.mjs";
 import { checkSteering } from "./check-steering.mjs";
 import { checkWorktreeSetup } from "./check-worktree-setup.mjs";
@@ -150,6 +151,7 @@ try {
       await checkWorktreeSetup(browser, url, out, engine);
       await checkConfigSync(browser, url, out, engine);
       await checkSteering(browser, url, out, engine);
+      await checkQuestions(browser, url, out, engine);
       await checkSessionFallback(browser, url, out, engine);
       assert.deepEqual(errors, []);
       console.log(

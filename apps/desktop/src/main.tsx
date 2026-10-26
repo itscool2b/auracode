@@ -30,6 +30,10 @@ if (container) {
       void import("./dev/configSyncPreview").then(({ mountConfigSyncPreview }) =>
         mountConfigSyncPreview(container),
       );
+    else if (mode === "questions")
+      void import("./dev/questionsPreview").then(({ mountQuestionsPreview }) =>
+        mountQuestionsPreview(container),
+      );
     else if (mode === "steering")
       void import("./dev/steeringPreview").then(({ mountSteeringPreview }) =>
         mountSteeringPreview(container),

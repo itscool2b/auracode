@@ -13,6 +13,7 @@ import { GitDialog } from "./GitDialog";
 import { Header } from "./Header";
 import { PermissionCard } from "./PermissionCard";
 import { Pickers } from "./Pickers";
+import { QuestionCard } from "./QuestionCard";
 import { QueueList } from "./QueueList";
 import { Transcript } from "./Transcript";
 import type { TurnActions } from "./TurnView";
@@ -110,12 +111,13 @@ export function ChatView({
   const resumable =
     (state.session?.native_session_id ?? null) !== null || hasTurns(state.transcript);
   const newestError = lastErrorKey(state.transcript);
-  const pendingPermissions = useMemo(
+  const pendingRequests = useMemo(
     () =>
       live
         ? [...state.transcript.items.values()].filter(
             (item) =>
-              item.kind === "permission" &&
+              (item.kind === "permission" ||
+                (item.kind === "question" && item.request.prompt.type !== "notify")) &&
               item.resolution === null &&
               state.requests.get(item.request.request_id)?.gone !== true,
           )
@@ -125,11 +127,11 @@ export function ChatView({
   const dockedRequests = useMemo(
     () =>
       new Set(
-        pendingPermissions.flatMap((item) =>
-          item.kind === "permission" ? [item.request.request_id] : [],
+        pendingRequests.flatMap((item) =>
+          item.kind === "permission" || item.kind === "question" ? [item.request.request_id] : [],
         ),
       ),
-    [pendingPermissions],
+    [pendingRequests],
   );
 
   const startSession = useCallback(
@@ -309,14 +311,14 @@ export function ChatView({
               onRemove={(promptId) => void store.cancelQueued(promptId)}
               onSendQueued={() => void store.resumeQueue()}
             />
-            {pendingPermissions.length > 0 ? (
-              <section className="chat-permission-dock" aria-label="Waiting for your permission">
+            {pendingRequests.length > 0 ? (
+              <section className="chat-permission-dock" aria-label="Waiting for your response">
                 <div className="chat-permission-label">
-                  Needs your permission
-                  {pendingPermissions.length > 1 ? ` · ${pendingPermissions.length} requests` : ""}
+                  Needs your response
+                  {pendingRequests.length > 1 ? ` · ${pendingRequests.length} requests` : ""}
                 </div>
-                {pendingPermissions.map((item) => {
-                  if (item.kind !== "permission") return null;
+                {pendingRequests.map((item) => {
+                  if (item.kind !== "permission" && item.kind !== "question") return null;
                   const segment = state.transcript.segments.find((entry) =>
                     entry.itemKeys.includes(item.key),
                   );
@@ -333,21 +335,39 @@ export function ChatView({
                       data-test-stop-reason={segment?.end?.stopReason ?? ""}
                       data-test-recovered={String(segment?.end?.recovered ?? false)}
                     >
-                      <PermissionCard
-                        item={item}
-                        request={state.requests.get(item.request.request_id)}
-                        onRespond={(optionId) =>
-                          void store.respondPermission(item.request.request_id, optionId)
-                        }
-                        blobs={state.blobs}
-                        onLoadBlob={(sha256) => void store.loadBlob(sha256)}
-                      />
+                      <p className="chat-request-scope">
+                        {segment?.turnId ? "Turn request" : "Session request"}
+                        {user?.kind === "user" ? (
+                          <span className="chat-request-prompt" title={user.text}>
+                            {user.text.slice(0, 160)}
+                          </span>
+                        ) : null}
+                      </p>
+                      {item.kind === "question" ? (
+                        <QuestionCard
+                          item={item}
+                          request={state.requests.get(item.request.request_id)}
+                          onRespond={(answer) =>
+                            void store.respondUi(item.request.request_id, answer)
+                          }
+                        />
+                      ) : (
+                        <PermissionCard
+                          item={item}
+                          request={state.requests.get(item.request.request_id)}
+                          onRespond={(optionId) =>
+                            void store.respondPermission(item.request.request_id, optionId)
+                          }
+                          blobs={state.blobs}
+                          onLoadBlob={(sha256) => void store.loadBlob(sha256)}
+                        />
+                      )}
                     </div>
                   );
                 })}
               </section>
             ) : null}
-            <div className="chat-compose-slot" hidden={pendingPermissions.length > 0}>
+            <div className="chat-compose-slot" hidden={pendingRequests.length > 0}>
               <Composer
                 blocked={
                   !handoffLoaded ||

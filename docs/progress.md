@@ -2473,3 +2473,9 @@ Chromium and WebKit passed explicit launch, cancellation, success/failure, Retry
 fallback and stale lookup cases with synthetic terminal IO. Accessibility checks and inspected dark
 desktop/narrow screenshots passed. No vendor login, credential store, account service or paid prompt
 was used. Native sign-in acceptance remains in the final platform gate.
+
+### Pending questions remain beside the composer
+
+Unanswered, actionable UI questions now share the permission dock while the session has a process, including pre-Ready startup recovery. Each request shows whether it belongs to a turn or the session; turn requests include a bounded prompt label. The transcript keeps the resolved history and informational notifications, but does not duplicate a docked question. The existing response path owns pending, failure and withdrawal state. A hidden composer keeps its draft while the user answers.
+
+Chromium and WebKit fixtures passed keyboard selection/submission, no automatic answer in Full auto, pre-Ready questions, pending/error/retry, agent withdrawal, reattachment, mixed permission/question requests, notification-only behavior, preserved drafts, accessibility and the 390px layout. Screenshots were inspected. Forty-nine related frontend tests, TypeScript, targeted Biome and instruction parity pass. The question fixture joins the existing final settings browser gate. These are production-component fixtures with an owned synthetic transport, not paid-agent or packaged native acceptance.
