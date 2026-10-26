@@ -68,6 +68,11 @@ fn unsupported(command: DriverCommand) {
                 ))
             });
         }
+        DriverCommand::Steer { reply, .. } => {
+            let _ = reply.send(crate::driver::SteerResult::Rejected {
+                message: "This agent cannot steer an exact running turn.".into(),
+            });
+        }
         DriverCommand::RewindFiles { reply, .. } => {
             let _ = reply.send(Err(failure("This text fallback cannot rewind files.")));
         }

@@ -2,7 +2,7 @@
 use super::{options, requests, translate, wire};
 use crate::driver::{
     DriverCommand, DriverContext, DriverError, DriverEvent, DriverExit, DriverStatus,
-    LoggedCommand, PermissionOutcome, ReadyInfo, ResumeOutcome, SessionSetup,
+    LoggedCommand, PermissionOutcome, ReadyInfo, ResumeOutcome, SessionSetup, SteerResult,
 };
 use crate::jsonrpc::{self, Incoming, RpcError, RpcOut};
 use aura_process::{
@@ -77,6 +77,10 @@ enum Purpose {
     Open,
     Models,
     Start(String),
+    Steer {
+        native_turn: String,
+        reply: tokio::sync::oneshot::Sender<SteerResult>,
+    },
     Interrupt,
     Limits,
 }
@@ -306,6 +310,26 @@ impl Session {
         let Some(pending) = self.pending.remove(&id) else {
             return;
         };
+        // Correlate a reply even after settlement or Stop. The native exact-turn precondition
+        // prevents late delivery to another turn; local lifecycle changes cannot prove delivery.
+        if let Purpose::Steer { native_turn, reply } = pending.purpose {
+            let outcome = match result {
+                Ok(value) if value["turnId"].as_str() == Some(native_turn.as_str()) => {
+                    SteerResult::Accepted
+                }
+                Ok(_) => {
+                    self.fail(protocol_error("Codex returned an invalid steering acknowledgement. Delivery is unconfirmed."));
+                    SteerResult::Unconfirmed {
+                        message: "Codex did not confirm delivery to the selected turn.".into(),
+                    }
+                }
+                Err(err) => SteerResult::Rejected {
+                    message: err.message,
+                },
+            };
+            let _ = reply.send(outcome);
+            return;
+        }
         if self.stopping && !matches!(pending.purpose, Purpose::Start(_) | Purpose::Interrupt) {
             return;
         }
@@ -351,6 +375,7 @@ impl Session {
             }
         };
         match pending.purpose {
+            Purpose::Steer { .. } => unreachable!("steering replies handled above"),
             Purpose::Initialize => {
                 match serde_json::from_value::<wire::InitializeResponse>(value) {
                     Ok(info) if !info.user_agent.is_empty() => {
@@ -806,6 +831,44 @@ impl Session {
             return;
         }
         match command {
+            DriverCommand::Steer {
+                turn_id,
+                message_id,
+                parts,
+                reply,
+            } => {
+                let native_turn = self
+                    .active
+                    .as_ref()
+                    .filter(|active| {
+                        self.ready
+                            && !self.stopping
+                            && self.failure.is_none()
+                            && !self.idle
+                            && !active.interrupt
+                            && active.aura_id == turn_id
+                    })
+                    .and_then(|active| active.native_id.clone());
+                let Some(native_turn) = native_turn else {
+                    let _ = reply.send(SteerResult::Rejected {
+                        message: "The selected turn is no longer running or has not started yet."
+                            .into(),
+                    });
+                    return;
+                };
+                let input = match crate::attachments::codex_with_reader(
+                    &parts,
+                    self.setup.attachment_dir.as_deref(),
+                    self.setup.attachment_reader.as_deref(),
+                ) {
+                    Ok(input) => input,
+                    Err(message) => {
+                        let _ = reply.send(SteerResult::Rejected { message });
+                        return;
+                    }
+                };
+                self.request("turn/steer", json!({"threadId":self.thread,"expectedTurnId":native_turn,"clientUserMessageId":message_id,"input":input}), Purpose::Steer { native_turn, reply });
+            }
             DriverCommand::Prompt { turn, parts } => {
                 if self.active.is_some() || !self.idle || !self.callbacks.is_empty() {
                     self.outbox.push_back(DriverEvent::TurnEnded {
@@ -1025,6 +1088,11 @@ impl Session {
                 continue;
             };
             match p.purpose {
+                Purpose::Steer { reply, .. } => {
+                    let message = "Codex did not acknowledge steering before its deadline. Delivery is unconfirmed.";
+                    let _ = reply.send(SteerResult::Unconfirmed { message: message.into() });
+                    self.fail(error(ErrorKind::AgentError, message));
+                },
                 Purpose::Models=>{self.models.clear();self.models_done=true;self.notice("Codex did not return its model list before the deadline.");self.ready();},
                 Purpose::Limits=>{self.limits_dirty=false;self.notice("Codex did not refresh usage limits before the deadline.");},
                 _=>self.fail(error(ErrorKind::AgentError,"Codex did not acknowledge an operation before its deadline. The session was stopped to avoid uncertain state.")),

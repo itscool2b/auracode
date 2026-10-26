@@ -234,6 +234,7 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
 
 /// A typed control reply on its way.
 enum ReplyWait {
+    Steer(String, oneshot::Receiver<crate::driver::SteerResult>),
     Option(
         String,
         oneshot::Receiver<Result<(), crate::driver::DriverError>>,
@@ -413,6 +414,22 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
 /// The command a `cmd` record stands for, with its reply receiver.
 fn command_for(logged: &LoggedCommand) -> (DriverCommand, Option<ReplyWait>) {
     match logged.clone() {
+        LoggedCommand::Steer {
+            turn_id,
+            message_id,
+            parts,
+        } => {
+            let (reply, wait) = oneshot::channel();
+            (
+                DriverCommand::Steer {
+                    turn_id,
+                    message_id: message_id.clone(),
+                    parts,
+                    reply,
+                },
+                Some(ReplyWait::Steer(message_id, wait)),
+            )
+        }
         LoggedCommand::Prompt { turn_id, parts } => (
             DriverCommand::Prompt {
                 turn: TurnRef { turn_id },
@@ -482,6 +499,12 @@ fn command_for(logged: &LoggedCommand) -> (DriverCommand, Option<ReplyWait>) {
 
 async fn reply_json(wait: ReplyWait) -> Value {
     match wait {
+        ReplyWait::Steer(message_id, wait) => {
+            let reply = wait
+                .await
+                .map_or(json!("dropped"), |outcome| json!(outcome));
+            json!({"steer": message_id, "reply": reply})
+        }
         ReplyWait::Option(option_id, wait) => {
             let reply = match wait.await {
                 Ok(Ok(())) => json!({"ok": null}),

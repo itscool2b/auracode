@@ -15,6 +15,111 @@ use tokio::sync::mpsc;
 use tokio::time::timeout;
 
 struct Quiet(Arc<FakeSpawner>);
+fn steer(h: &Harness, turn: &str) -> tokio::sync::oneshot::Receiver<crate::driver::SteerResult> {
+    let (reply, result) = tokio::sync::oneshot::channel();
+    h.tx.send(DriverCommand::Steer {
+        turn_id: turn.into(),
+        message_id: "steer-1".into(),
+        parts: vec![PromptPart::Text {
+            text: "Focus on the tests.".into(),
+        }],
+        reply,
+    })
+    .unwrap();
+    result
+}
+
+async fn running(h: &mut Harness) {
+    h.begin().await;
+    h.send(json!({"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"message-1","delta":"Working"}}));
+    loop {
+        if matches!(
+            h.event().await,
+            DriverEvent::Event {
+                event: AuraEvent::MessageDelta { .. },
+                ..
+            }
+        ) {
+            break;
+        }
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn steering_uses_native_exact_turn_and_accepts_a_late_matching_acknowledgement() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    running(&mut h).await;
+    let reply = steer(&h, "aura-turn");
+    let request = h.wire().await;
+    assert_eq!(request["method"], "turn/steer");
+    assert_eq!(
+        request["params"],
+        json!({"threadId":"thread-1","expectedTurnId":"turn-1","clientUserMessageId":"steer-1","input":[{"type":"text","text":"Focus on the tests."}]})
+    );
+    h.send(json!({"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}));
+    h.send(json!({"id":request["id"],"result":{"turnId":"turn-1"}}));
+    assert_eq!(reply.await.unwrap(), crate::driver::SteerResult::Accepted);
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn steering_rejects_stale_local_turn_and_native_restrictions_without_queueing() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    assert!(matches!(
+        steer(&h, "aura-turn").await.unwrap(),
+        crate::driver::SteerResult::Rejected { .. }
+    ));
+    running(&mut h).await;
+    assert!(matches!(
+        steer(&h, "old-turn").await.unwrap(),
+        crate::driver::SteerResult::Rejected { .. }
+    ));
+    let reply = steer(&h, "aura-turn");
+    let request = h.wire().await;
+    assert_eq!(request["method"], "turn/steer");
+    h.send(json!({"id":request["id"],"error":{"code":-32600,"message":"This active turn cannot be steered.","data":{"codexErrorInfo":"activeTurnNotSteerable"}}}));
+    assert_eq!(
+        reply.await.unwrap(),
+        crate::driver::SteerResult::Rejected {
+            message: "This active turn cannot be steered.".into()
+        }
+    );
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn steering_wrong_turn_acknowledgement_is_unconfirmed_and_stops_the_session() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    running(&mut h).await;
+    let reply = steer(&h, "aura-turn");
+    let request = h.wire().await;
+    h.send(json!({"id":request["id"],"result":{"turnId":"different-turn"}}));
+    assert!(matches!(
+        reply.await.unwrap(),
+        crate::driver::SteerResult::Unconfirmed { .. }
+    ));
+    while h.events.recv().await.is_some() {}
+    assert!(matches!(h.run.await.unwrap(), DriverExit::Crashed { .. }));
+}
+
+#[tokio::test(start_paused = true)]
+async fn steering_timeout_is_unconfirmed_and_never_retried() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    running(&mut h).await;
+    let reply = steer(&h, "aura-turn");
+    assert_eq!(h.wire().await["method"], "turn/steer");
+    assert!(matches!(
+        reply.await.unwrap(),
+        crate::driver::SteerResult::Unconfirmed { .. }
+    ));
+    while h.events.recv().await.is_some() {}
+    assert!(matches!(h.run.await.unwrap(), DriverExit::Crashed { .. }));
+}
+
 impl AgentSpawner for Quiet {
     fn spawn(&self, spec: SpawnSpec) -> BoxFuture<'static, Result<SpawnedProcess, SpawnError>> {
         self.0

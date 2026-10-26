@@ -1008,6 +1008,11 @@ impl Session {
             DriverCommand::RespondUi { request_id, answer } => {
                 self.on_ui_answer(&request_id, answer.as_ref())
             }
+            DriverCommand::Steer { reply, .. } => {
+                let _ = reply.send(crate::driver::SteerResult::Rejected {
+                    message: "This agent cannot steer an exact running turn.".into(),
+                });
+            }
             DriverCommand::RewindFiles { reply, .. } => {
                 let _ = reply.send(Err(DriverError {
                     kind: ErrorKind::ProtocolError,

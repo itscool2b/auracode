@@ -593,6 +593,11 @@ impl Mock {
                 self.push(DriverEvent::Options(self.options.clone()));
                 let _ = reply.send(Ok(self.autonomy_state()));
             }
+            DriverCommand::Steer { reply, .. } => {
+                let _ = reply.send(crate::driver::SteerResult::Rejected {
+                    message: "This agent cannot steer an exact running turn.".into(),
+                });
+            }
             DriverCommand::RewindFiles { reply, .. } => {
                 let _ = reply.send(Err(DriverError {
                     kind: ErrorKind::ProtocolError,

@@ -719,6 +719,11 @@ impl Session {
                 self.send(json!({"type":"user","message":{"role":"user","content":content},"parent_tool_use_id":null,"session_id":self.native_id,"uuid":turn.turn_id}));
             }
             DriverCommand::Interrupt => self.interrupt(),
+            DriverCommand::Steer { reply, .. } => {
+                let _ = reply.send(crate::driver::SteerResult::Rejected {
+                    message: "This agent cannot steer an exact running turn.".into(),
+                });
+            }
             DriverCommand::RewindFiles {
                 user_message_id,
                 dry_run,

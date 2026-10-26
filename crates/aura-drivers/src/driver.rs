@@ -224,6 +224,15 @@ pub struct FileRewindResult {
     pub skipped_links: Option<u64>,
 }
 
+/// Native delivery acknowledgement. An uncertain response must never be retried automatically.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum SteerResult {
+    Accepted,
+    Rejected { message: String },
+    Unconfirmed { message: String },
+}
+
 /// What the session actor asks of a driver.
 #[derive(Debug)]
 pub enum DriverCommand {
@@ -233,6 +242,13 @@ pub enum DriverCommand {
     Prompt {
         turn: TurnRef,
         parts: Vec<PromptPart>,
+    },
+    /// Explicit user input for exactly this running turn. Never queue it for a later turn.
+    Steer {
+        turn_id: String,
+        message_id: String,
+        parts: Vec<PromptPart>,
+        reply: oneshot::Sender<SteerResult>,
     },
     /// Soft interrupt; idempotent; the turn still ends with `TurnEnded`.
     Interrupt,
@@ -523,6 +539,11 @@ pub enum LoggedCommand {
         turn_id: String,
         parts: Vec<PromptPart>,
     },
+    Steer {
+        turn_id: String,
+        message_id: String,
+        parts: Vec<PromptPart>,
+    },
     Interrupt,
     RespondPermission {
         request_id: String,
@@ -552,6 +573,16 @@ impl From<&DriverCommand> for LoggedCommand {
         match command {
             DriverCommand::Prompt { turn, parts } => LoggedCommand::Prompt {
                 turn_id: turn.turn_id.clone(),
+                parts: parts.clone(),
+            },
+            DriverCommand::Steer {
+                turn_id,
+                message_id,
+                parts,
+                ..
+            } => LoggedCommand::Steer {
+                turn_id: turn_id.clone(),
+                message_id: message_id.clone(),
                 parts: parts.clone(),
             },
             DriverCommand::Interrupt => LoggedCommand::Interrupt,

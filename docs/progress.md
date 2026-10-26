@@ -1796,3 +1796,8 @@ All 75 aura-config tests and all-target Clippy pass on Windows, including five a
 and four metadata/merge regressions. No real configuration, environment secrets or vendor credential
 stores were inspected. macOS and desktop/profile integration remain pending.
 
+## Native steering driver checkpoint, 2026-10-26
+
+The driver contract now distinguishes accepted, rejected and unconfirmed steering. Codex uses the committed 0.162.1 schema's native `expectedTurnId` precondition and correlates acknowledgements even after the selected turn settles. Stale local turns are rejected without sending, vendor restrictions remain effective, and malformed acknowledgements or timeouts stop the owned session with an unconfirmed outcome. Four focused fake-process regressions and driver all-target Clippy passed on Windows. The capability remains disabled until the durable actor and composer path is integrated. No paid prompt or live agent call was made.
+
+Pi steering remains unsupported: pinned Pi 1.0.2 awaits asynchronous input handlers before adding steering to a queue and has no exact-turn precondition. Clearing that queue after settlement would also remove unrelated extension inputs. A local busy check therefore cannot meet the product's no-later-turn delivery guarantee. Other drivers explicitly reject the new command.

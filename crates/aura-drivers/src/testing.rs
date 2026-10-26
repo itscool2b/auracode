@@ -501,6 +501,11 @@ impl Runner {
         let logged = LoggedCommand::from(&command);
         self.shared.record(logged.clone());
         match command {
+            DriverCommand::Steer { reply, .. } => {
+                let _ = reply.send(crate::driver::SteerResult::Rejected {
+                    message: "The scripted agent does not steer turns.".into(),
+                });
+            }
             DriverCommand::Prompt { turn, .. } => self.current_turn = Some(turn.turn_id),
             DriverCommand::SetOption { reply, .. } => {
                 let _ = reply.send(self.shared.option_reply());
