@@ -1826,3 +1826,9 @@ All 24 focused sync tests passed, including the previously blocked missing-index
 child-before-parent pages, per-field merge, tombstones, malformed-page rollback and config clock
 collisions. Core all-target Clippy and the schema foreign-key/index check passed. This remains a storage
 checkpoint: the network scheduler, blob transfer and transcript chunk import are not attached yet.
+
+### Configuration sync interface and MCP integration
+
+- Settings now includes Account-only configuration inventory, paginated items, device-only controls, explicit per-item merge choices, four-version review, confirmed removals and encrypted receipt recovery. Expired/stale one-use reviews require a new review; partial results show recovery instead of success.
+- Both Chromium and WebKit pass the actual production component with synthetic responses: Local profile gating, no automatic apply, manual conflict choice, pagination, stale review, partial apply, explicit rollback, removal confirmation and accessibility. The dark Orbit review screenshot was inspected. Source formatting passes.
+- MCP manual choices retain all present devices' local setup requirement names. Codex plugin and marketplace declarations require a native vendor workflow. Two added integration regressions compile, but Windows Application Control blocked this new executable with error 4551 before execution; these tests remain pending for qualified execution. No policy workaround was attempted.

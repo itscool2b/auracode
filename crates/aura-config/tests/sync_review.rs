@@ -147,6 +147,74 @@ fn fixture() -> (tempfile::TempDir, ConfigScanner, ConfigSnapshot) {
     let snapshot = scanner.scan().items.into_values().next().unwrap();
     (temp, scanner, snapshot)
 }
+
+#[tokio::test]
+async fn explicit_conflict_choices_preserve_both_devices_local_setup_requirements() {
+    let (temp, scanner, _) = fixture();
+    fs::write(temp.path().join("config/config.toml"),"[mcp_servers.demo]\ncommand = 'fixture-tool'\n[mcp_servers.demo.env]\nLOCAL_KEY = 'synthetic-local-value'\n").unwrap();
+    let local = scanner
+        .scan()
+        .items
+        .into_values()
+        .find(|item| item.identity.format == ConfigFormat::Mcp)
+        .unwrap();
+    let mut remote = local.clone();
+    remote.local_fields = vec!["env/REMOTE_KEY".into()];
+    let port = Port::default();
+    port.remote(&remote);
+    for choice in [ConfigChoice::KeepLocal, ConfigChoice::UseRemote] {
+        let review = prepare_review(&port, &scanner, &local.identity.id().unwrap(), choice)
+            .await
+            .unwrap();
+        assert_eq!(
+            review.desired.as_ref().unwrap().local_fields,
+            vec!["env/LOCAL_KEY", "env/REMOTE_KEY"]
+        );
+        assert!(
+            !review
+                .preview
+                .local
+                .as_ref()
+                .unwrap()
+                .contains("synthetic-local-value")
+        );
+        assert_eq!(port.0.lock().unwrap().writes, 0);
+    }
+}
+
+#[tokio::test]
+async fn codex_plugin_declarations_wait_for_native_installation() {
+    let (temp, scanner, _) = fixture();
+    fs::write(
+        temp.path().join("config/config.toml"),
+        "[plugins.'example@market']\nenabled = true\n",
+    )
+    .unwrap();
+    let plugin = scanner
+        .scan()
+        .items
+        .into_values()
+        .find(|item| {
+            item.identity
+                .keys
+                .first()
+                .is_some_and(|key| key == "plugins")
+        })
+        .unwrap();
+    assert!(plugin.identity.requires_vendor());
+    let port = Port::default();
+    port.remote(&plugin);
+    let review = prepare_review(
+        &port,
+        &scanner,
+        &plugin.identity.id().unwrap(),
+        ConfigChoice::UseRemote,
+    )
+    .await
+    .unwrap();
+    assert!(!review.preview.can_apply);
+    assert_eq!(review.preview.item.operation, ConfigOperation::Wait);
+}
 #[tokio::test]
 async fn inventory_is_read_only_and_first_link_requires_explicit_review_completion() {
     let (_temp, scanner, snapshot) = fixture();

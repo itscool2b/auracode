@@ -1,0 +1,226 @@
+.config-sync-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.config-sync-toolbar p {
+  flex: 1;
+  margin: 0;
+  color: var(--o-text-2);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.config-sync-list-heading {
+  padding: 20px 22px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--o-text-2);
+}
+.config-sync-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 22px;
+  border-top: 1px solid var(--o-line);
+}
+.config-sync-row > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.config-sync-row strong {
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.config-sync-row p {
+  margin: 5px 0;
+  font-size: 12px;
+  color: var(--o-text-2);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.config-sync-state {
+  display: block;
+  margin-top: 10px;
+  color: var(--o-text-2);
+  font-size: 11px;
+}
+.config-sync-state[data-attention="true"],
+.config-sync-warning {
+  color: var(--o-signal-text);
+}
+.config-sync-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.config-sync-actions label,
+.config-sync-delete {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--o-text-2);
+}
+.config-sync input {
+  accent-color: var(--o-signal-text);
+}
+.config-sync-empty {
+  padding: 24px;
+  color: var(--o-text-2);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.config-sync-empty h2 {
+  color: var(--o-text-1);
+  font-size: 17px;
+}
+.config-sync-notices {
+  padding: 16px 0;
+  color: var(--o-text-2);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.config-sync-notices summary {
+  cursor: pointer;
+}
+.config-sync-status {
+  padding: 14px 0;
+  font-size: 13px;
+  color: var(--o-text-2);
+  line-height: 1.7;
+}
+.config-sync-more {
+  margin: 16px 22px;
+}
+.config-sync-review {
+  width: min(1040px, calc(100vw - 48px));
+  max-width: 1040px;
+}
+.config-sync-review-body,
+.config-sync-restore {
+  padding: 24px;
+}
+.config-sync-review-heading strong {
+  font-size: 18px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.config-sync-review-heading p {
+  color: var(--o-text-2);
+  font-size: 12px;
+  margin: 8px 0 22px;
+}
+.config-sync-choices {
+  border: 0;
+  padding: 0;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.config-sync-choices [aria-pressed="true"] {
+  border-color: var(--o-signal-text);
+  color: var(--o-text-1);
+  background: var(--o-raised-2);
+}
+.config-sync-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--o-line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.config-sync-comparison section {
+  min-width: 0;
+}
+.config-sync-comparison section:nth-child(even) {
+  border-left: 1px solid var(--o-line);
+}
+.config-sync-comparison section:nth-child(n + 3) {
+  border-top: 1px solid var(--o-line);
+}
+.config-sync-comparison h3 {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 11px;
+  color: var(--o-text-2);
+  background: var(--o-raised-2);
+  font-weight: 500;
+}
+.config-sync-comparison pre {
+  margin: 0;
+  padding: 16px;
+  max-height: 250px;
+  min-height: 110px;
+  overflow: auto;
+  color: var(--o-text-1);
+  font: 11px / 1.8 var(--o-mono, monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.config-sync-warnings,
+.config-sync-warning {
+  font-size: 12px;
+  line-height: 1.8;
+  margin-bottom: 20px;
+}
+.config-sync-warnings {
+  color: var(--o-text-2);
+  padding-left: 18px;
+}
+.config-sync-delete {
+  margin-top: 20px;
+  font-size: 12px;
+}
+.config-sync-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+.config-sync-footer > span {
+  margin-right: auto;
+  color: var(--o-text-2);
+  font-size: 12px;
+}
+.config-sync-primary {
+  border-color: var(--o-signal-text);
+}
+.config-sync-restore p {
+  font-size: 13px;
+  color: var(--o-text-2);
+  line-height: 1.8;
+}
+@media (max-width: 720px) {
+  .config-sync-toolbar {
+    flex-wrap: wrap;
+  }
+  .config-sync-toolbar p {
+    flex-basis: 100%;
+  }
+  .config-sync-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .config-sync-actions {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .config-sync-comparison {
+    grid-template-columns: 1fr;
+  }
+  .config-sync-comparison section:nth-child(even) {
+    border-left: 0;
+  }
+  .config-sync-comparison section + section {
+    border-top: 1px solid var(--o-line);
+  }
+}

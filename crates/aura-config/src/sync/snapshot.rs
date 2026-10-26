@@ -96,7 +96,11 @@ impl ConfigIdentity {
         self.keys.first().is_some_and(|key| {
             matches!(
                 key.as_str(),
-                "enabledPlugins" | "extraKnownMarketplaces" | "packages"
+                "enabledPlugins"
+                    | "extraKnownMarketplaces"
+                    | "packages"
+                    | "plugins"
+                    | "marketplaces"
             )
         })
     }

@@ -9,6 +9,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 import { checkAccount } from "./check-account.mjs";
 import { checkAccountVerification } from "./check-account-verification.mjs";
+import { checkConfigSync } from "./check-config-sync.mjs";
 import { checkGitReview } from "./check-git-review.mjs";
 import { checkProfiles } from "./check-profiles.mjs";
 import { checkWorktreeSetup } from "./check-worktree-setup.mjs";
@@ -132,6 +133,7 @@ try {
       await checkAccount(browser, url, out, engine);
       await checkProfiles(browser, url, out, engine);
       await checkWorktreeSetup(browser, url, out, engine);
+      await checkConfigSync(browser, url, out, engine);
       assert.deepEqual(errors, []);
       console.log(
         `${engine}: settings persistence failures, focus, accessibility and explicit updater actions passed`,

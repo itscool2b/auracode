@@ -203,6 +203,34 @@ pub async fn prepare_review(
             }
         }
     }
+    // A manual conflict choice selects public content, not permission to remove another device's
+    // local setup requirements. Missing private values remain a native apply prerequisite.
+    if let Some(result) = &mut decision.result {
+        if result.content.is_some() {
+            let local = match &context.local {
+                LocalSnapshot::Present(value) => Some(value),
+                _ => None,
+            };
+            let requirements = [context.base.as_ref(), local, context.remote.as_ref()]
+                .into_iter()
+                .flatten()
+                .filter(|snapshot| snapshot.content.is_some())
+                .flat_map(|snapshot| snapshot.local_fields.iter().cloned())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>();
+            if result.local_fields != requirements {
+                result.local_fields = requirements;
+                if matches!(
+                    decision.operation,
+                    ConfigOperation::Apply | ConfigOperation::InSync
+                ) {
+                    decision.operation = ConfigOperation::Merge;
+                }
+            }
+        }
+        result.encode()?;
+    }
     item.operation = if unavailable {
         ConfigOperation::Wait
     } else {
@@ -212,6 +240,14 @@ pub async fn prepare_review(
         "Review the full change before applying. Configuration can change what an agent executes."
             .into(),
     ];
+    if let Some(result) = &decision.result {
+        if !result.local_fields.is_empty() {
+            warnings.push(format!(
+                "Required setup stays local: {}. Values are never included in sync.",
+                result.local_fields.join(", ")
+            ));
+        }
+    }
     if decision.first_link {
         warnings.push("First connection keeps additions from both devices. Missing items are not treated as uninstalls.".into());
     }

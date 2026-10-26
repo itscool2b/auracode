@@ -7,14 +7,16 @@ import { revealDataDir } from "../../lib/ipc";
 import { type SetupApi, setMotionPreference, setupApi } from "../../lib/setup";
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
 import { AccountPanel } from "./AccountPanel";
+import { ConfigSyncPanel } from "./ConfigSyncPanel";
 import { ProfilePicker } from "./ProfilePicker";
 import { UpdatePanel } from "./UpdatePanel";
 import "./settings.css";
 
-type Page = "general" | "account" | "shortcuts" | "about";
+type Page = "general" | "account" | "configuration" | "shortcuts" | "about";
 const TITLES: Record<Page, readonly [string, string]> = {
   general: ["General", "Your workspace. At your pace."],
   account: ["Account", "Your work, across your devices."],
+  configuration: ["Configuration sync", "Bring your setup with you."],
   shortcuts: ["Shortcuts", "Keep your hands on the keyboard."],
   about: ["About auracode", "One window for your agents."],
 };
@@ -230,7 +232,7 @@ export function SettingsScreen({
         </button>
         <h2>Settings</h2>
         <nav>
-          {(["general", "account", "shortcuts", "about"] as const).map((value) => (
+          {(["general", "account", "configuration", "shortcuts", "about"] as const).map((value) => (
             <button
               key={value}
               type="button"
@@ -279,6 +281,15 @@ export function SettingsScreen({
                 activeProfileId={info.profile?.id ?? null}
               />
             </>
+          ) : null}
+          {page === "configuration" ? (
+            <ConfigSyncPanel
+              active={info.profile?.kind === "account" && !info.profile_locked}
+              onAccount={() => {
+                setPage("account");
+                requestAnimationFrame(() => heading.current?.focus());
+              }}
+            />
           ) : null}
           {page === "shortcuts" ? (
             <section className="settings-section">
