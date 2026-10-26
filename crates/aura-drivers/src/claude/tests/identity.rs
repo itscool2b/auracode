@@ -36,7 +36,7 @@ async fn early_path_resolution_is_reported_in_ready_without_a_second_identity_ev
     loop {
         match h.event().await {
             DriverEvent::Ready(info) => {
-                assert_eq!(info.native_session_id, ID);
+                assert_eq!(info.native_session_id.as_deref(), Some(ID));
                 assert_eq!(info.resumed, crate::driver::ResumeOutcome::Resumed);
                 break;
             }
@@ -168,7 +168,7 @@ async fn uuid_resume_identity_is_canonical_even_when_the_launch_source_is_upperc
     h.send(json!({"type":"control_response","response":{"subtype":"success","request_id":initialize["request_id"],"response":{"session_state":"idle","current_permission_mode":"default","models":[]}}})).await;
     loop {
         if let DriverEvent::Ready(info) = h.event().await {
-            assert_eq!(info.native_session_id, ID);
+            assert_eq!(info.native_session_id.as_deref(), Some(ID));
             break;
         }
     }

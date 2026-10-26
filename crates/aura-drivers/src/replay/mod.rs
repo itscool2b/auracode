@@ -653,7 +653,7 @@ mod tests {
         assert_eq!(first.events, second.events);
         assert_eq!(first.exit, second.exit);
         assert!(first.events.iter().any(|event| matches!(serde_json::from_value::<DriverEvent>(event.clone()),
-            Ok(DriverEvent::Ready(info)) if info.native_session_id == REPLAY_NATIVE_SESSION_ID && info.resumed == crate::driver::ResumeOutcome::New)));
+            Ok(DriverEvent::Ready(info)) if info.native_session_id.as_deref() == Some(REPLAY_NATIVE_SESSION_ID) && info.resumed == crate::driver::ResumeOutcome::New)));
     }
 
     #[tokio::test(start_paused = true)]

@@ -386,7 +386,7 @@ async fn startup_reports_each_status_then_ready_with_capabilities() {
         ]
     );
     let info = ready_info(&events);
-    assert_eq!(info.native_session_id, SESSION);
+    assert_eq!(info.native_session_id.as_deref(), Some(SESSION));
     assert_eq!(info.agent_name.as_deref(), Some("Fake Agent"));
     assert_eq!(info.agent_version.as_deref(), Some("1.2.3"));
     assert_eq!(info.resumed, ResumeOutcome::New);
@@ -678,8 +678,8 @@ async fn open_resume_variants() {
         .await;
     let info = ready_info(&events);
     assert_eq!(
-        (info.native_session_id.as_str(), &info.resumed),
-        ("old-1", &ResumeOutcome::Resumed)
+        (info.native_session_id.as_deref(), &info.resumed),
+        (Some("old-1"), &ResumeOutcome::Resumed)
     );
 
     // Load only: session/load, Loaded.
@@ -719,7 +719,7 @@ async fn open_resume_variants() {
             .events_until(|event| matches!(event, DriverEvent::Ready(_)))
             .await;
         let info = ready_info(&events);
-        assert_eq!(info.native_session_id, "new-2");
+        assert_eq!(info.native_session_id.as_deref(), Some("new-2"));
         assert_eq!(
             info.resumed,
             ResumeOutcome::Fresh {
@@ -797,7 +797,7 @@ async fn codex_resume_of_a_thread_without_a_rollout_starts_a_new_session() {
         .events_until(|event| matches!(event, DriverEvent::Ready(_)))
         .await;
     let info = ready_info(&events);
-    assert_eq!(info.native_session_id, "new-1");
+    assert_eq!(info.native_session_id.as_deref(), Some("new-1"));
     assert_eq!(
         info.resumed,
         ResumeOutcome::Fresh {

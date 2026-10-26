@@ -249,8 +249,14 @@ Windows. No real agent configuration or credentials were read or changed.
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
   no-form plan auto-approval path and exposes only its enforceable Full auto autonomy. See
-  [the contract baseline](spikes/m1d-acp.md). Local Rust validation is pending because Windows
-  Application Control blocked clean dependency build scripts; no real-agent runs were performed.
+  [the contract baseline](spikes/m1d-acp.md). A normal Cargo retry now runs after an initial
+  Application Control build-script rejection. The 354 driver unit tests and six identity tests
+  pass; no real-agent runs were performed.
+- Driver readiness now permits an absent native ID until a vendor creates a transcript on the
+  first visible prompt. Core stores no fabricated resume target and claims the confirmed ID only
+  when reported, holding queued work until its checked database write succeeds. Existing drivers
+  retain their known IDs. Regressions cover two initially anonymous sessions, failed first prompts,
+  restart without a resume target and the durable save barrier for an initially absent ID.
 
 - Rust owns backend logic. TypeScript remains for React and necessary platform/build glue.
 - D1 and Cloudflare Email Service replace Neon/Postgres, Neon Auth, Hyperdrive, and Resend.
