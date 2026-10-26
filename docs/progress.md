@@ -1394,3 +1394,22 @@ public account acceptance remain pending. Local Wrangler is unauthenticated. The
 dry run succeeds, but neither environment has been deployed. The combined CI workflow now includes
 the compiled Worker runtime and site build, and its encrypted gate covers the full core library.
 
+
+## M4 bring uncommitted changes
+
+Isolation can now bring reviewed working-file contents, deletions, renames and nonignored untracked
+files into the new checkout as unstaged changes. The source files, HEAD and exact index bytes remain
+unchanged, including mixed staged and unstaged edits. Previews hash bounded file contents in addition
+to Git status, so an edit that keeps the same status label still invalidates Apply. Protected agent
+configuration, credentials, links, special files and files over 10 MiB are excluded with bounded
+warnings. The total copy is limited to 100 MiB and 5,000 paths. Ignored setup files remain separate.
+
+File publication shares the checkpoint no-follow and recovery-preserving implementation. A changed
+destination fails before copying; a publication failure retains original and replacement files in
+the new checkout and records RecoveryRequired. Successful cleanup removes only this operation's exact
+temporary files. A Windows directory-handle cleanup failure was reproduced and fixed by closing the
+owned handle before removal. Git state is checked again afterward. Seventeen Git tests and thirteen
+checkpoint tests pass on Windows, including exact CRLF/binary bytes, staged rename/deletion, protected
+exclusions and concurrent source/destination edits. The final copy checks and core/CLI/desktop
+all-target Clippy pass. DTOs are unchanged. Setup, PR creation and remaining M4 acceptance stay pending;
+no remote CI, push or real-agent work ran.

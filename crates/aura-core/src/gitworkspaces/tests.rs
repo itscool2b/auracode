@@ -96,6 +96,175 @@ async fn isolated(rig: &Rig) -> aura_protocol::git::ManagedWorktree {
     result.worktree
 }
 
+#[tokio::test]
+async fn bring_changes_preserves_mixed_source_index_and_exact_working_bytes() {
+    let rig = rig().await;
+    std::fs::write(rig.work.join("deleted.txt"), b"delete me\n").expect("delete fixture");
+    std::fs::write(rig.work.join("old name.txt"), b"rename me\n").expect("rename fixture");
+    rig.git
+        .run(
+            &rig.work,
+            git::args(&["add", "--", "deleted.txt", "old name.txt"]),
+            8192,
+        )
+        .await
+        .expect("stage baseline");
+    rig.git
+        .run(
+            &rig.work,
+            git::args(&["-c", "commit.gpgSign=false", "commit", "-m", "baseline"]),
+            8192,
+        )
+        .await
+        .expect("commit baseline");
+    std::fs::write(rig.work.join("file.txt"), b"staged\n").expect("stage content");
+    rig.git
+        .run(&rig.work, git::args(&["add", "--", "file.txt"]), 8192)
+        .await
+        .expect("stage");
+    let working = b"unstaged\r\nexact bytes\r\n";
+    std::fs::write(rig.work.join("file.txt"), working).expect("unstaged content");
+    std::fs::remove_file(rig.work.join("deleted.txt")).expect("delete");
+    rig.git
+        .run(
+            &rig.work,
+            git::args(&["mv", "--", "old name.txt", "new name.txt"]),
+            8192,
+        )
+        .await
+        .expect("stage rename");
+    std::fs::create_dir(rig.work.join("new")).expect("new folder");
+    std::fs::write(rig.work.join("new/binary.dat"), [0, 255, 13, 10, 1]).expect("binary");
+    std::fs::create_dir(rig.work.join(".codex")).expect("protected fixture");
+    std::fs::write(rig.work.join(".codex/auth.json"), b"owned fixture excluded")
+        .expect("protected fixture");
+    let index = std::fs::read(rig.work.join(".git/index")).expect("index");
+    let before = inspect::inspect(&rig.git, &rig.work).await.expect("source");
+    let preview = rig
+        .service
+        .isolation_preview(
+            "chat",
+            &rig.work,
+            IsolationInput {
+                slug: "bring".into(),
+                bring_changes: true,
+            },
+        )
+        .await
+        .expect("preview");
+    assert!(preview.bring_changes);
+    assert!(
+        preview
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("unstaged"))
+    );
+    assert!(
+        preview
+            .warnings
+            .iter()
+            .any(|warning| warning.contains(".codex/auth.json"))
+    );
+    let result = rig
+        .service
+        .isolation_apply("chat", &preview.token)
+        .await
+        .expect("apply");
+    assert_eq!(
+        result.worktree.state,
+        WorktreeState::Ready,
+        "{:?}",
+        result.worktree.detail
+    );
+    let target = Path::new(&result.worktree.path);
+    assert_eq!(
+        std::fs::read(target.join("file.txt")).expect("copied bytes"),
+        working
+    );
+    assert_eq!(
+        std::fs::read(target.join("new/binary.dat")).expect("binary"),
+        [0, 255, 13, 10, 1]
+    );
+    assert!(!target.join("deleted.txt").exists());
+    assert!(!target.join("old name.txt").exists());
+    assert_eq!(
+        std::fs::read(target.join("new name.txt")).expect("renamed"),
+        b"rename me\n"
+    );
+    assert!(!target.join(".codex").exists());
+    assert_eq!(
+        std::fs::read(rig.work.join("file.txt")).expect("source bytes"),
+        working
+    );
+    assert_eq!(
+        std::fs::read(rig.work.join(".git/index")).expect("source index"),
+        index
+    );
+    assert_eq!(
+        inspect::inspect(&rig.git, &rig.work)
+            .await
+            .expect("source after")
+            .fingerprint,
+        before.fingerprint
+    );
+    let destination = rig.service.inspect(target).await.expect("destination");
+    assert!(
+        destination
+            .files
+            .iter()
+            .all(|file| file.index == "." || file.index == "?")
+    );
+    assert!(!std::fs::read_dir(target).expect("files").any(|entry| {
+        entry
+            .expect("entry")
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".auracode-transfer-")
+    }));
+}
+
+#[tokio::test]
+async fn bring_changes_rejects_changed_bytes_even_when_git_status_is_identical() {
+    let rig = rig().await;
+    std::fs::write(rig.work.join("file.txt"), b"first edit\n").expect("edit");
+    let preview = rig
+        .service
+        .isolation_preview(
+            "chat",
+            &rig.work,
+            IsolationInput {
+                slug: "stale-bring".into(),
+                bring_changes: true,
+            },
+        )
+        .await
+        .expect("preview");
+    let before = inspect::inspect(&rig.git, &rig.work).await.expect("before");
+    std::fs::write(rig.work.join("file.txt"), b"other edit\n").expect("new edit");
+    assert_eq!(
+        inspect::inspect(&rig.git, &rig.work)
+            .await
+            .expect("after")
+            .fingerprint,
+        before.fingerprint,
+        "status alone is insufficient"
+    );
+    assert!(
+        rig.service
+            .isolation_apply("chat", &preview.token)
+            .await
+            .expect_err("stale content")
+            .to_string()
+            .contains("contents changed")
+    );
+    assert!(!Path::new(&preview.path).exists());
+    assert!(rig.service.list("chat").await.expect("records").is_empty());
+    assert_eq!(
+        std::fs::read(rig.work.join("file.txt")).expect("retained"),
+        b"other edit\n"
+    );
+}
+
 async fn commit_file(rig: &Rig, path: &Path, text: &str) {
     std::fs::write(path.join("file.txt"), text).expect("edit");
     rig.git

@@ -14,9 +14,9 @@ pub(super) const TOTAL_LIMIT: usize = 100 * 1024 * 1024;
 const COUNT_LIMIT: usize = 20_000;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct Fingerprint {
+pub(crate) struct Fingerprint {
     pub(super) sha256: String,
-    pub(super) bytes: u32,
+    pub(crate) bytes: u32,
     pub(super) mode: u32,
     pub(super) binary: bool,
 }
@@ -94,6 +94,7 @@ pub(super) fn validate(path: &str) -> Result<()> {
             .iter()
             .any(|name| part.eq_ignore_ascii_case(name))
                 || part.starts_with(".auracode-revert-")
+                || part.starts_with(".auracode-transfer-")
                 || part.to_ascii_lowercase().starts_with(".env.")
                 || [".key", ".pem", ".p12", ".keychain-db"]
                     .iter()
@@ -139,7 +140,7 @@ fn is_link(meta: &fs::Metadata) -> bool {
     }
 }
 
-pub(super) fn read(root: &Path, relative: &str) -> Result<Option<(Fingerprint, Vec<u8>)>> {
+pub(crate) fn read(root: &Path, relative: &str) -> Result<Option<(Fingerprint, Vec<u8>)>> {
     let path = checked_path(root, relative)?;
     let meta = match fs::symlink_metadata(&path) {
         Ok(meta) => meta,

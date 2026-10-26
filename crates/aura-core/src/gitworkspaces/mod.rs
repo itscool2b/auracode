@@ -8,6 +8,7 @@ mod records;
 mod recovery;
 #[cfg(test)]
 mod tests;
+mod transfer;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

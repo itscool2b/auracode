@@ -226,7 +226,7 @@ fn apply(
     Ok(result)
 }
 
-fn apply_file(
+pub(crate) fn apply_file(
     root_dir: &Dir,
     backup: &Dir,
     root: &Path,

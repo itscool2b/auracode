@@ -16,6 +16,7 @@ pub(super) struct Prepared {
     source: Inspection,
     record: ManagedWorktree,
     expires: Instant,
+    transfer: Option<transfer::Snapshot>,
 }
 
 fn invalid(message: &str) -> GitError {
@@ -33,16 +34,22 @@ impl GitWorkspaces {
             return Err(invalid("The chat identifier is invalid."));
         }
         let slug = slug(&input.slug)?;
-        if input.bring_changes {
-            return Err(invalid(
-                "Bringing uncommitted files is not available in this build yet. The source folder is unchanged.",
-            ));
-        }
         let git = self.git().await?;
         let source = inspect(&git, folder).await?;
         if !source.view.blockers.is_empty() {
             return Err(GitError::Message(source.view.blockers.join(" ")));
         }
+        let transfer = if input.bring_changes {
+            let root = source.root.clone();
+            let files = source.view.files.clone();
+            Some(
+                tokio::task::spawn_blocking(move || transfer::snapshot(&root, &files))
+                    .await
+                    .map_err(|_| invalid("Could not inspect working-file contents."))??,
+            )
+        } else {
+            None
+        };
         // The stable app-data worktree lives outside the original repository and watcher tree.
         let storage = self.root.canonicalize()?;
         if storage.starts_with(&source.root) {
@@ -83,7 +90,10 @@ impl GitWorkspaces {
             ));
         }
         let mut warnings = Vec::new();
-        if !source.view.files.is_empty() {
+        if let Some(transfer) = &transfer {
+            warnings.push("Reviewed working-file contents, deletions and nonignored untracked files are copied as unstaged changes. The source files and index are preserved; source staging is not recreated.".into());
+            warnings.extend(transfer.warnings.clone());
+        } else if !source.view.files.is_empty() {
             warnings.push("Uncommitted changes stay in the source folder. This worktree starts from the reviewed commit.".into());
         }
         if source.view.has_submodules {
@@ -122,7 +132,7 @@ impl GitWorkspaces {
             source: source.view.clone(),
             branch,
             path: record.path.clone(),
-            bring_changes: false,
+            bring_changes: input.bring_changes,
             warnings,
             expires_at: now + 600_000,
         };
@@ -142,6 +152,7 @@ impl GitWorkspaces {
                 source,
                 record,
                 expires: Instant::now() + Duration::from_secs(600),
+                transfer,
             },
         );
         Ok(preview)
@@ -174,6 +185,24 @@ impl GitWorkspaces {
                 "The repository changed after the preview. Review a new preview before creating isolation.",
             ));
         }
+        let contents = if let Some(snapshot) = prepared.transfer {
+            let root = current.root.clone();
+            let files = current.view.files.clone();
+            Some(
+                tokio::task::spawn_blocking(move || {
+                    if transfer::snapshot(&root, &files)? != snapshot {
+                        return Err(invalid(
+                            "Working-file contents changed after preview. Review isolation again.",
+                        ));
+                    }
+                    transfer::contents(&root, &snapshot)
+                })
+                .await
+                .map_err(|_| invalid("Could not capture the reviewed working-file contents."))??,
+            )
+        } else {
+            None
+        };
         let mut record = prepared.record;
         if Path::new(&record.path)
             .parent()
@@ -228,7 +257,7 @@ impl GitWorkspaces {
             record.base_commit.clone().into(),
         ];
         let created = git.run(&current.root, command, 64 * 1024).await;
-        let verified = match created {
+        let mut verified = match created {
             Ok(_) => inspect(&git, Path::new(&record.path))
                 .await
                 .and_then(|new| {
@@ -246,6 +275,32 @@ impl GitWorkspaces {
                 }),
             Err(error) => Err(error),
         };
+        if verified.is_ok()
+            && let Some(contents) = contents
+        {
+            let root = PathBuf::from(&record.path);
+            verified = async {
+                let checked_root = root.clone();
+                let (contents, baseline) = tokio::task::spawn_blocking(move || {
+                    transfer::destination(&checked_root, &contents).map(|baseline| (contents, baseline))
+                }).await.map_err(|_| invalid("Could not inspect the new worktree before copying."))??;
+                let clean = inspect(&git, &root).await?;
+                if clean.common != current.common || clean.view.head.as_deref() != Some(&record.base_commit)
+                    || clean.view.branch.as_deref() != Some(&record.branch) || !clean.view.files.is_empty()
+                    || !clean.view.blockers.is_empty() {
+                    return Err(invalid("The new worktree changed before copying. Its files were preserved for review."));
+                }
+                let copied_root = root.clone();
+                tokio::task::spawn_blocking(move || transfer::apply(&copied_root, &contents, &baseline)).await
+                    .map_err(|_| invalid("The file copy stopped unexpectedly. Inspect its retained recovery files."))??;
+                let after = inspect(&git, &root).await?;
+                if after.common != current.common || after.view.head.as_deref() != Some(&record.base_commit)
+                    || after.view.branch.as_deref() != Some(&record.branch) || !after.view.blockers.is_empty() {
+                    return Err(invalid("The new worktree's Git state changed during copying. Review its preserved files and branch."));
+                }
+                Ok(())
+            }.await;
+        }
         match verified {
             Ok(()) => {
                 record.state = WorktreeState::Ready;

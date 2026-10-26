@@ -5,7 +5,8 @@
 mod encrypted;
 mod git;
 mod revert;
-mod scan;
+pub(crate) mod scan;
+pub(crate) use revert::apply_file;
 #[cfg(test)]
 mod tests;
 
