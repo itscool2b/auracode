@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { FolderLocationReview, FolderResolution, ProjectFolder } from "../../bindings";
 import { type FolderResolutionApi, folderResolutionApi } from "../../lib/folderResolution";
 import { CloneProject } from "./CloneProject";
+import "./folder-resolver.css";
 
 /** Mount under the active profile and key by profile ID. Only explicit Search reads code roots. */
 export function FolderResolver({
@@ -118,7 +119,7 @@ export function FolderResolver({
   const canClone =
     remote?.startsWith("https://github.com/") || remote?.startsWith("ssh://git@github.com/");
   return (
-    <section className="setup-clone-review" aria-labelledby={title}>
+    <section className="folder-resolver" aria-labelledby={title}>
       <h3 id={title}>Find {value?.folder.display_name ?? "project folder"} on this device</h3>
       <p className="setup-footnote">
         Folder paths stay on this device. Agent history requires a separate Continue here review.

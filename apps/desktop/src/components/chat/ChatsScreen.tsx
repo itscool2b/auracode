@@ -250,7 +250,10 @@ export function ChatsScreen({
       ) : null}
       {projectDialog && workspace ? (
         <ProjectDialog
+          key={`${info.profile?.id}:${projectDialog.project?.id ?? "new"}`}
           project={projectDialog.project}
+          profileId={info.profile?.id}
+          onLocated={() => app.reloadChats()}
           store={workspace}
           transport={transport}
           agents={snapshot.agents}

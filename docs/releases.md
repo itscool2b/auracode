@@ -163,6 +163,7 @@ pnpm --filter @auracode/desktop check:setup
 pnpm --filter @auracode/desktop exec node scripts/check-library.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-config-recovery.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-account-vault.mjs
+pnpm --filter @auracode/desktop exec node scripts/check-folder-resolution.mjs
 pnpm --filter @auracode/web test:release
 pnpm --filter @auracode/web test:browser
 pnpm --filter @auracode/desktop tauri build --debug --no-bundle

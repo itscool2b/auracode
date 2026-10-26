@@ -3,7 +3,9 @@ import { useState, useSyncExternalStore } from "react";
 import type { AgentEntry, ProjectSummary } from "../../bindings";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
+import { inTauri } from "../../lib/ipc";
 import type { WorkspaceStore } from "../../lib/workspace";
+import { FolderResolver } from "../setup/FolderResolver";
 import { projectName } from "./ChatList";
 import { Modal } from "./Modal";
 
@@ -14,12 +16,16 @@ export function ProjectDialog({
   transport,
   agents,
   onClose,
+  profileId,
+  onLocated,
 }: {
   readonly project: ProjectSummary | null;
   readonly store: WorkspaceStore;
   readonly transport: Transport;
   readonly agents: readonly AgentEntry[] | null;
   readonly onClose: () => void;
+  readonly profileId?: string;
+  readonly onLocated?: () => Promise<void>;
 }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const current = state.data?.projects.find((item) => item.id === project?.id) ?? project;
@@ -29,6 +35,7 @@ export function ProjectDialog({
   const [agent, setAgent] = useState(project?.default_agent ?? "");
   const [localError, setLocalError] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [resolving, setResolving] = useState<string | null>(null);
   const chooseFolder = async () => {
     setPicking(true);
     setLocalError(null);
@@ -46,6 +53,24 @@ export function ProjectDialog({
       setPicking(false);
     }
   };
+  if (resolving && current) {
+    return (
+      <Modal title="Folder on this device" onClose={() => setResolving(null)}>
+        <FolderResolver
+          key={`${profileId}:${resolving}`}
+          folderId={resolving}
+          pickFolder={() => transport.pickFolder()}
+          onLocated={async () => {
+            await store.refresh();
+            await onLocated?.();
+          }}
+        />
+        <button className="ui-button" type="button" onClick={() => setResolving(null)}>
+          Back to project
+        </button>
+      </Modal>
+    );
+  }
   return (
     <Modal title={project ? "Project settings" : "New project"} onClose={onClose}>
       <form
@@ -105,6 +130,13 @@ export function ProjectDialog({
                   <small className="ui-error">{item.unavailable_reason}</small>
                 ) : null}
               </span>
+              {inTauri() ? (
+                <button type="button" className="ui-button" onClick={() => setResolving(item.id)}>
+                  {item.path && !item.unavailable_reason
+                    ? "Change location"
+                    : "Find on this device"}
+                </button>
+              ) : null}
             </div>
           ))}
           {folder ? <p className="ui-mono">{folder}</p> : null}

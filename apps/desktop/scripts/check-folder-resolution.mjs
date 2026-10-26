@@ -1,15 +1,18 @@
 /** Production folder picker with synthetic command responses. No real folders or remotes. */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const vite = resolve(dirname(require.resolve("vite/package.json")), "bin/vite.js");
 const origin = "http://127.0.0.1:1466";
+const out = resolve(app, "../../target/folder-resolution-browser");
 const server = spawn(
   process.execPath,
   [vite, "--host", "127.0.0.1", "--port", "1466", "--strictPort"],
@@ -21,6 +24,7 @@ for (const stream of [server.stdout, server.stderr])
     output = (output + chunk).slice(-8192);
   });
 try {
+  await mkdir(out, { recursive: true });
   let ready = false;
   for (let attempt = 0; attempt < 100; attempt++) {
     if (server.exitCode !== null) throw new Error(output);
@@ -70,6 +74,18 @@ try {
       assert.equal(await remote.inputValue(), "https://github.com/fixture/project");
       assert.equal(await remote.isDisabled(), true);
       await page.getByRole("button", { name: "Close clone" }).click();
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      await page.screenshot({ path: resolve(out, `${engine}-folder-resolution.png`) });
+      await page.setViewportSize({ width: 390, height: 800 });
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+        true,
+      );
+      assert.equal(
+        await page.locator(".chat-modal").evaluate((node) => node.scrollWidth <= node.clientWidth),
+        true,
+      );
+      await page.screenshot({ path: resolve(out, `${engine}-folder-resolution-mobile.png`) });
       assert.deepEqual(errors, []);
       console.log(
         `${engine}: reviewed mapping, stale review, saved-result refresh failure and locked clone origin passed`,

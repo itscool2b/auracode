@@ -2227,3 +2227,9 @@ typecheck and Biome passed. Chromium and WebKit passed synthetic review, retry, 
 and locked clone-origin checks. No real user folder, account request, vendor prompt or remote mutation
 was used. Publish to GitHub for local-only folders, native macOS qualification and complete M7 acceptance
 remain pending.
+
+### Folder resolution in project settings
+
+Project folder rows now offer Find on this device or Change location. The resolver is keyed by active profile and folder, uses the native picker, and refreshes committed workspace and chat summaries after mapping. Its review opens separately from the project form so Clone cannot submit project edits. Selected code roots, matching origin search, Locate and the existing reviewed Clone flow are available from that screen. The component has compact dark dialog spacing and wraps paths and actions on narrow windows.
+
+Chromium and WebKit passed the integrated modal fixture's mapping, stale review, post-save refresh failure and fixed clone origin flows, plus accessibility and narrow-dialog overflow checks. Rendered narrow screenshots were inspected. TypeScript, Biome, workflow lint and instruction parity pass. This adds the resolver browser gate and screenshots to final manual CI; native platform and final combined acceptance are still pending. No user folder was remapped and no remote was cloned.

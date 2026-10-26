@@ -1,9 +1,11 @@
 /** Synthetic folder resolution only. No native filesystem, agent or remote calls. */
 import "../styles.css";
 import "../ui-tokens.css";
+import "../orbit-shell.css";
 import "../components/setup/setup.css";
 import { createRoot } from "react-dom/client";
 import type { FolderLocationReview, FolderResolution } from "../bindings";
+import { Modal } from "../components/chat/Modal";
 import { FolderResolver } from "../components/setup/FolderResolver";
 import type { FolderResolutionApi } from "../lib/folderResolution";
 
@@ -59,14 +61,16 @@ const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
     <main className="setup-shell" style={{ overflow: "auto", padding: 40 }}>
-      <FolderResolver
-        folderId="folder"
-        api={api}
-        pickFolder={async () => "C:\\Code\\project"}
-        onLocated={async () => {
-          calls.push("located");
-          if (mode === "refresh") throw new Error("refresh failed");
-        }}
-      />
+      <Modal title="Folder on this device" onClose={() => {}}>
+        <FolderResolver
+          folderId="folder"
+          api={api}
+          pickFolder={async () => "C:\\Code\\project"}
+          onLocated={async () => {
+            calls.push("located");
+            if (mode === "refresh") throw new Error("refresh failed");
+          }}
+        />
+      </Modal>
     </main>,
   );

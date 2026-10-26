@@ -4,8 +4,8 @@
 mod checkpoints;
 mod conversation;
 mod folder_context;
-mod project_tools;
 mod folder_resolution;
+mod project_tools;
 mod steering;
 #[cfg(feature = "account-sync")]
 mod sync_history;

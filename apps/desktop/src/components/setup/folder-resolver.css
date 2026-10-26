@@ -1,0 +1,70 @@
+.folder-resolver {
+  display: grid;
+  gap: 12px;
+  color: var(--o-text-2);
+  font: 400 13px / 1.65 var(--o-sans);
+}
+.folder-resolver h3,
+.folder-resolver h4,
+.folder-resolver p,
+.folder-resolver ul {
+  margin: 0;
+}
+.folder-resolver h3 {
+  color: var(--o-text-1);
+  font-size: 13px;
+  font-weight: 500;
+}
+.folder-resolver h4 {
+  margin-top: 8px;
+  color: var(--o-text-3);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.folder-resolver ul {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+.folder-resolver li {
+  overflow-wrap: anywhere;
+}
+.folder-resolver .setup-path {
+  font: 400 11px / 1.6 var(--o-mono);
+  overflow-wrap: anywhere;
+}
+.folder-resolver footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+.folder-resolver button {
+  font-size: 12px;
+  font-weight: 400;
+}
+.folder-resolver .setup-button,
+.folder-resolver .setup-text-button {
+  min-height: 32px;
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+.folder-resolver .setup-folder {
+  min-height: 44px;
+  padding: 10px 14px;
+  border-style: solid;
+  border-radius: 8px;
+}
+.folder-resolver > section {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--o-line);
+}
+.folder-resolver + .ui-button {
+  margin-top: 20px;
+}
