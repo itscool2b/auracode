@@ -118,6 +118,15 @@ pub enum AgentAuthStatus {
     Unsupported,
 }
 
+/// Actions this exact detected installation can perform through reviewed vendor commands.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct AgentMaintenance {
+    pub auth_status: bool,
+    /// `None` enables the explicit update action. Otherwise this explains the owning channel or
+    /// missing helper; the UI must not offer an update for that installation.
+    pub update_unavailable: Option<String>,
+}
+
 /// Public release metadata. Stale cached data remains visible during offline use.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct LatestRelease {

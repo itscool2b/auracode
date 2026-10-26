@@ -1,5 +1,7 @@
 import type {
+  AgentAuthStatus,
   AgentEntry,
+  AgentMaintenance,
   AuraEvent,
   Autonomy,
   AutonomyState,
@@ -540,6 +542,24 @@ export class FakeTransport implements Transport {
   agentsRefresh(): Promise<AgentEntry[]> {
     this.#record("agentsRefresh", []);
     return this.handlers.agentsRefresh?.() ?? Promise.resolve([]);
+  }
+
+  agentMaintenance(agentId: string): Promise<AgentMaintenance> {
+    this.#record("agentMaintenance", [agentId]);
+    return (
+      this.handlers.agentMaintenance?.(agentId) ??
+      Promise.resolve({ auth_status: false, update_unavailable: "No vendor commands." })
+    );
+  }
+
+  agentAuthStatus(agentId: string): Promise<AgentAuthStatus> {
+    this.#record("agentAuthStatus", [agentId]);
+    return this.handlers.agentAuthStatus?.(agentId) ?? Promise.resolve({ state: "unsupported" });
+  }
+
+  agentUpdate(agentId: string): Promise<void> {
+    this.#record("agentUpdate", [agentId]);
+    return this.handlers.agentUpdate?.(agentId) ?? Promise.resolve();
   }
 
   envStatus(): Promise<EnvStatus> {

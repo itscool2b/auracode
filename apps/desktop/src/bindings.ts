@@ -56,6 +56,12 @@ export const commands = {
 	 *  probe has not ended by then keep their last known availability.
 	 */
 	agentsRefresh: () => __TAURI_INVOKE<AgentEntry[]>("agents_refresh"),
+	/**  Reviewed capabilities for the detected install, without running authentication or updates. */
+	agentMaintenance: (agentId: string) => typedError<AgentMaintenance, AppError>(__TAURI_INVOKE("agent_maintenance", { agentId })),
+	/**  Ask the vendor CLI for local auth status, retaining no account details or raw output. */
+	agentAuthStatus: (agentId: string) => typedError<AgentAuthStatus, AppError>(__TAURI_INVOKE("agent_auth_status", { agentId })),
+	/**  Explicit update action. No updates run as part of detection or release checks. */
+	agentUpdate: (agentId: string) => typedError<null, AppError>(__TAURI_INVOKE("agent_update", { agentId })),
 	/**
 	 *  The environment agents start with: resolving, resolved (and how), or a fallback, with the
 	 *  names of the variables no agent inherits. Never waits.
@@ -155,6 +161,9 @@ export const SMOKE_CHAT_CHECKS = ["chats-screen","pick-folder","create-chat","pi
 export const SMOKE_CHAT_REOPEN_CHECKS = ["reopen-list","reopen-no-start","reopen-history","reopen-interrupted","reopen-held","reopen-blob","reopen-resume","reopen-send-queued"] as const;
 
 /* Types */
+/**  The vendor's own local authentication check. This does not promise a successful paid request. */
+export type AgentAuthStatus = { state: "credentials_present" } | { state: "sign_in_required" } | { state: "unknown"; reason: string } | { state: "unsupported" };
+
 /**  An agent auracode can start, as the New chat screen shows it. */
 export type AgentEntry = {
 	id: string,
@@ -184,6 +193,16 @@ export type AgentInstallation = {
 	version: string,
 	channel: InstallChannel,
 	verification: VersionVerification,
+};
+
+/**  Actions this exact detected installation can perform through reviewed vendor commands. */
+export type AgentMaintenance = {
+	auth_status: boolean,
+	/**
+	 *  `None` enables the explicit update action. Otherwise this explains the owning channel or
+	 *  missing helper; the UI must not offer an update for that installation.
+	 */
+	update_unavailable: string | null,
 };
 
 /**  A command failure, serialized as `{ code, message }`. */

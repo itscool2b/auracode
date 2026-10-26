@@ -83,9 +83,31 @@ struct LiveState {
 struct MaintenanceGuard {
     live: Arc<Live>,
     provider: String,
+    active: bool,
+}
+impl MaintenanceGuard {
+    fn complete(mut self, spec: &AgentSpec, detection: Detection) {
+        let mut state = lock(&self.live.state);
+        state.generation += 1;
+        let generation = state.generation;
+        state
+            .minimum_generation
+            .insert(self.provider.clone(), generation);
+        state
+            .probes
+            .retain(|id, _| crate::installation::provider_namespace(id) != self.provider);
+        state
+            .results
+            .insert(spec.id.to_owned(), (generation, detection));
+        state.maintenance.remove(&self.provider);
+        self.active = false;
+    }
 }
 impl Drop for MaintenanceGuard {
     fn drop(&mut self) {
+        if !self.active {
+            return;
+        }
         let mut state = lock(&self.live.state);
         state.maintenance.remove(&self.provider);
         state
@@ -636,6 +658,39 @@ impl Detector {
             }
         });
     }
+    /// Reviewed actions for the currently detected installation, without running those actions.
+    pub async fn maintenance(&self, id: &str) -> aura_protocol::agents::AgentMaintenance {
+        use aura_protocol::agents::AgentMaintenance;
+        let unavailable = |reason: String| AgentMaintenance {
+            auth_status: false,
+            update_unavailable: Some(reason),
+        };
+        let Mode::Live(live) = &self.mode else {
+            return unavailable("This agent has no vendor maintenance commands.".into());
+        };
+        let Some(spec) = self.spec(id) else {
+            return unavailable("This agent is not in the catalog.".into());
+        };
+        let Some(installation) = live.detect(&spec).await.installation else {
+            return unavailable("The agent installation is not ready.".into());
+        };
+        let env = live.env.get().await;
+        let update_unavailable = if lock(&live.state)
+            .maintenance
+            .contains(&installation.provider)
+        {
+            Some(crate::maintenance::MaintenanceError::AlreadyRunning.to_string())
+        } else {
+            crate::maintenance::update_command(&installation, &env.vars)
+                .err()
+                .map(|error| error.to_string())
+        };
+        AgentMaintenance {
+            auth_status: crate::maintenance::auth_command(&installation).is_ok(),
+            update_unavailable,
+        }
+    }
+
     /// Runs the vendor's local status command and retains only a coarse status, never account data.
     pub async fn auth_status(&self, id: &str) -> aura_protocol::agents::AgentAuthStatus {
         use aura_protocol::agents::AgentAuthStatus;
@@ -689,6 +744,7 @@ impl Detector {
         let guard = MaintenanceGuard {
             live: Arc::clone(live),
             provider: provider.clone(),
+            active: true,
         };
         let installation = live
             .probe(&spec, true)
@@ -720,15 +776,15 @@ impl Detector {
         if code != Some(0) {
             return Err(MaintenanceError::Failed(code));
         }
-        drop(guard);
-        if !live
-            .probe(&spec, true)
-            .wait()
-            .await
-            .is_some_and(|detected| matches!(detected.availability, Availability::Ready { .. }))
-        {
+        // Keep the provider lock through verification. Releasing it first would let another
+        // updater replace the binary while this check is still deciding whether it succeeded.
+        let detection = live.probe(&spec, true).wait().await;
+        let Some(detection) = detection
+            .filter(|detected| matches!(detected.availability, Availability::Ready { .. }))
+        else {
             return Err(MaintenanceError::VerificationFailed);
-        }
+        };
+        guard.complete(&spec, detection);
         Ok(())
     }
     /// Detects the catalog's agents. Detection starts in the background on `rt` at once and probes

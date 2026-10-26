@@ -423,6 +423,33 @@ impl SessionManager {
         self.deps().detector.detect_all(refresh).await
     }
 
+    pub async fn agent_maintenance(
+        &self,
+        agent_id: &str,
+    ) -> aura_protocol::agents::AgentMaintenance {
+        self.deps().detector.maintenance(agent_id).await
+    }
+
+    pub async fn agent_auth_status(
+        &self,
+        agent_id: &str,
+    ) -> aura_protocol::agents::AgentAuthStatus {
+        self.deps().detector.auth_status(agent_id).await
+    }
+
+    /// Only an explicit user action invokes the vendor's updater. The detector revalidates the
+    /// binary/channel, serializes aliases and verifies the resulting installation.
+    pub async fn update_agent(&self, agent_id: &str) -> Result<(), SessionError> {
+        if self.shared().is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
+        self.deps()
+            .detector
+            .update(agent_id)
+            .await
+            .map_err(|error| SessionError::AgentUnavailable(error.to_string()))
+    }
+
     /// The env agents start with: how it was resolved, and the names the scrub removes.
     pub fn env_status(&self) -> EnvStatus {
         let env = &self.deps().env;

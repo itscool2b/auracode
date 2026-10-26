@@ -13,6 +13,55 @@ fn vendor_machine() -> (Machine, std::path::PathBuf) {
 }
 
 #[tokio::test]
+async fn capabilities_do_not_run_authentication_or_updates() {
+    let (machine, bin) = vendor_machine();
+    let detector = machine.detector(machine.env_with_path(&[&bin], &[]));
+    let available = detector.maintenance("claude").await;
+    assert!(available.auth_status);
+    assert_eq!(available.update_unavailable, None);
+    assert!(
+        machine
+            .runs("claude")
+            .iter()
+            .all(|run| run["argv"] == serde_json::json!(["--version"]))
+    );
+    let missing = detector.maintenance("not-installed").await;
+    assert!(!missing.auth_status);
+    assert!(missing.update_unavailable.is_some());
+}
+
+#[tokio::test]
+async fn update_ownership_includes_post_update_verification() {
+    let (machine, bin) = vendor_machine();
+    std::fs::write(machine.fake.join("claude.maintenance"), "verify-gated").unwrap();
+    let detector = machine.detector(machine.env_with_path(&[&bin], &[]));
+    let worker = detector.clone();
+    let update = tokio::spawn(async move { worker.update("claude").await });
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !machine.fake.join("verification-ready").exists() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        detector.update("claude-acp").await,
+        Err(MaintenanceError::AlreadyRunning)
+    );
+    std::fs::write(machine.fake.join("verification-release"), "continue").unwrap();
+    assert_eq!(update.await.unwrap(), Ok(()));
+    assert!(
+        detector
+            .cached()
+            .into_iter()
+            .find(|entry| entry.id == "claude")
+            .unwrap()
+            .installation
+            .is_some()
+    );
+}
+
+#[tokio::test]
 async fn status_runs_the_exact_vendor_command_and_drops_account_details() {
     let (machine, bin) = vendor_machine();
     let detector = machine.detector(machine.env_with_path(&[&bin], &[]));

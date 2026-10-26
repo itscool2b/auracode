@@ -296,6 +296,16 @@ host regressions, which also pass, as do bindings export, targeted all-target Cl
 typecheck and 287 desktop tests. Linux cwd translation and canonical configuration realms await the
 supervisor inspection contract; no WSL launch capability is claimed yet.
 
+The catalog now exposes reviewed maintenance capabilities, coarse vendor sign-in checks and explicit
+channel-owned updates through typed desktop IPC and the selected installation's controls. Selecting
+an agent only checks which actions are available; auth checks and updates require their own user
+action. Bundled/unsupported updates show their reason. Delayed responses cannot replace another
+agent's status, and release metadata continues to refresh in an already-open window. The provider
+update lock now includes verification and atomic cache publication, preventing a second updater from
+replacing the binary during the first verification. Four fake maintenance integration tests, bindings
+export, targeted all-target Clippy, desktop typecheck and 289 desktop tests pass. No real updater or
+authentication command ran. Interactive vendor login remains pending a qualified terminal sheet.
+
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
   no-form plan auto-approval path and exposes only its enforceable Full auto autonomy. See

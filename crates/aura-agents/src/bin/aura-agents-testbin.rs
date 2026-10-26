@@ -104,6 +104,9 @@ fn run(name: &str, args: &[String]) -> Result<ExitCode> {
                 Some("break-version") => {
                     std::fs::write(fake_dir()?.join(format!("{name}.version")), "unknown")?
                 }
+                Some("verify-gated") => {
+                    std::fs::write(fake_dir()?.join(format!("{name}.mode")), "gated-version")?
+                }
                 _ => {}
             }
             println!("Updated");
@@ -131,6 +134,17 @@ fn run(name: &str, args: &[String]) -> Result<ExitCode> {
 }
 
 fn version(name: &str, mode: &str) -> Result<ExitCode> {
+    if mode == "gated-version" {
+        let root = fake_dir()?;
+        std::fs::write(root.join("verification-ready"), "ready")?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        while !root.join("verification-release").exists() {
+            if std::time::Instant::now() >= deadline {
+                return Ok(ExitCode::FAILURE);
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
     match mode {
         "fail" => {
             eprintln!("ImportError: No module named '{name}_cli'");
