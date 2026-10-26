@@ -1260,3 +1260,12 @@ expect the supported image payload path. Reviewed golden changes are only `image
 `images: true`; the focused handshake and all three replay gates pass locally without updating
 goldens during verification. Recorded wire inputs and ACP goldens are unchanged.
 
+Account writer file routing now covers composer imports, native attachment reads, tool output pages
+and streamed encrypted recovery journals. The ordinary writer entry rejects Account profiles, and
+account agent spawns disable raw protocol logs while retaining their unique spawn identity. Eleven
+focused Windows tests pass for reopening, ciphertext-only storage, Unicode range boundaries,
+corrupt-page rejection, poisoned writes, partial journals and owned spawn logging. Default and
+account-feature core all-target Clippy pass. No real profile or credential store was accessed.
+Encrypted checkpoints, recovery UI, ledger projection/scheduling and account readiness remain
+pending; production account sessions must wait for that remaining wiring.
+

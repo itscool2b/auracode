@@ -103,6 +103,7 @@ impl ProcessBook {
 pub(crate) struct SessionSpawner {
     base: Arc<dyn ProcessSpawner>,
     logs: LogFactory,
+    protocol_logging: bool,
     chat_id: String,
     book: Arc<ProcessBook>,
     generation: u64,
@@ -119,6 +120,7 @@ impl SessionSpawner {
         SessionSpawner {
             base,
             logs,
+            protocol_logging: true,
             chat_id,
             book,
             generation,
@@ -126,10 +128,21 @@ impl SessionSpawner {
     }
 }
 
+impl SessionSpawner {
+    pub(crate) fn with_protocol_logging(mut self, enabled: bool) -> Self {
+        self.protocol_logging = enabled;
+        self
+    }
+}
+
 impl AgentSpawner for SessionSpawner {
     fn spawn(&self, spec: SpawnSpec) -> BoxFuture<'static, Result<SpawnedProcess, SpawnError>> {
         let spawn_id = new_id();
-        let log = self.logs.open(&self.chat_id, &spawn_id);
+        let log = if self.protocol_logging {
+            self.logs.open(&self.chat_id, &spawn_id)
+        } else {
+            aura_process::ProtocolLog::disabled_with_id(spawn_id)
+        };
         let spawned = self.base.spawn(spec, log);
         let book = Arc::clone(&self.book);
         let generation = self.generation;
@@ -183,6 +196,33 @@ mod tests {
             }),
             max_line_bytes: 1024,
         }
+    }
+
+    #[tokio::test]
+    async fn disabled_protocol_logging_keeps_spawn_identity_without_creating_a_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let (base, _ends) = FakeSpawner::new();
+        let logs = LogFactory::new(
+            dir.path().to_path_buf(),
+            Arc::new(Redactor::standard()),
+            Handle::current(),
+        );
+        let spawner = SessionSpawner::new(
+            base,
+            logs,
+            "account-chat".into(),
+            Arc::new(ProcessBook::default()),
+            1,
+        )
+        .with_protocol_logging(false);
+        let process = spawner.spawn(spec()).await.unwrap();
+        assert!(!process.spawn_id.is_empty());
+        assert_eq!(process.log.spawn_id(), process.spawn_id);
+        assert!(process.log.path().is_none());
+        process
+            .log
+            .command(serde_json::json!({"prompt":"synthetic private prompt"}));
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
     }
 
     #[tokio::test]

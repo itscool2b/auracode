@@ -1,7 +1,7 @@
 //! Account-only encrypted object storage. All IO after root selection is directory-relative and
 //! refuses final-component links. Publication never replaces an existing immutable object.
 use aura_sync::crypto::files::{self, ProfileFileKey, Purpose, Reader};
-use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, OpenOptions};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -46,6 +46,13 @@ impl EncryptedFiles {
     pub fn open(path: &Path, purpose: Purpose, key: Arc<ProfileFileKey>) -> io::Result<Self> {
         crate::fsutil::create_private_dir_all(path).map_err(io::Error::other)?;
         let dir = Arc::new(Dir::open_ambient_dir(path, cap_std::ambient_authority())?);
+        Self::open_directory(dir, purpose, key)
+    }
+    fn open_directory(
+        dir: Arc<Dir>,
+        purpose: Purpose,
+        key: Arc<ProfileFileKey>,
+    ) -> io::Result<Self> {
         let store = Self { dir, key, purpose };
         let expected = Marker {
             version: 1,
@@ -81,6 +88,31 @@ impl EncryptedFiles {
             Err(error) => return Err(error),
         }
         Ok(store)
+    }
+    /// An independently discoverable recovery group. The UUID contains no message or account data.
+    /// Callers also bind it into every child object ID, preventing cross-journal substitution.
+    pub(crate) fn child(&self, id: &str, create: bool) -> io::Result<Self> {
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| invalid("Invalid recovery group."))?;
+        if uuid.to_string() != id {
+            return Err(invalid("Invalid recovery group."));
+        }
+        if create {
+            let builder = cap_std::fs::DirBuilder::new();
+            #[cfg(unix)]
+            let builder = {
+                use cap_std::fs::DirBuilderExt;
+                let mut builder = builder;
+                builder.mode(0o700);
+                builder
+            };
+            self.dir.create_dir_with(id, &builder)?;
+            self.sync_directory()?;
+        }
+        Self::open_directory(
+            Arc::new(self.dir.open_dir_nofollow(id)?),
+            self.purpose,
+            self.key.clone(),
+        )
     }
     pub fn reader(&self, id: &str) -> io::Result<Reader<'_, File>> {
         let name = self.name(id)?;

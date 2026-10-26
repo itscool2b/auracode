@@ -188,3 +188,18 @@ The object ID is authenticated but is not written into the public header. This a
 known attachment's public content hash as its filename. The codec uses the existing reviewed AEAD
 library; its application framing still requires independent security review and platform acceptance.
 
+Account chat writers require the explicit `start_account` entry point with the unlocked file key.
+Composer imports and tool output use the encrypted attachment directory; bounded native image reads
+never fall back to plaintext paths. Raw per-agent protocol logs are disabled for account writers
+because they may contain complete prompts and base64 images. Local profiles keep their existing
+file layout and logs.
+
+Encrypted recovery journals live under `backups/recovery/<random UUID>/`. The group UUID is not
+derived from chat content. Each JSONL stream is serialized into immutable 64 KiB encrypted parts,
+with object IDs `<UUID>-<part number>`. An encrypted `<UUID>-manifest` is published last and contains
+`{version:1, parts, bytes}`. These IDs bind every part to its journal. A crash can leave authenticated
+parts without a completion manifest; they remain available for explicit recovery and are never
+mistaken for a complete stream. Serialization buffers are bounded and no plaintext recovery JSONL
+is created. Recovery browsing/export and encrypted checkpoints remain required before production
+Account sessions are enabled.
+

@@ -1,8 +1,8 @@
 //! Composer metadata on the profile writer. Arbitrary blob hashes are never accepted from the UI.
-use super::{StoreError, blobs, rows};
+use super::{StoreError, files::Attachments, rows};
 use aura_protocol::composer::{ComposerAttachment, ComposerInput};
 use rusqlite::{Connection, OptionalExtension as _, params};
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 pub(crate) enum ComposerCommand {
     ReadDraft {
@@ -57,7 +57,7 @@ impl ComposerCommand {
 
 pub(crate) fn execute(
     conn: &Connection,
-    dir: &Path,
+    files: &Attachments,
     now: i64,
     command: ComposerCommand,
 ) -> Result<ComposerReply, StoreError> {
@@ -104,7 +104,7 @@ pub(crate) fn execute(
             if !exists {
                 return Err(StoreError::Other("This chat no longer exists.".into()));
             }
-            let size = blobs::write(dir, &sha256, &bytes).map_err(|error| {
+            let size = files.write(&sha256, &bytes).map_err(|error| {
                 StoreError::Other(format!("Could not save attachment: {error}"))
             })?;
             rows::insert_attachment(conn, &sha256, &mime, size, now).map_err(sql)?;

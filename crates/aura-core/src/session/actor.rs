@@ -2121,19 +2121,22 @@ impl ChatActor {
         let deps = &self.shared.deps;
         let (commands, command_rx) = mpsc::unbounded_channel();
         let (events, event_rx) = event_channel();
-        let spawner = Arc::new(SessionSpawner::new(
-            aura_process::HostSpawner::new(
-                Arc::clone(&deps.spawner),
-                aura_agents::hosts::execution(&self.chat.agent_host),
-            ),
-            deps.logs.clone(),
-            self.chat_id.clone(),
-            Arc::clone(&self.book),
-            generation,
-        ));
+        let spawner = Arc::new(
+            SessionSpawner::new(
+                aura_process::HostSpawner::new(
+                    Arc::clone(&deps.spawner),
+                    aura_agents::hosts::execution(&self.chat.agent_host),
+                ),
+                deps.logs.clone(),
+                self.chat_id.clone(),
+                Arc::clone(&self.book),
+                generation,
+            )
+            .with_protocol_logging(!deps.store.encrypted()),
+        );
         let setup = SessionSetup {
             attachment_dir: Some(deps.store.attachment_dir().to_path_buf()),
-            attachment_reader: None,
+            attachment_reader: deps.store.attachment_reader(),
             chat_id: self.chat_id.clone(),
             agent_id: spec.id.to_owned(),
             dialect: spec.dialect.to_owned(),

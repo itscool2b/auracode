@@ -21,7 +21,6 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
@@ -788,8 +787,7 @@ pub(crate) struct Writer {
     store: Option<Store>,
     owner: Option<ProfileOwner>,
     device_id: String,
-    attachments: PathBuf,
-    backups: PathBuf,
+    files: super::files::Files,
     recovered: watch::Sender<Option<RecoveryReport>>,
     mode: Mode,
     dead_letters: Option<File>,
@@ -801,8 +799,7 @@ impl Writer {
         store: Store,
         owner: ProfileOwner,
         device_id: String,
-        attachments: PathBuf,
-        backups: PathBuf,
+        files: super::files::Files,
         recovered: watch::Sender<Option<RecoveryReport>>,
     ) -> Writer {
         Writer {
@@ -810,8 +807,7 @@ impl Writer {
             store: Some(store),
             owner: Some(owner),
             device_id,
-            attachments,
-            backups,
+            files,
             recovered,
             mode: Mode::Normal,
             dead_letters: None,
@@ -1110,7 +1106,7 @@ impl Writer {
             store,
             writes,
             &self.device_id,
-            &self.attachments,
+            &self.files.attachments,
             &self.shared.config.compact,
         );
         #[cfg(test)]
@@ -1219,7 +1215,7 @@ impl Writer {
                     .send(self.read(|conn| super::search::execute(conn, &query, include_archived)));
             }
             Request::Composer { command, reply } => {
-                let dir = self.attachments.clone();
+                let dir = self.files.attachments.clone();
                 let now = now_millis();
                 let result = if matches!(self.mode, Mode::Damaged) {
                     Err(StoreError::Damaged(DAMAGED.into()))
@@ -1281,7 +1277,7 @@ impl Writer {
                 let acknowledged = match &self.store {
                     Some(store) => store.acknowledge_recovery(&quarantined),
                     None => Err(CoreError::Io {
-                        path: self.backups.clone(),
+                        path: self.files.backups.clone(),
                         source: io::Error::other("auracode's database is closed"),
                     }),
                 };
@@ -1372,7 +1368,7 @@ impl Writer {
     }
 
     fn read_blob(&mut self, sha256: &str, offset: u64, len: u32) -> Result<BlobText, StoreError> {
-        match blobs::read_page(&self.attachments, sha256, offset, len) {
+        match self.files.attachments.read_page(sha256, offset, len) {
             Ok(text) => Ok(text),
             Err(blobs::ReadError::Gone) => Err(StoreError::BlobMissing(BLOB_GONE.to_owned())),
             Err(blobs::ReadError::Io(error)) => Err(StoreError::Other(error.to_string())),
@@ -1574,6 +1570,28 @@ impl Writer {
             return;
         }
         let at = now_millis();
+        #[cfg(feature = "account-sync")]
+        if let Some(recovery) = &self.files.recovery {
+            let written = (|| -> io::Result<()> {
+                let mut journal = super::journal::Journal::new(recovery)?;
+                for item in &items {
+                    if let Some(letter) = dead_letter(item, error, at) {
+                        serde_json::to_writer(&mut journal, &letter).map_err(io::Error::other)?;
+                        journal.write_all(b"\n")?;
+                    }
+                }
+                journal.finish()
+            })();
+            if written.is_err() {
+                // Never log the serialization error, which could contain rejected payload text.
+                tracing::error!(
+                    count = items.len(),
+                    "could not save encrypted recovery ops; some queued data was lost"
+                );
+            }
+            self.committed(&items);
+            return;
+        }
         let lines: Vec<String> = items
             .iter()
             .filter_map(|item| dead_letter_line(item, error, at))
@@ -1600,9 +1618,9 @@ impl Writer {
 
     fn dead_letter_file(&mut self) -> io::Result<&mut File> {
         if self.dead_letters.is_none() {
-            fsutil::create_private_dir_all(&self.backups).map_err(io::Error::other)?;
+            fsutil::create_private_dir_all(&self.files.backups).map_err(io::Error::other)?;
             let path = fsutil::free_path(
-                &self.backups,
+                &self.files.backups,
                 &format!("deadletter-{}", now_millis()),
                 ".jsonl",
             );
@@ -1656,7 +1674,7 @@ fn commit(
     store: &mut Store,
     writes: &[Item],
     device_id: &str,
-    attachments: &Path,
+    attachments: &super::files::Attachments,
     limits: &CompactLimits,
 ) -> Result<(), Failure> {
     let conn = store.conn_mut();
@@ -1689,7 +1707,7 @@ fn apply(
     conn: &rusqlite::Connection,
     item: &Item,
     device_id: &str,
-    attachments: &Path,
+    attachments: &super::files::Attachments,
     limits: &CompactLimits,
     now: i64,
 ) -> Result<(), Failure> {
@@ -1723,8 +1741,9 @@ fn apply(
             mime,
             bytes,
         } => {
-            let size =
-                blobs::write(attachments, sha256, bytes).map_err(|error| classify_io(&error))?;
+            let size = attachments
+                .write(sha256, bytes)
+                .map_err(|error| classify_io(&error))?;
             sql(rows::insert_attachment(conn, sha256, mime, size, now))
         }
         Op::SetTitle {
@@ -1810,6 +1829,10 @@ struct DeadLetter<'a> {
 }
 
 fn dead_letter_line(item: &Item, error: &str, at: i64) -> Option<String> {
+    serde_json::to_string(&dead_letter(item, error, at)?).ok()
+}
+
+fn dead_letter<'a>(item: &'a Item, error: &'a str, at: i64) -> Option<DeadLetter<'a>> {
     let op = match &item.work {
         Work::Op(op) => match op {
             Op::InsertAgentSession(row) => DeadOp::InsertAgentSession { row },
@@ -1848,7 +1871,7 @@ fn dead_letter_line(item: &Item, error: &str, at: i64) -> Option<String> {
         #[cfg(test)]
         Work::Test(TestWork::Panic) => DeadOp::TestPanic,
     };
-    serde_json::to_string(&DeadLetter { at, error, op }).ok()
+    Some(DeadLetter { at, error, op })
 }
 
 /// Why waiting for the writer's answer ended without one.
@@ -1929,8 +1952,7 @@ mod tests {
             store,
             owner,
             "dev".into(),
-            profile.attachments_dir(),
-            profile.backups_dir(),
+            super::super::files::Files::local(&profile),
             recovered,
         );
         writer.mode = Mode::Damaged;

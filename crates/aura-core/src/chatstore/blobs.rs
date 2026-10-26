@@ -118,26 +118,36 @@ pub(crate) fn read_page(
     let mut window = vec![0u8; usize::try_from(window_len).unwrap_or(usize::MAX)];
     file.read_exact(&mut window).map_err(ReadError::Io)?;
 
+    Ok(text_window(sha256, offset, len, total, &window))
+}
+
+pub(crate) fn text_window(
+    sha256: &str,
+    offset: u64,
+    len: u32,
+    total: u64,
+    window: &[u8],
+) -> BlobText {
     let start = window
         .iter()
         .position(|byte| !is_continuation(*byte))
         .unwrap_or(window.len());
     let wanted_end = start.saturating_add(len as usize).min(window.len());
-    let end = if wanted_end >= window.len() && window_start + window_len == total {
+    let end = if wanted_end >= window.len() && offset + window.len() as u64 == total {
         window.len()
     } else {
-        char_floor(&window, start, wanted_end)
+        char_floor(window, start, wanted_end)
     };
     let text = String::from_utf8_lossy(&window[start..end]).into_owned();
-    let next_offset = window_start + end as u64;
-    Ok(BlobText {
+    let next_offset = offset + end as u64;
+    BlobText {
         sha256: sha256.to_owned(),
-        offset: window_start + start as u64,
+        offset: offset + start as u64,
         next_offset,
         total,
         text,
         eof: next_offset >= total,
-    })
+    }
 }
 
 fn is_continuation(byte: u8) -> bool {
