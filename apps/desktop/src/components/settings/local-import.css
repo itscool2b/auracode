@@ -1,0 +1,51 @@
+.local-import-panel > p,
+.local-import-notices {
+  color: var(--o-text-2);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.local-import-notices {
+  padding-left: 18px;
+}
+.local-import-projects {
+  border: 0;
+  margin: 16px 0;
+  padding: 0;
+  max-height: 320px;
+  overflow: auto;
+}
+.local-import-projects legend {
+  padding: 0 0 8px;
+  font-size: 12px;
+  color: var(--o-text-2);
+}
+.local-import-projects label {
+  display: flex;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--o-line);
+}
+.local-import-projects input {
+  align-self: center;
+  accent-color: var(--o-ink);
+}
+.local-import-projects span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.local-import-projects strong {
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.local-import-projects small {
+  color: var(--o-text-3);
+  font-size: 11px;
+}
+.local-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}

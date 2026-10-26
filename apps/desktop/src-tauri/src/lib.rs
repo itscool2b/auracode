@@ -36,6 +36,7 @@ pub mod git_commands;
 pub mod glass;
 pub mod integrity;
 pub mod launch;
+pub mod local_import_commands;
 pub mod native_shell;
 pub mod onboarding;
 pub mod os;

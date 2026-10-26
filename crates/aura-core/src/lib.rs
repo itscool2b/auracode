@@ -41,6 +41,8 @@ pub mod device;
 pub mod error;
 pub mod gitworkspaces;
 pub mod ids;
+#[cfg(feature = "account-sync")]
+pub mod local_import;
 pub mod onboarding;
 pub mod owner;
 pub mod paths;

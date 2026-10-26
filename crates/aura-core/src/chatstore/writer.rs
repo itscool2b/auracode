@@ -141,6 +141,12 @@ pub(crate) enum Work {
 
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
+    #[cfg(feature = "account-sync")]
+    LocalImport {
+        command: crate::local_import::Command,
+        reply:
+            oneshot::Sender<Result<crate::local_import::Reply, crate::local_import::ImportError>>,
+    },
     Steering {
         command: super::steering::Command,
         reply: oneshot::Sender<Result<(), StoreError>>,
@@ -485,6 +491,8 @@ fn work_bytes(work: &Work) -> usize {
         Work::Request(Request::Config { command, .. }) => command.bytes(),
         #[cfg(feature = "account-sync")]
         Work::Request(Request::SyncExchange { command, .. }) => command.bytes(),
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::LocalImport { .. }) => 64 * 1024,
         Work::Request(Request::Search { query, .. }) => 256 + query.len(),
         Work::Request(_) => 256,
         #[cfg(test)]
@@ -665,6 +673,8 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::Config { .. }) => "config_sync",
         #[cfg(feature = "account-sync")]
         Work::Request(Request::SyncExchange { .. }) => "sync_exchange",
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::LocalImport { .. }) => "local_import",
         Work::Request(Request::Flush { .. }) => "flush",
         Work::Op(op) => op_name(op),
         Work::Request(Request::CreateChat { .. }) => "create_chat",
@@ -1247,6 +1257,20 @@ impl Writer {
 
     fn answer_request(&mut self, request: Request) {
         match request {
+            #[cfg(feature = "account-sync")]
+            Request::LocalImport { command, reply } => {
+                let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {
+                    (Some(store), Some(context), Mode::Normal) => crate::local_import::execute(
+                        store,
+                        context,
+                        &self.files.attachments,
+                        &self.device_id,
+                        command,
+                    ),
+                    _ => Err(crate::local_import::ImportError::AccountRequired),
+                };
+                let _ = reply.send(result);
+            }
             Request::Steering { command, reply } => {
                 let now = now_millis();
                 let result = if matches!(self.mode, Mode::Damaged) {

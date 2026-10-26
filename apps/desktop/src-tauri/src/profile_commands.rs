@@ -562,13 +562,13 @@ async fn activate_one(
             "The active profile could not be confirmed. Existing data and any pending configuration recovery were preserved.",
         ));
     }
-    if let Some(staged) = staged {
-        if !matches!(
+    if let Some(staged) = staged
+        && !matches!(
             tokio::task::spawn_blocking(move || staged.finish()).await,
             Ok(Ok(()))
-        ) {
-            prepared.notices.push("The profile pointer was saved, but configuration verification remains pending. Use configuration recovery before continuing.".into());
-        }
+        )
+    {
+        prepared.notices.push("The profile pointer was saved, but configuration verification remains pending. Use configuration recovery before continuing.".into());
     }
     // No fallible preparation remains after publication. Old data was flushed before this point;
     // a close failure is reported honestly while retaining its WAL/recovery files.

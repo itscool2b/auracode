@@ -34,7 +34,7 @@ pub(crate) mod history;
 #[cfg(feature = "account-sync")]
 mod journal;
 pub(crate) mod organization;
-mod recover;
+pub(crate) mod recover;
 pub(crate) mod rows;
 pub(crate) mod search;
 pub(crate) mod steering;

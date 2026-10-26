@@ -22,6 +22,7 @@ pub mod conversation;
 pub mod git;
 mod lenient;
 pub mod project_tools;
+pub mod local_import;
 pub mod search;
 pub mod session;
 pub mod setup_actions;

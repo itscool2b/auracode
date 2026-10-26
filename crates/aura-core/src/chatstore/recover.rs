@@ -220,7 +220,7 @@ struct OpenRequest {
     turn_id: Option<String>,
 }
 
-fn recover_chat(
+pub(crate) fn recover_chat(
     conn: &Connection,
     chat_id: &str,
     device_id: &str,

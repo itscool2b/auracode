@@ -1,0 +1,357 @@
+use super::*;
+use crate::{
+    chatstore::{NewChat, files::Attachments, rows},
+    paths::DataRoot,
+    profile::Profiles,
+    store::Store,
+    sync::{SyncContext, SyncIdentity},
+};
+use aura_protocol::{AuraEvent, PromptPart, StopReason};
+use aura_sync::crypto::AccountKey;
+use std::sync::Arc;
+
+struct Fixture {
+    _dir: tempfile::TempDir,
+    local: Profile,
+    source: Store,
+    target: Store,
+    context: SyncContext,
+    files: Attachments,
+}
+fn fixture() -> Fixture {
+    let dir = tempfile::tempdir().unwrap();
+    let profiles = Profiles::new(DataRoot::at(dir.path()));
+    let local = profiles.create(ProfileKind::Local, "Local").unwrap();
+    let account = profiles.create(ProfileKind::Account, "Account").unwrap();
+    let (source, _) = Store::open(&local).unwrap();
+    let key = Arc::new(AccountKey::generate().unwrap());
+    let (mut target, _) = Store::open_encrypted(
+        &account,
+        Arc::new(key.database_key("account", &account.meta.id).unwrap()),
+    )
+    .unwrap();
+    let files = Attachments::Encrypted(
+        crate::profile_files::EncryptedFiles::open(
+            &account.attachments_dir(),
+            aura_sync::crypto::files::Purpose::Attachment,
+            Arc::new(key.profile_file_key("account", &account.meta.id).unwrap()),
+        )
+        .unwrap(),
+    );
+    let context = SyncContext {
+        identity: SyncIdentity {
+            account: "account".into(),
+            device: "sync-device".into(),
+            key_version: 1,
+        },
+        key,
+    };
+    context.initialize(&mut target).unwrap();
+    Fixture {
+        _dir: dir,
+        local,
+        source,
+        target,
+        context,
+        files,
+    }
+}
+fn seed(f: &Fixture, running: bool) -> (String, String, String) {
+    let chat = rows::create_chat(
+        f.source.conn(),
+        &NewChat {
+            folder: format!("/explicit/{}", crate::ids::new_id()).into(),
+            agent_id: "claude".into(),
+            agent_host: aura_protocol::agents::AgentHost::Native,
+            device_id: "device".into(),
+            now: 1,
+        },
+    )
+    .unwrap();
+    let project: String = f
+        .source
+        .conn()
+        .query_row(
+            "SELECT project_id FROM chats WHERE id=?1",
+            [&chat.id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let session = crate::ids::new_id();
+    let turn = crate::ids::new_id();
+    let bytes = b"explicit selected project attachment";
+    let hash = format!("{:x}", Sha256::digest(bytes));
+    std::fs::write(f.local.attachments_dir().join(&hash), bytes).unwrap();
+    f.source.conn().execute("INSERT INTO attachments(sha256,mime,size,created_at) VALUES(?1,'text/plain',?2,1) ON CONFLICT(sha256) DO NOTHING",params![hash,bytes.len() as i64]).unwrap();
+    f.source.conn().execute("INSERT INTO composer_attachments(id,chat_id,sha256,display_name,mime,byte_length,created_at) VALUES(?1,?2,?3,'notes.txt','text/plain',?4,1)",params![crate::ids::new_id(),chat.id,hash,bytes.len() as i64]).unwrap();
+    f.source.conn().execute("INSERT INTO agent_sessions(id,chat_id,agent_id,native_session_id,cwd,created_at,updated_at,device_id) VALUES(?1,?2,'claude','do-not-copy-native','/private/native',1,1,'device')",params![session,chat.id]).unwrap();
+    let parts = serde_json::to_string(&vec![PromptPart::Text {
+        text: "Original visible prompt".into(),
+    }])
+    .unwrap();
+    f.source.conn().execute("INSERT INTO turns(id,chat_id,agent_session_id,seq,status,started_at,ended_at,device_id,prompt_parts_json,first_event_seq) VALUES(?1,?2,?3,1,?4,1,2,'device',?5,0)",params![turn,chat.id,session,if running {"running"} else {"completed"},parts]).unwrap();
+    let mut events = vec![
+        AuraEvent::TurnStarted {
+            turn_id: turn.clone(),
+            prompt_id: None,
+        },
+        AuraEvent::UserMessageDelta {
+            message_id: "user".into(),
+            text: "Original visible prompt".into(),
+        },
+        AuraEvent::MessageDelta {
+            message_id: "assistant".into(),
+            text: "Saved response".into(),
+        },
+    ];
+    if !running {
+        events.extend([
+            AuraEvent::MessageCompleted {
+                message_id: "assistant".into(),
+            },
+            AuraEvent::TurnEnded {
+                turn_id: turn.clone(),
+                stop_reason: StopReason::EndTurn,
+                usage: None,
+                duration_ms: None,
+                recovered: false,
+            },
+        ]);
+    }
+    for (seq, event) in events.into_iter().enumerate() {
+        f.source.conn().execute("INSERT INTO events(id,chat_id,turn_id,seq,kind,payload,created_at,device_id) VALUES(?1,?2,?3,?4,?5,?6,1,'device')",params![crate::ids::new_id(),chat.id,turn,seq as i64,event.kind(),serde_json::to_string(&event).unwrap()]).unwrap();
+    }
+    f.source.conn().execute("INSERT INTO queued_prompts(id,chat_id,text,created_at,device_id) VALUES(?1,?2,'Never send this automatically',1,'device')",params![crate::ids::new_id(),chat.id]).unwrap();
+    f.source
+        .conn()
+        .execute(
+            "INSERT INTO composer_drafts(chat_id,input_json,updated_at) VALUES(?1,?2,1)",
+            params![chat.id, r#"{"text":"Saved draft","attachment_ids":[]}"#],
+        )
+        .unwrap();
+    (project, chat.id, hash)
+}
+fn reviewed(f: &Fixture) -> Vec<LocalImportSelection> {
+    preview(&f.local, "device")
+        .unwrap()
+        .projects
+        .into_iter()
+        .map(|p| LocalImportSelection {
+            project_id: p.project_id,
+            revision: p.revision,
+        })
+        .collect()
+}
+fn apply(
+    f: &mut Fixture,
+    selected: Vec<LocalImportSelection>,
+) -> Result<aura_protocol::local_import::LocalImportResult> {
+    let Reply::Applied(result) = execute(
+        &mut f.target,
+        &f.context,
+        &f.files,
+        "device",
+        Command::Apply {
+            source: f.local.clone(),
+            selected,
+        },
+    )?
+    else {
+        panic!("apply");
+    };
+    Ok(result)
+}
+
+#[test]
+fn selected_projects_copy_to_ciphertext_preserve_local_and_require_fresh_handoff() {
+    let mut f = fixture();
+    let (project, chat, hash) = seed(&f, true);
+    let before = reviewed(&f);
+    let result = apply(&mut f, before.clone()).unwrap();
+    assert_eq!(result.project_ids, vec![project]);
+    assert_eq!(
+        (result.chats, result.turns, result.missing_attachments),
+        (1, 1, 0)
+    );
+    assert_eq!(reviewed(&f), before, "source data is unchanged");
+    let native: u32 = f
+        .target
+        .conn()
+        .query_row("SELECT count(*) FROM agent_sessions", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(native, 0);
+    let queued: u32 = f
+        .target
+        .conn()
+        .query_row("SELECT count(*) FROM queued_prompts", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(queued, 0);
+    let load = rows::load_chat(f.target.conn(), "device", &chat, 0)
+        .unwrap()
+        .unwrap();
+    assert!(load.remote_history);
+    assert_eq!(
+        load.chat.folder.to_string_lossy(),
+        f.source
+            .conn()
+            .query_row("SELECT path FROM folder_locations LIMIT 1", [], |r| r
+                .get::<_, String>(0))
+            .unwrap()
+    );
+    let state: String = f
+        .target
+        .conn()
+        .query_row("SELECT status FROM turns WHERE chat_id=?1", [&chat], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(state, "interrupted");
+    assert_eq!(
+        f.files.sync_range(&hash, 0).unwrap().1.as_slice(),
+        b"explicit selected project attachment"
+    );
+    let outbox: u32 = f
+        .target
+        .conn()
+        .query_row("SELECT count(*) FROM sync_outbox", [], |r| r.get(0))
+        .unwrap();
+    assert!(outbox >= 3);
+    let draft: String = f
+        .target
+        .conn()
+        .query_row(
+            "SELECT input_json FROM composer_drafts WHERE chat_id=?1",
+            [&chat],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(draft.contains("Saved draft"));
+}
+
+#[test]
+fn changed_second_project_rolls_back_the_whole_selection_and_repeats_never_overwrite() {
+    let mut f = fixture();
+    let (first, _, _) = seed(&f, false);
+    let (second, _, _) = seed(&f, false);
+    let selected = reviewed(&f);
+    f.source
+        .conn()
+        .execute(
+            "UPDATE projects SET name='Changed after review' WHERE id=?1",
+            [&second],
+        )
+        .unwrap();
+    assert!(matches!(apply(&mut f, selected), Err(ImportError::Changed)));
+    assert_eq!(
+        f.target
+            .conn()
+            .query_row("SELECT count(*) FROM projects", [], |r| r.get::<_, u32>(0))
+            .unwrap(),
+        0
+    );
+    let selected = reviewed(&f);
+    apply(&mut f, selected.clone()).unwrap();
+    f.target
+        .conn()
+        .execute(
+            "UPDATE projects SET name='Account edit' WHERE id=?1",
+            [&first],
+        )
+        .unwrap();
+    assert!(apply(&mut f, selected).unwrap().project_ids.is_empty());
+    assert_eq!(
+        f.target
+            .conn()
+            .query_row("SELECT name FROM projects WHERE id=?1", [&first], |r| {
+                r.get::<_, String>(0)
+            })
+            .unwrap(),
+        "Account edit"
+    );
+}
+
+#[test]
+fn occupied_local_and_newer_schema_are_refused_without_repair() {
+    let f = fixture();
+    seed(&f, false);
+    let owner = ProfileOwner::acquire(&f.local).unwrap();
+    assert!(matches!(
+        preview(&f.local, "device"),
+        Err(ImportError::InUse)
+    ));
+    drop(owner);
+    f.source
+        .conn()
+        .pragma_update(None, "user_version", crate::store::SCHEMA_VERSION + 1)
+        .unwrap();
+    assert!(matches!(
+        preview(&f.local, "device"),
+        Err(ImportError::Schema)
+    ));
+    assert_eq!(
+        f.source
+            .conn()
+            .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
+            .unwrap(),
+        crate::store::SCHEMA_VERSION + 1
+    );
+}
+
+#[test]
+fn missing_files_are_reported_but_changed_bytes_and_identity_collisions_roll_back() {
+    let mut f = fixture();
+    let (project, _, hash) = seed(&f, false);
+    let selected = reviewed(&f);
+    let attachment = f.local.attachments_dir().join(&hash);
+    std::fs::write(&attachment, b"changed").unwrap();
+    assert!(matches!(
+        apply(&mut f, selected.clone()),
+        Err(ImportError::Changed)
+    ));
+    assert_eq!(
+        f.target
+            .conn()
+            .query_row("SELECT count(*) FROM local_imports", [], |r| r
+                .get::<_, u32>(0))
+            .unwrap(),
+        0
+    );
+    std::fs::remove_file(&attachment).unwrap();
+    assert_eq!(apply(&mut f, selected).unwrap().missing_attachments, 1);
+    let Reply::Preview(review) = execute(
+        &mut f.target,
+        &f.context,
+        &f.files,
+        "device",
+        Command::Preview(f.local.clone()),
+    )
+    .unwrap() else {
+        panic!("preview");
+    };
+    assert!(review.projects[0].already_imported);
+    f.target
+        .conn()
+        .execute("DELETE FROM local_imports WHERE project_id=?1", [&project])
+        .unwrap();
+    let selected = reviewed(&f);
+    assert!(matches!(
+        apply(&mut f, selected),
+        Err(ImportError::Conflict)
+    ));
+}
+
+#[test]
+fn local_destination_is_never_a_plaintext_fallback() {
+    let mut f = fixture();
+    seed(&f, false);
+    assert!(matches!(
+        execute(
+            &mut f.source,
+            &f.context,
+            &f.files,
+            "device",
+            Command::Preview(f.local.clone())
+        ),
+        Err(ImportError::AccountRequired)
+    ));
+}

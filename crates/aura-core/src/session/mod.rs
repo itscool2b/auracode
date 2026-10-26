@@ -21,6 +21,8 @@ mod conversation;
 mod gitworkspaces;
 mod installer;
 mod live;
+#[cfg(feature = "account-sync")]
+mod local_import;
 mod login;
 mod normalize;
 mod policy;

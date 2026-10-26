@@ -2124,3 +2124,27 @@ Quit now preserves project terminals until explicit confirmation. Cancel leaves 
 ### Updater cleanup admission correction
 
 Updater installation already retains the profile-transition, session-idle and terminal-idle barriers across cleanup and installation. Its quit wrapper now reuses those barriers instead of asking for ordinary drain admission, which correctly refuses an already-quiesced manager. The protected-work wait, refusal to discard drafts, storage flush and installer handoff remain unchanged. Both updater cleanup tests now model refused ordinary admission and pass; combined native Clippy passes. This fixes a source-level always-refused install path, not the still-pending signed-package upgrade acceptance.
+
+### Explicit Local project import
+
+An unlocked Account can now review selected Local projects and copy their chats, saved drafts and
+attachments into encrypted storage. The inactive Local database is opened read-only under its owner
+lock. A content revision binds the review to the copied rows; a changed source or identity collision
+rolls back the whole selection. Schema 13 stores device-local import receipts, so repeating an import
+does not overwrite subsequent Account edits. Portable metadata and its sealed outbox commit together.
+The original Local database, vendor sessions and files remain intact.
+
+Imported turns preserve source agents but no native-session identity or checkpoint reference. Existing
+recovery closes unresolved approvals and retains unfinished responses as interrupted. Continue here is
+required before a new prompt. Managed worktree ownership, queued prompts and protocol logs remain in
+Local, with those boundaries stated in the review. Attachment reads reject links and changed hashes;
+already missing files are counted explicitly. Source schema mismatches fail without migration/repair.
+Owned apply tasks retain both profile and session admission through the actual writer result.
+
+The new LocalImportPanel reads Local only after its review button, lets the user select projects and
+shows repeat/missing-file outcomes. It uses dark Orbit controls and generated command DTOs. Account
+screen wiring and browser acceptance remain with the integrated application. Five focused core tests,
+the schema foreign-key check, ordinary native bindings export, desktop TypeScript and Biome checks
+passed on Windows. Core and desktop all-target Clippy passed after a minimal existing profile-command
+lint correction agreed with its owner. No real Local profile, vendor login, network request or paid
+prompt was used. Remote folder resolution, macOS and complete M7 acceptance remain pending.

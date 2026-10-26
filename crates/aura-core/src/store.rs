@@ -66,7 +66,7 @@ use lock::OpenLock;
 use recovery::Recovery;
 
 /// The schema version this build reads and writes; equals the number of migrations.
-pub const SCHEMA_VERSION: u32 = 12;
+pub const SCHEMA_VERSION: u32 = 13;
 
 /// Pre-migration backups kept per database. Enough to step back through several upgrades without
 /// letting a long-lived install fill the disk with copies.
@@ -96,6 +96,7 @@ static MIGRATIONS: [M<'static>; SCHEMA_VERSION as usize] = [
     M::up(include_str!("../migrations/0010_steering.sql")).foreign_key_check(),
     M::up(include_str!("../migrations/0011_sync_projection.sql")).foreign_key_check(),
     M::up(include_str!("../migrations/0012_transcript_sync.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0013_local_import.sql")).foreign_key_check(),
 ];
 
 fn migrations() -> &'static [M<'static>] {
@@ -985,7 +986,7 @@ mod tests {
     use super::*;
     use std::collections::{BTreeSet, HashSet};
 
-    const TABLES: [&str; 21] = [
+    const TABLES: [&str; 22] = [
         "settings",
         "projects",
         "project_folders",
@@ -1007,6 +1008,7 @@ mod tests {
         "sync_turn_parts",
         "sync_turn_files",
         "sync_turn_fragments",
+        "local_imports",
     ];
 
     /// The current schema version as SQLite reports it.
@@ -1383,7 +1385,7 @@ mod tests {
             }
         }
         assert_eq!(
-            checked, 18,
+            checked, 19,
             "every foreign key in the listed tables was checked"
         );
     }

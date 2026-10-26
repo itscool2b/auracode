@@ -7,6 +7,50 @@ use zeroize::Zeroizing;
 mod tests;
 
 impl ChatStore {
+    pub async fn local_import_preview(
+        &self,
+        source: crate::profile::Profile,
+    ) -> Result<aura_protocol::local_import::LocalImportPreview, crate::local_import::ImportError>
+    {
+        match self
+            .local_import(crate::local_import::Command::Preview(source))
+            .await?
+        {
+            crate::local_import::Reply::Preview(value) => Ok(value),
+            _ => Err(crate::local_import::ImportError::Storage),
+        }
+    }
+    pub async fn local_import_apply(
+        &self,
+        source: crate::profile::Profile,
+        selected: Vec<aura_protocol::local_import::LocalImportSelection>,
+    ) -> Result<aura_protocol::local_import::LocalImportResult, crate::local_import::ImportError>
+    {
+        match self
+            .local_import(crate::local_import::Command::Apply { source, selected })
+            .await?
+        {
+            crate::local_import::Reply::Applied(value) => Ok(value),
+            _ => Err(crate::local_import::ImportError::Storage),
+        }
+    }
+    async fn local_import(
+        &self,
+        command: crate::local_import::Command,
+    ) -> Result<crate::local_import::Reply, crate::local_import::ImportError> {
+        use crate::local_import::ImportError;
+        let (reply, answer) = oneshot::channel();
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(64 * 1024))
+            .await
+            .map_err(|_| ImportError::Storage)?
+            .ok_or(ImportError::Storage)?;
+        self.shared.push(
+            Work::Request(Request::LocalImport { command, reply }),
+            Some(permits),
+        );
+        // Admission survives IPC cancellation and waits for the actual transaction result.
+        answer.await.map_err(|_| ImportError::Storage)?
+    }
     /// Encrypted transfer requests have the same FIFO ownership and profile binding as local edits.
     /// Once queued, their transaction finishes even if a network task stops waiting for its reply.
     pub async fn sync_exchange(

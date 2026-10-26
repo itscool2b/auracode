@@ -114,6 +114,8 @@ export const commands = {
 	cloneCancel: (id: string) => __TAURI_INVOKE<void>("clone_cancel", { id }),
 	cloneStatus: (id: string) => typedError<CloneRecord, AppError>(__TAURI_INVOKE("clone_status", { id })),
 	cloneHistory: (parent: string) => typedError<CloneRecord[], AppError>(__TAURI_INVOKE("clone_history", { parent })),
+	localImportPreview: () => typedError<LocalImportPreview, AppError>(__TAURI_INVOKE("local_import_preview")),
+	localImportApply: (selected: LocalImportSelection[]) => typedError<LocalImportResult, AppError>(__TAURI_INVOKE("local_import_apply", { selected })),
 	terminalRead: (terminalId: string) => typedError<TerminalChunk, AppError>(__TAURI_INVOKE("terminal_read", { terminalId })),
 	terminalWrite: (terminalId: string, bytes: number[]) => typedError<null, AppError>(__TAURI_INVOKE("terminal_write", { terminalId, bytes })),
 	terminalResize: (terminalId: string, rows: number, cols: number) => typedError<null, AppError>(__TAURI_INVOKE("terminal_resize", { terminalId, rows, cols })),
@@ -1163,6 +1165,33 @@ export type LimitWindow = {
 	label: string,
 	used_percent: number | null,
 	resets_at: number | null,
+};
+
+export type LocalImportPreview = {
+	projects: LocalImportProject[],
+	notices: string[],
+};
+
+export type LocalImportProject = {
+	project_id: string,
+	name: string,
+	folders: number,
+	chats: number,
+	turns: number,
+	revision: string,
+	already_imported: boolean,
+};
+
+export type LocalImportResult = {
+	project_ids: string[],
+	chats: number,
+	turns: number,
+	missing_attachments: number,
+};
+
+export type LocalImportSelection = {
+	project_id: string,
+	revision: string,
 };
 
 export type ManagedWorktree = {
