@@ -652,6 +652,7 @@ mod tests {
             db.conn(),
             "dev",
             &QueuedRow {
+                parts: Vec::new(),
                 id: "q".into(),
                 chat_id: chat.clone(),
                 text: "next".into(),

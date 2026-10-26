@@ -568,6 +568,7 @@ pub struct AgentSessionPatch {
 /// A `turns` row as it starts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TurnRow {
+    pub parts: Vec<aura_protocol::PromptPart>,
     pub id: String,
     pub chat_id: String,
     pub agent_session_id: Option<String>,
@@ -614,6 +615,7 @@ pub struct EventRow {
 /// A `queued_prompts` row.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct QueuedRow {
+    pub parts: Vec<aura_protocol::PromptPart>,
     pub id: String,
     pub chat_id: String,
     pub text: String,
@@ -938,6 +940,7 @@ mod tests {
 
     fn queued_prompt(chat: &str) -> Op {
         Op::QueuePut(QueuedRow {
+            parts: Vec::new(),
             id: "p1".into(),
             chat_id: chat.into(),
             text: "hello".into(),
@@ -954,6 +957,7 @@ mod tests {
         };
         Op::BeginTurn {
             turn: TurnRow {
+                parts: Vec::new(),
                 id: "t1".into(),
                 chat_id: chat.into(),
                 agent_session_id: None,
@@ -1344,6 +1348,7 @@ mod tests {
         send(
             store,
             Op::QueuePut(QueuedRow {
+                parts: Vec::new(),
                 id: "q".into(),
                 chat_id: quiet.id.clone(),
                 text: "next".into(),
@@ -1794,6 +1799,7 @@ mod tests {
                 &tx,
                 "dev",
                 &TurnRow {
+                    parts: Vec::new(),
                     id: "t1".into(),
                     chat_id: chat.clone(),
                     agent_session_id: None,
@@ -1834,6 +1840,7 @@ mod tests {
                 store.conn(),
                 "dev",
                 &QueuedRow {
+                    parts: Vec::new(),
                     id: "p1".into(),
                     chat_id: chat.id,
                     text: "hi".into(),
@@ -1872,6 +1879,7 @@ mod tests {
             send(
                 store,
                 Op::QueuePut(QueuedRow {
+                    parts: Vec::new(),
                     id: id.into(),
                     chat_id: chat.id.clone(),
                     text: format!("prompt {id}"),
@@ -1885,6 +1893,7 @@ mod tests {
             store,
             Op::BeginTurn {
                 turn: TurnRow {
+                    parts: Vec::new(),
                     id: "t1".into(),
                     chat_id: chat.id.clone(),
                     agent_session_id: None,

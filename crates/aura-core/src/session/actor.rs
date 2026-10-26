@@ -107,6 +107,7 @@ pub(crate) enum ChatMsg {
     },
     Send {
         text: String,
+        parts: Vec<PromptPart>,
         reply: oneshot::Sender<Result<PromptAck, SessionError>>,
     },
     CancelQueued {
@@ -251,6 +252,7 @@ struct Subscriber {
 
 /// The turn in flight.
 struct OpenTurn {
+    parts: Vec<PromptPart>,
     id: String,
     tag: Arc<str>,
     prompt_id: String,
@@ -379,6 +381,7 @@ enum Done {
 
 /// A prompt about to be sent.
 struct Prompt {
+    parts: Vec<PromptPart>,
     id: String,
     text: String,
     created_at: Millis,
@@ -654,8 +657,8 @@ impl ChatActor {
                 self.read_page(before_seq, max_bytes, PageFor::History { reply });
             }
             ChatMsg::Lists { reply } => drop(reply.send(Ok(self.lists()))),
-            ChatMsg::Send { text, reply } => {
-                let ack = self.send(text);
+            ChatMsg::Send { text, parts, reply } => {
+                let ack = self.send(text, parts);
                 drop(reply.send(ack));
             }
             ChatMsg::CancelQueued { prompt_id, reply } => {
@@ -923,7 +926,7 @@ impl ChatActor {
         }
     }
 
-    fn send(&mut self, text: String) -> Result<PromptAck, SessionError> {
+    fn send(&mut self, text: String, parts: Vec<PromptPart>) -> Result<PromptAck, SessionError> {
         if self.organizing {
             return Err(SessionError::Organization(
                 "Wait for the chat change to finish.".into(),
@@ -952,6 +955,7 @@ impl ChatActor {
         if self.can_dispatch() {
             self.dispatch(Prompt {
                 id: prompt_id.clone(),
+                parts,
                 text,
                 created_at: now,
             });
@@ -966,6 +970,7 @@ impl ChatActor {
         }
         let row = QueuedRow {
             id: prompt_id.clone(),
+            parts,
             chat_id: self.chat_id.clone(),
             text,
             held: false,
@@ -1076,6 +1081,13 @@ impl ChatActor {
         let row = self.queue.remove(index);
         self.dispatch(Prompt {
             id: row.id,
+            parts: if row.parts.is_empty() {
+                vec![PromptPart::Text {
+                    text: row.text.clone(),
+                }]
+            } else {
+                row.parts
+            },
             text: row.text,
             created_at: row.created_at,
         });
@@ -1097,6 +1109,7 @@ impl ChatActor {
         let tag: Arc<str> = Arc::from(turn_id.as_str());
         let started_at = now_millis();
         self.begun = Some(TurnRow {
+            parts: prompt.parts.clone(),
             id: turn_id.clone(),
             chat_id: self.chat_id.clone(),
             agent_session_id: self
@@ -1109,6 +1122,7 @@ impl ChatActor {
             started_at,
         });
         self.turn = Some(OpenTurn {
+            parts: prompt.parts.clone(),
             id: turn_id.clone(),
             tag: Arc::clone(&tag),
             prompt_id: prompt.id.clone(),
@@ -1160,7 +1174,7 @@ impl ChatActor {
         self.last_activity = Instant::now();
         let _ = commands.send(DriverCommand::Prompt {
             turn: TurnRef { turn_id },
-            parts: vec![PromptPart::Text { text: prompt.text }],
+            parts: prompt.parts,
         });
     }
 
@@ -2607,6 +2621,7 @@ impl ChatActor {
             // The prompt goes back into the queue, held, keeping its place; the process stops.
             let row = QueuedRow {
                 id: turn.prompt_id.clone(),
+                parts: turn.parts.clone(),
                 chat_id: self.chat_id.clone(),
                 text: turn.text.clone(),
                 held: true,

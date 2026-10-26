@@ -234,10 +234,17 @@ fn parse_session_host(value: &str) -> aura_protocol::agents::AgentHost {
 /// The chat's queued prompts, oldest first.
 pub(crate) fn queued(conn: &Connection, chat_id: &str) -> rusqlite::Result<Vec<QueuedRow>> {
     let mut stmt = conn.prepare_cached(
-        "SELECT id, chat_id, text, held, created_at FROM queued_prompts WHERE chat_id = ?1 ORDER BY created_at, id",
+        "SELECT id, chat_id, text, held, created_at, parts_json FROM queued_prompts WHERE chat_id = ?1 ORDER BY created_at, id",
     )?;
     let rows = stmt.query_map(params![chat_id], |row| {
         Ok(QueuedRow {
+            parts: serde_json::from_str(&row.get::<_, String>(5)?).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    5,
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })?,
             id: row.get(0)?,
             chat_id: row.get(1)?,
             text: row.get(2)?,
@@ -422,7 +429,7 @@ pub(crate) fn begin_turn(
 ) -> rusqlite::Result<()> {
     conn.prepare_cached(
         "INSERT INTO turns (id, chat_id, agent_session_id, seq, status, started_at, device_id, prompt_id, \
-         first_event_seq) VALUES (?1, ?2, ?3, ?4, 'running', ?5, ?6, ?7, ?8)",
+         first_event_seq, prompt_parts_json) VALUES (?1, ?2, ?3, ?4, 'running', ?5, ?6, ?7, ?8, ?9)",
     )?
     .execute(params![
         turn.id,
@@ -433,6 +440,7 @@ pub(crate) fn begin_turn(
         device_id,
         turn.prompt_id,
         turn.first_event_seq,
+        serde_json::to_string(&turn.parts).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
     ])?;
     append_events(conn, device_id, &turn.chat_id, rows)?;
     conn.prepare_cached("DELETE FROM queued_prompts WHERE id = ?1")?
@@ -528,8 +536,8 @@ pub(crate) fn queue_put(
     row: &QueuedRow,
 ) -> rusqlite::Result<()> {
     conn.prepare_cached(
-        "INSERT OR REPLACE INTO queued_prompts (id, chat_id, text, held, created_at, device_id) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT OR REPLACE INTO queued_prompts (id, chat_id, text, held, created_at, device_id, parts_json) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
     )?
     .execute(params![
         row.id,
@@ -538,6 +546,7 @@ pub(crate) fn queue_put(
         i64::from(row.held),
         row.created_at,
         device_id,
+        serde_json::to_string(&row.parts).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
     ])?;
     Ok(())
 }
@@ -732,6 +741,7 @@ pub(crate) mod tests {
             conn,
             "dev",
             &TurnRow {
+                parts: Vec::new(),
                 id: "t1".into(),
                 chat_id: chat.clone(),
                 agent_session_id: Some("s1".into()),
@@ -778,6 +788,7 @@ pub(crate) mod tests {
             conn,
             "dev",
             &QueuedRow {
+                parts: Vec::new(),
                 id: "q2".into(),
                 chat_id: chat.clone(),
                 text: "later".into(),
@@ -790,6 +801,7 @@ pub(crate) mod tests {
             conn,
             "dev",
             &QueuedRow {
+                parts: Vec::new(),
                 id: "q1".into(),
                 chat_id: chat.clone(),
                 text: "first".into(),
@@ -847,6 +859,7 @@ pub(crate) mod tests {
                 conn,
                 "dev",
                 &QueuedRow {
+                    parts: Vec::new(),
                     id: id.into(),
                     chat_id: chat.clone(),
                     text: "x".into(),

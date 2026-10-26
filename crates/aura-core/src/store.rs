@@ -64,7 +64,7 @@ use lock::OpenLock;
 use recovery::Recovery;
 
 /// The schema version this build reads and writes; equals the number of migrations.
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 /// Pre-migration backups kept per database. Enough to step back through several upgrades without
 /// letting a long-lived install fill the disk with copies.
@@ -85,6 +85,7 @@ static MIGRATIONS: [M<'static>; SCHEMA_VERSION as usize] = [
     M::up(include_str!("../migrations/0001_initial.sql")).foreign_key_check(),
     M::up(include_str!("../migrations/0002_sessions.sql")).foreign_key_check(),
     M::up(include_str!("../migrations/0003_agent_hosts.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0004_composer.sql")).foreign_key_check(),
 ];
 
 fn migrations() -> &'static [M<'static>] {

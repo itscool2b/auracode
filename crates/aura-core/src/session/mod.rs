@@ -772,6 +772,7 @@ impl SessionManager {
         }
         self.ask(chat_id, |reply| ChatMsg::Send {
             text: text.clone(),
+            parts: vec![aura_protocol::PromptPart::Text { text: text.clone() }],
             reply,
         })
         .await

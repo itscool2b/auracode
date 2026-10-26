@@ -1817,6 +1817,7 @@ mod tests {
             store.conn(),
             "dev",
             &QueuedRow {
+                parts: Vec::new(),
                 id: "q".into(),
                 chat_id: chat.id.clone(),
                 text: "typed before the crash".into(),
