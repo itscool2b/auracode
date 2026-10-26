@@ -26,6 +26,7 @@
 //! - `sleep <seconds>`: sleeps.
 //! - `print-env`: prints `{"env":{...}}`. `print-cwd`: prints `{"cwd":"..."}`.
 //! - `echo`: echoes stdin lines until its end, then prints `{"eof":true}` and exits 0.
+//! - `raw-echo`: copies stdin bytes unchanged to stdout until end of file.
 //! - `orphan <seconds>`: starts `sleep <seconds>` through aura-process's `Spawner`, prints its pid,
 //!   waits for a line on stdin, then exits without running destructors, the way a crash would.
 //!
@@ -36,7 +37,7 @@
 //! (same session) and appends its own and that child's pid to `AURA_TESTBIN_PIDFILE`.
 
 use std::ffi::OsString;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
@@ -82,6 +83,20 @@ fn run(args: &[String]) -> Result<ExitCode> {
         .split_first()
         .ok_or("missing mode; see the module docs")?;
     match mode.as_str() {
+        "raw-echo" => {
+            let mut input = io::stdin().lock();
+            let mut output = io::stdout().lock();
+            let mut buffer = [0; 4096];
+            loop {
+                let count = input.read(&mut buffer)?;
+                if count == 0 {
+                    break;
+                }
+                output.write_all(&buffer[..count])?;
+                output.flush()?;
+            }
+            Ok(ExitCode::SUCCESS)
+        }
         "json-lines" => json_lines(number(rest, 0)?, number(rest, 1).unwrap_or(0)),
         "flood-stderr" => {
             write_repeated(&mut io::stderr().lock(), number(rest, 0)?)?;

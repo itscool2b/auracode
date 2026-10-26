@@ -153,6 +153,33 @@ impl ExitInfo {
     }
 }
 
+/// The shutdown chain can close either protocol lines or an unlogged binary transport.
+pub(crate) enum StdinControl {
+    Lines(LineSink),
+    Bytes(crate::raw::ByteSink),
+}
+
+impl StdinControl {
+    pub(crate) fn close(&self) {
+        match self {
+            Self::Lines(stdin) => stdin.close(),
+            Self::Bytes(stdin) => stdin.close(),
+        }
+    }
+}
+
+impl From<LineSink> for StdinControl {
+    fn from(stdin: LineSink) -> Self {
+        Self::Lines(stdin)
+    }
+}
+
+impl From<crate::raw::ByteSink> for StdinControl {
+    fn from(stdin: crate::raw::ByteSink) -> Self {
+        Self::Bytes(stdin)
+    }
+}
+
 /// What a real agent's control and its shutdown chain share.
 pub(crate) struct ControlState {
     pub(crate) pid: u32,
@@ -162,7 +189,7 @@ pub(crate) struct ControlState {
     /// Unix: its start time, so a recycled pid is never taken for it.
     #[cfg(unix)]
     pub(crate) start: crate::ptable::StartTime,
-    pub(crate) stdin: LineSink,
+    pub(crate) stdin: StdinControl,
     pub(crate) exit: watch::Receiver<Option<ExitInfo>>,
     pub(crate) tail: Arc<StderrTail>,
     pub(crate) log: ProtocolLog,
@@ -193,7 +220,7 @@ impl ControlState {
     pub(crate) fn new(
         pid: u32,
         #[cfg(unix)] start: crate::ptable::StartTime,
-        stdin: LineSink,
+        stdin: impl Into<StdinControl>,
         exit: watch::Receiver<Option<ExitInfo>>,
         tail: Arc<StderrTail>,
         log: ProtocolLog,
@@ -209,7 +236,7 @@ impl ControlState {
             pgid: pid,
             #[cfg(unix)]
             start,
-            stdin,
+            stdin: stdin.into(),
             exit,
             tail,
             log,

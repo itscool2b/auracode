@@ -658,3 +658,15 @@ and autonomy assertions. Final combined CI and real-agent qualification remain p
 - One finished PR per milestone, no automatic merges. This foundation branch precedes M1b.
 - Added LF text checkout attributes after Windows CRLF conversion caused baseline formatter failures.
   Normalization changes no existing tracked source content; binary files remain binary.
+
+## M1e terminal foundation
+
+The native process layer now exposes a raw binary transport using the existing environment scrub,
+registry, direct-child exit observation and owned-tree shutdown. Its bounded stdin queue preserves
+whole packets when an async enqueue is cancelled; close interrupts blocked output and discards
+queued transport bytes. Terminal payloads never enter protocol logs or the retained stderr tail.
+Windows validation passed 183 process unit tests, three raw transport regressions, 31 existing
+spawn/helper/shutdown tests and all-target Clippy. The tests verify binary fidelity, concurrent pipe
+draining, owned descendants ending on last-control drop and an unrelated sibling remaining alive.
+The PTY platform layer, explicit sign-in sheet, Unix execution evidence and vendor acceptance remain
+pending. No vendor login or model prompt was run.

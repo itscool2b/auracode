@@ -125,6 +125,50 @@ impl Spawner {
     pub fn registry(&self) -> &Arc<LeftoverRegistry> {
         &self.registry
     }
+
+    /// Starts a native binary transport with the ordinary environment and tree-ownership rules.
+    /// No stdin/stdout/stderr content is logged. Callers must consume both output streams.
+    pub async fn spawn_raw(&self, spec: SpawnSpec) -> Result<crate::raw::RawProcess, SpawnError> {
+        let cwd = match &spec.launch.cwd {
+            ProcessCwd::ChatFolder => spec.folder,
+            ProcessCwd::Fixed(dir) => dir.clone(),
+        };
+        let (vars, _) = child_env(&spec.env, &spec.launch.set_env);
+        check(&self.rt, &cwd, &spec.launch.program, &vars).await?;
+        let command = command(
+            &spec.launch.program,
+            &spec.launch.args,
+            &cwd,
+            &vars,
+            Stdio::piped(),
+        );
+        let mut child = start(&self.rt, command, false, &spec.launch.program)?;
+        let missing_pipe = || SpawnError::Spawn {
+            program: spec.launch.program.display().to_string(),
+            source: io::Error::other("the owned transport is missing a pipe"),
+        };
+        let input = child.stdin().take().ok_or_else(missing_pipe)?;
+        let stdout = child.stdout().take().ok_or_else(missing_pipe)?;
+        let stderr = child.stderr().take().ok_or_else(missing_pipe)?;
+        let (stdin, receiver) = crate::raw::ByteSink::channel();
+        let control = own_child(
+            Arc::clone(&self.registry),
+            self.rt.clone(),
+            child,
+            &spec.launch,
+            stdin.clone(),
+            ProtocolLog::disabled(),
+            Arc::new(StderrTail::default()),
+        )
+        .await?;
+        self.rt.spawn(receiver.forward(input));
+        Ok(crate::raw::RawProcess {
+            stdin,
+            stdout,
+            stderr,
+            control,
+        })
+    }
 }
 
 impl ProcessSpawner for Spawner {
@@ -162,14 +206,6 @@ async fn spawn_agent(
     let command = command(&launch.program, &launch.args, &cwd, &vars, Stdio::piped());
     let mut child = start(&rt, command, false, &launch.program)?;
     let pid = child_pid(child.as_ref(), &launch.program)?;
-    // Until the control exists, a dropped spawn kills the tree and drops its registry entry.
-    let mut guard = SpawnGuard {
-        #[cfg(unix)]
-        pid,
-        rt: rt.clone(),
-        registration: Registration::new(registry.handle(), pid),
-        armed: true,
-    };
     let stdin_pipe = child.stdin().take();
     let stdout_pipe = child.stdout().take();
     let stderr_pipe = child.stderr().take();
@@ -192,21 +228,19 @@ async fn spawn_agent(
         pid,
     });
 
-    // Unix: the start time tells this agent from a recycled pid, and the registry entry lets the
-    // next start stop it if auracode dies first. A registry failure is only a warning.
-    #[cfg(unix)]
-    let start_time = {
-        let registration = guard.registration.clone();
-        let label = launch.label.clone();
-        let daemons = launch.daemons.clone();
-        rt.spawn_blocking(move || register_agent(&registration, pid, label, daemons))
-            .await
-            .unwrap_or(crate::ptable::StartTime::Unknown)
-    };
-
     let tail = Arc::new(StderrTail::default());
     let (sink, stdin_rx) = LineSink::channel();
     let (stdout_tx, source) = stdout_channel();
+    let control = own_child(
+        registry,
+        rt.clone(),
+        child,
+        &launch,
+        sink.clone(),
+        log.clone(),
+        Arc::clone(&tail),
+    )
+    .await?;
     if let Some(pipe) = stdin_pipe {
         rt.spawn(crate::io::write_stdin(pipe, stdin_rx, log.clone()));
     }
@@ -221,6 +255,45 @@ async fn spawn_agent(
     if let Some(pipe) = stderr_pipe {
         rt.spawn(crate::stderr::drain(pipe, Arc::clone(&tail), log.clone()));
     }
+    Ok(SpawnedProcess {
+        spawn_id: log.spawn_id().to_owned(),
+        io: AgentIo {
+            stdin: sink,
+            stdout: source,
+        },
+        control,
+        log,
+    })
+}
+
+/// Attach registry, direct-child exit observation and existing tree cleanup to a prepared child.
+/// The guard covers cancellation while registration is written on the blocking pool.
+pub(crate) async fn own_child(
+    registry: Arc<LeftoverRegistry>,
+    rt: Handle,
+    child: Box<dyn ChildWrapper>,
+    launch: &LaunchSpec,
+    stdin: impl Into<crate::control::StdinControl>,
+    log: ProtocolLog,
+    tail: Arc<StderrTail>,
+) -> Result<ProcessControl, SpawnError> {
+    let pid = child_pid(child.as_ref(), &launch.program)?;
+    let mut guard = SpawnGuard {
+        #[cfg(unix)]
+        pid,
+        rt: rt.clone(),
+        registration: Registration::new(registry.handle(), pid),
+        armed: true,
+    };
+    #[cfg(unix)]
+    let start_time = {
+        let registration = guard.registration.clone();
+        let label = launch.label.clone();
+        let daemons = launch.daemons.clone();
+        rt.spawn_blocking(move || register_agent(&registration, pid, label, daemons))
+            .await
+            .unwrap_or(crate::ptable::StartTime::Unknown)
+    };
     let (exit_tx, exit_rx) = watch::channel(None);
     #[cfg(windows)]
     let (kill_tx, kill_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -239,29 +312,21 @@ async fn spawn_agent(
         pid,
         #[cfg(unix)]
         start_time,
-        sink.clone(),
+        stdin,
         exit_rx,
         tail,
         log.clone(),
         rt,
         registry.handle(),
         #[cfg(unix)]
-        launch.daemons,
+        launch.daemons.clone(),
         #[cfg(unix)]
         group_gone,
         #[cfg(windows)]
         kill_tx,
     );
     guard.armed = false;
-    Ok(SpawnedProcess {
-        spawn_id: log.spawn_id().to_owned(),
-        io: AgentIo {
-            stdin: sink,
-            stdout: source,
-        },
-        control: ProcessControl::new(Arc::new(ChildControl::new(state))),
-        log,
-    })
+    Ok(ProcessControl::new(Arc::new(ChildControl::new(state))))
 }
 
 /// Reads a process's start time and records it in the registry (blocking).
