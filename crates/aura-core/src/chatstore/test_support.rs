@@ -35,6 +35,7 @@ impl TestDb {
         rows::create_chat(
             self.conn(),
             &NewChat {
+                agent_host: Default::default(),
                 agent_id: "mock".into(),
                 folder: PathBuf::from(folder),
                 device_id: "dev".into(),

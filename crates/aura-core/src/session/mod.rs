@@ -526,6 +526,7 @@ impl SessionManager {
             .detector
             .spec(&record.agent_id)
             .map_or_else(|| record.agent_id.clone(), |spec| spec.name.to_owned());
+        let agent_name = aura_agents::hosts::display_name(&agent_name, &record.agent_host);
         // The list never reads a folder (that is what a macOS privacy prompt guards), so a refusal
         // is the one the last start met; whether the folder exists is current, or what the last
         // start found when the check did not answer.
@@ -541,6 +542,7 @@ impl SessionManager {
                 .and_then(|state| state.title.clone())
                 .or(record.title),
             agent_id: record.agent_id,
+            agent_host: record.agent_host,
             agent_name,
             folder: record.folder.to_string_lossy().into_owned(),
             folder_state,
@@ -561,8 +563,25 @@ impl SessionManager {
         agent_id: &str,
         folder: &Path,
     ) -> Result<ChatSummary, SessionError> {
+        self.create_chat_on_host(agent_id, aura_protocol::agents::AgentHost::Native, folder)
+            .await
+    }
+
+    /// Creates a chat on the explicitly selected host. The folder is this device's local path;
+    /// a qualified host bridge must translate it before the driver or Linux process receives it.
+    pub async fn create_chat_on_host(
+        &self,
+        agent_id: &str,
+        agent_host: aura_protocol::agents::AgentHost,
+        folder: &Path,
+    ) -> Result<ChatSummary, SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
+        }
+        if let aura_process::HostAvailability::Unavailable { reason } =
+            aura_agents::hosts::execution(&agent_host).availability()
+        {
+            return Err(SessionError::AgentUnavailable(reason));
         }
         let detector = &self.deps().detector;
         if detector.spec(agent_id).is_none() {
@@ -586,6 +605,7 @@ impl SessionManager {
             .map_err(|_| SessionError::Internal("checking the folder failed".into()))?;
         checked?;
         let new = NewChat {
+            agent_host,
             agent_id: agent_id.to_owned(),
             folder: folder.to_path_buf(),
             device_id: self.deps().device_id.clone(),

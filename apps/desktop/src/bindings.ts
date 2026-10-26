@@ -77,6 +77,11 @@ export const commands = {
 	 */
 	chatCreate: (agentId: string, folder: string) => typedError<ChatSummary, AppError>(__TAURI_INVOKE("chat_create", { agentId, folder })),
 	/**
+	 *  Creates a chat on an explicitly selected execution host. Unsupported hosts are refused before
+	 *  writing the chat or starting any native process.
+	 */
+	chatCreateOnHost: (agentId: string, agentHost: AgentHost, folder: string) => typedError<ChatSummary, AppError>(__TAURI_INVOKE("chat_create_on_host", { agentId, agentHost, folder })),
+	/**
 	 *  Opens a view of a chat: the snapshot and the newest history page, consistent with the frames
 	 *  `channel` carries from `next_seq` on. Opening a chat never starts its agent. A webview has one
 	 *  view per chat; attaching again replaces the earlier one.
@@ -424,6 +429,7 @@ export type ChatSummary = {
 	id: string,
 	title: string | null,
 	agent_id: string,
+	agent_host?: AgentHost,
 	agent_name: string,
 	folder: string,
 	folder_state: FolderState,

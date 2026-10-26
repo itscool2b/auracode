@@ -1336,9 +1336,11 @@ impl ChatActor {
     }
 
     fn agent_label(&self) -> String {
-        self.spec
+        let name = self
+            .spec
             .as_ref()
-            .map_or_else(|| self.chat.agent_id.clone(), |spec| spec.name.to_owned())
+            .map_or_else(|| self.chat.agent_id.clone(), |spec| spec.name.to_owned());
+        aura_agents::hosts::display_name(&name, &self.chat.agent_host)
     }
 
     /// Starts the agent. `explicit` (`chat_start`): a full slot is an error; otherwise a card.
@@ -1381,6 +1383,15 @@ impl ChatActor {
             self.start_failed(ErrorKind::AgentUnavailable, reason, None, false);
             return Ok(());
         };
+        if !fresh
+            && self
+                .agent_session
+                .as_ref()
+                .is_some_and(|session| session.host != self.chat.agent_host)
+        {
+            self.start_failed(ErrorKind::AgentUnavailable, "The saved session belongs to a different execution host. Start a fresh session to use this host.".into(), None, false);
+            return Ok(());
+        }
         if !self.shared.live.acquire(&self.chat_id) {
             let error = SessionError::TooManyAgents(self.shared.live.max());
             if explicit {
@@ -1401,6 +1412,7 @@ impl ChatActor {
         let deps = &self.shared.deps;
         let task = deps.rt.spawn(prepare(
             folder,
+            self.chat.agent_host.clone(),
             spec.clone(),
             Arc::clone(&deps.detector),
             Arc::clone(&deps.env),
@@ -1499,7 +1511,10 @@ impl ChatActor {
         let (commands, command_rx) = mpsc::unbounded_channel();
         let (events, event_rx) = event_channel();
         let spawner = Arc::new(SessionSpawner::new(
-            Arc::clone(&deps.spawner),
+            aura_process::HostSpawner::new(
+                Arc::clone(&deps.spawner),
+                aura_agents::hosts::execution(&self.chat.agent_host),
+            ),
             deps.logs.clone(),
             self.chat_id.clone(),
             Arc::clone(&self.book),
@@ -2276,6 +2291,7 @@ impl ChatActor {
             }
             _ => {
                 let row = AgentSessionRow {
+                    host: self.chat.agent_host.clone(),
                     id: new_id(),
                     chat_id: self.chat_id.clone(),
                     agent_id: spec.id.to_owned(),
@@ -3307,6 +3323,7 @@ impl ChatActor {
             id: self.chat_id.clone(),
             title: self.chat.title.clone(),
             agent_id: self.chat.agent_id.clone(),
+            agent_host: self.chat.agent_host.clone(),
             agent_name: self.agent_label(),
             folder: self.chat.folder.to_string_lossy().into_owned(),
             folder_state: self.folder_state,
@@ -3577,6 +3594,7 @@ async fn next_progress(progress: &mut Option<mpsc::UnboundedReceiver<String>>) -
 /// session, which this start may resume.
 async fn prepare(
     folder: PathBuf,
+    agent_host: aura_protocol::agents::AgentHost,
     spec: AgentSpec,
     detector: Arc<aura_agents::Detector>,
     env: Arc<aura_process::EnvResolver>,
@@ -3585,6 +3603,15 @@ async fn prepare(
 ) -> Result<Prepared, StartFailure> {
     // The actor holds the sender for as long as this task can matter.
     let _ = winding_down.wait_for(|retiring| *retiring == 0).await;
+    if let aura_process::HostAvailability::Unavailable { reason } =
+        aura_agents::hosts::execution(&agent_host).availability()
+    {
+        return Err(StartFailure {
+            kind: ErrorKind::AgentUnavailable,
+            message: reason,
+            folder: None,
+        });
+    }
     check_folder(folder).await?;
     match detector.detect(&spec).await {
         Availability::Missing { reason } | Availability::Broken { reason } => {

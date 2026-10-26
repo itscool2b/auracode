@@ -468,6 +468,7 @@ pub enum Op {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct NewChat {
     pub agent_id: String,
+    pub agent_host: aura_protocol::agents::AgentHost,
     pub folder: PathBuf,
     pub device_id: String,
     pub now: Millis,
@@ -479,6 +480,7 @@ pub struct ChatRecord {
     pub title: Option<String>,
     pub title_source: Option<TitleSource>,
     pub agent_id: String,
+    pub agent_host: aura_protocol::agents::AgentHost,
     pub folder: PathBuf,
     pub created_at: Millis,
     pub updated_at: Millis,
@@ -508,6 +510,7 @@ pub struct ReplayCheck {
 /// An `agent_sessions` row.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AgentSessionRow {
+    pub host: aura_protocol::agents::AgentHost,
     pub id: String,
     pub chat_id: String,
     pub agent_id: String,
@@ -711,6 +714,7 @@ mod tests {
     async fn new_chat(store: &ChatStore) -> ChatRecord {
         store
             .create_chat(NewChat {
+                agent_host: Default::default(),
                 agent_id: "mock".into(),
                 folder: PathBuf::from("/work/repo"),
                 device_id: "dev".into(),
@@ -1638,6 +1642,7 @@ mod tests {
             let chat = rows::create_chat(
                 store.conn(),
                 &NewChat {
+                    agent_host: Default::default(),
                     agent_id: "mock".into(),
                     folder: PathBuf::from("/w"),
                     device_id: "dev".into(),
@@ -1705,6 +1710,7 @@ mod tests {
             let chat = rows::create_chat(
                 store.conn(),
                 &NewChat {
+                    agent_host: Default::default(),
                     agent_id: "mock".into(),
                     folder: PathBuf::from("/w"),
                     device_id: "dev".into(),
@@ -1786,6 +1792,7 @@ mod tests {
             let chat = rows::create_chat(
                 store.conn(),
                 &NewChat {
+                    agent_host: Default::default(),
                     agent_id: "mock".into(),
                     folder: PathBuf::from("/w"),
                     device_id: "dev".into(),
@@ -1919,6 +1926,7 @@ mod tests {
             let chat = rows::create_chat(
                 store.conn(),
                 &NewChat {
+                    agent_host: Default::default(),
                     agent_id: "mock".into(),
                     folder: PathBuf::from("/w"),
                     device_id: "dev".into(),

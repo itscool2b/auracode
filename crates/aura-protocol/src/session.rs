@@ -98,6 +98,8 @@ pub struct ChatSummary {
     pub id: String,
     pub title: Option<String>,
     pub agent_id: String,
+    #[serde(default)]
+    pub agent_host: crate::agents::AgentHost,
     pub agent_name: String,
     pub folder: String,
     pub folder_state: FolderState,
@@ -328,6 +330,7 @@ mod tests {
 
     fn summary() -> ChatSummary {
         ChatSummary {
+            agent_host: Default::default(),
             id: "c".into(),
             title: None,
             agent_id: "hermes".into(),

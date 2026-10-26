@@ -284,6 +284,18 @@ alias probes cannot survive a vendor update. Remote catalog CI still needs the i
 assertion and spike-documentation fixes; WSL supervision, host persistence and milestone acceptance
 remain pending. No real authentication flow, update or paid prompt was run.
 
+Host persistence now uses schema migration 0003, with the existing pre-migration backup and rollback
+path. Earlier chats and agent sessions remain native. A typed host is saved independently of the
+provider and transport; unknown host data is unavailable rather than silently native. The legacy
+`create_chat` API remains native, and `create_chat_on_host` plus generated `chatCreateOnHost` and
+`ChatSummary.agent_host` form the explicit UI seam for M2b. Restored WSL/unknown chats fail before
+native detection or spawning while the qualified Linux bridge is unavailable. Resuming a saved ID
+from another host is refused; starting fresh is explicit. Native launches now pass through
+`HostSpawner`. The 258 core unit tests and 27 lifecycle tests passed before the final two targeted
+host regressions, which also pass, as do bindings export, targeted all-target Clippy, desktop
+typecheck and 287 desktop tests. Linux cwd translation and canonical configuration realms await the
+supervisor inspection contract; no WSL launch capability is claimed yet.
+
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
   no-form plan auto-approval path and exposes only its enforceable Full auto autonomy. See

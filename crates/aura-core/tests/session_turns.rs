@@ -1111,6 +1111,7 @@ async fn seq_limit() {
     let record = h
         .store
         .create_chat(aura_core::chatstore::NewChat {
+            agent_host: Default::default(),
             agent_id: MOCK.into(),
             folder: h.folder.clone(),
             device_id: "device".into(),

@@ -56,6 +56,7 @@ export function chatSummary(id: string, overrides: Partial<ChatSummary> = {}): C
     id,
     title: null,
     agent_id: "mock",
+    agent_host: { type: "native" },
     agent_name: "Demo agent",
     folder: "/Users/me/code/app",
     folder_state: "ok",

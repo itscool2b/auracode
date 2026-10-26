@@ -94,6 +94,25 @@ pub fn host_key(host: &AgentHost) -> Result<String, HostError> {
     }
 }
 
+/// Convert at the process boundary. Unknown hosts never fall back to native execution.
+pub fn execution(host: &AgentHost) -> aura_process::HostExecution {
+    match host {
+        AgentHost::Native => aura_process::HostExecution::Native,
+        AgentHost::Wsl { distro } if valid_distro(distro) => aura_process::HostExecution::Wsl {
+            distro: distro.clone(),
+        },
+        AgentHost::Wsl { .. } | AgentHost::Unsupported => aura_process::HostExecution::Unsupported,
+    }
+}
+
+pub fn display_name(agent: &str, host: &AgentHost) -> String {
+    match host {
+        AgentHost::Native => agent.into(),
+        AgentHost::Wsl { distro } if valid_distro(distro) => format!("{agent} · WSL {distro}"),
+        AgentHost::Wsl { .. } | AgentHost::Unsupported => format!("{agent} · Unsupported host"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

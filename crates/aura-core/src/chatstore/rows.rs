@@ -43,7 +43,7 @@ pub(crate) fn chats(conn: &Connection, device_id: &str) -> rusqlite::Result<Vec<
 /// A chat with the folder as this device knows it (any device's path when this one has none).
 const CHAT_SELECT: &str = "SELECT c.id, c.title, c.title_source, c.active_agent, c.created_at, c.updated_at, \
      COALESCE((SELECT fl.path FROM folder_locations fl WHERE fl.folder_id = c.folder_id AND fl.device_id = ?1), \
-              (SELECT fl.path FROM folder_locations fl WHERE fl.folder_id = c.folder_id LIMIT 1)) \
+              (SELECT fl.path FROM folder_locations fl WHERE fl.folder_id = c.folder_id LIMIT 1)), c.agent_host \
      FROM chats c";
 
 fn chat_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatRecord> {
@@ -54,6 +54,8 @@ fn chat_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatRecord> {
         title: row.get(1)?,
         title_source: title_source.as_deref().and_then(parse_title_source),
         agent_id: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+        agent_host: serde_json::from_str(&row.get::<_, String>(7)?)
+            .unwrap_or(aura_protocol::agents::AgentHost::Unsupported),
         folder: PathBuf::from(folder.unwrap_or_default()),
         created_at: row.get(4)?,
         updated_at: row.get(5)?,
@@ -122,15 +124,17 @@ pub(crate) fn create_chat(conn: &Connection, new: &NewChat) -> rusqlite::Result<
     };
     let id = new_id();
     conn.prepare_cached(
-        "INSERT INTO chats (id, project_id, folder_id, active_agent, created_at, updated_at, device_id) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6)",
+        "INSERT INTO chats (id, project_id, folder_id, active_agent, created_at, updated_at, device_id, agent_host) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6, ?7)",
     )?
-    .execute(params![id, project_id, folder_id, new.agent_id, new.now, new.device_id])?;
+    .execute(params![id, project_id, folder_id, new.agent_id, new.now, new.device_id,
+        serde_json::to_string(&new.agent_host).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?])?;
     Ok(ChatRecord {
         id,
         title: None,
         title_source: None,
         agent_id: new.agent_id.clone(),
+        agent_host: new.agent_host.clone(),
         folder: new.folder.clone(),
         created_at: new.now,
         updated_at: new.now,
@@ -194,12 +198,13 @@ pub(crate) fn latest_agent_session(
 ) -> rusqlite::Result<Option<AgentSessionRow>> {
     conn.prepare_cached(
         "SELECT id, chat_id, agent_id, native_session_id, model, effort, autonomy, config_json, cwd, \
-         created_at, updated_at FROM agent_sessions WHERE chat_id = ?1 ORDER BY created_at DESC, id DESC LIMIT 1",
+         created_at, updated_at, host FROM agent_sessions WHERE chat_id = ?1 ORDER BY created_at DESC, id DESC LIMIT 1",
     )?
     .query_row(params![chat_id], |row| {
         let autonomy: Option<String> = row.get(6)?;
         let cwd: String = row.get(8)?;
         Ok(AgentSessionRow {
+            host: parse_session_host(&row.get::<_, String>(11)?),
             id: row.get(0)?,
             chat_id: row.get(1)?,
             agent_id: row.get(2)?,
@@ -214,6 +219,15 @@ pub(crate) fn latest_agent_session(
         })
     })
     .optional()
+}
+
+fn parse_session_host(value: &str) -> aura_protocol::agents::AgentHost {
+    // The original schema's SQL default remains valid for old writers and recovered rows.
+    if value == "native" {
+        aura_protocol::agents::AgentHost::Native
+    } else {
+        serde_json::from_str(value).unwrap_or(aura_protocol::agents::AgentHost::Unsupported)
+    }
 }
 
 /// The chat's queued prompts, oldest first.
@@ -335,7 +349,7 @@ pub(crate) fn insert_agent_session(
 ) -> rusqlite::Result<()> {
     conn.prepare_cached(
         "INSERT INTO agent_sessions (id, chat_id, agent_id, native_session_id, model, effort, autonomy, cwd, \
-         created_at, updated_at, device_id, config_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+         created_at, updated_at, device_id, config_json, host) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
     )?
     .execute(params![
         row.id,
@@ -350,6 +364,7 @@ pub(crate) fn insert_agent_session(
         row.updated_at,
         device_id,
         row.config_json,
+        serde_json::to_string(&row.host).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
     ])?;
     Ok(())
 }
@@ -571,12 +586,64 @@ pub(crate) mod tests {
     use crate::chatstore::test_support::{TestDb, event_row};
 
     #[test]
+    fn chat_host_roundtrips_and_unknown_hosts_never_become_native() {
+        use aura_protocol::agents::AgentHost;
+        let db = TestDb::new();
+        let saved = create_chat(
+            db.conn(),
+            &NewChat {
+                agent_id: "codex".into(),
+                agent_host: AgentHost::Wsl {
+                    distro: "My Linux".into(),
+                },
+                folder: "/work".into(),
+                device_id: "dev".into(),
+                now: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            chat(db.conn(), "dev", &saved.id).unwrap(),
+            Some(saved.clone())
+        );
+        db.conn()
+            .execute(
+                "UPDATE chats SET agent_host = ?1 WHERE id = ?2",
+                params![r#"{"type":"future"}"#, saved.id],
+            )
+            .unwrap();
+        assert_eq!(
+            chat(db.conn(), "dev", &saved.id)
+                .unwrap()
+                .unwrap()
+                .agent_host,
+            AgentHost::Unsupported
+        );
+        db.conn()
+            .execute(
+                "UPDATE chats SET agent_host = 'malformed' WHERE id = ?1",
+                params![saved.id],
+            )
+            .unwrap();
+        assert_eq!(
+            chat(db.conn(), "dev", &saved.id)
+                .unwrap()
+                .unwrap()
+                .agent_host,
+            AgentHost::Unsupported
+        );
+        assert_eq!(parse_session_host("native"), AgentHost::Native);
+        assert_eq!(parse_session_host("future"), AgentHost::Unsupported);
+    }
+
+    #[test]
     fn a_chat_in_a_new_folder_creates_its_project_folder_and_location() {
         let db = TestDb::new();
         let conn = db.conn();
         let chat = create_chat(
             conn,
             &NewChat {
+                agent_host: Default::default(),
                 agent_id: "mock".into(),
                 folder: PathBuf::from("/work/my repo"),
                 device_id: "dev".into(),
@@ -606,6 +673,7 @@ pub(crate) mod tests {
         let db = TestDb::new();
         let conn = db.conn();
         let new = |now| NewChat {
+            agent_host: Default::default(),
             agent_id: "mock".into(),
             folder: PathBuf::from("/work/repo"),
             device_id: "dev".into(),
@@ -645,6 +713,7 @@ pub(crate) mod tests {
         assert_eq!(empty.agent_session, None);
 
         let session = AgentSessionRow {
+            host: Default::default(),
             id: "s1".into(),
             chat_id: chat.clone(),
             agent_id: "mock".into(),

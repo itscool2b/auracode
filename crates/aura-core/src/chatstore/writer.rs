@@ -1772,6 +1772,7 @@ mod tests {
         let chat = rows::create_chat(
             store.conn(),
             &NewChat {
+                agent_host: Default::default(),
                 agent_id: "mock".into(),
                 folder: PathBuf::from("/work"),
                 device_id: "dev".into(),

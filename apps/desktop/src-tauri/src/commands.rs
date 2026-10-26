@@ -275,6 +275,22 @@ pub async fn chat_create(
         .await?)
 }
 
+/// Creates a chat on an explicitly selected execution host. Unsupported hosts are refused before
+/// writing the chat or starting any native process.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_create_on_host(
+    state: State<'_, AppState>,
+    agent_id: String,
+    agent_host: aura_protocol::agents::AgentHost,
+    folder: String,
+) -> Result<ChatSummary, AppError> {
+    Ok(state
+        .sessions()?
+        .create_chat_on_host(&agent_id, agent_host, Path::new(&folder))
+        .await?)
+}
+
 /// Opens a view of a chat: the snapshot and the newest history page, consistent with the frames
 /// `channel` carries from `next_seq` on. Opening a chat never starts its agent. A webview has one
 /// view per chat; attaching again replaces the earlier one.
