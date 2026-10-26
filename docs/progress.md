@@ -159,6 +159,14 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   persists user settings. The Pi free probe uses native read-only state checks and leaves settings
   unchanged. New regressions cover resource bounds, exhausted retries, dropped setting receivers
   and buffered process output under event backpressure. Final Windows and follow-up CI are pending.
+- CI run `40280216757` passed every applicable gate for `fa41b80` on Linux and Windows, including
+  workspace tests, Clippy, generated bindings, replay and desktop smoke tests. Lint and PowerShell
+  checks also passed. The next source audit found the synthetic settlement fixture incorrectly
+  included an `aborted` field: official Pi 1.0.2 emits `agent_settled` without fields. Corrected
+  the adapter and fixture, deriving cancellation from owned interrupts or assistant stop reasons.
+  Added manual-compaction idle handling, automatic-compaction continuation coverage and a bound
+  for oversized committed block arrays. These follow-up changes require their own CI run. No
+  real prompts have been sent, and M1d acceptance remains pending.
 
 ## Decisions and constraints
 

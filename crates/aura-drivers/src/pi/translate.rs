@@ -202,6 +202,12 @@ impl Translator {
         if !self.ended.insert(digest) {
             return;
         }
+        if message["content"]
+            .as_array()
+            .is_some_and(|blocks| blocks.len() > MAX_BLOCKS)
+        {
+            self.exhausted = true;
+        }
         for (index, content) in message["content"]
             .as_array()
             .into_iter()
@@ -435,5 +441,10 @@ mod tests {
         assert_eq!(translator.blocks.len(), MAX_BLOCKS);
         translator.begin_turn();
         assert!(!translator.is_exhausted());
+        let blocks = vec![json!({"type":"text","text":"snapshot"}); MAX_BLOCKS + 1];
+        translator
+            .ingest(&json!({"type":"message_end","message":{"role":"assistant","content":blocks}}));
+        assert!(translator.is_exhausted());
+        assert_eq!(translator.blocks.len(), MAX_BLOCKS);
     }
 }

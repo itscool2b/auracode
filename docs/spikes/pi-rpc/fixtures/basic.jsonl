@@ -21,7 +21,7 @@
 {"d":"in","msg":{"type":"message_update","assistantMessageEvent":{"type":"text_end","contentIndex":0,"content":"ok"}}}
 {"d":"in","msg":{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"ok"}],"timestamp":1,"stopReason":"stop","usage":{"input":3,"output":2,"cacheRead":1,"cacheWrite":0}}}}
 {"d":"in","msg":{"type":"agent_end","messages":[],"willRetry":false}}
-{"d":"in","msg":{"type":"agent_settled","aborted":false}}
+{"d":"in","msg":{"type":"agent_settled"}}
 {"d":"out","msg":{"id":"state-2","type":"get_state"}}
 {"d":"out","msg":{"id":"levels-2","type":"get_available_thinking_levels"}}
 {"d":"out","msg":{"id":"commands-2","type":"get_commands"}}

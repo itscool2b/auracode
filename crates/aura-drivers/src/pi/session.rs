@@ -173,6 +173,7 @@ struct Session {
     state_seen: bool,
     idle: bool,
     run_active: bool,
+    compacting: bool,
     turn: Option<String>,
     interrupted: bool,
     init_deadline: Instant,
@@ -363,8 +364,9 @@ impl Session {
         self.state_seen = true;
         self.metadata.state(data);
         if !self.ready {
-            self.run_active = streaming || compacting || pending > 0;
-            self.idle(!self.run_active);
+            self.run_active = streaming || pending > 0;
+            self.compacting = compacting;
+            self.idle(!self.run_active && !self.compacting);
         }
         self.outbox.push_back(DriverEvent::Title(
             data["sessionName"].as_str().map(str::to_owned),
@@ -530,7 +532,7 @@ impl Session {
                         }
                         Purpose::Prompt => {
                             self.finish(StopReason::Error, Some(err));
-                            self.idle(!self.run_active);
+                            self.idle(!self.run_active && !self.compacting);
                         }
                         Purpose::State | Purpose::Levels
                             if pending.startup || self.setting.is_some() =>
@@ -605,7 +607,7 @@ impl Session {
                             Some("started" | "queued") => {}
                             Some("handled") => {
                                 self.finish(StopReason::EndTurn, None);
-                                self.idle(!self.run_active);
+                                self.idle(!self.run_active && !self.compacting);
                                 if !self.stopping {
                                     self.refresh();
                                 }
@@ -620,6 +622,7 @@ impl Session {
                             // The pinned RPC contract waits for the session to become idle. A handled
                             // prompt or extension-only run need not emit another agent_settled.
                             self.run_active = false;
+                            self.compacting = false;
                             self.finish(StopReason::Cancelled, None);
                             self.idle(true);
                             self.interrupted = false;
@@ -663,17 +666,19 @@ impl Session {
             return;
         }
         match wire::text(&frame, "type") {
-            Some("agent_start" | "compaction_start" | "auto_retry_start") => {
+            Some("agent_start" | "auto_retry_start") => {
                 self.run_active = true;
+                self.idle(false);
+            }
+            Some("compaction_start") => {
+                self.compacting = true;
                 self.idle(false);
             }
             Some("agent_end") => {} // Retry, compaction and queued work may still follow.
             Some("agent_settled") => {
-                let Some(aborted) = frame["aborted"].as_bool() else {
-                    self.failure = Some(error("Pi returned an invalid settled event."));
-                    return;
-                };
-                let reason = if aborted {
+                // Pi 1.0.2 emits this boundary without fields. Cancellation comes from our
+                // interrupt or the completed assistant's stopReason, not an invented flag.
+                let reason = if self.interrupted {
                     StopReason::Cancelled
                 } else if self.run_failed {
                     StopReason::Error
@@ -691,7 +696,7 @@ impl Session {
                 };
                 self.run_active = false;
                 self.finish(reason, failure);
-                self.idle(true);
+                self.idle(!self.compacting);
                 self.interrupted = false;
                 if !self.stopping {
                     self.refresh();
@@ -711,6 +716,10 @@ impl Session {
                 frame["name"].as_str().map(str::to_owned),
             )),
             Some("compaction_end") => {
+                // Manual compaction is independent of the agent loop and does not emit
+                // agent_settled. Automatic compaction keeps run_active until that boundary.
+                self.compacting = false;
+                self.idle(!self.run_active);
                 self.usage.context_used = None;
                 self.outbox.push_back(DriverEvent::Event {
                     turn: None,
@@ -980,6 +989,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         state_seen: false,
         idle: false,
         run_active: false,
+        compacting: false,
         turn: None,
         interrupted: false,
         init_deadline: deadline,
