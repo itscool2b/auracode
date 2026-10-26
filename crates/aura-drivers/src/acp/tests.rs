@@ -1,6 +1,9 @@
 //! Driver tests over `FakeSpawner` pipes: startup, every reply row, the main loop's phases,
 //! permissions, cancellation, options and autonomy, and the exit paths.
 
+#[path = "callback_lifecycle_tests.rs"]
+mod callback_lifecycle;
+
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
