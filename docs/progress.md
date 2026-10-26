@@ -1931,3 +1931,21 @@ status before the turn can become immutable sync history. Compaction also advanc
 event sequence through that late outcome. A controlled driver regression ends its turn before replying
 to steering and verifies both the incomplete and sealed states. That regression and core all-target
 Clippy passed locally on Windows. No vendor call was performed.
+
+### Bounded encrypted transcript transport
+
+Schema 12 records each turn's parent and source agent without copying native session identities.
+Completed, compacted turns are captured incrementally through the profile writer as one immutable
+`chat_chunks` head pointing to a reverse chain of encrypted pieces, each at most 3 MiB. Raw event JSON,
+typed prompt/steering parts and authenticated attachment ranges survive capture. Heavily escaped rows
+use bounded fragments; progress and ciphertext commit together. An already missing attachment remains
+explicitly unavailable. A head cannot leave the outbox until every referenced piece is uploaded.
+Incoming pieces authenticate the account, turn and ordinal, reject head rewrites and ciphertext
+substitution, and remain staged until session admission can safely publish them to visible history.
+
+All 34 focused sync tests passed on Windows, including bounded restartable capture, unknown events,
+image bytes, accepted steering, fragmentation, upload ordering and two-device encrypted transport.
+This run also passed both scheduler clock/revocation tests previously blocked by Application Control.
+The schema/index regression and core all-target Clippy passed. No policy workaround, vendor prompt or
+real account request was used. Remote turn publication, open-view reconciliation, concurrent fork
+markers, explicit Local import, folder resolution and Continue-here integration remain pending M7 work.

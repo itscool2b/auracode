@@ -19,6 +19,7 @@ aura-drivers.workspace = true
 aura-process.workspace = true
 aura-protocol.workspace = true
 aura-sync = { workspace = true, optional = true }
+base64 = "0.22.1"
 dirs.workspace = true
 futures.workspace = true
 # Fallible (io::Result) instead of panicking when the OS refuses, so a broken hostname lookup

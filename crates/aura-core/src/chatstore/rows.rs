@@ -482,6 +482,7 @@ pub(crate) fn begin_turn(
         turn.checkpoint_ref,
         turn.continuation_prefix,
     ])?;
+    conn.execute("UPDATE turns SET parent_turn_id=(SELECT p.id FROM turns p WHERE p.chat_id=?2 AND p.seq<?3 ORDER BY p.seq DESC LIMIT 1) WHERE id=?1", params![turn.id,turn.chat_id,turn.ordinal])?;
     conn.execute("UPDATE chat_continuations SET pending_json=json_set(pending_json,'$.handoff','') WHERE chat_id=?1", [&turn.chat_id])?;
     append_events(conn, device_id, &turn.chat_id, rows)?;
     conn.prepare_cached("DELETE FROM queued_prompts WHERE id = ?1")?

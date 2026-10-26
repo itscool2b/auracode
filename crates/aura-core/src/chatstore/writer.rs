@@ -1255,7 +1255,12 @@ impl Writer {
             Request::SyncExchange { command, reply } => {
                 let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {
                     (Some(store), Some(context), Mode::Normal) => {
-                        crate::sync::exchange::execute(store, context, command)
+                        crate::sync::exchange::execute_with_files(
+                            store,
+                            context,
+                            command,
+                            Some(&self.files.attachments),
+                        )
                     }
                     _ => Err(crate::sync::SyncError::Unavailable),
                 };

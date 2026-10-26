@@ -17,6 +17,7 @@ pub mod exchange;
 pub mod journal;
 pub mod managed_config;
 mod projection;
+pub(crate) mod transcript;
 
 /// An unlocked Account writer's identity and encryption authority. Never exported through IPC.
 #[derive(Clone)]
@@ -28,6 +29,7 @@ impl SyncContext {
     pub(crate) fn initialize(&self, store: &mut Store) -> Result<()> {
         let _ = SyncLedger::new(store, self.identity.clone(), &self.key)?;
         capture::install(store.conn())?;
+        transcript::install(store.conn())?;
         // Existing encrypted profiles may predate writer integration. Seed bounded transactions;
         // this reads portable metadata rows only, never the transcript or native credential files.
         loop {
@@ -282,7 +284,7 @@ impl<'a> SyncLedger<'a> {
 }
 
 fn outgoing(conn: &Connection) -> Result<Vec<EncryptedRecord>> {
-    let mut query = conn.prepare("SELECT o.record_json FROM sync_outbox o WHERE NOT EXISTS(SELECT 1 FROM sync_deferred d WHERE d.collection=o.collection AND d.id=o.id) AND (o.collection<>'config' OR EXISTS(SELECT 1 FROM sync_blob_refs r JOIN sync_blobs b ON b.id=r.blob_id WHERE r.collection=o.collection AND r.id=o.id AND b.uploaded=1)) ORDER BY o.hlc,o.collection,o.id LIMIT 32")?;
+    let mut query = conn.prepare("SELECT o.record_json FROM sync_outbox o WHERE NOT EXISTS(SELECT 1 FROM sync_deferred d WHERE d.collection=o.collection AND d.id=o.id) AND (o.collection<>'config' OR EXISTS(SELECT 1 FROM sync_blob_refs r JOIN sync_blobs b ON b.id=r.blob_id WHERE r.collection=o.collection AND r.id=o.id AND b.uploaded=1)) AND (o.collection<>'chat_chunks' OR NOT EXISTS(SELECT 1 FROM sync_turn_parts p LEFT JOIN sync_blobs b ON b.id=p.blob_id WHERE p.turn_id=o.id AND COALESCE(b.uploaded,0)=0)) ORDER BY o.hlc,o.collection,o.id LIMIT 32")?;
     query
         .query_map([], |row| row.get::<_, String>(0))?
         .map(|row| decode_record(&row?))
@@ -483,6 +485,9 @@ fn accept(
     clock.observe(&remote_clock, now)?;
     if remote.collection == "config" {
         return config::accept_remote(tx, identity, key, change);
+    }
+    if remote.collection == "chat_chunks" {
+        return transcript::accept_remote(tx, identity, key, change);
     }
     if !matches!(remote.collection.as_str(), "projects" | "chats") {
         if remote.key_version != identity.key_version {

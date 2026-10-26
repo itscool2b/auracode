@@ -28,7 +28,7 @@ pub(crate) mod blobs;
 pub(crate) mod compact;
 pub(crate) mod composer;
 pub(crate) mod conversation;
-mod files;
+pub(crate) mod files;
 pub(crate) mod history;
 #[cfg(feature = "account-sync")]
 mod journal;

@@ -11,6 +11,28 @@ pub(crate) enum Attachments {
     Encrypted(crate::profile_files::EncryptedFiles),
 }
 impl Attachments {
+    #[cfg(feature = "account-sync")]
+    pub(crate) fn sync_range(
+        &self,
+        hash: &str,
+        offset: u64,
+    ) -> io::Result<(u64, zeroize::Zeroizing<Vec<u8>>)> {
+        if !blobs::is_sha256(hash) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Invalid attachment identifier.",
+            ));
+        }
+        let Self::Encrypted(files) = self else {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Sync requires encrypted attachment storage.",
+            ));
+        };
+        let mut reader = files.reader(hash)?;
+        let page = reader.range(offset, 192 * 1024).map_err(io::Error::other)?;
+        Ok((page.total, page.bytes))
+    }
     pub(crate) fn write(&self, hash: &str, bytes: &[u8]) -> io::Result<u64> {
         match self {
             Self::Local(dir) => blobs::write(dir, hash, bytes),

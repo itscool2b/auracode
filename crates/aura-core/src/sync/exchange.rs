@@ -20,6 +20,7 @@ pub struct Pending {
     pub upload: Option<Upload>,
     pub downloads: Vec<Download>,
     pub changes: u32,
+    pub local_work: bool,
 }
 pub enum Command {
     Pending,
@@ -75,7 +76,16 @@ impl Command {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn execute(store: &mut Store, context: &SyncContext, command: Command) -> Result<Reply> {
+    execute_with_files(store, context, command, None)
+}
+pub(crate) fn execute_with_files(
+    store: &mut Store,
+    context: &SyncContext,
+    command: Command,
+    files: Option<&crate::chatstore::files::Attachments>,
+) -> Result<Reply> {
     command.validate()?;
     let now = crate::time::now_millis().max(0) as u64;
     match command {
@@ -93,7 +103,12 @@ pub(crate) fn execute(store: &mut Store, context: &SyncContext, command: Command
                 .conn_mut()
                 .transaction_with_behavior(TransactionBehavior::Immediate)?;
             let result = match command {
-                Command::Pending => Reply::Pending(pending(&tx, context)?),
+                Command::Pending => {
+                    if let Some(files) = files {
+                        transcript::capture_one(&tx, context, files)?;
+                    }
+                    Reply::Pending(pending(&tx, context)?)
+                }
                 Command::Uploaded { sent, etag } => {
                     uploaded(&tx, context, &sent, &etag)?;
                     Reply::Saved
@@ -112,7 +127,7 @@ pub(crate) fn execute(store: &mut Store, context: &SyncContext, command: Command
 }
 
 fn pending(conn: &Connection, context: &SyncContext) -> Result<Pending> {
-    let upload = conn.query_row("SELECT b.id,b.key_version,b.nonce,b.ciphertext FROM sync_blobs b WHERE b.uploaded=0 AND EXISTS(SELECT 1 FROM sync_blob_refs r WHERE r.blob_id=b.id) ORDER BY b.id LIMIT 1", [], |r| Ok(Upload { id: r.get(0)?, key_version: r.get(1)?, sealed: SealedPayload { nonce: r.get(2)?, ciphertext: r.get(3)? } })).optional()?;
+    let upload = conn.query_row("SELECT b.id,b.key_version,b.nonce,b.ciphertext FROM sync_blobs b WHERE b.uploaded=0 AND (EXISTS(SELECT 1 FROM sync_blob_refs r WHERE r.blob_id=b.id) OR EXISTS(SELECT 1 FROM sync_turn_parts p WHERE p.blob_id=b.id)) ORDER BY b.id LIMIT 1", [], |r| Ok(Upload { id: r.get(0)?, key_version: r.get(1)?, sealed: SealedPayload { nonce: r.get(2)?, ciphertext: r.get(3)? } })).optional()?;
     if let Some(upload) = &upload {
         if upload.key_version != context.identity.key_version {
             return Err(SyncError::Identity);
@@ -136,14 +151,28 @@ fn pending(conn: &Connection, context: &SyncContext) -> Result<Pending> {
             record,
         });
     }
+    let parts=conn.prepare("SELECT h.record_json,p.blob_id FROM sync_turn_parts p JOIN sync_heads h ON h.collection='chat_chunks' AND h.id=p.turn_id WHERE NOT EXISTS(SELECT 1 FROM sync_blobs b WHERE b.id=p.blob_id) ORDER BY p.turn_id,p.part_index DESC LIMIT ?1")?
+        .query_map([(4-downloads.len()) as u32],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
+    for (json, id) in parts {
+        downloads.push(Download {
+            id,
+            record: decode_record(&json)?,
+        });
+    }
     let records = outgoing(conn)?;
-    let changes: u32 = conn.query_row("SELECT (SELECT count(*) FROM sync_outbox)+(SELECT count(*) FROM sync_projection)+(SELECT count(*) FROM sync_blob_refs r WHERE NOT EXISTS(SELECT 1 FROM sync_blobs b WHERE b.id=r.blob_id))", [], |r|r.get(0))?;
+    let changes: u32 = conn.query_row("SELECT (SELECT count(*) FROM sync_outbox)+(SELECT count(*) FROM sync_projection)+(SELECT count(*) FROM sync_blob_refs r WHERE NOT EXISTS(SELECT 1 FROM sync_blobs b WHERE b.id=r.blob_id))+(SELECT count(*) FROM sync_turns WHERE state IN ('capture','remote','staged'))", [], |r|r.get(0))?;
+    let local_work = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sync_turns s WHERE state='capture' AND NOT EXISTS(SELECT 1 FROM steering_inputs i WHERE i.turn_id=s.turn_id AND i.state='pending'))",
+        [],
+        |r| r.get(0),
+    )?;
     Ok(Pending {
         cursor: cursor(conn)?,
         records,
         upload,
         downloads,
         changes,
+        local_work,
     })
 }
 fn etag(value: &str) -> Result<()> {
@@ -170,9 +199,7 @@ fn downloaded(
     blob: &Blob,
 ) -> Result<()> {
     etag(&blob.etag)?;
-    let payload = config::decode(context, &request.record).map_err(|_| SyncError::Invalid)?;
-    if payload.head.blob_id != request.id
-        || blob.key_version != context.identity.key_version
+    if blob.key_version != context.identity.key_version
         || crypto::decode(&blob.ciphertext, 4 * 1024 * 1024)?.len() as u64 != blob.size_bytes
     {
         return Err(SyncError::Invalid);
@@ -188,7 +215,21 @@ fn downloaded(
         blob.key_version,
         &sealed,
     )?;
-    config::validate_blob(&payload.id, &payload.head, &bytes).map_err(|_| SyncError::Invalid)?;
+    match request.record.collection.as_str() {
+        "config" => {
+            let payload =
+                config::decode(context, &request.record).map_err(|_| SyncError::Invalid)?;
+            if payload.head.blob_id != request.id {
+                return Err(SyncError::Invalid);
+            }
+            config::validate_blob(&payload.id, &payload.head, &bytes)
+                .map_err(|_| SyncError::Invalid)?;
+        }
+        "chat_chunks" => {
+            transcript::accept_piece(conn, context, &request.record, &request.id, &bytes)?
+        }
+        _ => return Err(SyncError::Invalid),
+    }
     let previous: Option<(u32, String, String)> = conn
         .query_row(
             "SELECT key_version,nonce,ciphertext FROM sync_blobs WHERE id=?1",
@@ -203,6 +244,7 @@ fn downloaded(
         return Ok(());
     }
     conn.execute("INSERT INTO sync_blobs(id,key_version,nonce,ciphertext,etag,uploaded) VALUES(?1,?2,?3,?4,?5,1)",params![request.id,blob.key_version,blob.nonce,blob.ciphertext,blob.etag])?;
+    conn.execute("UPDATE sync_turns SET state='staged' WHERE turn_id=?1 AND state='remote' AND part_count=(SELECT count(*) FROM sync_turn_parts WHERE turn_id=?1) AND NOT EXISTS(SELECT 1 FROM sync_turn_parts p WHERE p.turn_id=?1 AND NOT EXISTS(SELECT 1 FROM sync_blobs b WHERE b.id=p.blob_id))",[&request.record.id])?;
     Ok(())
 }
 

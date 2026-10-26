@@ -241,7 +241,10 @@ async fn cycle(
     let work = pending(store).await?;
     Ok((
         work.changes,
-        more || work.upload.is_some() || !work.records.is_empty() || !work.downloads.is_empty(),
+        more || work.local_work
+            || work.upload.is_some()
+            || !work.records.is_empty()
+            || !work.downloads.is_empty(),
     ))
 }
 
