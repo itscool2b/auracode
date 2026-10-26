@@ -630,21 +630,26 @@ async fn process_exit_drains_buffered_transcript_under_event_backpressure() {
 }
 
 #[cfg(feature = "replay")]
-#[tokio::test(start_paused = true)]
-async fn pinned_protocol_fixture_replays_without_envelope_or_contract_mismatches() {
-    let fixture = crate::replay::Fixture::parse(
-        "pi-basic",
-        include_str!("../../../../docs/spikes/pi-rpc/fixtures/basic.jsonl"),
-    )
-    .unwrap();
+async fn replay_events(name: &str, source: &str) -> Vec<DriverEvent> {
+    let fixture = crate::replay::Fixture::parse(name, source).unwrap();
     let report = crate::replay::run(&fixture).await;
     assert!(report.mismatches.is_empty(), "{:?}", report.mismatches);
-    let events: Vec<DriverEvent> = report
+    report
         .events
         .iter()
         .cloned()
         .map(|v| serde_json::from_value(v).unwrap())
-        .collect();
+        .collect()
+}
+
+#[cfg(feature = "replay")]
+#[tokio::test(start_paused = true)]
+async fn pinned_protocol_fixture_replays_without_envelope_or_contract_mismatches() {
+    let events = replay_events(
+        "pi-basic",
+        include_str!("../../../../docs/spikes/pi-rpc/fixtures/basic.jsonl"),
+    )
+    .await;
     let ended: Vec<_> = events
         .iter()
         .filter_map(|event| {
@@ -676,4 +681,108 @@ async fn pinned_protocol_fixture_replays_without_envelope_or_contract_mismatches
         })
         .collect();
     assert_eq!(text, "ok");
+}
+
+#[cfg(feature = "replay")]
+#[tokio::test(start_paused = true)]
+async fn thinking_tool_replay_preserves_one_thought_tool_and_final_result() {
+    use aura_protocol::{AuraEvent, ToolContent, ToolStatus};
+    let events = replay_events(
+        "pi-thinking-tool",
+        include_str!("../../../../docs/spikes/pi-rpc/fixtures/thinking-tool.jsonl"),
+    )
+    .await;
+    let mut thought = String::new();
+    let mut text = String::new();
+    let mut completed_thoughts = 0;
+    let mut tools = 0;
+    let mut final_tool = None;
+    let mut turns = 0;
+    for event in events {
+        match event {
+            DriverEvent::Event { event, .. } => match event {
+                AuraEvent::ThoughtDelta { text, .. } => thought.push_str(&text),
+                AuraEvent::ThoughtCompleted { .. } => completed_thoughts += 1,
+                AuraEvent::MessageDelta { text: delta, .. } => text.push_str(&delta),
+                AuraEvent::ToolCall(tool) => {
+                    tools += 1;
+                    assert_eq!(tool.tool_call_id, "tool-read-1");
+                }
+                AuraEvent::ToolUpdate(update) if update.status == Some(ToolStatus::Completed) => {
+                    final_tool = update.content;
+                }
+                _ => {}
+            },
+            DriverEvent::TurnEnded {
+                usage, stop_reason, ..
+            } => {
+                turns += 1;
+                assert_eq!(stop_reason, StopReason::EndTurn);
+                let usage = usage.unwrap();
+                assert_eq!(
+                    (
+                        usage.input_tokens,
+                        usage.output_tokens,
+                        usage.cache_read_tokens
+                    ),
+                    (8, 4, Some(5))
+                );
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(thought, "Inspect the file.");
+    assert_eq!(completed_thoughts, 1);
+    assert_eq!(text, "ok");
+    assert_eq!((tools, turns), (1, 1));
+    assert!(
+        matches!(final_tool.as_deref(), Some([ToolContent::Text { text, .. }]) if text == "complete file")
+    );
+}
+
+#[cfg(feature = "replay")]
+#[tokio::test(start_paused = true)]
+async fn interrupted_dialog_replay_withdraws_before_ending_and_keeps_partial_text() {
+    use aura_protocol::AuraEvent;
+    let events = replay_events(
+        "pi-interrupted-dialog",
+        include_str!("../../../../docs/spikes/pi-rpc/fixtures/interrupted-dialog.jsonl"),
+    )
+    .await;
+    let request = events
+        .iter()
+        .position(|event| matches!(event, DriverEvent::UiRequest { .. }))
+        .unwrap();
+    let withdrawn = events.iter().position(|event| matches!(event, DriverEvent::UiWithdrawn { request_id } if request_id == "dialog-1")).unwrap();
+    let ended = events
+        .iter()
+        .position(|event| {
+            matches!(
+                event,
+                DriverEvent::TurnEnded {
+                    stop_reason: StopReason::Cancelled,
+                    ..
+                }
+            )
+        })
+        .unwrap();
+    assert!(request < withdrawn && withdrawn < ended);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event, DriverEvent::TurnEnded { .. }))
+            .count(),
+        1
+    );
+    let text: String = events
+        .iter()
+        .filter_map(|event| match event {
+            DriverEvent::Event {
+                event: AuraEvent::MessageDelta { text, .. },
+                ..
+            } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(text, "partial");
 }

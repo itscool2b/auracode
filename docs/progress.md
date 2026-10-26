@@ -221,6 +221,10 @@ subsequent totals become turn differences, and a restarted process begins a new 
 process regression covers two cumulative results and a resumed process. Combined CI found a
 missing field in the new no-prompt probe test constructor; that compile defect is corrected.
 The usage regression and corrected combined checkpoint still await CI execution.
+Pi's synthetic replay evidence now includes thinking with a tool round trip and an interrupted
+extension confirmation. The semantic checks require deduplicated text and reasoning, one native
+tool lifecycle with final output, turn token totals and dialog withdrawal before the cancelled
+turn. These fixtures derive from the pinned public wire types; they are not real-agent recordings.
 
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
