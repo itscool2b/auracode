@@ -48,7 +48,7 @@ mod lock;
 mod recovery;
 mod salvage;
 
-use std::fs::{self, File};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 

@@ -69,7 +69,7 @@ mod keyed {
             return Err(unavailable(path));
         }
         let mut bytes = Vec::new();
-        File::open(&marker)
+        std::fs::File::open(&marker)
             .map_err(CoreError::io(&marker))?
             .take(257)
             .read_to_end(&mut bytes)
