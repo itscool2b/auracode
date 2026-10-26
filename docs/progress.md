@@ -131,6 +131,11 @@ Live Claude acceptance on Windows, with the installed native 2.1.310 CLI:
 
 ## Decisions and constraints
 
+Parallel M2a work is on `m2a-orbit`. Orbit geometry, its SVG renderer and mark styles now live in
+`@auracode/ui/orbit`, with the Design Lab consuming that same implementation. All 352 Design Lab
+tests, UI/Lab typechecks and the Lab build pass after extraction. Desktop integration, both themes,
+power-aware live animation and browser accessibility/visual checks remain pending.
+
 - Rust owns backend logic. TypeScript remains for React and necessary platform/build glue.
 - D1 and Cloudflare Email Service replace Neon/Postgres, Neon Auth, Hyperdrive, and Resend.
 - Reuse the existing targeted environment scrub, not the handoff's older blanket prefix scrub.

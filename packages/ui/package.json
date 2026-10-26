@@ -10,7 +10,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./tokens.css": "./src/tokens.css",
-    "./fonts.css": "./src/fonts.css"
+    "./fonts.css": "./src/fonts.css",
+    "./orbit": "./src/orbit/index.ts",
+    "./orbit.css": "./src/orbit/orbit.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
