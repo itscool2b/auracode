@@ -12,6 +12,7 @@ mod edit;
 pub mod managed;
 mod mcp;
 mod merge;
+pub mod profile_transition;
 mod review;
 mod scan;
 mod snapshot;

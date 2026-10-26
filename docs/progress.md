@@ -1,5 +1,14 @@
 # Auracode implementation progress
 
+## 2026-10-26: profile configuration transaction engine
+
+Added a read-only managed-profile transition planner and a bounded transactional apply/restore
+engine. It records each receipt ID before dispatch, verifies final selected content and preserves
+unmanaged concurrent changes during inverse application. Five synthetic transaction regressions and
+aura-config all-target Clippy pass. Encrypted transition storage, the root locator, startup admission
+and actual profile publication/recovery integration are still pending. No real configuration or
+agent process was accessed.
+
 ## 2026-10-26: managed configuration claim foundation
 
 Added an encrypted, content-bound Account ownership store and explicit prepare/commit/cancel claim

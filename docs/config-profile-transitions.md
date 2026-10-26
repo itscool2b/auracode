@@ -50,11 +50,16 @@ pending tokens never enter IPC, logs or plaintext sidecars.
 
 ## Remaining transition coordinator
 
-This foundation does not yet switch vendor configuration. The next step will snapshot outgoing
-managed content, restore its baselines and apply the incoming Account snapshots under one durable
-transition coordinator. Incoming baselines must match the restored device state; unavailable,
-conflicting and unresolved items fail visibly. A nonsecret, strictly validated root locator will
+The pure transition planner and executor now snapshot outgoing managed content, restore its
+baselines and apply the incoming Account snapshots using encrypted-store and apply-journal ports.
+Incoming baselines must match the restored device state; unavailable, conflicting, overlapping and
+unresolved items fail visibly. Step receipt IDs persist before dispatch, so lost completion
+acknowledgments reopen for rollback instead of replaying commands. A nonsecret, strictly validated root locator will
 identify the encrypted pending transaction before any mutation. Interrupted work must block native
 launches and expose a typed recovery action until completion or rollback. Profile publication comes
 only after successful file and encrypted-state acknowledgments. No isolated agent home or implicit
 re-login is introduced.
+
+The desktop coordinator and startup/recovery gate are still pending. Five pure transaction tests
+cover outgoing edits, unmanaged conflicts, overlapping identities, complete apply/rollback and a
+lost step acknowledgment followed by rollback that preserves a concurrent unmanaged edit.
