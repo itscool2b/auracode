@@ -215,7 +215,7 @@ fn capture_is_bounded_restartable_and_preserves_unknown_events_images_and_steeri
 fn head_waits_for_all_uploads_and_remote_chain_rejects_rewrite_and_substitution() {
     let key = Arc::new(AccountKey::generate().unwrap());
     let (_dir, mut source, context, files) = fixture(key.clone(), "source");
-    let (_target_dir, mut target, target_context, _) = fixture(key, "target");
+    let (_target_dir, mut target, target_context, target_files) = fixture(key, "target");
     let (_, turn, _) = seed(&source, &files);
     let header = capture(&mut source, &context, &files, &turn);
     let mut blobs = std::collections::HashMap::new();
@@ -297,6 +297,72 @@ fn head_waits_for_all_uploads_and_remote_chain_rejects_rewrite_and_substitution(
         )
         .unwrap();
     assert_eq!(state, "staged");
+    let missing = exchange::execute_with_files(
+        &mut target,
+        &target_context,
+        exchange::Command::Import {
+            chat_id: header.chat_id.clone(),
+            minimum_seq: 0,
+        },
+        Some(&target_files),
+    )
+    .unwrap();
+    assert!(matches!(missing, exchange::Reply::Imported(None)));
+    let (project, folder): (String, String) = source
+        .conn()
+        .query_row(
+            "SELECT project_id,folder_id FROM chats WHERE id=?1",
+            [&header.chat_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    target.conn().execute("INSERT INTO projects(id,name,created_at,updated_at,device_id) VALUES(?1,'Remote project',1,1,'source')",[&project]).unwrap();
+    target.conn().execute("INSERT INTO project_folders(id,project_id,display_name,kind,created_at,updated_at,device_id) VALUES(?1,?2,'Remote folder','local',1,1,'source')",params![folder,project]).unwrap();
+    target.conn().execute("INSERT INTO chats(id,project_id,folder_id,active_agent,created_at,updated_at,device_id) VALUES(?1,?2,?3,'codex',1,1,'source')",params![header.chat_id,project,folder]).unwrap();
+    let exchange::Reply::Imported(Some(imported)) = exchange::execute_with_files(
+        &mut target,
+        &target_context,
+        exchange::Command::Import {
+            chat_id: header.chat_id.clone(),
+            minimum_seq: 90,
+        },
+        Some(&target_files),
+    )
+    .unwrap() else {
+        panic!("import")
+    };
+    assert!(imported.next_seq > 90);
+    let load = crate::chatstore::rows::load_chat(target.conn(), "target", &header.chat_id, 0)
+        .unwrap()
+        .unwrap();
+    assert!(load.remote_history);
+    assert!(load.chat.folder.as_os_str().is_empty());
+    assert!(load.agent_session.is_none());
+    let unknown: String = target
+        .conn()
+        .query_row(
+            "SELECT payload FROM events WHERE turn_id=?1 AND kind='future_event'",
+            [&turn],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        unknown,
+        "{ \"type\": \"future_event\", \"opaque\": [3,2,1] }"
+    );
+    let hash = format!("{:x}", Sha256::digest(vec![0x90; 1024 * 1024]));
+    let (size, bytes) = target_files.sync_range(&hash, 0).unwrap();
+    assert_eq!(size, 1024 * 1024);
+    assert!(bytes.iter().all(|byte| *byte == 0x90));
+    let accepted: String = target
+        .conn()
+        .query_row(
+            "SELECT state FROM steering_inputs WHERE turn_id=?1",
+            [&turn],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(accepted, "accepted");
     // A later authenticated revision from the same account still cannot rewrite an immutable turn.
     let mut different = header;
     different.tail = crate::ids::new_id();
@@ -415,4 +481,318 @@ fn capture_waits_for_pending_steering_instead_of_freezing_an_unconfirmed_outcome
         .unwrap();
     capture(&mut store, &context, &files, &turn);
     assert!(head(store.conn(), "chat_chunks", &turn).unwrap().is_some());
+}
+
+pub(crate) fn staged_turn(
+    conn: &Connection,
+    context: &SyncContext,
+    chat_id: &str,
+    parent: Option<String>,
+) -> String {
+    let id = crate::ids::new_id();
+    let blob_id = crate::ids::new_id();
+    let metadata = Turn {
+        chat_id: chat_id.into(),
+        turn_id: id.clone(),
+        parent_turn_id: parent.clone(),
+        agent: "mock".into(),
+        status: "completed".into(),
+        stop_reason: Some("end_turn".into()),
+        started_at: 1,
+        ended_at: 2,
+        prompt_id: None,
+        parts: vec![PromptPart::Text {
+            text: "remote prompt".into(),
+        }],
+        continuation_prefix: None,
+    };
+    let mut entries = vec![Entry::Turn(metadata)];
+    for (seq, event) in [
+        AuraEvent::TurnStarted {
+            turn_id: id.clone(),
+            prompt_id: None,
+        },
+        AuraEvent::UserMessageDelta {
+            message_id: format!("{id}.user"),
+            text: "remote prompt".into(),
+        },
+        AuraEvent::MessageDelta {
+            message_id: format!("{id}.assistant"),
+            text: "remote reply".into(),
+        },
+        AuraEvent::MessageCompleted {
+            message_id: format!("{id}.assistant"),
+        },
+        AuraEvent::TurnEnded {
+            turn_id: id.clone(),
+            stop_reason: aura_protocol::StopReason::EndTurn,
+            usage: None,
+            duration_ms: None,
+            recovered: false,
+        },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        entries.push(Entry::Event(Event {
+            seq: seq as u32,
+            kind: event.kind().into(),
+            payload: serde_json::to_string(&event).unwrap(),
+            created_at: 2,
+        }));
+    }
+    let piece = Piece {
+        schema_version: 1,
+        turn_id: id.clone(),
+        index: 0,
+        previous: None,
+        entries,
+    };
+    let sealed = crypto::seal_blob(
+        &context.key,
+        &context.identity.account,
+        &blob_id,
+        context.identity.key_version,
+        &serde_json::to_vec(&piece).unwrap(),
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO sync_blobs(id,key_version,nonce,ciphertext,uploaded) VALUES(?1,?2,?3,?4,1)",
+        params![
+            blob_id,
+            context.identity.key_version,
+            sealed.nonce,
+            sealed.ciphertext
+        ],
+    )
+    .unwrap();
+    let head = Head {
+        schema_version: 1,
+        chat_id: chat_id.into(),
+        turn_id: id.clone(),
+        parent_turn_id: parent,
+        tail: blob_id.clone(),
+        parts: 1,
+    };
+    let clock = Clock::new("remote-device")
+        .unwrap()
+        .tick(crate::time::now_millis() as u64)
+        .unwrap();
+    let mut record = EncryptedRecord {
+        collection: "chat_chunks".into(),
+        id: id.clone(),
+        hlc: clock.to_string(),
+        deleted: false,
+        nonce: String::new(),
+        ciphertext: String::new(),
+        key_version: context.identity.key_version,
+    };
+    let sealed = crypto::seal_record(
+        &context.key,
+        &super::super::context(&context.identity, &record),
+        &serde_json::to_vec(&head).unwrap(),
+    )
+    .unwrap();
+    record.nonce = sealed.nonce;
+    record.ciphertext = sealed.ciphertext;
+    save_head(conn, &record).unwrap();
+    conn.execute("INSERT INTO sync_turns(turn_id,chat_id,state,tail_blob,part_count) VALUES(?1,?2,'staged',?3,1)",params![id,chat_id,blob_id]).unwrap();
+    conn.execute(
+        "INSERT INTO sync_turn_parts(turn_id,part_index,blob_id) VALUES(?1,0,?2)",
+        params![id, blob_id],
+    )
+    .unwrap();
+    id
+}
+
+fn empty_chat(store: &Store) -> String {
+    crate::chatstore::rows::create_chat(
+        store.conn(),
+        &NewChat {
+            folder: std::path::PathBuf::from(format!("/private/{}", crate::ids::new_id())),
+            agent_id: "mock".into(),
+            agent_host: aura_protocol::agents::AgentHost::Native,
+            device_id: "target".into(),
+            now: 1,
+        },
+    )
+    .unwrap()
+    .id
+}
+
+fn import_turn(
+    store: &mut Store,
+    context: &SyncContext,
+    files: &Attachments,
+    chat: &str,
+    floor: u32,
+) -> Option<Imported> {
+    let exchange::Reply::Imported(imported) = exchange::execute_with_files(
+        store,
+        context,
+        exchange::Command::Import {
+            chat_id: chat.into(),
+            minimum_seq: floor,
+        },
+        Some(files),
+    )
+    .unwrap() else {
+        panic!("import");
+    };
+    imported
+}
+
+#[test]
+fn import_waits_for_ancestors_and_marks_offline_siblings_without_replacing_history() {
+    let (_dir, mut store, context, files) =
+        fixture(Arc::new(AccountKey::generate().unwrap()), "target");
+    let chat = empty_chat(&store);
+    let parent = staged_turn(store.conn(), &context, &chat, None);
+    let child = staged_turn(store.conn(), &context, &chat, Some(parent.clone()));
+    store
+        .conn()
+        .execute(
+            "UPDATE sync_turns SET state='remote' WHERE turn_id=?1",
+            [&parent],
+        )
+        .unwrap();
+    assert!(import_turn(&mut store, &context, &files, &chat, 20).is_none());
+    let count: u32 = store
+        .conn()
+        .query_row(
+            "SELECT count(*) FROM turns WHERE chat_id=?1",
+            [&chat],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 0);
+    store
+        .conn()
+        .execute(
+            "UPDATE sync_turns SET state='staged' WHERE turn_id=?1",
+            [&parent],
+        )
+        .unwrap();
+    let first = import_turn(&mut store, &context, &files, &chat, 20).unwrap();
+    assert_eq!(first.turn_id, parent);
+    let second = import_turn(&mut store, &context, &files, &chat, first.next_seq).unwrap();
+    assert_eq!(second.turn_id, child);
+    let sibling = staged_turn(store.conn(), &context, &chat, Some(parent.clone()));
+    let third = import_turn(&mut store, &context, &files, &chat, second.next_seq).unwrap();
+    assert_eq!(third.turn_id, sibling);
+    assert!(third.next_seq > second.next_seq && second.next_seq > first.next_seq);
+    let parents: Vec<(String, Option<String>)> = store
+        .conn()
+        .prepare("SELECT id,parent_turn_id FROM turns WHERE chat_id=?1 ORDER BY seq")
+        .unwrap()
+        .query_map([&chat], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(
+        parents,
+        vec![
+            (parent.clone(), None),
+            (child, Some(parent.clone())),
+            (sibling, Some(parent))
+        ]
+    );
+    let notices: Vec<String> = store
+        .conn()
+        .prepare("SELECT payload FROM events WHERE chat_id=?1 AND kind='notice'")
+        .unwrap()
+        .query_map([&chat], |row| row.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(notices.len(), 1);
+    assert!(notices[0].contains("Both conversation branches are retained"));
+    assert!(import_turn(&mut store, &context, &files, &chat, third.next_seq).is_none());
+}
+
+#[test]
+fn malformed_authenticated_turn_rolls_back_all_visible_rows_and_preserves_staging() {
+    let (_dir, mut store, context, files) =
+        fixture(Arc::new(AccountKey::generate().unwrap()), "target");
+    let chat = empty_chat(&store);
+    let turn = staged_turn(store.conn(), &context, &chat, None);
+    let (id,nonce,ciphertext): (String,String,String) = store.conn().query_row("SELECT b.id,b.nonce,b.ciphertext FROM sync_turn_parts p JOIN sync_blobs b ON b.id=p.blob_id WHERE p.turn_id=?1",[&turn],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).unwrap();
+    let sealed = SealedPayload { nonce, ciphertext };
+    let bytes = crypto::open_blob(&context.key, "account", &id, 1, &sealed).unwrap();
+    let mut value = piece(&bytes, &turn, 0).unwrap();
+    value.entries.pop(); // Authenticated bytes still need complete lifecycle validation.
+    let damaged = crypto::seal_blob(
+        &context.key,
+        "account",
+        &id,
+        1,
+        &serde_json::to_vec(&value).unwrap(),
+    )
+    .unwrap();
+    store
+        .conn()
+        .execute(
+            "UPDATE sync_blobs SET nonce=?2,ciphertext=?3 WHERE id=?1",
+            params![id, damaged.nonce, damaged.ciphertext],
+        )
+        .unwrap();
+    assert!(
+        exchange::execute_with_files(
+            &mut store,
+            &context,
+            exchange::Command::Import {
+                chat_id: chat.clone(),
+                minimum_seq: 50
+            },
+            Some(&files)
+        )
+        .is_err()
+    );
+    let visible: u32 = store.conn().query_row("SELECT (SELECT count(*) FROM turns WHERE chat_id=?1)+(SELECT count(*) FROM events WHERE chat_id=?1)",[&chat],|r|r.get(0)).unwrap();
+    assert_eq!(visible, 0);
+    let state: String = store
+        .conn()
+        .query_row(
+            "SELECT state FROM sync_turns WHERE turn_id=?1",
+            [&turn],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(state, "staged");
+    store
+        .conn()
+        .execute(
+            "UPDATE sync_blobs SET nonce=?2,ciphertext=?3 WHERE id=?1",
+            params![id, sealed.nonce, sealed.ciphertext],
+        )
+        .unwrap();
+    assert_eq!(
+        import_turn(&mut store, &context, &files, &chat, 50)
+            .unwrap()
+            .turn_id,
+        turn
+    );
+}
+
+#[test]
+fn staged_chat_rotation_does_not_starve_behind_four_busy_actors() {
+    let (_dir, mut store, context, _files) =
+        fixture(Arc::new(AccountKey::generate().unwrap()), "target");
+    let mut expected = std::collections::BTreeSet::new();
+    for _ in 0..5 {
+        let chat = empty_chat(&store);
+        staged_turn(store.conn(), &context, &chat, None);
+        expected.insert(chat);
+    }
+    let mut observed = std::collections::BTreeSet::new();
+    for _ in 0..2 {
+        let exchange::Reply::ReadyChats(chats) =
+            exchange::execute(&mut store, &context, exchange::Command::ReadyChats).unwrap()
+        else {
+            panic!("ready chats");
+        };
+        assert_eq!(chats.len(), 4);
+        observed.extend(chats);
+    }
+    assert_eq!(observed, expected);
 }

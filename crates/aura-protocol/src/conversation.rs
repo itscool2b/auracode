@@ -21,6 +21,9 @@ pub struct ConversationTurns {
     pub turns: Vec<ConversationTurn>,
     pub before_ordinal: Option<u32>,
     pub has_more: bool,
+    /// New remote history requires a reviewed visible handoff before a local agent can continue.
+    #[serde(default)]
+    pub can_continue_here: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -36,6 +39,7 @@ pub struct EditablePrompt {
 pub enum ContinuationAction {
     // Rebuild visible context in a fresh session when native history cannot be resumed.
     FreshSession,
+    ContinueHere,
     SwitchAgent { agent_id: String },
     Retry { turn_id: String },
     Edit { turn_id: String, text: String },

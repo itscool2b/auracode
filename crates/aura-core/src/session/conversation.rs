@@ -126,7 +126,9 @@ impl SessionManager {
             return Err(SessionError::ShuttingDown);
         }
         let (selected, target, include_selected) = match &action {
-            ContinuationAction::FreshSession => (None, None, true),
+            ContinuationAction::FreshSession | ContinuationAction::ContinueHere => {
+                (None, None, true)
+            }
             ContinuationAction::SwitchAgent { agent_id } => (None, Some(agent_id.clone()), true),
             ContinuationAction::Retry { turn_id } | ContinuationAction::Edit { turn_id, .. } => {
                 (Some(turn_id.clone()), None, false)
@@ -141,6 +143,12 @@ impl SessionManager {
         let snapshot = self
             .conversation_snapshot(chat_id, selected, target.clone(), include_selected)
             .await?;
+        let continue_here = matches!(action, ContinuationAction::ContinueHere);
+        if continue_here && !snapshot.remote_history {
+            return Err(invalid(
+                "This chat has no new remote history to continue from.",
+            ));
+        }
         if let Some(relocation) = &relocation
             && live::normalize_path(snapshot.chat.folder.clone())
                 != live::normalize_path(relocation.from.clone())
@@ -175,6 +183,7 @@ impl SessionManager {
             session.host == snapshot.chat.agent_host && session.cwd == snapshot.chat.folder
         });
         let resumes_native = relocation.is_none()
+            && !snapshot.remote_history
             && switch
             && session
                 .and_then(|session| session.native_session_id.as_ref())
@@ -185,6 +194,9 @@ impl SessionManager {
         let mut warnings = Vec::new();
         if matches!(action, ContinuationAction::FreshSession) {
             warnings.push("A new native session will use only the handoff shown here. Earlier messages and saved sessions remain intact. No files are changed and no prompt is sent until your next message.".into());
+        }
+        if continue_here {
+            warnings.push("A fresh native session will receive the reviewed context in your next visible prompt. Saved native sessions remain unchanged.".into());
         }
         if switch
             && !resumes_native
@@ -197,6 +209,7 @@ impl SessionManager {
             warnings.push("This saved native session cannot be safely resumed here. A new session will receive the visible handoff.".into());
         }
         let uses_native_fork = creates_chat
+            && !snapshot.remote_history
             && session
                 .and_then(|session| session.capabilities.as_ref())
                 .is_some_and(|capabilities| capabilities.fork)
@@ -214,7 +227,7 @@ impl SessionManager {
         if creates_chat {
             warnings.push("The new chat uses the same working folder. The source conversation remains available.".into());
         }
-        if !switch && !matches!(action, ContinuationAction::FreshSession) {
+        if !switch && !continue_here && !matches!(action, ContinuationAction::FreshSession) {
             warnings.push("Continuing from an earlier message does not revert files. Review Changes separately if the folder should be restored.".into());
         }
         let (files, diff_stat) = match self.chat_changes(chat_id, None).await {

@@ -202,6 +202,7 @@ pub(crate) fn load_chat(
     };
     Ok(Some(ChatLoad {
         initial_model,
+        remote_history: remote_history(conn, chat_id)?,
         continuation: super::conversation::pending(conn, chat_id)?,
         chat,
         next_seq,
@@ -211,6 +212,10 @@ pub(crate) fn load_chat(
         recovered_turns,
         replay_check,
     }))
+}
+
+pub(crate) fn remote_history(conn: &Connection, chat_id: &str) -> rusqlite::Result<bool> {
+    conn.query_row("SELECT COALESCE((SELECT source_agent IS NOT NULL FROM turns WHERE chat_id=?1 ORDER BY seq DESC LIMIT 1),0)",[chat_id],|r|r.get(0))
 }
 
 /// The chat's newest agent session.

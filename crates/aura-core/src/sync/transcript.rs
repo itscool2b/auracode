@@ -7,6 +7,16 @@ use zeroize::Zeroizing;
 
 mod capture;
 pub(crate) use capture::{capture_one, install};
+mod import;
+pub(crate) use import::publish;
+
+#[derive(Clone)]
+pub struct Imported {
+    pub chat_id: String,
+    pub turn_id: String,
+    pub next_seq: u32,
+    pub next_turn_ordinal: u32,
+}
 
 pub(super) const PIECE_BYTES: usize = 3 * 1024 * 1024;
 const MAX_ENTRY_BYTES: usize = 16 * 1024 * 1024;
@@ -361,3 +371,5 @@ fn referenced(entry: &Entry) -> Vec<String> {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+pub(crate) use tests::staged_turn;

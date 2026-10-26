@@ -2031,3 +2031,27 @@ profile run passed 12/13; the stale A-to-B failure assertion is corrected to req
 and invalidation while preserving A's encrypted receipt/head for reopen. Parent will rerun the native
 case and wire the screen before the final combined gate. No real configuration or account was used.
 
+### Admitted remote history and Continue here
+
+Staged encrypted turns now publish through the chat actor after earlier writes finish and only when
+no native session, queued prompt, steering or chat mutation is active. Publication validates the full
+piece chain, remaps event sequences, imports authenticated attachments into encrypted storage, and
+commits visible rows atomically. Missing ancestors defer publication. Offline sibling continuations
+retain both branches and add a visible fork notice. Fair selection keeps busy chats from starving
+other incoming history. Existing attached views receive a sequence gap and reattach to durable history.
+
+New remote history invalidates earlier handoff reviews. Continue here previews a bounded visible
+handoff, preserves the saved native session, and starts a fresh session only with the next user prompt.
+Neither applying a review nor importing a turn sends an agent prompt. The actor rejects ordinary
+start/send until that handoff has been reviewed. Unknown event JSON and accepted steering remain in
+the imported transcript; device folder mappings and native session IDs are never copied.
+
+Seven focused transcript tests and the Account actor handoff regression passed on Windows, including
+authenticated malformed-data rollback, missing-parent deferral, branch union, encrypted image transfer,
+busy-session deferral, view reconciliation and stale-review rejection. Account-feature all-target
+Clippy, default core compilation and ordinary native TypeScript export passed. Only the generated
+conversation declarations were retained because this isolated branch lacks newer installer/clone/setup
+commands already exported by the integrated branch. Pinned pnpm typecheck still reports its existing
+AppInfo fixture and steering reducer gaps; it reports no new conversation errors. Root integration owns
+the scheduler admission hook and Continue here UI. Explicit Local import, folder resolution, macOS and
+complete M7 acceptance remain pending. No real account request or vendor prompt was used.

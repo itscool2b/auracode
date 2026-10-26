@@ -26,6 +26,8 @@ mod normalize;
 mod policy;
 mod search;
 mod spawner;
+#[cfg(feature = "account-sync")]
+mod sync_history;
 #[cfg(test)]
 mod tests;
 mod workspace;

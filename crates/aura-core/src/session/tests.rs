@@ -5,6 +5,8 @@ mod checkpoints;
 mod conversation;
 mod folder_context;
 mod steering;
+#[cfg(feature = "account-sync")]
+mod sync_history;
 mod workspace;
 mod worktree_guards;
 
@@ -110,6 +112,18 @@ fn rig_with_spec(
     let rt = Handle::current();
     let store = ChatStore::start_with(store, owner, &profile, "device".into(), rt.clone(), config)
         .expect("store");
+    rig_from_store(dir, profile, folder, store, drivers, knobs)
+}
+
+fn rig_from_store(
+    dir: tempfile::TempDir,
+    profile: Profile,
+    folder: PathBuf,
+    store: Arc<ChatStore>,
+    drivers: Arc<dyn DriverFactory>,
+    knobs: Knobs,
+) -> Rig {
+    let rt = Handle::current();
     let mut vars = EnvMap::new();
     vars.insert(EnvKey::from("PATH"), "/usr/bin".into());
     let env = EnvResolver::fixed(ResolvedEnv {

@@ -19,6 +19,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 mod steering;
+#[cfg(feature = "account-sync")]
+mod sync_history;
 
 use aura_agents::{AgentSpec, LaunchError, Recipe};
 use aura_drivers::batch::{FrameBatcher, TurnTag};
@@ -93,6 +95,10 @@ pub(crate) enum ChatMsg {
                 SessionError,
             >,
         >,
+    },
+    #[cfg(feature = "account-sync")]
+    ImportSync {
+        reply: oneshot::Sender<Result<bool, SessionError>>,
     },
     ReserveGit {
         id: String,
@@ -218,6 +224,8 @@ impl ChatMsg {
     /// Answers the message with `error` (a chat that does not exist, a store that is gone).
     fn refuse(self, error: SessionError) {
         match self {
+            #[cfg(feature = "account-sync")]
+            ChatMsg::ImportSync { reply } => drop(reply.send(Err(error))),
             ChatMsg::ReserveGit { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::ReleaseGit { .. } => {}
             ChatMsg::Conversation { reply, .. } => drop(reply.send(Err(error))),
@@ -392,6 +400,11 @@ struct NativeIdentitySave {
 
 /// What an `in_flight` future completes.
 enum Done {
+    #[cfg(feature = "account-sync")]
+    SyncImported {
+        result: Result<Option<crate::sync::transcript::Imported>, SessionError>,
+        reply: oneshot::Sender<Result<bool, SessionError>>,
+    },
     Steering(Box<steering::Completion>),
     Conversation {
         result: Result<crate::chatstore::conversation::ConversationReply, SessionError>,
@@ -504,6 +517,8 @@ pub(crate) struct ChatActor {
     progress: Option<mpsc::UnboundedReceiver<String>>,
     in_flight: FuturesUnordered<BoxFuture<'static, Done>>,
     organizing: bool,
+    #[cfg(feature = "account-sync")]
+    sync_importing: bool,
     steering_pending: bool,
     git_reservation: Option<String>,
     checkpointing: Option<(String, AbortHandle)>,
@@ -516,6 +531,7 @@ pub(crate) struct ChatActor {
     winding_down: watch::Sender<usize>,
     agent_session: Option<AgentSessionRow>,
     continuation: Option<crate::chatstore::conversation::PendingContinuation>,
+    remote_history: bool,
     autonomy: Autonomy,
     autonomy_state: AutonomyState,
     desired: BTreeMap<String, ConfigValue>,
@@ -561,6 +577,7 @@ impl ChatActor {
     ) -> ChatActor {
         let ChatLoad {
             initial_model,
+            remote_history,
             continuation,
             chat,
             next_seq,
@@ -589,6 +606,9 @@ impl ChatActor {
                 .is_some_and(|value| value.force_fresh || value.native_start.fork)
         });
         ChatActor {
+            #[cfg(feature = "account-sync")]
+            sync_importing: false,
+            remote_history,
             continuation,
             batcher: FrameBatcher::new(chat_id.clone()).starting_at(next_seq),
             batched_bytes: 0,
@@ -721,7 +741,24 @@ impl ChatActor {
     // ---- IPC messages -------------------------------------------------------------------------
 
     fn on_msg(&mut self, msg: ChatMsg) {
+        #[cfg(feature = "account-sync")]
+        if self.sync_importing {
+            match msg {
+                ChatMsg::Shutdown { reply, .. } => {
+                    self.quitting = true;
+                    self.shutdown_reply = Some(reply);
+                    return;
+                }
+                ChatMsg::Detach { .. } | ChatMsg::DropOwner { .. } => {}
+                _ => {
+                    msg.refuse(SessionError::SessionNotReady);
+                    return;
+                }
+            }
+        }
         match msg {
+            #[cfg(feature = "account-sync")]
+            ChatMsg::ImportSync { reply } => self.import_sync(reply),
             ChatMsg::ReserveGit { id, reply } => {
                 let result = if self.organizing
                     || self.steering_pending
@@ -1176,6 +1213,7 @@ impl ChatActor {
                 return Ok(aura_protocol::conversation::ContinuationResult { chat_id: id, prompt: None });
             }
             self.chat = load.chat;
+            self.remote_history = load.remote_history;
             self.agent_session = load.agent_session;
             self.continuation = load.continuation;
             self.replay_check = load.replay_check.filter(|_| !self.continuation.as_ref().is_some_and(|value| value.force_fresh || value.native_start.fork));
@@ -1322,6 +1360,7 @@ impl ChatActor {
     }
 
     fn send(&mut self, text: String, parts: Vec<PromptPart>) -> Result<PromptAck, SessionError> {
+        self.require_remote_handoff()?;
         if self.organizing {
             return Err(SessionError::Organization(
                 "Wait for the chat change to finish.".into(),
@@ -1601,6 +1640,7 @@ impl ChatActor {
             driver.run_idle = Some(false);
         }
         self.queue.retain(|row| row.id != prompt.id);
+        self.remote_history = false;
         self.ordinal = self.ordinal.saturating_add(1);
         let tag: Arc<str> = Arc::from(turn_id.as_str());
         let started_at = now_millis();
@@ -1958,11 +1998,27 @@ impl ChatActor {
         aura_agents::hosts::display_name(&name, &self.chat.agent_host)
     }
 
+    fn require_remote_handoff(&self) -> Result<(), SessionError> {
+        if self.remote_history
+            && !self
+                .continuation
+                .as_ref()
+                .is_some_and(|value| !value.handoff.is_empty())
+        {
+            return Err(SessionError::Organization("Review Continue here before sending to an agent. This device has new remote history that its saved native session has not seen.".into()));
+        }
+        Ok(())
+    }
+
     /// Starts the agent. `explicit` (`chat_start`): a full slot is an error; otherwise a card.
     fn start(&mut self, fresh: bool, explicit: bool) -> Result<(), SessionError> {
         if self.shared.deps.store.config_recovery_pending() {
-            return Err(SessionError::Organization("Recover the interrupted profile configuration switch before starting agents.".into()));
+            return Err(SessionError::Organization(
+                "Recover the interrupted profile configuration switch before starting agents."
+                    .into(),
+            ));
         }
+        self.require_remote_handoff()?;
         if self.steering_pending {
             return Err(SessionError::OptionInvalid(
                 "Wait for steering delivery to finish before restarting.".into(),
@@ -2538,6 +2594,8 @@ impl ChatActor {
 
     fn on_done(&mut self, done: Done) {
         match done {
+            #[cfg(feature = "account-sync")]
+            Done::SyncImported { result, reply } => self.sync_imported(result, reply),
             Done::Steering(completion) => self.steering_done(*completion),
             Done::Conversation { result, reply } => {
                 drop(reply.send(result));

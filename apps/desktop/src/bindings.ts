@@ -852,7 +852,7 @@ export type ConfigSyncReceipt = {
 /**  A value for a [`ConfigOption`]: a choice for a select, a flag for a toggle. */
 export type ConfigValue = { type: "choice"; value: string } | { type: "toggle"; value: boolean };
 
-export type ContinuationAction = { type: "fresh_session" } | { type: "switch_agent"; agent_id: string } | { type: "retry"; turn_id: string } | { type: "edit"; turn_id: string; text: string } | { type: "fork"; turn_id: string };
+export type ContinuationAction = { type: "fresh_session" } | { type: "continue_here" } | { type: "switch_agent"; agent_id: string } | { type: "retry"; turn_id: string } | { type: "edit"; turn_id: string; text: string } | { type: "fork"; turn_id: string };
 
 export type ContinuationPreview = {
 	token: string,
@@ -891,6 +891,8 @@ export type ConversationTurns = {
 	turns: ConversationTurn[],
 	before_ordinal: number | null,
 	has_more: boolean,
+	/**  New remote history requires a reviewed visible handoff before a local agent can continue. */
+	can_continue_here?: boolean,
 };
 
 export type Cost = {

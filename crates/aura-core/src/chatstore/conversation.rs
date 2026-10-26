@@ -23,6 +23,7 @@ pub(crate) struct PendingContinuation {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ConversationSnapshot {
+    pub remote_history: bool,
     pub chat: ChatRecord,
     pub next_seq: u32,
     pub latest_ordinal: u32,
@@ -128,7 +129,7 @@ pub(crate) fn execute(
         ConversationCommand::Turns { chat_id, before } => {
             let _ =
                 rows::chat(conn, device, &chat_id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
-            let mut statement = conn.prepare("SELECT t.id,t.seq,COALESCE(s.agent_id,''),t.status,t.started_at FROM turns t LEFT JOIN agent_sessions s ON s.id=t.agent_session_id WHERE t.chat_id=?1 AND (?2 IS NULL OR t.seq<?2) ORDER BY t.seq DESC LIMIT 51")?;
+            let mut statement = conn.prepare("SELECT t.id,t.seq,COALESCE(t.source_agent,s.agent_id,''),t.status,t.started_at FROM turns t LEFT JOIN agent_sessions s ON s.id=t.agent_session_id WHERE t.chat_id=?1 AND (?2 IS NULL OR t.seq<?2) ORDER BY t.seq DESC LIMIT 51")?;
             let mut turns = statement
                 .query_map(params![chat_id, before], |row| {
                     Ok(ConversationTurn {
@@ -149,6 +150,7 @@ pub(crate) fn execute(
             }
             let before_ordinal = turns.last().map(|turn| turn.ordinal);
             Ok(ConversationReply::Turns(ConversationTurns {
+                can_continue_here: rows::remote_history(conn, &chat_id)?,
                 turns,
                 before_ordinal,
                 has_more,
@@ -206,6 +208,7 @@ pub(crate) fn execute(
             turns.reverse();
             Ok(ConversationReply::Snapshot(Box::new(
                 ConversationSnapshot {
+                    remote_history: rows::remote_history(conn, &chat_id)?,
                     next_seq: next_seq(conn, &chat_id)?,
                     chat,
                     latest_ordinal,
@@ -235,7 +238,7 @@ fn next_seq(conn: &Connection, chat: &str) -> rusqlite::Result<u32> {
 }
 
 fn read_turn(conn: &Connection, chat_id: &str, turn_id: &str) -> rusqlite::Result<ContextTurn> {
-    let (ordinal,agent_id,status,json,prefix): (u32,String,String,String,Option<String>) = conn.query_row("SELECT t.seq,COALESCE(s.agent_id,c.active_agent,''),t.status,t.prompt_parts_json,t.continuation_prefix FROM turns t JOIN chats c ON c.id=t.chat_id LEFT JOIN agent_sessions s ON s.id=t.agent_session_id WHERE t.id=?1 AND t.chat_id=?2", params![turn_id,chat_id], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)))?;
+    let (ordinal,agent_id,status,json,prefix): (u32,String,String,String,Option<String>) = conn.query_row("SELECT t.seq,COALESCE(t.source_agent,s.agent_id,c.active_agent,''),t.status,t.prompt_parts_json,t.continuation_prefix FROM turns t JOIN chats c ON c.id=t.chat_id LEFT JOIN agent_sessions s ON s.id=t.agent_session_id WHERE t.id=?1 AND t.chat_id=?2", params![turn_id,chat_id], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)))?;
     if json.len() > 2 * 1024 * 1024 {
         return Err(invalid(
             "The original prompt exceeds the continuation limit.",

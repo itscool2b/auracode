@@ -774,6 +774,7 @@ pub struct ChatRecord {
 /// Everything a chat actor starts from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChatLoad {
+    pub(crate) remote_history: bool,
     pub(crate) continuation: Option<conversation::PendingContinuation>,
     /// A project default for a chat that has never established an agent session.
     pub initial_model: Option<String>,

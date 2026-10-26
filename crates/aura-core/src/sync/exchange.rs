@@ -24,6 +24,12 @@ pub struct Pending {
 }
 pub enum Command {
     Pending,
+    ReadyChats,
+    /// Internal actor operation. The caller must retain chat mutation admission until completion.
+    Import {
+        chat_id: String,
+        minimum_seq: u32,
+    },
     Pull(Pull),
     Heads {
         sent: Vec<EncryptedRecord>,
@@ -40,6 +46,8 @@ pub enum Command {
 }
 pub enum Reply {
     Pending(Pending),
+    ReadyChats(Vec<String>),
+    Imported(Option<super::transcript::Imported>),
     Saved,
 }
 impl Command {
@@ -48,7 +56,7 @@ impl Command {
             1024 + record.ciphertext.len() + record.nonce.len()
         }
         1024 + match self {
-            Self::Pending => 0,
+            Self::Pending | Self::ReadyChats | Self::Import { .. } => 0,
             Self::Pull(page) => page.records.iter().map(|record| size(&record.record)).sum(),
             Self::Heads { sent, heads } => {
                 sent.iter().map(size).sum::<usize>()
@@ -65,6 +73,9 @@ impl Command {
     }
     pub(crate) fn validate(&self) -> Result<()> {
         if self.bytes() > 16 * 1024 * 1024 {
+            return Err(SyncError::Invalid);
+        }
+        if matches!(self,Self::Import{chat_id,..} if chat_id.len()>128) {
             return Err(SyncError::Invalid);
         }
         if matches!(self, Self::Pull(page) if page.records.len() > 32)
@@ -103,6 +114,26 @@ pub(crate) fn execute_with_files(
                 .conn_mut()
                 .transaction_with_behavior(TransactionBehavior::Immediate)?;
             let result = match command {
+                Command::ReadyChats => {
+                    let chats = tx.prepare("SELECT s.chat_id FROM sync_turns s JOIN chats c ON c.id=s.chat_id WHERE s.state='staged' AND c.deleted=0 GROUP BY s.chat_id ORDER BY MIN(s.attempt),s.chat_id LIMIT 4")?
+                        .query_map([], |row| row.get::<_, String>(0))?
+                        .collect::<rusqlite::Result<Vec<_>>>()?;
+                    // Rotate even busy actors so one live chat cannot starve other staged history.
+                    for chat in &chats {
+                        tx.execute("UPDATE sync_turns SET attempt=attempt+1 WHERE chat_id=?1 AND state='staged'", [chat])?;
+                    }
+                    Reply::ReadyChats(chats)
+                }
+                Command::Import {
+                    chat_id,
+                    minimum_seq,
+                } => Reply::Imported(transcript::publish(
+                    &tx,
+                    context,
+                    files.ok_or(SyncError::Unavailable)?,
+                    &chat_id,
+                    minimum_seq,
+                )?),
                 Command::Pending => {
                     if let Some(files) = files {
                         transcript::capture_one(&tx, context, files)?;
