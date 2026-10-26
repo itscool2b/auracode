@@ -1009,3 +1009,23 @@ read/write was performed.
   Account session activation, attachment/checkpoint storage, backup restore UI, durable sync state and
   macOS runtime qualification remain pending. No existing profile was opened or modified.
 
+## M4 worktree creation foundation
+
+A separate Rust GitWorkspaces service now inspects repository state and prepares single-use isolation
+previews. Apply verifies the source HEAD/index and repository identity again, journals Creating before
+spawning Git, and creates a locked worktree on a new collision-safe aura branch outside the source.
+Failures retain a RecoveryRequired record and the possibly created branch/path. The service does not
+remove uncertain work or silently roll back. Non-repositories, detached HEAD, unborn branches, active
+merge/rebase/cherry-pick/bisect and index locks return concrete reasons. Bounded NUL-delimited Git
+status parsing preserves paths with spaces and rename sources. Read helpers disable optional index
+locks and inherited Git redirects; explicit worktree operations disable hooks.
+
+Six focused Windows tests and all-target core Clippy pass, using only owned temporary repositories.
+The real Git creation test preserves staged index bytes, HEAD, unstaged CRLF bytes and untracked files.
+The Git-for-Windows extended-path argument incompatibility was reproduced and fixed with regular
+drive/UNC argument spelling while canonical identity checks remain in place. Bindings are generated
+from the new DTOs. This service is not yet exposed to chat UI: relocation/native handoff, bringing
+uncommitted changes, setup copies/commands, merge/PR/discard/recovery and macOS execution remain pending.
+No agent prompt, login, real-repository mutation, push or CI dispatch ran. Protocol references are the
+official [Git worktree](https://git-scm.com/docs/git-worktree) and
+[Git status porcelain v2](https://git-scm.com/docs/git-status) documentation.

@@ -38,6 +38,11 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::conversation::ContinuationAction>()
         .typ::<aura_protocol::conversation::ContinuationPreview>()
         .typ::<aura_protocol::conversation::ContinuationResult>()
+        .typ::<aura_protocol::git::GitWorkspace>()
+        .typ::<aura_protocol::git::IsolationInput>()
+        .typ::<aura_protocol::git::IsolationPreview>()
+        .typ::<aura_protocol::git::IsolationResult>()
+        .typ::<aura_protocol::git::ManagedWorktree>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
             crate::onboarding::setup_snapshot,

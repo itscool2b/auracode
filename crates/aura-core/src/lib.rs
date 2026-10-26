@@ -35,6 +35,7 @@ pub mod checkpoints;
 mod conversation;
 pub mod device;
 pub mod error;
+pub mod gitworkspaces;
 pub mod ids;
 pub mod onboarding;
 pub mod owner;
