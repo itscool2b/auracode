@@ -20,6 +20,8 @@ impl Default for Activity {
 pub(crate) struct State {
     available: bool,
     active: bool,
+    #[cfg(test)]
+    remove_before_begin: bool,
 }
 pub(crate) struct Turn {
     activity: Arc<Activity>,
@@ -48,6 +50,10 @@ impl Activity {
     pub(crate) fn begin(self: &Arc<Self>, chat: &str) -> Option<Turn> {
         let mut states = self.lock();
         let state = states.get_mut(chat)?;
+        #[cfg(test)]
+        if std::mem::take(&mut state.remove_before_begin) {
+            state.available = false;
+        }
         if !state.available || state.active {
             return None;
         }
@@ -56,6 +62,13 @@ impl Activity {
             activity: self.clone(),
             chat: chat.into(),
         })
+    }
+    #[cfg(test)]
+    pub(crate) fn remove_before_begin(&self, chat: &str) {
+        self.lock()
+            .get_mut(chat)
+            .expect("loaded test chat")
+            .remove_before_begin = true;
     }
     pub(crate) fn available(&self, chat: &str) -> bool {
         self.lock().get(chat).is_some_and(|state| state.available)

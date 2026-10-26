@@ -1482,16 +1482,13 @@ impl ChatActor {
         let prompt_id = new_id();
         let now = now_millis();
         if self.can_dispatch() {
-            self.dispatch(Prompt {
+            let queued = self.dispatch(Prompt {
                 id: prompt_id.clone(),
                 parts,
                 text,
                 created_at: now,
             });
-            return Ok(PromptAck {
-                prompt_id,
-                queued: self.shared.deps.checkpoints.is_some(),
-            });
+            return Ok(PromptAck { prompt_id, queued });
         }
         let max_queue = self.shared.deps.limits.max_queue;
         if self.queue.len() >= max_queue {
@@ -1640,7 +1637,7 @@ impl ChatActor {
 
     /// Starts a turn for `prompt`: the turn's first rows go out in one `BeginTurn` (which removes
     /// the queued row), then the prompt goes to the driver.
-    fn dispatch(&mut self, prompt: Prompt) {
+    fn dispatch(&mut self, prompt: Prompt) -> bool {
         self.workspace_turn = None;
         let Some(admission) = self.store.begin_workspace_turn(&self.chat_id) else {
             let row = QueuedRow {
@@ -1651,17 +1648,28 @@ impl ChatActor {
                 held: true,
                 created_at: prompt.created_at,
             };
+            let preview = cap_chars(row.text.clone(), PREVIEW_CHARS);
+            let prompt_id = row.id.clone();
             self.queue.push(row.clone());
             self.queue_op(Op::QueuePut(row));
+            self.push(
+                AuraEvent::PromptLifecycle {
+                    prompt_id,
+                    state: PromptState::Queued,
+                    preview: Some(preview),
+                },
+                None,
+            );
+            self.info_dirty = true;
             self.set_detail(Some("This workspace was removed. Restore it from Removed projects and folders before resuming this saved prompt.".into()));
             self.flush();
-            return;
+            return true;
         };
         self.workspace_turn = Some(admission);
         let turn_id = new_id();
         let Some(checkpoints) = self.shared.deps.checkpoints.clone() else {
             self.dispatch_prepared(prompt, turn_id, None);
-            return;
+            return false;
         };
         let row = QueuedRow {
             id: prompt.id.clone(),
@@ -1713,6 +1721,7 @@ impl ChatActor {
             Some("Saving checkpoint before sending the prompt".into()),
         );
         self.flush();
+        true
     }
 
     fn dispatch_prepared(

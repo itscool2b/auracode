@@ -115,3 +115,41 @@ async fn project_terminal_and_stale_membership_refuse_removal() {
     assert_eq!(rig.manager.chats().await.unwrap().len(), 2);
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
 }
+#[tokio::test]
+async fn removal_winning_dispatch_admission_returns_a_held_queue_ack_and_lifecycle() {
+    let (driver, handle) = ScriptedDriver::new(vec![
+        ready_step("admission-race"),
+        Step::Expect(CommandMatch::Shutdown),
+    ]);
+    let rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let sink = Arc::new(Sink::default());
+    rig.manager.attach(&chat.id, sink.clone()).await.unwrap();
+    // Inject the writer winning exactly between send's visibility check and dispatch admission.
+    rig.store.remove_workspace_before_begin(&chat.id);
+    let ack = rig
+        .manager
+        .send(&chat.id, "retain this prompt".into())
+        .await
+        .unwrap();
+    assert!(ack.queued);
+    eventually("queued lifecycle", || lock(&sink.frames).iter().flat_map(|frame| &frame.events).any(|event| matches!(event,
+        AuraEvent::PromptLifecycle { prompt_id, state: aura_protocol::PromptState::Queued, .. } if prompt_id == &ack.prompt_id
+    ))).await;
+    let attached = rig
+        .manager
+        .attach(&chat.id, Arc::new(Sink::default()))
+        .await
+        .unwrap();
+    assert_eq!(attached.snapshot.queue.len(), 1);
+    assert!(attached.snapshot.queue[0].held);
+    assert_eq!(attached.snapshot.queue[0].prompt_id, ack.prompt_id);
+    assert!(
+        !handle
+            .commands()
+            .iter()
+            .any(|command| matches!(command, aura_drivers::driver::LoggedCommand::Prompt { .. }))
+    );
+    rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}

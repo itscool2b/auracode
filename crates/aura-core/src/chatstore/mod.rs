@@ -128,6 +128,10 @@ impl ChatStore {
     pub(crate) fn workspace_changes(&self) -> watch::Receiver<u64> {
         self.shared.workspace_activity.subscribe()
     }
+    #[cfg(test)]
+    pub(crate) fn remove_workspace_before_begin(&self, chat: &str) {
+        self.shared.workspace_activity.remove_before_begin(chat);
+    }
     pub(crate) fn workspace_available(&self, chat: &str) -> bool {
         self.shared.workspace_activity.available(chat)
     }

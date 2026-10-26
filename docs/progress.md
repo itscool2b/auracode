@@ -2421,3 +2421,6 @@ the current schema plus one, and damaged-schema checks include every table from 
 All 25 focused salvage tests pass after those fixture corrections. Production salvage behavior was
 unchanged. This broad run also exercised the new removal and Account rebind tests successfully; the
 reviewed held-prompt acknowledgement follow-up and remaining lifecycle work still require integration.
+### Removal dispatch acknowledgement follow-up
+
+Independent review found a race where incoming removal could win after send admission but before dispatch. The prompt was safely saved as held, but its acknowledgement incorrectly claimed immediate delivery when checkpoints were disabled. Dispatch now reports its actual queued outcome and emits the normal queued lifecycle for this path. A deterministic test hook removes workspace admission at that exact boundary and checks the held queue, queued acknowledgement/lifecycle and absence of a driver prompt. Core all-target account-sync Clippy and instruction parity pass; native test execution remains pending after the earlier Application Control denial.
