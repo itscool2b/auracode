@@ -2713,3 +2713,32 @@ clean worktree, four focused tests and inventory integrity checks passing. It is
 into this branch yet. The conservative source inventory and Vite hooks still require full builds,
 discoverable notices UI and artifact/native redistribution review. The project license remains
 unchanged. All parallel agents have stopped at the owner's handoff request.
+
+### Claude Code continuation: notices, identity regression and Worker tests
+
+The third-party notices checkpoint is integrated. Its input hashes were refreshed after the
+invitation commits changed `apps/api/package.json`; the 414 runtime records and license texts were
+unchanged. The website footer now links `/third-party-notices`, served as a prerendered directory
+index that the Rust website Worker accepts, with the same `frame-ancestors 'none'` policy as other
+public pages. Desktop Settings, About, Third-party notices opens the same text in a dialog. It loads
+a lazy `virtual:third-party-notices` chunk because the desktop CSP permits no same-origin fetch.
+Chromium and WebKit checks cover the dialog with Axe, keyboard scrolling and Escape. The root test
+script now runs the notice tests, so a dependency change without a reviewed refresh fails.
+Installer and deployed-artifact inspection and WebView2Loader redistribution review remain open.
+
+The stalled identity regression was stale test ordering, not a dispatch bypass. Restart prepares
+project folders with a FIFO read through the chat store writer. That read waits behind the identity
+write while SQLite's busy wait runs, so the new generation cannot become Ready until the write
+resolves. The test waited for Ready while still holding the lock and hung until its patience limit.
+It now asserts that, inside the busy wait, the restart neither becomes Ready nor dispatches and the
+stored identity is unchanged; after release the identity commits, the restart resumes the native
+session and the prompt is sent. It passed three consecutive local Windows runs. The tentative timing
+edit in the separate Windows-fix worktree is superseded and was not integrated.
+
+The website Worker runtime test predated the WebP screenshot variants and failed on their MIME type.
+It now covers WebP, the notice text file and the notices page. Local full `pnpm check`, the rebuilt
+website Worker's five runtime tests, eight native unit tests and native/Wasm Clippy pass. The new
+website Worker modules are 20,473 bytes JS (unchanged glue, SHA-256 `7fea5f5a…`) and 1,107,745 bytes
+Wasm (SHA-256 `e926c1c6…`). They are not deployed: this session's Cloudflare connector is authorized
+for a different account and has no upload operation. Both live websites still serve the earlier build.
+API source is unchanged since the staged invitation build, so its recorded artifacts remain current.
