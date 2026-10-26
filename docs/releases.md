@@ -1,5 +1,9 @@
 # Windows and macOS packaging
 
+The owner deferred public signing on 2026-10-26. Complete source and unsigned qualification first.
+The signing and signed-update requirements below apply when public distribution is resumed; they
+do not block the current implementation work.
+
 The manual `Build` workflow produces unsigned acceptance artifacts for three explicit targets:
 
 | Target | Installer | Native acceptance still required |
@@ -158,6 +162,7 @@ pnpm --filter @auracode/desktop check:settings
 pnpm --filter @auracode/desktop check:setup
 pnpm --filter @auracode/desktop exec node scripts/check-library.mjs
 pnpm --filter @auracode/desktop exec node scripts/check-config-recovery.mjs
+pnpm --filter @auracode/desktop exec node scripts/check-account-vault.mjs
 pnpm --filter @auracode/web test:release
 pnpm --filter @auracode/web test:browser
 pnpm --filter @auracode/desktop tauri build --debug --no-bundle

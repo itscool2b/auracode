@@ -13,6 +13,8 @@ export const commands = {
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
 	accountConfig: () => typedError<AccountConfiguration, AccountFailure>(__TAURI_INVOKE("account_config")),
 	accountStatus: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_status")),
+	accountVaultStatus: () => typedError<AccountVaultStatus, AccountFailure>(__TAURI_INVOKE("account_vault_status")),
+	accountVaultUnlock: (passphrase: string, create: boolean) => typedError<AccountVaultStatus, AccountFailure>(__TAURI_INVOKE("account_vault_unlock", { passphrase, create })),
 	accountRequestCode: (email: string, turnstileToken: string) => typedError<SignInChallenge, AccountFailure>(__TAURI_INVOKE("account_request_code", { email, turnstileToken })),
 	accountVerifyCode: (challengeId: string, code: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_verify_code", { challengeId, code })),
 	accountRefresh: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_refresh")),
@@ -279,7 +281,7 @@ export const SMOKE_CHAT_CHECKS = ["chats-screen","pick-folder","create-chat","pi
 export const SMOKE_CHAT_REOPEN_CHECKS = ["reopen-list","reopen-no-start","reopen-history","reopen-interrupted","reopen-held","reopen-blob","reopen-resume","reopen-send-queued"] as const;
 
 /* Types */
-export type AccountAccess = "signed_out" | "verification_required" | "needs_device" | "needs_first_key" | "pending_approval" | "verify_account_key" | "ready" | "expired" | "denied";
+export type AccountAccess = "signed_out" | "verification_required" | "needs_device" | "needs_first_key" | "pending_approval" | "verify_account_key" | "ready" | "expired" | "denied" | "deleted";
 
 export type AccountConfiguration = {
 	service_origin: string,
@@ -304,7 +306,7 @@ export type AccountFailure = {
 	retry_after_seconds: number | null,
 };
 
-export type AccountFailureCode = "invalid_input" | "invalid_state" | "offline" | "timed_out" | "unauthorized" | "forbidden" | "invalid_code" | "conflict" | "quota" | "rate_limited" | "delivery_failed" | "unavailable" | "not_found" | "protocol" | "secure_storage" | "local_storage" | "key_mismatch";
+export type AccountFailureCode = "invalid_input" | "invalid_state" | "offline" | "timed_out" | "unauthorized" | "deleted" | "forbidden" | "invalid_code" | "conflict" | "quota" | "rate_limited" | "delivery_failed" | "unavailable" | "not_found" | "protocol" | "secure_storage" | "local_storage" | "key_mismatch";
 
 export type AccountSignOut = {
 	status: AccountStatus,
@@ -333,6 +335,13 @@ export type AccountSyncStatus = {
 	pending_changes: number | null,
 	last_sync_at: number | null,
 	message: string | null,
+};
+
+export type AccountVaultMode = "native" | "passphrase_locked" | "passphrase_unlocked" | "restart_required";
+
+export type AccountVaultStatus = {
+	mode: AccountVaultMode,
+	can_create: boolean,
 };
 
 /**  The vendor's own local authentication check. This does not promise a successful paid request. */
