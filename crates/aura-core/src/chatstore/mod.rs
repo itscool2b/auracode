@@ -45,6 +45,8 @@ pub(crate) mod steering;
 mod sync;
 #[cfg(test)]
 pub(crate) mod test_support;
+pub(crate) mod workspace_activity;
+pub(crate) mod workspace_removal;
 pub(crate) mod worktree_setup;
 mod writer;
 
@@ -119,6 +121,38 @@ impl ChatStore {
             .ok_or(StoreError::Closed)?;
         self.shared.push(
             Work::Request(Request::FolderResolution { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+    pub(crate) fn workspace_changes(&self) -> watch::Receiver<u64> {
+        self.shared.workspace_activity.subscribe()
+    }
+    pub(crate) fn workspace_available(&self, chat: &str) -> bool {
+        self.shared.workspace_activity.available(chat)
+    }
+    pub(crate) fn begin_workspace_turn(&self, chat: &str) -> Option<workspace_activity::Turn> {
+        self.shared.workspace_activity.begin(chat)
+    }
+    pub(crate) async fn workspace_removal(
+        &self,
+        command: workspace_removal::Command,
+    ) -> Result<workspace_removal::Reply, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if !command.writes() {
+            return self
+                .request(Request::WorkspaceRemoval { command, reply }, answer)
+                .await?;
+        }
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::WorkspaceRemoval { command, reply }),
             Some(permits),
         );
         answer.await.map_err(|_| StoreError::Closed)?

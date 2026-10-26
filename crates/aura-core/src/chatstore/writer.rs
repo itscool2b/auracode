@@ -85,6 +85,7 @@ impl WriterConfig {
 
 /// What the store and the writer share.
 pub(crate) struct Shared {
+    pub(crate) workspace_activity: Arc<super::workspace_activity::Activity>,
     queue: Mutex<Queue>,
     wake: Condvar,
     pub(crate) count: Arc<Semaphore>,
@@ -141,6 +142,10 @@ pub(crate) enum Work {
 
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
+    WorkspaceRemoval {
+        command: super::workspace_removal::Command,
+        reply: oneshot::Sender<Result<super::workspace_removal::Reply, StoreError>>,
+    },
     FolderResolution {
         command: super::folder_resolution::Command,
         reply: oneshot::Sender<Result<super::folder_resolution::Reply, StoreError>>,
@@ -497,6 +502,7 @@ fn work_bytes(work: &Work) -> usize {
         Work::Request(Request::Organization { command, .. }) => command.bytes(),
         Work::Request(Request::WorktreeSetup { command, .. }) => command.bytes(),
         Work::Request(Request::FolderResolution { command, .. }) => command.bytes(),
+        Work::Request(Request::WorkspaceRemoval { command, .. }) => command.bytes(),
         Work::Request(Request::Steering { command, .. }) => command.bytes(),
         Work::Request(Request::Composer { command, .. }) => command.bytes(),
         #[cfg(feature = "account-sync")]
@@ -528,6 +534,7 @@ fn ends_batch(work: &Work) -> bool {
 impl Shared {
     pub(crate) fn new(config: WriterConfig) -> Shared {
         Shared {
+            workspace_activity: Arc::default(),
             queue: Mutex::new(Queue {
                 items: VecDeque::new(),
                 saved: VecDeque::new(),
@@ -697,6 +704,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::Organization { .. }) => "organization",
         Work::Request(Request::WorktreeSetup { .. }) => "worktree setup",
         Work::Request(Request::FolderResolution { .. }) => "folder resolution",
+        Work::Request(Request::WorkspaceRemoval { .. }) => "workspace removal",
         Work::Request(Request::Steering { .. }) => "steering",
         Work::Request(Request::Composer { .. }) => "composer",
         Work::Request(Request::CheckpointContext { .. }) => "checkpoint_context",
@@ -1312,17 +1320,28 @@ impl Writer {
             }
             #[cfg(feature = "account-sync")]
             Request::SyncExchange { command, reply } => {
+                let activity = Arc::clone(&self.shared.workspace_activity);
+                let mut active = activity.lock();
                 let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {
                     (Some(store), Some(context), Mode::Normal) => {
-                        crate::sync::exchange::execute_with_files(
-                            store,
-                            context,
-                            command,
-                            Some(&self.files.attachments),
-                        )
+                        let prepared = super::workspace_activity::prepare(store.conn(), &active)
+                            .map_err(crate::sync::SyncError::from);
+                        prepared.and_then(|()| {
+                            crate::sync::exchange::execute_with_files(
+                                store,
+                                context,
+                                command,
+                                Some(&self.files.attachments),
+                            )
+                        })
                     }
                     _ => Err(crate::sync::SyncError::Unavailable),
                 };
+                if let Some(store) = &self.store
+                    && super::workspace_activity::refresh(store.conn(), &mut active)
+                {
+                    activity.changed();
+                }
                 let _ = reply.send(result);
             }
             #[cfg(feature = "account-sync")]
@@ -1368,6 +1387,27 @@ impl Writer {
                         super::worktree_setup::execute(conn, &device, now, command)
                     })
                 };
+                let _ = reply.send(result);
+            }
+            Request::WorkspaceRemoval { command, reply } => {
+                let activity = Arc::clone(&self.shared.workspace_activity);
+                let mut active = activity.lock();
+                let device = self.device_id.clone();
+                let now = now_millis();
+                let result = if !command.writes() {
+                    self.read(|conn| super::workspace_removal::execute(conn, &device, now, command))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| {
+                        super::workspace_removal::execute(conn, &device, now, command)
+                    })
+                };
+                if let Some(store) = &self.store
+                    && super::workspace_activity::refresh(store.conn(), &mut active)
+                {
+                    activity.changed();
+                }
                 let _ = reply.send(result);
             }
             Request::FolderResolution { command, reply } => {
@@ -1548,7 +1588,11 @@ impl Writer {
             }
         }
         let device = self.device_id.clone();
-        let mut load = self.read(|conn| rows::load_chat(conn, &device, chat_id, recovered))?;
+        let activity = Arc::clone(&self.shared.workspace_activity);
+        let mut load = self.read(|conn| {
+            activity.loaded(conn, chat_id)?;
+            rows::load_chat(conn, &device, chat_id, recovered)
+        })?;
         if let Some(load) = &mut load {
             // Every row queued before the actor that loads it waits for the user (decision 11):
             // recovery holds them, and when it could not (a damaged database, a chat whose recovery
@@ -1682,7 +1726,11 @@ impl Writer {
             return Err(paused);
         }
         let device = self.device_id.clone();
-        let load = self.read(|conn| rows::load_chat(conn, &device, chat_id, 0))?;
+        let activity = Arc::clone(&self.shared.workspace_activity);
+        let load = self.read(|conn| {
+            activity.loaded(conn, chat_id)?;
+            rows::load_chat(conn, &device, chat_id, 0)
+        })?;
         Ok(load.map(|mut load| {
             for row in &mut load.queue {
                 row.held = true;

@@ -10,6 +10,7 @@ mod steering;
 #[cfg(feature = "account-sync")]
 mod sync_history;
 mod workspace;
+mod workspace_removal;
 mod worktree_guards;
 
 use std::sync::Mutex;

@@ -135,6 +135,7 @@ pub(crate) fn execute_with_files(
                     minimum_seq,
                 )?),
                 Command::Pending => {
+                    projection::drain(&tx, &context.identity, &context.key, now)?;
                     if let Some(files) = files {
                         transcript::capture_one(&tx, context, files)?;
                     }

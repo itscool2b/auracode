@@ -85,6 +85,15 @@ pub(crate) fn drain(
             continue;
         };
         let row = decode(&record, &metadata)?;
+        if (metadata.deleted() || matches!(row.table, "chats" | "project_folders"))
+            && removal_busy(conn, &row)?
+        {
+            conn.execute(
+                "UPDATE sync_projection SET attempt=?3 WHERE collection=?1 AND id=?2",
+                params![collection, id, attempt],
+            )?;
+            continue;
+        }
         if !dependencies(conn, &row)? {
             conn.execute(
                 "UPDATE sync_projection SET attempt=?3 WHERE collection=?1 AND id=?2",
@@ -124,6 +133,26 @@ pub(crate) fn drain(
         )?;
     }
     Ok(())
+}
+
+fn removal_busy(conn: &Connection, row: &Row) -> Result<bool> {
+    let predicate = match row.table {
+        "projects" => "c.project_id=?1",
+        "project_folders" => "c.folder_id=?1",
+        "chats" => "c.id=?1",
+        _ => return Ok(false),
+    };
+    let active: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_temp_schema WHERE name='aura_workspace_active')",
+        [],
+        |r| r.get(0),
+    )?;
+    let memory = if active {
+        " OR EXISTS(SELECT 1 FROM aura_workspace_active a WHERE a.chat_id=c.id)"
+    } else {
+        ""
+    };
+    Ok(conn.query_row(&format!("SELECT EXISTS(SELECT 1 FROM chats c WHERE {predicate} AND (EXISTS(SELECT 1 FROM turns t WHERE t.chat_id=c.id AND t.status='running') OR EXISTS(SELECT 1 FROM steering_inputs i WHERE i.chat_id=c.id AND i.state='pending'){memory}))"),[&row.id],|r|r.get(0))?)
 }
 
 fn dependencies(conn: &Connection, row: &Row) -> Result<bool> {

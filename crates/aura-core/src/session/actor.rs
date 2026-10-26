@@ -100,6 +100,11 @@ pub(crate) enum ChatMsg {
     ImportSync {
         reply: oneshot::Sender<Result<bool, SessionError>>,
     },
+    ReserveWorkspace {
+        id: String,
+        restoring: bool,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
     ReserveGit {
         id: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
@@ -231,7 +236,9 @@ impl ChatMsg {
         match self {
             #[cfg(feature = "account-sync")]
             ChatMsg::ImportSync { reply } => drop(reply.send(Err(error))),
-            ChatMsg::ReserveGit { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::ReserveWorkspace { reply, .. } | ChatMsg::ReserveGit { reply, .. } => {
+                drop(reply.send(Err(error)))
+            }
             ChatMsg::ReleaseGit { .. } => {}
             ChatMsg::FolderLocated { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Conversation { reply, .. } => drop(reply.send(Err(error))),
@@ -515,6 +522,7 @@ pub(crate) struct ChatActor {
     turn: Option<OpenTurn>,
     /// The turn row of the turn whose `TurnStarted` is not flushed yet.
     begun: Option<TurnRow>,
+    workspace_turn: Option<crate::chatstore::workspace_activity::Turn>,
     ordinal: u32,
     outbox: VecDeque<Op>,
     outbox_bytes: usize,
@@ -631,6 +639,7 @@ impl ChatActor {
             queue,
             turn: None,
             begun: None,
+            workspace_turn: None,
             ordinal: next_turn_ordinal.saturating_sub(1),
             outbox: VecDeque::new(),
             outbox_bytes: 0,
@@ -681,6 +690,7 @@ impl ChatActor {
 
     async fn run(mut self, mut mailbox: mpsc::UnboundedReceiver<ChatMsg>) {
         self.publish();
+        let mut workspace_changes = self.store.workspace_changes();
         loop {
             // A flush that is due runs before anything else is read: a timer set for "now" only
             // fires on a later tick of a busy runtime, and the outbox bound must see the flush.
@@ -693,6 +703,14 @@ impl ChatActor {
             let head = self.outbox.front().map(op_bytes);
             tokio::select! {
                 biased;
+                changed = workspace_changes.changed() => {
+                    if changed.is_err() { break; }
+                    if self.require_workspace().is_err() {
+                        self.hold_queue();
+                        self.stop();
+                        self.set_detail(Some("This project or folder was removed. Restore it from Removed projects and folders to continue.".into()));
+                    }
+                },
                 msg = mailbox.recv() => match msg {
                     Some(msg) => self.on_msg(msg),
                     None => break,
@@ -718,12 +736,62 @@ impl ChatActor {
                     None => self.progress = None,
                 },
             }
+            let workspace_busy = self.turn.is_some()
+                || self.checkpointing.is_some()
+                || self.preparing.is_some()
+                || matches!(
+                    self.status,
+                    SessionStatus::Starting
+                        | SessionStatus::Running
+                        | SessionStatus::Cancelling
+                        | SessionStatus::Stopping
+                );
+            if !workspace_busy {
+                self.workspace_turn = None;
+            } else if self.workspace_turn.is_none() {
+                self.workspace_turn = self.store.begin_workspace_turn(&self.chat_id);
+            }
             self.update_idle();
             self.finish_shutdown();
         }
         // The manager is gone: dropping the driver's command sender closes it (a shutdown with no
         // grace), and the recorded processes die with their last handles.
         self.book.kill_all();
+    }
+
+    fn reserve_workspace(
+        &mut self,
+        id: String,
+        restoring: bool,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    ) {
+        let result = if self.organizing
+            || self.steering_pending
+            || self.driver.is_some()
+            || self.preparing.is_some()
+            || !self.retiring.is_empty()
+            || self.checkpointing.is_some()
+            || self.turn.is_some()
+            || (!restoring && !self.queue.is_empty())
+            || self.pending_start.is_some()
+            || self.native_identity_pending.is_some()
+            || self.quitting
+            || self.shared.is_shutting_down()
+        {
+            Err(SessionError::Organization("Stop affected chats and clear their queued prompts before changing this workspace.".into()))
+        } else if self.store.is_paused() {
+            Err(SessionError::StorageUnavailable(
+                "Wait for saving to resume before changing this workspace.".into(),
+            ))
+        } else {
+            self.organizing = true;
+            self.git_reservation = Some(id.clone());
+            Ok(())
+        };
+        if reply.send(result).is_err() && self.git_reservation.as_deref() == Some(&id) {
+            self.git_reservation = None;
+            self.organizing = false;
+        }
     }
 
     fn reading_events(&self) -> bool {
@@ -765,35 +833,12 @@ impl ChatActor {
         match msg {
             #[cfg(feature = "account-sync")]
             ChatMsg::ImportSync { reply } => self.import_sync(reply),
-            ChatMsg::ReserveGit { id, reply } => {
-                let result = if self.organizing
-                    || self.steering_pending
-                    || self.driver.is_some()
-                    || self.preparing.is_some()
-                    || !self.retiring.is_empty()
-                    || self.checkpointing.is_some()
-                    || self.turn.is_some()
-                    || !self.queue.is_empty()
-                    || self.pending_start.is_some()
-                    || self.native_identity_pending.is_some()
-                    || self.quitting
-                    || self.shared.is_shutting_down()
-                {
-                    Err(SessionError::Organization("Stop affected chats and clear their queued prompts before changing Git worktrees.".into()))
-                } else if self.store.is_paused() {
-                    Err(SessionError::StorageUnavailable(
-                        "Wait for saving to resume before changing Git worktrees.".into(),
-                    ))
-                } else {
-                    self.organizing = true;
-                    self.git_reservation = Some(id.clone());
-                    Ok(())
-                };
-                if reply.send(result).is_err() && self.git_reservation.as_deref() == Some(&id) {
-                    self.git_reservation = None;
-                    self.organizing = false;
-                }
-            }
+            ChatMsg::ReserveGit { id, reply } => self.reserve_workspace(id, false, reply),
+            ChatMsg::ReserveWorkspace {
+                id,
+                restoring,
+                reply,
+            } => self.reserve_workspace(id, restoring, reply),
             ChatMsg::ReleaseGit { id } => {
                 if self.git_reservation.as_deref() == Some(&id) {
                     self.git_reservation = None;
@@ -923,8 +968,8 @@ impl ChatActor {
                 drop(reply.send(result));
             }
             ChatMsg::ResumeQueue { reply } => {
-                self.resume_queue();
-                drop(reply.send(Ok(())));
+                let result = self.require_workspace().map(|()| self.resume_queue());
+                drop(reply.send(result));
             }
             ChatMsg::Interrupt { reply } => {
                 self.interrupt();
@@ -1158,6 +1203,10 @@ impl ChatActor {
             Result<aura_protocol::conversation::ContinuationResult, SessionError>,
         >,
     ) {
+        if let Err(error) = self.require_workspace() {
+            let _ = reply.send(Err(error));
+            return;
+        }
         if self.organizing
             || self.steering_pending
             || self.driver.is_some()
@@ -1387,6 +1436,7 @@ impl ChatActor {
     }
 
     fn send(&mut self, text: String, parts: Vec<PromptPart>) -> Result<PromptAck, SessionError> {
+        self.require_workspace()?;
         self.require_remote_handoff()?;
         if self.organizing {
             return Err(SessionError::Organization(
@@ -1519,7 +1569,18 @@ impl ChatActor {
         Ok(())
     }
 
+    fn require_workspace(&self) -> Result<(), SessionError> {
+        if self.store.workspace_available(&self.chat_id) {
+            Ok(())
+        } else {
+            Err(SessionError::Organization("This project or folder was removed. Restore it from Removed projects and folders before continuing this chat.".into()))
+        }
+    }
+
     fn resume_queue(&mut self) {
+        if self.require_workspace().is_err() {
+            return;
+        }
         for row in &mut self.queue {
             row.held = false;
         }
@@ -1553,6 +1614,9 @@ impl ChatActor {
     }
 
     fn dispatch_next(&mut self) {
+        if self.require_workspace().is_err() {
+            return;
+        }
         if !self.can_dispatch() {
             return;
         }
@@ -1577,6 +1641,23 @@ impl ChatActor {
     /// Starts a turn for `prompt`: the turn's first rows go out in one `BeginTurn` (which removes
     /// the queued row), then the prompt goes to the driver.
     fn dispatch(&mut self, prompt: Prompt) {
+        self.workspace_turn = None;
+        let Some(admission) = self.store.begin_workspace_turn(&self.chat_id) else {
+            let row = QueuedRow {
+                id: prompt.id.clone(),
+                chat_id: self.chat_id.clone(),
+                text: prompt.text,
+                parts: prompt.parts,
+                held: true,
+                created_at: prompt.created_at,
+            };
+            self.queue.push(row.clone());
+            self.queue_op(Op::QueuePut(row));
+            self.set_detail(Some("This workspace was removed. Restore it from Removed projects and folders before resuming this saved prompt.".into()));
+            self.flush();
+            return;
+        };
+        self.workspace_turn = Some(admission);
         let turn_id = new_id();
         let Some(checkpoints) = self.shared.deps.checkpoints.clone() else {
             self.dispatch_prepared(prompt, turn_id, None);
@@ -2039,6 +2120,7 @@ impl ChatActor {
 
     /// Starts the agent. `explicit` (`chat_start`): a full slot is an error; otherwise a card.
     fn start(&mut self, fresh: bool, explicit: bool) -> Result<(), SessionError> {
+        self.require_workspace()?;
         if self.shared.deps.store.config_recovery_pending() {
             return Err(SessionError::Organization(
                 "Recover the interrupted profile configuration switch before starting agents."
@@ -2118,6 +2200,16 @@ impl ChatActor {
             }
             self.start_failed(ErrorKind::SpawnFailed, error.to_string(), None, false);
             return Ok(());
+        }
+        if self.workspace_turn.is_none() {
+            self.workspace_turn = self.store.begin_workspace_turn(&self.chat_id);
+            if self.workspace_turn.is_none() {
+                self.shared.live.release(&self.chat_id);
+                return Err(SessionError::Organization(
+                    "The workspace was removed while starting. Restore it before continuing."
+                        .into(),
+                ));
+            }
         }
         self.generation += 1;
         let generation = self.generation;

@@ -67,6 +67,17 @@ pub(crate) fn pending(conn: &Connection, context: &SyncContext, now: u64) -> Res
         if deferred(conn, collection, &wire_id)? {
             return Err(SyncError::Deferred);
         }
+        // A parent tombstone waiting for an active turn must not be implicitly undone by a
+        // concurrent rename or folder edit against the still-visible old projection.
+        if entity != "chat"
+            && conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM sync_projection WHERE collection=?1 AND id=?2)",
+                params![collection, wire_id],
+                |row| row.get::<_, bool>(0),
+            )?
+        {
+            return Err(SyncError::Deferred);
+        }
         let snapshot = snapshot(conn, entity, id)?;
         let previous = head(conn, collection, &wire_id)?;
         // Local edits remain possible after a wall-clock rollback. Push waits for a corrected clock

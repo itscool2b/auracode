@@ -392,7 +392,7 @@ fn snapshot(
             project.folders.push(folder);
         }
     }
-    let mut statement = conn.prepare("SELECT c.id,c.project_id,c.folder_id,c.pinned,c.archived FROM chats c JOIN projects p ON p.id=c.project_id WHERE c.deleted=0 AND p.deleted=0 AND (?1 OR c.archived=0) AND (?2 IS NULL OR c.project_id=?2) ORDER BY c.pinned DESC,c.updated_at DESC,c.id DESC")?;
+    let mut statement = conn.prepare("SELECT c.id,c.project_id,c.folder_id,c.pinned,c.archived FROM chats c JOIN projects p ON p.id=c.project_id WHERE c.deleted=0 AND p.deleted=0 AND (c.folder_id IS NULL OR EXISTS(SELECT 1 FROM project_folders f WHERE f.id=c.folder_id AND f.deleted=0)) AND (?1 OR c.archived=0) AND (?2 IS NULL OR c.project_id=?2) ORDER BY c.pinned DESC,c.updated_at DESC,c.id DESC")?;
     let metadata = statement
         .query_map(params![filter.include_archived, filter.project_id], |row| {
             Ok((

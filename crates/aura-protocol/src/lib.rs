@@ -30,6 +30,7 @@ pub mod search;
 pub mod session;
 pub mod setup_actions;
 pub mod workspace;
+pub mod workspace_removal;
 
 use serde::{Deserialize, Serialize};
 use specta::Type;

@@ -39,6 +39,7 @@ mod sync_history;
 mod tests;
 mod workspace;
 mod workspace_folders;
+mod workspace_removal;
 mod worktree_setup;
 
 pub use config_library::LibraryRoots;
@@ -278,6 +279,7 @@ pub(crate) struct Shared {
     organization: tokio::sync::Mutex<()>,
     continuations: Mutex<HashMap<String, conversation::PreparedContinuation>>,
     project_tools: Mutex<HashMap<String, project_tools::PreparedTools>>,
+    removals: Mutex<HashMap<String, workspace_removal::Prepared>>,
     #[cfg(feature = "account-sync")]
     preservation: Mutex<HashMap<String, preservation::Prepared>>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
@@ -397,6 +399,7 @@ impl SessionManager {
                     preservation: Mutex::new(HashMap::new()),
                     continuations: Mutex::new(HashMap::new()),
                     project_tools: Mutex::new(HashMap::new()),
+                    removals: Mutex::new(HashMap::new()),
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
                 }),

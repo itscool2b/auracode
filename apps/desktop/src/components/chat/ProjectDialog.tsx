@@ -1,6 +1,6 @@
 import { FolderOpen, Plus } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
-import type { AgentEntry, ProjectSummary } from "../../bindings";
+import type { AgentEntry, ProjectSummary, WorkspaceRemovalTarget } from "../../bindings";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
 import { inTauri } from "../../lib/ipc";
@@ -8,6 +8,7 @@ import type { WorkspaceStore } from "../../lib/workspace";
 import { FolderResolver } from "../setup/FolderResolver";
 import { projectName } from "./ChatList";
 import { Modal } from "./Modal";
+import { WorkspaceRemovalDialog } from "./WorkspaceRemovalDialog";
 
 const COLORS = ["#8a98a6", "#a59e92", "#8c9c88", "#a88e80"];
 export function ProjectDialog({
@@ -29,6 +30,7 @@ export function ProjectDialog({
 }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const current = state.data?.projects.find((item) => item.id === project?.id) ?? project;
+  const [removal, setRemoval] = useState<{ target: WorkspaceRemovalTarget | null } | null>(null);
   const [name, setName] = useState(project?.name ?? "");
   const [folder, setFolder] = useState<string | null>(null);
   const [color, setColor] = useState(project?.color ?? COLORS[0]);
@@ -54,6 +56,17 @@ export function ProjectDialog({
       setPicking(false);
     }
   };
+  if (removal)
+    return (
+      <WorkspaceRemovalDialog
+        target={removal.target}
+        onClose={onClose}
+        onChanged={async () => {
+          await store.refresh();
+          await onLocated?.();
+        }}
+      />
+    );
   if (resolving && current) {
     return (
       <Modal title="Folder on this device" onClose={() => setResolving(null)}>
@@ -131,6 +144,13 @@ export function ProjectDialog({
                   <small className="ui-error">{item.unavailable_reason}</small>
                 ) : null}
               </span>
+              <button
+                type="button"
+                className="ui-button"
+                onClick={() => setRemoval({ target: { kind: "folder", id: item.id } })}
+              >
+                Remove…
+              </button>
               {inTauri() ? (
                 <button type="button" className="ui-button" onClick={() => setResolving(item.id)}>
                   {item.path && !item.unavailable_reason
@@ -196,6 +216,20 @@ export function ProjectDialog({
             {localError ?? state.error}
           </p>
         ) : null}
+        <section aria-label="Workspace removal">
+          {project ? (
+            <button
+              className="ui-button"
+              type="button"
+              onClick={() => setRemoval({ target: { kind: "project", id: project.id } })}
+            >
+              Remove project…
+            </button>
+          ) : null}
+          <button className="ui-button" type="button" onClick={() => setRemoval({ target: null })}>
+            Removed projects and folders
+          </button>
+        </section>
         <footer>
           <button type="button" className="ui-button" onClick={onClose}>
             Cancel

@@ -1,0 +1,26 @@
+.workspace-removal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.workspace-removal-content p {
+  margin: 0;
+  color: var(--o-text-2);
+}
+.workspace-removal-content ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.workspace-removal-content li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--o-line);
+  overflow-wrap: anywhere;
+}
+.workspace-removal-content > .ui-button {
+  align-self: flex-start;
+}

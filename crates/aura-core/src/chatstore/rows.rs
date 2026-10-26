@@ -46,7 +46,7 @@ pub(crate) fn chat(
 /// Every chat that is neither deleted nor archived, the most recently updated first.
 pub(crate) fn chats(conn: &Connection, device_id: &str) -> rusqlite::Result<Vec<ChatRecord>> {
     let mut stmt = conn.prepare_cached(&format!(
-        "{CHAT_SELECT} WHERE c.deleted = 0 AND c.archived = 0 ORDER BY c.updated_at DESC, c.id DESC"
+        "{CHAT_SELECT} WHERE c.deleted = 0 AND c.archived = 0 AND EXISTS(SELECT 1 FROM projects p WHERE p.id=c.project_id AND p.deleted=0) AND (c.folder_id IS NULL OR EXISTS(SELECT 1 FROM project_folders f WHERE f.id=c.folder_id AND f.deleted=0)) ORDER BY c.updated_at DESC, c.id DESC"
     ))?;
     let rows = stmt.query_map(params![device_id], chat_record)?;
     rows.collect()
