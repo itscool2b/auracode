@@ -23,10 +23,15 @@ Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b 
 M1c is being implemented independently on `m1c-codex-native` from M1b checkpoint `08c19b1`.
 The native Codex driver uses an owned stdio app-server, initializes once, persists the native thread
 ID, separates turn completion from idle, and handles approvals, grouped questions, model/effort
-settings and account quota updates. Initial verification covers 20 native unit tests, seven synthetic
+settings and account quota updates. Initial verification covers 22 native unit tests, seven synthetic
 native replay fixtures and conformance to the installed Codex 0.162.1 generated schema. Existing ACP
 and Claude fixtures remain unchanged. No real prompts, credential/config inspection or vendor update
 were used. This is a work checkpoint, not milestone acceptance.
+
+The driver now detects a closed asynchronous stdin writer after a send was accepted and stops the
+owned process without waiting for its request timeout. Regression tests also verify outstanding
+callbacks are cancelled and withdrawn before a turn completes. This incorporates the shared process
+writer-closure seam from M1b commit `447fe72`.
 
 M1c requirements still pending: native CLI probe integration and opt-in live verification, generated
 schema verification for the historical 0.164.0 baseline, frontend and complete workspace gates,

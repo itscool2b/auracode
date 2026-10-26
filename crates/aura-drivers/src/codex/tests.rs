@@ -427,3 +427,56 @@ async fn rejected_permission_mode_never_retries_or_sends_a_hidden_prompt() {
         assert!(!line.contains("turn/start"));
     }
 }
+
+#[tokio::test(start_paused = true)]
+async fn writer_failure_after_an_accepted_send_does_not_wait_for_request_timeout() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.end.from_client.close();
+    h.prompt();
+    let mut observed = false;
+    timeout(Duration::from_secs(12), async {
+        while let Some(event) = h.events.recv().await {
+            if let DriverEvent::Event {
+                event:
+                    AuraEvent::Error {
+                        kind: aura_protocol::ErrorKind::AgentExited,
+                        ..
+                    },
+                ..
+            } = event
+            {
+                observed = true;
+            }
+        }
+    })
+    .await
+    .expect("writer failure and owned shutdown are prompt");
+    assert!(observed);
+    assert!(*h.end.killed.borrow());
+    assert!(matches!(h.run.await.unwrap(), DriverExit::Crashed { .. }));
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_unanswered_callback_is_cancelled_before_turn_completion() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.begin().await;
+    h.send(json!({"id":"approval","method":"item/fileChange/requestApproval","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"files","startedAtMs":1}}));
+    loop {
+        if matches!(h.event().await, DriverEvent::Permission { .. }) {
+            break;
+        }
+    }
+    h.send(json!({"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}));
+    assert_eq!(
+        h.wire().await,
+        json!({"id":"approval","result":{"decision":"cancel"}})
+    );
+    assert!(matches!(
+        h.event().await,
+        DriverEvent::PermissionWithdrawn { .. }
+    ));
+    assert!(matches!(h.event().await, DriverEvent::TurnEnded { .. }));
+    h.stop().await;
+}

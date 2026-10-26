@@ -1038,6 +1038,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
     process
         .log
         .note(LogNote::Start(setup.start_note(&process.spawn_id)));
+    let writer = process.io.stdin.clone();
     let init_deadline =
         Instant::now() + setup.timings.open_ceiling.min(setup.launch.startup_timeout);
     let mut s = Session {
@@ -1138,6 +1139,9 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
             .min()
             .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400));
         tokio::select! {
+            _=writer.writer_closed(),if !s.stopping&&!process_done&&s.failure.is_none()=>{
+                s.fail(error(ErrorKind::AgentExited,"Codex stopped reading its input. The owned session was stopped."));
+            },
             command=commands.recv(),if !requested_close&&s.failure.is_none()&&!s.stopping&&!process_done=>match command {
                 None|Some(DriverCommand::Shutdown {..})=>{
                     let plan=match command {Some(DriverCommand::Shutdown {plan})=>plan,_=>crate::driver::StopPlan {cancel_grace:Duration::ZERO,process:ShutdownPlan::STANDARD}};
