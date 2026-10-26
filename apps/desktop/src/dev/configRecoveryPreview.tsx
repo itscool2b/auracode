@@ -3,10 +3,79 @@ import "../styles.css";
 import "../ui-tokens.css";
 import "../chat.css";
 import "../orbit-shell.css";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AppInfo, ConfigProfileRecovery } from "../bindings";
+import { AccountPanel } from "../components/settings/AccountPanel";
 import { ConfigurationRecovery } from "../components/settings/ConfigurationRecovery";
+import type { AccountApi } from "../lib/account/api";
+import type { AccountStatus } from "../lib/account/bindings";
+
+function AuthPreview({ mode }: { readonly mode: string }) {
+  const [forbidden, setForbidden] = useState(0);
+  const [unlocked, setUnlocked] = useState(false);
+  const api = useMemo(() => {
+    let status: AccountStatus = {
+      access:
+        mode === "auth-pending"
+          ? "pending_approval"
+          : mode === "auth-new"
+            ? "needs_first_key"
+            : "ready",
+      account_id: "fixture-account",
+      device_id: "fixture-device",
+      profile_id:
+        mode === "auth-wrong" ? "other-profile" : mode === "auth-ready" ? "owner-profile" : null,
+      local_key_available: mode === "auth-ready",
+      approval_code: "123456",
+      fingerprint: null,
+      sync: { state: "paused", pending_changes: null, last_sync_at: null, message: null },
+    };
+    return new Proxy(
+      {
+        config: async () => ({
+          service_origin: "https://auracode.si",
+          verification_url: "https://auracode.si/verify-device",
+        }),
+        status: async () => status,
+        recover: async () => {
+          status = {
+            ...status,
+            access: "ready",
+            profile_id: "owner-profile",
+            local_key_available: true,
+          };
+          return status;
+        },
+      },
+      {
+        get(target, name) {
+          if (name in target) return target[name as keyof typeof target];
+          return async () => {
+            setForbidden((value) => value + 1);
+            throw new Error("Unexpected management call in recovery-only UI.");
+          };
+        },
+      },
+    ) as AccountApi;
+  }, [mode]);
+  return (
+    <main className="orbit-theme settings-content">
+      <h1>Recover account access</h1>
+      <AccountPanel
+        api={api}
+        recoveryOnly
+        recoveryProfileId="owner-profile"
+        onActivate={async () => setUnlocked(true)}
+        Verification={() => <span>Fixture verification</span>}
+      />
+      <output aria-label="Forbidden account calls" hidden>
+        {forbidden}
+      </output>
+      {unlocked ? <p role="status">Selected account unlocked</p> : null}
+    </main>
+  );
+}
 
 function Preview() {
   const mode = new URLSearchParams(location.search).get("case");
@@ -51,4 +120,6 @@ function Preview() {
   );
 }
 const root = document.getElementById("root");
-if (root) createRoot(root).render(<Preview />);
+const mode = new URLSearchParams(location.search).get("case") ?? "";
+if (root)
+  createRoot(root).render(mode.startsWith("auth-") ? <AuthPreview mode={mode} /> : <Preview />);

@@ -8,15 +8,16 @@ use std::{future::Future, path::PathBuf, sync::Arc};
 use tauri::State;
 use tokio::sync::OnceCell;
 
+#[derive(Clone)]
 pub struct AccountService {
     root: Option<PathBuf>,
-    accounts: OnceCell<Arc<Accounts>>,
+    accounts: Arc<OnceCell<Arc<Accounts>>>,
 }
 impl AccountService {
     pub fn new(root: Option<PathBuf>) -> Self {
         Self {
             root,
-            accounts: OnceCell::new(),
+            accounts: Arc::new(OnceCell::new()),
         }
     }
     pub async fn get(&self) -> Result<Arc<Accounts>, AccountFailure> {
@@ -80,19 +81,89 @@ fn configuration(origin: Option<&str>) -> Result<AccountConfiguration, AccountFa
 fn now() -> i64 {
     aura_core::time::now_millis() / 1000
 }
-async fn run<T, F, Fut>(state: &AppState, action: F) -> Result<T, AccountFailure>
+#[derive(Clone, Copy)]
+enum AccountAction {
+    /// Explicit sign-in/device proof may be required to unlock the Account owning recovery.
+    RecoverAccess,
+    Manage,
+}
+fn admit(
+    quitting: bool,
+    switching: bool,
+    recovery: Option<&crate::profile_config::ConfigProfileRecovery>,
+    action: AccountAction,
+) -> Result<(), AccountFailure> {
+    if quitting || switching {
+        return Err(failure(
+            AccountFailureCode::Unavailable,
+            "Wait for the current profile transition to finish.",
+        ));
+    }
+    if recovery.is_some_and(|recovery| {
+        !matches!(action, AccountAction::RecoverAccess) || recovery.owner_profile.is_none()
+    }) {
+        return Err(failure(
+            AccountFailureCode::Unavailable,
+            "Recover the interrupted configuration switch before changing account or device settings. Sign-in and account-key recovery remain available.",
+        ));
+    }
+    Ok(())
+}
+async fn owned<T: Send + 'static>(
+    permit: tokio::sync::OwnedMutexGuard<()>,
+    operation: impl Future<Output = Result<T, AccountFailure>> + Send + 'static,
+) -> Result<T, AccountFailure> {
+    tokio::spawn(async move {
+        let _permit = permit;
+        operation.await
+    })
+    .await
+    .map_err(|_| {
+        failure(
+            AccountFailureCode::Unavailable,
+            "The account action could not finish.",
+        )
+    })?
+}
+fn can_resume(status: &AccountStatus, profile: Option<&str>, recovery_pending: bool) -> bool {
+    !recovery_pending
+        && profile.is_some()
+        && status.access == AccountAccess::Ready
+        && status.profile_id.as_deref() == profile
+}
+async fn run<T, F, Fut>(
+    state: &AppState,
+    kind: AccountAction,
+    action: F,
+) -> Result<T, AccountFailure>
 where
     T: Send + 'static,
     F: FnOnce(Arc<Accounts>) -> Fut + Send + 'static,
     Fut: Future<Output = Result<T, AccountFailure>> + Send + 'static,
 {
-    let accounts = state.accounts.get().await?;
+    let permit = state.transition.clone().try_lock_owned().map_err(|_| {
+        failure(
+            AccountFailureCode::Unavailable,
+            "Another account or profile operation is in progress.",
+        )
+    })?;
+    let info = state.app_info();
+    admit(
+        state.quit.is_quitting(),
+        info.profile_switching,
+        info.config_profile_recovery.as_ref(),
+        kind,
+    )?;
+    let service = state.accounts.clone();
+    let root = state.data_dir().map(std::path::Path::to_path_buf);
+    let profile = info.profile.map(|profile| profile.id);
     let engine = state
         .chats()
         .and_then(|chats| chats.sync_engine.get().cloned());
     // Dropping a JoinHandle detaches it. A webview reload cannot cancel a half-completed local
     // credential/index publication or leave the service's in-memory state behind its saved state.
-    tokio::spawn(async move {
+    owned(permit, async move {
+        let accounts = service.get().await?;
         if let Some(engine) = &engine
             && !engine.suspend(std::time::Duration::from_secs(5)).await
         {
@@ -102,23 +173,20 @@ where
             ));
         }
         let result = action(accounts.clone()).await;
+        let recovery_pending = root
+            .as_ref()
+            .is_none_or(|root| !matches!(aura_core::config_transition::pending(root), Ok(None)));
         if let Some(engine) = engine
             && accounts
                 .status()
                 .await
-                .is_ok_and(|status| status.access == AccountAccess::Ready)
+                .is_ok_and(|status| can_resume(&status, profile.as_deref(), recovery_pending))
         {
             engine.resume();
         }
         result
     })
     .await
-    .map_err(|_| {
-        failure(
-            AccountFailureCode::Unavailable,
-            "The account action could not finish.",
-        )
-    })?
 }
 
 #[tauri::command]
@@ -140,9 +208,11 @@ pub async fn account_request_code(
     email: String,
     turnstile_token: String,
 ) -> Result<SignInChallenge, AccountFailure> {
-    run(&state, |accounts| async move {
-        accounts.request_code(&email, &turnstile_token).await
-    })
+    run(
+        &state,
+        AccountAction::RecoverAccess,
+        |accounts| async move { accounts.request_code(&email, &turnstile_token).await },
+    )
     .await
 }
 #[tauri::command]
@@ -152,9 +222,11 @@ pub async fn account_verify_code(
     challenge_id: String,
     code: String,
 ) -> Result<AccountStatus, AccountFailure> {
-    run(&state, |accounts| async move {
-        accounts.verify_code(&challenge_id, &code).await
-    })
+    run(
+        &state,
+        AccountAction::RecoverAccess,
+        |accounts| async move { accounts.verify_code(&challenge_id, &code).await },
+    )
     .await
 }
 #[tauri::command]
@@ -162,6 +234,7 @@ pub async fn account_verify_code(
 pub async fn account_refresh(state: State<'_, AppState>) -> Result<AccountStatus, AccountFailure> {
     run(
         &state,
+        AccountAction::RecoverAccess,
         |accounts| async move { accounts.refresh(now()).await },
     )
     .await
@@ -182,9 +255,11 @@ pub async fn account_register_device(
             "Account sync supports Windows and macOS.",
         ));
     };
-    run(&state, move |accounts| async move {
-        accounts.register_device(&name, platform, now()).await
-    })
+    run(
+        &state,
+        AccountAction::RecoverAccess,
+        move |accounts| async move { accounts.register_device(&name, platform, now()).await },
+    )
     .await
 }
 #[tauri::command]
@@ -192,7 +267,7 @@ pub async fn account_register_device(
 pub async fn account_prepare_recovery(
     state: State<'_, AppState>,
 ) -> Result<RecoverySetup, AccountFailure> {
-    run(&state, |accounts| async move {
+    run(&state, AccountAction::Manage, |accounts| async move {
         accounts.prepare_recovery().await
     })
     .await
@@ -202,10 +277,9 @@ pub async fn account_prepare_recovery(
 pub async fn account_cancel_setup(
     state: State<'_, AppState>,
 ) -> Result<AccountStatus, AccountFailure> {
-    run(
-        &state,
-        |accounts| async move { accounts.cancel_setup().await },
-    )
+    run(&state, AccountAction::Manage, |accounts| async move {
+        accounts.cancel_setup().await
+    })
     .await
 }
 #[tauri::command]
@@ -215,7 +289,7 @@ pub async fn account_confirm_recovery(
     setup_id: String,
     retained: bool,
 ) -> Result<AccountStatus, AccountFailure> {
-    run(&state, move |accounts| async move {
+    run(&state, AccountAction::Manage, move |accounts| async move {
         accounts.confirm_recovery(&setup_id, retained, now()).await
     })
     .await
@@ -226,9 +300,11 @@ pub async fn account_recover(
     state: State<'_, AppState>,
     recovery_key: String,
 ) -> Result<AccountStatus, AccountFailure> {
-    run(&state, |accounts| async move {
-        accounts.recover(recovery_key, now()).await
-    })
+    run(
+        &state,
+        AccountAction::RecoverAccess,
+        |accounts| async move { accounts.recover(recovery_key, now()).await },
+    )
     .await
 }
 #[tauri::command]
@@ -237,9 +313,11 @@ pub async fn account_confirm_fingerprint(
     state: State<'_, AppState>,
     fingerprint: String,
 ) -> Result<AccountStatus, AccountFailure> {
-    run(&state, |accounts| async move {
-        accounts.confirm_fingerprint(&fingerprint, now()).await
-    })
+    run(
+        &state,
+        AccountAction::RecoverAccess,
+        |accounts| async move { accounts.confirm_fingerprint(&fingerprint, now()).await },
+    )
     .await
 }
 #[tauri::command]
@@ -247,10 +325,9 @@ pub async fn account_confirm_fingerprint(
 pub async fn account_devices(
     state: State<'_, AppState>,
 ) -> Result<Vec<AccountDevice>, AccountFailure> {
-    run(
-        &state,
-        |accounts| async move { accounts.devices(now()).await },
-    )
+    run(&state, AccountAction::Manage, |accounts| async move {
+        accounts.devices(now()).await
+    })
     .await
 }
 #[tauri::command]
@@ -260,7 +337,7 @@ pub async fn account_approve_device(
     device_id: String,
     verification_code: String,
 ) -> Result<AccountStatus, AccountFailure> {
-    run(&state, |accounts| async move {
+    run(&state, AccountAction::Manage, |accounts| async move {
         accounts
             .approve_device(&device_id, &verification_code, now())
             .await
@@ -273,7 +350,7 @@ pub async fn account_revoke_device(
     state: State<'_, AppState>,
     device_id: String,
 ) -> Result<AccountStatus, AccountFailure> {
-    run(&state, |accounts| async move {
+    run(&state, AccountAction::Manage, |accounts| async move {
         accounts.revoke_device(&device_id, now()).await
     })
     .await
@@ -283,12 +360,74 @@ pub async fn account_revoke_device(
 pub async fn account_sign_out(
     state: State<'_, AppState>,
 ) -> Result<AccountSignOut, AccountFailure> {
-    run(&state, |accounts| async move { accounts.sign_out().await }).await
+    run(&state, AccountAction::Manage, |accounts| async move {
+        accounts.sign_out().await
+    })
+    .await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn recovery_allows_only_explicit_access_restoration_and_never_resumes_sync() {
+        let pending = crate::profile_config::ConfigProfileRecovery {
+            transaction: Some("transaction".into()),
+            owner_profile: Some("owner".into()),
+            from_profile: Some("local".into()),
+            to_profile: Some("owner".into()),
+            phase: crate::profile_config::ConfigProfileRecoveryPhase::RestorePrevious,
+            detail: "fixture".into(),
+        };
+        assert!(admit(false, false, Some(&pending), AccountAction::Manage).is_err());
+        assert!(admit(false, false, Some(&pending), AccountAction::RecoverAccess).is_ok());
+        assert!(admit(false, true, Some(&pending), AccountAction::RecoverAccess).is_err());
+        let unknown = crate::profile_config::ConfigProfileRecovery {
+            owner_profile: None,
+            ..pending
+        };
+        assert!(admit(false, false, Some(&unknown), AccountAction::RecoverAccess).is_err());
+        let status = AccountStatus {
+            access: AccountAccess::Ready,
+            account_id: Some("account".into()),
+            device_id: Some("device".into()),
+            profile_id: Some("owner".into()),
+            local_key_available: true,
+            approval_code: None,
+            fingerprint: None,
+            sync: AccountSyncStatus {
+                state: AccountSyncState::Inactive,
+                pending_changes: None,
+                last_sync_at: None,
+                message: None,
+            },
+        };
+        assert!(!can_resume(&status, Some("owner"), true));
+        assert!(!can_resume(&status, Some("other"), false));
+        assert!(can_resume(&status, Some("owner"), false));
+    }
+    #[tokio::test]
+    async fn cancelled_renderer_keeps_account_action_exclusive_until_owned_completion() {
+        let serial = Arc::new(tokio::sync::Mutex::new(()));
+        let permit = serial.clone().try_lock_owned().unwrap();
+        let (started, began) = tokio::sync::oneshot::channel();
+        let (finish, done) = tokio::sync::oneshot::channel();
+        let (completed, finished) = tokio::sync::oneshot::channel();
+        let caller = tokio::spawn(owned(permit, async move {
+            let _ = started.send(());
+            let _ = done.await;
+            let _ = completed.send(());
+            Ok(())
+        }));
+        began.await.unwrap();
+        caller.abort();
+        assert!(serial.clone().try_lock_owned().is_err());
+        finish.send(()).unwrap();
+        finished.await.unwrap();
+        let _guard = tokio::time::timeout(std::time::Duration::from_secs(1), serial.lock_owned())
+            .await
+            .unwrap();
+    }
     #[test]
     fn verification_origin_is_fixed_to_the_same_release_environment() {
         assert_eq!(

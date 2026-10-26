@@ -92,3 +92,15 @@ unlock controls through children. It must render before ordinary LockedProfile o
 pending recovery offers no Local switch. Two component regressions and Chromium/WebKit browser tests
 pass, including zero actions on mount, success, retryable failure, locked/unavailable states and axe.
 App wiring and final combined verification remain with the parent integration.
+
+Account mutation commands retain the same transition mutex through their owned task, including
+local vault initialization and completion. Profile selection resolves its Account key under that
+mutex too. A renderer reload cannot release this admission while an account write continues.
+Pending configuration recovery permits explicit sign-in, existing-device proof, account-key recovery
+and fingerprint confirmation; sign-out, key initialization and device management remain refused.
+The engine resumes only when its profile matches the authenticated account and no locator remains.
+
+`AccountPanel` has a `recoveryOnly` presentation with a required matching `recoveryProfileId` before
+unlock activation. It hides device management, sign-out and new-key setup, and makes no management
+calls on mount or unmount. A wrong account can sign in again but cannot activate the recovery.
+Both browser engines cover matching and wrong profiles, existing-key recovery and first-key refusal.

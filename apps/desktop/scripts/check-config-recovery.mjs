@@ -83,6 +83,32 @@ try {
       await page.getByRole("heading", { name: "Your settings are preserved" }).waitFor();
       assert.equal(await page.getByRole("button").count(), 0);
       assert.equal(await page.getByLabel("Recovery calls").textContent(), "0");
+      for (const mode of ["auth-ready", "auth-wrong", "auth-new", "auth-pending"]) {
+        await page.goto(`${url}?case=${mode}`);
+        await page.getByRole("heading", { name: "Unlock the account for this recovery" }).waitFor();
+        if (mode === "auth-ready" || mode === "auth-wrong") {
+          const unlock = page.getByRole("button", { name: "Unlock selected account" });
+          await unlock.waitFor();
+          assert.equal(await unlock.isDisabled(), mode === "auth-wrong");
+        }
+        if (mode === "auth-new") await page.getByLabel("Email address").waitFor();
+        if (mode === "auth-pending") {
+          await page.getByText("Use my recovery key instead", { exact: true }).click();
+          await page.getByLabel("Recovery key", { exact: true }).fill("SYNTHETIC-KEY");
+          await page.getByRole("button", { name: "Unlock with recovery key" }).click();
+          await page.getByRole("button", { name: "Unlock selected account" }).click();
+          await page.getByText("Selected account unlocked", { exact: true }).waitFor();
+        }
+        assert.equal(
+          await page
+            .getByRole("button", {
+              name: /Sign out|Create recovery key|Refresh devices|Revoke|Review approval/,
+            })
+            .count(),
+          0,
+        );
+        assert.equal(await page.getByLabel("Forbidden account calls").textContent(), "0");
+      }
       assert.deepEqual(errors, []);
       console.log(
         `${engine}: explicit recovery, preserved failure, locked and unavailable states passed`,

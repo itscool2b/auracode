@@ -28,11 +28,15 @@ export function AccountPanel({
   Verification = AccountVerification,
   activeProfileId = null,
   onActivate = switchProfile,
+  recoveryOnly = false,
+  recoveryProfileId = null,
 }: {
   readonly api?: AccountApi;
   readonly deviceName?: string;
   readonly activeProfileId?: string | null;
   readonly onActivate?: () => Promise<void>;
+  readonly recoveryOnly?: boolean;
+  readonly recoveryProfileId?: string | null;
   readonly Verification?: ComponentType<{
     onToken: (token: string) => void;
     origin?: VerificationOrigin;
@@ -79,9 +83,9 @@ export function AccountPanel({
     return () => {
       mounted.current = false;
       clearInterval(timer);
-      void api.cancelSetup().catch(() => {});
+      if (!recoveryOnly) void api.cancelSetup().catch(() => {});
     };
-  }, [api]);
+  }, [api, recoveryOnly]);
   useEffect(() => {
     void generation;
     let live = true;
@@ -105,7 +109,7 @@ export function AccountPanel({
     void status?.account_id;
     setDevices(null);
     setDeviceError(null);
-    if (status?.access !== "ready") return;
+    if (recoveryOnly || status?.access !== "ready") return;
     let live = true;
     void api.devices().then(
       (value) => {
@@ -118,15 +122,15 @@ export function AccountPanel({
     return () => {
       live = false;
     };
-  }, [api, status?.access, status?.account_id, deviceGeneration]);
+  }, [api, status?.access, status?.account_id, deviceGeneration, recoveryOnly]);
   useEffect(() => {
-    if (recovery && recovery.expiresAt <= now) {
+    if (!recoveryOnly && recovery && recovery.expiresAt <= now) {
       setRecovery(null);
       setRetained(false);
       setNotice("That recovery setup expired. Create a new key to continue.");
       void api.cancelSetup().catch(() => {});
     }
-  }, [api, now, recovery]);
+  }, [api, now, recovery, recoveryOnly]);
 
   const run = async (action: () => Promise<void>) => {
     if (acting.current) return;
@@ -157,7 +161,14 @@ export function AccountPanel({
   const origin = config ? verificationOrigin(config.service_origin) : null;
   const remaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
   const locked = busy || remaining > 0;
-  const signedOut = status && ["signed_out", "expired", "denied"].includes(status.access);
+  const wrongRecoveryAccount =
+    recoveryOnly &&
+    status?.access === "ready" &&
+    (!recoveryProfileId || status.profile_id !== recoveryProfileId);
+  const signedOut =
+    status &&
+    (["signed_out", "expired", "denied"].includes(status.access) ||
+      (recoveryOnly && (wrongRecoveryAccount || status.access === "needs_first_key")));
   const requestCode = () =>
     run(async () => {
       const token = proof;
@@ -207,10 +218,12 @@ export function AccountPanel({
       <section className="settings-section">
         <div className="account-heading">
           <ShieldCheck size={20} />
-          <h2>Your account</h2>
+          <h2>{recoveryOnly ? "Unlock the account for this recovery" : "Your account"}</h2>
         </div>
         <p className="account-description">
-          Keep working locally, or connect your own devices with encrypted sync.
+          {recoveryOnly
+            ? "Sign in to the existing account that owns the saved configuration. Account and device changes stay unavailable until recovery finishes."
+            : "Keep working locally, or connect your own devices with encrypted sync."}
         </p>
         {!status && !error ? <p role="status">Reading account status…</p> : null}
         {signedOut ? (
@@ -367,7 +380,7 @@ export function AccountPanel({
             </button>
           </form>
         ) : null}
-        {status?.access === "needs_first_key" ? (
+        {status?.access === "needs_first_key" && !recoveryOnly ? (
           <div className="settings-group account-card">
             <KeyRound size={22} />
             <h3>Keep a way back in</h3>
@@ -537,15 +550,21 @@ export function AccountPanel({
                 ) : null}
               </dl>
               {status.sync.message ? <p role="status">{status.sync.message}</p> : null}
-              {status.profile_id !== activeProfileId ? (
+              {recoveryOnly && wrongRecoveryAccount ? (
+                <p role="status">
+                  This account does not match the saved recovery. Sign in to the owning account
+                  above.
+                </p>
+              ) : null}
+              {recoveryOnly || status.profile_id !== activeProfileId ? (
                 <div className="account-actions">
                   <button
                     className="ui-button ui-button-primary"
                     type="button"
-                    disabled={locked}
+                    disabled={locked || wrongRecoveryAccount}
                     onClick={() => void run(onActivate)}
                   >
-                    Open account workspace
+                    {recoveryOnly ? "Unlock selected account" : "Open account workspace"}
                   </button>
                 </div>
               ) : null}
@@ -554,66 +573,68 @@ export function AccountPanel({
                 <code className="account-fingerprint">{status.fingerprint}</code>
               </details>
             </div>
-            <section className="settings-section">
-              <div className="account-heading">
-                <h2>Devices</h2>
-                <button
-                  className="ui-button"
-                  type="button"
-                  disabled={locked}
-                  onClick={() => setDeviceGeneration((value) => value + 1)}
-                >
-                  <RefreshCw size={13} />
-                  Refresh devices
-                </button>
-              </div>
-              {!devices && !deviceError ? <p role="status">Loading devices…</p> : null}
-              {deviceError ? (
-                <p role="alert" className="settings-error">
-                  {deviceError}
-                </p>
-              ) : null}
-              <ul className="account-devices">
-                {devices?.map((device) => (
-                  <li key={device.id}>
-                    <Laptop size={18} />
-                    <div>
-                      <strong>
-                        {device.name}
-                        {device.current ? " · This device" : ""}
-                      </strong>
-                      <p>
-                        {device.platform} ·{" "}
-                        {device.revoked_at !== null
-                          ? "Revoked"
-                          : device.approved_at === null
-                            ? "Waiting for approval"
-                            : `Last seen ${time(device.last_seen)}`}
-                      </p>
-                    </div>
-                    {device.revoked_at === null ? (
-                      <button
-                        className="ui-button"
-                        type="button"
-                        disabled={locked}
-                        onClick={() => {
-                          setDeviceAction({
-                            device,
-                            kind: device.approved_at === null ? "approve" : "revoke",
-                          });
-                          setDeviceCode("");
-                        }}
-                      >
-                        {device.approved_at === null ? "Review approval" : "Revoke"}
-                      </button>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </section>
+            {!recoveryOnly ? (
+              <section className="settings-section">
+                <div className="account-heading">
+                  <h2>Devices</h2>
+                  <button
+                    className="ui-button"
+                    type="button"
+                    disabled={locked}
+                    onClick={() => setDeviceGeneration((value) => value + 1)}
+                  >
+                    <RefreshCw size={13} />
+                    Refresh devices
+                  </button>
+                </div>
+                {!devices && !deviceError ? <p role="status">Loading devices…</p> : null}
+                {deviceError ? (
+                  <p role="alert" className="settings-error">
+                    {deviceError}
+                  </p>
+                ) : null}
+                <ul className="account-devices">
+                  {devices?.map((device) => (
+                    <li key={device.id}>
+                      <Laptop size={18} />
+                      <div>
+                        <strong>
+                          {device.name}
+                          {device.current ? " · This device" : ""}
+                        </strong>
+                        <p>
+                          {device.platform} ·{" "}
+                          {device.revoked_at !== null
+                            ? "Revoked"
+                            : device.approved_at === null
+                              ? "Waiting for approval"
+                              : `Last seen ${time(device.last_seen)}`}
+                        </p>
+                      </div>
+                      {device.revoked_at === null ? (
+                        <button
+                          className="ui-button"
+                          type="button"
+                          disabled={locked}
+                          onClick={() => {
+                            setDeviceAction({
+                              device,
+                              kind: device.approved_at === null ? "approve" : "revoke",
+                            });
+                            setDeviceCode("");
+                          }}
+                        >
+                          {device.approved_at === null ? "Review approval" : "Revoke"}
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
           </>
         ) : null}
-        {status && !signedOut ? (
+        {!recoveryOnly && status && !signedOut ? (
           <button
             className="ui-button"
             type="button"
@@ -648,7 +669,7 @@ export function AccountPanel({
           Try again in {remaining} seconds.
         </p>
       ) : null}
-      {deviceAction ? (
+      {!recoveryOnly && deviceAction ? (
         <Modal
           title={deviceAction.kind === "approve" ? "Approve device" : "Revoke device"}
           closeDisabled={busy}

@@ -2075,3 +2075,12 @@ prompt, verified the resulting usable composer and passed accessibility. The ren
 was inspected. The integrated Windows native build, all 13 focused profile tests, import-status
 regression and exact binding export passed. Local import, folder resolution, the final platform gates
 and complete M7 acceptance remain pending.
+Account actions now retain profile-transition admission through owned completion, including vault
+initialization, and profile selection resolves its key under the same lock. Recovery allows only
+explicit existing-account access restoration; management actions remain refused and sync cannot
+resume with a pending locator or another profile's account. Added two native regressions for that
+policy and renderer-cancellation ownership, pending integrated execution. Recovery-only AccountPanel
+suppresses management calls and controls and requires the matching profile before unlock activation.
+Chromium and WebKit checks pass for correct/wrong account, existing-key recovery, first-key refusal
+and zero management calls, alongside the prior configuration recovery coverage. No native auth ran.
+

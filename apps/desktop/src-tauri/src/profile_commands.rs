@@ -45,7 +45,7 @@ impl Resolved {
 }
 struct Switching<'a> {
     state: &'a AppState,
-    _serial: tokio::sync::OwnedMutexGuard<()>,
+    _serial: Option<tokio::sync::OwnedMutexGuard<()>>,
 }
 impl Drop for Switching<'_> {
     fn drop(&mut self) {
@@ -122,7 +122,7 @@ pub async fn config_profile_recover(app: tauri::AppHandle) -> Result<AppInfo, Ap
         lock(&state.runtime).info.profile_switching = true;
         let _switching = Switching {
             state: &state,
-            _serial: serial,
+            _serial: Some(serial),
         };
         tokio::time::timeout(Duration::from_secs(5), state.wait_profile_commands())
             .await
@@ -244,6 +244,11 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
     // active pointer while leaving the old runtime in memory.
     tokio::spawn(async move {
         let state = app.state::<AppState>();
+        let serial = state
+            .transition
+            .clone()
+            .try_lock_owned()
+            .map_err(|_| unavailable("Another account or profile operation is in progress."))?;
         let before = state.app_info();
         let previous_engine = state
             .chats()
@@ -261,7 +266,7 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
                 .state::<Arc<crate::config_library::LibraryService>>()
                 .mutation
                 .clone();
-            activate_serial(&state, resolved, Outside::real, mutation).await
+            activate_serial(&state, resolved, Outside::real, mutation, Some(&serial)).await
         }
         .await;
         let result = match result {
@@ -318,7 +323,7 @@ async fn activate(
     selected: Resolved,
     outside: OutsideFactory,
 ) -> Result<AppInfo, AppError> {
-    activate_serial(state, selected, outside, Arc::default()).await
+    activate_serial(state, selected, outside, Arc::default(), None).await
 }
 
 async fn activate_serial(
@@ -326,12 +331,18 @@ async fn activate_serial(
     selected: Resolved,
     outside: OutsideFactory,
     mutation: Arc<tokio::sync::Mutex<()>>,
+    serial: Option<&tokio::sync::OwnedMutexGuard<()>>,
 ) -> Result<AppInfo, AppError> {
-    let serial = state
-        .transition
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| unavailable("Another profile transition is in progress."))?;
+    let serial = match serial {
+        Some(_) => None,
+        None => Some(
+            state
+                .transition
+                .clone()
+                .try_lock_owned()
+                .map_err(|_| unavailable("Another profile transition is in progress."))?,
+        ),
+    };
     if state.quit.is_quitting() {
         return Err(AppError::new(
             AppErrorCode::ShuttingDown,
