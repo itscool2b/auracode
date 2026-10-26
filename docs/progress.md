@@ -2008,4 +2008,8 @@ that independent pin. Artifact handles also refuse leaf links atomically during 
 regressions and all-target Clippy passed. Chromium and WebKit verified the synthetic download stage,
 including all architecture links without JavaScript and rejection of changed staged bytes. No real
 signing key, installer, publication or hosted CI job was involved.
+Normal quit now also takes the existing profile-transition mutex before draining owned work, and
+LiveAgents refuses a drain while an idle barrier is held. This prevents closing storage during a
+profile switch or update preparation. The existing quiesce regression now asserts drain refusal;
+native execution remains blocked by the dependency build-script policy failure described above.
 

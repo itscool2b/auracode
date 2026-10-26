@@ -280,7 +280,7 @@ impl LiveAgents {
 
     pub(crate) fn begin_owned_drain(&self) -> bool {
         let mut inner = self.lock();
-        if inner.owned_draining {
+        if inner.owned_draining || inner.quiescing {
             return false;
         }
         inner.owned_draining = true;
@@ -405,6 +405,7 @@ mod tests {
         live.release_folder(folder);
         assert!(live.try_quiesce());
         assert!(!live.try_quiesce());
+        assert!(!live.begin_owned_drain());
         assert!(!live.acquire("two"));
         assert!(!live.reserve_folder(folder));
         live.resume_admission();

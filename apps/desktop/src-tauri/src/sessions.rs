@@ -843,10 +843,16 @@ pub struct AppQuitHost<'a> {
 
 impl QuitHost for AppQuitHost<'_> {
     fn owned_work_guard(&self) -> Option<Box<dyn Send + '_>> {
-        self.chats
-            .manager
-            .try_drain_owned_work()
-            .map(|guard| Box::new(guard) as Box<dyn Send>)
+        use tauri::Manager as _;
+        let transition = self
+            .app
+            .state::<crate::state::AppState>()
+            .transition
+            .clone()
+            .try_lock_owned()
+            .ok()?;
+        let guard = self.chats.manager.try_drain_owned_work()?;
+        Some(Box::new((transition, guard)))
     }
 
     async fn wait_owned_work(&self, deadline: Duration) -> bool {
