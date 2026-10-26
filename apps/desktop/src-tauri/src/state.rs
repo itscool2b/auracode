@@ -167,6 +167,9 @@ impl AppState {
             .map(|dir| Arc::new(crate::onboarding::SetupService::new(dir)));
         let mut notices = booted.notices;
         notices.extend(launch.notices());
+        if crate::updater::staging() {
+            notices.push(format!("Staging build {app_version}. Updates use the staging release channel. This build is for release qualification."));
+        }
         let info = AppInfo {
             app_version,
             tauri_version: tauri::VERSION.to_string(),

@@ -459,6 +459,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "aura-release"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "minisign-verify",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "specta",
+ "specta-serde",
+ "specta-typescript",
+ "tempfile",
+ "time",
+]
+
+[[package]]
 name = "aura-sync"
 version = "0.1.0"
 dependencies = [

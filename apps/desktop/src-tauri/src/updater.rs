@@ -16,9 +16,22 @@ use crate::{
     sync::lock,
 };
 
-const MANIFEST: &str = "https://download.auracode.si/latest.json";
 const MAX_MANIFEST: usize = 64 * 1024;
 const MAX_PACKAGE: usize = 512 * 1024 * 1024;
+
+pub(crate) fn staging() -> bool {
+    matches!(option_env!("AURACODE_UPDATER_CHANNEL"), Some("staging"))
+}
+fn channel() -> &'static str {
+    if staging() { "staging" } else { "stable" }
+}
+fn manifest(staging: bool) -> &'static str {
+    if staging {
+        "https://download.auracode.si/staging/latest.json"
+    } else {
+        "https://download.auracode.si/latest.json"
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
@@ -37,6 +50,7 @@ pub enum UpdatePhase {
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct UpdateStatus {
+    pub channel: String,
     pub phase: UpdatePhase,
     pub version: Option<String>,
     pub notes: Option<String>,
@@ -80,7 +94,7 @@ impl Default for Updates {
         let enabled = public_key().is_some() && cfg!(any(windows, target_os = "macos"));
         Self { busy: AtomicBool::new(false), inner: Mutex::new(Inner {
             pending: None,
-            status: UpdateStatus { phase: if enabled { UpdatePhase::Idle } else { UpdatePhase::Disabled }, version: None, notes: None,
+            status: UpdateStatus { channel: channel().into(), phase: if enabled { UpdatePhase::Idle } else { UpdatePhase::Disabled }, version: None, notes: None,
                 downloaded_bytes: 0, total_bytes: None,
                 message: (!enabled).then(|| "This build has no configured update signing key. Install a verified release manually.".into()) },
         }) }
@@ -149,7 +163,7 @@ pub async fn app_update_check(
     updates.phase(UpdatePhase::Checking, None);
     let result = async {
         let response = client(Duration::from_secs(30))?
-            .get(MANIFEST)
+            .get(manifest(staging()))
             .send()
             .await
             .map_err(|_| error("Could not reach the update service. Retry when online."))?;
@@ -179,6 +193,7 @@ pub async fn app_update_check(
         Ok(update) => {
             let mut inner = lock(&updates.inner);
             inner.status = UpdateStatus {
+                channel: channel().into(),
                 phase: if update.is_some() {
                     UpdatePhase::Available
                 } else {
@@ -271,6 +286,10 @@ fn client(timeout: Duration) -> Result<reqwest::Client, UpdateError> {
 }
 
 fn validate_download_url(url: &reqwest::Url) -> Result<(), UpdateError> {
+    validate_channel_url(url, staging())
+}
+
+fn validate_channel_url(url: &reqwest::Url, staging: bool) -> Result<(), UpdateError> {
     if url.scheme() != "https"
         || url.host_str() != Some("download.auracode.si")
         || url.port().is_some()
@@ -278,7 +297,11 @@ fn validate_download_url(url: &reqwest::Url) -> Result<(), UpdateError> {
         || url.password().is_some()
         || url.query().is_some()
         || url.fragment().is_some()
-        || !url.path().starts_with("/releases/")
+        || !url.path().starts_with(if staging {
+            "/staging/releases/"
+        } else {
+            "/releases/"
+        })
         || url.path().contains('%')
     {
         return Err(error(
@@ -558,10 +581,11 @@ mod tests {
     #[test]
     fn update_artifacts_never_follow_a_manifest_to_another_origin() {
         assert!(
-            validate_download_url(
+            validate_channel_url(
                 &"https://download.auracode.si/releases/0.2.0/app.exe"
                     .parse()
-                    .unwrap()
+                    .unwrap(),
+                false
             )
             .is_ok()
         );
@@ -575,8 +599,38 @@ mod tests {
             "https://download.auracode.si:8443/releases/x",
         ] {
             assert!(
-                validate_download_url(&url.parse().unwrap()).is_err(),
+                validate_channel_url(&url.parse().unwrap(), false).is_err(),
                 "{url}"
+            );
+        }
+    }
+    #[test]
+    fn staging_and_stable_never_cross_release_prefixes() {
+        let stable = "https://download.auracode.si/releases/0.2.0/app.exe"
+            .parse()
+            .unwrap();
+        let staging = "https://download.auracode.si/staging/releases/0.2.0/app.exe"
+            .parse()
+            .unwrap();
+        assert!(validate_channel_url(&stable, false).is_ok());
+        assert!(validate_channel_url(&staging, true).is_ok());
+        assert!(validate_channel_url(&stable, true).is_err());
+        assert!(validate_channel_url(&staging, false).is_err());
+        assert_ne!(manifest(true), manifest(false));
+        for path in [
+            "/staging/releases/../latest.json",
+            "/staging/releases/%2e%2e/latest.json",
+            "/staging/releases/file.exe?x=1",
+            "/staging/releases/file.exe#ignored",
+        ] {
+            assert!(
+                validate_channel_url(
+                    &format!("https://download.auracode.si{path}")
+                        .parse()
+                        .unwrap(),
+                    true
+                )
+                .is_err()
             );
         }
     }

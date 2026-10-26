@@ -1716,6 +1716,7 @@ export type UpdateError = {
 export type UpdatePhase = "disabled" | "idle" | "checking" | "available" | "downloading" | "ready" | "waiting_for_idle" | "installing" | "restart_required" | "failed";
 
 export type UpdateStatus = {
+	channel: string,
 	phase: UpdatePhase,
 	version: string | null,
 	notes: string | null,

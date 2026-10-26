@@ -6,6 +6,11 @@ use std::path::{Path, PathBuf};
 const WINDOWS_MANIFEST: &str = "windows-app-manifest.xml";
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=AURACODE_UPDATER_CHANNEL");
+    match env::var("AURACODE_UPDATER_CHANNEL").as_deref() {
+        Err(env::VarError::NotPresent) | Ok("stable" | "staging") => {}
+        _ => panic!("AURACODE_UPDATER_CHANNEL must be stable or staging"),
+    }
     // tauri-build embeds its Windows manifest in binaries only, so this crate's own test binaries
     // started without Common Controls v6 and Windows refused to load them (exit 0xc0000139,
     // STATUS_ENTRYPOINT_NOT_FOUND, on an import only v6 exports). Tauri's manifest is switched off

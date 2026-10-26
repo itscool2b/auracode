@@ -12,6 +12,8 @@ import { checkAccountVerification } from "./check-account-verification.mjs";
 import { checkConfigSync } from "./check-config-sync.mjs";
 import { checkGitReview } from "./check-git-review.mjs";
 import { checkProfiles } from "./check-profiles.mjs";
+import { checkSessionFallback } from "./check-session-fallback.mjs";
+import { checkSteering } from "./check-steering.mjs";
 import { checkWorktreeSetup } from "./check-worktree-setup.mjs";
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -128,12 +130,21 @@ try {
       await page.getByRole("button", { name: "About", exact: true }).click();
       await page.getByText("Manual installation", { exact: true }).waitFor();
       assert.equal(await page.getByRole("button", { name: "Check for updates" }).count(), 0);
+      await page.goto(`${url}/?preview=settings&staging`);
+      await page.getByRole("button", { name: "About", exact: true }).click();
+      await page
+        .getByText("Staging build. Updates are restricted to release qualification builds.", {
+          exact: true,
+        })
+        .waitFor();
       await checkGitReview(page, url, out, engine);
       await checkAccountVerification(browser, url, out, engine);
       await checkAccount(browser, url, out, engine);
       await checkProfiles(browser, url, out, engine);
       await checkWorktreeSetup(browser, url, out, engine);
       await checkConfigSync(browser, url, out, engine);
+      await checkSteering(browser, url, out, engine);
+      await checkSessionFallback(browser, url, out, engine);
       assert.deepEqual(errors, []);
       console.log(
         `${engine}: settings persistence failures, focus, accessibility and explicit updater actions passed`,

@@ -122,6 +122,11 @@ export function UpdatePanel({ api }: { readonly api: UpdatesApi }) {
             )
           ) : null}
         </div>
+        {status?.channel === "staging" ? (
+          <p className="settings-note" role="status">
+            Staging build. Updates are restricted to release qualification builds.
+          </p>
+        ) : null}
         {status?.message ? <p className="settings-note">{status.message}</p> : null}
         {phase === "downloading" && status ? (
           <div className="settings-download">

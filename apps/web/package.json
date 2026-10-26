@@ -8,7 +8,8 @@
     "build": "react-router build && node scripts/headers.mjs",
     "typecheck": "react-router typegen && tsc --noEmit -p .",
     "test": "pnpm run build && node --test tests/static.test.mjs",
-    "test:browser": "pnpm run build && node tests/browser.mjs"
+    "test:browser": "pnpm run build && node tests/browser.mjs",
+    "test:release": "node tests/release.test.mjs"
   },
   "dependencies": {
     "@auracode/ui": "workspace:*",

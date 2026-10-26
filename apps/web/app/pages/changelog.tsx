@@ -21,8 +21,9 @@ export default function Changelog() {
           </p>
           <h3>Release status</h3>
           <p>
-            No public signed installer is published yet. This page will link versioned release
-            notes, checksums and known issues when each release is available.
+            {catalog.release
+              ? `Version ${catalog.release.version} is available. The download page includes its release notes, platform requirements and checksums.`
+              : "No public installer is published yet. This page will link versioned release notes, checksums and known issues when each release is available."}
           </p>
           <a className="text-link" href="/download">
             View download status ↗
@@ -32,3 +33,5 @@ export default function Changelog() {
     </Page>
   );
 }
+
+import catalog from "#release-catalog";

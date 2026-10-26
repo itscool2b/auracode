@@ -426,6 +426,22 @@ h2 span {
 .data-row span:first-child {
   color: var(--quiet);
 }
+.data-row.checksum {
+  display: block;
+}
+.data-row.checksum code {
+  display: block;
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+}
+.download-panel .data-row span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.release-notes {
+  white-space: pre-wrap;
+}
 .prose {
   max-width: 700px;
 }

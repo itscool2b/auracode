@@ -50,6 +50,7 @@ const setup: SetupApi = {
   },
 };
 let status: UpdateStatus = {
+  channel: new URLSearchParams(location.search).has("staging") ? "staging" : "stable",
   phase: new URLSearchParams(location.search).has("unsigned") ? "disabled" : "idle",
   version: null,
   notes: null,

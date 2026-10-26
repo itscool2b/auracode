@@ -34,6 +34,21 @@ test("empty optional roots are omitted and ambiguous separators fail", () => {
   }
 });
 
+test("updater channel is explicit and closed", () => {
+  for (const channel of ["stable", "staging"]) {
+    assert.equal(
+      releaseBuildEnv({ AURACODE_UPDATER_CHANNEL: channel }, []).AURACODE_UPDATER_CHANNEL,
+      channel,
+    );
+  }
+  for (const channel of ["", "preview", "https://example.com", "staging "]) {
+    assert.throws(
+      () => releaseBuildEnv({ AURACODE_UPDATER_CHANNEL: channel }, []),
+      /must be stable or staging/,
+    );
+  }
+});
+
 test("signed updater builds require both public and private material without printing either", () => {
   for (const env of [
     {},

@@ -2,17 +2,11 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
-import { chromium, webkit } from "playwright";
-
-const url = process.env.ORBIT_URL ?? "http://localhost:1426";
-const out = fileURLToPath(new URL("../../../target/session-fallback-browser/", import.meta.url));
-await mkdir(out, { recursive: true });
-for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
-  const browser = await launcher.launch();
+export async function checkSessionFallback(browser, url, out, engine) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   try {
-    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await context.newPage();
     page.setDefaultTimeout(12000);
     const errors = [];
@@ -52,6 +46,21 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
       `${engine}: missing native transcript opens review, cancel preserves source and confirmation waits for a prompt`,
     );
   } finally {
-    await browser.close();
+    await context.close();
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  const { chromium, webkit } = await import("playwright");
+  const url = process.env.ORBIT_URL ?? "http://localhost:1426";
+  const out = fileURLToPath(new URL("../../../target/session-fallback-browser/", import.meta.url));
+  await mkdir(out, { recursive: true });
+  for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
+    const browser = await launcher.launch();
+    try {
+      await checkSessionFallback(browser, url, out, engine);
+    } finally {
+      await browser.close();
+    }
   }
 }

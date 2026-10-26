@@ -1,5 +1,11 @@
 // Build tooling only. Keep private build-machine paths out of distributed Rust binaries.
 export function releaseBuildEnv(env, roots) {
+  if (
+    env.AURACODE_UPDATER_CHANNEL !== undefined &&
+    !["stable", "staging"].includes(env.AURACODE_UPDATER_CHANNEL)
+  ) {
+    throw new Error("AURACODE_UPDATER_CHANNEL must be stable or staging.");
+  }
   const flags = env.CARGO_ENCODED_RUSTFLAGS
     ? env.CARGO_ENCODED_RUSTFLAGS.split("\x1f")
     : (env.RUSTFLAGS ?? "").split(/\s+/u).filter(Boolean);
