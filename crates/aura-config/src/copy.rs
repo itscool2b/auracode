@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     CopyFile, CopyPreview, CopyReceipt, CopyResult, CopyState, Error, ItemRef, Kind, Library,
-    Provider, Result, Scope, Source, inventory,
+    Provider, Result, Scope, Source, inventory, mcp, mcp_document,
     safe_fs::{self, FileData},
 };
 
@@ -29,6 +29,7 @@ pub struct PreparedCopy {
     files: Vec<Mutation>,
     target_kind: Kind,
     target_prefix: String,
+    mcp: Option<EntryPatch>,
 }
 
 impl PreparedCopy {
@@ -54,6 +55,26 @@ struct Journal {
     kind: Kind,
     prefix: String,
     files: Vec<JournalFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    mcp: Option<EntryPatch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    restores: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct EntryPatch {
+    key: String,
+    before: Option<serde_json::Value>,
+    after: Option<serde_json::Value>,
+}
+
+struct Operation {
+    id: String,
+    kind: Kind,
+    prefix: String,
+    files: Vec<Mutation>,
+    mcp: Option<EntryPatch>,
+    restores: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -100,10 +121,16 @@ impl Library {
                     continue;
                 }
                 validate_journal(source, &journal)?;
+                let mixed_pending = journal.mcp.is_some() && mixed_payloads_remain(&backup)?;
+                if journal.restores.is_some() && has_marker(&backup, "complete")? && !mixed_pending
+                {
+                    continue;
+                }
                 let state = if has_marker(&backup, "rolled-back")? {
                     CopyState::RolledBack
                 } else if has_marker(&backup, "complete")?
                     && !has_marker(&backup, "rollback-started")?
+                    && !mixed_pending
                 {
                     CopyState::Complete
                 } else {
@@ -160,6 +187,49 @@ impl Library {
         let mut files = Vec::new();
         let mut before_bytes = 0;
         let mut before_text = None;
+        let mut after_text = entry.text;
+        let mut patch = None;
+        if from.kind == Kind::McpServer {
+            // Reparse the source strictly so duplicate JSON keys cannot disguise the reviewed item.
+            let source_bytes = safe_fs::read(&inventory::open(source)?, &entry.item.relative_path)?
+                .ok_or(Error::Stale)?;
+            let value = mcp_document::selected(&source_bytes, source.provider, &from.key)?
+                .ok_or(Error::Stale)?;
+            if safe_fs::hash(&serde_json::to_vec(&value).map_err(|_| Error::Format)?) != revision {
+                return Err(Error::Stale);
+            }
+            let after = mcp::portable(&value, source.provider, target.provider)?;
+            let before = safe_fs::read_file(&root, &prefix)?;
+            let bytes = before
+                .as_ref()
+                .map_or(&[][..], |file| file.bytes.as_slice());
+            let old = mcp_document::selected(bytes, target.provider, &from.key)?;
+            if let Some(old) = &old {
+                mcp::portable(old, target.provider, target.provider)?;
+            }
+            before_text = old
+                .as_ref()
+                .map(serde_json::to_string_pretty)
+                .transpose()
+                .map_err(|_| Error::Format)?;
+            after_text = serde_json::to_string_pretty(&after).map_err(|_| Error::Format)?;
+            let bytes = mcp_document::replace(bytes, target.provider, &from.key, Some(&after))?;
+            let executable = before.as_ref().is_some_and(|file| file.executable);
+            files.push(Mutation {
+                path: prefix.clone(),
+                before,
+                after: FileData {
+                    path: prefix.clone(),
+                    bytes,
+                    executable,
+                },
+            });
+            patch = Some(EntryPatch {
+                key: from.key.clone(),
+                before: old,
+                after: Some(after),
+            });
+        }
         for file in entry.files {
             let path = if from.kind == Kind::Skill {
                 format!("{prefix}/{}", file.path)
@@ -188,14 +258,19 @@ impl Library {
                 "This item needs a vendor-specific installation workflow.".into(),
             ));
         }
-        let preview = CopyPreview {
+        let mut preview = CopyPreview {
             id: uuid::Uuid::now_v7().to_string(), from: from.clone(), to_source: to_source.into(),
             files: files.iter().map(|file| CopyFile { path: file.path.clone(), before_revision: file.before.as_ref().map(fingerprint),
                 after_revision: fingerprint(&file.after), bytes: file.after.bytes.len() as u32 }).collect(),
-            before_text, after_text: entry.text,
+            before_text, after_text,
             notices: vec!["Copying changes the selected agent's configuration. Review instructions and scripts before the next agent session.".into(),
                 "Existing unrelated files stay in place. Replaced files are retained for rollback; the Library does not run copied scripts.".into()],
         };
+        if patch.is_some() {
+            preview.notices = vec!["Only this server entry changes. Other servers, credentials and project settings stay in place.".into(),
+                "The destination applies its own enable and approval rules. Source approvals are not copied.".into(),
+                "Restore reverses this entry without replacing unrelated configuration changes.".into()];
+        }
         Ok(PreparedCopy {
             preview,
             source_revision: revision.into(),
@@ -206,6 +281,7 @@ impl Library {
             files,
             target_kind: from.kind,
             target_prefix: prefix,
+            mcp: patch,
         })
     }
 
@@ -229,10 +305,24 @@ impl Library {
         {
             return Err(Error::Stale);
         }
+        Self::write_copy(
+            target,
+            prepared.target,
+            Operation {
+                id: prepared.preview.id,
+                kind: prepared.target_kind,
+                prefix: prepared.target_prefix,
+                files: prepared.files,
+                mcp: prepared.mcp,
+                restores: None,
+            },
+        )
+    }
+
+    fn write_copy(target: &Source, root: Dir, operation: Operation) -> Result<CopyResult> {
         // Keep the handle opened for the preview. A path replacement after canonical validation
         // cannot redirect any write into a different root.
-        let root = prepared.target;
-        for file in &prepared.files {
+        for file in &operation.files {
             if safe_fs::read_file(&root, &file.path)?
                 .as_ref()
                 .map(fingerprint)
@@ -242,22 +332,16 @@ impl Library {
             }
         }
         let journals = create_directory(&root, JOURNALS)?;
-        journals.create_dir(&prepared.preview.id)?;
-        let backup = journals.open_dir_nofollow(&prepared.preview.id)?;
-        for (index, file) in prepared.files.iter().enumerate() {
-            stage(&backup, &format!("after-{index}"), &file.after)?;
-            if let Some(before) = &file.before {
-                // Keep a separate snapshot too: an editor holding an old handle can still change
-                // the moved original. The reviewed bytes must remain recoverable in that case.
-                stage(&backup, &format!("snapshot-{index}"), before)?;
-            }
-        }
+        journals.create_dir(&operation.id)?;
+        let backup = journals.open_dir_nofollow(&operation.id)?;
         let journal = Journal {
-            version: 1,
+            version: if operation.mcp.is_some() { 2 } else { 1 },
             source_id: target.id.clone(),
-            kind: prepared.target_kind,
-            prefix: prepared.target_prefix,
-            files: prepared
+            kind: operation.kind,
+            prefix: operation.prefix,
+            mcp: operation.mcp,
+            restores: operation.restores,
+            files: operation
                 .files
                 .iter()
                 .map(|file| JournalFile {
@@ -279,14 +363,25 @@ impl Library {
         )?;
         sync_directory(&backup)?;
         sync_directory(&journals)?;
+        // Publish recovery metadata before staging full documents, so interruption cannot strand
+        // mixed configuration bytes in an undiscoverable folder. No live file changes yet.
+        for (index, file) in operation.files.iter().enumerate() {
+            stage(&backup, &format!("after-{index}"), &file.after)?;
+            if let Some(before) = &file.before {
+                // Keep a separate snapshot too: an editor holding an old handle can still change
+                // the moved original. The reviewed bytes must remain recoverable in that case.
+                stage(&backup, &format!("snapshot-{index}"), before)?;
+            }
+        }
+        sync_directory(&backup)?;
         let mut result = CopyResult {
-            id: prepared.preview.id,
+            id: operation.id,
             source_id: target.id.clone(),
             applied: Vec::new(),
             recovery_required: false,
             message: None,
         };
-        for (index, file) in prepared.files.iter().enumerate() {
+        for (index, file) in operation.files.iter().enumerate() {
             if let Err(error) = apply_file(&root, &backup, index, file) {
                 result.recovery_required = true;
                 result.message = Some(format!(
@@ -299,6 +394,13 @@ impl Library {
         if !result.recovery_required && marker(&backup, "complete").is_err() {
             result.recovery_required = true;
             result.message = Some("The files were copied, but the final recovery marker could not be saved. The retained originals remain available.".into());
+        }
+        if journal.mcp.is_some()
+            && !result.recovery_required
+            && cleanup_mixed_payloads(&backup, &journal).is_err()
+        {
+            result.recovery_required = true;
+            result.message = Some("The server entry was saved, but temporary transaction files could not be removed. Copy history can finish recovery.".into());
         }
         Ok(result)
     }
@@ -323,6 +425,9 @@ impl Library {
             serde_json::from_slice(&safe_fs::read(&backup, "journal.json")?.ok_or(Error::Format)?)
                 .map_err(|_| Error::Format)?;
         validate_journal(target, &journal)?;
+        if journal.mcp.is_some() {
+            return Self::rollback_mcp(target, root, backup, id, journal);
+        }
         let complete = has_marker(&backup, "complete")?;
         let rollback_started = has_marker(&backup, "rollback-started")?;
         // A copy can stop before moving a file, after moving its old value, or after publication.
@@ -375,9 +480,105 @@ impl Library {
         }
         Ok(result)
     }
+
+    fn rollback_mcp(
+        target: &Source,
+        root: Dir,
+        backup: Dir,
+        id: &str,
+        journal: Journal,
+    ) -> Result<CopyResult> {
+        let patch = journal.mcp.as_ref().ok_or(Error::Format)?;
+        let mut current = safe_fs::read_file(&root, &journal.prefix)?;
+        if current.is_none() {
+            // Recover the only missing-file window using the verified transient original. Never
+            // interpret a later deletion of a completed copy as an interrupted publication.
+            if has_marker(&backup, "complete")? {
+                return Err(Error::Stale);
+            }
+            if journal.files[0].before.is_some() {
+                let retained = safe_fs::read_file(&backup, "before-0")?.ok_or(Error::Stale)?;
+                if Some(fingerprint(&retained)) != journal.files[0].before {
+                    return Err(Error::Stale);
+                }
+                let (parent, name) = destination_parent(&root, &journal.prefix)?;
+                backup.hard_link("before-0", &parent, &name)?;
+                sync_directory(&parent)?;
+                current = Some(retained);
+            }
+        }
+        let current_bytes = current
+            .as_ref()
+            .map_or(&[][..], |file| file.bytes.as_slice());
+        let value = mcp_document::selected(current_bytes, target.provider, &patch.key)?;
+        if value == patch.before {
+            cleanup_mixed_payloads(&backup, &journal)?;
+            marker(&backup, "rolled-back")?;
+            return Ok(CopyResult {
+                id: id.into(),
+                source_id: target.id.clone(),
+                applied: vec![journal.prefix],
+                recovery_required: false,
+                message: None,
+            });
+        }
+        if value != patch.after {
+            return Err(Error::Stale);
+        }
+        let bytes = mcp_document::replace(
+            current_bytes,
+            target.provider,
+            &patch.key,
+            patch.before.as_ref(),
+        )?;
+        let executable = current.as_ref().is_some_and(|file| file.executable);
+        marker(&backup, "rollback-started")?;
+        let inverse = EntryPatch {
+            key: patch.key.clone(),
+            before: patch.after.clone(),
+            after: patch.before.clone(),
+        };
+        let operation = Operation {
+            id: uuid::Uuid::now_v7().to_string(),
+            kind: Kind::McpServer,
+            prefix: journal.prefix.clone(),
+            mcp: Some(inverse),
+            restores: Some(id.into()),
+            files: vec![Mutation {
+                path: journal.prefix.clone(),
+                before: current,
+                after: FileData {
+                    path: journal.prefix.clone(),
+                    bytes,
+                    executable,
+                },
+            }],
+        };
+        let mut result = Self::write_copy(target, root, operation)?;
+        if !result.recovery_required {
+            // The inverse operation has its own discoverable journal if the process stops before
+            // this parent marker. Completed inverse receipts are hidden to avoid duplicate history.
+            if cleanup_mixed_payloads(&backup, &journal)
+                .and_then(|()| marker(&backup, "rolled-back"))
+                .is_err()
+            {
+                result.recovery_required = true;
+                result.message = Some("The entry was restored, but recovery metadata needs another review. Temporary files were retained.".into());
+            } else {
+                result.id = id.into();
+            }
+        }
+        Ok(result)
+    }
 }
 
 fn destination(target: &Source, kind: Kind, key: &str, from: Provider) -> Result<String> {
+    if kind == Kind::McpServer {
+        if key.is_empty() || key.len() > 256 || key.chars().any(char::is_control) {
+            return Err(Error::Format);
+        }
+        return mcp_document::path(target).map(str::to_owned);
+    }
     if target.claude_state_only {
         return Err(Error::Unsupported(
             "Choose an agent configuration folder for this item.".into(),
@@ -423,12 +624,31 @@ fn destination(target: &Source, kind: Kind, key: &str, from: Provider) -> Result
 }
 
 fn validate_journal(target: &Source, journal: &Journal) -> Result<()> {
-    if journal.version != 1
+    if journal.version != if journal.mcp.is_some() { 2 } else { 1 }
         || journal.source_id != target.id
         || journal.files.is_empty()
         || journal.files.len() > safe_fs::FILE_COUNT
     {
         return Err(Error::Format);
+    }
+    if journal.restores.as_ref().is_some_and(|id| {
+        uuid::Uuid::parse_str(id)
+            .ok()
+            .is_none_or(|parsed| parsed.to_string() != *id)
+    }) {
+        return Err(Error::Format);
+    }
+    if let Some(patch) = &journal.mcp {
+        if journal.kind != Kind::McpServer
+            || journal.files.len() != 1
+            || destination(target, Kind::McpServer, &patch.key, target.provider)? != journal.prefix
+            || journal.files[0].path != journal.prefix
+        {
+            return Err(Error::UnsafePath);
+        }
+        for value in [&patch.before, &patch.after].into_iter().flatten() {
+            mcp::portable(value, target.provider, target.provider)?;
+        }
     }
     let mut paths = std::collections::HashSet::new();
     for file in &journal.files {
@@ -440,6 +660,7 @@ fn validate_journal(target: &Source, journal: &Journal) -> Result<()> {
             return Err(Error::Format);
         }
         match journal.kind {
+            Kind::McpServer if journal.mcp.is_some() => {}
             Kind::Instructions => {
                 if journal.files.len() != 1
                     || file.path != journal.prefix
@@ -463,6 +684,34 @@ fn validate_journal(target: &Source, journal: &Journal) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn mixed_payloads_remain(backup: &Dir) -> Result<bool> {
+    for name in ["after-0", "before-0", "snapshot-0"] {
+        match backup.symlink_metadata(name) {
+            Ok(_) => return Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(Error::Io),
+        }
+    }
+    Ok(false)
+}
+
+fn cleanup_mixed_payloads(backup: &Dir, journal: &Journal) -> Result<()> {
+    // A writer may retain the old OS handle after our rename. Preserve any newer bytes it wrote.
+    if let Some(original) = safe_fs::read_file(backup, "before-0")?
+        && Some(fingerprint(&original)) != journal.files[0].before
+    {
+        return Err(Error::Stale);
+    }
+    for name in ["after-0", "before-0", "snapshot-0"] {
+        match backup.remove_file(name) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    sync_directory(backup)
 }
 
 fn create_directory(root: &Dir, path: &str) -> Result<Dir> {
@@ -598,6 +847,90 @@ mod tests {
     use super::*;
 
     #[test]
+    fn mcp_interruption_before_and_after_publication_recovers_without_retaining_private_settings() {
+        for phase in 0..3 {
+            let fixture = tempfile::tempdir().unwrap();
+            let source = Source {
+                id: "pi".into(),
+                provider: Provider::Pi,
+                scope: Scope::User,
+                root: fixture.path().into(),
+                claude_state_only: false,
+            };
+            let root = inventory::open(&source).unwrap();
+            let before = FileData {
+                path: "mcp.json".into(),
+                bytes:
+                    br#"{"private":"SYNTHETIC_PRIVATE","mcpServers":{"docs":{"command":"old"}}}"#
+                        .to_vec(),
+                executable: false,
+            };
+            let after = FileData {
+                path: "mcp.json".into(),
+                bytes:
+                    br#"{"private":"SYNTHETIC_PRIVATE","mcpServers":{"docs":{"command":"new"}}}"#
+                        .to_vec(),
+                executable: false,
+            };
+            root.write("mcp.json", &before.bytes).unwrap();
+            let id = uuid::Uuid::now_v7().to_string();
+            let backup = create_directory(&root, &format!("{JOURNALS}/{id}")).unwrap();
+            let journal = Journal {
+                version: 2,
+                source_id: "pi".into(),
+                kind: Kind::McpServer,
+                prefix: "mcp.json".into(),
+                restores: None,
+                mcp: Some(EntryPatch {
+                    key: "docs".into(),
+                    before: Some(serde_json::json!({"command":"old"})),
+                    after: Some(serde_json::json!({"command":"new"})),
+                }),
+                files: vec![JournalFile {
+                    path: "mcp.json".into(),
+                    before: Some(fingerprint(&before)),
+                    after: fingerprint(&after),
+                }],
+            };
+            stage(
+                &backup,
+                "journal.json",
+                &FileData {
+                    path: String::new(),
+                    bytes: serde_json::to_vec(&journal).unwrap(),
+                    executable: false,
+                },
+            )
+            .unwrap();
+            stage(&backup, "after-0", &after).unwrap();
+            stage(&backup, "snapshot-0", &before).unwrap();
+            if phase >= 1 {
+                root.rename("mcp.json", &backup, "before-0").unwrap();
+            }
+            if phase == 2 {
+                backup.hard_link("after-0", &root, "mcp.json").unwrap();
+            }
+            let library = Library::new(vec![source]).unwrap();
+            let restored = library.rollback_copy("pi", &id).unwrap();
+            assert!(
+                !restored.recovery_required,
+                "phase {phase}: {:?}",
+                restored.message
+            );
+            assert_eq!(
+                mcp_document::selected(&root.read("mcp.json").unwrap(), Provider::Pi, "docs")
+                    .unwrap(),
+                Some(serde_json::json!({"command":"old"}))
+            );
+            assert!(!mixed_payloads_remain(&backup).unwrap());
+            assert_eq!(
+                library.copy_history().unwrap()[0].state,
+                CopyState::RolledBack
+            );
+        }
+    }
+
+    #[test]
     fn changed_file_between_validation_and_move_is_retained_without_overwriting_it() {
         let fixture = tempfile::tempdir().unwrap();
         let root = Dir::open_ambient_dir(fixture.path(), cap_std::ambient_authority()).unwrap();
@@ -678,6 +1011,8 @@ mod tests {
         stage(&backup, "after-0", &after).unwrap();
         let journal = Journal {
             version: 1,
+            mcp: None,
+            restores: None,
             source_id: "pi".into(),
             kind: Kind::Instructions,
             prefix: "AGENTS.md".into(),

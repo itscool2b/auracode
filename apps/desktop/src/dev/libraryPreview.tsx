@@ -84,7 +84,12 @@ function fixture() {
       calls.push(`preview:${reference.key}`);
       return {
         item: find(reference),
-        text: reference.key === "private" ? '{"values":"Hidden for manual review"}' : text,
+        text:
+          reference.key === "private"
+            ? '{"values":"Hidden for manual review"}'
+            : reference.kind === "mcp_server"
+              ? '{"url":"https://example.test/mcp","type":"http"}'
+              : text,
         files: reference.kind === "skill" ? ["SKILL.md", "scripts/check.txt"] : [],
         notices: [],
       };
@@ -100,22 +105,26 @@ function fixture() {
         id: "synthetic-copy",
         from,
         to_source,
-        before_text: "# Earlier instructions\n\nKeep changes small.\n",
-        after_text: text,
-        files: [
-          {
-            path: "skills/review-changes/SKILL.md",
-            before_revision: "old",
-            after_revision: "new",
-            bytes: text.length,
-          },
-          {
-            path: "skills/review-changes/scripts/check.txt",
-            before_revision: null,
-            after_revision: "script",
-            bytes: 15,
-          },
-        ],
+        before_text:
+          from.kind === "mcp_server" ? null : "# Earlier instructions\n\nKeep changes small.\n",
+        after_text: from.kind === "mcp_server" ? '{"url":"https://example.test/mcp"}' : text,
+        files:
+          from.kind === "mcp_server"
+            ? [{ path: "config.toml", before_revision: "old", after_revision: "new", bytes: 40 }]
+            : [
+                {
+                  path: "skills/review-changes/SKILL.md",
+                  before_revision: "old",
+                  after_revision: "new",
+                  bytes: text.length,
+                },
+                {
+                  path: "skills/review-changes/scripts/check.txt",
+                  before_revision: null,
+                  after_revision: "script",
+                  bytes: 15,
+                },
+              ],
         notices: [
           "Existing unrelated files stay in place. Replaced files are retained for rollback.",
         ],

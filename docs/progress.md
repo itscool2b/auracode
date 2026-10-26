@@ -1528,3 +1528,21 @@ rejection, empty browser storage and accessibility. The combined Settings/Git/ve
 browser batch, desktop typecheck, website static checks and Biome pass locally. The second hosted
 integration also passed Windows native chat smoke and cross-platform generated binding parity.
 The newer account/Library command set still needs the final combined native binding export.
+
+### M8 per-entry MCP copy and recovery, 2026-10-26
+
+- Added scoped JSON/TOML MCP edits with reviewed stdio/HTTP conversion, required Claude transport
+  type, duplicate-key rejection and refusal of selected credential/unknown fields. Other servers,
+  project trust and private settings never enter a preview or lasting recovery receipt.
+- Full-document private transaction files remain in the original config realm only while the
+  publication is unfinished. Checked publication retains uncertain originals; successful operations
+  remove temporary documents. Persistent receipts keep only safe before/after entry values. Restore
+  applies the inverse entry change to current configuration, preserving unrelated later edits.
+- All 22 pure configuration tests and all-target Clippy pass. Added interruption coverage before
+  moving the original, between move/publication and after publication, plus private-value exclusion,
+  unrelated-edit preservation, stale rejection and Claude state-file tests. A first test executable
+  was blocked by Application Control; the normal rebuild after substantive recovery edits passed
+  without renaming, relocating or changing policy. No actual agent configuration was read or written.
+- Chromium/WebKit tests now also cover MCP review and protected-entry rejection; focused TypeScript
+  and Biome pass. Native desktop compilation, plugin installation/conversion and remaining Library
+  acceptance stay pending. The Library back action is neutral for Settings integration.

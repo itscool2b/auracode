@@ -93,6 +93,15 @@ try {
       await page.getByRole("button", { name: "Review restore" }).waitFor();
       assert.equal(await page.getByRole("button", { name: "Review restore" }).isEnabled(), false);
       await page.getByRole("button", { name: /MCP servers/ }).click();
+      await page.getByRole("button", { name: /Documentation Claude/ }).click();
+      await page.getByLabel("Copy destination").selectOption("user:codex");
+      await page.getByRole("button", { name: "Review copy", exact: true }).click();
+      await page
+        .getByRole("dialog")
+        .getByText('{"url":"https://example.test/mcp"}', { exact: true })
+        .waitFor();
+      assert.equal(await page.getByRole("dialog").getByText("config.toml").count(), 1);
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
       await page.getByRole("button", { name: /Private issue tracker/ }).click();
       await page
         .getByText("This server has authentication or vendor options", { exact: false })

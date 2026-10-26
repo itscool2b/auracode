@@ -107,7 +107,7 @@ export function LibraryScreen({
     <main className="library-screen orbit-theme" data-theme="dark">
       <header className="library-topbar">
         <button type="button" className="library-quiet" onClick={onBack}>
-          <ArrowLeft size={15} /> Back to chats
+          <ArrowLeft size={15} /> Back
         </button>
         <span>Workspace / Library</span>
       </header>
@@ -391,14 +391,18 @@ function ItemDetail({
   };
   const blocked =
     item.copy_blocked ??
-    (!["skill", "instructions"].includes(item.item.kind)
+    (!["skill", "instructions", "mcp_server"].includes(item.item.kind)
       ? "Copying this item needs its agent's configuration workflow. Inspection is available here."
       : null);
   const destinations = sources.filter(
     (source) =>
       source.available &&
       source.id !== item.item.source_id &&
-      !source.id.endsWith(":claude-mcp") &&
+      (item.item.kind === "mcp_server"
+        ? source.provider !== "claude" ||
+          source.scope === "project" ||
+          source.id.endsWith(":claude-mcp")
+        : !source.id.endsWith(":claude-mcp")) &&
       (source.provider !== "shared" || item.item.kind === "skill"),
   );
   return (

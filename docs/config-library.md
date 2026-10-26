@@ -69,11 +69,23 @@ desktop command compilation/export is pending: Windows Application Control block
 Tauri plugin build script locally. No policy or blocked executable was changed.
 
 The dark Library screen supports source/agent/category filters, literal previews, a before/after
-copy review, explicit apply and restart recovery. Unsupported MCP/plugin/package copies explain
+copy review, explicit apply and restart recovery. Unsupported MCP fields and plugin/package copies explain
 the limitation instead of displaying a working action. A preparation that completes after its
 item is closed is canceled; stale apply errors close the consumed review and remain visible.
 Synthetic Chromium/WebKit tests cover these states and accessibility. Its standalone fixture
 is `library.html`, served only by the development entry, and reads no actual configuration.
 
-MCP/plugin apply, duplicate precedence, nested skill discovery and macOS native execution checks
-remain pending. M8 and M9 are not complete. No real agent configuration was read or changed.
+MCP copies change one reviewed stdio/HTTP entry, including the required Claude HTTP discriminator.
+They preserve unselected JSON spans and TOML tables/comments, and reject unknown, credential-bearing
+or incompatible selected entries. Persistent recovery metadata contains only the selected safe
+before/after values. Full documents are staged privately in the same approved configuration realm
+for checked publication, then removed after success. An interrupted or uncertain transaction retains
+them locally for recovery and never includes them in inventory, previews or sync. Metadata is saved
+before staging, so an interrupted transaction is discoverable. Restoring a server applies its inverse
+entry change to the current document, preserving unrelated edits made after the original copy. An
+edited selected entry or a later whole-file deletion is refused. Agent enable/approval state remains
+vendor-owned and is not copied between providers.
+
+Cross-provider executable plugin/package installation, duplicate precedence, nested skill discovery
+and macOS native execution checks remain pending. M8 and M9 are not complete. No real agent
+configuration was read or changed.

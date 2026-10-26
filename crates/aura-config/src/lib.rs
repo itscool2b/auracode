@@ -5,6 +5,7 @@
 mod copy;
 mod inventory;
 mod mcp;
+mod mcp_document;
 mod safe_fs;
 
 use std::path::PathBuf;
