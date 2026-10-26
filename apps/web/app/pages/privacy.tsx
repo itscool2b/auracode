@@ -52,8 +52,8 @@ export default function Privacy() {
         <p>
           A receipt of each session valid at deletion retains only its token hash, client type,
           request-verification hash and deletion and expiry times. It lets that device recognize
-          deletion without signing in again. Receipts expire with the original session, within
-          30 days, and scheduled cleanup removes expired receipts. They contain no email or account
+          deletion without signing in again. Receipts expire with the original session, within 30
+          days, and scheduled cleanup removes expired receipts. They contain no email or account
           identifier.
         </p>
         <h2>Your controls</h2>
