@@ -19,7 +19,7 @@ use futures::FutureExt;
 use futures::future::BoxFuture;
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Handle;
 use tokio::sync::watch;
 
@@ -754,6 +754,32 @@ pub async fn run_helper(
     registry: &LeftoverRegistry,
     spec: HelperSpec,
 ) -> Result<HelperOutput, SpawnError> {
+    run_helper_inner(registry, spec, None).await
+}
+
+/// Runs an owned helper with at most 1 MiB of unlogged stdin, closing the pipe after all bytes are
+/// written. Input never enters argv or a temporary file. Output capture and cancellation retain the
+/// same bounds and tree ownership as [`run_helper`].
+/// Successful pipe delivery is not an application acknowledgment; callers must validate the result.
+pub async fn run_helper_input(
+    registry: &LeftoverRegistry,
+    spec: HelperSpec,
+    input: Vec<u8>,
+) -> Result<HelperOutput, SpawnError> {
+    if input.len() > 1024 * 1024 {
+        return Err(SpawnError::Spawn {
+            program: spec.program.display().to_string(),
+            source: io::Error::new(io::ErrorKind::InvalidInput, "helper input exceeds 1 MiB"),
+        });
+    }
+    run_helper_inner(registry, spec, Some(input)).await
+}
+
+async fn run_helper_inner(
+    registry: &LeftoverRegistry,
+    spec: HelperSpec,
+    input: Option<Vec<u8>>,
+) -> Result<HelperOutput, SpawnError> {
     let rt = Handle::try_current().map_err(|_| SpawnError::NoRuntime)?;
     let HelperSpec {
         program,
@@ -784,7 +810,17 @@ pub async fn run_helper(
     check(&rt, &cwd, &program, &vars).await?;
     let mut child = start(
         &rt,
-        command(&program, &args, &cwd, &vars, Stdio::null()),
+        command(
+            &program,
+            &args,
+            &cwd,
+            &vars,
+            if input.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            },
+        ),
         new_session,
         &program,
     )?;
@@ -834,6 +870,21 @@ pub async fn run_helper(
         .flatten()
         .map(|task| task.abort_handle())
         .collect();
+    let writer = if let Some(input) = input {
+        let mut pipe = child.stdin().take().ok_or_else(|| SpawnError::Spawn {
+            program: program.display().to_string(),
+            source: io::Error::other("helper stdin pipe is unavailable"),
+        })?;
+        Some(rt.spawn(async move {
+            pipe.write_all(&input).await?;
+            pipe.shutdown().await
+        }))
+    } else {
+        None
+    };
+    if let Some(writer) = &writer {
+        guard.readers.push(writer.abort_handle());
+    }
 
     let (exit, timed_out) = match tokio::time::timeout(timeout, wait_direct(child.as_mut())).await {
         Ok(status) => (status.ok().map(ExitInfo::from_status), false),
@@ -848,7 +899,23 @@ pub async fn run_helper(
     for reader in readers.into_iter().flatten() {
         let _ = tokio::time::timeout(PIPE_EOF_GRACE, reader).await;
     }
+    let input_written = if let Some(mut writer) = writer {
+        let result = tokio::time::timeout(PIPE_EOF_GRACE, &mut writer).await;
+        writer.abort();
+        matches!(result, Ok(Ok(Ok(()))))
+    } else {
+        true
+    };
     guard.finish().await;
+    if !input_written && !timed_out {
+        return Err(SpawnError::Spawn {
+            program: program.display().to_string(),
+            source: io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "helper did not accept its complete input",
+            ),
+        });
+    }
     let captured = std::mem::take(&mut *lock(&stdout));
     Ok(HelperOutput {
         exit,

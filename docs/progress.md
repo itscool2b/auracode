@@ -1413,3 +1413,10 @@ checkpoint tests pass on Windows, including exact CRLF/binary bytes, staged rena
 exclusions and concurrent source/destination edits. The final copy checks and core/CLI/desktop
 all-target Clippy pass. DTOs are unchanged. Setup, PR creation and remaining M4 acceptance stay pending;
 no remote CI, push or real-agent work ran.
+
+The PR helper foundation now accepts at most 1 MiB of stdin and closes it after writing, keeping
+reviewed bodies out of process arguments and temporary files. It preserves owned-tree cleanup,
+concurrent bounded output draining and timeout/cancellation behavior. Successful pipe delivery does
+not prove the helper consumed the bytes; the caller still validates its result. All eleven Windows
+helper tests and process all-target Clippy pass, including complete multiline input, blocked input,
+size rejection and existing descendant cleanup. No real GitHub or repository mutation ran.
