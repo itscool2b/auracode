@@ -2479,3 +2479,9 @@ was used. Native sign-in acceptance remains in the final platform gate.
 Unanswered, actionable UI questions now share the permission dock while the session has a process, including pre-Ready startup recovery. Each request shows whether it belongs to a turn or the session; turn requests include a bounded prompt label. The transcript keeps the resolved history and informational notifications, but does not duplicate a docked question. The existing response path owns pending, failure and withdrawal state. A hidden composer keeps its draft while the user answers.
 
 Chromium and WebKit fixtures passed keyboard selection/submission, no automatic answer in Full auto, pre-Ready questions, pending/error/retry, agent withdrawal, reattachment, mixed permission/question requests, notification-only behavior, preserved drafts, accessibility and the 390px layout. Screenshots were inspected. Forty-nine related frontend tests, TypeScript, targeted Biome and instruction parity pass. The question fixture joins the existing final settings browser gate. These are production-component fixtures with an owned synthetic transport, not paid-agent or packaged native acceptance.
+
+### Codex recovery answer lifecycle
+
+- Corrected Codex startup-model recovery so a submitted answer does not also emit a withdrawal. Core already resolves the answer; the extra withdrawal produced a false notice that the answer did not reach the agent.
+- The real driver regression covers accepting the offered default and cancelling the recovery without withdrawal. Stop still withdraws its unanswered card, closes the owned process, and preserves queued user work through the existing core contract.
+- Validation: six focused native Codex recovery driver tests and both core startup recovery tests passed; aura-drivers all-target Clippy with replay/testing passed. No real agent or paid prompt ran.

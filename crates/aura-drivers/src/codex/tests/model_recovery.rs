@@ -105,6 +105,7 @@ async fn startup_recovery_requires_user_choice_in_full_auto_and_opens_same_resum
         let mut notice = false;
         loop {
             match h.event().await {
+                DriverEvent::UiWithdrawn { .. } => panic!("a user answer is not withdrawn"),
                 DriverEvent::Event {
                     event: AuraEvent::Notice { message, .. },
                     ..
@@ -132,7 +133,12 @@ async fn cancelling_startup_recovery_preserves_original_failure_without_retry() 
         let mut h = Harness::start_with(configured(true)).await;
         let request = failed_open(&mut h).await;
         respond(&h, &request, choice);
-        while h.events.recv().await.is_some() {}
+        while let Some(event) = h.events.recv().await {
+            assert!(
+                !matches!(event, DriverEvent::UiWithdrawn { .. }),
+                "a user cancellation is already resolved"
+            );
+        }
         let DriverExit::StartFailed(error) = h.run.await.unwrap() else {
             panic!("failed startup")
         };
@@ -212,11 +218,29 @@ async fn auth_errors_and_incomplete_or_ambiguous_model_lists_never_offer_recover
 #[tokio::test(start_paused = true)]
 async fn stop_closes_pending_startup_recovery_and_duplicate_answers_cannot_retry() {
     let mut h = Harness::start_with(configured(true)).await;
-    failed_open(&mut h).await;
+    let request = failed_open(&mut h).await;
     respond(&h, "wrong-request", Some(0));
     tokio::task::yield_now().await;
     assert!(h.end.from_client.try_recv().is_err());
-    h.stop().await;
+    h.tx.send(DriverCommand::Shutdown {
+        plan: StopPlan {
+            cancel_grace: Duration::ZERO,
+            process: ShutdownPlan::FORCE,
+        },
+    })
+    .unwrap();
+    let mut withdrawn = false;
+    while let Some(event) = h.events.recv().await {
+        if let DriverEvent::UiWithdrawn { request_id } = event {
+            assert_eq!(request_id, request);
+            withdrawn = true;
+        }
+    }
+    assert!(
+        withdrawn,
+        "Stop withdraws the still-unanswered recovery card"
+    );
+    assert_eq!(h.run.await.unwrap(), DriverExit::Closed);
     let mut h = Harness::start_with(configured(true)).await;
     let request2 = failed_open(&mut h).await;
     respond(&h, &request2, Some(0));

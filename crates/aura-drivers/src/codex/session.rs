@@ -364,9 +364,8 @@ impl Session {
         let Some(recovery) = self.model_recovery.take() else {
             return true;
         };
-        self.outbox.push_back(DriverEvent::UiWithdrawn {
-            request_id: request_id.into(),
-        });
+        // Core has already resolved a user answer. UiWithdrawn is reserved for an independent
+        // cancellation; emitting it here would falsely report that the answer lost a race.
         if !matches!(answer, Some(UiAnswer::Select { index: 0 })) {
             self.fail(recovery.failure);
             return true;
