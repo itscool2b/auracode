@@ -239,6 +239,13 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
 
 ## Decisions and constraints
 
+- M1e process supervision now has an explicit host boundary: native execution delegates unchanged,
+  while WSL and unknown hosts return `HostUnavailable` before starting a process. A Windows job
+  around `wsl.exe` does not establish ownership of its Linux descendants. The Linux supervisor and
+  its deployment/qualification remain pending, so discovered WSL installations are not launchable
+  yet. Two fake-spawner regressions cover the boundary; local execution is blocked by Application
+  Control build-script checks and awaits CI. No blocked binaries or host policy were altered.
+
 M1e is progressing in the isolated `m1e-agent-catalog` worktree. Its first checkpoint adds typed
 native/WSL host identity, bounded WSL distribution decoding, installation channel classification from
 resolved paths, provider alias identity, and exact-version verification metadata. Detection and UI
