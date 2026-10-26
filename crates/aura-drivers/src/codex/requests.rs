@@ -8,7 +8,10 @@ use std::collections::BTreeSet;
 
 #[derive(Debug)]
 pub(super) enum Callback {
-    Approval { permissions: Option<Value> },
+    Approval {
+        permissions: Option<Value>,
+        decisions: BTreeSet<String>,
+    },
     Questions(Vec<UiQuestion>),
 }
 
@@ -17,20 +20,24 @@ impl Callback {
         match self {
             Self::Approval {
                 permissions: Some(_),
+                ..
             } => json!({"permissions":{},"scope":"turn"}),
-            Self::Approval { permissions: None } => json!({"decision":"cancel"}),
+            Self::Approval {
+                permissions: None, ..
+            } => json!({"decision":"cancel"}),
             Self::Questions(_) => json!({"answers":{}}),
         }
     }
 
     pub fn permission_answer(&self, decision: &str) -> Option<Value> {
-        let Self::Approval { permissions } = self else {
+        let Self::Approval {
+            permissions,
+            decisions,
+        } = self
+        else {
             return None;
         };
-        if !matches!(
-            decision,
-            "accept" | "acceptForSession" | "decline" | "cancel"
-        ) {
+        if !decisions.contains(decision) {
             return None;
         }
         Some(match permissions {
@@ -170,7 +177,14 @@ pub(super) fn approval(
         ),
         _ => return None,
     };
-    let options = [
+    // Newer native builds advertise a narrower choice set than the stable schema.
+    // Persistent policy amendments require a separate UI and are not offered here.
+    let advertised = match params.get("availableDecisions") {
+        None | Some(Value::Null) => None,
+        Some(Value::Array(choices)) => Some(choices),
+        Some(_) => return None,
+    };
+    let options: Vec<_> = [
         ("accept", "Allow once", PermissionOptionKind::AllowOnce),
         (
             "acceptForSession",
@@ -189,12 +203,22 @@ pub(super) fn approval(
         ),
     ]
     .into_iter()
+    .filter(|(id, _, _)| {
+        advertised.is_none_or(|choices| choices.iter().any(|choice| choice.as_str() == Some(id)))
+    })
     .map(|(id, label, kind)| PermissionOption {
         option_id: id.into(),
         label: label.into(),
         kind,
     })
     .collect();
+    if options.is_empty() {
+        return None;
+    }
+    let decisions = options
+        .iter()
+        .map(|option| option.option_id.clone())
+        .collect();
     let content = ["reason", "grantRoot"]
         .into_iter()
         .filter_map(|field| {
@@ -208,7 +232,10 @@ pub(super) fn approval(
         })
         .collect();
     Some((
-        Callback::Approval { permissions },
+        Callback::Approval {
+            permissions,
+            decisions,
+        },
         PermissionRequest {
             request_id,
             tool_call_id: None,
@@ -277,6 +304,7 @@ mod tests {
     fn permission_grants_cannot_add_unrequested_rights() {
         let callback = Callback::Approval {
             permissions: Some(json!({"network":{"enabled":true}})),
+            decisions: ["accept", "decline"].map(str::to_owned).into(),
         };
         assert_eq!(
             callback.permission_answer("accept"),
@@ -287,5 +315,36 @@ mod tests {
             Some(json!({"permissions":{},"scope":"turn"}))
         );
         assert_eq!(callback.permission_answer("invented"), None);
+    }
+
+    #[test]
+    fn advertised_decisions_bound_both_visible_choices_and_wire_answers() {
+        let params = json!({"command":"echo test","availableDecisions":["accept",{"acceptWithExecpolicyAmendment":{"execpolicy_amendment":["echo"]}},"cancel"]});
+        let (callback, request) =
+            approval("item/commandExecution/requestApproval", &params, "r".into()).unwrap();
+        assert_eq!(
+            request
+                .options
+                .iter()
+                .map(|option| option.option_id.as_str())
+                .collect::<Vec<_>>(),
+            ["accept", "cancel"]
+        );
+        assert_eq!(
+            callback.permission_answer("accept"),
+            Some(json!({"decision":"accept"}))
+        );
+        assert_eq!(callback.permission_answer("acceptForSession"), None);
+        assert_eq!(callback.permission_answer("decline"), None);
+        for choices in [json!([]), json!(["unknown"]), json!("accept")] {
+            assert!(
+                approval(
+                    "item/commandExecution/requestApproval",
+                    &json!({"availableDecisions":choices}),
+                    "r".into()
+                )
+                .is_none()
+            );
+        }
     }
 }

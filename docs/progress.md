@@ -25,8 +25,8 @@ The native Codex driver uses an owned stdio app-server, initializes once, persis
 ID, separates turn completion from idle, and handles approvals, grouped questions, model/effort
 settings and account quota updates. Initial verification covers 31 native unit tests, seven synthetic
 and three recorded native replay fixtures, and conformance to the installed Codex 0.162.1 generated schema. Existing ACP
-and Claude fixtures remain unchanged. No real prompts, credential/config inspection or vendor update
-were used. This is a work checkpoint, not milestone acceptance.
+and Claude fixtures remain unchanged. Initial work used no real prompts, credential/config inspection
+or vendor update. Later prompted verification is recorded below. This is not milestone acceptance.
 
 The driver now detects a closed asynchronous stdin writer after a send was accepted and stops the
 owned process without waiting for its request timeout. Regression tests also verify outstanding
@@ -61,7 +61,25 @@ also recognizes the installed binary's `Codex Desktop/0.162.1` user-agent spelli
 Ask uses a read-only native sandbox with untrusted-command approvals and user review, so it does
 not pregrant workspace writes. Auto-edit keeps workspace write access; Full auto requests full access
 with no driver auto-answering of vendor callbacks. The tightened Ask mapping passes schema and replay
-tests; its real permission turn remains part of prompted verification.
+tests.
+
+The first minimal native smoke used explicit GPT-6-Luna and low effort. Basic text and native turn
+usage passed. The permission scenario displayed both callbacks; denial worked, but allow-once failed
+inside the native Windows execution helper before the command started. Ten checks passed and one
+failed; interrupt, continuation, full auto and resume were not attempted. The smoke stopped after
+three visible prompts, with no paid retries. A free direct `command/exec` running only `Get-Location`
+in the same owned temp repository reproduced `helper_unknown_error: setup refresh had errors` under
+the same read-only sandbox. `windowsSandbox/readiness` reported `ready`, so no setup mutation or
+sandbox weakening was justified. No credential/config files were inspected or edited.
+
+The real callback also exposed a narrower `availableDecisions` menu than the stable schema. The
+driver now bounds both displayed options and outgoing answers to advertised supported choices.
+Persistent policy amendments remain unsupported. Two native regressions and a synthetic replay
+exercise this restriction, and the real basic turn has a curated recording and golden. Targeted
+Clippy and instruction checks pass; Windows Application Control refused the new native and schema
+test executables with error 4551 before any test ran. The new replay golden is a reviewed expected
+result derived from its prior passing fixture and still requires CI execution. Live acceptance
+remains pending the native helper issue and the remaining four smoke scenarios.
 
 M1c requirements still pending: opt-in prompted verification, generated
 schema verification for the historical 0.164.0 baseline, independent verification of review fixes,

@@ -358,6 +358,39 @@ async fn approval_ids_remain_exact_and_withdrawals_do_not_answer_twice() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn unavailable_approval_decisions_cannot_be_sent_even_by_direct_driver_commands() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    h.begin().await;
+    h.send(json!({"id":17,"method":"item/commandExecution/requestApproval","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"tool-1","command":"echo test","startedAtMs":1,"availableDecisions":["accept",{"acceptWithExecpolicyAmendment":{"execpolicy_amendment":["echo"]}},"cancel"]}}));
+    let request = loop {
+        if let DriverEvent::Permission { request, .. } = h.event().await {
+            break request;
+        }
+    };
+    assert_eq!(
+        request
+            .options
+            .iter()
+            .map(|option| option.option_id.as_str())
+            .collect::<Vec<_>>(),
+        ["accept", "cancel"]
+    );
+    for decision in ["acceptForSession", "decline", "accept"] {
+        h.tx.send(DriverCommand::RespondPermission {
+            request_id: request.request_id.clone(),
+            outcome: crate::driver::PermissionOutcome::Selected(decision.into()),
+        })
+        .unwrap();
+    }
+    assert_eq!(
+        h.wire().await,
+        json!({"id":17,"result":{"decision":"accept"}})
+    );
+    h.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
 async fn interrupt_waits_for_start_id_and_does_not_complete_on_acknowledgement() {
     let mut h = Harness::start().await;
     h.ready().await;
