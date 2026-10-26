@@ -36,6 +36,9 @@ export const commands = {
 	setupSnapshot: () => typedError<SetupSnapshot, AppError>(__TAURI_INVOKE("setup_snapshot")),
 	setupApply: (revision: number, action: SetupAction) => typedError<SetupSnapshot, AppError>(__TAURI_INVOKE("setup_apply", { revision, action })),
 	librarySnapshot: (folderId: string | null) => typedError<LibraryInventory, AppError>(__TAURI_INVOKE("library_snapshot", { folderId })),
+	configVendorReview: (request: VendorRequest) => typedError<VendorReview, AppError>(__TAURI_INVOKE("config_vendor_review", { request })),
+	configVendorCancel: (token: string) => __TAURI_INVOKE<void>("config_vendor_cancel", { token }),
+	configVendorStart: (token: string, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("config_vendor_start", { token, terminalId, rows, cols })),
 	configSyncInventory: (after: string | null) => typedError<ConfigSyncInventory, AppError>(__TAURI_INVOKE("config_sync_inventory", { after })),
 	configSyncPreview: (id: string, choice: ConfigSyncChoice) => typedError<ConfigSyncPreview, AppError>(__TAURI_INVOKE("config_sync_preview", { id, choice })),
 	configSyncCancel: (token: string) => __TAURI_INVOKE<void>("config_sync_cancel", { token }),
@@ -1737,6 +1740,33 @@ export type UsageScope =
 "session";
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };
+
+export type VendorAction = "install" | "update" | "remove" | "enable" | "disable";
+
+export type VendorKind = "plugin" | "marketplace" | "package";
+
+export type VendorProvider = "claude" | "codex" | "pi";
+
+export type VendorRequest = {
+	provider: VendorProvider,
+	kind: VendorKind,
+	action: VendorAction,
+	target: string,
+	/**  An optional Library item revision, checked against personal configuration only. */
+	item_revision: string | null,
+};
+
+export type VendorReview = {
+	token: string,
+	request: VendorRequest,
+	program: string,
+	arguments: string[],
+	working_directory: string,
+	config_directory: string,
+	revision: string,
+	timeout_seconds: number,
+	notices: string[],
+};
 
 /**  Evidence about this exact installed version, independent of whether its binary can start. */
 export type VersionVerification = { state: "verified"; version: string; scope: string } | { state: "untested"; last_verified: string | null } | { state: "unknown" };

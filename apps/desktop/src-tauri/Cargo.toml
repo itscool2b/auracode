@@ -47,6 +47,7 @@ tauri-plugin-window-state.workspace = true
 tauri-specta.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+uuid = { workspace = true, features = ["v4"] }
 reqwest.workspace = true
 # Native TLS matches the rest of the desktop; signed-version verification is required.
 tauri-plugin-updater = { version = "=2.14.0", default-features = false, features = ["native-tls", "system-proxy", "zip"] }

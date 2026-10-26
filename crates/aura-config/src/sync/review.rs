@@ -240,13 +240,13 @@ pub async fn prepare_review(
         "Review the full change before applying. Configuration can change what an agent executes."
             .into(),
     ];
-    if let Some(result) = &decision.result {
-        if !result.local_fields.is_empty() {
-            warnings.push(format!(
-                "Required setup stays local: {}. Values are never included in sync.",
-                result.local_fields.join(", ")
-            ));
-        }
+    if let Some(result) = &decision.result
+        && !result.local_fields.is_empty()
+    {
+        warnings.push(format!(
+            "Required setup stays local: {}. Values are never included in sync.",
+            result.local_fields.join(", ")
+        ));
     }
     if decision.first_link {
         warnings.push("First connection keeps additions from both devices. Missing items are not treated as uninstalls.".into());
