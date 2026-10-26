@@ -162,7 +162,10 @@ pub fn create_main(
         .visible(false)
         .transparent(plan.transparent)
         .on_navigation(move |url| {
-            let allowed = is_app_url(url, origin, dev_url.as_ref());
+            // Wry sends child-frame navigations through this callback on macOS. These exact
+            // verification documents stay remote: they receive no native command capabilities.
+            let allowed = is_app_url(url, origin, dev_url.as_ref())
+                || (cfg!(target_os = "macos") && is_verification_document(url));
             if !allowed {
                 leave_for_browser(&handle, url);
             }
@@ -338,6 +341,24 @@ fn same_origin(a: &Url, b: &Url) -> bool {
         && a.port_or_known_default() == b.port_or_known_default()
 }
 
+fn is_verification_document(url: &Url) -> bool {
+    if url.scheme() != "https"
+        || url.port_or_known_default() != Some(443)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+    {
+        return false;
+    }
+    match url.host_str() {
+        Some("auracode.si" | "preview.auracode.si") => {
+            url.path() == "/verify-device" && url.query().is_none()
+        }
+        Some("challenges.cloudflare.com") => url.path().starts_with("/cdn-cgi/challenge-platform/"),
+        _ => false,
+    }
+}
+
 /// A blocked navigation to the web opens in the browser instead; anything else (`file:`, custom
 /// schemes) is only logged.
 fn leave_for_browser(app: &AppHandle, url: &Url) {
@@ -374,6 +395,33 @@ mod tests {
 
     fn url(text: &str) -> Url {
         Url::parse(text).expect("url")
+    }
+
+    #[test]
+    fn verification_documents_never_expand_the_trusted_app_origin() {
+        for page in [
+            "https://auracode.si/verify-device",
+            "https://preview.auracode.si/verify-device",
+            "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/turnstile/frame",
+        ] {
+            let page = url(page);
+            assert!(is_verification_document(&page));
+            for origin in ALL {
+                assert!(!is_app_url(&page, origin, None));
+            }
+        }
+        for page in [
+            "http://auracode.si/verify-device",
+            "https://auracode.si:444/verify-device",
+            "https://auracode.si/verify-device?token=anything",
+            "https://auracode.si/verify-device/other",
+            "https://user@auracode.si/verify-device",
+            "https://auracode.si/account",
+            "https://auracode.si.evil.invalid/verify-device",
+            "https://challenges.cloudflare.com/anything-else",
+        ] {
+            assert!(!is_verification_document(&url(page)), "{page}");
+        }
     }
 
     #[test]

@@ -1,0 +1,61 @@
+.diagnostics-shell {
+  --aura-text-1: var(--o-text-1);
+  --aura-text-2: var(--o-text-2);
+  --aura-text-3: var(--o-text-3);
+  --aura-danger: var(--o-red);
+  background: var(--o-pane);
+  color: var(--o-text-1);
+  font-family: var(--o-sans);
+}
+.diagnostics-title {
+  margin: 0;
+  font: 500 32px / 1.2 var(--o-sans);
+  letter-spacing: -1.2px;
+}
+.diagnostics-shell .lede {
+  color: var(--o-text-2);
+  font: 13px / 1.8 var(--o-sans);
+}
+.diagnostics-shell .sidebar {
+  background: var(--o-tray-tint);
+  border-right: 1px solid var(--o-line-strong);
+  box-shadow: none;
+}
+.diagnostics-shell .wordmark {
+  font: 500 19px var(--o-sans);
+  letter-spacing: -0.6px;
+}
+.diagnostics-panel {
+  border: 1px solid var(--o-line-strong);
+  border-radius: 10px;
+  background: var(--o-raised);
+}
+.diagnostics-shell :is(.panel-title, .eyebrow) {
+  color: var(--o-text-2);
+  font-family: var(--o-sans);
+}
+.diagnostics-shell :is(.btn, select) {
+  color: var(--o-text-1);
+  background: var(--o-raised-2);
+  border: 1px solid var(--o-line-strong);
+  box-shadow: none;
+  border-radius: 6px;
+  font: 12px var(--o-sans);
+}
+.diagnostics-shell .btn-primary {
+  color: var(--o-on-ink);
+  background: var(--o-ink);
+}
+.diagnostics-shell .btn-quiet {
+  border-color: transparent;
+  background: transparent;
+}
+.diagnostics-shell .btn:hover:not(:disabled) {
+  background: var(--o-hover);
+  color: var(--o-text-1);
+}
+.diagnostics-shell .agent-chip {
+  border: 1px solid var(--o-line-strong);
+  background: var(--o-raised);
+  box-shadow: none;
+}

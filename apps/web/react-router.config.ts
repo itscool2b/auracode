@@ -6,6 +6,7 @@ export default {
     "/download",
     "/signin",
     "/signup",
+    "/verify-device",
     "/account",
     "/privacy",
     "/terms",

@@ -7,6 +7,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
+import { checkAccount } from "./check-account.mjs";
+import { checkAccountVerification } from "./check-account-verification.mjs";
 import { checkGitReview } from "./check-git-review.mjs";
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -124,6 +126,8 @@ try {
       await page.getByText("Manual installation", { exact: true }).waitFor();
       assert.equal(await page.getByRole("button", { name: "Check for updates" }).count(), 0);
       await checkGitReview(page, url, out, engine);
+      await checkAccountVerification(browser, url, out, engine);
+      await checkAccount(browser, url, out, engine);
       assert.deepEqual(errors, []);
       console.log(
         `${engine}: settings persistence failures, focus, accessibility and explicit updater actions passed`,

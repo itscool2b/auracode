@@ -1502,3 +1502,29 @@ core/CLI/desktop all-target Clippy and exact binding export pass. Native GitHub 
 execution, setup and remaining M4 acceptance are pending. No real remote mutation or agent call ran.
 The native behavior follows the official [GitHub PR create](https://cli.github.com/manual/gh_pr_create)
 and [Git push lease](https://git-scm.com/docs/git-push) contracts.
+
+## Account setup and remaining dark surfaces
+
+Settings now includes the real Rust account command transport, email/code flow, recovery-key
+acknowledgment, device approval and revocation, fingerprint comparison and sign-out. Transient proofs,
+codes and recovery text are never persisted by the frontend. Account activation and sync scheduling
+remain separate pending work, with inactive state shown explicitly. Library navigation and project
+folder selection are connected. Git isolation exposes reviewed uncommitted-file copying after the
+configured credential-root exclusion fix. Diagnostics and startup errors now use Orbit typography,
+solid dark surfaces and marks; obsolete milestone copy and placeholder navigation are removed.
+The dark-only rule is also explicit in both byte-identical root instruction files.
+
+The production verification page and desktop frame enforce exact origins, source windows and a
+fresh attempt nonce. The website keeps hashed script CSP and permits framing only on that route.
+The native page gains only exact verification-frame sources, with no remote command capabilities.
+Pinned Wry's macOS navigation handler covers child frames, so its narrow verification-document
+allowlist now covers the hosted page and Cloudflare challenge documents without making them trusted
+app origins. Native/live-widget acceptance remains pending: the local test build was blocked by
+Application Control on Specta's build script. No bypass was attempted.
+
+Chromium and WebKit checks pass for invalid sign-in codes, recovery-key acknowledgment, fingerprint
+confirmation, mismatched recipient codes, revocation, sign-out, verification origin/window/nonce
+rejection, empty browser storage and accessibility. The combined Settings/Git/verification/account
+browser batch, desktop typecheck, website static checks and Biome pass locally. The second hosted
+integration also passed Windows native chat smoke and cross-platform generated binding parity.
+The newer account/Library command set still needs the final combined native binding export.

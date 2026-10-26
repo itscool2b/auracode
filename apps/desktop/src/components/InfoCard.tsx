@@ -1,4 +1,3 @@
-import { GlassPanel } from "@auracode/ui";
 import { Fragment, type ReactNode, useState } from "react";
 import type { AppInfo } from "../bindings";
 import { errorMessage } from "../lib/errors";
@@ -19,7 +18,7 @@ export function InfoCard({
   readonly onRecoveryDismissed: () => void;
 }) {
   return (
-    <GlassPanel elevation={1} squircle className="flex flex-col gap-4 p-5">
+    <section className="diagnostics-panel flex flex-col gap-4 p-5">
       <h2 className="panel-title m-0">This launch</h2>
       <dl className="facts">
         <dt>auracode</dt>
@@ -71,7 +70,7 @@ export function InfoCard({
           ) : null}
         </Notices>
       ) : null}
-    </GlassPanel>
+    </section>
   );
 }
 

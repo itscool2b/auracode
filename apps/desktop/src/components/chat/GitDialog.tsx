@@ -108,6 +108,7 @@ export function GitDialog({
       .replace(/^-+|-+$/g, "") || "work",
   );
   const [message, setMessage] = useState(`Merge ${title || "isolated work"}`);
+  const [bringChanges, setBringChanges] = useState(false);
   const [revision, setRevision] = useState(0);
   const alive = useRef(false);
   const acting = useRef(false);
@@ -158,7 +159,7 @@ export function GitDialog({
   };
   const reviewIsolation = () =>
     run(async () => {
-      const value = await api.isolationPreview(chatId, { slug, bring_changes: false });
+      const value = await api.isolationPreview(chatId, { slug, bring_changes: bringChanges });
       if (alive.current) {
         setPreview({ type: "isolate", value });
         setResult(null);
@@ -297,6 +298,12 @@ export function GitDialog({
                 <dd>{preview.value.path}</dd>
                 <dt>Starting commit</dt>
                 <dd>{preview.value.source.head}</dd>
+                <dt>Working files</dt>
+                <dd>
+                  {preview.value.bring_changes
+                    ? "Copy reviewed changes as unstaged files"
+                    : "Start from the commit"}
+                </dd>
               </dl>
             ) : preview.type === "relocate" ? (
               <>
@@ -416,6 +423,20 @@ export function GitDialog({
                     onChange={(event) => setSlug(event.currentTarget.value)}
                     disabled={busy}
                   />
+                </label>
+                <label className="git-copy-option">
+                  <input
+                    type="checkbox"
+                    checked={bringChanges}
+                    onChange={(event) => setBringChanges(event.currentTarget.checked)}
+                    disabled={busy}
+                  />
+                  <span>
+                    Bring uncommitted changes
+                    <small>
+                      Copy your working files. Keep the source folder and its staged changes intact.
+                    </small>
+                  </span>
                 </label>
                 <button
                   type="button"

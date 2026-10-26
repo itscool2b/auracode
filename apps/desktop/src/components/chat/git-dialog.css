@@ -106,6 +106,24 @@
 .git-section .ui-field {
   margin-bottom: 12px;
 }
+.git-copy-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+.git-copy-option input {
+  accent-color: var(--o-ink);
+}
+.git-copy-option small {
+  display: block;
+  margin-top: 5px;
+  color: var(--o-text-3);
+  font-size: 11px;
+  line-height: 1.6;
+}
 .git-actions {
   display: flex;
   justify-content: flex-end;

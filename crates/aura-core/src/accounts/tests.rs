@@ -66,7 +66,12 @@ async fn opening_and_status_never_create_profile_or_contact_service() {
     assert_eq!(view.sync.state, AccountSyncState::Inactive);
     assert_eq!(*vault.writes.lock().unwrap(), 0);
     assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
-    assert_eq!(std::fs::metadata(dir.path().join("accounts.lock")).unwrap().len(), 0);
+    assert_eq!(
+        std::fs::metadata(dir.path().join("accounts.lock"))
+            .unwrap()
+            .len(),
+        0
+    );
     assert_eq!(
         accounts.local_profile().await.err().unwrap().code,
         AccountFailureCode::InvalidState

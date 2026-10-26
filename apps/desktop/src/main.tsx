@@ -3,6 +3,7 @@ import "./ui-tokens.css";
 import "./chat.css";
 import "./orbit-shell.css";
 import "./context-panel.css";
+import "./diagnostics.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
@@ -23,7 +24,15 @@ const container = document.getElementById("root");
 if (container) {
   if (import.meta.env.DEV && new URLSearchParams(location.search).has("preview")) {
     const mode = new URLSearchParams(location.search).get("preview");
-    if (mode === "git")
+    if (mode === "account")
+      void import("./dev/accountPreview").then(({ mountAccountPreview }) =>
+        mountAccountPreview(container),
+      );
+    else if (mode === "verification")
+      void import("./dev/verificationPreview").then(({ mountVerificationPreview }) =>
+        mountVerificationPreview(container),
+      );
+    else if (mode === "git")
       void import("./dev/gitPreview").then(({ mountGitPreview }) => mountGitPreview(container));
     else if (mode === "settings")
       void import("./dev/settingsPreview").then(({ mountSettingsPreview }) =>

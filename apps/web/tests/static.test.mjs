@@ -23,11 +23,17 @@ test("static CSP authorizes only the emitted inline framework scripts", async ()
   const headers = await readFile(new URL("_headers", root), "utf8");
   assert.match(headers, /frame-ancestors 'none'/);
   assert.doesNotMatch(headers, /script-src[^;]*'unsafe-inline'/);
+  assert.match(
+    headers,
+    /\/verify-device\n {2}! X-Frame-Options\n {2}Content-Security-Policy: frame-ancestors tauri:\/\/localhost http:\/\/tauri.localhost https:\/\/tauri.localhost/,
+  );
+  assert.ok(headers.split("\n").every((line) => line.length <= 2000));
   for (const path of [
     "",
     "download/",
     "signin/",
     "signup/",
+    "verify-device/",
     "account/",
     "privacy/",
     "terms/",

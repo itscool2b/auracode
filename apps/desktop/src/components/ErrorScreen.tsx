@@ -1,4 +1,4 @@
-import { GlassPanel, Orb } from "@auracode/ui";
+import { OrbitMark } from "@auracode/ui/orbit";
 import { DataPath, Notices } from "./InfoCard";
 
 /**
@@ -19,12 +19,15 @@ export function ErrorScreen({
   readonly notices?: readonly string[];
 }) {
   return (
-    <main className="relative flex h-full items-center justify-center p-10">
+    <main
+      className="diagnostics-shell orbit-theme relative flex h-full items-center justify-center p-10"
+      data-theme="dark"
+    >
       <div className="drag-strip" data-tauri-drag-region="" />
-      <GlassPanel elevation={2} squircle className="flex w-full max-w-[600px] flex-col gap-5 p-8">
-        <Orb brand="generic" state="error" size={56} label="auracode could not start" />
+      <section className="diagnostics-panel flex w-full max-w-[600px] flex-col gap-5 p-8">
+        <OrbitMark agent="generic" state="error" size={48} label="auracode could not start" />
         <div className="flex flex-col gap-3">
-          <h1 className="display m-0 text-[40px]">{title}</h1>
+          <h1 className="diagnostics-title">{title}</h1>
           <p role="alert" className="m-0 text-[15px] text-(--aura-text-1) select-text">
             {message}
           </p>
@@ -39,7 +42,7 @@ export function ErrorScreen({
         <p className="muted m-0 text-sm">
           Nothing was deleted. Fix the problem above, then quit and reopen auracode.
         </p>
-      </GlassPanel>
+      </section>
     </main>
   );
 }

@@ -989,3 +989,28 @@ dialog::backdrop {
     scroll-behavior: auto;
   }
 }
+
+body:has(.device-verification) {
+  min-height: 0;
+  background: #101010;
+}
+body:has(.device-verification) > :is(.nav, .footer, .skip) {
+  display: none;
+}
+.device-verification {
+  padding: 12px;
+  font-size: 12px;
+}
+.device-verification h1 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.device-verification .verification {
+  margin: 0;
+}
+.device-verification p {
+  margin: 8px 0;
+  line-height: 1.5;
+}

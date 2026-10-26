@@ -43,7 +43,7 @@ const api: GitWorkspaceApi = {
       source: structuredClone(workspace),
       branch: `aura/${input.slug}`,
       path: "C:/auracode/worktrees/owned-one",
-      bring_changes: false,
+      bring_changes: input.bring_changes,
       warnings: ["Uncommitted changes stay in the source folder."],
       expires_at: Date.now() + 600_000,
     };

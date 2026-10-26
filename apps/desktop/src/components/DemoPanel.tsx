@@ -1,4 +1,3 @@
-import { GlassPanel } from "@auracode/ui";
 import { useId, useState } from "react";
 import { errorMessage } from "../lib/errors";
 import { useStream } from "../lib/hooks";
@@ -37,7 +36,7 @@ export function DemoPanel({
   };
 
   return (
-    <GlassPanel elevation={1} squircle className="flex min-h-0 flex-col gap-4 p-5">
+    <section className="diagnostics-panel flex min-h-0 flex-col gap-4 p-5">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="panel-title m-0">Demo stream</h2>
         <span className="text-xs text-(--aura-text-3)" aria-live="polite">
@@ -107,6 +106,6 @@ export function DemoPanel({
       ) : (
         <Transcript snapshot={snapshot} className="min-h-0 flex-1" />
       )}
-    </GlassPanel>
+    </section>
   );
 }

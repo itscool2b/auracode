@@ -3,20 +3,15 @@ import {
   AGENT_BRANDS,
   type AgentBrandId,
   ORB_STATE_LABELS,
-  Orb,
   type OrbState,
 } from "@auracode/ui";
+import { OrbitMark } from "@auracode/ui/orbit";
 import { useId } from "react";
-import { FolderIcon, PlusIcon, SparkIcon } from "./icons";
-
-const NAV = [
-  { label: "Projects", icon: FolderIcon },
-  { label: "Agents", icon: SparkIcon },
-] as const;
+import { PlusIcon } from "./icons";
 
 /**
- * The slim sidebar of Diagnostics: wordmark, the way back to the chats, navigation (placeholders
- * until M2), and the demo agent's live orb. Its top strip is a window drag region, with room for
+ * The slim sidebar of Diagnostics: wordmark, the way back to chats, and the sample agent's live
+ * mark. Its top strip is a window drag region, with room for
  * the macOS traffic lights.
  */
 export function Sidebar({
@@ -47,26 +42,12 @@ export function Sidebar({
               Chats
             </button>
           </li>
-          {NAV.map(({ label, icon: Icon }) => (
-            <li key={label}>
-              <button
-                type="button"
-                className="nav-item"
-                aria-disabled="true"
-                title={`${label} arrives with the app shell in M2`}
-              >
-                <Icon />
-                {label}
-                <span className="soon">Soon</span>
-              </button>
-            </li>
-          ))}
         </ul>
       </nav>
       <div className="flex-1" data-tauri-drag-region="" />
       <div className="agent-chip">
-        <Orb
-          brand={brand}
+        <OrbitMark
+          agent={brand.id}
           state={orbState}
           size={40}
           label={`${brand.name} demo agent, ${ORB_STATE_LABELS[orbState]}`}

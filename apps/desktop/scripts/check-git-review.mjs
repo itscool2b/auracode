@@ -9,8 +9,10 @@ export async function checkGitReview(page, url, out, engine) {
   assert.equal(await isolate.isDisabled(), true);
   assert.deepEqual(await page.evaluate(() => window.gitFixture.calls()), []);
   await page.getByRole("button", { name: "Stop session", exact: true }).click();
+  await page.getByLabel("Bring uncommitted changes", { exact: false }).check();
   await isolate.click();
   await page.getByRole("heading", { name: "Review isolation" }).waitFor();
+  await page.getByText("Copy reviewed changes as unstaged files", { exact: true }).waitFor();
   assert.equal(
     await page.evaluate(() => window.gitFixture.calls().includes("apply-isolation")),
     false,

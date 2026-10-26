@@ -40,7 +40,7 @@
         "object-src": "'none'",
         "base-uri": "'none'",
         "form-action": "'none'",
-        "frame-src": "'none'"
+        "frame-src": "https://auracode.si/verify-device https://preview.auracode.si/verify-device"
       }
     }
   },
@@ -64,7 +64,7 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "One home for all your coding agents.",
-    "longDescription": "auracode drives the coding agents you already use (Claude Code, Codex, Pi, Antigravity, Cursor, Grok Build, OpenCode, Hermes and any ACP agent) through their real harnesses, in one fast, glassy chat interface.",
+    "longDescription": "auracode runs your coding agents through their own harnesses, with local chats, reviewed Git workspaces and encrypted account sync in one dark desktop interface.",
     "homepage": "https://auracode.si",
     "copyright": "Copyright 2026 itscool2b",
     "macOS": {

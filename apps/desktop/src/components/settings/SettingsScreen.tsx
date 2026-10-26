@@ -6,12 +6,14 @@ import { errorMessage } from "../../lib/errors";
 import { revealDataDir } from "../../lib/ipc";
 import { type SetupApi, setMotionPreference, setupApi } from "../../lib/setup";
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
+import { AccountPanel } from "./AccountPanel";
 import { UpdatePanel } from "./UpdatePanel";
 import "./settings.css";
 
-type Page = "general" | "shortcuts" | "about";
+type Page = "general" | "account" | "shortcuts" | "about";
 const TITLES: Record<Page, readonly [string, string]> = {
   general: ["General", "Your workspace. At your pace."],
+  account: ["Account", "Your work, across your devices."],
   shortcuts: ["Shortcuts", "Keep your hands on the keyboard."],
   about: ["About auracode", "One window for your agents."],
 };
@@ -165,6 +167,7 @@ export function SettingsScreen({
   info,
   onBack,
   onAgents,
+  onLibrary,
   onSetup,
   onDiagnostics,
   setup = setupApi,
@@ -174,6 +177,7 @@ export function SettingsScreen({
   readonly info: AppInfo;
   readonly onBack: () => void;
   readonly onAgents: () => void;
+  readonly onLibrary?: () => void;
   readonly onSetup: () => void;
   readonly onDiagnostics: () => void;
   readonly setup?: SetupApi;
@@ -225,7 +229,7 @@ export function SettingsScreen({
         </button>
         <h2>Settings</h2>
         <nav>
-          {(["general", "shortcuts", "about"] as const).map((value) => (
+          {(["general", "account", "shortcuts", "about"] as const).map((value) => (
             <button
               key={value}
               type="button"
@@ -241,6 +245,11 @@ export function SettingsScreen({
           <button type="button" onClick={onAgents}>
             Agents <ArrowUpRight size={13} />
           </button>
+          {onLibrary ? (
+            <button type="button" onClick={onLibrary}>
+              Library <ArrowUpRight size={13} />
+            </button>
+          ) : null}
         </nav>
         <div className="settings-identity">
           <OrbitMark agent="claude" size={25} />
@@ -260,6 +269,9 @@ export function SettingsScreen({
           </header>
           {page === "general" ? (
             <General info={info} api={setup} onSetup={onSetup} reveal={reveal} />
+          ) : null}
+          {page === "account" ? (
+            <AccountPanel deviceName={info.device?.name ?? "My computer"} />
           ) : null}
           {page === "shortcuts" ? (
             <section className="settings-section">

@@ -12,6 +12,7 @@ import type { AppInfo, StressConfig } from "./bindings";
 import { ChatsScreen } from "./components/chat/ChatsScreen";
 import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
+import { LibraryScreen } from "./components/library/LibraryScreen";
 import { Sidebar } from "./components/Sidebar";
 import { StressView } from "./components/StressView";
 import { SettingsScreen } from "./components/settings/SettingsScreen";
@@ -39,7 +40,7 @@ type Boot =
   | { readonly status: "failed"; readonly message: string };
 
 /** The chats (the default), the M0 home (the info card and the demo stream), or the stress view. */
-type View = "chats" | "diagnostics" | "stress" | "setup" | "agents" | "settings";
+type View = "chats" | "diagnostics" | "stress" | "setup" | "agents" | "settings" | "library";
 
 /**
  * Switching views ends the current stream: the shell stops it (so it does not keep streaming into
@@ -243,7 +244,7 @@ export function App({
   const activity = snapshot.phase === "idle" ? "idle" : activityOf(snapshot.stream);
   const orbState: OrbState = activity;
   const intensity: AuraIntensity = running && activity !== "idle" ? "active" : "calm";
-  const showAura = view === "diagnostics" || stressConfig.aura;
+  const showAura = view === "stress" && stressConfig.aura;
   // The field drifts only while something streams; idle, it holds still and costs nothing.
   const auraPaused = !running && view === "diagnostics";
 
@@ -273,10 +274,10 @@ export function App({
         }}
       />
     );
-  if (view === "chats" || view === "settings") {
+  if (view === "chats" || view === "settings" || view === "library") {
     return (
       <>
-        <div hidden={view === "settings"} style={{ height: "100%" }}>
+        <div hidden={view !== "chats"} style={{ height: "100%" }}>
           <ChatsScreen
             active={view === "chats"}
             workspace={workspace}
@@ -295,11 +296,23 @@ export function App({
             info={info}
             onBack={() => setView("chats")}
             onAgents={() => setView("agents")}
+            onLibrary={() => setView("library")}
             onDiagnostics={() => setView("diagnostics")}
             onSetup={() => {
               setRestartSetup(true);
               setView("setup");
             }}
+          />
+        ) : null}
+        {view === "library" ? (
+          <LibraryScreen
+            onBack={() => setView("settings")}
+            folders={workspace?.getSnapshot().data?.projects.flatMap((project) =>
+              project.folders.map((folder) => ({
+                id: folder.id,
+                label: `${project.name} / ${folder.display_name}`,
+              })),
+            )}
           />
         ) : null}
       </>
@@ -308,7 +321,11 @@ export function App({
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="app" style={brandCssVariables(brand) as CSSProperties}>
+      <div
+        className={`app orbit-theme ${view === "diagnostics" ? "diagnostics-shell" : ""}`}
+        data-theme="dark"
+        style={brandCssVariables(brand) as CSSProperties}
+      >
         <Sidebar
           brandId={brandId}
           onBrandChange={setBrandId}
