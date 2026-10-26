@@ -28,6 +28,73 @@ fn ready_path(availability: &Availability) -> PathBuf {
 }
 
 #[tokio::test]
+async fn cursor_never_probes_an_unrelated_agent_executable() {
+    let machine = Machine::with_tools(&["agent"]);
+    machine.version("agent", "Cursor 2026.10.22-27dcf5f");
+    let detector = machine.detector(machine.env(&[]));
+    assert!(matches!(
+        detector.detect(&spec("cursor")).await,
+        Availability::Missing { .. }
+    ));
+    assert!(machine.runs("agent").is_empty());
+}
+
+#[tokio::test]
+async fn vendor_acp_recipes_probe_only_versions_and_keep_transport_arguments() {
+    for (id, program, version, args) in [
+        ("cursor", "cursor-agent", "2026.10.22-27dcf5f", vec!["acp"]),
+        ("omp", "omp", "18.12.6", vec!["acp"]),
+        ("grok", "grok", "1.0.70", vec!["agent", "stdio"]),
+    ] {
+        let machine = Machine::with_tools(&[program]);
+        machine.version(program, version);
+        let detector = machine.detector(machine.env(&[]));
+        let agent = spec(id);
+        assert!(
+            matches!(detector.detect(&agent).await, Availability::Ready { version:Some(version), .. } if version.contains("unverified"))
+        );
+        let launch = detector.prepare_launch(&agent, progress()).await.unwrap();
+        assert_eq!(launch.program, machine.tool(program));
+        assert_eq!(launch.args, args);
+        assert!(launch.set_env.is_empty());
+        assert_eq!(machine.runs(program).len(), 1);
+        assert_eq!(
+            machine.runs(program)[0]["argv"],
+            serde_json::json!(["--version"])
+        );
+    }
+}
+
+#[tokio::test]
+async fn opencode_major_lines_and_omp_form_baseline_are_qualified_separately() {
+    for (version, accepted, rejected) in [
+        ("1.19.4", "opencode", "opencode-v2"),
+        ("2.1.4", "opencode-v2", "opencode"),
+    ] {
+        let machine = Machine::with_tools(&["opencode"]);
+        machine.version("opencode", version);
+        let detector = machine.detector(machine.env(&[]));
+        assert!(matches!(
+            detector.detect(&spec(accepted)).await,
+            Availability::Ready { .. }
+        ));
+        assert!(matches!(
+            detector.detect(&spec(rejected)).await,
+            Availability::Broken { .. }
+        ));
+    }
+    let machine = Machine::with_tools(&["omp"]);
+    machine.version("omp", "18.12.5");
+    assert!(matches!(
+        machine
+            .detector(machine.env(&[]))
+            .detect(&spec("omp"))
+            .await,
+        Availability::Broken { .. }
+    ));
+}
+
+#[tokio::test]
 async fn detect_missing_binary() {
     let machine = Machine::with_tools(&["node", "npm"]);
     let detector = machine.detector(machine.env(&[]));

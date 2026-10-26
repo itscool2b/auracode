@@ -36,6 +36,9 @@ impl NativeSessionScope {
         let (provider, config) = match agent_id {
             "claude" | "claude-acp" => ("claude", Some(("CLAUDE_CONFIG_DIR", ".claude"))),
             "codex" | "codex-acp" => ("codex", Some(("CODEX_HOME", ".codex"))),
+            "opencode" | "opencode-v2" => ("opencode", None),
+            "antigravity" | "agy-stream" => ("antigravity", None),
+            "grok" | "grok-stream" => ("grok", None),
             other => (other, None),
         };
         // Only configuration-path variables are consulted. Credential files and values are
@@ -331,7 +334,13 @@ mod tests {
 
     #[test]
     fn native_and_acp_aliases_share_claims_in_both_directions() {
-        for (native, acp) in [("claude", "claude-acp"), ("codex", "codex-acp")] {
+        for (native, acp) in [
+            ("claude", "claude-acp"),
+            ("codex", "codex-acp"),
+            ("opencode", "opencode-v2"),
+            ("antigravity", "agy-stream"),
+            ("grok", "grok-stream"),
+        ] {
             for (first, second) in [(native, acp), (acp, native)] {
                 let live = LiveAgents::new(12);
                 assert!(live.claim(&scope(first, "local", &[]), "s1", "a"));

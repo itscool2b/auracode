@@ -190,7 +190,8 @@ impl Live {
         };
         match &spec.recipe {
             Recipe::Builtin => Ok(launch::builtin(spec)),
-            Recipe::Binary { program, args, .. } => {
+            Recipe::Binary { program, args, .. }
+            | Recipe::QualifiedBinary { program, args, .. } => {
                 let located = located.ok_or_else(|| LaunchError::Missing {
                     reason: format!("{program} was not found on your PATH."),
                 })?;
@@ -727,10 +728,12 @@ fn entry(spec: &AgentSpec, availability: Availability, needs_download: bool) -> 
 /// How the agent starts, for display.
 fn launch_label(spec: &AgentSpec) -> String {
     match &spec.recipe {
-        Recipe::Binary { program, args, .. } => std::iter::once(*program)
-            .chain(args.iter().copied())
-            .collect::<Vec<_>>()
-            .join(" "),
+        Recipe::Binary { program, args, .. } | Recipe::QualifiedBinary { program, args, .. } => {
+            std::iter::once(*program)
+                .chain(args.iter().copied())
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
         Recipe::NativeBinary { user_binary, args } => std::iter::once(user_binary.program)
             .chain(args.iter().copied())
             .collect::<Vec<_>>()
@@ -820,10 +823,26 @@ mod tests {
         let ids: Vec<&str> = entries.iter().map(|entry| entry.id.as_str()).collect();
         assert_eq!(
             ids,
-            ["hermes", "claude", "claude-acp", "codex-acp", "pi", "mock"]
+            catalog().iter().map(|spec| spec.id).collect::<Vec<_>>()
         );
+        for entry in entries.iter().filter(|entry| {
+            matches!(
+                entry.id.as_str(),
+                "antigravity" | "cursor" | "grok" | "omp" | "opencode" | "opencode-v2"
+            )
+        }) {
+            assert!(
+                matches!(&entry.availability, Availability::Missing { reason } if reason.contains("official"))
+            );
+        }
         let reasons: Vec<Availability> = entries
             .iter()
+            .filter(|entry| {
+                matches!(
+                    entry.id.as_str(),
+                    "hermes" | "claude" | "claude-acp" | "codex-acp" | "pi" | "mock"
+                )
+            })
             .map(|entry| entry.availability.clone())
             .collect();
         assert_eq!(
@@ -879,7 +898,8 @@ mod tests {
             detector.detect(&hermes).await,
             Availability::Missing { .. }
         ));
-        assert!(detector.spec("cursor").is_none());
+        assert!(detector.spec("cursor").is_some());
+        assert!(detector.spec("agent").is_none());
         detector.forget_install(&claude());
         assert_eq!(detector.forgotten(), ["claude-acp"]);
     }
