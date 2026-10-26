@@ -1589,3 +1589,12 @@ The merge, apply and desktop integration remain in progress.
   attempted. A harmless local-process no-polling deadline regression is included for integration.
   No real installer, sign-in, model prompt, credentials, push or CI dispatch was run. Clone remains
   the next authorized implementation step, not complete.
+
+### M9 snapshot and merge foundation
+
+Configuration snapshots now carry validated provider-relative identities and explicit tombstones.
+The pure merge preserves first-link additions, merges independent setting keys and text edits with
+`diffy`, and leaves overlaps or edit/delete races unresolved for user review. It never writes conflict
+markers. Missing heads and unavailable items wait. File, tree, field, scope and payload validation
+reject unsafe paths, trust/credential fields and future schemas. Canonical encoding binds content to
+its exact item. Thirteen focused Rust regressions pass; scanner, reviewed apply and UI are pending.

@@ -6,6 +6,12 @@ use std::{future::Future, pin::Pin};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+mod merge;
+mod snapshot;
+
+pub use merge::{ConfigDecision, ConfigOperation, LocalSnapshot, merge};
+pub use snapshot::{ConfigContent, ConfigFile, ConfigFormat, ConfigIdentity, ConfigSnapshot};
+
 /// A single item snapshot fits below the authenticated cloud blob plaintext limit. Larger bundles
 /// stay explicitly skipped rather than being interpreted as a deleted item.
 pub const MAX_SNAPSHOT_BYTES: usize = 3 * 1024 * 1024;

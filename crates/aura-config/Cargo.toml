@@ -21,6 +21,7 @@ toml_edit = { version = "0.25.17", features = ["serde"] }
 uuid.workspace = true
 url = "2.5.8"
 zeroize = "1.9.1"
+diffy = "0.5.2"
 
 [dev-dependencies]
 tempfile.workspace = true
