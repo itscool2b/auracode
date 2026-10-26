@@ -20,6 +20,7 @@ import {
   pressEnter,
   readFullTranscript,
   readTranscript,
+  revealTranscriptItem,
   type SegmentShape,
   type SegmentView,
   StepError,
@@ -1021,18 +1022,24 @@ function toolOutput(prompt: string): HTMLElement | null {
 
 /** Pages in `/big`'s whole output with Load full output; returns how many characters show. */
 async function loadFullOutput(prompt: string): Promise<number> {
+  const tool = await revealTranscriptItem(prompt, "tool");
+  const disclosure = one("tool-output", tool);
+  if (disclosure instanceof HTMLDetailsElement && !disclosure.open)
+    click(disclosure.querySelector("summary"), "the tool output");
   const content = toolOutput(prompt);
   if (content === null) throw new StepError(`the turn for "${prompt}" shows no tool output`);
   if (attr(content, "truncated") !== "true") throw new StepError("the big output arrived whole");
   const cut = text(one("tool-text", content)).length;
   if (cut >= BIG_OUTPUT_CHARS) throw new StepError(`the cut output shows ${cut} characters`);
   click(one("load-full-output", content), "Load full output");
-  return waitFor(`all ${BIG_OUTPUT_CHARS} characters of the big output`, () => {
+  const length = await waitFor(`all ${BIG_OUTPUT_CHARS} characters of the big output`, () => {
     const shown = toolOutput(prompt);
     if (shown === null) return null;
     const length = text(one("tool-text", shown)).length;
     return length === BIG_OUTPUT_CHARS && one("load-full-output", shown) === null ? length : null;
   });
+  one("jump-latest")?.click();
+  return length;
 }
 
 // ---------- chat_reopen: the same data folder after the quit ----------

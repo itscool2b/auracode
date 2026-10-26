@@ -1,6 +1,6 @@
 /** Development-only visual harness. It never starts a process or uses the native transport. */
 import { useOrbitTheme } from "@auracode/ui/orbit";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import fullAuto from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-full-auto.events.json";
 import thinking from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-thinking.events.json";
@@ -52,6 +52,38 @@ function recorded(source: { events: readonly { type: string; data: unknown }[] }
 }
 
 function synthetic(mode: string): AuraEvent[] {
+  if (mode === "focus-group")
+    return [
+      ev.turnStarted("focus-group"),
+      ev.user("focus-user", "Keep the focused output available."),
+      ev.toolCall("focus-first", {
+        status: "in_progress",
+        title: "Read the first file",
+        content: [{ type: "text", text: "First output", truncated: null }],
+      }),
+    ];
+  if (mode === "long-output")
+    return [
+      ev.turnStarted("long-output"),
+      ev.user("long-output-user", "Run the checks."),
+      ev.toolCall("long-output-tool", {
+        kind: "execute",
+        title: "Run cargo test",
+        status: "failed",
+        content: [
+          {
+            type: "terminal",
+            output: Array.from(
+              { length: 100 },
+              (_, index) => `Check ${index + 1}: ${index === 99 ? "failed" : "passed"}`,
+            ).join("\n"),
+            exit_code: 1,
+            truncated: null,
+          },
+        ],
+      }),
+      ev.turnEnded("long-output"),
+    ];
   if (mode === "diff")
     return [
       ev.turnStarted("diff-turn"),
@@ -223,6 +255,8 @@ function Preview() {
     "partial-message",
     "large-turn",
     "long-prompt",
+    "long-output",
+    "focus-group",
     "diff",
     "recorded-thinking",
     "recorded-tools",
@@ -233,7 +267,10 @@ function Preview() {
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
   const [selected, setSelected] = useState<string | null>(mode === "new" ? null : "preview");
   const status: SessionStatus =
-    mode === "thinking" || mode === "permission" || mode === "history-question"
+    mode === "thinking" ||
+    mode === "permission" ||
+    mode === "history-question" ||
+    mode === "focus-group"
       ? "running"
       : mode === "error"
         ? "failed"
@@ -250,6 +287,28 @@ function Preview() {
       }),
     [mode, status],
   );
+  const publishPreview = useRef<((updates: AuraEvent[]) => void) | null>(null);
+  useEffect(() => {
+    if (mode !== "focus-group") return;
+    const step = (event: Event) => {
+      if ((event as CustomEvent).detail === "add")
+        publishPreview.current?.([
+          ev.toolCall("focus-second", {
+            status: "in_progress",
+            title: "Read the second file",
+            content: [{ type: "text", text: "Second output", truncated: null }],
+          }),
+        ]);
+      else if ((event as CustomEvent).detail === "finish")
+        publishPreview.current?.([
+          ev.toolUpdate("focus-first", { status: "completed" }),
+          ev.toolUpdate("focus-second", { status: "completed" }),
+          ev.turnEnded("focus-group"),
+        ]);
+    };
+    window.addEventListener("auracode-preview-tool-step", step);
+    return () => window.removeEventListener("auracode-preview-tool-step", step);
+  }, [mode]);
   const transport = useMemo(() => {
     const events =
       mode === "recorded-thinking"
@@ -273,6 +332,7 @@ function Preview() {
       receive?.(frame("preview", seq, updates));
       seq += updates.length;
     };
+    publishPreview.current = publish;
     return new FakeTransport({
       attach: async (chatId, onFrame) => {
         receive = onFrame;

@@ -1,5 +1,13 @@
 import { OrbitMark } from "@auracode/ui/orbit";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { chatActivity, hasLiveLine } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
 import { type RenderedItem, renderCache } from "../../lib/chat/transcript";
@@ -30,6 +38,7 @@ export function Transcript({
   const [render] = useState(renderCache);
   const [disclosures] = useState<DisclosureChoices>(() => new Map());
   const [groups, setGroups] = useState<DisclosureChoices>(() => new Map());
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const segments = useMemo(() => render(state.transcript, live), [render, state.transcript, live]);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef<StickToBottom | null>(null);
@@ -62,6 +71,8 @@ export function Transcript({
               : "Working"
             : null;
   const rows: TranscriptRow[] = [];
+  let focusedGroupKey: string | null = null;
+  let focusedGroupPhase = "";
   let leading: ReactNode = null;
   if (state.hasMore || first?.partial || state.skipped > 0)
     leading = (
@@ -102,10 +113,12 @@ export function Transcript({
     );
   for (const segment of segments) {
     const active = status === "running" && segment === last && segment.end === null;
+    let prompt: TranscriptRow["prompt"];
     const addItem = (index: number, item: RenderedItem, grouped = false) =>
       rows.push({
         key: JSON.stringify([segment.key, item.key]),
         estimate: item.kind === "message" ? 200 : item.kind === "user" ? 70 : 48,
+        prompt,
         retain:
           (item.kind === "question" || item.kind === "permission") &&
           item.resolution === null &&
@@ -126,6 +139,8 @@ export function Transcript({
     for (let index = 0; index < segment.items.length; index++) {
       const item = segment.items[index];
       if (!item) continue;
+      if (item.kind === "user")
+        prompt = { key: JSON.stringify([segment.key, item.key]), text: item.text };
       const tools: Extract<RenderedItem, { kind: "tool" }>[] = [];
       if (item.kind === "tool") {
         for (let next = index; next < segment.items.length; next++) {
@@ -146,10 +161,19 @@ export function Transcript({
           ? "running"
           : "settled";
       const choice = groups.get(key);
-      const expanded = choice?.phase === phase ? choice.open : failed;
+      const ownsFocus = tools.some(
+        (tool) => JSON.stringify([segment.key, tool.key]) === focusedKey,
+      );
+      if (ownsFocus) {
+        focusedGroupKey = key;
+        focusedGroupPhase = phase;
+      }
+      const expanded =
+        ownsFocus || (choice?.phase === phase || choice?.open === true ? choice.open : failed);
       rows.push({
         key,
         estimate: 32,
+        prompt,
         content: (
           <ToolGroup
             tools={tools}
@@ -176,6 +200,7 @@ export function Transcript({
       rows.push({
         key: JSON.stringify([segment.key, "footer"]),
         estimate: 50,
+        prompt,
         content: (
           <TurnView
             segment={segment}
@@ -211,6 +236,17 @@ export function Transcript({
       estimate: 100,
       content: <p className="chat-centered">Nothing here yet. Send a message to start.</p>,
     });
+  useLayoutEffect(() => {
+    if (focusedGroupKey === null) return;
+    const key = focusedGroupKey;
+    // A new group may form around a focused call. Keep it open when focus moves to its header,
+    // so the header does not collapse before the user's subsequent click can toggle it.
+    setGroups((current) =>
+      current.get(key)?.open === true
+        ? current
+        : new Map(current).set(key, { phase: focusedGroupPhase, open: true }),
+    );
+  }, [focusedGroupKey, focusedGroupPhase]);
   return (
     <div className="chat-transcript-shell">
       <div
@@ -231,6 +267,8 @@ export function Transcript({
             historyRevision={state.historyRevision}
             historyError={state.earlierError}
             captureHistory={captureHistory}
+            focusedKey={focusedKey}
+            onFocusKey={setFocusedKey}
           />
         </DisclosureMemory.Provider>
       </div>

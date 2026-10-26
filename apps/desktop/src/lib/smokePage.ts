@@ -283,26 +283,57 @@ export function readTranscript(within: ParentNode = document): SegmentView[] {
   });
 }
 
+async function paintTranscript(): Promise<void> {
+  await new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+}
+
+/** Finds an actionable item by walking the loaded history, including offscreen virtual rows. */
+export async function revealTranscriptItem(prompt: string, kind: string): Promise<HTMLElement> {
+  const transcript = one("transcript");
+  if (!transcript) throw new StepError("the transcript is not on the page");
+  const find = () =>
+    readTranscript()
+      .find((turn) => turn.prompt === prompt)
+      ?.views.find((view) => view.kind === kind)?.element;
+  transcript.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
+  transcript.scrollTop = 0;
+  for (let page = 0; page < 1000; page++) {
+    await paintTranscript();
+    const closed = all("tool-group", transcript).filter(
+      (node) => node.getAttribute("aria-expanded") === "false",
+    );
+    for (const group of closed) group.click();
+    if (closed.length) await paintTranscript();
+    const item = find();
+    if (item) {
+      item.scrollIntoView({ block: "center" });
+      await paintTranscript();
+      const shown = find();
+      if (shown) return shown;
+    }
+    if (transcript.scrollTop + transcript.clientHeight >= transcript.scrollHeight - 2) break;
+    transcript.scrollTop += Math.max(100, transcript.clientHeight * 0.7);
+  }
+  throw new StepError(`the loaded history for "${prompt}" shows no ${kind}`);
+}
+
 /** Walks the real scroll surface and opens groups before reading a complete DOM snapshot. */
 export async function readFullTranscript(): Promise<SegmentView[]> {
   const transcript = one("transcript");
   if (!transcript) return [];
   const pieces = new Map<string, { index: number; element: HTMLElement }>();
-  const paint = async () => {
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
-  };
   // A reader scroll, so incoming content cannot drag the sweep back to the bottom.
   transcript.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
   transcript.scrollTop = 0;
   for (let page = 0; page < 1000; page++) {
-    await paint();
+    await paintTranscript();
     const closed = all("tool-group", transcript).filter(
       (node) => node.getAttribute("aria-expanded") === "false",
     );
     for (const group of closed) group.click();
-    if (closed.length) await paint();
+    if (closed.length) await paintTranscript();
     for (const row of transcript.querySelectorAll<HTMLElement>("[data-row-key]")) {
       const key = row.dataset.rowKey;
       if (key)
@@ -323,7 +354,7 @@ export async function readFullTranscript(): Promise<SegmentView[]> {
     content.append(piece.element);
   snapshot.append(content);
   one("jump-latest")?.click();
-  await paint();
+  await paintTranscript();
   return readTranscript(snapshot);
 }
 /** A segment in one line, to compare with what a script expects and to show when they differ. */

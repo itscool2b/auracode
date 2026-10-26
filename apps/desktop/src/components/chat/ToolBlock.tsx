@@ -1,10 +1,26 @@
 import { CopyButton, OrbitMark } from "@auracode/ui/orbit";
+import {
+  ArrowRightLeft,
+  Brain,
+  FileMinus,
+  FilePenLine,
+  FileText,
+  Globe,
+  Search,
+  SlidersHorizontal,
+  Square,
+  SquareTerminal,
+  Wrench,
+  X,
+} from "lucide-react";
+import { useState } from "react";
 import type { ToolContent, ToolLocation, Truncation } from "../../bindings";
 import type { BlobState } from "../../lib/chat/chatStore";
 import type { ToolDisplayStatus, ToolItem } from "../../lib/chat/transcript";
 import { formatCount } from "../../lib/format";
 import { DiffBlock } from "./DiffBlock";
 import { useDisclosure } from "./DisclosureMemory";
+import { TerminalOutput } from "./TerminalOutput";
 
 /** What a block needs to page a truncated output in through `chat_blob`. */
 export interface BlobProps {
@@ -20,6 +36,19 @@ const STATUS_LABEL: Record<ToolDisplayStatus, string> = {
   stopped: "Stopped",
 };
 
+const TOOL_ICON = {
+  read: FileText,
+  edit: FilePenLine,
+  delete: FileMinus,
+  move: ArrowRightLeft,
+  search: Search,
+  execute: SquareTerminal,
+  think: Brain,
+  fetch: Globe,
+  switch_mode: SlidersHorizontal,
+  other: Wrench,
+} as const;
+
 /** A tool call: title, kind, status and locations, with its output below. */
 export function ToolBlock({
   tool,
@@ -33,7 +62,10 @@ export function ToolBlock({
   readonly agentId?: string;
 } & BlobProps) {
   const running = display === "pending" || display === "in_progress";
+  const Icon = display === "failed" ? X : display === "stopped" ? Square : TOOL_ICON[tool.toolKind];
   const [expanded, setExpanded] = useDisclosure(tool.key, display, running || display === "failed");
+  const [outputFocused, setOutputFocused] = useState(false);
+  const open = expanded || outputFocused;
   return (
     <div
       className="chat-tool"
@@ -42,12 +74,18 @@ export function ToolBlock({
       data-test-kind="tool"
       data-test-tool-kind={tool.toolKind}
       data-test-status={display}
+      onFocusCapture={(event) =>
+        setOutputFocused((event.target as Element).closest("summary") === null)
+      }
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOutputFocused(false);
+      }}
     >
       <details
         data-testid="tool-output"
-        open={expanded}
+        open={open}
         onToggle={(event) => {
-          if (event.currentTarget.open !== expanded) setExpanded(event.currentTarget.open);
+          if (event.currentTarget.open !== open) setExpanded(event.currentTarget.open);
         }}
       >
         <summary className="chat-tool-head">
@@ -60,7 +98,7 @@ export function ToolBlock({
             />
           ) : (
             <span className="chat-tool-icon" aria-hidden="true">
-              {display === "failed" ? "×" : tool.toolKind === "execute" ? "$" : "›"}
+              <Icon size={14} strokeWidth={1.5} />
             </span>
           )}
           <span className="chat-block-title">{tool.title || tool.toolName || "Tool"}</span>
@@ -79,6 +117,7 @@ export function ToolBlock({
                   key={index}
                   content={content}
                   disclosureKey={`${tool.key}:${index}`}
+                  running={running}
                   blobs={blobs}
                   onLoadBlob={onLoadBlob}
                 />
@@ -157,9 +196,14 @@ function unkeptBytes(truncation: Truncation | null, blob: BlobState | undefined)
 export function ToolContentView({
   content,
   disclosureKey = "output",
+  running = false,
   blobs,
   onLoadBlob,
-}: { readonly content: ToolContent; readonly disclosureKey?: string } & BlobProps) {
+}: {
+  readonly content: ToolContent;
+  readonly disclosureKey?: string;
+  readonly running?: boolean;
+} & BlobProps) {
   const blob = content.truncated?.blob ? blobs.get(content.truncated.blob) : undefined;
   switch (content.type) {
     case "text": {
@@ -204,19 +248,21 @@ export function ToolContentView({
           data-test-type="terminal"
           data-test-truncated={String(content.truncated !== null)}
         >
-          {head === null || between === 0 ? (
-            <pre className="ui-pre">{(head ?? "") + tail}</pre>
-          ) : (
-            <>
-              <pre className="ui-pre">{head}</pre>
-              <p className="chat-marker">
-                {blob?.eof
-                  ? `${formatCount(between)} bytes in between weren't kept (an output keeps its first 64 MiB). The end of the output:`
-                  : `${formatCount(between)} bytes not loaded yet. The end of the output:`}
-              </p>
-              <pre className="ui-pre">{tail}</pre>
-            </>
-          )}
+          <TerminalOutput text={visible} running={running} disclosureKey={disclosureKey}>
+            {head === null || between === 0 ? (
+              <pre className="ui-pre">{(head ?? "") + tail}</pre>
+            ) : (
+              <>
+                <pre className="ui-pre">{head}</pre>
+                <p className="chat-marker">
+                  {blob?.eof
+                    ? `${formatCount(between)} bytes in between weren't kept (an output keeps its first 64 MiB). The end of the output:`
+                    : `${formatCount(between)} bytes not loaded yet. The end of the output:`}
+                </p>
+                <pre className="ui-pre">{tail}</pre>
+              </>
+            )}
+          </TerminalOutput>
           {content.exit_code !== null ? (
             <span className="ui-muted ui-mono">exit {content.exit_code}</span>
           ) : null}

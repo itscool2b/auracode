@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   captureReadingAnchor,
   type ReadingAnchor,
@@ -19,6 +20,7 @@ export interface TranscriptRow {
   readonly content: ReactNode;
   readonly estimate: number;
   readonly retain?: boolean;
+  readonly prompt?: { readonly key: string; readonly text: string };
 }
 
 /** Stable row keys retain measured heights and the reading anchor as older history is prepended. */
@@ -30,6 +32,8 @@ export function VirtualRows({
   historyRevision,
   historyError,
   captureHistory,
+  focusedKey,
+  onFocusKey,
 }: {
   readonly rows: readonly TranscriptRow[];
   readonly leading?: ReactNode;
@@ -38,10 +42,11 @@ export function VirtualRows({
   readonly historyRevision: number;
   readonly historyError: string | null;
   readonly captureHistory: RefObject<(() => void) | null>;
+  readonly focusedKey: string | null;
+  readonly onFocusKey: (key: string | null) => void;
 }) {
   const reading = useRef<{ anchor: ReadingAnchor; revision: number } | null>(null);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [leadingHeight, setLeadingHeight] = useState(0);
   const leadingRef = useCallback((node: HTMLDivElement | null) => {
     if (!node) return;
@@ -85,6 +90,11 @@ export function VirtualRows({
   virtual.shouldAdjustScrollPositionOnItemSizeChange =
     reading.current && reading.current.revision !== historyRevision ? () => false : undefined;
   const total = virtual.getTotalSize();
+  const visibleItems = virtual.getVirtualItems();
+  const firstVisible = visibleItems.find((item) => item.end > (virtual.scrollOffset ?? 0) + 1);
+  const prompt = firstVisible && rows[firstVisible.index]?.prompt;
+  const promptIndex = prompt ? rows.findIndex((row) => row.key === prompt.key) : -1;
+  const showPrompt = prompt && promptIndex >= 0 && firstVisible && promptIndex < firstVisible.index;
   useLayoutEffect(() => {
     if (historyError !== null) reading.current = null;
     captureHistory.current = () => {
@@ -148,20 +158,20 @@ export function VirtualRows({
       </div>
     );
   }
-  return (
+  const content = (
     <div
       className="chat-transcript-inner chat-virtual"
       style={{ height: total }}
       data-testid="virtual-transcript"
       data-row-count={rows.length}
       onFocusCapture={(event) =>
-        setFocusedKey(
+        onFocusKey(
           (event.target as HTMLElement).closest<HTMLElement>("[data-row-key]")?.dataset.rowKey ??
             null,
         )
       }
       onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setFocusedKey(null);
+        if (!event.currentTarget.contains(event.relatedTarget)) onFocusKey(null);
       }}
     >
       {leading ? (
@@ -169,7 +179,7 @@ export function VirtualRows({
           {leading}
         </div>
       ) : null}
-      {virtual.getVirtualItems().map((item) => {
+      {visibleItems.map((item) => {
         const row = rows[item.index];
         if (!row) return null;
         return (
@@ -186,5 +196,31 @@ export function VirtualRows({
         );
       })}
     </div>
+  );
+  const shell = scroller.current?.parentElement;
+  return (
+    <>
+      {content}
+      {showPrompt && shell
+        ? createPortal(
+            <button
+              type="button"
+              className="chat-sticky-prompt"
+              data-testid="sticky-prompt"
+              title={prompt.text}
+              aria-label={`Return to prompt: ${prompt.text}`}
+              onClick={() => {
+                scroller.current?.focus({ preventScroll: true });
+                stick.current?.release();
+                virtual.scrollToIndex(promptIndex, { align: "start" });
+              }}
+            >
+              <span aria-hidden="true">↑</span>
+              <span>{prompt.text}</span>
+            </button>,
+            shell,
+          )
+        : null}
+    </>
   );
 }

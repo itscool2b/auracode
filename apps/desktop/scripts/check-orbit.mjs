@@ -195,6 +195,63 @@ async function inspect(engine, launcher) {
     );
     await page.getByRole("button", { name: "Show less", exact: true }).click();
 
+    await page.goto(`${url}/?preview=long-output`);
+    const output = page.getByTestId("terminal-output");
+    await output.waitFor();
+    await page.waitForTimeout(100);
+    assert.ok(
+      await output.evaluate((node) => node.scrollHeight - node.scrollTop - node.clientHeight < 2),
+      "folded output did not show its end",
+    );
+    assert.ok((await output.boundingBox()).height <= 216, "folded output exceeded twelve lines");
+    await page.getByRole("button", { name: "Show all 100 loaded lines", exact: true }).click();
+    assert.equal(
+      await output.evaluate((node) => node.scrollTop),
+      0,
+      "expanded output did not show its start",
+    );
+    await page.getByRole("button", { name: "Copy output", exact: true }).click();
+    assert.match(
+      await page.evaluate(() => window.__copiedText),
+      /^Check 1: passed[\s\S]+Check 100: failed$/,
+    );
+    await page.getByRole("button", { name: "Show recent lines", exact: true }).click();
+    assert.ok(
+      await output.evaluate((node) => node.scrollHeight - node.scrollTop - node.clientHeight < 2),
+      "refolded output lost its end",
+    );
+
+    await page.goto(`${url}/?preview=focus-group`);
+    const firstCopy = page.getByRole("button", { name: "Copy output", exact: true }).first();
+    await firstCopy.focus();
+    await page.evaluate(() =>
+      window.dispatchEvent(new CustomEvent("auracode-preview-tool-step", { detail: "add" })),
+    );
+    await page.getByTestId("tool-group").waitFor();
+    assert.ok(
+      await firstCopy.evaluate((node) => document.activeElement === node),
+      "forming a group removed the focused output",
+    );
+    assert.equal(await page.getByTestId("tool-group").getAttribute("aria-expanded"), "true");
+    await page.getByTestId("tool-group").click();
+    await page.getByTestId("tool-group").click();
+    await firstCopy.focus();
+    await page.evaluate(() =>
+      window.dispatchEvent(new CustomEvent("auracode-preview-tool-step", { detail: "finish" })),
+    );
+    await page.waitForTimeout(100);
+    assert.ok(
+      await firstCopy.evaluate((node) => document.activeElement === node),
+      "finishing a group removed the focused output",
+    );
+    assert.equal(await firstCopy.isVisible(), true, "finishing a tool hid its focused button");
+    await page.getByTestId("composer-input").focus();
+    assert.equal(
+      await page.getByTestId("tool-group").getAttribute("aria-expanded"),
+      "true",
+      "finishing erased the user's group disclosure choice",
+    );
+
     await page.goto(`${url}/?preview=history`);
     await page.locator('[data-test-phase="live"]').waitFor();
     await page.waitForTimeout(700);
@@ -255,6 +312,17 @@ async function inspect(engine, launcher) {
       beforePrepend && afterPrepend && Math.abs(beforePrepend.y - afterPrepend.y) < 3,
       "loading earlier history moved the text being read",
     );
+    await transcript.evaluate((node) => {
+      node.scrollTop = 0;
+    });
+    await page.locator('[data-test-turn-id="history-0"]').first().waitFor();
+    const revealed = await page.evaluate(async () => {
+      const { revealTranscriptItem } = await import("/src/lib/smokePage.ts");
+      const item = await revealTranscriptItem("Review file 21.", "message");
+      return { connected: item.isConnected, text: item.textContent };
+    });
+    assert.equal(revealed.connected, true, "older-item reveal returned a detached snapshot");
+    assert.match(revealed.text ?? "", /Review 21:/);
     await transcript.evaluate((node) => {
       node.scrollTop = 0;
     });
@@ -345,6 +413,24 @@ async function inspect(engine, launcher) {
       await thought.getAttribute("open"),
       null,
       "thought disclosure choice was forgotten",
+    );
+    await page.getByTestId("transcript").evaluate((node) => {
+      node.scrollTop = node.scrollHeight / 2;
+    });
+    const stickyPrompt = page.getByTestId("sticky-prompt");
+    await stickyPrompt.waitFor();
+    await stickyPrompt.focus();
+    await page.keyboard.press("Enter");
+    await stickyPrompt.waitFor({ state: "detached" });
+    const promptBounds = await page.locator('[data-test-kind="user"]').boundingBox();
+    const transcriptBounds = await page.getByTestId("transcript").boundingBox();
+    assert.ok(
+      promptBounds && transcriptBounds && Math.abs(promptBounds.y - transcriptBounds.y) < 3,
+      "sticky prompt did not return to its original message",
+    );
+    assert.ok(
+      await page.getByTestId("transcript").evaluate((node) => document.activeElement === node),
+      "returning to prompt lost keyboard focus",
     );
 
     for (const mode of ["partial-history", "partial-message"]) {

@@ -19,6 +19,7 @@
     "@auracode/ui": "workspace:*",
     "@tanstack/react-virtual": "3.14.22",
     "@tauri-apps/api": "2.12.4",
+    "lucide-react": "1.55.0",
     "motion": "14.6.0",
     "react": "19.3.1",
     "react-dom": "19.3.1"

@@ -462,6 +462,56 @@
     min-height: 0;
   }
 
+  .chat-sticky-prompt {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    left: 50%;
+    translate: -50% 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    width: min(720px, calc(100% - 32px));
+    padding: 0 14px;
+    border-radius: 0 0 12px 12px;
+    background: var(--o-user-bg);
+    color: var(--o-user-fg);
+    font-size: 12px;
+    text-align: left;
+    animation: prompt-peek 220ms ease-out;
+  }
+  .chat-sticky-prompt span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chat-sticky-prompt::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    height: 24px;
+    pointer-events: none;
+    background: linear-gradient(var(--o-pane), transparent);
+  }
+  @keyframes prompt-peek {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .chat-sticky-prompt {
+      animation: none;
+    }
+  }
+
   .chat-latest {
     position: absolute;
     bottom: 12px;
@@ -648,6 +698,11 @@
     font: 11px var(--ui-font-mono);
     white-space: nowrap;
   }
+  .chat-tool-group-summary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   .chat-tool-group-result[data-failed="true"] {
     color: var(--o-red);
@@ -681,6 +736,36 @@
     overflow: auto;
     padding-left: 10px;
     border-left: 1px solid var(--o-rule);
+  }
+
+  .chat-terminal-body {
+    max-height: 420px;
+    overflow: auto;
+  }
+  .chat-terminal-body .ui-pre {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 12px;
+    line-height: 18px;
+    max-height: none;
+    overflow: visible;
+    white-space: pre;
+  }
+  .chat-terminal[data-folded="true"] .chat-terminal-body {
+    max-height: 216px;
+    overflow-y: hidden;
+    mask-image: linear-gradient(transparent, black 18px);
+  }
+  .chat-terminal[data-folded="true"][data-running="true"] .chat-terminal-body {
+    max-height: 108px;
+  }
+  .chat-terminal-expand {
+    margin-top: 6px;
+    color: var(--o-text-2);
+    font-size: 12px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
   .chat-output-actions,
