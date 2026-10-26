@@ -49,6 +49,7 @@ function agent(
     needs_download: false,
     last_verified: "",
     installation: null,
+    latest_release: null,
     ...extra,
   };
 }

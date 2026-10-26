@@ -118,6 +118,15 @@ pub enum AgentAuthStatus {
     Unsupported,
 }
 
+/// Public release metadata. Stale cached data remains visible during offline use.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct LatestRelease {
+    pub version: Option<String>,
+    pub source: String,
+    pub checked_at: Option<crate::Millis>,
+    pub stale: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

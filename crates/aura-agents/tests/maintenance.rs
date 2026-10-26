@@ -35,8 +35,12 @@ async fn status_runs_the_exact_vendor_command_and_drops_account_details() {
 #[tokio::test]
 async fn vendor_update_serializes_aliases_and_rechecks_the_resulting_installation() {
     let (machine, bin) = vendor_machine();
+    machine.install_tool(&machine.bin, "node");
+    machine.install_tool(&machine.bin, "npm");
     std::fs::write(machine.fake.join("claude.maintenance"), "slow").unwrap();
-    let detector = machine.detector(machine.env_with_path(&[&bin], &[]));
+    let detector = machine.detector(machine.env_with_path(&[&bin, &machine.bin], &[]));
+    let alias = aura_agents::get("claude-acp").unwrap();
+    detector.detect(alias).await;
     let worker = std::sync::Arc::clone(&detector);
     let update = tokio::spawn(async move { worker.update("claude").await });
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
@@ -61,6 +65,10 @@ async fn vendor_update_serializes_aliases_and_rechecks_the_resulting_installatio
         .find(|entry| entry.id == "claude")
         .unwrap();
     assert_eq!(entry.installation.unwrap().version, "2.1.310");
+    // An alias's completed probe must not survive the update's cache invalidation.
+    let before = machine.runs("claude").len();
+    detector.detect(alias).await;
+    assert!(machine.runs("claude").len() > before);
     std::fs::write(machine.fake.join("claude.maintenance"), "break-version").unwrap();
     assert_eq!(
         detector.update("claude").await,

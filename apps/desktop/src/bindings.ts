@@ -163,6 +163,7 @@ export type AgentEntry = {
 	last_verified: string,
 	/**  Present only after a successful version probe of the user's installation. */
 	installation?: AgentInstallation | null,
+	latest_release?: LatestRelease | null,
 };
 
 /**  Where the user's agent runs. Unknown future hosts must never fall back to a local launch. */
@@ -565,6 +566,14 @@ export type HistoryPage = {
 
 /**  How the installed binary is managed. Unknown and bundled installations cannot be updated here. */
 export type InstallChannel = { type: "vendor_standalone" } | { type: "npm"; package: string } | { type: "homebrew"; formula: string } | { type: "bundled"; application: string } | { type: "unknown" };
+
+/**  Public release metadata. Stale cached data remains visible during offline use. */
+export type LatestRelease = {
+	version: string | null,
+	source: string,
+	checked_at: number | null,
+	stale: boolean,
+};
 
 /**
  *  What the UI should open into. Smoke mode wins over the stress view, since it is the one that

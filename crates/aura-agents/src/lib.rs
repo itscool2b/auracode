@@ -22,6 +22,7 @@ pub mod installation;
 mod launch;
 pub mod maintenance;
 mod probe;
+pub mod releases;
 mod shared;
 
 use std::time::Duration;

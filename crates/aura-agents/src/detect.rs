@@ -69,6 +69,8 @@ struct Live {
 
 #[derive(Default)]
 struct LiveState {
+    release_checks_enabled: bool,
+    releases: HashMap<String, aura_protocol::agents::LatestRelease>,
     maintenance: HashSet<String>,
     minimum_generation: HashMap<String, u64>,
     /// Each agent's latest detection, with the generation of the probe that made it.
@@ -84,7 +86,11 @@ struct MaintenanceGuard {
 }
 impl Drop for MaintenanceGuard {
     fn drop(&mut self) {
-        lock(&self.live.state).maintenance.remove(&self.provider);
+        let mut state = lock(&self.live.state);
+        state.maintenance.remove(&self.provider);
+        state
+            .probes
+            .retain(|id, _| crate::installation::provider_namespace(id) != self.provider);
     }
 }
 
@@ -195,6 +201,7 @@ impl Live {
             Some(detection) => {
                 let mut entry = entry(spec, detection.availability, detection.needs_download);
                 entry.installation = detection.installation;
+                entry.latest_release = lock(&self.state).releases.get(spec.id).cloned();
                 entry
             }
             None => entry(spec, Availability::Checking, false),
@@ -578,6 +585,57 @@ impl Fixed {
 }
 
 impl Detector {
+    /// Desktop opt-in at real startup. Fixed detectors and test machines never start network work.
+    /// Release checks are independent of launch readiness and never install anything.
+    pub fn enable_release_checks(&self, cache_path: PathBuf) {
+        let Mode::Live(live) = &self.mode else {
+            return;
+        };
+        let Ok(cache) = crate::releases::ReleaseCache::new(cache_path) else {
+            return;
+        };
+        {
+            let mut state = lock(&live.state);
+            if state.release_checks_enabled {
+                return;
+            }
+            state.release_checks_enabled = true;
+        }
+        let weak = Arc::downgrade(live);
+        live.rt.spawn(async move {
+            cache.load().await;
+            loop {
+                {
+                    let Some(live) = weak.upgrade() else {
+                        break;
+                    };
+                    live.detect_every(false).await;
+                    let installations: Vec<_> = lock(&live.state)
+                        .results
+                        .iter()
+                        .filter_map(|(id, (_, detection))| {
+                            Some((id.clone(), detection.installation.clone()?))
+                        })
+                        .collect();
+                    for (id, installation) in installations {
+                        let Some(source) =
+                            crate::releases::ReleaseSource::for_installation(&installation)
+                        else {
+                            continue;
+                        };
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_or(0, |time| {
+                                i64::try_from(time.as_millis()).unwrap_or(i64::MAX)
+                            });
+                        let latest = cache.refresh(&source, now).await;
+                        lock(&live.state).releases.insert(id, latest);
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(15 * 60)).await;
+            }
+        });
+    }
     /// Runs the vendor's local status command and retains only a coarse status, never account data.
     pub async fn auth_status(&self, id: &str) -> aura_protocol::agents::AgentAuthStatus {
         use aura_protocol::agents::AgentAuthStatus;
@@ -649,6 +707,9 @@ impl Detector {
             state.minimum_generation.insert(provider.clone(), floor);
             state
                 .results
+                .retain(|id, _| crate::installation::provider_namespace(id) != provider);
+            state
+                .probes
                 .retain(|id, _| crate::installation::provider_namespace(id) != provider);
         }
         let output = maintenance::run(command, env, &live.registry, crate::INSTALL_TIMEOUT).await?;
@@ -838,6 +899,7 @@ fn entry(spec: &AgentSpec, availability: Availability, needs_download: bool) -> 
         needs_download,
         last_verified: spec.last_verified.to_owned(),
         installation: None,
+        latest_release: None,
     }
 }
 

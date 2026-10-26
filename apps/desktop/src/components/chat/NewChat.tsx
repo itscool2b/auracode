@@ -139,6 +139,12 @@ export function NewChat({
         {selected?.installation ? (
           <InstallationStatus installation={selected.installation} />
         ) : null}
+        {selected?.latest_release?.version ? (
+          <small className="ui-muted">
+            Latest on {selected.latest_release.source}: {selected.latest_release.version}
+            {selected.latest_release.stale ? " (cached; refresh unavailable)" : null}
+          </small>
+        ) : null}
         {note !== null ? <span>{note}</span> : null}
       </div>
       {unavailable.length > 0 ? (

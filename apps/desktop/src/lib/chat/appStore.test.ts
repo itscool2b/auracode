@@ -22,6 +22,7 @@ function agent(id: string, availability: AgentEntry["availability"]): AgentEntry
     needs_download: false,
     last_verified: "",
     installation: null,
+    latest_release: null,
   };
 }
 

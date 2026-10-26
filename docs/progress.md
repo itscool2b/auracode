@@ -273,6 +273,17 @@ The auth contracts are from [Claude's CLI reference](https://code.claude.com/doc
 installed CLI help, and [Codex 0.162.1 login source](https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/cli/src/login.rs).
 Corrected M1c head `887ad12` passed full [Linux/Windows CI](https://github.com/itscool2b/auracode/actions/runs/40281970244).
 
+M1e now checks reviewed public npm, GitHub and Homebrew release endpoints in the background on real
+desktop startup, refreshing successful checks after six hours. Bounded HTTPS responses, ETags and
+auracode's own disk cache retain a clearly stale version when offline. Bundled installs continue to
+defer updates to their owning application; release metadata never controls readiness or runs an
+installer. The protocol and generated bindings expose latest-release metadata for the catalog UI.
+The 37 agent unit tests, two maintenance integration tests, release cache cases, binding export,
+desktop typecheck and 287 desktop tests pass locally. The update test also verifies that completed
+alias probes cannot survive a vendor update. Remote catalog CI still needs the inherited M1d catalog
+assertion and spike-documentation fixes; WSL supervision, host persistence and milestone acceptance
+remain pending. No real authentication flow, update or paid prompt was run.
+
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
   no-form plan auto-approval path and exposes only its enforceable Full auto autonomy. See

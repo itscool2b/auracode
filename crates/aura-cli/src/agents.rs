@@ -97,6 +97,7 @@ mod tests {
             needs_download,
             last_verified: "1.0.0".into(),
             installation: None,
+            latest_release: None,
         };
         let lines = render(
             &env,

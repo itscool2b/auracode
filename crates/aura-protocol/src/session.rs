@@ -225,6 +225,8 @@ pub struct AgentEntry {
     /// Present only after a successful version probe of the user's installation.
     #[serde(default)]
     pub installation: Option<crate::agents::AgentInstallation>,
+    #[serde(default)]
+    pub latest_release: Option<crate::agents::LatestRelease>,
 }
 
 /// Whether an agent can start here.
@@ -525,6 +527,7 @@ mod tests {
             needs_download: false,
             last_verified: "auracode".into(),
             installation: None,
+            latest_release: None,
         };
         assert_eq!(round_trip(&entry), entry);
         let env = EnvStatus {
