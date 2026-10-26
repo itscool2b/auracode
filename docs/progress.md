@@ -242,6 +242,11 @@ with a notice, as ACP callbacks already do. Pure regressions cover escaped text,
 limits and aggregate size; a fake-wire regression requires cancellation without a partial question
 and verifies the next supported dialog remains answerable. Execution awaits branch CI because
 ordinary local Cargo is still blocked by Application Control.
+Combined CI `40288849525` passed all 401 driver tests on Linux, including Pi's dialog fidelity
+regressions. The Linux test step found an existing notification-test subscription race: its
+script emitted before the recording sink attached, so the event could already belong to initial
+history. The test now injects its notification after attachment, preserving its actual notification
+and autonomy assertions. Final combined CI and real-agent qualification remain pending.
 
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its

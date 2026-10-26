@@ -498,15 +498,6 @@ async fn two_subscribers() {
 async fn notifications_are_never_open_and_a_refused_autonomy_asks() {
     let (driver, handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
-        Step::Emit(DriverEvent::UiRequest {
-            turn: None,
-            request: UiRequest {
-                request_id: "n".into(),
-                prompt: UiPrompt::Notify {
-                    message: "FYI".into(),
-                },
-            },
-        }),
         Step::Expect(CommandMatch::SetAutonomy),
         Step::Hang,
     ]);
@@ -522,6 +513,16 @@ async fn notifications_are_never_open_and_a_refused_autonomy_asks() {
         .attach(&chat.id, sink.clone())
         .await
         .expect("attach");
+    // The sink only receives live events after attach. Do not race the initial history snapshot.
+    handle.emit(DriverEvent::UiRequest {
+        turn: None,
+        request: UiRequest {
+            request_id: "n".into(),
+            prompt: UiPrompt::Notify {
+                message: "FYI".into(),
+            },
+        },
+    });
     sink.wait_for("the notification", |event| {
         matches!(event, AuraEvent::UiRequest(_))
     })
