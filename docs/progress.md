@@ -912,3 +912,16 @@ explicitly typed for transitions after stopping. Both changes join the combined 
   assumption and four stale screen assertions. These untouched root-owned tests remain pending.
   M3 remains pending reviewed new-agent installation, native window/drop/terminal acceptance, final
   globe-to-dock polish and enabled account/clone flows. Details and sources: docs/onboarding.md.
+## M7 client foundation
+
+The isolated `aura-sync` crate now implements versioned XChaCha20-Poly1305 record/blob encryption,
+X25519 + HKDF-SHA256 device key wrapping, independent recovery encryption/authentication derivation,
+and a public-key-bound approval code. The exact byte conventions are in `docs/sync-crypto-v1.md`.
+Record AAD includes routing identity, merge clock and deletion state; key envelopes bind account,
+device, version and both public keys. Secrets use zeroizing containers and redacted Debug output.
+Six focused local tests and all-target Clippy pass, including a synthetic deterministic wire vector,
+cross-account/device/record substitution, malformed lengths, non-contributory keys and tampering.
+This is the crypto foundation only. API transport, secure local key persistence, account profiles,
+SQLCipher migration, sync scheduling/merging, approved config adapters, device UI and cross-platform
+acceptance remain pending. No cloud mutation, account login, credential inspection or real config
+read/write was performed.

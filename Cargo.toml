@@ -24,6 +24,7 @@ aura-process = { path = "crates/aura-process" }
 aura-agents = { path = "crates/aura-agents" }
 aura-core = { path = "crates/aura-core" }
 aura-drivers = { path = "crates/aura-drivers" }
+aura-sync = { path = "crates/aura-sync" }
 
 # async + errors + logging
 # `signal`: the desktop's quit flow listens for SIGTERM, SIGINT and SIGHUP.
