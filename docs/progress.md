@@ -429,6 +429,11 @@ Pi's synthetic replay evidence now includes thinking with a tool round trip and 
 extension confirmation. The semantic checks require deduplicated text and reasoning, one native
 tool lifecycle with final output, turn token totals and dialog withdrawal before the cancelled
 turn. These fixtures derive from the pinned public wire types; they are not real-agent recordings.
+Combined Windows CI `40285702748` passed Clippy, all new Pi/Headless/CLI behavior regressions,
+bindings and desktop smokes. Its full test step exposed two stale catalog assumptions: the CLI
+missing-agent count and Grok's single-probe count despite ACP/fallback aliases. Those assertions
+now derive the catalog size and verify every observed invocation is a version check. Final combined
+CI, the expanded replay fixtures and real-agent qualification remain pending.
 
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
