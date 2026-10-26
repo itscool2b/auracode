@@ -1633,3 +1633,11 @@ failures cannot establish deletion. Empty settings containers never create overl
 Aggregate discovery and each snapshot are bounded. All nine discovery and thirteen merge regressions
 pass using temporary synthetic files. No real agent configuration was inspected or changed. Reviewed
 application, secret-free MCP extraction and desktop orchestration remain pending.
+### Owned cleanup confirmation retry (2026-10-26)
+
+- Independent clone review identified that ProcessControl::shutdown deliberately shares its first
+  report forever, including an unconfirmed result. Added retry_unconfirmed_shutdown as an explicit
+  recovery seam: it joins pending or confirmed chains and replaces only a completed unconfirmed
+  chain. Ordinary shutdown retains its original idempotent behavior.
+- Passed all three focused control tests, including real Shared-future pending/unknown/leftover/
+  confirmed states, plus all-target aura-process Clippy. No native or vendor processes were run.

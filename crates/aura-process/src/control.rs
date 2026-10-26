@@ -40,6 +40,11 @@ pub trait ControlImpl: Send + Sync + 'static {
     fn kill_tree(&self);
     /// The shutdown chain. Idempotent and shared: a second call joins the first chain.
     fn shutdown(&self, plan: ShutdownPlan) -> BoxFuture<'static, ShutdownReport>;
+    /// Explicit cleanup recovery. Ordinary shutdown remains idempotent; implementations may
+    /// retry a completed chain that could not confirm exit without replacing an in-flight one.
+    fn retry_unconfirmed_shutdown(&self, plan: ShutdownPlan) -> BoxFuture<'static, ShutdownReport> {
+        self.shutdown(plan)
+    }
     /// The direct child's exit on every OS: never a job-wide or group-wide wait.
     fn exited(&self) -> BoxFuture<'static, ExitInfo>;
     fn try_exited(&self) -> Option<ExitInfo>;
@@ -89,6 +94,13 @@ impl ProcessControl {
     /// See [`ControlImpl::shutdown`].
     pub fn shutdown(&self, plan: ShutdownPlan) -> BoxFuture<'static, ShutdownReport> {
         self.imp().shutdown(plan)
+    }
+
+    pub fn retry_unconfirmed_shutdown(
+        &self,
+        plan: ShutdownPlan,
+    ) -> BoxFuture<'static, ShutdownReport> {
+        self.imp().retry_unconfirmed_shutdown(plan)
     }
 
     pub fn exited(&self) -> BoxFuture<'static, ExitInfo> {
@@ -150,6 +162,16 @@ impl ExitInfo {
             signal: None,
             at_ms: now_millis(),
         }
+    }
+}
+
+fn invalidate_unconfirmed(chain: &mut Option<Shared<BoxFuture<'static, ShutdownReport>>>) {
+    if chain
+        .as_ref()
+        .and_then(Shared::peek)
+        .is_some_and(|report| report.exit.is_none() || !report.leftovers.is_empty())
+    {
+        *chain = None;
     }
 }
 
@@ -345,6 +367,11 @@ impl ControlImpl for ChildControl {
         self.state.exited_now()
     }
 
+    fn retry_unconfirmed_shutdown(&self, plan: ShutdownPlan) -> BoxFuture<'static, ShutdownReport> {
+        invalidate_unconfirmed(&mut lock(&self.state.chain));
+        self.shutdown(plan)
+    }
+
     fn record_escaped(&self) -> BoxFuture<'static, ()> {
         crate::shutdown::record_escaped(Arc::clone(&self.state))
     }
@@ -444,6 +471,50 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn retry_releases_only_completed_unconfirmed_chains() {
+        let pending = futures::future::pending::<ShutdownReport>()
+            .boxed()
+            .shared();
+        let mut chain = Some(pending);
+        invalidate_unconfirmed(&mut chain);
+        assert!(chain.is_some(), "an in-flight chain must still be shared");
+        let failed = futures::future::ready(ShutdownReport::default())
+            .boxed()
+            .shared();
+        failed.clone().await;
+        chain = Some(failed);
+        invalidate_unconfirmed(&mut chain);
+        assert!(
+            chain.is_none(),
+            "unknown exit cannot be a permanent cached confirmation"
+        );
+        let confirmed = ShutdownReport {
+            exit: Some(ExitInfo {
+                code: Some(0),
+                signal: None,
+                at_ms: 0,
+            }),
+            ..Default::default()
+        };
+        let complete = futures::future::ready(confirmed.clone()).boxed().shared();
+        complete.clone().await;
+        chain = Some(complete);
+        invalidate_unconfirmed(&mut chain);
+        assert_eq!(chain.as_ref().and_then(Shared::peek), Some(&confirmed));
+        let leftovers = ShutdownReport {
+            leftovers: vec![123],
+            ..confirmed
+        };
+        let incomplete = futures::future::ready(leftovers).boxed().shared();
+        incomplete.clone().await;
+        chain = Some(incomplete);
+        invalidate_unconfirmed(&mut chain);
+        assert!(
+            chain.is_none(),
+            "a leader exit does not prove descendant cleanup"
+        );
+    }
     use std::sync::atomic::{AtomicU32, Ordering};
 
     use super::*;
