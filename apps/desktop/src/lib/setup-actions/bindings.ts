@@ -11,3 +11,29 @@ export type AgentInstallReview = {
 	timeout_seconds: number,
 	notices: string[],
 };
+
+export type CloneInput = {
+	remote: string,
+	parent: string,
+	name: string,
+};
+
+export type CloneRecord = {
+	id: string,
+	remote: string,
+	parent: string,
+	destination: string,
+	journal: string,
+	state: CloneState,
+	detail: string,
+};
+
+export type CloneReview = {
+	id: string,
+	remote: string,
+	parent: string,
+	destination: string,
+	notices: string[],
+};
+
+export type CloneState = "running" | "ready" | "canceled" | "failed" | "interrupted" | "cleanup_pending";

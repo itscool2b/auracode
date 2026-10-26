@@ -1693,3 +1693,14 @@ Setup settings now expose typed read/save, preview/apply and guarded terminal-st
 Command start is a separate explicit action. The owned PTY keeps folder and actor reservations through shutdown, even if IPC or the window disappears. A ten-minute command deadline stops only the owned tree. Unconfirmed cleanup retains reservations and returns a recovery error. Command-only previews support rerunning installation without recopying existing files. Windows requires a native executable or an explicitly selected interpreter with arguments; shell shims are never silently expanded. No actual vendor, installation, network clone or paid agent command was executed during development.
 
 Verification: six focused setup and terminal regressions passed on Windows. The storage run passed 73 tests; its one stale foreign-key-count assertion was updated for the new table and then passed separately. Core and desktop all-target Clippy passed with warnings denied, rustfmt and mirrored-instruction checks passed. The desktop TypeScript exporter compiled but Windows Application Control blocked its test executable with OS error 4551 before execution. Generated bindings remain unchanged pending the final integration export. macOS setup execution and the complete M4 product acceptance remain pending.
+
+### Integrated setup and profile admission
+
+The ordinary Windows native build and exact desktop command export now pass with the combined
+installer, clone, worktree setup and Account profile commands. The pure setup DTO export also passes.
+An integration review found and closed a clone-start gap: its native profile admission now stays owned
+through asynchronous reservation, execution and cleanup. Profile publication cancels stale clone
+reviews; worktree startup retains admission through terminal ownership. Boot subscribes to profile
+publication before reading initial state, avoiding a lost startup-unlock event. Integrated Clippy is
+pending because Windows Application Control blocked darling_macro loading with error 4551. No policy
+change, artifact rename or alternate execution was attempted.

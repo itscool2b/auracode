@@ -85,8 +85,8 @@ pub async fn worktree_setup_start(
         .validate()
         .map_err(|_| TerminalError::Resize)?;
     let ticket = state.terminals.claim(webview.label(), &terminal_id)?;
-    let plan = state
-        .sessions()?
+    let admission = state.sessions()?;
+    let plan = admission
         .prepare_worktree_setup_terminal(&chat_id, &token)
         .await?;
     if !state.pages.for_view(webview.label()).is_current() {

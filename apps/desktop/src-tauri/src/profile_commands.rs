@@ -118,6 +118,9 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
         if let Some(library) = app.try_state::<Arc<crate::config_library::LibraryService>>() {
             library.reset_profile();
         }
+        if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
+            clones.cancel_all();
+        }
         crate::native_shell::profile_changed(&app);
         let _ = app.emit(PROFILE_CHANGED, &result);
         Ok(result)

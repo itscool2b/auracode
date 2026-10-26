@@ -26,6 +26,7 @@ import { useStream } from "./lib/hooks";
 import { getAppInfo, inTauri, sendSmokeReport, windowReady } from "./lib/ipc";
 import { subscribeNativeNavigation } from "./lib/nativeNavigation";
 import { LATE_NOTICE_CHECKS_MS, withLateNotices } from "./lib/notices";
+import { installProfileEvents } from "./lib/profiles";
 import { afterPaint, whenPainted } from "./lib/ready";
 import { isRunning, type StreamStore } from "./lib/session";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
@@ -105,21 +106,23 @@ export function App({
       return;
     }
     let live = true;
-    getAppInfo().then(
-      (info) => {
-        if (!live) return;
-        if (info.launch.type === "stress") {
-          setStressConfig(info.launch.config);
-          setStressAutoStart(true);
-          setView("stress");
-        }
-        if (info.launch.type === "smoke") setView("chats");
-        setBoot({ status: "ready", info });
-      },
-      (error: unknown) => {
-        if (live) setBoot({ status: "failed", message: errorMessage(error) });
-      },
-    );
+    installProfileEvents()
+      .then(() => getAppInfo())
+      .then(
+        (info) => {
+          if (!live) return;
+          if (info.launch.type === "stress") {
+            setStressConfig(info.launch.config);
+            setStressAutoStart(true);
+            setView("stress");
+          }
+          if (info.launch.type === "smoke") setView("chats");
+          setBoot({ status: "ready", info });
+        },
+        (error: unknown) => {
+          if (live) setBoot({ status: "failed", message: errorMessage(error) });
+        },
+      );
     const timers = LATE_NOTICE_CHECKS_MS.map((delay) =>
       setTimeout(() => {
         getAppInfo().then(

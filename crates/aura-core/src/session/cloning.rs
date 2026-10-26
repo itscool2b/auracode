@@ -24,6 +24,7 @@ impl SessionManager {
         owner: &str,
         id: &str,
         registry: Arc<LeftoverRegistry>,
+        admission: Box<dyn Send + Sync>,
     ) -> Result<CloneRecord, SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
@@ -32,6 +33,9 @@ impl SessionManager {
         let view = job.snapshot();
         let manager = self.clone();
         self.deps().rt.spawn(async move {
+            // Native profile admission lives through reservation acquisition, execution and
+            // cleanup. Starting the task must not leave a gap in which its dataset can switch.
+            let _admission = admission;
             let folders = vec![
                 prepared.parent.clone(),
                 PathBuf::from(&prepared.view.destination),

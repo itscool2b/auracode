@@ -95,6 +95,14 @@ export const commands = {
 	agentUpdate: (agentId: string) => typedError<null, AppError>(__TAURI_INVOKE("agent_update", { agentId })),
 	terminalReserve: () => typedError<string, AppError>(__TAURI_INVOKE("terminal_reserve")),
 	agentLoginStart: (terminalId: string, agentId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_login_start", { terminalId, agentId, rows, cols })),
+	agentInstallReview: (agentId: string) => typedError<AgentInstallReview, AppError>(__TAURI_INVOKE("agent_install_review", { agentId })),
+	agentInstallStart: (terminalId: string, agentId: string, revision: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_install_start", { terminalId, agentId, revision, rows, cols })),
+	cloneReview: (input: CloneInput) => typedError<CloneReview, AppError>(__TAURI_INVOKE("clone_review", { input })),
+	cloneCancelReview: (id: string) => __TAURI_INVOKE<void>("clone_cancel_review", { id }),
+	cloneStart: (id: string) => typedError<CloneRecord, AppError>(__TAURI_INVOKE("clone_start", { id })),
+	cloneCancel: (id: string) => __TAURI_INVOKE<void>("clone_cancel", { id }),
+	cloneStatus: (id: string) => typedError<CloneRecord, AppError>(__TAURI_INVOKE("clone_status", { id })),
+	cloneHistory: (parent: string) => typedError<CloneRecord[], AppError>(__TAURI_INVOKE("clone_history", { parent })),
 	terminalRead: (terminalId: string) => typedError<TerminalChunk, AppError>(__TAURI_INVOKE("terminal_read", { terminalId })),
 	terminalWrite: (terminalId: string, bytes: number[]) => typedError<null, AppError>(__TAURI_INVOKE("terminal_write", { terminalId, bytes })),
 	terminalResize: (terminalId: string, rows: number, cols: number) => typedError<null, AppError>(__TAURI_INVOKE("terminal_resize", { terminalId, rows, cols })),
@@ -130,6 +138,12 @@ export const commands = {
 	chatChangeDiff: (chatId: string, checkpointId: string, path: string) => typedError<ChangeDiff, AppError>(__TAURI_INVOKE("chat_change_diff", { chatId, checkpointId, path })),
 	checkpointRevertPreview: (chatId: string, checkpointId: string, paths: string[]) => typedError<RevertPreview, AppError>(__TAURI_INVOKE("checkpoint_revert_preview", { chatId, checkpointId, paths })),
 	checkpointRevert: (chatId: string, token: string) => typedError<RevertResult, AppError>(__TAURI_INVOKE("checkpoint_revert", { chatId, token })),
+	worktreeSetup: (chatId: string) => typedError<WorktreeSetup, AppError>(__TAURI_INVOKE("worktree_setup", { chatId })),
+	worktreeSetupSave: (chatId: string, input: WorktreeSetupInput) => typedError<WorktreeSetup, AppError>(__TAURI_INVOKE("worktree_setup_save", { chatId, input })),
+	worktreeSetupPreview: (chatId: string, worktreeId: string) => typedError<WorktreeSetupPreview, AppError>(__TAURI_INVOKE("worktree_setup_preview", { chatId, worktreeId })),
+	worktreeSetupCommandPreview: (chatId: string, worktreeId: string) => typedError<WorktreeSetupPreview, AppError>(__TAURI_INVOKE("worktree_setup_command_preview", { chatId, worktreeId })),
+	worktreeSetupApply: (chatId: string, token: string) => typedError<WorktreeSetupResult, AppError>(__TAURI_INVOKE("worktree_setup_apply", { chatId, token })),
+	worktreeSetupStart: (chatId: string, token: string, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("worktree_setup_start", { chatId, token, terminalId, rows, cols })),
 	gitWorkspace: (chatId: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_workspace", { chatId })),
 	managedWorktrees: (chatId: string) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("managed_worktrees", { chatId })),
 	isolationPreview: (chatId: string, input: IsolationInput) => typedError<IsolationPreview, AppError>(__TAURI_INVOKE("isolation_preview", { chatId, input })),
@@ -320,6 +334,18 @@ export type AgentEntry = {
 
 /**  Where the user's agent runs. Unknown future hosts must never fall back to a local launch. */
 export type AgentHost = { type: "native" } | { type: "wsl"; distro: string } | { type: "unsupported" };
+
+export type AgentInstallReview = {
+	agent_id: string,
+	package: string,
+	version: string,
+	program: string,
+	arguments: string[],
+	working_directory: string,
+	revision: string,
+	timeout_seconds: number,
+	notices: string[],
+};
 
 /**  A successful version probe of one installation. `launch_path` remains the stable user entry. */
 export type AgentInstallation = {
@@ -660,6 +686,32 @@ export type CheckpointSummary = {
 	/**  Exclusions and limits are visible. Excluded paths are never removed by a revert. */
 	warnings: string[],
 };
+
+export type CloneInput = {
+	remote: string,
+	parent: string,
+	name: string,
+};
+
+export type CloneRecord = {
+	id: string,
+	remote: string,
+	parent: string,
+	destination: string,
+	journal: string,
+	state: CloneState,
+	detail: string,
+};
+
+export type CloneReview = {
+	id: string,
+	remote: string,
+	parent: string,
+	destination: string,
+	notices: string[],
+};
+
+export type CloneState = "running" | "ready" | "canceled" | "failed" | "interrupted" | "cleanup_pending";
 
 export type ComposerAttachment = {
 	id: string,
@@ -1320,6 +1372,16 @@ export type SessionStatus =
 
 export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" };
 
+export type SetupCommand = {
+	program: string,
+	args: string[],
+};
+
+export type SetupFile = {
+	path: string,
+	bytes: number,
+};
+
 export type SetupPreferences = {
 	revision: number,
 	step: SetupStep,
@@ -1672,6 +1734,33 @@ export type WorktreeRelocationPreview = {
 	handoff: string,
 	warnings: string[],
 	expires_at: number,
+};
+
+export type WorktreeSetup = {
+	source: string,
+	input: WorktreeSetupInput,
+};
+
+export type WorktreeSetupInput = {
+	files: string[],
+	command: SetupCommand | null,
+};
+
+export type WorktreeSetupPreview = {
+	token: string,
+	worktree_id: string,
+	source: string,
+	destination: string,
+	files: SetupFile[],
+	command: SetupCommand | null,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type WorktreeSetupResult = {
+	copied: string[],
+	command_token: string | null,
+	warning: string | null,
 };
 
 export type WorktreeState = "creating" | "ready" | "merging" | "retiring" | "restoring" | "recovery_required" | "missing" | "retired" | string;

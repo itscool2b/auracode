@@ -63,17 +63,20 @@ pub fn clone_start(
     id: String,
 ) -> Result<CloneRecord, AppError> {
     current(&webview, &state)?;
+    let admission = state.sessions()?;
+    let manager = (*admission).clone();
     let chats = state.chats().ok_or_else(|| {
         AppError::new(
             AppErrorCode::SessionNotReady,
             "The local workspace is unavailable.",
         )
     })?;
-    Ok(state.sessions()?.clone_start(
+    Ok(manager.clone_start(
         &service,
         webview.label(),
         &id,
         Arc::clone(&chats.registry),
+        Box::new(admission),
     )?)
 }
 #[tauri::command]
@@ -97,6 +100,6 @@ pub async fn clone_history(
     service: State<'_, Arc<Clones>>,
     parent: String,
 ) -> Result<Vec<CloneRecord>, AppError> {
-    state.sessions()?;
+    let _admission = state.sessions()?;
     service.history(PathBuf::from(parent)).await.map_err(error)
 }

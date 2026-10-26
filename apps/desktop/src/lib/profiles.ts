@@ -48,14 +48,18 @@ function setBusy(busy: boolean): void {
 }
 
 /** Install before boot. Native publication also covers account-key restoration at startup. */
-export function installProfileEvents(): void {
-  if (!inTauri()) return;
-  void listen<AppInfo>("profile-changed", () => {
+let eventReady: Promise<void> | null = null;
+export function installProfileEvents(): Promise<void> {
+  if (!inTauri()) return Promise.resolve();
+  eventReady ??= listen<AppInfo>("profile-changed", () => {
     setBusy(true);
     reload();
-  }).catch(() => {
-    // Explicit activation still reloads from its successful response.
-  });
+  })
+    .then(() => {})
+    .catch(() => {
+      // Explicit activation still reloads from its successful response.
+    });
+  return eventReady;
 }
 
 export async function switchProfile(profileId?: string): Promise<void> {
