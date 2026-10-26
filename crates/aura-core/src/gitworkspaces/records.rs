@@ -20,7 +20,12 @@ impl GitWorkspaces {
         }
         let bytes = std::fs::read(&path)?;
         let records:Records=serde_json::from_slice(&bytes).map_err(|_|GitError::Message("The worktree registry is damaged. Its contents were retained; use Git to inspect existing worktrees.".into()))?;
-        if records.version != 1 {
+        if !(1..=2).contains(&records.version)
+            || records
+                .entries
+                .iter()
+                .any(|entry| entry.state == WorktreeState::Unknown)
+        {
             return Err(GitError::Message(
                 "This worktree registry belongs to a newer app version.".into(),
             ));
@@ -37,7 +42,7 @@ impl GitWorkspaces {
         crate::fsutil::write_json_atomic(
             &self.root.join("registry.json"),
             &Records {
-                version: 1,
+                version: 2,
                 entries,
             },
         )?;

@@ -48,6 +48,7 @@ pub enum WorktreeState {
     Ready,
     Merging,
     Retiring,
+    Restoring,
     RecoveryRequired,
     Missing,
     Retired,
@@ -65,7 +66,43 @@ pub struct ManagedWorktree {
     pub base_commit: String,
     pub state: WorktreeState,
     pub detail: Option<String>,
+    #[serde(default)]
+    pub recovery: Option<WorktreeRecovery>,
     pub created_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum WorktreeRecovery {
+    Create,
+    Retire,
+    Restore,
+    Merge {
+        branch: String,
+        before_ref: String,
+        prepared_ref: String,
+        before_commit: String,
+        prepared_commit: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum WorktreeRecoveryAction {
+    Reconcile,
+    Restore,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeRecoveryPreview {
+    pub token: String,
+    pub worktree: ManagedWorktree,
+    pub action: WorktreeRecoveryAction,
+    pub folder: GitWorkspace,
+    pub target: Option<GitWorkspace>,
+    pub destination: String,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]

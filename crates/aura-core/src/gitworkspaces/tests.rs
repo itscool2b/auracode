@@ -390,6 +390,227 @@ async fn post_merge_verification_rejects_a_branch_switch_or_new_index_change() {
 }
 
 #[tokio::test]
+async fn retired_worktree_restore_preserves_files_and_reconciles_an_interrupted_move() {
+    use aura_protocol::git::{WorktreeAction, WorktreeRecovery, WorktreeRecoveryAction};
+    let rig = rig().await;
+    let original = isolated(&rig).await;
+    std::fs::write(
+        Path::new(&original.path).join("private.local"),
+        b"retain bytes\r\n",
+    )
+    .expect("local bytes");
+    std::fs::write(rig.work.join(".git/info/exclude"), "private.local\n").expect("owned ignore");
+    let discard = rig
+        .service
+        .action_preview("chat", &original.id, WorktreeAction::Discard)
+        .await
+        .expect("discard");
+    let retired = rig
+        .service
+        .action_apply("chat", &discard.token)
+        .await
+        .expect("retire")
+        .worktree;
+    let mut interrupted = original.clone();
+    interrupted.state = WorktreeState::Retiring;
+    interrupted.recovery = Some(WorktreeRecovery::Retire);
+    rig.service
+        .save_record(&interrupted)
+        .expect("interrupted journal");
+    let review = rig
+        .service
+        .recovery_preview("chat", &original.id, WorktreeRecoveryAction::Reconcile)
+        .await
+        .expect("reconcile moved path");
+    assert_eq!(
+        Path::new(&review.destination)
+            .canonicalize()
+            .expect("destination"),
+        Path::new(&retired.path).canonicalize().expect("retired")
+    );
+    let reconciled = rig
+        .service
+        .recovery_apply("chat", &original.id, &review.token)
+        .await
+        .expect("reconcile");
+    assert_eq!(reconciled.worktree.state, WorktreeState::Retired);
+    let restore = rig
+        .service
+        .recovery_preview("chat", &original.id, WorktreeRecoveryAction::Restore)
+        .await
+        .expect("restore preview");
+    assert!(
+        rig.service
+            .recovery_apply("chat", "another-worktree", &restore.token)
+            .await
+            .is_err()
+    );
+    let restore = rig
+        .service
+        .recovery_preview("chat", &original.id, WorktreeRecoveryAction::Restore)
+        .await
+        .expect("fresh restore");
+    let result = rig
+        .service
+        .recovery_apply("chat", &original.id, &restore.token)
+        .await
+        .expect("restore");
+    assert_eq!(result.error, None);
+    assert_eq!(result.worktree.state, WorktreeState::Ready);
+    assert_eq!(Path::new(&result.worktree.path), Path::new(&original.path));
+    assert_eq!(
+        std::fs::read(Path::new(&original.path).join("private.local")).expect("kept"),
+        b"retain bytes\r\n"
+    );
+    assert!(!Path::new(&retired.path).exists());
+    assert!(
+        rig.service
+            .recovery_apply("chat", &original.id, &restore.token)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn recovery_keeps_foreign_locks_and_rejects_unknown_future_state() {
+    use aura_protocol::git::WorktreeRecoveryAction;
+    let rig = rig().await;
+    let mut worktree = isolated(&rig).await;
+    worktree.state = WorktreeState::Creating;
+    rig.service
+        .save_record(&worktree)
+        .expect("interrupted creation");
+    let folder = Path::new(&worktree.path);
+    let gitdir = git::text(
+        &rig.git
+            .run(
+                folder,
+                git::args(&["rev-parse", "--absolute-git-dir"]),
+                8192,
+            )
+            .await
+            .expect("git dir"),
+    )
+    .expect("path");
+    let lock = Path::new(&gitdir).join("locked");
+    std::fs::write(&lock, "another owner's review\n").expect("foreign lock fixture");
+    let preview = rig
+        .service
+        .recovery_preview("chat", &worktree.id, WorktreeRecoveryAction::Reconcile)
+        .await
+        .expect("read only preview");
+    assert!(
+        rig.service
+            .recovery_apply("chat", &worktree.id, &preview.token)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        std::fs::read_to_string(lock).expect("retained"),
+        "another owner's review\n"
+    );
+    let registry = rig.service.root.join("registry.json");
+    let before = std::fs::read_to_string(&registry)
+        .expect("registry")
+        .replace("\"creating\"", "\"future_state\"");
+    std::fs::write(&registry, &before).expect("newer state fixture");
+    assert!(rig.service.list("chat").await.is_err());
+    assert_eq!(
+        std::fs::read_to_string(registry).expect("unchanged"),
+        before
+    );
+}
+
+#[tokio::test]
+async fn interrupted_merge_reconciliation_checks_clean_outcome_and_retained_refs() {
+    use aura_protocol::git::{WorktreeAction, WorktreeRecovery, WorktreeRecoveryAction};
+    let rig = rig().await;
+    let worktree = isolated(&rig).await;
+    commit_file(&rig, Path::new(&worktree.path), "merged\n").await;
+    let merge = rig
+        .service
+        .action_preview(
+            "chat",
+            &worktree.id,
+            WorktreeAction::Merge {
+                message: "merge".into(),
+            },
+        )
+        .await
+        .expect("merge preview");
+    let mut result = rig
+        .service
+        .action_apply("chat", &merge.token)
+        .await
+        .expect("merge")
+        .worktree;
+    result.state = WorktreeState::Merging;
+    rig.service
+        .save_record(&result)
+        .expect("interrupted journal");
+    std::fs::write(rig.work.join("file.txt"), "new user edit").expect("edit");
+    assert!(
+        rig.service
+            .recovery_preview("chat", &worktree.id, WorktreeRecoveryAction::Reconcile)
+            .await
+            .is_err()
+    );
+    std::fs::write(rig.work.join("file.txt"), "merged\n").expect("restore owned fixture");
+    let index = std::fs::read(rig.work.join(".git/index")).expect("index before read-only review");
+    let preview = rig
+        .service
+        .recovery_preview("chat", &worktree.id, WorktreeRecoveryAction::Reconcile)
+        .await
+        .expect("settled outcome");
+    assert_eq!(
+        std::fs::read(rig.work.join(".git/index")).expect("index after review"),
+        index
+    );
+    let Some(WorktreeRecovery::Merge {
+        before_ref,
+        before_commit,
+        ..
+    }) = &result.recovery
+    else {
+        panic!("typed merge journal");
+    };
+    rig.git
+        .run(
+            &rig.work,
+            git::args(&["update-ref", "-d", before_ref, before_commit]),
+            8192,
+        )
+        .await
+        .expect("external ref deletion fixture");
+    assert!(
+        rig.service
+            .recovery_apply("chat", &worktree.id, &preview.token)
+            .await
+            .is_err()
+    );
+    rig.git
+        .run(
+            &rig.work,
+            git::args(&["update-ref", before_ref, before_commit, ""]),
+            8192,
+        )
+        .await
+        .expect("restore fixture ref");
+    let preview = rig
+        .service
+        .recovery_preview("chat", &worktree.id, WorktreeRecoveryAction::Reconcile)
+        .await
+        .expect("review retained outcome");
+    let reconciled = rig
+        .service
+        .recovery_apply("chat", &worktree.id, &preview.token)
+        .await
+        .expect("reconcile");
+    assert_eq!(reconciled.worktree.state, WorktreeState::Ready);
+    assert_eq!(reconciled.error, None);
+}
+
+#[tokio::test]
 async fn create_isolation_preserves_dirty_user_index_and_head_and_is_durably_registered() {
     let rig = rig().await;
     std::fs::write(rig.work.join("file.txt"), "staged\n").expect("staged");

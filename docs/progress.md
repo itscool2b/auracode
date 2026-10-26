@@ -1281,3 +1281,22 @@ rules as normal dispatch; native background work still waits for idle. Five focu
 and all three real-startup desktop demo tests pass locally on Windows. The background test allows its
 late event to arrive between turns or inside the next turn, while still proving untagged persistence
 after the originating turn and permission survival. No real agent or login was invoked.
+
+## M4 reviewed recovery controls
+
+Managed worktrees now carry a typed operation journal in version 2 local metadata. Interrupted
+creation, retirement and restore can be reconciled only after checking the owned path, repository,
+branch and native worktree registration. Interrupted merge reconciliation additionally requires a
+clean target at exactly its retained before or prepared commit and unchanged recovery refs. Restore
+moves a retained directory back to its original owned location, preserving ignored files and its
+branch. Missing, ambiguous, redirected, foreign-locked or newer-version records remain unchanged with
+a reason. No broad prune, lock deletion, automatic reset or recursive deletion is used.
+
+The eight Git workspace Tauri commands are registered and generated bindings are committed. Recovery
+tokens bind the chat, worktree, operation and reviewed state; the manager retains canonical folder and
+actor reservations through an owned task even if IPC disconnects. Git diff verification now disables
+automatic index refresh and examines a bounded patch, preserving index bytes even after stat-only file
+changes. Fourteen Git tests, five checkpoint lifecycle tests and all three desktop demo integration
+tests pass on Windows. Core, CLI and desktop all-target Clippy and binding export pass. macOS execution,
+chat relocation, optional bring-changes/setup, PR creation and missing-directory recreation remain
+pending. No remote CI, push, real-agent prompt or login ran for this checkpoint.

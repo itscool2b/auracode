@@ -46,6 +46,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<aura_protocol::git::WorktreeAction>()
         .typ::<aura_protocol::git::WorktreeActionPreview>()
         .typ::<aura_protocol::git::WorktreeActionResult>()
+        .typ::<aura_protocol::git::WorktreeRecoveryPreview>()
         .commands(tauri_specta::collect_commands![
             commands::app_info,
             crate::updater::app_update_status,
@@ -92,6 +93,14 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::changes_commands::chat_change_diff,
             crate::changes_commands::checkpoint_revert_preview,
             crate::changes_commands::checkpoint_revert,
+            crate::git_commands::git_workspace,
+            crate::git_commands::managed_worktrees,
+            crate::git_commands::isolation_preview,
+            crate::git_commands::isolation_apply,
+            crate::git_commands::worktree_action_preview,
+            crate::git_commands::worktree_action_apply,
+            crate::git_commands::worktree_recovery_preview,
+            crate::git_commands::worktree_recovery_apply,
             commands::chats_list,
             crate::workspace_commands::workspace_snapshot,
             crate::workspace_commands::project_create,

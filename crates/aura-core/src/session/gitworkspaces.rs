@@ -2,7 +2,8 @@
 
 use aura_protocol::git::{
     GitWorkspace, IsolationInput, IsolationPreview, IsolationResult, ManagedWorktree,
-    WorktreeAction, WorktreeActionPreview, WorktreeActionResult,
+    WorktreeAction, WorktreeActionPreview, WorktreeActionResult, WorktreeRecoveryAction,
+    WorktreeRecoveryPreview,
 };
 
 use super::*;
@@ -212,5 +213,40 @@ impl SessionManager {
             answer.await.map_err(|_| stopped())??;
         }
         Ok(reservations)
+    }
+
+    pub async fn worktree_recovery_preview(
+        &self,
+        chat_id: &str,
+        worktree_id: &str,
+        action: WorktreeRecoveryAction,
+    ) -> Result<WorktreeRecoveryPreview, SessionError> {
+        self.git_chat(chat_id).await?;
+        self.worktrees()?
+            .recovery_preview(chat_id, worktree_id, action)
+            .await
+            .map_err(|error| invalid(error.to_string()))
+    }
+
+    pub async fn worktree_recovery_apply(
+        &self,
+        chat_id: &str,
+        worktree_id: &str,
+        token: &str,
+    ) -> Result<WorktreeActionResult, SessionError> {
+        let manager = self.clone();
+        let chat_id = chat_id.to_owned();
+        let worktree_id = worktree_id.to_owned();
+        let token = token.to_owned();
+        self.deps().rt.spawn(async move {
+            let _organization = manager.shared().organization.lock().await;
+            manager.git_chat(&chat_id).await?;
+            let service = manager.worktrees()?;
+            let folders = service.recovery_folders(&chat_id, &worktree_id).await
+                .map_err(|error| invalid(error.to_string()))?;
+            let _reservations = manager.reserve_git_folders(folders).await?;
+            service.recovery_apply(&chat_id, &worktree_id, &token).await
+                .map_err(|error| invalid(error.to_string()))
+        }).await.map_err(|_| invalid("The recovery task ended unexpectedly. Its saved state and files remain available for review."))?
     }
 }

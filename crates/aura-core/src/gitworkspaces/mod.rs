@@ -5,6 +5,7 @@ mod create;
 mod git;
 mod inspect;
 mod records;
+mod recovery;
 #[cfg(test)]
 mod tests;
 
@@ -35,6 +36,7 @@ pub struct GitWorkspaces {
     gate: tokio::sync::Mutex<()>,
     prepared: std::sync::Mutex<HashMap<String, create::Prepared>>,
     actions: std::sync::Mutex<HashMap<String, actions::PreparedAction>>,
+    recoveries: std::sync::Mutex<HashMap<String, recovery::PreparedRecovery>>,
 }
 
 impl GitWorkspaces {
@@ -50,6 +52,7 @@ impl GitWorkspaces {
             gate: tokio::sync::Mutex::new(()),
             prepared: std::sync::Mutex::new(HashMap::new()),
             actions: std::sync::Mutex::new(HashMap::new()),
+            recoveries: std::sync::Mutex::new(HashMap::new()),
         })
     }
 

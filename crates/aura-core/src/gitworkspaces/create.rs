@@ -1,5 +1,6 @@
 use aura_protocol::git::{
-    IsolationInput, IsolationPreview, IsolationResult, ManagedWorktree, WorktreeState,
+    IsolationInput, IsolationPreview, IsolationResult, ManagedWorktree, WorktreeRecovery,
+    WorktreeState,
 };
 use std::collections::HashSet;
 use std::ffi::OsString;
@@ -113,6 +114,7 @@ impl GitWorkspaces {
                     .into(),
             ),
             created_at: now,
+            recovery: Some(WorktreeRecovery::Create),
         };
         let token = crate::ids::new_id();
         let preview = IsolationPreview {

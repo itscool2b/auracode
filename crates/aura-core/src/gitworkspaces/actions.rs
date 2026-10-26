@@ -3,7 +3,8 @@
 use std::time::Duration;
 
 use aura_protocol::git::{
-    ManagedWorktree, WorktreeAction, WorktreeActionPreview, WorktreeActionResult, WorktreeState,
+    ManagedWorktree, WorktreeAction, WorktreeActionPreview, WorktreeActionResult, WorktreeRecovery,
+    WorktreeState,
 };
 
 use super::{
@@ -200,7 +201,7 @@ impl GitWorkspaces {
         Ok(record)
     }
 
-    fn save_record(&self, record: &ManagedWorktree) -> Result<()> {
+    pub(super) fn save_record(&self, record: &ManagedWorktree) -> Result<()> {
         let mut entries = self.read_records()?;
         let existing = entries
             .iter_mut()
@@ -228,6 +229,7 @@ impl GitWorkspaces {
             ));
         }
         record.state = WorktreeState::Retiring;
+        record.recovery = Some(WorktreeRecovery::Retire);
         record.detail = Some(format!(
             "Recoverable retirement to {} is in progress.",
             destination.display()
@@ -362,6 +364,13 @@ impl GitWorkspaces {
         )
         .await?;
         record.state = WorktreeState::Merging;
+        record.recovery = Some(WorktreeRecovery::Merge {
+            branch: branch.into(),
+            before_ref: recovery.clone(),
+            prepared_ref: prepared_ref.clone(),
+            before_commit: old.into(),
+            prepared_commit: commit.clone(),
+        });
         record.detail = Some(format!(
             "Merge to {branch} is in progress. Previous target: {recovery}. Prepared commit: {prepared_ref}."
         ));
@@ -447,16 +456,32 @@ pub(super) async fn verify_merge_result(
         vec![
             "diff",
             "--cached",
-            "--quiet",
+            "--patch",
+            "--binary",
+            "--no-color",
+            "--no-renames",
+            "--ignore-submodules=none",
             "--no-ext-diff",
             "--no-textconv",
             commit,
             "--",
         ],
-        vec!["diff", "--quiet", "--no-ext-diff", "--no-textconv", "--"],
+        vec![
+            "diff",
+            "--patch",
+            "--binary",
+            "--no-color",
+            "--no-renames",
+            "--ignore-submodules=none",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--",
+        ],
     ] {
         let output = git.output(root, args(&command), 4096).await?;
-        if output.exit.as_ref().and_then(|exit| exit.code) != Some(0) {
+        // With autoRefreshIndex disabled, Git's exit-code shortcut treats stat-only changes as
+        // dirty. A bounded native patch compares contents without refreshing the user's index.
+        if output.exit.as_ref().and_then(|exit| exit.code) != Some(0) || !output.stdout.is_empty() {
             return Err(invalid(
                 "The target index or files no longer match the prepared merge. Review its recovery refs.",
             ));

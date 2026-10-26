@@ -25,6 +25,7 @@ pub mod composer_commands;
 pub mod conversation_commands;
 pub mod demo;
 pub mod error;
+pub mod git_commands;
 pub mod glass;
 pub mod integrity;
 pub mod launch;

@@ -94,6 +94,14 @@ export const commands = {
 	composerSend: (chatId: string, input: ComposerInput) => typedError<PromptAck, AppError>(__TAURI_INVOKE("composer_send", { chatId, input })),
 	composerDraft: (chatId: string) => typedError<ComposerDraft, AppError>(__TAURI_INVOKE("composer_draft", { chatId })),
 	composerSaveDraft: (chatId: string, input: ComposerInput) => typedError<null, AppError>(__TAURI_INVOKE("composer_save_draft", { chatId, input })),
+	gitWorkspace: (chatId: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_workspace", { chatId })),
+	managedWorktrees: (chatId: string) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("managed_worktrees", { chatId })),
+	isolationPreview: (chatId: string, input: IsolationInput) => typedError<IsolationPreview, AppError>(__TAURI_INVOKE("isolation_preview", { chatId, input })),
+	isolationApply: (chatId: string, token: string) => typedError<IsolationResult, AppError>(__TAURI_INVOKE("isolation_apply", { chatId, token })),
+	worktreeActionPreview: (chatId: string, worktreeId: string, action: WorktreeAction) => typedError<WorktreeActionPreview, AppError>(__TAURI_INVOKE("worktree_action_preview", { chatId, worktreeId, action })),
+	worktreeActionApply: (chatId: string, token: string) => typedError<WorktreeActionResult, AppError>(__TAURI_INVOKE("worktree_action_apply", { chatId, token })),
+	worktreeRecoveryPreview: (chatId: string, worktreeId: string, action: WorktreeRecoveryAction) => typedError<WorktreeRecoveryPreview, AppError>(__TAURI_INVOKE("worktree_recovery_preview", { chatId, worktreeId, action })),
+	worktreeRecoveryApply: (chatId: string, worktreeId: string, token: string) => typedError<WorktreeActionResult, AppError>(__TAURI_INVOKE("worktree_recovery_apply", { chatId, worktreeId, token })),
 	/**  Every chat, newest activity first. */
 	chatsList: () => typedError<ChatSummary[], AppError>(__TAURI_INVOKE("chats_list")),
 	workspaceSnapshot: (filter: WorkspaceFilter) => typedError<WorkspaceSnapshot, AppError>(__TAURI_INVOKE("workspace_snapshot", { filter })),
@@ -776,6 +784,18 @@ export type LimitWindow = {
 export type MotionPreference = 
 /**  Full motion still honors the operating system's reduced-motion setting. */
 "full" | "reduced" | "off";
+export type ManagedWorktree = {
+	id: string,
+	chat_id: string,
+	source: string,
+	path: string,
+	branch: string,
+	base_commit: string,
+	state: WorktreeState,
+	detail: string | null,
+	recovery?: WorktreeRecovery | null,
+	created_at: number,
+};
 
 export type NoticeLevel = "info" | "warning" | "error";
 
@@ -1312,6 +1332,43 @@ export type WorkspaceSnapshot = {
 	projects: ProjectSummary[],
 	chats: WorkspaceChat[],
 };
+
+export type WorktreeAction = { type: "merge"; message: string } | { type: "discard" };
+
+export type WorktreeActionPreview = {
+	token: string,
+	worktree: ManagedWorktree,
+	action: WorktreeAction,
+	target: GitWorkspace | null,
+	changes: string,
+	conflicts: string[],
+	warnings: string[],
+	expires_at: number,
+};
+
+export type WorktreeActionResult = {
+	worktree: ManagedWorktree,
+	recovery: string,
+	commit: string | null,
+	error: string | null,
+};
+
+export type WorktreeRecovery = { type: "create" } | { type: "retire" } | { type: "restore" } | { type: "merge"; branch: string; before_ref: string; prepared_ref: string; before_commit: string; prepared_commit: string };
+
+export type WorktreeRecoveryAction = "reconcile" | "restore";
+
+export type WorktreeRecoveryPreview = {
+	token: string,
+	worktree: ManagedWorktree,
+	action: WorktreeRecoveryAction,
+	folder: GitWorkspace,
+	target: GitWorkspace | null,
+	destination: string,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type WorktreeState = "creating" | "ready" | "merging" | "retiring" | "restoring" | "recovery_required" | "missing" | "retired" | string;
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

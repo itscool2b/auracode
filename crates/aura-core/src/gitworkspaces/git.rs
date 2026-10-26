@@ -65,6 +65,8 @@ impl Git {
             "core.quotePath=false".into(),
             "-c".into(),
             "core.fsync=all".into(),
+            "-c".into(),
+            "diff.autoRefreshIndex=false".into(),
         ];
         command.extend(args);
         let output = run_helper(
