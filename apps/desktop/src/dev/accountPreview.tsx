@@ -8,11 +8,11 @@ import "../components/settings/settings.css";
 
 const stage = new URLSearchParams(location.search).get("stage");
 let state: AccountStatus = {
-  access: stage === "pending" ? "pending_approval" : "signed_out",
+  access: stage === "deleted" ? "deleted" : stage === "pending" ? "pending_approval" : "signed_out",
   account_id: "fixture-account",
   device_id: "fixture-device",
-  profile_id: null,
-  local_key_available: false,
+  profile_id: stage === "deleted" ? "fixture-profile" : null,
+  local_key_available: stage === "deleted",
   approval_code: "THIS-DEVICE-1234",
   fingerprint: "1234 5678 90AB CDEF 1234 5678 90AB CDEF",
   sync: {
@@ -136,7 +136,12 @@ function Preview() {
       <div style={{ maxWidth: 650, margin: "0 auto" }}>
         <h1 style={{ fontSize: 32, fontWeight: 500, letterSpacing: -1 }}>Account</h1>
         {open ? (
-          <AccountPanel api={api} deviceName="Current computer" Verification={Verification} />
+          <AccountPanel
+            api={api}
+            deviceName="Current computer"
+            Verification={Verification}
+            activeProfileId={new URLSearchParams(location.search).get("active")}
+          />
         ) : (
           <p>Account closed.</p>
         )}

@@ -15,6 +15,8 @@ import { switchProfile } from "../../lib/profiles";
 import { Modal } from "../chat/Modal";
 import { AccountVault } from "./AccountVault";
 import { AccountVerification } from "./AccountVerification";
+import { KeepAsLocalPanel } from "./KeepAsLocalPanel";
+import { ResetSyncPanel } from "./ResetSyncPanel";
 import { SignOutDialog } from "./SignOutDialog";
 import "./account.css";
 
@@ -169,7 +171,7 @@ export function AccountPanel({
   const locked = busy || remaining > 0;
   const wrongRecoveryAccount =
     recoveryOnly &&
-    status?.access === "ready" &&
+    (status?.access === "ready" || status?.access === "deleted") &&
     (!recoveryProfileId || status.profile_id !== recoveryProfileId);
   const signedOut =
     status &&
@@ -563,7 +565,7 @@ export function AccountPanel({
                   above.
                 </p>
               ) : null}
-              {recoveryOnly || status.profile_id !== activeProfileId ? (
+              {recoveryOnly || !status.profile_id || status.profile_id !== activeProfileId ? (
                 <div className="account-actions">
                   <button
                     className="ui-button ui-button-primary"
@@ -641,7 +643,32 @@ export function AccountPanel({
             ) : null}
           </>
         ) : null}
-        {!recoveryOnly && status && !signedOut ? (
+        {status?.access === "deleted" ? (
+          <div className="settings-group account-card">
+            <h3>This account was deleted</h3>
+            <p>Network sync has stopped. Its encrypted workspace stays on this computer.</p>
+            {status.local_key_available ? (
+              <>
+                {!status.profile_id || status.profile_id !== activeProfileId || recoveryOnly ? (
+                  <button
+                    className="ui-button"
+                    type="button"
+                    disabled={locked || wrongRecoveryAccount}
+                    onClick={() => void run(onActivate)}
+                  >
+                    {recoveryOnly ? recoveryActionLabel : "Open retained account workspace"}
+                  </button>
+                ) : null}
+                {!recoveryOnly && status.profile_id && status.profile_id === activeProfileId ? (
+                  <KeepAsLocalPanel onOpen={(profileId) => switchProfile(profileId)} />
+                ) : null}
+              </>
+            ) : (
+              <p>The local account key is unavailable. Existing encrypted files were preserved.</p>
+            )}
+          </div>
+        ) : null}
+        {!recoveryOnly && status && !signedOut && status.access !== "deleted" ? (
           <button
             className="ui-button"
             type="button"
@@ -688,6 +715,15 @@ export function AccountPanel({
         {showVault ? "Close secure storage" : "Secure storage"}
       </button>
       {showVault ? <AccountVault onUnlocked={() => setGeneration((value) => value + 1)} /> : null}
+      {!recoveryOnly && status?.account_id && status.access !== "deleted" ? (
+        <ResetSyncPanel
+          key={status.account_id}
+          access={status.access}
+          allowReview={!status.local_key_available}
+          disabled={locked}
+          onStatus={(value) => setStatus(value)}
+        />
+      ) : null}
       {!recoveryOnly && signOutReview ? (
         <SignOutDialog
           pending={status?.sync.pending_changes ?? null}

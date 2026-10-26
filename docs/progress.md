@@ -2277,3 +2277,11 @@ The owner requested Cloudflare MCP deployment. Its documented request interface 
 and upload the Rust Worker, but cannot supply the separate bearer token required by Static Assets
 uploads. The official direct-upload documentation confirms that requirement. Website publication
 remains pending; no alternate authentication, new login request or live resource mutation was made.
+
+### Account reset and Deleted preservation controls
+
+- Added an explicit reset review that shows the affected encrypted record/blob/device counts, requires saving the new recovery key and typing `RESET SYNC`, and never begins a reset on mount.
+- Saved uncertain reset requests expose exact retry and server-arbitrated cancellation. Confirmed server resets with unfinished local binding cleanup remain visible after restart.
+- Deleted accounts now show retained workspace guidance and mount Keep as Local only for the matching active unlocked Account. Opening the panel does not copy data.
+- Chromium and WebKit synthetic browser checks pass for review cancellation, confirmation failure, exact retry, pending cancellation, committed local completion and Deleted activation/mount boundaries. TypeScript, Biome and instruction parity pass. No live account, key, configuration or cloud data was used.
+- Explicit existing-profile key rebinding and reviewed removal from this device remain in progress.
