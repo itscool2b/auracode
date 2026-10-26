@@ -105,6 +105,10 @@ schema has no runtime selector, so selecting another shell does not address that
 driver regression preserves the failed tool and its error text even when the provider completes the
 turn normally. Paid allow-once and the remaining smoke scenarios stay pending an external fix.
 
+The later helper-failure regression initially expected plain text instead of terminal content. CI
+caught the incorrect test expectation; the corrected test requires the exact native terminal error
+and exit code -1. All 34 Codex unit tests pass locally after that test-only correction.
+
 Checkpoint `e2416e7` passed [Linux and Windows CI](https://github.com/itscool2b/auracode/actions/runs/40278206764),
 including the native approval regressions, all replay fixtures, generated schema checks, bindings,
 frontend checks and both app smoke runs. macOS was skipped by branch policy. The subsequently added
