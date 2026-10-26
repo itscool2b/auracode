@@ -30,6 +30,7 @@ pub(crate) mod composer;
 pub(crate) mod conversation;
 mod export;
 pub(crate) mod files;
+pub(crate) mod folder_resolution;
 pub(crate) mod history;
 #[cfg(feature = "account-sync")]
 mod journal;
@@ -97,6 +98,29 @@ impl fmt::Debug for ChatStore {
 }
 
 impl ChatStore {
+    pub(crate) async fn folder_resolution(
+        &self,
+        command: folder_resolution::Command,
+    ) -> Result<folder_resolution::Reply, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if !command.writes() {
+            return self
+                .request(Request::FolderResolution { command, reply }, answer)
+                .await?;
+        }
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::FolderResolution { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
     /// The app's fixed profile layout supplies this authority, never a renderer path. Legacy test
     /// stores outside that layout have no shared-home transition coordinator.
     pub(crate) fn config_recovery_pending(&self) -> bool {

@@ -107,6 +107,11 @@ pub(crate) enum ChatMsg {
     ReleaseGit {
         id: String,
     },
+    FolderLocated {
+        reservation: String,
+        record: ChatRecord,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
     Conversation {
         command: crate::chatstore::conversation::ConversationCommand,
         reply: oneshot::Sender<
@@ -228,6 +233,7 @@ impl ChatMsg {
             ChatMsg::ImportSync { reply } => drop(reply.send(Err(error))),
             ChatMsg::ReserveGit { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::ReleaseGit { .. } => {}
+            ChatMsg::FolderLocated { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Conversation { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Continue { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::CheckpointContext { reply, .. } => drop(reply.send(Err(error))),
@@ -792,6 +798,27 @@ impl ChatActor {
                 if self.git_reservation.as_deref() == Some(&id) {
                     self.git_reservation = None;
                     self.organizing = false;
+                }
+            }
+            ChatMsg::FolderLocated {
+                reservation,
+                record,
+                reply,
+            } => {
+                if self.git_reservation.as_deref() != Some(&reservation)
+                    || record.id != self.chat_id
+                {
+                    let _ = reply.send(Err(SessionError::Organization(
+                        "Folder ownership changed. Reopen this chat before starting it.".into(),
+                    )));
+                } else {
+                    self.chat.folder = record.folder;
+                    self.chat.folder_id = record.folder_id;
+                    self.folder_state = FolderState::Ok;
+                    self.info_dirty = true;
+                    self.schedule_flush();
+                    self.publish();
+                    let _ = reply.send(Ok(()));
                 }
             }
             ChatMsg::Conversation { command, reply } => self.conversation_read(command, reply),

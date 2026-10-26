@@ -18,6 +18,7 @@ mod composer;
 mod config_library;
 mod config_vendor;
 mod conversation;
+mod folder_resolution;
 mod gitworkspaces;
 mod installer;
 mod live;

@@ -119,6 +119,11 @@ export const commands = {
 	localImportPreview: () => typedError<LocalImportPreview, AppError>(__TAURI_INVOKE("local_import_preview")),
 	chatExportMarkdown: (chatId: string) => typedError<string | null, AppError>(__TAURI_INVOKE("chat_export_markdown", { chatId })),
 	localImportApply: (selected: LocalImportSelection[]) => typedError<LocalImportResult, AppError>(__TAURI_INVOKE("local_import_apply", { selected })),
+	folderCodeRoots: () => typedError<string[], AppError>(__TAURI_INVOKE("folder_code_roots")),
+	folderSetCodeRoots: (roots: string[]) => typedError<string[], AppError>(__TAURI_INVOKE("folder_set_code_roots", { roots })),
+	folderResolution: (folderId: string, search: boolean) => typedError<FolderResolution, AppError>(__TAURI_INVOKE("folder_resolution", { folderId, search })),
+	folderLocateReview: (folderId: string, path: string) => typedError<FolderLocationReview, AppError>(__TAURI_INVOKE("folder_locate_review", { folderId, path })),
+	folderLocateApply: (review: FolderLocationReview) => typedError<ProjectFolder, AppError>(__TAURI_INVOKE("folder_locate_apply", { review })),
 	terminalRead: (terminalId: string) => typedError<TerminalChunk, AppError>(__TAURI_INVOKE("terminal_read", { terminalId })),
 	terminalWrite: (terminalId: string, bytes: number[]) => typedError<null, AppError>(__TAURI_INVOKE("terminal_write", { terminalId, bytes })),
 	terminalResize: (terminalId: string, rows: number, cols: number) => typedError<null, AppError>(__TAURI_INVOKE("terminal_resize", { terminalId, rows, cols })),
@@ -990,6 +995,21 @@ export type FileMention = {
 };
 
 export type FolderKind = "local" | "git";
+
+export type FolderLocationReview = {
+	folder_id: string,
+	path: string,
+	revision: string,
+	notices: string[],
+};
+
+export type FolderResolution = {
+	folder: ProjectFolder,
+	roots: string[],
+	matches: string[],
+	truncated: boolean,
+	notices: string[],
+};
 
 /**  Whether a chat's folder can be used on this machine. */
 export type FolderState = "ok" | "missing" | 

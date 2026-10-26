@@ -2204,3 +2204,26 @@ The website now clears account controls and any open confirmation when the accou
 ### Integrated passphrase storage verification
 
 The integrated native Windows account service passes all five focused admission and vault tests, including explicit passphrase creation, reopening locked, wrong-password rejection and interrupted setup refusing OS-storage fallback. Full desktop and lightweight account DTO exports pass with both the new vault states and Deleted state retained; desktop TypeScript passes. The final manual CI gate now includes the isolated vault browser checks. README and release instructions reflect dark-only Windows/macOS scope, deliberate CI batches, the preview API's actual deployment state and the owner's signing deferral. No full final batch or release publication has run yet.
+### Reviewed folder resolution on another device
+
+Git folders can now search explicitly selected code roots for the same normalized origin. Roots live
+only in the current device's keyed settings. Search visits at most three levels, 4096 directory entries
+and 128 repositories within 20 seconds, skips hidden/linked directories and reports incomplete checks.
+It never fetches, changes the index or reads vendor configuration. Locate reviews a chosen root, checks
+the origin again after admission, and commits only this device's folder location with identity CAS.
+Local-only copies require explicit review because their contents have no portable Git identity.
+
+Owned mutations retain profile admission, stop new agent starts, reserve affected parked actors including
+archived chats, and refresh their working directories from the committed writer response before release.
+A different location with native history on this device is refused rather than silently reusing that
+session in a new cwd. FolderResolver reuses the reviewed GitHub clone dialog with a fixed origin and
+requires a separate mapping confirmation after clone completion. Other hosts remain available through
+Locate. The integrated app still needs to mount the standalone component and refresh workspace context.
+
+Four focused core tests passed with default and Account features on Windows. They cover device isolation,
+stale mapping CAS, native-history refusal, parked actor refresh, bounded discovery and an origin swap with
+an unchanged Git index. Ordinary native bindings export, core/desktop all-target Clippy, pinned pnpm
+typecheck and Biome passed. Chromium and WebKit passed synthetic review, retry, saved-result refresh-error
+and locked clone-origin checks. No real user folder, account request, vendor prompt or remote mutation
+was used. Publish to GitHub for local-only folders, native macOS qualification and complete M7 acceptance
+remain pending.

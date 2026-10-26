@@ -141,6 +141,10 @@ pub(crate) enum Work {
 
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
+    FolderResolution {
+        command: super::folder_resolution::Command,
+        reply: oneshot::Sender<Result<super::folder_resolution::Reply, StoreError>>,
+    },
     #[cfg(feature = "account-sync")]
     LocalImport {
         command: crate::local_import::Command,
@@ -485,6 +489,7 @@ fn work_bytes(work: &Work) -> usize {
         Work::Op(op) => op_bytes(op),
         Work::Request(Request::Organization { command, .. }) => command.bytes(),
         Work::Request(Request::WorktreeSetup { command, .. }) => command.bytes(),
+        Work::Request(Request::FolderResolution { command, .. }) => command.bytes(),
         Work::Request(Request::Steering { command, .. }) => command.bytes(),
         Work::Request(Request::Composer { command, .. }) => command.bytes(),
         #[cfg(feature = "account-sync")]
@@ -680,6 +685,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::CreateChat { .. }) => "create_chat",
         Work::Request(Request::Organization { .. }) => "organization",
         Work::Request(Request::WorktreeSetup { .. }) => "worktree setup",
+        Work::Request(Request::FolderResolution { .. }) => "folder resolution",
         Work::Request(Request::Steering { .. }) => "steering",
         Work::Request(Request::Composer { .. }) => "composer",
         Work::Request(Request::CheckpointContext { .. }) => "checkpoint_context",
@@ -1336,6 +1342,20 @@ impl Writer {
                 } else {
                     self.write_tx(|conn| {
                         super::worktree_setup::execute(conn, &device, now, command)
+                    })
+                };
+                let _ = reply.send(result);
+            }
+            Request::FolderResolution { command, reply } => {
+                let device = self.device_id.clone();
+                let now = now_millis();
+                let result = if !command.writes() {
+                    self.read(|conn| super::folder_resolution::execute(conn, &device, now, command))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| {
+                        super::folder_resolution::execute(conn, &device, now, command)
                     })
                 };
                 let _ = reply.send(result);

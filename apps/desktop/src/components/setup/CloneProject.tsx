@@ -8,11 +8,15 @@ export function CloneProject({
   onFolder,
   disabled = false,
   api = cloneApi,
+  remote,
+  label = "Clone from GitHub",
 }: {
   readonly pickParent: () => Promise<string | null>;
   readonly onFolder: (path: string) => void;
   readonly disabled?: boolean;
   readonly api?: CloneApi;
+  readonly remote?: string;
+  readonly label?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -23,7 +27,7 @@ export function CloneProject({
         disabled={disabled}
         onClick={() => setOpen(true)}
       >
-        Clone from GitHub
+        {label}
       </button>
       {open ? (
         <CloneDialog
@@ -31,6 +35,7 @@ export function CloneProject({
           pickParent={pickParent}
           onClose={() => setOpen(false)}
           onFolder={onFolder}
+          fixedRemote={remote}
         />
       ) : null}
     </>
@@ -42,11 +47,13 @@ function CloneDialog({
   pickParent,
   onClose,
   onFolder,
+  fixedRemote,
 }: {
   api: CloneApi;
   pickParent: () => Promise<string | null>;
   onClose: () => void;
   onFolder: (path: string) => void;
+  fixedRemote?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const mounted = useRef(false);
@@ -54,7 +61,7 @@ function CloneDialog({
   const started = useRef<string | null>(null);
   const pending = useRef(false);
   const title = useId();
-  const [remote, setRemote] = useState("");
+  const [remote, setRemote] = useState(fixedRemote ?? "");
   const [parent, setParent] = useState("");
   const [name, setName] = useState("");
   const [review, setReview] = useState<CloneReview | null>(null);
@@ -205,7 +212,7 @@ function CloneDialog({
               required
               maxLength={256}
               value={remote}
-              disabled={busy}
+              disabled={busy || fixedRemote !== undefined}
               placeholder="https://github.com/owner/repository"
               onChange={(event) => setRemote(event.currentTarget.value)}
             />

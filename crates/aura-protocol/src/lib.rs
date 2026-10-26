@@ -19,6 +19,7 @@ pub mod changes;
 pub mod composer;
 pub mod config_vendor;
 pub mod conversation;
+pub mod folder_resolution;
 pub mod git;
 mod lenient;
 pub mod local_import;

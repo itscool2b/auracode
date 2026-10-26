@@ -33,6 +33,7 @@ pub mod config_vendor;
 pub mod conversation_commands;
 pub mod demo;
 pub mod error;
+pub mod folder_resolution_commands;
 pub mod git_commands;
 pub mod glass;
 pub mod integrity;
