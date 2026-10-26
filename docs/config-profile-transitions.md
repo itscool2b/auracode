@@ -23,6 +23,13 @@ profile lease, Library mutation lock and maintenance admission:
 generic error is not proof of rollback. A canceled initial claim owns nothing. Later attempts may
 capture a fresh unmanaged baseline; an already committed claim always retains its first baseline.
 
+For an uncertain pending claim, prepare a fresh explicit three-way review and retain its previous
+claim token privately. After resolving outstanding filesystem receipts and revalidating that review,
+use `resume_claim(store, &previous_claim, &fresh_local, desired)`, then the normal apply/complete/commit
+sequence. This replaces the pending token while preserving the original baseline, including an
+uncommitted first claim. File rollback does not imply that remote publication or the base was undone.
+The automatic runner must never resume a pending claim.
+
 Automatic sync considers only `store.load()?.document.items` entries with `committed == true` and
 `pending == None`, plus an established merge base. First-link, vendor-required, device-only,
 conflicting, skipped and recovery cases remain manual. The store has no implicit network behavior.

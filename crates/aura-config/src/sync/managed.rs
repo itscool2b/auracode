@@ -178,6 +178,51 @@ pub fn commit_claim(
     item.pending = None;
     store.save(&read.revision, &read.document)
 }
+
+/// Explicit recovery only: the host first prepares and revalidates a fresh three-way review and
+/// resolves any outstanding filesystem receipt. Publication/base acknowledgment may have already
+/// advanced, so this never assumes that rolling back a file also rolled back the account record.
+/// The original baseline survives even when the interrupted first claim was not committed.
+pub fn resume_claim(
+    store: &dyn ConfigManagedStore,
+    previous: &ConfigClaim,
+    local: &LocalSnapshot,
+    desired: &ConfigSnapshot,
+) -> Result<ConfigClaim, ConfigPortError> {
+    if desired.identity.id()? != previous.id {
+        return Err(ConfigPortError::Stale);
+    }
+    match local {
+        LocalSnapshot::Present(value) if value.identity == desired.identity => {
+            value.encode()?;
+        }
+        LocalSnapshot::Absent => {}
+        _ => return Err(ConfigPortError::Unavailable),
+    }
+    let mut read = store.load()?;
+    let item = read
+        .document
+        .items
+        .get_mut(&previous.id)
+        .ok_or(ConfigPortError::Stale)?;
+    if item
+        .pending
+        .as_ref()
+        .is_none_or(|pending| pending.token != previous.token)
+    {
+        return Err(ConfigPortError::Stale);
+    }
+    let token = uuid::Uuid::now_v7().to_string();
+    item.pending = Some(PendingClaim {
+        token: token.clone(),
+        desired_hash: snapshot_hash(desired)?,
+    });
+    store.save(&read.revision, &read.document)?;
+    Ok(ConfigClaim {
+        id: previous.id.clone(),
+        token,
+    })
+}
 /// Cancel only when the host proved no filesystem/publication/base action began, or after a
 /// verified rollback. A generic failure/timeout is not proof and must retain its pending marker.
 pub fn cancel_claim(
@@ -320,5 +365,24 @@ mod tests {
             },
         );
         assert!(document.encode().is_err());
+    }
+
+    #[test]
+    fn explicit_recovery_keeps_the_first_baseline_after_partial_files_or_base_publication() {
+        let store = Memory::new();
+        let baseline = snapshot("original-local");
+        let desired = snapshot("first-account");
+        let first =
+            prepare_claim(&store, &LocalSnapshot::Present(baseline.clone()), &desired).unwrap();
+        let recovered = snapshot("reviewed-recovery");
+        let next =
+            resume_claim(&store, &first, &LocalSnapshot::Present(desired), &recovered).unwrap();
+        assert!(resume_claim(&store, &first, &LocalSnapshot::Absent, &recovered).is_err());
+        commit_claim(&store, &next, &recovered).unwrap();
+        let read = store.load().unwrap();
+        let item = &read.document.items[&next.id];
+        assert!(item.baseline == baseline);
+        assert!(item.saved == recovered);
+        assert!(item.committed);
     }
 }
