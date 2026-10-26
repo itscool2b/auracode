@@ -30,17 +30,17 @@ regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["io-std"] }
+tokio = { workspace = true, features = ["io-std", "net"] }
 tracing.workspace = true
 uuid.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 # killpg for process groups, getsid for the leftover registry, the passwd entry's shell.
-nix = { version = "0.31.3", features = ["signal", "process", "user"] }
+nix = { version = "0.31.3", features = ["signal", "process", "user", "term", "fs"] }
 
 [target.'cfg(windows)'.dependencies]
-# Only for the CREATE_NO_WINDOW constant that process-wrap's CreationFlags takes; no unsafe code.
-windows = { version = "0.62.2", features = ["Win32_System_Threading"] }
+# ConPTY and suspended, job-contained native terminal creation.
+windows = { version = "0.62.2", features = ["Win32_System_Threading", "Win32_System_Console", "Win32_System_JobObjects", "Win32_Security"] }
 # The machine and user environment from the registry, through its safe API.
 winreg = "0.56.0"
 

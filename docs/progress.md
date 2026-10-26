@@ -670,3 +670,14 @@ spawn/helper/shutdown tests and all-target Clippy. The tests verify binary fidel
 draining, owned descendants ending on last-control drop and an unrelated sibling remaining alive.
 The PTY platform layer, explicit sign-in sheet, Unix execution evidence and vendor acceptance remain
 pending. No vendor login or model prompt was run.
+
+The PTY layer now uses Windows ConPTY with suspended native process creation, Job assignment before
+resume and kill-on-close containment. Explicit standard-handle initialization prevents redirected
+parent output from escaping the terminal. The macOS path opens a controlling PTY in an owned session,
+with close-on-exec descriptors and asynchronous nonblocking IO. Output is bounded to 256 KiB, never
+logged, and drained independently of the viewer with a post-exit deadline. The implementation uses
+native bindings instead of portable-pty because its Windows launcher resumes before a Job could be
+assigned, leaving a descendant ownership race. No breakaway flags or shell command interpolation are
+used. Four harmless Windows PTY tests pass for terminal IO, quoting, Unicode, resize, descendant
+cleanup, unrelated-process preservation and stalled output. Three raw transport regressions and
+all-target process Clippy also pass. macOS execution and the sign-in sheet remain pending.

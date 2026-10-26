@@ -24,6 +24,7 @@ pub mod host;
 pub mod io;
 pub mod log;
 pub mod ptable;
+pub mod pty;
 pub mod raw;
 pub mod registry;
 pub mod shutdown;
@@ -47,11 +48,11 @@ pub use env::{
 };
 pub use host::{HostAvailability, HostExecution, HostSpawner};
 pub use io::{AgentIo, LineSink, LineSource, StdinClosed, StdoutItem, TopKeys};
-pub use raw::{ByteSink, RawProcess};
 pub use log::{
     Direction, LogFactory, LogLimits, LogNote, ProtocolLog, Redactor, RetentionPolicy,
     RetentionReport,
 };
+pub use raw::{ByteSink, RawProcess};
 pub use registry::{
     EscapedProc, InstanceRecord, LeftoverEntry, LeftoverRegistry, SweepReport, sweep_stale,
 };

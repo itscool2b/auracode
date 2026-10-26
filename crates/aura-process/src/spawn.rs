@@ -126,6 +126,15 @@ impl Spawner {
         &self.registry
     }
 
+    /// An interactive, owned terminal. The caller supplies a native executable and argument vector.
+    pub async fn spawn_pty(
+        &self,
+        spec: SpawnSpec,
+        size: crate::pty::PtySize,
+    ) -> Result<crate::pty::PtyProcess, SpawnError> {
+        crate::pty::spawn(Arc::clone(&self.registry), self.rt.clone(), spec, size).await
+    }
+
     /// Starts a native binary transport with the ordinary environment and tree-ownership rules.
     /// No stdin/stdout/stderr content is logged. Callers must consume both output streams.
     pub async fn spawn_raw(&self, spec: SpawnSpec) -> Result<crate::raw::RawProcess, SpawnError> {
@@ -432,7 +441,12 @@ fn session_of(pid: u32) -> Option<u32> {
 /// The cwd and program checks, on the blocking pool: a macOS privacy prompt can hold the call
 /// until the user answers, and Unix reports a missing cwd as a missing program, so the cwd goes
 /// first.
-async fn check(rt: &Handle, cwd: &Path, program: &Path, vars: &EnvMap) -> Result<(), SpawnError> {
+pub(crate) async fn check(
+    rt: &Handle,
+    cwd: &Path,
+    program: &Path,
+    vars: &EnvMap,
+) -> Result<(), SpawnError> {
     let name = program.display().to_string();
     let (cwd, program) = (cwd.to_path_buf(), program.to_path_buf());
     #[cfg(windows)]
@@ -628,7 +642,7 @@ fn start(
     }
 }
 
-fn spawn_error(program: &Path, source: io::Error) -> SpawnError {
+pub(crate) fn spawn_error(program: &Path, source: io::Error) -> SpawnError {
     let program = program.display().to_string();
     match source.kind() {
         io::ErrorKind::NotFound => SpawnError::ProgramNotFound { program },

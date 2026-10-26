@@ -407,7 +407,10 @@ pub(crate) async fn wait_child(
                 status = native.wait() => Event::Exited(status),
                 kill = kills.recv(), if kills_open => Event::Kill(kill.is_some()),
             },
-            None => Event::Exited(child.wait().await),
+            None => tokio::select! {
+                status = child.wait() => Event::Exited(status),
+                kill = kills.recv(), if kills_open => Event::Kill(kill.is_some()),
+            },
         };
         match event {
             Event::Exited(status) => break status,
