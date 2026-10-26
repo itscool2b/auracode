@@ -10,7 +10,7 @@
     "apps/desktop/package.json": "1051b234c9250e3ac3896caa8f4f74be382be32ddc8a655f20e285d7272b8d69",
     "apps/desktop/src-tauri/Cargo.toml": "a5fb8bfb01b99835ab4fbf3b4385b41aacb68d593ef46d5a9d5e0d2864c9976f",
     "apps/web-worker/Cargo.toml": "b1a95f1bb8377afb2a02c0a31feeda0bdc6971b057febbaee62f63314d6c6fb6",
-    "apps/web-worker/package.json": "7ad89c6d52c331fbe72db21661e420af06849ffbf730d6a6a223ade9dcc91744",
+    "apps/web-worker/package.json": "9bd52b46d1fc2854db835f8b44b456f395436470e095aa1e4ccc43a5a6a8ea76",
     "apps/web/package.json": "c5fdd28a728541a829c399d0a78cf6044970a5a15aebcf6f42460ca9cfebaf7a",
     "crates/aura-agents/Cargo.toml": "ac7691f5a61b30e2ccf587aba4e9f9eed9b7690afc70c5980f7c1cef4eff5ad5",
     "crates/aura-cli/Cargo.toml": "5f7f902ba9dd355a90a73c371099ad9d0fcd4ba769e1bbd6f2eefd05a2e0f646",
