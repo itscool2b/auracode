@@ -1,0 +1,275 @@
+/*
+ * The placeholder transcript (PlainTranscript.tsx): legible over the glass, deliberately plain.
+ * Built only on Aura tokens; `--plain-accent` is each placeholder's own colour.
+ */
+
+.lab-plain {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 272px 1fr;
+  color: var(--aura-text-1);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  /* What the app lays over the native glass, so text keeps its contrast on bright wallpapers. */
+  background: var(--aura-window-tint);
+}
+
+.lab-plain-meta {
+  color: var(--aura-text-3);
+  font-size: 12px;
+}
+
+.lab-plain-dim {
+  color: var(--aura-text-3);
+  font-size: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.lab-plain-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 64px 16px 16px;
+  border-right: 1px solid var(--aura-border-1);
+  overflow: hidden;
+}
+
+.lab-plain-badge {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: var(--aura-radius-pill);
+  border: 1px solid var(--plain-accent);
+  color: var(--plain-accent);
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.lab-plain-label {
+  margin-top: 12px;
+  color: var(--aura-text-4);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lab-plain-project-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--aura-text-2);
+}
+
+.lab-plain-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.lab-plain-chat {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 8px 4px 15px;
+  border-radius: var(--aura-radius-sm);
+}
+
+.lab-plain-chat[data-active] {
+  background: var(--aura-fill-selected);
+}
+
+.lab-plain-chat-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lab-plain-agent {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lab-plain-agent[data-missing] {
+  color: var(--aura-text-3);
+}
+
+.lab-plain-account {
+  margin-top: auto;
+  color: var(--aura-text-3);
+}
+
+.lab-plain-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.lab-plain-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--lab-titlebar-height, 52px);
+  padding: 0 24px;
+  flex: none;
+}
+
+.lab-plain-scroll {
+  position: relative;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.lab-plain-column {
+  width: 760px;
+  max-width: calc(100% - 48px);
+  margin: 0 auto;
+  padding: 12px 0 24px;
+}
+
+.lab-plain-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding-top: 180px;
+  text-align: center;
+}
+
+.lab-plain-hero-title {
+  font-family: var(--font-display);
+  font-size: 44px;
+  line-height: 1.1;
+}
+
+.lab-plain-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.lab-plain-user {
+  align-self: flex-end;
+  max-width: 70%;
+  padding: 10px 14px;
+  border-radius: var(--aura-radius-lg);
+  background: var(--aura-fill-2);
+}
+
+.lab-plain-thought,
+.lab-plain-run,
+.lab-plain-permission {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 12px;
+  border-left: 2px solid var(--aura-border-2);
+}
+
+.lab-plain-run[data-status="running"],
+.lab-plain-run[data-status="waiting"] {
+  border-left-color: var(--plain-accent);
+}
+
+.lab-plain-permission {
+  border-left-color: var(--aura-warning);
+}
+
+.lab-plain-call {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lab-plain-code {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--aura-text-2);
+  white-space: pre-wrap;
+}
+
+.lab-plain-message {
+  white-space: pre-wrap;
+  color: var(--aura-text-1);
+}
+
+.lab-plain-option {
+  margin-right: 8px;
+  padding: 3px 12px;
+  border-radius: var(--aura-radius-pill);
+  border: 1px solid var(--aura-border-3);
+  color: var(--aura-text-2);
+  font-size: 12px;
+}
+
+.lab-plain-footer {
+  padding-top: 4px;
+  border-top: 1px solid var(--aura-border-1);
+}
+
+.lab-plain-bottom {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 760px;
+  max-width: calc(100% - 48px);
+  margin: 0 auto 20px;
+  flex: none;
+}
+
+.lab-plain-plan {
+  padding: 8px 12px;
+  border-radius: var(--aura-radius-md);
+  background: var(--aura-fill-1);
+  font-size: 12px;
+}
+
+.lab-plain-plan [data-status="completed"] {
+  color: var(--aura-text-3);
+}
+
+.lab-plain-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--aura-radius-lg);
+  background: var(--aura-overlay-scrim);
+  border: 1px solid var(--aura-border-2);
+}
+
+.lab-plain-picker [data-selected] {
+  color: var(--plain-accent);
+}
+
+.lab-plain-composer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--aura-radius-xl);
+  background: var(--aura-fill-2);
+  border: 1px solid var(--aura-border-2);
+}
+
+.lab-plain-placeholder {
+  flex: 1;
+  color: var(--aura-text-3);
+}
+
+.lab-plain-pill {
+  padding: 3px 10px;
+  border-radius: var(--aura-radius-pill);
+  background: var(--aura-fill-3);
+  color: var(--aura-text-2);
+  font-size: 12px;
+}

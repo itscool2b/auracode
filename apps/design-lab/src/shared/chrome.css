@@ -1,0 +1,139 @@
+/*
+ * The simulated desktop: wallpaper, window, traffic lights. Shared by every direction; class names
+ * start with `lab-` so they never collide with a direction's own.
+ */
+
+.lab-stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #050507;
+}
+
+.lab-wallpaper {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Oversized so the blur never shows the transparent edge of the layer. */
+.lab-wallpaper-layer {
+  position: absolute;
+  left: -8%;
+  top: -8%;
+  width: 116%;
+  height: 116%;
+}
+
+.lab-wallpaper-grain {
+  position: absolute;
+  inset: 0;
+  background-size: 240px 240px;
+}
+
+.lab-window-frame {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+}
+
+/* macOS window shadow: a wide ambient shadow, a tighter contact one, and a dark outline. */
+.lab-window-shadow {
+  position: absolute;
+  inset: 0;
+  box-shadow:
+    0 44px 100px rgb(0 0 0 / 0.5),
+    0 14px 36px rgb(0 0 0 / 0.32),
+    0 0 0 0.5px rgb(0 0 0 / 0.7);
+}
+
+.lab-stage[data-compact] .lab-window-shadow {
+  box-shadow:
+    0 18px 40px rgb(0 0 0 / 0.45),
+    0 0 0 0.5px rgb(0 0 0 / 0.7);
+}
+
+.lab-window {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/*
+ * The native glass: what Liquid Glass (dark appearance) puts behind a transparent window, simulated
+ * with a blurred copy of the wallpaper (aligned with the one behind the window) and a light dark
+ * tint. In the app macOS draws this, not CSS; directions lay their own tint on top of it, as the app
+ * does with --aura-window-tint. Static, so it is rasterised once.
+ */
+.lab-window-glass {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.lab-window-glass-copy {
+  position: absolute;
+  filter: blur(44px) saturate(1.8) brightness(0.92);
+}
+
+.lab-window-glass-tint {
+  position: absolute;
+  inset: 0;
+  background: rgb(26 26 34 / 0.3);
+}
+
+.lab-window-content {
+  position: absolute;
+  inset: 0;
+}
+
+/* The window's own hairline, drawn above the content as macOS does. */
+.lab-window-rim {
+  position: absolute;
+  inset: 0;
+  z-index: 5000;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    inset 0 1px 0 rgb(255 255 255 / 0.16);
+}
+
+.lab-traffic-lights {
+  position: absolute;
+  z-index: 5001;
+  display: flex;
+  align-items: center;
+}
+
+.lab-traffic-light {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.24);
+}
+
+.lab-traffic-light[data-kind="close"] {
+  background: #ff5f57;
+}
+
+.lab-traffic-light[data-kind="minimize"] {
+  background: #febc2e;
+}
+
+.lab-traffic-light[data-kind="zoom"] {
+  background: #28c840;
+}
+
+.lab-traffic-light svg {
+  fill: none;
+  stroke: rgb(0 0 0 / 0.55);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  opacity: 0;
+}
+
+.lab-traffic-lights:hover .lab-traffic-light svg {
+  opacity: 1;
+}

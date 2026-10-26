@@ -70,6 +70,7 @@ crates/aura-core/       device identity, data folder, profiles, the per-profile 
 crates/aura-drivers/    the driver contract, frame batching, the scripted mock agent; the ACP driver (M1a)
 crates/aura-cli/        dev CLI: probes and smoke-tests agents headlessly, records and replays fixtures
 apps/desktop/           Tauri v2 app: Rust shell in src-tauri/, React UI in src/
+apps/design-lab/        M1a Design Lab: visual directions rendered from a recorded chat (see its README)
 packages/ui/            Aura design system: tokens, fonts, glass, motion, Orb, AuraField
 docs/                   plan and spike write-ups; spike code sits next to its write-up in docs/spikes/,
                         and docs/spikes/doc-check/ tests the write-ups against the code they cite

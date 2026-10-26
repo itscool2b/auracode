@@ -1,0 +1,5098 @@
+/*
+ * Orbit's surfaces: docs/design/visual-language.md, section 4. Every rule is scoped under
+ * [data-direction="orbit"]. Tokens live in tokens.css.
+ *
+ * The window is the tray; panes are paper laid on it, 8px in from the window and from each other,
+ * with a 1px ring and no shadow. Only floating objects lift (composer, menus, picker, cards).
+ * Radii: 0 for markers, 8 for rows and wells, 12 for panes, 16 for floating objects, pills for
+ * controls. Nothing breathes: motion starts with an event and ends with it.
+ */
+
+/* =============================================================================== the frame */
+
+[data-direction="orbit"] .o-desk {
+  position: absolute;
+  inset: 0 0 0 var(--o-sidebar-w);
+  background: var(--o-tray);
+  transition: left var(--o-slow) var(--o-ease-sheet);
+}
+
+/* Folded, the sidebar is X's 72px icon rail; the panes slide over with it (section 4.2). */
+[data-direction="orbit"] .o-root[data-rail] {
+  --o-sidebar-w: 72px;
+}
+
+[data-direction="orbit"] .o-pane {
+  background: var(--o-pane);
+  border-radius: var(--o-r-lg);
+  box-shadow: var(--o-ring);
+}
+
+[data-direction="orbit"] .o-main {
+  position: absolute;
+  top: var(--o-inset);
+  right: var(--o-inset);
+  bottom: var(--o-inset);
+  left: var(--o-sidebar-w);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: left var(--o-slow) var(--o-ease-sheet);
+  --o-dock-h: 140px;
+}
+
+[data-direction="orbit"] .o-root[data-panel] .o-main {
+  right: calc(var(--o-inset) * 2 + var(--o-panel-w));
+}
+
+/* A window too narrow for both: the chat keeps its width and the panel floats over it. */
+[data-direction="orbit"] .o-root[data-panel-floats] .o-main {
+  right: var(--o-inset);
+}
+
+/* ============================================================================== primitives */
+
+[data-direction="orbit"] .o-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--o-r-xs);
+  background: var(--o-key-fill);
+  box-shadow: inset 0 0 0 1px var(--o-key-ring);
+  color: var(--o-text-2);
+  font-family: var(--o-mono);
+  font-size: 10.5px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+[data-direction="orbit"] .o-key[data-on-ink] {
+  background: color-mix(in srgb, var(--o-on-ink) 16%, transparent);
+  box-shadow: none;
+  color: var(--o-on-ink-2);
+}
+
+/* Grok Build's 2x3 dot loader: a light walks the grid in 0.66s. */
+[data-direction="orbit"] .o-loader {
+  display: inline-grid;
+  flex: none;
+  grid-template-columns: 2px 2px;
+  grid-template-rows: 2px 2px 2px;
+  gap: 1px;
+  width: 5px;
+  height: 8px;
+  color: var(--o-text-2);
+}
+
+[data-direction="orbit"] .o-loader-dot {
+  background: currentColor;
+  animation: o-dots 0.66s linear infinite;
+}
+
+[data-direction="orbit"] .o-loader-dot[data-dot="1"] {
+  animation-delay: -550ms;
+}
+
+[data-direction="orbit"] .o-loader-dot[data-dot="2"] {
+  animation-delay: -110ms;
+}
+
+[data-direction="orbit"] .o-loader-dot[data-dot="3"] {
+  animation-delay: -440ms;
+}
+
+[data-direction="orbit"] .o-loader-dot[data-dot="4"] {
+  animation-delay: -220ms;
+}
+
+[data-direction="orbit"] .o-loader-dot[data-dot="5"] {
+  animation-delay: -330ms;
+}
+
+@keyframes o-dots {
+  0% {
+    opacity: 0.18;
+  }
+  13.6% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 1;
+  }
+  63.6% {
+    opacity: 0.18;
+  }
+  100% {
+    opacity: 0.18;
+  }
+}
+
+[data-direction="orbit"] .o-pip {
+  display: inline-block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 1px;
+}
+
+[data-direction="orbit"] .o-pip[data-kind="needs"] {
+  background: var(--o-signal);
+  transform: rotate(45deg);
+}
+
+[data-direction="orbit"] .o-pip[data-kind="done"] {
+  background: var(--o-ink);
+}
+
+[data-direction="orbit"] .o-pip-error {
+  width: 8px;
+  height: 8px;
+  margin: 0;
+  fill: none;
+  stroke: var(--o-red);
+  stroke-width: 1.5;
+  stroke-linecap: square;
+}
+
+[data-direction="orbit"] .o-squares {
+  display: inline-flex;
+  flex: none;
+  gap: 1px;
+}
+
+[data-direction="orbit"] .o-square {
+  width: 6px;
+  height: 6px;
+  background: var(--o-square-rest);
+}
+
+[data-direction="orbit"] .o-square[data-tone="add"] {
+  background: var(--o-green);
+}
+
+[data-direction="orbit"] .o-square[data-tone="del"] {
+  background: var(--o-red);
+}
+
+[data-direction="orbit"] .o-counts {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  font-family: var(--o-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-direction="orbit"] .o-counts[data-size="11"] {
+  font-size: 11px;
+}
+
+[data-direction="orbit"] .o-level {
+  flex: none;
+}
+
+[data-direction="orbit"] .o-level rect {
+  fill: var(--o-text-4);
+}
+
+[data-direction="orbit"] .o-level rect[data-on] {
+  fill: var(--o-ink);
+}
+
+[data-direction="orbit"] .o-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--o-r-pill);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+[data-direction="orbit"] .o-status-mark {
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+}
+
+[data-direction="orbit"] .o-status[data-tone="green"] {
+  background: var(--o-green-tint);
+  color: var(--o-green-text);
+}
+
+[data-direction="orbit"] .o-status[data-tone="red"] {
+  background: var(--o-red-tint);
+  color: var(--o-red);
+}
+
+[data-direction="orbit"] .o-status[data-tone="signal"] {
+  background: var(--o-signal-tint);
+  color: var(--o-signal-text);
+}
+
+[data-direction="orbit"] .o-status[data-tone="ink"] {
+  background: var(--o-selected);
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-icon-btn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--o-r-sm);
+  color: var(--o-text-3);
+  transition:
+    background-color var(--o-micro) var(--o-ease-standard),
+    color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-icon-btn[data-size="24"] {
+  width: 24px;
+  height: 24px;
+}
+
+[data-direction="orbit"] .o-icon-btn:hover {
+  background: var(--o-hover);
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-icon-btn[data-active] {
+  background: var(--o-raised-2);
+  color: var(--o-text-1);
+}
+
+/* X Money's grey-on-grey shimmer for live labels. */
+[data-direction="orbit"] .o-shimmer {
+  background:
+    linear-gradient(
+      100deg,
+      var(--o-text-2) 0%,
+      var(--o-text-2) 38%,
+      var(--o-text-1) 50%,
+      var(--o-text-2) 62%,
+      var(--o-text-2) 100%
+    )
+    0 0 / 250% 100%;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: o-shimmer 1.4s linear infinite;
+}
+
+@keyframes o-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+[data-direction="orbit"] .o-tear {
+  height: 1px;
+  background: linear-gradient(90deg, var(--o-dash) 50%, transparent 0) 0 0 / 16px 1px repeat-x;
+}
+
+[data-direction="orbit"] .o-numeral {
+  display: inline-flex;
+  align-items: flex-start;
+  color: var(--o-text-1);
+}
+
+/* Built superscript decimals: 42% of the numeral, top-aligned, 2px after the integer. */
+[data-direction="orbit"] .o-sup {
+  margin-left: 2px;
+  font-size: 0.42em;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+[data-direction="orbit"] .o-unit {
+  align-self: flex-end;
+  margin-left: 2px;
+  color: var(--o-text-3);
+  font-size: 0.5em;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+/* ============================================================================= the mark */
+
+[data-direction="orbit"] .o-mark {
+  flex: none;
+  overflow: visible;
+}
+
+[data-direction="orbit"] .o-mark-orbit {
+  fill: none;
+  stroke-width: 1px;
+  stroke: var(--o-text-2);
+  vector-effect: non-scaling-stroke;
+}
+
+[data-direction="orbit"] .o-mark-orbit[data-tone="text-1"] {
+  stroke: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-mark-orbit[data-tone="text-3"] {
+  stroke: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-mark-orbit[data-tone="text-4"] {
+  stroke: var(--o-text-4);
+}
+
+/* From 48px the far half is the X Card's dashed arc, so the orbit reads as passing behind. */
+[data-direction="orbit"] .o-mark-orbit[data-far] {
+  stroke-dasharray: 2 2;
+}
+
+[data-direction="orbit"] .o-mark-orbit[data-dashed="dash"] {
+  stroke-dasharray: 2 2;
+}
+
+[data-direction="orbit"] .o-mark-orbit[data-dashed="error"] {
+  stroke-dasharray: 2 3;
+}
+
+[data-direction="orbit"] .o-mark-body {
+  stroke: var(--o-text-3);
+  stroke-width: 1px;
+}
+
+[data-direction="orbit"] .o-mark-body[data-ghost] {
+  stroke: var(--o-text-4);
+}
+
+/* Below 48px the body is a filled node with no outline: a line around a node, not a capsule. */
+[data-direction="orbit"] .o-mark-body[data-node] {
+  stroke: none;
+}
+
+/* At 14 and 16px a 1px orbit thins to nothing on a 2x screen: it draws at 1.25px. */
+[data-direction="orbit"] .o-mark[data-fine] .o-mark-orbit {
+  stroke-width: 1.25px;
+}
+
+[data-direction="orbit"] .o-mark-sat {
+  fill: var(--o-ink);
+}
+
+[data-direction="orbit"] .o-mark-sat[data-tone="signal"] {
+  fill: var(--o-signal);
+}
+
+[data-direction="orbit"] .o-mark-sat[data-tone="red"] {
+  fill: var(--o-red);
+}
+
+[data-direction="orbit"] .o-mark-sat[data-hollow] {
+  fill: var(--o-pane);
+  stroke: var(--o-text-4);
+  stroke-width: 1px;
+}
+
+[data-direction="orbit"] .o-mark-trail {
+  fill: none;
+  stroke: var(--o-text-1);
+  stroke-width: 1.25px;
+}
+
+[data-direction="orbit"] .o-mark-ripple {
+  fill: none;
+  stroke: var(--o-text-2);
+  stroke-width: 1px;
+}
+
+[data-direction="orbit"] .o-mark-ripple[data-tone="signal"] {
+  stroke: var(--o-signal);
+}
+
+[data-direction="orbit"] .o-mark-check {
+  fill: none;
+  stroke: var(--o-green);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The empty state's agent switch: the new orbit draws in, its far half and satellite fade in. */
+[data-direction="orbit"] .o-mark[data-draw] .o-mark-orbit[data-near] {
+  stroke-dasharray: 1;
+  animation: o-orbit-draw 400ms var(--o-ease-out) both;
+}
+
+[data-direction="orbit"] .o-mark[data-draw] .o-mark-orbit:not([data-near]),
+[data-direction="orbit"] .o-mark[data-draw] .o-mark-sat {
+  animation: o-fade 400ms var(--o-ease-out) both;
+}
+
+@keyframes o-orbit-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ============================================================================= the sidebar */
+
+/* The native material shows here only, under the tray tint (section 6). */
+[data-direction="orbit"] .o-sidebar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--o-sidebar-w);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(var(--o-tray-tint), var(--o-tray-tint)), var(--o-material);
+  transition: width var(--o-slow) var(--o-ease-sheet);
+  --o-dock-surface: var(--o-tray);
+}
+
+[data-direction="orbit"] .o-band {
+  position: relative;
+  flex: none;
+  height: 52px;
+}
+
+[data-direction="orbit"] .o-band-toggle {
+  position: absolute;
+  top: 12px;
+  left: 224px;
+  transition:
+    left var(--o-slow) var(--o-ease-sheet),
+    top var(--o-slow) var(--o-ease-sheet);
+}
+
+[data-direction="orbit"] .o-side-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 12px 12px;
+}
+
+[data-direction="orbit"] .o-side-group + .o-side-group {
+  margin-top: 16px;
+}
+
+[data-direction="orbit"] .o-side-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px 0 12px;
+}
+
+[data-direction="orbit"] .o-side-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--o-r-md);
+  color: var(--o-text-2);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: var(--o-w-ui);
+  transition:
+    font-weight var(--o-base) var(--o-ease-out),
+    color var(--o-base) var(--o-ease-out),
+    background-color var(--o-micro) var(--o-ease-standard);
+}
+
+/* X Money's nav: hover changes the letter weight and ink, not the fill. */
+[data-direction="orbit"] .o-side-row:hover {
+  color: var(--o-text-1);
+  font-weight: var(--o-w-hover);
+}
+
+[data-direction="orbit"] .o-side-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-utility {
+  padding-left: 8px;
+}
+
+[data-direction="orbit"] .o-utility .o-side-title {
+  padding-left: 0;
+}
+
+[data-direction="orbit"] .o-keys {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+  opacity: 0.85;
+}
+
+[data-direction="orbit"] .o-needs-row .o-side-title {
+  color: var(--o-text-1);
+}
+
+/* The title is what you need: as one run of text, the project suffix is what the ellipsis eats. */
+[data-direction="orbit"] .o-needs-project {
+  color: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-needs-row[data-active] .o-needs-project {
+  color: var(--o-text-2);
+}
+
+[data-direction="orbit"] .o-needs-pip {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+}
+
+[data-direction="orbit"] .o-project-row {
+  gap: 12px;
+  padding-left: 12px;
+}
+
+[data-direction="orbit"] .o-project-square {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--o-r-0);
+  background: var(--o-project-stone);
+}
+
+[data-direction="orbit"] .o-project-square[data-tone="slate"] {
+  background: var(--o-project-slate);
+}
+
+[data-direction="orbit"] .o-project-square[data-tone="sage"] {
+  background: var(--o-project-sage);
+}
+
+[data-direction="orbit"] .o-project-square[data-tone="clay"] {
+  background: var(--o-project-clay);
+}
+
+[data-direction="orbit"] .o-project-name {
+  color: var(--o-text-1);
+  font-weight: var(--o-w-strong);
+}
+
+[data-direction="orbit"] .o-project-side {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+}
+
+[data-direction="orbit"] .o-project-pip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-direction="orbit"] .o-project-count {
+  min-width: 12px;
+  text-align: right;
+}
+
+[data-direction="orbit"] .o-project-chev {
+  flex: none;
+  width: 0;
+  opacity: 0;
+  color: var(--o-text-3);
+  transition:
+    transform var(--o-fast) var(--o-ease-standard),
+    opacity var(--o-fast) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-project-row:hover .o-project-chev {
+  width: 12px;
+  opacity: 1;
+}
+
+[data-direction="orbit"] .o-project-chev[data-open] {
+  transform: rotate(90deg);
+}
+
+[data-direction="orbit"] .o-chat-row {
+  padding-left: 32px;
+}
+
+[data-direction="orbit"] .o-chat-row[data-strong] .o-side-title {
+  color: var(--o-text-1);
+  font-weight: var(--o-w-strong);
+}
+
+[data-direction="orbit"] .o-chat-row[data-status="running"]:not([data-active]) .o-side-title {
+  color: var(--o-text-3);
+}
+
+/* The active chat: a piece of the pane lifted onto the desk (Aside, Arc). */
+[data-direction="orbit"] .o-chat-row[data-active] {
+  background: var(--o-pane);
+  box-shadow: var(--o-ring-strong), var(--o-e1);
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-root[data-theme="dark"] .o-chat-row[data-active] {
+  background: var(--o-raised);
+}
+
+/* The same chat in Needs you is only marked: one lifted row per chat. */
+[data-direction="orbit"] .o-needs-row[data-active] {
+  background: var(--o-selected);
+}
+
+[data-direction="orbit"] .o-trail {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+[data-direction="orbit"] .o-trail-word {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+/*
+ * A chat line: the row, and its hover tools laid over the row's trailing slot (Superhuman). At rest
+ * the tools are invisible and take no clicks; on hover (or while the row has focus, or its menu is
+ * open) they replace the time or the status.
+ */
+[data-direction="orbit"] .o-chat-line {
+  position: relative;
+}
+
+[data-direction="orbit"] .o-chat-tools {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-chat-line:is(:hover, :focus-within, [data-menu]) .o-chat-tools {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+[data-direction="orbit"] .o-chat-line:is(:hover, :focus-within, [data-menu]) .o-trail {
+  visibility: hidden;
+}
+
+/* The dock is the agent card's anchor: the card opens above the whole strip, left-aligned. */
+[data-direction="orbit"] .o-dock-strip {
+  position: relative;
+  flex: none;
+  margin: 0 12px;
+  padding: 8px 0 4px;
+  box-shadow: 0 -1px 0 var(--o-rule);
+}
+
+[data-direction="orbit"] .o-dock-cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px 0 0;
+}
+
+[data-direction="orbit"] .o-dock-anchor {
+  display: inline-flex;
+}
+
+/* A cell: the agent's 24px mark, and under it its two-letter code (SpaceXAI's marker and label). */
+[data-direction="orbit"] .o-dock-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 32px;
+  height: 44px;
+  padding-top: 4px;
+  border-radius: var(--o-r-md);
+  transition: background-color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-dock-cell:hover {
+  background: var(--o-hover);
+}
+
+[data-direction="orbit"] .o-dock-cell[data-open] {
+  background: var(--o-selected);
+}
+
+[data-direction="orbit"] .o-dock-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+}
+
+/* The smallest type Orbit sets: `caps` at 10px, as on the NEW chip (section 3.9). */
+[data-direction="orbit"] .o-dock-code {
+  color: var(--o-text-3);
+  font-family: var(--o-mono);
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+[data-direction="orbit"] .o-dock-code[data-missing] {
+  color: var(--o-text-4);
+}
+
+[data-direction="orbit"] .o-dock-update {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 5px;
+  height: 5px;
+  background: var(--o-signal);
+}
+
+[data-direction="orbit"] .o-account {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 12px 8px 20px;
+}
+
+[data-direction="orbit"] .o-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--o-r-pill);
+  background: var(--o-selected);
+  color: var(--o-text-2);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+[data-direction="orbit"] .o-account-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ============================================================================== the header */
+
+[data-direction="orbit"] .o-head {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--o-head-h);
+  padding: 0 10px 0 16px;
+  container: o-head / inline-size;
+}
+
+[data-direction="orbit"] .o-head::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: var(--o-rule);
+  content: "";
+  opacity: 0;
+  transition: opacity var(--o-fast) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-head[data-scrolled]::after {
+  opacity: 1;
+}
+
+[data-direction="orbit"] .o-head-left {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/*
+ * The title is a button that renames in place. Its ellipsis lives on an inner span, so the focus
+ * ring around the button is never clipped; it gives way only after the metadata has.
+ */
+[data-direction="orbit"] .o-head-title {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-head-title-btn {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 420px;
+  height: 26px;
+  align-items: center;
+  margin-left: -6px;
+  padding: 0 6px;
+  border-radius: var(--o-r-sm);
+  cursor: text;
+  transition: background-color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-head-title-btn:hover {
+  background: var(--o-hover);
+}
+
+[data-direction="orbit"] .o-head-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Rename in place (section 3.9 input): the field replaces the title at its width, no ring. */
+[data-direction="orbit"] .o-head-rename {
+  height: 26px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--o-r-sm);
+  outline: none;
+  background: var(--o-pane);
+  box-shadow: inset 0 0 0 1px var(--o-line-strong);
+  color: var(--o-text-1);
+  caret-color: var(--o-ink);
+}
+
+[data-direction="orbit"] .o-head-rename:focus,
+[data-direction="orbit"] .o-head-rename:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--o-ink) 32%, transparent);
+}
+
+[data-direction="orbit"] .o-head-meta {
+  display: inline-flex;
+  flex: 0 100 auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-head-meta > * {
+  flex: none;
+}
+
+[data-direction="orbit"] .o-head-meta-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A narrow pane drops the metadata before the title cuts. */
+@container o-head (max-width: 560px) {
+  [data-direction="orbit"] .o-head-meta {
+    display: none;
+  }
+}
+
+[data-direction="orbit"] .o-head-meta .o-t-mono {
+  font-size: 12px;
+}
+
+[data-direction="orbit"] .o-head-right {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+[data-direction="orbit"] .o-diff-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--o-r-sm);
+  box-shadow: var(--o-ring);
+  transition: background-color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-diff-chip:hover {
+  background: var(--o-hover);
+}
+
+/* ========================================================================== the transcript */
+
+[data-direction="orbit"] .o-chat-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-anchor: none;
+  padding: 24px 32px calc(var(--o-dock-h) + 32px);
+}
+
+/* Scroll-driven fades instead of frosted bars (Aside). */
+[data-direction="orbit"] .o-fade-top,
+[data-direction="orbit"] .o-fade-bottom {
+  position: absolute;
+  right: 8px;
+  left: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+[data-direction="orbit"] .o-fade-top {
+  top: var(--o-head-h);
+  height: 32px;
+  background: linear-gradient(var(--o-pane), transparent);
+}
+
+/*
+ * The bottom fade runs from 32px above the dock to the pane's edge: pane colour fills in behind
+ * the composer and the strip under it, so nothing scrolled shows below or beside the shell.
+ */
+[data-direction="orbit"] .o-fade-bottom {
+  bottom: 0;
+  height: calc(var(--o-dock-h) + 32px);
+  background: linear-gradient(transparent, var(--o-pane) 32px);
+}
+
+[data-direction="orbit"] .o-transcript {
+  max-width: var(--o-column);
+  margin: 0 auto;
+}
+
+[data-direction="orbit"] .o-turn + .o-turn {
+  margin-top: 32px;
+}
+
+/* The user's message: the darkest object on screen (Grok Bot), its tail pointing at the composer. */
+[data-direction="orbit"] .o-user {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 20px;
+}
+
+[data-direction="orbit"] .o-user-block {
+  position: relative;
+  max-width: 82%;
+  padding: 10px 14px;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--o-user-bg);
+  color: var(--o-user-fg);
+  line-height: 21px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Over 12 lines the block clamps and fades into its own fill, with Show all at its foot. */
+[data-direction="orbit"] .o-user-block[data-clamped] {
+  max-height: calc(12 * 21px + 20px);
+  overflow: hidden;
+}
+
+[data-direction="orbit"] .o-user-block[data-clamped]::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 56px;
+  background: linear-gradient(transparent, var(--o-user-bg) 70%);
+  content: "";
+}
+
+[data-direction="orbit"] .o-user-more {
+  display: block;
+  margin-top: 6px;
+  color: color-mix(in srgb, var(--o-user-fg) 70%, transparent);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-user-block[data-clamped] .o-user-more {
+  position: absolute;
+  right: 14px;
+  bottom: 8px;
+  z-index: 1;
+  margin: 0;
+}
+
+[data-direction="orbit"] .o-user-more:hover {
+  color: var(--o-user-fg);
+}
+
+/* A steer: the message, with when it went in written over it in caps. */
+[data-direction="orbit"] .o-user[data-tag] {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+[data-direction="orbit"] .o-user-tag {
+  padding-right: 4px;
+}
+
+/*
+ * The gutter: every line's first 22px. Icons, chevrons and the agent's live mark sit centred in it
+ * (on x 11), so the words of every row start at x 22 and a live line can hand over to the next
+ * without its words moving.
+ */
+[data-direction="orbit"] .o-gutter {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 100%;
+}
+
+/* The byline: the agent's mark in the gutter, its name on the word column. */
+[data-direction="orbit"] .o-byline {
+  display: flex;
+  align-items: center;
+  height: 24px;
+}
+
+[data-direction="orbit"] .o-byline-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Claude's sticky prompt: a 32px ink strip that pins under the header while the turn's message is
+ * scrolled out of view. It takes no room in the column; hidden, it takes no clicks and no focus.
+ */
+[data-direction="orbit"] .o-sticky {
+  position: sticky;
+  /* Sticky offsets count from inside the scroller's 24px top padding: this pins at its edge. */
+  top: -24px;
+  z-index: 3;
+  height: 0;
+}
+
+[data-direction="orbit"] .o-sticky-prompt {
+  /* Positioned, so it paints over the backing below. */
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 32px;
+  padding: 0 14px;
+  overflow: hidden;
+  border-radius: 0 0 12px 12px;
+  background: var(--o-user-bg);
+  color: var(--o-user-fg);
+  line-height: 32px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition:
+    opacity 220ms var(--o-ease-out),
+    transform 220ms var(--o-ease-out),
+    visibility 0s linear 220ms;
+}
+
+/*
+ * Under the strip, the pane's fade carries on, so text never ends hard against its edge. Its first
+ * 16px stay solid: a line that slid under the strip's edge is hidden, never shown cut in half.
+ */
+[data-direction="orbit"] .o-sticky::after {
+  position: absolute;
+  top: 32px;
+  right: -32px;
+  left: -32px;
+  height: 40px;
+  background: linear-gradient(var(--o-pane) 16px, transparent);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms var(--o-ease-out);
+}
+
+[data-direction="orbit"] .o-sticky[data-shown]::after {
+  opacity: 1;
+}
+
+/* The pane behind the strip, so its rounded corners sit on the pane, not on the text under it. */
+[data-direction="orbit"] .o-sticky::before {
+  position: absolute;
+  top: 0;
+  right: -32px;
+  left: -32px;
+  height: 32px;
+  background: var(--o-pane);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms var(--o-ease-out);
+}
+
+[data-direction="orbit"] .o-sticky[data-shown]::before {
+  opacity: 1;
+}
+
+[data-direction="orbit"] .o-sticky[data-shown] .o-sticky-prompt {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 220ms var(--o-ease-out),
+    transform 220ms var(--o-ease-out),
+    visibility 0s;
+}
+
+[data-direction="orbit"] .o-turn-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* Tool rows (and the now-row after one) stack 2px apart, a list rather than separate items. */
+[data-direction="orbit"]
+  .o-turn-items
+  > :is(.o-tool-group, .o-call, .o-plan-row)
+  + :is(.o-tool-group, .o-call, .o-plan-row, .o-now) {
+  margin-top: -10px;
+}
+
+/* ---------------------------------------------------------------------------- markdown */
+
+[data-direction="orbit"] .o-md {
+  color: var(--o-text-1);
+  font-size: 14px;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+
+/* Block rhythm: 10px between blocks, 16px above a heading, 6px under it. */
+[data-direction="orbit"] .o-md > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+[data-direction="orbit"] .o-md > * + * {
+  margin-top: 10px;
+}
+
+[data-direction="orbit"] .o-md > * + :is(.o-md-h, .o-md-h3) {
+  margin-top: 16px;
+}
+
+/*
+ * Running text keeps a reading measure: about 89 characters at 14px, Harvey's thread measure.
+ * Code blocks, tables, tool rows, the user block and the composer keep the full 720px column.
+ */
+[data-direction="orbit"] .o-md > :is(.o-md-p, .o-md-ul, .o-md-ol, .o-md-quote, .o-md-h, .o-md-h3) {
+  max-width: 560px;
+}
+
+[data-direction="orbit"] .o-md > :is(.o-md-h, .o-md-h3) + * {
+  margin-top: 6px;
+}
+
+[data-direction="orbit"] .o-md-h {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: var(--o-w-heading);
+  letter-spacing: -0.01em;
+}
+
+[data-direction="orbit"] .o-md-h3 {
+  font-size: 14px;
+  font-weight: var(--o-w-heading);
+}
+
+[data-direction="orbit"] .o-md-ul,
+[data-direction="orbit"] .o-md-ol {
+  padding-left: 18px;
+  list-style: none;
+}
+
+[data-direction="orbit"] .o-md-ol {
+  counter-reset: o-li;
+}
+
+[data-direction="orbit"] .o-md-li {
+  position: relative;
+}
+
+[data-direction="orbit"] .o-md-li + .o-md-li {
+  margin-top: 6px;
+}
+
+/* Bullets are SpaceXAI's markers: 4px zero-radius squares. */
+[data-direction="orbit"] .o-md-ul > .o-md-li::before {
+  position: absolute;
+  top: 9px;
+  left: -14px;
+  width: 4px;
+  height: 4px;
+  background: var(--o-text-3);
+  content: "";
+}
+
+[data-direction="orbit"] .o-md-ol > .o-md-li {
+  counter-increment: o-li;
+}
+
+[data-direction="orbit"] .o-md-ol > .o-md-li::before {
+  position: absolute;
+  left: -18px;
+  color: var(--o-text-3);
+  font-variant-numeric: tabular-nums;
+  content: counter(o-li) ".";
+}
+
+[data-direction="orbit"] .o-strong {
+  color: var(--o-text-1);
+  font-weight: var(--o-w-heading);
+}
+
+[data-direction="orbit"] .o-li-rest {
+  color: var(--o-text-2);
+}
+
+[data-direction="orbit"] .o-em {
+  font-style: normal;
+  font-weight: var(--o-w-strong);
+}
+
+[data-direction="orbit"] .o-inline-code {
+  padding: 1px 5px;
+  border-radius: var(--o-r-xs);
+  background: var(--o-inline-code);
+  box-shadow: var(--o-ring);
+  color: var(--o-text-1);
+  font-family: var(--o-mono);
+  font-size: 0.893em;
+}
+
+[data-direction="orbit"] .o-file-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 0 5px;
+  border-radius: var(--o-r-xs);
+  background: var(--o-inline-code);
+  box-shadow: var(--o-ring);
+  color: var(--o-text-1);
+  font-family: var(--o-mono);
+  font-size: 12px;
+  line-height: 18px;
+  vertical-align: 1px;
+}
+
+[data-direction="orbit"] .o-file-ref svg {
+  color: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-link {
+  color: var(--o-text-1);
+  text-decoration: underline;
+  text-decoration-color: var(--o-text-4);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+[data-direction="orbit"] .o-link:hover {
+  text-decoration-color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-md-quote {
+  padding-left: 12px;
+  box-shadow: inset 2px 0 0 var(--o-line-strong);
+  color: var(--o-text-2);
+}
+
+[data-direction="orbit"] .o-md > .o-md-rule {
+  margin: 16px 0;
+}
+
+[data-direction="orbit"] .o-md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-direction="orbit"] .o-md-table th {
+  height: 32px;
+  color: var(--o-text-3);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  box-shadow: inset 0 -1px 0 var(--o-rule);
+}
+
+[data-direction="orbit"] .o-md-table td {
+  height: 32px;
+  box-shadow: inset 0 -1px 0 var(--o-rule);
+}
+
+/* Streamed words fade in once, then stay put (ChatGPT). */
+[data-direction="orbit"] .o-word {
+  animation: o-word-in 300ms var(--o-ease-out) both;
+}
+
+@keyframes o-word-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* --------------------------------------------------------------------------- code blocks */
+
+[data-direction="orbit"] .o-codeblock {
+  overflow: hidden;
+  border-radius: var(--o-r-md);
+  background: var(--o-well);
+  box-shadow: var(--o-ring);
+}
+
+[data-direction="orbit"] .o-codeblock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  padding: 0 8px 0 14px;
+  box-shadow: inset 0 -1px 0 var(--o-rule);
+}
+
+[data-direction="orbit"] .o-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--o-r-sm);
+  color: var(--o-text-3);
+  font-size: 12px;
+  transition:
+    background-color var(--o-micro) var(--o-ease-standard),
+    color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-copy:hover {
+  background: var(--o-hover);
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-codeblock-body {
+  max-height: 420px;
+  margin: 0;
+  padding: 10px 14px;
+  overflow: auto;
+  color: var(--o-code-fg);
+  font-family: var(--o-mono);
+  font-size: 12.5px;
+  line-height: 20px;
+  white-space: pre;
+}
+
+/*
+ * x.ai's code window: near-monochrome. Keywords red, strings blue, numbers and attributes orange;
+ * calls, types and names stay in the foreground; comments and punctuation dim. Purple and teal are
+ * left to terminal output, where a program chose them.
+ */
+[data-direction="orbit"] .o-tok[data-kind="comment"],
+[data-direction="orbit"] .o-tok[data-kind="punct"] {
+  color: var(--o-code-dim);
+}
+
+[data-direction="orbit"] .o-tok[data-kind="string"] {
+  color: var(--o-code-blue);
+}
+
+[data-direction="orbit"] .o-tok:is([data-kind="number"], [data-kind="attr"]) {
+  color: var(--o-code-orange);
+}
+
+[data-direction="orbit"] .o-tok[data-kind="keyword"] {
+  color: var(--o-code-red);
+}
+
+/* ------------------------------------------------------------------------------ thinking */
+
+[data-direction="orbit"] .o-thought-line {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  max-width: 100%;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: var(--o-w-ui);
+}
+
+[data-direction="orbit"] .o-thought-chev {
+  flex: none;
+  color: var(--o-text-3);
+  transition: transform var(--o-fast) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-thought[data-open] .o-thought-chev {
+  transform: rotate(90deg);
+}
+
+[data-direction="orbit"] .o-thought-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-thought-line:hover .o-thought-label {
+  color: var(--o-text-2);
+}
+
+/* A fold that animates its height: its content is clipped while it opens and closes. */
+[data-direction="orbit"] .o-fold {
+  overflow: hidden;
+}
+
+[data-direction="orbit"] .o-thought-body {
+  position: relative;
+  max-height: 280px;
+  margin-top: 4px;
+  padding: 2px 0 2px 22px;
+  overflow-y: auto;
+  color: var(--o-text-2);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+[data-direction="orbit"] .o-thought-body p {
+  max-width: 560px;
+  margin: 0;
+}
+
+[data-direction="orbit"] .o-thought-body[data-more] {
+  mask-image: linear-gradient(#000 calc(100% - 24px), transparent);
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 24px), transparent);
+}
+
+[data-direction="orbit"] .o-thought-body::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 10.5px;
+  width: 1px;
+  background: var(--o-rule);
+  content: "";
+}
+
+/* ---------------------------------------------------------------------------- tool rows */
+
+[data-direction="orbit"] .o-tool-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 28px;
+  padding: 0 6px 0 0;
+  border-radius: var(--o-r-sm);
+  text-align: left;
+  transition: background-color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-tool-row:not(:disabled, [data-static]):hover {
+  background: var(--o-hover);
+}
+
+[data-direction="orbit"] .o-tool-icon {
+  flex: none;
+  color: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-tool-chev {
+  flex: none;
+  color: var(--o-text-3);
+  transition: transform var(--o-fast) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-tool-group[data-open] > .o-tool-row .o-tool-chev {
+  transform: rotate(90deg);
+}
+
+[data-direction="orbit"] .o-tool-text {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-tool-verb {
+  flex: none;
+  color: var(--o-text-2);
+}
+
+[data-direction="orbit"] .o-tool-object {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--o-text-1);
+  font-family: var(--o-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+[data-direction="orbit"] .o-tool-result {
+  flex: none;
+  color: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-tool-side {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding-left: 12px;
+}
+
+[data-direction="orbit"] .o-tool-hover-chev {
+  width: 0;
+  color: var(--o-text-3);
+  opacity: 0;
+  transition: opacity var(--o-fast) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-tool-row:hover .o-tool-hover-chev {
+  width: 12px;
+  opacity: 1;
+}
+
+[data-direction="orbit"] .o-call[data-open] > .o-tool-row .o-tool-hover-chev {
+  transform: rotate(90deg);
+}
+
+/* The summary row of a running group names the call it is on: a live verb and a mono literal. */
+[data-direction="orbit"] .o-tool-summary .o-tool-object {
+  flex: 0 1 auto;
+}
+
+[data-direction="orbit"] .o-mono-11 {
+  font-size: 11px;
+  line-height: 16px;
+}
+
+[data-direction="orbit"] .o-w-strong {
+  font-weight: var(--o-w-strong);
+}
+
+[data-direction="orbit"] .o-fail {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* A group's calls hang off a 1px spine through their icons (Legora, Aside). */
+[data-direction="orbit"] .o-tool-children {
+  position: relative;
+  padding-top: 2px;
+}
+
+[data-direction="orbit"] .o-tool-children::before {
+  position: absolute;
+  top: 0;
+  bottom: 14px;
+  left: 10.5px;
+  width: 1px;
+  background: var(--o-rule);
+  content: "";
+}
+
+/* Turned down: struck through in a dashed outline (Cron). */
+[data-direction="orbit"] .o-tool-row[data-denied] {
+  outline: 1px dashed var(--o-line-strong);
+  outline-offset: -1px;
+}
+
+[data-direction="orbit"] .o-tool-row[data-denied] .o-tool-text > span {
+  color: var(--o-text-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--o-text-4);
+}
+
+/* -------------------------------------------------------------------------------- wells */
+
+[data-direction="orbit"] .o-well {
+  margin: 4px 0 8px 22px;
+  padding: 10px 12px;
+  border-radius: var(--o-r-md);
+  background: var(--o-well);
+  box-shadow: var(--o-ring);
+}
+
+[data-direction="orbit"] .o-well-stack .o-well + .o-well {
+  margin-top: 8px;
+}
+
+[data-direction="orbit"] .o-kv {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  align-items: baseline;
+  min-height: 22px;
+}
+
+[data-direction="orbit"] .o-kv-value {
+  overflow-wrap: anywhere;
+}
+
+[data-direction="orbit"] .o-well-more {
+  display: block;
+  width: 100%;
+  padding: 6px 12px 8px;
+  color: var(--o-text-2);
+  text-align: left;
+}
+
+[data-direction="orbit"] .o-well-more:hover {
+  color: var(--o-text-1);
+}
+
+/*
+ * A command (Grok Build's terminal grammar): its row is the block's header. Opened, the block is a
+ * well around the row and its output, and a failed run keeps Warp's red exit edge. The output's
+ * lines start on the word column, under the command.
+ */
+[data-direction="orbit"] .o-cmd {
+  border-radius: var(--o-r-md);
+  transition:
+    background-color var(--o-dock) var(--o-ease-out),
+    box-shadow var(--o-dock) var(--o-ease-out);
+}
+
+[data-direction="orbit"] .o-cmd[data-open] {
+  background: var(--o-well);
+  box-shadow: var(--o-ring);
+}
+
+[data-direction="orbit"] .o-cmd[data-open][data-failed] {
+  box-shadow:
+    inset 2px 0 0 var(--o-red),
+    var(--o-ring);
+}
+
+[data-direction="orbit"] .o-cmd-head {
+  display: flex;
+  align-items: center;
+}
+
+[data-direction="orbit"] .o-cmd-toggle {
+  flex: 1;
+  min-width: 0;
+}
+
+[data-direction="orbit"] .o-cmd[data-open] .o-cmd-toggle {
+  padding-right: 2px;
+}
+
+[data-direction="orbit"] .o-cmd-prompt {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  color: var(--o-text-3);
+  font-family: var(--o-mono);
+  font-size: 12px;
+  line-height: 14px;
+}
+
+/* Inside an opened group, each icon sits on a patch of pane, so the spine passes behind it. */
+[data-direction="orbit"] .o-call[data-nested] .o-tool-row .o-gutter > svg,
+[data-direction="orbit"] .o-call[data-nested] .o-tool-row .o-cmd-prompt {
+  position: relative;
+  background: var(--o-pane);
+  box-shadow: 0 0 0 3px var(--o-pane);
+}
+
+[data-direction="orbit"] .o-cmd-actions {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding-right: 2px;
+}
+
+[data-direction="orbit"] .o-term-body {
+  max-height: calc(12 * 18px + 16px);
+  padding: 4px 12px 10px 22px;
+  overflow: auto;
+  color: var(--o-code-fg);
+  font-family: var(--o-mono);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre;
+}
+
+[data-direction="orbit"] .o-term-body[data-clipped] {
+  mask-image: linear-gradient(transparent, #000 24px);
+  -webkit-mask-image: linear-gradient(transparent, #000 24px);
+}
+
+[data-direction="orbit"] .o-term-line {
+  min-height: 18px;
+}
+
+/* Vercel's log rows: an error or warning line is tinted edge to edge of the well's body. */
+[data-direction="orbit"] .o-term-line[data-tone] {
+  margin: 0 -12px 0 -22px;
+  padding: 0 12px 0 22px;
+}
+
+[data-direction="orbit"] .o-term-line[data-tone="error"] {
+  background: var(--o-red-tint);
+}
+
+[data-direction="orbit"] .o-term-line[data-tone="warn"] {
+  background: var(--o-signal-tint);
+}
+
+[data-direction="orbit"] .o-term-span[data-bold] {
+  font-weight: 600;
+}
+
+[data-direction="orbit"] .o-term-span[data-dim] {
+  opacity: 0.72;
+}
+
+[data-direction="orbit"] .o-cmd .o-well-more {
+  padding-left: 22px;
+}
+
+/* ------------------------------------------------------------------------------- diffs */
+
+[data-direction="orbit"] .o-well-diff {
+  padding: 0;
+  overflow: hidden;
+}
+
+[data-direction="orbit"] .o-diff-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 4px 0 12px;
+  box-shadow: inset 0 -1px 0 var(--o-rule);
+}
+
+[data-direction="orbit"] .o-diff-icon {
+  flex: none;
+}
+
+[data-direction="orbit"] .o-diff-path {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/*
+ * A path: the folder in text-3 gives way from its start ("…/orb/"), the file name in text-1 never
+ * does. The folder's text runs right to left inside its box, so its ellipsis lands on the left;
+ * the <bdi> keeps the path itself in reading order.
+ */
+[data-direction="orbit"] .o-path {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-direction="orbit"] .o-path-dir {
+  min-width: 0;
+  overflow: hidden;
+  direction: rtl;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-path-name {
+  flex: none;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-diff-actions {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+[data-direction="orbit"] .o-diff-rows {
+  padding: 4px 0;
+  overflow-x: auto;
+}
+
+[data-direction="orbit"] .o-diff-rows > :is(.o-diff-row, .o-diff-hunk, .o-diff-gap) {
+  min-width: 100%;
+  width: max-content;
+}
+
+[data-direction="orbit"] .o-diff-rows[data-clipped] {
+  mask-image: linear-gradient(#000 calc(100% - 40px), transparent);
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 40px), transparent);
+}
+
+[data-direction="orbit"] .o-diff-row {
+  display: grid;
+  grid-template-columns: 36px 14px auto;
+  height: 20px;
+  font-family: var(--o-mono);
+  font-size: 12.5px;
+  line-height: 20px;
+}
+
+[data-direction="orbit"] .o-diff[data-numbers="two"] .o-diff-row {
+  grid-template-columns: 36px 36px 14px auto;
+}
+
+/* Line numbers carry information, so they read at text-3; the changed side's takes its tone. */
+[data-direction="orbit"] .o-diff-num {
+  padding-right: 8px;
+  color: var(--o-text-3);
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-direction="orbit"] .o-diff-row[data-op="add"] {
+  background: var(--o-add-line);
+}
+
+[data-direction="orbit"] .o-diff-row[data-op="remove"] {
+  background: var(--o-del-line);
+}
+
+[data-direction="orbit"] .o-diff-row[data-op="add"] .o-diff-num,
+[data-direction="orbit"] .o-diff-row[data-op="add"] .o-diff-num[data-side="new"] {
+  color: var(--o-add-num);
+}
+
+[data-direction="orbit"] .o-diff-row[data-op="remove"] .o-diff-num,
+[data-direction="orbit"] .o-diff-row[data-op="remove"] .o-diff-num[data-side="old"] {
+  color: var(--o-del-num);
+}
+
+[data-direction="orbit"]
+  .o-diff[data-numbers="two"]
+  .o-diff-row[data-op="add"]
+  .o-diff-num[data-side="old"],
+[data-direction="orbit"]
+  .o-diff[data-numbers="two"]
+  .o-diff-row[data-op="remove"]
+  .o-diff-num[data-side="new"] {
+  color: var(--o-text-3);
+}
+
+/* The + and − at full tone: colour is never the only cue, so the mark itself must read. */
+[data-direction="orbit"] .o-diff-marker {
+  text-align: center;
+}
+
+[data-direction="orbit"] .o-diff-row[data-op="add"] .o-diff-marker {
+  color: var(--o-add-num);
+}
+
+[data-direction="orbit"] .o-diff-row[data-op="remove"] .o-diff-marker {
+  color: var(--o-del-num);
+}
+
+[data-direction="orbit"] .o-diff-code {
+  padding-right: 12px;
+  color: var(--o-code-fg);
+  white-space: pre;
+}
+
+/* GitHub's word highlights: the changed words of a replaced line, on the stronger tint. */
+[data-direction="orbit"] .o-diff-row[data-op="add"] .o-diff-word {
+  border-radius: 2px;
+  background: var(--o-add-word);
+}
+
+[data-direction="orbit"] .o-diff-row[data-op="remove"] .o-diff-word {
+  border-radius: 2px;
+  background: var(--o-del-word);
+}
+
+[data-direction="orbit"] .o-diff-hunk {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding-left: 12px;
+  background: var(--o-hunk);
+}
+
+[data-direction="orbit"] .o-diff-gap {
+  display: block;
+  width: 100%;
+  height: 24px;
+  padding-left: 50px;
+  text-align: left;
+}
+
+[data-direction="orbit"] .o-diff-gap:not(:disabled):hover {
+  color: var(--o-text-2);
+}
+
+/* ------------------------------------------------------------------------- search hits */
+
+[data-direction="orbit"] .o-well-search {
+  padding: 4px 4px;
+}
+
+[data-direction="orbit"] .o-hit {
+  display: grid;
+  grid-template-columns: 12px auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+}
+
+[data-direction="orbit"] .o-hit-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-match {
+  border-radius: 2px;
+  background: var(--o-signal-tint);
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-hit-more {
+  padding: 4px 8px;
+}
+
+/* ------------------------------------------------------------------------------ the plan */
+
+[data-direction="orbit"] .o-plan-well {
+  padding: 6px 12px;
+}
+
+[data-direction="orbit"] .o-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-direction="orbit"] .o-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+}
+
+/* X Money's tracking stepper: a dashed 3/3 spine between nodes. */
+[data-direction="orbit"] .o-step:not(:last-child)::after {
+  position: absolute;
+  top: 24px;
+  bottom: -8px;
+  left: 6.5px;
+  width: 1px;
+  background: linear-gradient(var(--o-text-4) 50%, transparent 0) 0 0 / 1px 6px repeat-y;
+  content: "";
+}
+
+[data-direction="orbit"] .o-step-node {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--o-r-pill);
+  box-shadow: inset 0 0 0 1px var(--o-text-4);
+}
+
+[data-direction="orbit"] .o-step[data-state="done"] .o-step-node {
+  background: var(--o-ink);
+  box-shadow: none;
+  color: var(--o-on-ink);
+}
+
+/* Harvey's two-tone ring: a track and a turning ink arc. */
+[data-direction="orbit"] .o-step[data-state="active"] .o-step-node {
+  box-shadow: none;
+  border: 2px solid var(--o-line-strong);
+  border-top-color: var(--o-ink);
+  animation: o-spin 1s linear infinite;
+}
+
+@keyframes o-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+[data-direction="orbit"] .o-step-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-step[data-state="done"] .o-step-label {
+  color: var(--o-text-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--o-text-4);
+}
+
+[data-direction="orbit"] .o-step[data-state="active"] .o-step-label {
+  color: var(--o-text-1);
+  font-weight: var(--o-w-strong);
+}
+
+[data-direction="orbit"] .o-step[data-state="pending"] .o-step-label {
+  color: var(--o-text-2);
+}
+
+[data-direction="orbit"] .o-plan-card {
+  padding: 0 14px 10px;
+  border-radius: var(--o-r-xl);
+  background: var(--o-raised);
+  box-shadow: var(--o-ring-strong), var(--o-e3);
+}
+
+[data-direction="orbit"] .o-plan-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+}
+
+[data-direction="orbit"] .o-plan-hide {
+  margin-left: auto;
+}
+
+[data-direction="orbit"] .o-plan-card-foot {
+  margin-top: 6px;
+}
+
+[data-direction="orbit"] .o-plan-pop {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 10;
+}
+
+/* ------------------------------------------------------------- now-row, events, receipt */
+
+/*
+ * The now-row has the geometry of the line that will replace it: a 28px tool row after an item
+ * (2px under a tool row, like the next call would be), a 24px thought line at the start of a turn.
+ * The mark sits in the gutter and the words start at x 22, so the hand-over moves nothing.
+ */
+[data-direction="orbit"] .o-now {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  animation: o-rise var(--o-dock) var(--o-ease-out) both;
+}
+
+/* At the start of a turn it rises into place; in a gap it fades in where the next row will be. */
+[data-direction="orbit"] .o-turn-items > .o-now:not(:first-child) {
+  animation-name: o-fade;
+}
+
+[data-direction="orbit"] .o-turn-items > .o-now:first-child {
+  height: 24px;
+}
+
+[data-direction="orbit"] .o-now-text {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-now-object {
+  overflow: hidden;
+  color: var(--o-text-1);
+  font-family: var(--o-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+@keyframes o-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+[data-direction="orbit"] .o-event {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  margin: 12px 0;
+  text-align: center;
+  animation: o-rise var(--o-dock) var(--o-ease-out) both;
+}
+
+[data-direction="orbit"] .o-turn-items > .o-event {
+  margin: 0;
+}
+
+[data-direction="orbit"] .o-event-text {
+  min-width: 0;
+}
+
+/* Grok Bot's entity chip: the agent's mark and its name in ink, inside a grey sentence. */
+[data-direction="orbit"] .o-entity {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 5px;
+  vertical-align: -3px;
+}
+
+[data-direction="orbit"] .o-event-literal {
+  color: var(--o-text-2);
+  font-family: var(--o-mono);
+  font-size: 11px;
+}
+
+[data-direction="orbit"] .o-event-detail {
+  font-family: var(--o-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Lines after a turn's receipt (a switch, a notice, a revert): 12px apart, 12px below it. */
+[data-direction="orbit"] .o-after {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+[data-direction="orbit"] .o-after > .o-event {
+  margin: 0;
+}
+
+[data-direction="orbit"] .o-receipt {
+  margin-top: 12px;
+}
+
+[data-direction="orbit"] .o-receipt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+  margin-top: 8px;
+}
+
+[data-direction="orbit"] .o-receipt-facts {
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-files-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--o-r-sm);
+  box-shadow: var(--o-ring);
+  color: var(--o-text-3);
+  transition: background-color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-files-chip:hover {
+  background: var(--o-hover);
+}
+
+[data-direction="orbit"] .o-receipt-actions {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity var(--o-fast) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-receipt[data-latest] .o-receipt-actions,
+[data-direction="orbit"] .o-receipt[data-open] .o-receipt-actions,
+[data-direction="orbit"] .o-turn:hover .o-receipt-actions {
+  opacity: 1;
+}
+
+/* ============================================================================ the composer */
+
+[data-direction="orbit"] .o-dock {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: center;
+  padding: 0 32px;
+  pointer-events: none;
+}
+
+[data-direction="orbit"] .o-card-slot {
+  width: 100%;
+  max-width: var(--o-column);
+  pointer-events: auto;
+}
+
+/* The dock's width drives the composer's narrow layout (container queries below). */
+[data-direction="orbit"] .o-composer-wrap {
+  position: relative;
+  width: 100%;
+  container: o-dock / inline-size;
+}
+
+[data-direction="orbit"] .o-composer {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--o-r-xl);
+  background: var(--o-raised);
+  box-shadow:
+    0 0 0 1px var(--o-ring-composer),
+    var(--o-e2);
+}
+
+/* Dark: Linear's lit top-left edge, the only light in the interface. */
+[data-direction="orbit"] .o-root[data-theme="dark"] .o-composer {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--o-raised), var(--o-raised)) padding-box,
+    linear-gradient(135deg, rgb(242 241 238 / 0.15), var(--o-ring-composer) 32%) border-box;
+  box-shadow: var(--o-e2);
+}
+
+/* Focus (section 3.7): the field's edge steps from its ring to ink 32%; no blue, no glow. */
+[data-direction="orbit"] .o-composer:focus-within {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--o-ink) 32%, transparent),
+    var(--o-e2);
+}
+
+[data-direction="orbit"] .o-root[data-theme="dark"] .o-composer:focus-within {
+  background:
+    linear-gradient(var(--o-raised), var(--o-raised)) padding-box,
+    linear-gradient(135deg, rgb(242 241 238 / 0.28), rgb(242 241 238 / 0.2) 32%) border-box;
+}
+
+[data-direction="orbit"] .o-segment-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+[data-direction="orbit"] .o-segment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  padding: 0 12px 0 14px;
+  background: var(--o-raised-2);
+  box-shadow: inset 0 -1px 0 var(--o-rule);
+  text-align: left;
+}
+
+[data-direction="orbit"] .o-segment-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-segment-chev {
+  flex: none;
+  color: var(--o-text-3);
+  transition: transform var(--o-fast) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-segment-chev[data-open] {
+  transform: rotate(180deg);
+}
+
+[data-direction="orbit"] .o-seg-more {
+  position: absolute;
+  top: 10px;
+  right: 40px;
+}
+
+[data-direction="orbit"] .o-seg-close {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--o-r-sm);
+  color: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-seg-close:hover {
+  background: var(--o-hover);
+  color: var(--o-text-1);
+}
+
+/* Harvey's timer rules: done ink, active sweeping, pending faint. */
+[data-direction="orbit"] .o-rules {
+  display: inline-flex;
+  flex: none;
+  gap: 3px;
+}
+
+[data-direction="orbit"] .o-rule-tick {
+  width: 24px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--o-line-strong);
+}
+
+[data-direction="orbit"] .o-rule-tick[data-state="done"] {
+  background: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-rule-tick[data-state="active"] {
+  background:
+    linear-gradient(90deg, var(--o-text-3) 0%, var(--o-text-1) 50%, var(--o-text-3) 100%) 0 0 / 250%
+    100%;
+  animation: o-sweep 1.4s linear infinite;
+}
+
+@keyframes o-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+[data-direction="orbit"] .o-plan-complete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-input-wrap {
+  padding: 12px 16px 6px;
+}
+
+[data-direction="orbit"] .o-input {
+  display: block;
+  width: 100%;
+  min-height: 22px;
+  max-height: calc(12 * 22px);
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--o-text-1);
+  caret-color: var(--o-ink);
+  resize: none;
+}
+
+[data-direction="orbit"] .o-input:focus-visible,
+[data-direction="orbit"] .o-instead-input:focus-visible {
+  outline: none;
+}
+
+[data-direction="orbit"] .o-input::placeholder {
+  color: var(--o-text-3);
+  opacity: 1;
+}
+
+[data-direction="orbit"] .o-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 8px 12px;
+}
+
+/* In a narrow pane the controls give way before anything clips; send never does. */
+[data-direction="orbit"] .o-controls > :not(.o-controls-fill) {
+  min-width: 0;
+}
+
+[data-direction="orbit"] .o-controls > :is(.o-send, .o-split, .o-attach) {
+  flex: none;
+}
+
+@container o-dock (max-width: 560px) {
+  [data-direction="orbit"] :is(.o-pill-model, .o-pill-effort, .o-meter-pct) {
+    display: none;
+  }
+}
+
+@container o-dock (max-width: 420px) {
+  [data-direction="orbit"] :is(.o-chip-label, .o-meter) {
+    display: none;
+  }
+}
+
+[data-direction="orbit"] .o-controls-fill {
+  flex: 1;
+}
+
+[data-direction="orbit"] .o-attach {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--o-r-md);
+  color: var(--o-text-2);
+  transition: background-color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-attach:hover {
+  background: var(--o-hover);
+}
+
+[data-direction="orbit"] .o-pill,
+[data-direction="orbit"] .o-chip {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  overflow: hidden;
+  border-radius: var(--o-r-md);
+  white-space: nowrap;
+  transition: background-color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-pill {
+  padding-left: 6px;
+}
+
+[data-direction="orbit"] .o-pill .o-mark {
+  margin-right: 3px;
+}
+
+[data-direction="orbit"] .o-pill:hover,
+[data-direction="orbit"] .o-chip:hover {
+  background: var(--o-hover);
+}
+
+[data-direction="orbit"] .o-pill[data-open],
+[data-direction="orbit"] .o-chip[data-open] {
+  background: var(--o-selected);
+}
+
+[data-direction="orbit"] .o-chip .o-level {
+  margin-right: 2px;
+}
+
+[data-direction="orbit"] .o-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 6px;
+}
+
+[data-direction="orbit"] .o-meter-track {
+  position: relative;
+  width: 28px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--o-meter-track);
+}
+
+[data-direction="orbit"] .o-meter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--o-text-2);
+}
+
+[data-direction="orbit"] .o-meter-fill[data-high] {
+  background: var(--o-signal);
+}
+
+[data-direction="orbit"] .o-send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--o-r-pill);
+  background: var(--o-ink);
+  color: var(--o-on-ink);
+  transition:
+    background-color 300ms var(--o-ease-settle),
+    transform 80ms var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-send:not(:disabled):hover {
+  background: var(--o-ink-hover);
+}
+
+[data-direction="orbit"] .o-send:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+[data-direction="orbit"] .o-send[data-mode="empty"] {
+  background: var(--o-meter-track);
+  color: var(--o-text-4);
+}
+
+/* Aside's split primary: Queue, then Steer behind the chevron. */
+[data-direction="orbit"] .o-split {
+  display: inline-flex;
+  flex: none;
+  height: 32px;
+  overflow: hidden;
+  border-radius: var(--o-r-pill);
+  background: var(--o-ink);
+  color: var(--o-on-ink);
+}
+
+[data-direction="orbit"] .o-split-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 14px;
+  font-weight: 500;
+}
+
+[data-direction="orbit"] .o-split-chev {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--o-on-ink) 20%, transparent);
+}
+
+[data-direction="orbit"] .o-split-main:hover,
+[data-direction="orbit"] .o-split-chev:hover {
+  background: color-mix(in srgb, var(--o-on-ink) 10%, transparent);
+}
+
+[data-direction="orbit"] .o-hint {
+  height: 18px;
+  margin: 4px 0 2px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* X Money's wallet stack: a sliver per further queued message. */
+[data-direction="orbit"] .o-peek {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+[data-direction="orbit"] .o-peek-sliver {
+  display: block;
+  height: 4px;
+  border-radius: 6px 6px 0 0;
+  background: var(--o-raised-2);
+  box-shadow: var(--o-ring);
+}
+
+[data-direction="orbit"] .o-text-btn {
+  color: var(--o-text-1);
+  font-weight: 500;
+}
+
+[data-direction="orbit"] .o-text-btn.o-signal-text {
+  color: var(--o-signal-text);
+}
+
+[data-direction="orbit"] .o-text-btn:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--o-text-4);
+  text-underline-offset: 3px;
+}
+
+[data-direction="orbit"] .o-ghost {
+  padding: 0 8px;
+  height: 24px;
+  border-radius: var(--o-r-pill);
+  color: var(--o-text-2);
+}
+
+[data-direction="orbit"] .o-ghost:hover {
+  background: var(--o-hover);
+  color: var(--o-text-1);
+}
+
+/* ============================================================================== the picker */
+
+[data-direction="orbit"] .o-picker {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  width: min(640px, 100cqw);
+  max-height: 420px;
+  padding: 6px;
+  overflow: hidden;
+  border-radius: var(--o-r-xl);
+  background: var(--o-raised);
+  box-shadow:
+    0 0 0 1px var(--o-line),
+    var(--o-e3);
+  transform-origin: bottom left;
+  --o-pick-selected-surface: #f0f0f0;
+}
+
+[data-direction="orbit"] .o-root[data-theme="dark"] .o-picker {
+  box-shadow:
+    0 0 0 1px var(--o-line-strong),
+    var(--o-e3);
+  --o-pick-selected-surface: #252524;
+}
+
+[data-direction="orbit"] .o-picker-cols {
+  display: grid;
+  grid-template-columns: 226px 244px 156px;
+}
+
+/* A narrow dock: agent at left, model at right, and the effort ladder under the models. */
+@container o-dock (max-width: 640px) {
+  [data-direction="orbit"] .o-picker-cols {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  [data-direction="orbit"] .o-picker-col[data-col="agent"] {
+    grid-row: span 2;
+  }
+
+  [data-direction="orbit"] .o-picker-col[data-col="effort"] {
+    box-shadow:
+      inset 1px 0 0 var(--o-rule),
+      inset 0 1px 0 var(--o-rule);
+  }
+
+  [data-direction="orbit"] .o-picker {
+    max-height: none;
+  }
+
+  [data-direction="orbit"] .o-picker-consequence {
+    display: none;
+  }
+}
+
+[data-direction="orbit"] .o-picker-col {
+  min-width: 0;
+  padding: 0 4px 4px;
+}
+
+[data-direction="orbit"] .o-picker-col + .o-picker-col {
+  box-shadow: inset 1px 0 0 var(--o-rule);
+}
+
+[data-direction="orbit"] .o-picker-label {
+  height: 28px;
+  padding: 8px 8px 0;
+}
+
+[data-direction="orbit"] .o-pick {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  text-align: left;
+  transition: background-color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-pick-effort {
+  min-height: 36px;
+}
+
+[data-direction="orbit"] .o-pick:hover {
+  background: var(--o-hover);
+}
+
+[data-direction="orbit"] .o-pick[data-selected] {
+  background: var(--o-selected);
+}
+
+/* Notion Calendar's selection rail, in ink, on the focused column. */
+[data-direction="orbit"] .o-pick[data-rail]::before {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--o-ink);
+  content: "";
+}
+
+[data-direction="orbit"] .o-pick-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+[data-direction="orbit"] .o-pick-label {
+  overflow: hidden;
+  color: var(--o-text-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-pick-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Selected rows lift their quiet lines a step, so they keep AA contrast on the selected fill. */
+[data-direction="orbit"] .o-root[data-theme="dark"] .o-pick[data-selected] .o-c3 {
+  color: rgb(242 241 238 / 0.58);
+}
+
+[data-direction="orbit"] .o-pick-action {
+  margin-left: 6px;
+  font-family: var(--o-sans);
+  font-weight: 500;
+}
+
+[data-direction="orbit"] .o-pick[data-missing] .o-pick-label {
+  color: var(--o-text-3);
+}
+
+/* Harvey: hovering a row dims its siblings. */
+[data-direction="orbit"] .o-picker-col:hover .o-pick:not(:hover) .o-pick-label {
+  color: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-pick-install {
+  font-size: 12px;
+}
+
+[data-direction="orbit"] .o-pick-side {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-direction="orbit"] .o-check-slot {
+  display: inline-block;
+  width: 14px;
+}
+
+[data-direction="orbit"] .o-pick-default {
+  margin-left: -4px;
+}
+
+[data-direction="orbit"] .o-pick-effort .o-key {
+  margin-left: auto;
+}
+
+[data-direction="orbit"] .o-ticks {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+}
+
+[data-direction="orbit"] .o-tick {
+  width: 2px;
+  height: 8px;
+  background: var(--o-text-4);
+}
+
+[data-direction="orbit"] .o-tick[data-on] {
+  background: var(--o-ink);
+}
+
+[data-direction="orbit"] .o-picker-none {
+  padding: 10px 8px;
+}
+
+[data-direction="orbit"] .o-picker-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 32px;
+  margin: 2px -6px -6px;
+  padding: 0 12px;
+  box-shadow: inset 0 1px 0 var(--o-rule);
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+[data-direction="orbit"] .o-picker-consequence {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* =============================================================================== menus */
+
+[data-direction="orbit"] .o-menu {
+  padding: 4px;
+  border-radius: var(--o-r-lg);
+  background: var(--o-raised);
+  box-shadow:
+    0 0 0 1px var(--o-line),
+    var(--o-e3);
+}
+
+[data-direction="orbit"] .o-root[data-theme="dark"] .o-menu {
+  box-shadow:
+    0 0 0 1px var(--o-line-strong),
+    var(--o-e3);
+}
+
+/*
+ * A menu row (X Money, Linear): a 14px icon, the label from the left, the shortcut or a check at
+ * the right in mono text-3. The one destructive row is red and sits last; a row the lab cannot do
+ * yet is shown in text-4 and does not hover. Keyboard focus is the selected fill and the 2px rail.
+ */
+[data-direction="orbit"] .o-menu-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px 0 8px;
+  border-radius: var(--o-r-md);
+  color: var(--o-text-1);
+  text-align: left;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-menu-row:not([aria-disabled]):hover {
+  background: var(--o-hover);
+}
+
+[data-direction="orbit"] .o-menu-row:not([aria-disabled]):active {
+  background: var(--o-pressed);
+}
+
+[data-direction="orbit"] .o-menu-row[data-focus] {
+  background: var(--o-selected);
+}
+
+[data-direction="orbit"] .o-menu-row[data-focus]::before {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--o-ink);
+  content: "";
+}
+
+[data-direction="orbit"] .o-menu-icon {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  color: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-menu-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-direction="orbit"] .o-menu-key {
+  justify-self: end;
+  color: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-menu-row[data-destructive],
+[data-direction="orbit"] .o-menu-row[data-destructive] .o-menu-icon {
+  color: var(--o-red);
+}
+
+[data-direction="orbit"] .o-menu-row[aria-disabled] {
+  color: var(--o-text-4);
+}
+
+[data-direction="orbit"] .o-menu-row[aria-disabled] :is(.o-menu-icon, .o-menu-key) {
+  color: var(--o-text-4);
+}
+
+[data-direction="orbit"] .o-menu-rule {
+  height: 1px;
+  margin: 4px;
+  background: var(--o-rule);
+}
+
+/*
+ * A popover menu hangs off its anchor: down from the header, up from a receipt (whatever sits
+ * below it would cover it), aligned to the anchor's end unless asked for its start.
+ */
+[data-direction="orbit"] .o-menu-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+[data-direction="orbit"] .o-pop-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 220px;
+  transform-origin: top right;
+}
+
+[data-direction="orbit"] .o-pop-menu[data-align="start"] {
+  right: auto;
+  left: 0;
+  transform-origin: top left;
+}
+
+[data-direction="orbit"] .o-pop-menu[data-side="top"] {
+  top: auto;
+  bottom: calc(100% + 6px);
+  transform-origin: bottom right;
+}
+
+[data-direction="orbit"] .o-autonomy-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  width: 300px;
+  padding: 6px;
+  border-radius: var(--o-r-xl);
+  transform-origin: bottom left;
+}
+
+[data-direction="orbit"] .o-autonomy-row,
+[data-direction="orbit"] .o-switch-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  text-align: left;
+  transition: background-color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-switch-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 44px;
+}
+
+[data-direction="orbit"] .o-autonomy-row:not(:disabled):hover,
+[data-direction="orbit"] .o-switch-row:hover {
+  background: var(--o-hover);
+}
+
+/* X Premium's selection: a 1.5px ink rim and a filled check. */
+[data-direction="orbit"] .o-autonomy-row[data-selected] {
+  box-shadow: inset 0 0 0 1.5px var(--o-ink);
+}
+
+[data-direction="orbit"] .o-autonomy-row:disabled {
+  opacity: 1;
+}
+
+[data-direction="orbit"] .o-autonomy-row:disabled .o-autonomy-text > :first-child,
+[data-direction="orbit"] .o-autonomy-row:disabled .o-key {
+  color: var(--o-text-4);
+}
+
+[data-direction="orbit"] .o-autonomy-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+[data-direction="orbit"] .o-filled-check {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--o-r-pill);
+  background: var(--o-ink);
+  color: var(--o-on-ink);
+}
+
+[data-direction="orbit"] .o-switch {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  border-radius: var(--o-r-pill);
+  background: var(--o-switch-off);
+  transition: background-color var(--o-fast) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-switch::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--o-r-pill);
+  background: var(--o-pane);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  content: "";
+  transition: transform var(--o-fast) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-switch[data-on] {
+  background: var(--o-ink);
+}
+
+[data-direction="orbit"] .o-switch[data-on]::after {
+  background: var(--o-on-ink);
+  transform: translateX(12px);
+}
+
+[data-direction="orbit"] .o-menu-foot {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin: 2px 0 0;
+  padding: 6px 12px 4px;
+}
+
+/* ========================================================================= permission card */
+
+[data-direction="orbit"] .o-permission {
+  margin-bottom: 16px;
+  padding: 16px 18px 14px;
+  border-radius: var(--o-r-xl);
+  background: var(--o-raised);
+  box-shadow: var(--o-ring-strong), var(--o-e3);
+}
+
+/* The card takes focus so its keys answer at once; the card itself draws no ring for it. */
+[data-direction="orbit"] .o-permission:focus,
+[data-direction="orbit"] .o-permission:focus-visible {
+  outline: none;
+}
+
+[data-direction="orbit"] .o-perm-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 16px;
+}
+
+[data-direction="orbit"] .o-diamond {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 1px;
+  background: var(--o-signal);
+  transform: rotate(45deg);
+}
+
+[data-direction="orbit"] .o-perm-wait {
+  margin-left: auto;
+}
+
+[data-direction="orbit"] .o-perm-title {
+  display: -webkit-box;
+  margin: 10px 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+[data-direction="orbit"] .o-perm-literal {
+  color: var(--o-text-1);
+  font-family: var(--o-mono);
+  font-size: 16.5px;
+  font-weight: var(--o-w-body);
+}
+
+[data-direction="orbit"] .o-perm-reason {
+  margin: 4px 0 0;
+  line-height: 20px;
+}
+
+[data-direction="orbit"] .o-perm-tear {
+  margin: 14px 0 6px;
+}
+
+[data-direction="orbit"] .o-perm-rows {
+  margin: 0;
+}
+
+[data-direction="orbit"] .o-perm-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 26px;
+  padding-top: 4px;
+}
+
+[data-direction="orbit"] .o-perm-row dt {
+  flex: none;
+}
+
+[data-direction="orbit"] .o-perm-row dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+[data-direction="orbit"] .o-perm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  row-gap: 8px;
+  margin-top: 14px;
+}
+
+/* The trailing ghost button ends on the key-value column's right edge, not 14px short of it. */
+[data-direction="orbit"] .o-perm-deny {
+  margin-right: -14px;
+}
+
+/* What the hovered answer does, or the rule a standing answer saves. */
+[data-direction="orbit"] .o-perm-hint {
+  min-height: 16px;
+  margin: 8px 0 0;
+}
+
+[data-direction="orbit"] .o-perm-rule {
+  padding: 1px 5px;
+  border-radius: var(--o-r-xs);
+  background: var(--o-inline-code);
+  box-shadow: var(--o-ring);
+  color: var(--o-text-1);
+  font-family: var(--o-mono);
+  font-size: 11.5px;
+}
+
+[data-direction="orbit"] .o-perm-command {
+  max-width: 70%;
+}
+
+[data-direction="orbit"] .o-perm-gap {
+  flex: 1;
+}
+
+[data-direction="orbit"] .o-perm-instead {
+  margin-top: 12px;
+  padding-top: 8px;
+  box-shadow: inset 0 1px 0 var(--o-rule);
+}
+
+[data-direction="orbit"] .o-instead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 2px;
+}
+
+[data-direction="orbit"] .o-instead-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-instead-input::placeholder {
+  color: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-instead:focus-within {
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--o-ink) 32%, transparent);
+}
+
+[data-direction="orbit"] .o-permission[data-answered] .o-btn:disabled:not([data-done]) {
+  opacity: 0.4;
+}
+
+/* ================================================================================ buttons */
+
+[data-direction="orbit"] .o-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--o-r-pill);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background-color 300ms var(--o-ease-settle),
+    color var(--o-micro) var(--o-ease-standard),
+    transform 80ms var(--o-ease-standard),
+    opacity var(--o-fast) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-btn:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+[data-direction="orbit"] .o-btn-sm {
+  height: 28px;
+  padding: 0 12px;
+}
+
+[data-direction="orbit"] .o-btn-xs {
+  height: 26px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+[data-direction="orbit"] .o-btn-ink {
+  background: var(--o-ink);
+  color: var(--o-on-ink);
+}
+
+[data-direction="orbit"] .o-btn-ink:not(:disabled):hover {
+  background: var(--o-ink-hover);
+}
+
+[data-direction="orbit"] .o-btn-soft {
+  background: var(--o-raised-2);
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-btn-soft:not(:disabled):hover {
+  background: color-mix(in srgb, var(--o-ink) 10%, var(--o-raised-2));
+}
+
+[data-direction="orbit"] .o-btn-outline {
+  box-shadow: inset 0 0 0 1px var(--o-line-strong);
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-btn-outline:not(:disabled):hover,
+[data-direction="orbit"] .o-btn-ghost:not(:disabled):hover {
+  background: var(--o-hover);
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-btn-ghost {
+  color: var(--o-text-2);
+}
+
+[data-direction="orbit"] .o-btn:disabled {
+  cursor: default;
+}
+
+[data-direction="orbit"] .o-btn[data-done] .o-drawn {
+  stroke-dasharray: 24;
+  animation: o-draw 250ms var(--o-ease-out) both;
+}
+
+@keyframes o-draw {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ============================================================================= right panel */
+
+[data-direction="orbit"] .o-panel {
+  position: absolute;
+  top: var(--o-inset);
+  right: var(--o-inset);
+  bottom: var(--o-inset);
+  z-index: 5;
+  width: var(--o-panel-w);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--o-r-lg);
+  background: var(--o-pane);
+  box-shadow: var(--o-ring);
+}
+
+/* Floating over the chat in a narrow window, the panel lifts like any floating object. */
+[data-direction="orbit"] .o-root[data-panel-floats] .o-panel {
+  box-shadow: var(--o-ring-strong), var(--o-e3);
+}
+
+/*
+ * The resize handle is the 8px gutter between the panes (section 4.1): a 1px ink-30% line shows in
+ * it on hover or keyboard focus, with the col-resize cursor.
+ */
+[data-direction="orbit"] .o-panel-gutter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  z-index: 6;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+[data-direction="orbit"] .o-panel-gutter::after {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 3.5px;
+  width: 1px;
+  background: color-mix(in srgb, var(--o-ink) 30%, transparent);
+  content: "";
+  opacity: 0;
+  transition: opacity var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-panel-gutter:is(:hover, :focus-visible, :active)::after {
+  opacity: 1;
+}
+
+[data-direction="orbit"] .o-panel-gutter:focus-visible {
+  outline: none;
+}
+
+[data-direction="orbit"] .o-panel-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--o-head-h);
+  padding: 0 8px 0 12px;
+  box-shadow: inset 0 -1px 0 var(--o-rule);
+}
+
+/* SpaceXAI's strong segmented control: one ink pill. */
+[data-direction="orbit"] .o-seg-strong {
+  display: inline-flex;
+  gap: 2px;
+  height: 26px;
+  padding: 2px;
+  border-radius: var(--o-r-pill);
+  background: var(--o-raised-2);
+}
+
+[data-direction="orbit"] .o-seg-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: var(--o-r-pill);
+  color: var(--o-text-2);
+  font-weight: 500;
+  transition:
+    background-color var(--o-fast) var(--o-ease-standard),
+    color var(--o-fast) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-seg-item:hover {
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-seg-item[data-active] {
+  background: var(--o-ink);
+  color: var(--o-on-ink);
+}
+
+[data-direction="orbit"] .o-seg-count {
+  opacity: 0.62;
+}
+
+[data-direction="orbit"] .o-panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+[data-direction="orbit"] .o-changes-summary {
+  padding: 14px 16px 16px;
+}
+
+[data-direction="orbit"] .o-scope {
+  position: relative;
+  display: inline-block;
+}
+
+[data-direction="orbit"] .o-scope-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border-radius: var(--o-r-sm);
+}
+
+[data-direction="orbit"] .o-scope-btn:hover {
+  background: var(--o-hover);
+}
+
+[data-direction="orbit"] .o-scope-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: -6px;
+  z-index: 10;
+  width: 200px;
+}
+
+[data-direction="orbit"] .o-hero-diff {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 8px;
+}
+
+[data-direction="orbit"] .o-hero-diff .o-squares {
+  margin-left: 4px;
+}
+
+[data-direction="orbit"] .o-changes-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 14px -12px 0 -12px;
+}
+
+[data-direction="orbit"] .o-file-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  box-shadow: inset 0 1px 0 var(--o-rule);
+}
+
+[data-direction="orbit"] .o-file-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto 12px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding: 0 16px;
+  box-shadow: inset 0 -1px 0 var(--o-rule);
+  text-align: left;
+}
+
+[data-direction="orbit"] .o-file-row:hover {
+  background: var(--o-hover);
+}
+
+[data-direction="orbit"] .o-file-row[data-selected],
+[data-direction="orbit"] .o-file-row[data-selected]:hover {
+  background: var(--o-selected);
+}
+
+/* The counts line up in two fixed columns, so +19 −5 and +40 −18 start where each other do. */
+[data-direction="orbit"] .o-file-row .o-counts {
+  display: inline-grid;
+  grid-template-columns: 4ch 4ch;
+  justify-items: end;
+}
+
+[data-direction="orbit"] .o-file-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-file-status {
+  text-align: right;
+}
+
+[data-direction="orbit"] .o-file-diffs {
+  padding-bottom: 8px;
+}
+
+[data-direction="orbit"] .o-file-diff + .o-file-diff {
+  box-shadow: inset 0 1px 0 var(--o-rule);
+}
+
+[data-direction="orbit"] .o-file-diff-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding-right: 8px;
+  background: var(--o-pane);
+  box-shadow: inset 0 -1px 0 var(--o-rule);
+}
+
+[data-direction="orbit"] .o-file-diff-head .o-diff-head {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding-left: 8px;
+  box-shadow: none;
+}
+
+[data-direction="orbit"] .o-file-diff-head .o-diff-actions {
+  display: none;
+}
+
+[data-direction="orbit"] .o-file-diff-toggle {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--o-text-3);
+  transition: transform var(--o-fast) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-file-diff[data-open] .o-file-diff-toggle {
+  transform: rotate(90deg);
+}
+
+[data-direction="orbit"] .o-viewed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-viewed input {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border-radius: var(--o-r-xs);
+  box-shadow: inset 0 0 0 1px var(--o-line-strong);
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+[data-direction="orbit"] .o-viewed input:checked {
+  background: var(--o-ink);
+  box-shadow: none;
+}
+
+[data-direction="orbit"] .o-viewed input:checked::after {
+  width: 6px;
+  height: 3px;
+  margin-top: -2px;
+  border-bottom: 1.5px solid var(--o-on-ink);
+  border-left: 1.5px solid var(--o-on-ink);
+  content: "";
+  transform: rotate(-45deg);
+}
+
+[data-direction="orbit"] .o-file-diff .o-diff-rows {
+  padding: 0 0 6px;
+}
+
+/* Soft wrap for the narrow review panel: long lines continue under the code's start. */
+[data-direction="orbit"] .o-diff[data-wrap] .o-diff-rows {
+  overflow-x: hidden;
+}
+
+[data-direction="orbit"]
+  .o-diff[data-wrap]
+  .o-diff-rows
+  > :is(.o-diff-row, .o-diff-hunk, .o-diff-gap) {
+  width: auto;
+}
+
+[data-direction="orbit"] .o-diff[data-wrap] .o-diff-row {
+  grid-template-columns: 36px 36px 14px minmax(0, 1fr);
+  height: auto;
+  min-height: 20px;
+}
+
+[data-direction="orbit"] .o-diff[data-wrap] .o-diff-code {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+[data-direction="orbit"] .o-panel-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 0 0 var(--o-r-lg) var(--o-r-lg);
+  background: var(--o-pane);
+  box-shadow: inset 0 1px 0 var(--o-rule);
+}
+
+[data-direction="orbit"] .o-panel-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 40px 24px;
+}
+
+[data-direction="orbit"] .o-panel-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-direction="orbit"] .o-panel-hints li {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  box-shadow: inset 0 -1px 0 var(--o-rule);
+}
+
+[data-direction="orbit"] .o-panel-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 16px 8px;
+}
+
+[data-direction="orbit"] .o-plan-tab .o-steps {
+  padding: 0 16px;
+}
+
+[data-direction="orbit"] .o-plan-tab-foot {
+  padding: 8px 16px;
+}
+
+[data-direction="orbit"] .o-session {
+  padding: 8px 0 16px;
+}
+
+[data-direction="orbit"] .o-props {
+  padding: 4px 16px 8px;
+}
+
+[data-direction="orbit"] .o-prop {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  min-height: 30px;
+}
+
+[data-direction="orbit"] .o-prop-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Harvey's property chips: the agent and the model as small bordered chips with a glyph. */
+[data-direction="orbit"] .o-prop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--o-r-sm);
+  box-shadow: inset 0 0 0 1px var(--o-line-strong);
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-prop-chip .o-mark {
+  margin-left: -2px;
+}
+
+[data-direction="orbit"] .o-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+/* X Money's stat pair: recessed tiles with a numeral each. */
+[data-direction="orbit"] .o-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--o-r-lg);
+  background: var(--o-raised-2);
+}
+
+[data-direction="orbit"] .o-context {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px 4px;
+}
+
+[data-direction="orbit"] .o-context-bar {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--o-meter-track);
+}
+
+[data-direction="orbit"] .o-context-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: var(--o-text-2);
+}
+
+[data-direction="orbit"] .o-context-tick {
+  position: absolute;
+  top: -3px;
+  width: 1px;
+  height: 10px;
+  background: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-timeline-strip {
+  padding: 0 0 4px;
+}
+
+[data-direction="orbit"] .o-strip {
+  position: relative;
+  display: block;
+  height: 24px;
+  margin: 0 16px;
+  overflow: hidden;
+  border-radius: var(--o-r-sm);
+  background: var(--o-well);
+  box-shadow: var(--o-ring);
+}
+
+[data-direction="orbit"] .o-strip-block {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  background: color-mix(in srgb, var(--o-ink) 15%, transparent);
+}
+
+[data-direction="orbit"] .o-strip-tick {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  width: 1px;
+  background: color-mix(in srgb, var(--o-ink) 40%, transparent);
+}
+
+[data-direction="orbit"] .o-strip-ends {
+  display: flex;
+  justify-content: space-between;
+  margin: 6px 16px 0;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+/* ============================================================================= empty state */
+
+[data-direction="orbit"] .o-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  padding: 220px 32px 32px;
+  overflow-y: auto;
+}
+
+[data-direction="orbit"] .o-empty-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+[data-direction="orbit"] .o-empty-sentence {
+  margin: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-empty-composer {
+  width: 100%;
+  max-width: var(--o-column);
+  margin-top: 24px;
+}
+
+[data-direction="orbit"] .o-ledger {
+  width: 100%;
+  max-width: var(--o-column);
+  margin-top: 4px;
+}
+
+[data-direction="orbit"] .o-ledger-label {
+  height: 28px;
+  padding: 8px 8px 0;
+}
+
+[data-direction="orbit"] .o-ledger-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto auto 48px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: var(--o-r-md);
+  text-align: left;
+  transition: background-color var(--o-micro) var(--o-ease-standard);
+}
+
+[data-direction="orbit"] .o-ledger-row:hover {
+  background: var(--o-hover);
+}
+
+[data-direction="orbit"] .o-ledger-pip {
+  display: grid;
+  place-items: center;
+}
+
+[data-direction="orbit"] .o-ledger-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-ledger-outcome {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+}
+
+[data-direction="orbit"] .o-ledger-age {
+  text-align: right;
+}
+
+/* ============================================================================== onboarding */
+
+[data-direction="orbit"] .o-root[data-onboarding] {
+  background: var(--o-pane);
+}
+
+/* The checklist column gives way to 440px in a narrow window before the night panel does. */
+[data-direction="orbit"] .o-onboarding {
+  position: absolute;
+  inset: 0;
+  --o-onb-column: clamp(440px, 40%, 568px);
+}
+
+[data-direction="orbit"] .o-onb-column {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--o-onb-column);
+  padding: 64px 64px 40px;
+  overflow-y: auto;
+}
+
+[data-direction="orbit"] .o-onb-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+}
+
+[data-direction="orbit"] .o-wordmark {
+  color: var(--o-text-1);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+[data-direction="orbit"] .o-checklist {
+  margin: 40px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-direction="orbit"] .o-check-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 14px;
+  padding-bottom: 18px;
+}
+
+[data-direction="orbit"] .o-check-step:not(:last-child)::before {
+  position: absolute;
+  top: 24px;
+  bottom: 4px;
+  left: 8.5px;
+  width: 1px;
+  background: linear-gradient(var(--o-text-4) 50%, transparent 0) 0 0 / 1px 6px repeat-y;
+  content: "";
+}
+
+[data-direction="orbit"] .o-numeral-ring {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  border-radius: var(--o-r-pill);
+  box-shadow: inset 0 0 0 1px var(--o-text-3);
+  color: var(--o-text-3);
+  font-size: 10.5px;
+  line-height: 1;
+}
+
+[data-direction="orbit"] .o-check-step[data-active] .o-numeral-ring {
+  background: var(--o-ink);
+  box-shadow: none;
+  color: var(--o-on-ink);
+}
+
+[data-direction="orbit"] .o-check-title[data-muted] {
+  color: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-onb-headline {
+  display: flex;
+  flex-direction: column;
+  margin: 12px 0 18px;
+  perspective: 600px;
+}
+
+[data-direction="orbit"] .o-flip {
+  display: inline-block;
+  transform-origin: 50% 100%;
+  animation: o-flip var(--o-hero) var(--o-ease-out) both;
+  white-space: pre;
+}
+
+@keyframes o-flip {
+  from {
+    opacity: 0;
+    transform: translateY(45%) rotateX(-40deg);
+  }
+}
+
+[data-direction="orbit"] .o-roster {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-direction="orbit"] .o-roster-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  box-shadow: inset 0 -1px 0 var(--o-rule);
+  animation: o-rise-4 var(--o-dock) var(--o-ease-out) both;
+}
+
+[data-direction="orbit"] .o-roster-row:first-child {
+  box-shadow:
+    inset 0 1px 0 var(--o-rule),
+    inset 0 -1px 0 var(--o-rule);
+}
+
+@keyframes o-rise-4 {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+[data-direction="orbit"] .o-roster-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+[data-direction="orbit"] .o-roster-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-roster-loader {
+  display: grid;
+  place-items: center;
+}
+
+[data-direction="orbit"] .o-ready {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-direction="orbit"] .o-ready-square {
+  width: 5px;
+  height: 5px;
+  background: var(--o-green);
+}
+
+[data-direction="orbit"] .o-install-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--o-r-xs);
+  background: var(--o-inline-code);
+  box-shadow: var(--o-ring);
+  color: var(--o-text-1);
+}
+
+[data-direction="orbit"] .o-install-cmd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-scan-note {
+  margin: 10px 0 0;
+}
+
+[data-direction="orbit"] .o-onb-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+/* Harvey's ink panel, Grok Console's night sky. Black in both themes. */
+[data-direction="orbit"] .o-night {
+  position: absolute;
+  top: var(--o-inset);
+  right: var(--o-inset);
+  bottom: var(--o-inset);
+  left: var(--o-onb-column);
+  overflow: hidden;
+  border-radius: var(--o-r-lg);
+  background: var(--o-night);
+  box-shadow: 0 0 0 1px var(--o-night-ring);
+  color: #fff;
+}
+
+[data-direction="orbit"] .o-night-caps {
+  position: absolute;
+  top: 22px;
+  left: 24px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: rgb(255 255 255 / 0.5);
+}
+
+[data-direction="orbit"] .o-night-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+[data-direction="orbit"] .o-night-globe {
+  position: absolute;
+  inset: 0;
+}
+
+[data-direction="orbit"] .o-night-caption {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+[data-direction="orbit"] .o-night-c1 {
+  color: rgb(255 255 255 / 0.86);
+}
+
+[data-direction="orbit"] .o-night-c2 {
+  color: rgb(255 255 255 / 0.45);
+}
+
+[data-direction="orbit"] .o-globe {
+  display: block;
+}
+
+/* SpaceXAI's calm globe on black: a solid sphere one value step up, a faint rim, a sparse grid. */
+[data-direction="orbit"] .o-globe-body {
+  fill: var(--o-night-body);
+  stroke: rgb(255 255 255 / 0.1);
+  stroke-width: 1px;
+}
+
+[data-direction="orbit"] .o-globe-grid path {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.07);
+  stroke-width: 1px;
+}
+
+[data-direction="orbit"] .o-globe-orbit {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.2);
+  stroke-width: 1px;
+}
+
+[data-direction="orbit"] .o-globe-orbit[data-missing] {
+  stroke: rgb(255 255 255 / 0.18);
+  stroke-dasharray: 3 4;
+}
+
+[data-direction="orbit"] .o-globe-sat {
+  fill: rgb(255 255 255 / 0.94);
+}
+
+[data-direction="orbit"] .o-globe-sat[data-tone="signal"] {
+  fill: #ff6308;
+}
+
+[data-direction="orbit"] .o-globe-sat[data-tone="hollow"] {
+  fill: #000;
+  stroke: rgb(255 255 255 / 0.4);
+  stroke-width: 1px;
+}
+
+/* ================================================================ floating objects, round 3 */
+
+/*
+ * Toasts (section 4.17): X Money's translucent pill, top centre of the main pane, 12px under the
+ * header. The one place CSS blur is allowed, written with the -webkit- prefix too. Headless WebKit
+ * does not paint the blur; judge it in Chromium or Safari.
+ */
+[data-direction="orbit"] .o-toast-slot {
+  position: absolute;
+  top: calc(var(--o-head-h) + 12px);
+  right: 0;
+  left: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* While the sticky prompt hangs under the header, the toast sits under it instead. */
+[data-direction="orbit"] .o-main:has(.o-sticky[data-shown]) .o-toast-slot {
+  top: calc(var(--o-head-h) + 44px);
+}
+
+[data-direction="orbit"] .o-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 64px);
+  min-height: 32px;
+  padding: 0 6px 0 14px;
+  border-radius: var(--o-r-xl);
+  background: var(--o-toast);
+  box-shadow:
+    0 0 0 1px var(--o-toast-ring),
+    0 8px 24px -8px rgb(0 0 0 / 0.28);
+  color: var(--o-toast-fg);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(16px) saturate(1.2);
+  pointer-events: auto;
+}
+
+[data-direction="orbit"] .o-toast:not(:has(.o-toast-action)) {
+  padding-right: 14px;
+}
+
+[data-direction="orbit"] .o-toast-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-toast-action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--o-r-pill);
+  color: inherit;
+  font-weight: 500;
+}
+
+[data-direction="orbit"] .o-toast-action:hover {
+  background: color-mix(in srgb, var(--o-toast-fg) 12%, transparent);
+}
+
+[data-direction="orbit"] .o-toast .o-keys {
+  margin-left: 0;
+}
+
+[data-direction="orbit"] .o-toast .o-toast-action .o-key {
+  background: color-mix(in srgb, var(--o-toast-fg) 14%, transparent);
+  box-shadow: none;
+  color: color-mix(in srgb, var(--o-toast-fg) 80%, transparent);
+}
+
+/*
+ * The destructive confirm (section 4.8): X Money's detached sheet, 440px, centred over the scrim.
+ * A sentence with grey verbs, a tear line, key-value rows, a calm line, then Cancel and one red
+ * pill side by side.
+ */
+[data-direction="orbit"] .o-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: var(--o-scrim);
+}
+
+[data-direction="orbit"] .o-sheet {
+  width: 440px;
+  max-width: calc(100% - 48px);
+  padding: 24px;
+  border-radius: var(--o-r-xl);
+  background: var(--o-raised);
+  box-shadow: var(--o-e4);
+}
+
+[data-direction="orbit"] .o-root[data-theme="dark"] .o-sheet {
+  box-shadow: var(--o-ring-strong), var(--o-e4);
+}
+
+[data-direction="orbit"] .o-sheet-title {
+  margin: 0;
+}
+
+[data-direction="orbit"] .o-sheet-tear {
+  margin: 16px 0 8px;
+}
+
+[data-direction="orbit"] .o-sheet-rows {
+  margin: 0;
+}
+
+[data-direction="orbit"] .o-sheet-rows .o-perm-row {
+  min-height: 26px;
+}
+
+[data-direction="orbit"] .o-sheet-calm {
+  margin: 12px 0 0;
+  line-height: 20px;
+}
+
+[data-direction="orbit"] .o-sheet-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+[data-direction="orbit"] .o-sheet-actions .o-btn {
+  height: 36px;
+}
+
+[data-direction="orbit"] .o-btn-red {
+  background: var(--o-red);
+  color: #fff;
+}
+
+[data-direction="orbit"] .o-btn-red:not(:disabled):hover {
+  background: color-mix(in srgb, var(--o-red) 88%, #000);
+}
+
+/* The agent card (section 4.2): a 280px popover over the dock, radius 16, e3. */
+[data-direction="orbit"] .o-agent-card {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  width: 280px;
+  padding: 14px;
+  border-radius: var(--o-r-xl);
+  background: var(--o-raised);
+  box-shadow: var(--o-ring), var(--o-e3);
+  transform-origin: bottom left;
+}
+
+[data-direction="orbit"] .o-root[data-theme="dark"] .o-agent-card {
+  box-shadow: var(--o-ring-strong), var(--o-e3);
+}
+
+[data-direction="orbit"] .o-agent-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+[data-direction="orbit"] .o-agent-card-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+[data-direction="orbit"] .o-agent-card-rows {
+  margin: 12px 0 0;
+  padding-top: 8px;
+  box-shadow: inset 0 1px 0 var(--o-rule);
+}
+
+[data-direction="orbit"] .o-agent-card-rows .o-prop {
+  grid-template-columns: 88px minmax(0, 1fr);
+  min-height: 26px;
+}
+
+[data-direction="orbit"] .o-agent-card-rows dd {
+  margin: 0;
+}
+
+[data-direction="orbit"] .o-agent-card-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-agent-card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+[data-direction="orbit"] .o-agent-card-actions .o-btn {
+  width: 100%;
+}
+
+/* Files tab: Grok Build's numbered file panel, a well with a line-number gutter. */
+[data-direction="orbit"] .o-files-tab .o-file-row {
+  height: 28px;
+}
+
+[data-direction="orbit"] .o-file-viewer {
+  max-height: 420px;
+  margin: 8px 12px 12px;
+  padding: 8px 0;
+  overflow: auto;
+  border-radius: var(--o-r-md);
+  background: var(--o-well);
+  box-shadow: var(--o-ring);
+  color: var(--o-code-fg);
+  font-family: var(--o-mono);
+  font-size: 12.5px;
+  line-height: 20px;
+}
+
+[data-direction="orbit"] .o-viewer-line {
+  display: grid;
+  grid-template-columns: 40px max-content;
+  white-space: pre;
+}
+
+[data-direction="orbit"] .o-viewer-num {
+  padding-right: 12px;
+  color: var(--o-text-3);
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+[data-direction="orbit"] .o-viewer-code {
+  padding-right: 14px;
+}
+
+[data-direction="orbit"] .o-file-viewer-none {
+  margin: 0;
+  padding: 8px 16px 12px;
+}
+
+/* A ghost button the lab cannot run: text-4, no hover, the tooltip says why. */
+[data-direction="orbit"] .o-btn[aria-disabled="true"],
+[data-direction="orbit"] .o-btn[aria-disabled="true"]:hover {
+  background: none;
+  color: var(--o-text-4);
+}
+
+/* ===================================================================== the transcript, round 3 */
+
+/* The dashed warning notice (section 4.8, Mistral): a fact that changes how the chat runs. */
+[data-direction="orbit"] .o-notice {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 4px 6px 4px 10px;
+  border-radius: var(--o-r-md);
+  outline: 1px dashed var(--o-line-strong);
+  outline-offset: -1px;
+}
+
+[data-direction="orbit"] .o-notice-text {
+  min-width: 0;
+}
+
+[data-direction="orbit"] .o-notice .o-text-btn {
+  flex: none;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--o-r-sm);
+}
+
+/* The turn error (section 4.8, Warp's exit edge): a well with a 2px red left edge. */
+[data-direction="orbit"] .o-error-card {
+  padding: 10px 14px 12px;
+  border-radius: 0 var(--o-r-md) var(--o-r-md) 0;
+  background: var(--o-well);
+  box-shadow:
+    inset 2px 0 0 var(--o-red),
+    var(--o-ring);
+}
+
+[data-direction="orbit"] .o-error-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-direction="orbit"] .o-error-detail {
+  margin: 6px 0 10px 20px;
+  overflow-wrap: anywhere;
+}
+
+[data-direction="orbit"] .o-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: 14px;
+}
+
+/* A blocking notice docked in the composer (section 4.8): a segment with its one way out. */
+[data-direction="orbit"] .o-blocking .o-text-btn {
+  flex: none;
+}
+
+/* Linear's jump to latest: a 26px pill floating 12px above the composer. */
+[data-direction="orbit"] .o-latest {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--o-r-pill);
+  background: var(--o-raised);
+  box-shadow: var(--o-ring), var(--o-e2);
+  color: var(--o-text-2);
+  transform: translateX(-50%);
+  pointer-events: auto;
+  animation: o-rise var(--o-dock) var(--o-ease-out) both;
+}
+
+[data-direction="orbit"] .o-latest:hover {
+  color: var(--o-text-1);
+}
+
+/* The queue after a stop: it waits, and says so. */
+[data-direction="orbit"] .o-queue-paused {
+  flex: none;
+}
+
+/* The handoff card: what the next agent starts from, as a receipt. */
+[data-direction="orbit"] .o-handoff-card .o-sheet-rows {
+  margin: 4px 0 0;
+}
+
+[data-direction="orbit"] .o-handoff-files {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-direction="orbit"] .o-handoff-answer {
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ================================================================== the empty state, round 3 */
+
+/*
+ * The agent's name over a 2px rule at ink 14% (x.ai's rotating word). When you choose another
+ * agent the name flips up word by word and one orange band runs along the rule, once.
+ */
+[data-direction="orbit"] .o-empty-agent {
+  display: inline-block;
+  perspective: 600px;
+}
+
+[data-direction="orbit"] .o-empty-agent-name {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 2px;
+}
+
+[data-direction="orbit"] .o-glint {
+  position: absolute;
+  right: 0;
+  bottom: -4px;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--o-ink) 14%, transparent);
+}
+
+[data-direction="orbit"] .o-glint::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40px;
+  width: 40px;
+  background: var(--o-signal);
+  content: "";
+  opacity: 0;
+}
+
+[data-direction="orbit"] .o-empty[data-switched] .o-glint::after {
+  animation: o-glint var(--o-glint) linear 120ms both;
+}
+
+@keyframes o-glint {
+  0% {
+    left: -40px;
+    opacity: 1;
+  }
+  99% {
+    opacity: 1;
+  }
+  100% {
+    left: 100%;
+    opacity: 0;
+  }
+}
+
+/* =================================================================== onboarding, round 3 */
+
+[data-direction="orbit"] .o-check-step[data-state="done"] .o-numeral-ring {
+  background: var(--o-ink);
+  box-shadow: none;
+  color: var(--o-on-ink);
+}
+
+[data-direction="orbit"] .o-check-step[data-state="active"] .o-numeral-ring {
+  background: var(--o-ink);
+  box-shadow: none;
+  color: var(--o-on-ink);
+}
+
+[data-direction="orbit"] .o-check-body {
+  min-width: 0;
+}
+
+[data-direction="orbit"] .o-check-title {
+  margin: 0;
+}
+
+/* A done step folds to one line of numbers; clicking it opens the step again. */
+[data-direction="orbit"] .o-check-again {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  border-radius: var(--o-r-sm);
+  color: var(--o-text-1);
+  text-align: left;
+}
+
+[data-direction="orbit"] .o-check-again:hover .o-check-summary {
+  color: var(--o-text-2);
+}
+
+[data-direction="orbit"] .o-check-content {
+  overflow: hidden;
+}
+
+[data-direction="orbit"] .o-onb-label {
+  margin: 18px 0 8px;
+}
+
+[data-direction="orbit"] .o-roster-in {
+  animation: o-rise-4 var(--o-dock) var(--o-ease-out) both;
+}
+
+[data-direction="orbit"] .o-roster-row[data-status="looking"] {
+  animation: none;
+}
+
+[data-direction="orbit"] .o-roster-status {
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+[data-direction="orbit"] button.o-install-chip {
+  cursor: default;
+}
+
+[data-direction="orbit"] button.o-install-chip:hover {
+  box-shadow: var(--o-ring-strong);
+}
+
+/* An input (section 3.9): 32px, radius 8, the pane's fill, a strong hairline that inks on focus. */
+[data-direction="orbit"] .o-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 400px;
+}
+
+[data-direction="orbit"] .o-input-box {
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--o-r-md);
+  outline: none;
+  background: var(--o-pane);
+  box-shadow: inset 0 0 0 1px var(--o-line-strong);
+  color: var(--o-text-1);
+  caret-color: var(--o-ink);
+}
+
+[data-direction="orbit"] .o-input-box::placeholder {
+  color: var(--o-text-3);
+}
+
+[data-direction="orbit"] .o-input-box:focus,
+[data-direction="orbit"] .o-input-box:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--o-ink) 32%, transparent);
+}
+
+/* Appearance as preview tiles (Claude's settings); the chosen one takes the 1.5px ink rim. */
+[data-direction="orbit"] .o-theme-tiles {
+  display: flex;
+  gap: 10px;
+}
+
+[data-direction="orbit"] .o-theme-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+[data-direction="orbit"] .o-theme-mini {
+  display: block;
+  width: 104px;
+  height: 72px;
+  padding: 10px 0 0 16px;
+  overflow: hidden;
+  border-radius: var(--o-r-md);
+  box-shadow: inset 0 0 0 1px var(--o-line-strong);
+}
+
+[data-direction="orbit"] .o-theme-tile[data-selected] .o-theme-mini {
+  box-shadow: inset 0 0 0 1.5px var(--o-ink);
+}
+
+[data-direction="orbit"] .o-theme-mini[data-theme-tile="light"] {
+  background: var(--o-swatch-light-tray);
+}
+
+[data-direction="orbit"] .o-theme-mini[data-theme-tile="dark"] {
+  background: var(--o-swatch-dark-tray);
+}
+
+[data-direction="orbit"] .o-theme-mini[data-theme-tile="system"] {
+  background: linear-gradient(
+    135deg,
+    var(--o-swatch-light-tray) 50%,
+    var(--o-swatch-dark-tray) 50%
+  );
+}
+
+[data-direction="orbit"] .o-theme-mini-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  height: 100%;
+  padding: 9px 10px;
+  border-radius: 6px 0 0;
+  background: var(--o-swatch-light-pane);
+  box-shadow: 0 0 0 1px rgb(10 10 10 / 0.08);
+}
+
+[data-direction="orbit"] .o-theme-mini[data-theme-tile="dark"] .o-theme-mini-pane {
+  background: var(--o-swatch-dark-pane);
+  box-shadow: 0 0 0 1px rgb(242 241 238 / 0.09);
+}
+
+[data-direction="orbit"] .o-theme-mini[data-theme-tile="system"] .o-theme-mini-pane {
+  background: linear-gradient(
+    135deg,
+    var(--o-swatch-light-pane) 46%,
+    var(--o-swatch-dark-pane) 46%
+  );
+}
+
+[data-direction="orbit"] .o-theme-mini-line {
+  display: block;
+  width: 70%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgb(10 10 10 / 0.22);
+}
+
+[data-direction="orbit"] .o-theme-mini-line[data-short] {
+  width: 44%;
+}
+
+[data-direction="orbit"] .o-theme-mini-block {
+  display: block;
+  align-self: flex-end;
+  width: 32px;
+  height: 10px;
+  border-radius: 4px;
+  background: var(--o-swatch-light-ink);
+}
+
+[data-direction="orbit"] .o-theme-mini[data-theme-tile="dark"] :is(.o-theme-mini-line) {
+  background: rgb(242 241 238 / 0.28);
+}
+
+[data-direction="orbit"] .o-theme-mini[data-theme-tile="dark"] .o-theme-mini-block,
+[data-direction="orbit"] .o-theme-mini[data-theme-tile="system"] .o-theme-mini-block {
+  background: var(--o-swatch-dark-ink);
+}
+
+[data-direction="orbit"] .o-theme-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--o-text-1);
+}
+
+/* The first project: a 120px dashed drop zone (section 4.14). */
+[data-direction="orbit"] .o-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  min-height: 120px;
+  padding: 16px 20px;
+  border-radius: var(--o-r-lg);
+  outline: 1px dashed color-mix(in srgb, var(--o-ink) 24%, transparent);
+  outline-offset: -1px;
+}
+
+[data-direction="orbit"] .o-drop[data-chosen] {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 72px;
+  outline-style: solid;
+  outline-color: var(--o-line-strong);
+}
+
+[data-direction="orbit"] .o-drop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+[data-direction="orbit"] .o-drop-square {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background: var(--o-project-slate);
+}
+
+[data-direction="orbit"] .o-drop-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The globe's labels sit on black plates, so no orbit line ever runs through their text. */
+[data-direction="orbit"] .o-globe-plate {
+  fill: #000;
+}
+
+[data-direction="orbit"] .o-globe-text {
+  font-family: var(--o-mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  fill: rgb(255 255 255 / 0.82);
+}
+
+[data-direction="orbit"] .o-globe-text[data-tone="data"] {
+  fill: rgb(255 255 255 / 0.5);
+}
+
+[data-direction="orbit"] .o-globe-text[data-tone="path"] {
+  fill: rgb(255 255 255 / 0.36);
+}
+
+[data-direction="orbit"] .o-globe-text[data-tone="signal"] {
+  fill: #ff7a2e;
+}
+
+[data-direction="orbit"] .o-globe-marker {
+  fill: #fff;
+}
+
+/* A project's arcs to its agents, lifted off the surface, drawn in 60ms apart. */
+[data-direction="orbit"] .o-globe-arc {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.5);
+  stroke-width: 1px;
+  stroke-dasharray: 1;
+  animation: o-orbit-draw 600ms var(--o-ease-out) both;
+}
+
+/* ========================================================================== the rail */
+
+[data-direction="orbit"] .o-sidebar[data-rail] .o-band-toggle {
+  top: 52px;
+  left: 22px;
+}
+
+[data-direction="orbit"] .o-sidebar[data-rail] .o-side-scroll {
+  padding: 34px 12px 12px;
+  overflow-x: hidden;
+}
+
+[data-direction="orbit"]
+  .o-sidebar[data-rail]
+  :is(
+    .o-side-title,
+    .o-side-label,
+    .o-keys,
+    .o-project-count,
+    .o-project-chev,
+    .o-project-pip .o-trail-word,
+    .o-chat-line,
+    .o-needs-group,
+    .o-account-text,
+    .o-account .o-icon-btn,
+    .o-dock-strip > .o-side-label
+  ) {
+  display: none;
+}
+
+[data-direction="orbit"] .o-sidebar[data-rail] .o-side-row {
+  justify-content: center;
+  width: 48px;
+  padding: 0;
+}
+
+[data-direction="orbit"] .o-sidebar[data-rail] .o-project-row {
+  gap: 6px;
+}
+
+[data-direction="orbit"] .o-sidebar[data-rail] .o-project-side {
+  margin-left: 0;
+}
+
+[data-direction="orbit"] .o-sidebar[data-rail] .o-project-side:not(:has(.o-project-pip)) {
+  display: none;
+}
+
+[data-direction="orbit"] .o-sidebar[data-rail] .o-project-square {
+  width: 10px;
+  height: 10px;
+}
+
+[data-direction="orbit"] .o-sidebar[data-rail] .o-dock-cells {
+  flex-direction: column;
+  align-items: center;
+}
+
+[data-direction="orbit"] .o-sidebar[data-rail] .o-dock-strip {
+  padding-top: 6px;
+}
+
+[data-direction="orbit"] .o-sidebar[data-rail] .o-account {
+  justify-content: center;
+  padding: 0 0 8px;
+}
+
+/* ============================================================= pressed, the last 80ms of a click */
+
+[data-direction="orbit"]
+  :is(
+    .o-icon-btn,
+    .o-tool-row:not(:disabled, [data-static]),
+    .o-side-row,
+    .o-pick,
+    .o-pill,
+    .o-chip,
+    .o-ledger-row,
+    .o-file-row,
+    .o-dock-cell,
+    .o-attach,
+    .o-diff-chip,
+    .o-files-chip,
+    .o-copy,
+    .o-scope-btn
+  ):active {
+  background: var(--o-pressed);
+}
+
+[data-direction="orbit"] .o-hit-path {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-kv-label {
+  padding-right: 12px;
+}
+
+[data-direction="orbit"] .o-ledger-agent {
+  white-space: nowrap;
+}
+
+[data-direction="orbit"] .o-md-table-wrap {
+  overflow-x: auto;
+}
+
+/* A clause that wraps splits evenly, never leaving one word on its own line. */
+[data-direction="orbit"] .o-onb-line {
+  display: block;
+  text-wrap: balance;
+}
+
+[data-direction="orbit"] .o-prop-label {
+  padding-right: 12px;
+}
+
+/*
+ * Hooks with no look of their own: structure that other selectors, the tests and assistive tech
+ * read. Listed here so every class the components use is declared in the stylesheet.
+ */
+[data-direction="orbit"]
+  :is(
+    .o-message,
+    .o-project,
+    .o-pick-agent,
+    .o-pick-model,
+    .o-pill-name,
+    .o-perm-primary,
+    .o-plan-segment,
+    .o-queue,
+    .o-handoff,
+    .o-menu-group,
+    .o-well-kv,
+    .o-stars,
+    .o-globe-label,
+    .o-globe-project
+  ) {
+  min-width: 0;
+}
+
+/* ========================================================================= reduced motion */
+
+:root[data-motion="reduce"] [data-direction="orbit"] .o-shimmer {
+  background: none;
+  color: var(--o-text-2);
+  animation: none;
+}
+
+:root[data-motion="reduce"] [data-direction="orbit"] .o-loader-dot {
+  opacity: 0.18;
+  animation: none;
+}
+
+:root[data-motion="reduce"] [data-direction="orbit"] .o-loader-dot[data-dot="0"],
+:root[data-motion="reduce"] [data-direction="orbit"] .o-loader-dot[data-dot="1"],
+:root[data-motion="reduce"] [data-direction="orbit"] .o-loader-dot[data-dot="3"] {
+  opacity: 1;
+}
+
+:root[data-motion="reduce"] [data-direction="orbit"] .o-word,
+:root[data-motion="reduce"] [data-direction="orbit"] .o-now,
+:root[data-motion="reduce"] [data-direction="orbit"] .o-event,
+:root[data-motion="reduce"] [data-direction="orbit"] .o-roster-row,
+:root[data-motion="reduce"] [data-direction="orbit"] .o-roster-in,
+:root[data-motion="reduce"] [data-direction="orbit"] .o-latest,
+:root[data-motion="reduce"] [data-direction="orbit"] .o-globe-arc,
+:root[data-motion="reduce"] [data-direction="orbit"] .o-empty[data-switched] .o-glint::after {
+  animation: none;
+}
+
+:root[data-motion="reduce"] [data-direction="orbit"] .o-flip {
+  animation: o-fade 150ms linear both;
+}
+
+@keyframes o-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+:root[data-motion="reduce"] [data-direction="orbit"] .o-step[data-state="active"] .o-step-node,
+:root[data-motion="reduce"] [data-direction="orbit"] .o-rule-tick[data-state="active"] {
+  animation: none;
+}
+
+:root[data-motion="reduce"] [data-direction="orbit"] .o-rule-tick[data-state="active"] {
+  background: var(--o-text-2);
+}
+
+/* The empty state paints its agent's name still on first paint; only a switch flips it in. */
+[data-direction="orbit"] .o-empty:not([data-switched]) .o-empty-agent .o-flip {
+  animation: none;
+}
