@@ -9,6 +9,7 @@ import { AuthCard } from "./AuthCard";
 import { ChangesPanel } from "./ChangesPanel";
 import { Composer } from "./Composer";
 import { ConversationDialog, type ConversationIntent } from "./ConversationDialog";
+import { GitDialog } from "./GitDialog";
 import { Header } from "./Header";
 import { PermissionCard } from "./PermissionCard";
 import { Pickers } from "./Pickers";
@@ -42,6 +43,7 @@ export function ChatView({
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport));
   const [changesOpen, setChangesOpen] = useState(false);
+  const [gitOpen, setGitOpen] = useState(false);
   const [continuation, setContinuation] = useState<ConversationIntent | null>(null);
   const [handoff, setHandoff] = useState<PendingHandoff | null>(null);
   const [handoffError, setHandoffError] = useState<string | null>(null);
@@ -192,6 +194,7 @@ export function ChatView({
         onStop={() => void store.stop()}
         onShowLog={() => void store.revealLog()}
         onHistory={transport.conversation ? () => setContinuation({ type: "history" }) : undefined}
+        onGit={transport.git ? () => setGitOpen(true) : undefined}
         changesOpen={changesOpen}
         onChanges={transport.changes ? () => setChangesOpen((open) => !open) : undefined}
       />
@@ -368,6 +371,21 @@ export function ChatView({
               setHandoffRevision((value) => value + 1);
             }
             onOpenChat?.(id);
+          }}
+        />
+      ) : null}
+      {gitOpen && transport.git ? (
+        <GitDialog
+          chatId={chatId}
+          title={state.chat?.title ?? "work"}
+          api={transport.git}
+          live={live}
+          onStop={() => store.stop()}
+          onClose={() => setGitOpen(false)}
+          onChanged={() => {
+            void store.reattach();
+            setHandoffRevision((value) => value + 1);
+            onOpenChat?.(chatId);
           }}
         />
       ) : null}

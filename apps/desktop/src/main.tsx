@@ -23,7 +23,9 @@ const container = document.getElementById("root");
 if (container) {
   if (import.meta.env.DEV && new URLSearchParams(location.search).has("preview")) {
     const mode = new URLSearchParams(location.search).get("preview");
-    if (mode === "settings")
+    if (mode === "git")
+      void import("./dev/gitPreview").then(({ mountGitPreview }) => mountGitPreview(container));
+    else if (mode === "settings")
       void import("./dev/settingsPreview").then(({ mountSettingsPreview }) =>
         mountSettingsPreview(container),
       );

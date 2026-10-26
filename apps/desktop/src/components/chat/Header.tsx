@@ -1,5 +1,5 @@
 import { OrbitMark } from "@auracode/ui/orbit";
-import { Ellipsis, PanelRight } from "lucide-react";
+import { Ellipsis, GitBranch, PanelRight } from "lucide-react";
 import type { AgentEntry, ChatSummary } from "../../bindings";
 import { chatActivity } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
@@ -23,6 +23,7 @@ export function Header({
   onShowLog,
   onChanges,
   onHistory,
+  onGit,
   changesOpen = false,
 }: {
   readonly state: ChatState;
@@ -40,6 +41,7 @@ export function Header({
   readonly onShowLog: () => void;
   readonly onChanges?: () => void;
   readonly onHistory?: () => void;
+  readonly onGit?: () => void;
   readonly changesOpen?: boolean;
 }) {
   const { session } = state;
@@ -100,6 +102,20 @@ export function Header({
           }}
         >
           <PanelRight size={16} />
+        </button>
+      ) : null}
+      {onGit ? (
+        <button
+          type="button"
+          className="chat-icon-button"
+          aria-label="Git workspace"
+          title="Git workspace"
+          onClick={(event) => {
+            event.currentTarget.focus();
+            onGit();
+          }}
+        >
+          <GitBranch size={16} />
         </button>
       ) : null}
       <Popover

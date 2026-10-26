@@ -1194,6 +1194,31 @@ keys can be shared with the Rust writer without exposing them through IPC; nine 
 tests still pass, including no key handle before fingerprint confirmation and offline access after
 sign-out. Caller wiring and macOS filesystem qualification remain pending.
 
+## First integration findings and Git review interface, 2026-10-26
+
+Hosted run 40311937683 completed at 28554a1. Windows passed Clippy, binding export, the process
+spike and stream smoke. Its full test run exposed the Windows npm-prefix alias mismatch, outdated
+native image capability expectations and demo checkpoint admission fixtures/behavior. The chat
+smoke reached its first explicit permission before its old transcript-only selector timed out.
+The dock now retains the request's segment identity and the DOM reader finds its actual controls.
+macOS failed at the ioctl type mismatch already fixed locally. Remaining native paths still need
+the batched rerun; neither platform's overall gate is complete.
+
+The complete Orbit Chromium and WebKit browser suites now pass, including the docked-request
+association, Files/Plan/Session, picker choices, accessibility, large history and long single-turn
+virtualization, focus, disclosure retention and dark-only rendering under both OS color schemes.
+The agent dock's accessible name includes its visible initials. Context-panel launch explicitly
+focuses its button so WebKit can restore focus after closing. Programmatic test scrolls issue the
+same reader-intent wheel event as a real upward gesture before changing virtualized scroll offset.
+
+The dark Git dialog presents repository branch/commit/files, isolation and merge previews, conflict
+paths, retirement and recovery/restoration reviews. Apply consumes the displayed Rust token and
+refreshes state even after a rejected or uncertain reply. Chromium/WebKit fixture tests passed
+stopped-session gating, no mutation before confirmation, merge conflict refusal, stale-review
+failure and retained-worktree restoration. Screenshots and Axe checks passed. Production isolation
+remains hidden until chat relocation is connected; backend command integration and exact generated
+bindings are still pending. This is a local implementation checkpoint, not M4 completion.
+
 ## Dark settings and explicit update controls, 2026-10-26
 
 The settings control and Cmd/Ctrl+, now open a dark settings surface using the Orbit layout and
