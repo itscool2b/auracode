@@ -21,6 +21,7 @@ import {
   numbered,
   sessionInfo,
 } from "../lib/chat/testing";
+import { withPreviewContext } from "./previewContext";
 
 const AGENT: AgentEntry = {
   id: "claude",
@@ -333,38 +334,40 @@ function Preview() {
       seq += updates.length;
     };
     publishPreview.current = publish;
-    return new FakeTransport({
-      attach: async (chatId, onFrame) => {
-        receive = onFrame;
-        return attachResult(
-          chatId,
-          seq,
-          historyPage(chatId, initialHistory, {
-            has_more: before !== null,
-            before_seq: before,
-            cut_turn_id: mode.startsWith("partial-") ? "long" : null,
-          }),
-          { chat, session: sessionInfo({ agent_name: AGENT.name, status }) },
-        );
-      },
-      history: async (chatId) => historyPage(chatId, history.slice(0, before ?? 0)),
-      pickFolder: async () => "/workspace/auracode",
-      respondPermission: async (_chatId, requestId, optionId) =>
-        publish([ev.permissionResolved(requestId, optionId)]),
-      send: async (_chatId, text) => {
-        publish([
-          ev.turnStarted("preview-send"),
-          ev.user("preview-user", text),
-          ev.message(
-            "preview-answer",
-            "This is a local UI preview. No prompt was sent to an agent.",
-          ),
-          ev.messageDone("preview-answer"),
-          ev.turnEnded("preview-send"),
-        ]);
-        return { prompt_id: "preview-send", queued: false };
-      },
-    });
+    return withPreviewContext(
+      new FakeTransport({
+        attach: async (chatId, onFrame) => {
+          receive = onFrame;
+          return attachResult(
+            chatId,
+            seq,
+            historyPage(chatId, initialHistory, {
+              has_more: before !== null,
+              before_seq: before,
+              cut_turn_id: mode.startsWith("partial-") ? "long" : null,
+            }),
+            { chat, session: sessionInfo({ agent_name: AGENT.name, status }) },
+          );
+        },
+        history: async (chatId) => historyPage(chatId, history.slice(0, before ?? 0)),
+        pickFolder: async () => "/workspace/auracode",
+        respondPermission: async (_chatId, requestId, optionId) =>
+          publish([ev.permissionResolved(requestId, optionId)]),
+        send: async (_chatId, text) => {
+          publish([
+            ev.turnStarted("preview-send"),
+            ev.user("preview-user", text),
+            ev.message(
+              "preview-answer",
+              "This is a local UI preview. No prompt was sent to an agent.",
+            ),
+            ev.messageDone("preview-answer"),
+            ev.turnEnded("preview-send"),
+          ]);
+          return { prompt_id: "preview-send", queued: false };
+        },
+      }),
+    );
   }, [mode, status, chat]);
   const draft = useMemo(() => new NewChatDraft(transport), [transport]);
   return (

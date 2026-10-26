@@ -843,3 +843,218 @@
     background: #303035;
   }
 }
+@layer components {
+  .chat-work-area {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+  }
+  .chat-conversation {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+  }
+  .changes-panel {
+    width: var(--changes-width, 380px);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-width: 320px;
+    max-width: 560px;
+    min-height: 0;
+    border-left: 1px solid var(--o-line);
+    background: var(--o-pane);
+  }
+  .changes-resizer {
+    margin: 0;
+    border: 0;
+    height: auto;
+    position: absolute;
+    left: -3px;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    touch-action: none;
+    z-index: 4;
+  }
+  .changes-resizer:focus-visible {
+    outline: 1px solid var(--o-text-3);
+  }
+  .changes-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--o-line);
+  }
+  .changes-panel-header h2 {
+    font-size: 12px;
+    font-weight: 550;
+    color: var(--o-text-1);
+  }
+  .changes-panel-header > span {
+    flex: 1;
+    color: var(--o-text-3);
+    font-size: 11px;
+  }
+  .changes-scope {
+    display: grid;
+    gap: 6px;
+    padding: 14px;
+    color: var(--o-text-3);
+    font-size: 10px;
+  }
+  .changes-scope select {
+    width: 100%;
+    border: 1px solid var(--o-line);
+    padding: 7px 8px;
+    border-radius: 6px;
+    background: var(--o-raised-2);
+    color: var(--o-text-2);
+    font-size: 12px;
+  }
+  .changes-panel-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 0 12px 12px;
+  }
+  .changes-empty {
+    padding: 16px 3px;
+    color: var(--o-text-3);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .changes-file-list {
+    padding: 0 0 16px;
+  }
+  .changes-file-list > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 5px;
+    border-radius: 5px;
+  }
+  .changes-file-list > div[data-selected="true"] {
+    background: var(--o-hover);
+  }
+  .changes-file-list input {
+    accent-color: #b6b6bd;
+  }
+  .changes-file-list button {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1;
+    min-width: 0;
+    padding: 6px 2px;
+    text-align: left;
+    color: var(--o-text-2);
+    font-size: 11px;
+  }
+  .changes-file-list button > span {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .changes-file-list small {
+    color: var(--o-text-3);
+    font: inherit;
+  }
+  .changes-file-list small[data-kind="added"] {
+    color: #8abb9b;
+  }
+  .changes-file-list small[data-kind="deleted"] {
+    color: #d38a88;
+  }
+  .changes-panel-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px;
+    border-top: 1px solid var(--o-line);
+    color: var(--o-text-3);
+    font-size: 10px;
+  }
+  .changes-panel-footer .ui-button {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 11px;
+  }
+  .changes-warnings,
+  .changes-warning {
+    margin-bottom: 12px;
+    color: var(--o-text-3);
+    font-size: 11px;
+    line-height: 1.6;
+  }
+  .changes-warnings p {
+    margin-top: 6px;
+  }
+  .changes-result {
+    padding: 12px 0;
+    font-size: 12px;
+    color: var(--o-text-2);
+  }
+  .changes-result p {
+    margin: 6px 0;
+    overflow-wrap: anywhere;
+  }
+  .changes-confirm-copy {
+    margin: 20px 0 14px;
+    color: var(--o-text-2);
+    font-size: 13px;
+  }
+  .changes-confirm-files {
+    max-height: 240px;
+    overflow: auto;
+    padding: 12px;
+    border: 1px solid var(--o-line);
+    border-radius: 7px;
+    margin-bottom: 16px;
+  }
+  .changes-confirm-files li {
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    padding: 5px 0;
+    font-size: 11px;
+  }
+  .changes-confirm-files code {
+    overflow-wrap: anywhere;
+  }
+  .changes-confirm-files span {
+    color: var(--o-text-3);
+  }
+  @media (max-width: 1050px) {
+    .changes-panel {
+      position: absolute;
+      inset: 0 0 0 auto;
+      width: min(100%, 420px);
+      max-width: 100%;
+      box-shadow: -20px 0 50px #0004;
+      z-index: 25;
+    }
+    .changes-resizer {
+      display: none;
+    }
+  }
+}
+@layer components {
+  .changes-panel :is(.chat-diff-note, .chat-diff-truncated, .chat-diff-empty) {
+    margin: 0;
+    padding: 6px 10px;
+    color: var(--o-text-3);
+    font-size: 11px;
+  }
+}

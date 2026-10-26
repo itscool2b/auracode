@@ -11,11 +11,13 @@ export function DiffBlock({
   oldText,
   newText,
   disclosureKey,
+  wholeFile = false,
 }: {
   readonly path: string;
   readonly oldText: string | null;
   readonly newText: string;
   readonly disclosureKey: string;
+  readonly wholeFile?: boolean;
 }) {
   const [expanded, setExpanded] = useDisclosure(disclosureKey, "diff", false);
   const bodyId = useId();
@@ -40,6 +42,7 @@ export function DiffBlock({
     ? diff.added - rows.filter((line) => line.op === "add").length
     : 0;
   const changed = diff.added + diff.removed;
+  const explain = !wholeFile || oldText === null || diff.truncated;
   const filledSquares = Math.min(5, changed);
   const addedSquares = changed === 0 ? 0 : Math.round((diff.added / changed) * filledSquares);
 
@@ -81,25 +84,30 @@ export function DiffBlock({
         </span>
         <CopyButton text={path} label="Copy path" caption="Copy path" />
       </figcaption>
-      <p className="chat-diff-note" id={noteId}>
-        Line numbers are relative to the supplied text.
-        {oldText === null ? " No previous text was provided." : null}
-        {diff.truncated
-          ? " Large diff: counts describe a replacement, not individual edits."
-          : null}
-      </p>
+      {explain ? (
+        <p className="chat-diff-note" id={noteId}>
+          {!wholeFile ? "Line numbers are relative to the supplied text." : null}
+          {oldText === null ? " No previous text was provided." : null}
+          {diff.truncated
+            ? " Large diff: counts describe a replacement, not individual edits."
+            : null}
+        </p>
+      ) : null}
       <section
         className="chat-diff-scroll"
         id={bodyId}
         aria-label={`Line changes for ${path || "supplied text"}`}
-        aria-describedby={noteId}
+        aria-describedby={explain ? noteId : undefined}
         // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users need to scroll long code lines horizontally.
         tabIndex={0}
       >
         {rows.length === 0 ? (
           <p className="chat-diff-empty">No text to compare.</p>
         ) : (
-          <table className="chat-diff-table" aria-label="Relative line changes">
+          <table
+            className="chat-diff-table"
+            aria-label={wholeFile ? "File line changes" : "Relative line changes"}
+          >
             <thead>
               <tr>
                 <th scope="col">Old</th>

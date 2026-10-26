@@ -131,7 +131,11 @@ export function Pickers({
           </select>
         </div>
         <div className="chat-picker-note">
-          {chosen === "full_auto" ? <div>Full auto: changes are not checkpointed yet.</div> : null}
+          {chosen === "full_auto" ? (
+            <div>
+              Full auto. A local checkpoint is saved before each turn. Review files in Changes.
+            </div>
+          ) : null}
           {lists?.autonomy.note ? <div>{lists.autonomy.note}</div> : null}
           {lists?.autonomy.native_mode ? <div>Agent mode: {lists.autonomy.native_mode}</div> : null}
           {error !== null ? (

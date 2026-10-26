@@ -19,6 +19,7 @@
 
 pub mod bindings;
 pub mod boot;
+pub mod changes_commands;
 pub mod commands;
 pub mod composer_commands;
 pub mod demo;

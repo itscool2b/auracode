@@ -25,6 +25,9 @@ export function Modal({
       className="orbit-theme chat-modal"
       data-theme="dark"
       aria-labelledby={label}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") event.stopPropagation();
+      }}
       onCancel={(event) => {
         event.preventDefault();
         onClose();

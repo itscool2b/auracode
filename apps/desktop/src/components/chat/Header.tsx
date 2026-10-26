@@ -1,5 +1,5 @@
 import { OrbitMark } from "@auracode/ui/orbit";
-import { Ellipsis } from "lucide-react";
+import { Ellipsis, PanelRight } from "lucide-react";
 import type { AgentEntry, ChatSummary } from "../../bindings";
 import { chatActivity } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
@@ -21,6 +21,8 @@ export function Header({
   onStart,
   onStop,
   onShowLog,
+  onChanges,
+  changesOpen = false,
 }: {
   readonly state: ChatState;
   /**
@@ -35,6 +37,8 @@ export function Header({
   readonly onStart: (fresh: boolean) => void;
   readonly onStop: () => void;
   readonly onShowLog: () => void;
+  readonly onChanges?: () => void;
+  readonly changesOpen?: boolean;
 }) {
   const { session } = state;
   const chat = listed ?? state.chat;
@@ -81,6 +85,18 @@ export function Header({
         {statusLabel}
         {session?.detail ? <span className="ui-muted"> · {session.detail}</span> : null}
       </span>
+      {onChanges ? (
+        <button
+          type="button"
+          className="chat-icon-button"
+          aria-label="Changes"
+          title="Changes"
+          aria-expanded={changesOpen}
+          onClick={onChanges}
+        >
+          <PanelRight size={16} />
+        </button>
+      ) : null}
       <Popover
         label="Chat details and controls"
         className="chat-header-menu"

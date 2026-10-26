@@ -766,3 +766,18 @@ the app open if that flush fails. Required Tauri event permissions also enable e
 navigation and native file-drop listeners. Ordering/failure/quit regressions are staged for the final
 integration batch; Biome and rustfmt pass. Native compilation/binding generation remain pending the
 planned platform check. This checkpoint does not mark M2c or the product complete.
+
+## Checkpoint Changes interface
+
+The dark Changes panel now connects the Rust checkpoint service to current-file comparisons,
+per-file diffs, checkpoint selection, explicit multi-file revert previews and partial-failure recovery
+paths. Active sessions must stop before a revert. The panel resizes with a pointer or keyboard,
+closes with Escape without interrupting an agent, and restores focus. Snapshot failures disable
+revert until a successful refresh. The autonomy disclosure now describes the implemented checkpoint
+behavior. Preview fixtures exercise attachment/mention controls and selected-file revert without
+accessing any real project files.
+
+A focused Chromium accessibility scan of the panel passed with no violations, and keyboard focus
+restoration passed. Biome and rustfmt pass apart from existing CSS ordering warnings. The combined
+browser regression is prepared for the integration batch. Native command bindings, real checkpoint
+UI acceptance on Windows/macOS, and broader milestone checks remain pending. No remote CI or push.

@@ -5,6 +5,7 @@ import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
 import { AuthCard } from "./AuthCard";
+import { ChangesPanel } from "./ChangesPanel";
 import { Composer } from "./Composer";
 import { Header } from "./Header";
 import { PermissionCard } from "./PermissionCard";
@@ -34,6 +35,7 @@ export function ChatView({
   readonly agents: readonly AgentEntry[] | null;
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport));
+  const [changesOpen, setChangesOpen] = useState(false);
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
   useEffect(() => {
@@ -144,93 +146,112 @@ export function ChatView({
         onStart={(fresh) => void store.start(fresh)}
         onStop={() => void store.stop()}
         onShowLog={() => void store.revealLog()}
+        changesOpen={changesOpen}
+        onChanges={transport.changes ? () => setChangesOpen((open) => !open) : undefined}
       />
-      {state.phase === "failed" ? (
-        <div className="chat-banner" data-level="error">
-          <span role="alert" data-testid="chat-attach-error">
-            {state.attachError}
-          </span>
-          <button
-            type="button"
-            className="ui-button"
-            data-testid="chat-reattach"
-            onClick={() => void store.reattach()}
-          >
-            Retry
-          </button>
-        </div>
-      ) : null}
-      <Transcript
-        dockedRequests={dockedRequests}
-        state={state}
-        live={live}
-        actions={actions}
-        onLoadEarlier={() => void store.loadEarlier()}
-      />
-      <div className="chat-dock">
-        {state.auth !== null ? (
-          <AuthCard
-            auth={state.auth}
-            onRetry={() => void (held ? store.resumeQueue() : store.start(false))}
-          />
-        ) : null}
-        {state.stillWorkingMinutes !== null ? (
-          <StillWorking minutes={state.stillWorkingMinutes} onStop={() => void store.interrupt()} />
-        ) : null}
-        <QueueList
-          queue={state.queue}
-          held={held}
-          onRemove={(promptId) => void store.cancelQueued(promptId)}
-          onSendQueued={() => void store.resumeQueue()}
-        />
-        {pendingPermissions.length > 0 ? (
-          <section className="chat-permission-dock" aria-label="Waiting for your permission">
-            <div className="chat-permission-label">
-              Needs your permission
-              {pendingPermissions.length > 1 ? ` · ${pendingPermissions.length} requests` : ""}
+      <div className="chat-work-area">
+        <div className="chat-conversation">
+          {state.phase === "failed" ? (
+            <div className="chat-banner" data-level="error">
+              <span role="alert" data-testid="chat-attach-error">
+                {state.attachError}
+              </span>
+              <button
+                type="button"
+                className="ui-button"
+                data-testid="chat-reattach"
+                onClick={() => void store.reattach()}
+              >
+                Retry
+              </button>
             </div>
-            {pendingPermissions.map((item) =>
-              item.kind === "permission" ? (
-                <PermissionCard
-                  key={item.key}
-                  item={item}
-                  request={state.requests.get(item.request.request_id)}
-                  onRespond={(optionId) =>
-                    void store.respondPermission(item.request.request_id, optionId)
-                  }
-                  blobs={state.blobs}
-                  onLoadBlob={(sha256) => void store.loadBlob(sha256)}
-                />
-              ) : null,
-            )}
-          </section>
-        ) : null}
-        <div className="chat-compose-slot" hidden={pendingPermissions.length > 0}>
-          <Composer
-            chatId={chatId}
-            contextApi={transport.composer}
-            agentName={agent?.name ?? state.chat.agent_name}
-            controls={
-              <Pickers
-                agent={agent}
-                lists={state.lists}
-                autonomy={state.session?.autonomy ?? "full_auto"}
-                status={status}
-                error={state.listsError}
-                optionsSaving={state.optionsSaving}
-                autonomySaving={state.autonomySaving}
-                onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
-                onSetOption={(optionId, value) => void store.setOption(optionId, value)}
-              />
-            }
-            status={status}
-            commands={state.lists?.commands ?? []}
-            error={state.sendError}
-            onSend={(text, context) => store.send(text, context)}
-            onStop={() => void store.interrupt()}
-            onForceStop={() => void store.forceStop()}
+          ) : null}
+          <Transcript
+            dockedRequests={dockedRequests}
+            state={state}
+            live={live}
+            actions={actions}
+            onLoadEarlier={() => void store.loadEarlier()}
           />
+          <div className="chat-dock">
+            {state.auth !== null ? (
+              <AuthCard
+                auth={state.auth}
+                onRetry={() => void (held ? store.resumeQueue() : store.start(false))}
+              />
+            ) : null}
+            {state.stillWorkingMinutes !== null ? (
+              <StillWorking
+                minutes={state.stillWorkingMinutes}
+                onStop={() => void store.interrupt()}
+              />
+            ) : null}
+            <QueueList
+              queue={state.queue}
+              held={held}
+              onRemove={(promptId) => void store.cancelQueued(promptId)}
+              onSendQueued={() => void store.resumeQueue()}
+            />
+            {pendingPermissions.length > 0 ? (
+              <section className="chat-permission-dock" aria-label="Waiting for your permission">
+                <div className="chat-permission-label">
+                  Needs your permission
+                  {pendingPermissions.length > 1 ? ` · ${pendingPermissions.length} requests` : ""}
+                </div>
+                {pendingPermissions.map((item) =>
+                  item.kind === "permission" ? (
+                    <PermissionCard
+                      key={item.key}
+                      item={item}
+                      request={state.requests.get(item.request.request_id)}
+                      onRespond={(optionId) =>
+                        void store.respondPermission(item.request.request_id, optionId)
+                      }
+                      blobs={state.blobs}
+                      onLoadBlob={(sha256) => void store.loadBlob(sha256)}
+                    />
+                  ) : null,
+                )}
+              </section>
+            ) : null}
+            <div className="chat-compose-slot" hidden={pendingPermissions.length > 0}>
+              <Composer
+                chatId={chatId}
+                contextApi={transport.composer}
+                agentName={agent?.name ?? state.chat.agent_name}
+                controls={
+                  <Pickers
+                    agent={agent}
+                    lists={state.lists}
+                    autonomy={state.session?.autonomy ?? "full_auto"}
+                    status={status}
+                    error={state.listsError}
+                    optionsSaving={state.optionsSaving}
+                    autonomySaving={state.autonomySaving}
+                    onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
+                    onSetOption={(optionId, value) => void store.setOption(optionId, value)}
+                  />
+                }
+                status={status}
+                commands={state.lists?.commands ?? []}
+                error={state.sendError}
+                onSend={(text, context) => store.send(text, context)}
+                onStop={() => void store.interrupt()}
+                onForceStop={() => void store.forceStop()}
+              />
+            </div>
+          </div>
         </div>
+        {changesOpen && transport.changes ? (
+          <ChangesPanel
+            chatId={chatId}
+            api={transport.changes}
+            status={status}
+            transcript={state.transcript}
+            onClose={() => setChangesOpen(false)}
+            onStop={() => void store.stop()}
+          />
+        ) : null}
       </div>
     </div>
   );

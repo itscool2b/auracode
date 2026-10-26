@@ -455,6 +455,38 @@ async function inspect(engine, launcher) {
       );
     }
 
+    await page.goto(`${url}/?preview=settled`);
+    await page.getByRole("button", { name: "Attach file", exact: true }).click();
+    await page.getByText("interface-notes.md", { exact: true }).waitFor();
+    await page.getByTestId("composer-input").fill("Review @Sidebar");
+    await page.getByRole("option", { name: "src/components/Sidebar.tsx" }).click();
+    await page.getByRole("button", { name: "Changes", exact: true }).click();
+    await page.getByRole("table", { name: "File line changes" }).waitFor();
+    const changeScan = await new AxeBuilder({ page })
+      .include(".changes-panel")
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+      .analyze();
+    assert.deepEqual(changeScan.violations, [], "Changes panel accessibility");
+    await page.getByRole("button", { name: "Close Changes" }).press("Escape");
+    assert.ok(
+      await page
+        .getByRole("button", { name: "Changes", exact: true })
+        .evaluate((node) => node === document.activeElement),
+      "Changes panel did not restore focus",
+    );
+    await page.getByRole("button", { name: "Changes", exact: true }).click();
+    await page.getByRole("checkbox", { name: "Select src/styles.css for revert" }).check();
+    await page.getByRole("button", { name: "Review revert" }).click();
+    await page.getByRole("dialog").waitFor();
+    assert.equal(await page.locator(".changes-confirm-files li").count(), 1);
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    assert.equal(await page.locator(".changes-file-list > div").count(), 2);
+    await page.getByRole("button", { name: "Review revert" }).click();
+    await page.getByRole("button", { name: "Revert 1 file", exact: true }).click();
+    await page.getByText("Reverted 1 file.", { exact: true }).waitFor();
+    assert.equal(await page.locator(".changes-file-list > div").count(), 1);
+    assert.equal(await page.getByTestId("composer-input").inputValue(), "Review ");
+
     await page.emulateMedia({ colorScheme: "dark", reducedMotion: "no-preference" });
     await page.goto(`${url}/?preview=thinking`);
     await page.locator('[data-test-phase="live"]').waitFor();
