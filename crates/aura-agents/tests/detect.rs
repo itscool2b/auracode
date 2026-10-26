@@ -57,11 +57,13 @@ async fn vendor_acp_recipes_probe_only_versions_and_keep_transport_arguments() {
         assert_eq!(launch.program, machine.tool(program));
         assert_eq!(launch.args, args);
         assert!(launch.set_env.is_empty());
-        assert_eq!(machine.runs(program).len(), 1);
-        assert_eq!(
-            machine.runs(program)[0]["argv"],
-            serde_json::json!(["--version"])
-        );
+        // Catalog aliases may independently probe the same binary in the background.
+        // Every observed invocation must still be a read-only version check.
+        let runs = machine.runs(program);
+        assert!(!runs.is_empty(), "{id} was not checked");
+        for run in runs {
+            assert_eq!(run["argv"], serde_json::json!(["--version"]), "{id}");
+        }
     }
 }
 

@@ -207,7 +207,15 @@ mod setup {
             text.contains("mock (Demo agent (scripted, no AI))\n  ready (built in)"),
             "{text}"
         );
-        assert_eq!(text.matches("  missing: ").count(), 5, "{text}");
+        let external_agents = aura_agents::catalog()
+            .iter()
+            .filter(|spec| !matches!(spec.recipe, aura_agents::Recipe::Builtin))
+            .count();
+        assert_eq!(
+            text.matches("  missing: ").count(),
+            external_agents,
+            "{text}"
+        );
         assert!(!text.contains("checking"), "detection finished: {text}");
         headless.shutdown().await;
     }
