@@ -1445,3 +1445,15 @@ size rejection and existing descendant cleanup. No real GitHub or repository mut
 - Focused Library TypeScript and Biome checks pass. Full app typechecking remains pending the
   planned native binding refresh for preexisting conversation/search DTO changes. MCP/plugin apply
   and broader Library acceptance continue; M8 is not complete.
+The account coordinator and fifteen typed desktop commands now cover explicit email proof, device
+registration/approval/revocation, recovery setup, local fingerprint confirmation and sign-out. No
+bearer or private key reaches IPC. A separate bounded app-owned vault index binds opaque Account
+profiles to the canonical data root and origin, with an exclusive empty operational lock. Local
+restoration requires no network, and profile preparation leaves the active pointer unchanged. The
+service origin is compile-time restricted to production or preview; `account_config` pairs the
+Turnstile frame with that environment. Eight core coordinator tests, the device-list/revocation
+regression, and core/desktop all-target Clippy pass on Windows. Desktop binding generation is blocked by Windows
+Application Control on the `selectors` build script, without a workaround. Guarded profile runtime
+activation, writer projection and sync scheduling remain pending. No real sign-in or credential
+access was used during development.
+

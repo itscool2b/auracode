@@ -470,3 +470,37 @@ async fn failed_signout_storage_is_reported_and_still_halts_the_live_owner() {
     ));
     done.join().unwrap();
 }
+
+#[tokio::test]
+async fn device_list_recomputes_codes_and_revocation_keeps_only_local_access() {
+    let (mut account, _) = account().await;
+    ready(&mut account).await;
+    let public = account.bundle.device_key.public_key();
+    let expected = crypto::approval_code(&account.id, "device", &public).unwrap();
+    let (wire, done) = script(vec![
+        (
+            "GET /api/v1/devices ",
+            "200 OK",
+            serde_json::json!({"devices":[{
+                "id":"device","name":"My PC","platform":"windows","public_key":public,
+                "verification_code":"000000","created_at":10,"last_seen":20,"approved_at":15,"revoked_at":null
+            }]}),
+        ),
+        (
+            "DELETE /api/v1/devices/device ",
+            "200 OK",
+            serde_json::json!({"revoked":true}),
+        ),
+    ]);
+    account.api = wire;
+    assert_eq!(
+        account.devices(100).await.unwrap()[0].verification_code,
+        expected
+    );
+    account.revoke_device("device", 100).await.unwrap();
+    assert_eq!(account.access, Access::Denied);
+    assert!(account.bundle.session.is_none());
+    assert!(account.local_key_handle().is_some());
+    assert!(account.pull(0, 100).await.is_err());
+    done.join().unwrap();
+}

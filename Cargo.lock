@@ -393,6 +393,7 @@ dependencies = [
  "tracing",
  "uuid",
  "windows-sys 0.61.2",
+ "zeroize",
 ]
 
 [[package]]
@@ -506,6 +507,7 @@ dependencies = [
  "aura-drivers",
  "aura-process",
  "aura-protocol",
+ "aura-sync",
  "embed-resource",
  "keepawake",
  "reqwest",

@@ -30,6 +30,8 @@
 //! opening the profile and opening its store; the store then moves into the chat store's writer
 //! thread ([`chatstore::ChatStore`]), and [`session::SessionManager`] runs the chats on top of it.
 
+#[cfg(feature = "account-sync")]
+pub mod accounts;
 pub mod chatstore;
 pub mod checkpoints;
 mod conversation;

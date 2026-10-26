@@ -448,6 +448,27 @@ impl Account {
         self.access = Access::Ready;
         Ok(())
     }
+    pub async fn devices(&mut self, now: i64) -> Result<Vec<Device>> {
+        self.check(now).await?;
+        let reply = self.api.devices(self.token()?).await;
+        let mut devices = self.response(reply).await?;
+        for device in &mut devices {
+            // The code is bound to the returned public key. Approval independently refetches it
+            // and compares the code the user entered from the recipient device.
+            device.verification_code =
+                crypto::approval_code(&self.id, &device.id, &device.public_key)?;
+        }
+        Ok(devices)
+    }
+    pub async fn revoke_device(&mut self, id: &str, now: i64) -> Result<()> {
+        self.ready(now).await?;
+        let reply = self.api.revoke_device(self.token()?, id).await;
+        self.response(reply).await?;
+        if self.device_id() == Some(id) {
+            self.clear_session(Access::Denied).await?;
+        }
+        Ok(())
+    }
     pub async fn pull(&mut self, after: u64, now: i64) -> Result<Pull> {
         self.ready(now).await?;
         let reply = self.api.pull(self.token()?, after).await;

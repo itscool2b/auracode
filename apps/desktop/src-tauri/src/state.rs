@@ -59,6 +59,8 @@ pub struct AppInfo {
 
 /// State managed by Tauri for the whole app.
 pub struct AppState {
+    /// Lazy app-owned credential access. Local startup never opens an account vault.
+    pub accounts: crate::accounts::AccountService,
     info: AppInfo,
     /// The data root as a path (`info.data_dir` is its display string): the one folder the page
     /// may reveal, through `reveal_data_dir`.
@@ -125,6 +127,7 @@ impl AppState {
             fatal: booted.fatal,
         };
         AppState {
+            accounts: crate::accounts::AccountService::new(booted.data_dir.clone()),
             info,
             data_dir: booted.data_dir,
             chats,

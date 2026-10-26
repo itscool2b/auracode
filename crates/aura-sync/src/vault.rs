@@ -40,6 +40,17 @@ pub type Result<T> = std::result::Result<T, VaultError>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VaultEntry(String);
 impl VaultEntry {
+    /// App-owned profile bindings have a separate namespace from every remote account ID.
+    /// `scope` identifies one local data root, but only its digest enters the platform entry name.
+    pub fn profile_index(origin: &str, scope: &str) -> Result<Self> {
+        let origin_entry = Self::new(origin, "profile-index")?;
+        if scope.is_empty() || scope.len() > 32 * 1024 {
+            return Err(VaultError::Invalid);
+        }
+        let tuple = serde_json::to_vec(&("auracode-profile-index-v1", origin_entry.0, scope))
+            .map_err(|_| VaultError::Invalid)?;
+        Ok(Self(crypto::encode(&Sha256::digest(tuple))))
+    }
     pub fn new(origin: &str, account: &str) -> Result<Self> {
         crypto::identifier(account).map_err(|_| VaultError::Invalid)?;
         let origin = reqwest::Url::parse(origin).map_err(|_| VaultError::Invalid)?;
