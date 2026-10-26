@@ -925,3 +925,14 @@ This is the crypto foundation only. API transport, secure local key persistence,
 SQLCipher migration, sync scheduling/merging, approved config adapters, device UI and cross-platform
 acceptance remain pending. No cloud mutation, account login, credential inspection or real config
 read/write was performed.
+# M7 desktop account transport foundation (2026-10-26)
+
+- Added the Rust `/api/v1` client against cloud contract `7a95e6b`, with HTTPS origins, no redirects
+  or hidden retries, sensitive bearer headers, bounded response bodies, static error messages,
+  cooldowns, and strict sync cursor/device-clock checks. Server-provided private error text is never
+  surfaced. Auth expiry is a distinct result so the sync coordinator can halt without deleting data.
+- Eleven focused crypto and local fake-HTTP tests pass, including authoritative stale-write heads,
+  global sequence gaps, duplicate writes, malformed tombstones, redirects and token expiry.
+- Secure storage, durable sync state, encrypted account profiles, account UI and config adapters are
+  still pending. No real auth, credential access, cloud mutation, deployment or paid call was run.
+
