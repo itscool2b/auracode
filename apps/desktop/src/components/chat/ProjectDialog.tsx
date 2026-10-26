@@ -33,6 +33,7 @@ export function ProjectDialog({
   const [folder, setFolder] = useState<string | null>(null);
   const [color, setColor] = useState(project?.color ?? COLORS[0]);
   const [agent, setAgent] = useState(project?.default_agent ?? "");
+  const [model, setModel] = useState(project?.default_model ?? "");
   const [localError, setLocalError] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
@@ -80,7 +81,7 @@ export function ProjectDialog({
             name: name.trim(),
             color: color ?? null,
             default_agent: agent || null,
-            default_model: project?.default_model ?? null,
+            default_model: agent && model.trim() ? model.trim() : null,
           };
           void store
             .perform(() =>
@@ -161,7 +162,10 @@ export function ProjectDialog({
           <select
             className="ui-select"
             value={agent}
-            onChange={(event) => setAgent(event.currentTarget.value)}
+            onChange={(event) => {
+              setAgent(event.currentTarget.value);
+              setModel("");
+            }}
           >
             <option value="">Choose when starting a chat</option>
             {(agents ?? []).map((item) => (
@@ -170,6 +174,22 @@ export function ProjectDialog({
               </option>
             ))}
           </select>
+        </label>
+        <label className="ui-field">
+          Default model ID
+          <input
+            className="ui-input"
+            value={model}
+            disabled={!agent}
+            maxLength={256}
+            spellCheck={false}
+            onChange={(event) => setModel(event.currentTarget.value)}
+            aria-describedby="project-default-model-help"
+          />
+          <small id="project-default-model-help" className="ui-muted">
+            Leave blank for the agent's default. A specific model ID is checked when a new chat
+            starts.
+          </small>
         </label>
         {(localError ?? state.error) ? (
           <p role="alert" className="ui-error">
