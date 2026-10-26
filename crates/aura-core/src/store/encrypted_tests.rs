@@ -270,3 +270,39 @@ fn sync_migration_keeps_existing_account_projects_and_takes_a_keyed_v6_backup() 
     assert_eq!(stored_version(&backup).unwrap(), 6);
     assert!(backup.prepare("SELECT * FROM sync_state").is_err());
 }
+
+#[test]
+fn account_filename_avoids_old_plaintext_open_and_multiple_candidates_are_preserved() {
+    let temp = tempfile::tempdir().unwrap();
+    let profile = Profile {
+        meta: crate::profile::ProfileMeta {
+            id: "profile".into(),
+            kind: ProfileKind::Account,
+            display_name: "Account".into(),
+            created_at: 0,
+        },
+        dir: temp.path().join("profile"),
+    };
+    assert_eq!(profile.db_path().file_name().unwrap(), "aura.encrypted.db");
+    fs::create_dir(&profile.dir).unwrap();
+    let old = profile.dir.join("aura.db");
+    fs::write(&old, b"older account data").unwrap();
+    assert!(matches!(
+        Store::open_encrypted(&profile, key()),
+        Err(CoreError::AccountDatabaseLayout { .. })
+    ));
+    assert!(!profile.db_path().exists());
+    assert_eq!(fs::read(&old).unwrap(), b"older account data");
+    fs::remove_file(&old).unwrap();
+    let key = key();
+    drop(Store::open_encrypted(&profile, key.clone()).unwrap().0);
+    let cipher = fs::read(profile.db_path()).unwrap();
+    // A pre-encryption build may create its own plain file, but it cannot target this ciphertext.
+    fs::write(&old, b"data from an older build").unwrap();
+    assert!(matches!(
+        Store::open_encrypted(&profile, key),
+        Err(CoreError::AccountDatabaseLayout { .. })
+    ));
+    assert_eq!(fs::read(profile.db_path()).unwrap(), cipher);
+    assert_eq!(fs::read(&old).unwrap(), b"data from an older build");
+}

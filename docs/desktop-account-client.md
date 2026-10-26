@@ -78,10 +78,16 @@ database. Local profiles continue through their existing plaintext open and reco
 
 The store retains the key for a separate integrity connection and encrypts each pre-migration online
 backup. Call `store.check_integrity()` rather than the unkeyed path helper for account data. The
-sidecar `aura.db.encryption` is bounded, contains only a format version and initialization state, and
+sidecar `aura.encrypted.db.encryption` is bounded, contains only a format version and initialization state, and
 blocks unkeyed path opens even in a build without the account feature. An unknown marker, wrong key,
 damaged encrypted header, or missing database previously marked ready never creates an empty
 replacement. Migration failures roll back after a keyed backup. No database key appears in SQL text.
+
+Accounts use `aura.encrypted.db`, while Local retains `aura.db`. A build predating encryption cannot
+mistake the ciphertext for corrupt plaintext at its old path. If an old account database or its
+sidecars are present, the account open fails before changing either location. Import/restore must be
+explicit and may not silently choose a database. Acquire the existing profile ownership guard before
+activating an account, as for Local, so another auracode process cannot change the profile concurrently.
 
 Encrypted recovery currently stops with an actionable error and preserves the original file. It does
 not invoke plaintext salvage, `VACUUM INTO`, schema-page rewriting, or unkeyed scratch files. Explicit

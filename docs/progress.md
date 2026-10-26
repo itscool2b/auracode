@@ -1095,3 +1095,8 @@ still running tests. There has been one started integration run; fixes are being
   integration, scheduling, chat/config codecs, encrypted external files, account UI and macOS
   qualification remain pending; this does not mark M7 complete.
 
+Account databases now use `aura.encrypted.db` so a pre-M7 binary's old `aura.db` corruption recovery
+cannot quarantine ciphertext. Local paths are unchanged. Legacy or multiple candidate account files
+cause an explicit import/restore error before any account database is opened. Focused Windows tests
+preserve both paths byte-for-byte in this case; no existing user profile was read or migrated.
+

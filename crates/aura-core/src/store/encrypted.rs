@@ -20,6 +20,20 @@ pub(super) fn require_plain(path: &Path) -> Result<()> {
 pub(super) use keyed::{backup, check_integrity, open, unavailable};
 
 #[cfg(feature = "account-sync")]
+pub(super) fn check_profile_layout(profile: &Profile) -> Result<()> {
+    let legacy = profile.dir.join(crate::profile::DB_FILE);
+    for suffix in ["", "-wal", "-shm", "-journal", ".encryption"] {
+        let candidate = fsutil::with_suffix(&legacy, suffix);
+        match fs::symlink_metadata(&candidate) {
+            Ok(_) => return Err(CoreError::AccountDatabaseLayout { path: legacy }),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(CoreError::io(candidate)(error)),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "account-sync")]
 mod keyed {
     use super::*;
     use aura_sync::{crypto::DatabaseKey, database};

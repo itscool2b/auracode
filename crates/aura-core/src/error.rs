@@ -37,6 +37,11 @@ pub enum CoreError {
     ProfileEncryptionMismatch,
 
     #[error(
+        "An older account database exists at {path}. Its data needs an explicit import or restore before this account can open. Both database locations were left unchanged."
+    )]
+    AccountDatabaseLayout { path: PathBuf },
+
+    #[error(
         "The encrypted database at {path} could not be opened safely. Check the account key or restore an encrypted backup. No repair or replacement was attempted."
     )]
     EncryptedDatabase { path: PathBuf },

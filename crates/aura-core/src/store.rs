@@ -201,6 +201,7 @@ impl Store {
         if profile.meta.kind != ProfileKind::Account {
             return Err(CoreError::ProfileEncryptionMismatch);
         }
+        encrypted::check_profile_layout(profile)?;
         encrypted::open(
             &profile.db_path(),
             &profile.backups_dir(),
