@@ -23,7 +23,9 @@ export interface ComposerTransport {
 
 export const composerApi: ComposerTransport = {
   draft: async (id) => settle(commands.composerDraft(id)),
-  saveDraft: async (id, input) => settle(commands.composerSaveDraft(id, input)),
+  saveDraft: async (id, input) => {
+    await settle(commands.composerSaveDraft(id, input));
+  },
   pick: async (id) => settle(commands.composerPick(id)),
   import: async (id, path) => settle(commands.composerImport(id, path)),
   paste: async (id, bytes) => settle(commands.composerPaste(id, bytes)),

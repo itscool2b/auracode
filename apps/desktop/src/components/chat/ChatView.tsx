@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import type { AgentEntry, ChatSummary, StorageStatus } from "../../bindings";
+import type { AgentEntry, ChatSummary, PendingHandoff, StorageStatus } from "../../bindings";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
+import { errorMessage } from "../../lib/errors";
 import { AuthCard } from "./AuthCard";
 import { ChangesPanel } from "./ChangesPanel";
 import { Composer } from "./Composer";
+import { ConversationDialog, type ConversationIntent } from "./ConversationDialog";
 import { Header } from "./Header";
 import { PermissionCard } from "./PermissionCard";
 import { Pickers } from "./Pickers";
@@ -25,6 +27,7 @@ export function ChatView({
   listed,
   storage,
   agents,
+  onOpenChat,
 }: {
   readonly chatId: string;
   readonly transport: Transport;
@@ -33,9 +36,15 @@ export function ChatView({
   /** The polled storage status: a failed join retries, and an unsaved gap joins again, on change. */
   readonly storage: StorageStatus | null;
   readonly agents: readonly AgentEntry[] | null;
+  readonly onOpenChat?: (id: string) => void;
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport));
   const [changesOpen, setChangesOpen] = useState(false);
+  const [continuation, setContinuation] = useState<ConversationIntent | null>(null);
+  const [handoff, setHandoff] = useState<PendingHandoff | null>(null);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [handoffLoaded, setHandoffLoaded] = useState(!transport.conversation);
+  const [handoffRevision, setHandoffRevision] = useState(0);
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
   useEffect(() => {
@@ -56,6 +65,28 @@ export function ChatView({
   }, [store]);
 
   const status = state.session?.status ?? state.chat?.status ?? "stopped";
+  useEffect(() => {
+    void status;
+    void handoffRevision;
+    if (!transport.conversation || state.phase !== "live") return;
+    let stale = false;
+    setHandoffLoaded(false);
+    void transport.conversation
+      .pending(chatId)
+      .then((value) => {
+        if (!stale) {
+          setHandoff(value);
+          setHandoffError(null);
+          setHandoffLoaded(true);
+        }
+      })
+      .catch((error) => {
+        if (!stale) setHandoffError(errorMessage(error));
+      });
+    return () => {
+      stale = true;
+    };
+  }, [transport.conversation, state.phase, chatId, status, handoffRevision]);
   const live = hasProcess(status);
   const resumable =
     (state.session?.native_session_id ?? null) !== null || hasTurns(state.transcript);
@@ -95,8 +126,9 @@ export function ChatView({
       onStart: (fresh) => void store.start(fresh),
       onShowLog: () => void store.revealLog(),
       canResume: !live,
+      onContinue: transport.conversation ? (intent) => setContinuation(intent) : undefined,
     }),
-    [store, state.blobs, state.requests, newestError, live, resumable],
+    [store, state.blobs, state.requests, newestError, live, resumable, transport.conversation],
   );
 
   if (state.chat === null) {
@@ -146,6 +178,7 @@ export function ChatView({
         onStart={(fresh) => void store.start(fresh)}
         onStop={() => void store.stop()}
         onShowLog={() => void store.revealLog()}
+        onHistory={transport.conversation ? () => setContinuation({ type: "history" }) : undefined}
         changesOpen={changesOpen}
         onChanges={transport.changes ? () => setChangesOpen((open) => !open) : undefined}
       />
@@ -174,6 +207,33 @@ export function ChatView({
             onLoadEarlier={() => void store.loadEarlier()}
           />
           <div className="chat-dock">
+            {handoff ? (
+              <details className="chat-handoff">
+                <summary>
+                  Next message includes a handoff to{" "}
+                  {agents?.find((agent) => agent.id === handoff.agent_id)?.name ?? handoff.agent_id}
+                  <span>Preview</span>
+                </summary>
+                <pre>
+                  {handoff.handoff ||
+                    (handoff.uses_native_fork
+                      ? "Continue from the saved native fork. No extra context will be added."
+                      : "No extra context will be added.")}
+                </pre>
+              </details>
+            ) : null}
+            {handoffError ? (
+              <p className="conversation-notice" role="alert">
+                Could not verify the saved handoff. {handoffError}{" "}
+                <button
+                  type="button"
+                  className="ui-button"
+                  onClick={() => setHandoffRevision((value) => value + 1)}
+                >
+                  Retry
+                </button>
+              </p>
+            ) : null}
             {state.auth !== null ? (
               <AuthCard
                 auth={state.auth}
@@ -216,11 +276,18 @@ export function ChatView({
             ) : null}
             <div className="chat-compose-slot" hidden={pendingPermissions.length > 0}>
               <Composer
+                blocked={!handoffLoaded || handoffError !== null}
                 chatId={chatId}
                 contextApi={transport.composer}
                 agentName={agent?.name ?? state.chat.agent_name}
                 controls={
                   <Pickers
+                    agents={agents}
+                    onChooseAgent={
+                      transport.conversation
+                        ? (agent_id) => setContinuation({ type: "switch_agent", agent_id })
+                        : undefined
+                    }
                     agent={agent}
                     lists={state.lists}
                     autonomy={state.session?.autonomy ?? "full_auto"}
@@ -253,6 +320,25 @@ export function ChatView({
           />
         ) : null}
       </div>
+      {continuation && transport.conversation ? (
+        <ConversationDialog
+          chatId={chatId}
+          api={transport.conversation}
+          initial={continuation}
+          agents={agents}
+          status={status}
+          queued={state.queue.length}
+          onStop={() => void store.stop()}
+          onClose={() => setContinuation(null)}
+          onApplied={async (id) => {
+            if (id === chatId) {
+              await store.reattach();
+              setHandoffRevision((value) => value + 1);
+            }
+            onOpenChat?.(id);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

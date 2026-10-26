@@ -22,6 +22,7 @@ export function Header({
   onStop,
   onShowLog,
   onChanges,
+  onHistory,
   changesOpen = false,
 }: {
   readonly state: ChatState;
@@ -38,6 +39,7 @@ export function Header({
   readonly onStop: () => void;
   readonly onShowLog: () => void;
   readonly onChanges?: () => void;
+  readonly onHistory?: () => void;
   readonly changesOpen?: boolean;
 }) {
   const { session } = state;
@@ -113,6 +115,11 @@ export function Header({
           </span>
         ) : null}
         <div className="ui-row">
+          {onHistory ? (
+            <button type="button" className="ui-button" onClick={onHistory}>
+              Conversation history
+            </button>
+          ) : null}
           {live ? (
             <button
               type="button"

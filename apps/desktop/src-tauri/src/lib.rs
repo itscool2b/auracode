@@ -22,6 +22,7 @@ pub mod boot;
 pub mod changes_commands;
 pub mod commands;
 pub mod composer_commands;
+pub mod conversation_commands;
 pub mod demo;
 pub mod error;
 pub mod glass;

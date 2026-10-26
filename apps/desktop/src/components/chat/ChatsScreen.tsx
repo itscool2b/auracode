@@ -151,6 +151,11 @@ export function ChatsScreen({
           />
         ) : (
           <ChatView
+            onOpenChat={(id) => {
+              setSelected(id);
+              void app.reloadChats();
+              void workspace?.refresh();
+            }}
             key={selected}
             chatId={selected}
             transport={transport}

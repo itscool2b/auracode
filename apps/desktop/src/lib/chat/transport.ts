@@ -18,6 +18,7 @@ import type {
 } from "../../bindings";
 import { changesApi } from "../changes";
 import { type ComposerTransport, composerApi } from "../composer";
+import { type ConversationTransport, conversationApi } from "../conversation";
 import {
   agentAuthStatus,
   agentMaintenance,
@@ -57,6 +58,7 @@ import { type SearchTransport, searchApi } from "../search";
  * wrappers throw `CommandError`s with the shell's codes.
  */
 export interface Transport {
+  readonly conversation?: ConversationTransport;
   readonly search?: SearchTransport;
   readonly changes?: import("../changes").ChangesTransport;
   readonly composer?: ComposerTransport;
@@ -99,6 +101,7 @@ export interface Transport {
 
 /** The shell, through the typed command wrappers. */
 export const tauriTransport: Transport = {
+  conversation: conversationApi,
   search: searchApi,
   changes: changesApi,
   composer: composerApi,

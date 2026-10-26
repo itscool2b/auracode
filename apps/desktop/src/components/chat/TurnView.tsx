@@ -6,6 +6,7 @@ import { costLabel, type ErrorActions, tokensLabel } from "../../lib/chat/presen
 import { type RenderedSegment, stopReasonLabel } from "../../lib/chat/transcript";
 import { formatDuration } from "../../lib/format";
 import { Answer } from "../Markdown";
+import type { ConversationIntent } from "./ConversationDialog";
 import { ErrorCard } from "./ErrorCard";
 import { PermissionCard } from "./PermissionCard";
 import { QuestionCard } from "./QuestionCard";
@@ -15,6 +16,7 @@ import { UserMessage } from "./UserMessage";
 
 /** What the items of a turn act on. */
 export interface TurnActions extends BlobProps {
+  readonly onContinue?: (intent: ConversationIntent) => void;
   readonly requests: ReadonlyMap<string, RequestState>;
   readonly onRespondPermission: (requestId: string, optionId: string | null) => void;
   readonly onRespondUi: (requestId: string, answer: UiAnswer | null) => void;
@@ -85,7 +87,18 @@ export const TurnView = memo(function TurnView({
         const content = (() => {
           switch (item.kind) {
             case "user":
-              return <UserMessage key={item.key} item={item} />;
+              return (
+                <UserMessage
+                  key={item.key}
+                  item={item}
+                  onEdit={
+                    segment.turnId && actions.onContinue && !active
+                      ? () =>
+                          actions.onContinue?.({ type: "edit", turn_id: segment.turnId as string })
+                      : undefined
+                  }
+                />
+              );
             case "message":
               return (
                 <div
@@ -193,6 +206,7 @@ export const TurnView = memo(function TurnView({
           agentName={agentName}
           canResume={actions.canResume}
           onStart={actions.onStart}
+          onContinue={actions.onContinue}
         />
       ) : null}
     </section>
@@ -231,11 +245,13 @@ function Footer({
   agentName,
   canResume,
   onStart,
+  onContinue,
 }: {
   readonly segment: RenderedSegment;
   readonly agentName: string;
   readonly canResume: boolean;
   readonly onStart: (fresh: boolean) => void;
+  readonly onContinue?: (intent: ConversationIntent) => void;
 }) {
   const { end } = segment;
   if (end === null) return null;
@@ -255,6 +271,22 @@ function Footer({
         <span key={part}>{part}</span>
       ))}
       <span className="chat-receipt-actions">
+        {segment.turnId && onContinue ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onContinue({ type: "retry", turn_id: segment.turnId as string })}
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => onContinue({ type: "fork", turn_id: segment.turnId as string })}
+            >
+              Fork
+            </button>
+          </>
+        ) : null}
         {response ? <CopyButton text={response} label="Copy response as Markdown" /> : null}
         <CopyButton text={receipt} label="Copy turn receipt" caption="Receipt" />
       </span>

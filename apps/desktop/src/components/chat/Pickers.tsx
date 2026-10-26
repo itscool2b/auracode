@@ -29,6 +29,8 @@ export function Pickers({
   onSetAutonomy,
   onSetOption,
   agent = null,
+  agents,
+  onChooseAgent,
 }: {
   readonly lists: SessionLists | null;
   /** The chat's autonomy until the lists arrive. */
@@ -41,6 +43,8 @@ export function Pickers({
   readonly onSetAutonomy: (autonomy: Autonomy) => void;
   readonly onSetOption: (optionId: string, value: ConfigValue) => void;
   readonly agent?: AgentEntry | null;
+  readonly agents?: readonly AgentEntry[] | null;
+  readonly onChooseAgent?: (id: string) => void;
 }) {
   const autonomyId = useId();
   const chosen = autonomySaving ?? lists?.autonomy.requested ?? autonomy;
@@ -67,33 +71,100 @@ export function Pickers({
           </>
         }
       >
-        <div className="chat-model-columns">
+        <div className="chat-model-columns" data-columns="three">
           <section>
             <h3>Agent</h3>
-            <span className="chat-current-agent">
-              <OrbitMark agent={agent?.id ?? "generic"} size={20} />
-              {agent?.name ?? "Agent"}
-            </span>
-            <p>{agent?.description ?? "The agent attached to this chat."}</p>
+            {agents?.length && onChooseAgent ? (
+              <div className="chat-agent-choices">
+                {agents.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    aria-pressed={entry.id === agent?.id}
+                    disabled={entry.availability.state !== "ready"}
+                    onClick={(event) => {
+                      if (entry.id !== agent?.id) {
+                        const details = event.currentTarget.closest("details");
+                        if (details) details.open = false;
+                        onChooseAgent(entry.id);
+                      }
+                    }}
+                  >
+                    <OrbitMark agent={entry.id} size={18} />
+                    <span>
+                      <strong>{entry.name}</strong>
+                      <small>
+                        {entry.availability.state === "ready"
+                          ? (entry.availability.version ?? "Installed")
+                          : entry.availability.state.replaceAll("_", " ")}
+                      </small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="chat-current-agent">
+                <OrbitMark agent={agent?.id ?? "generic"} size={20} />
+                {agent?.name ?? "Agent"}
+              </span>
+            )}
+            <p>Switching agents opens a visible context preview.</p>
           </section>
           <section>
-            <h3>Model and options</h3>
-            {options.length === 0 ? (
+            <h3>Model</h3>
+            {!model ? (
               <p>
                 {optionsEnabled
-                  ? "This agent has no configurable options."
+                  ? "This agent does not offer a model selector."
                   : "Start the session to load its models and options."}
               </p>
             ) : null}
-            {options.map((option) => (
-              <OptionPicker
-                key={option.id}
-                option={option}
-                saving={optionsSaving.get(option.id) ?? null}
-                enabled={optionsEnabled}
-                onSet={onSetOption}
-              />
-            ))}
+            {options
+              .filter((option) => option.category === "model")
+              .map((option) => (
+                <OptionPicker
+                  key={option.id}
+                  option={option}
+                  saving={optionsSaving.get(option.id) ?? null}
+                  enabled={optionsEnabled}
+                  onSet={onSetOption}
+                />
+              ))}
+          </section>
+          <section>
+            <h3>Effort</h3>
+            {!effort ? (
+              <p>{optionsEnabled ? "No effort setting" : "Available after the session starts."}</p>
+            ) : null}
+            {options
+              .filter((option) => option.category === "effort")
+              .map((option) => (
+                <OptionPicker
+                  key={option.id}
+                  option={option}
+                  saving={optionsSaving.get(option.id) ?? null}
+                  enabled={optionsEnabled}
+                  onSet={onSetOption}
+                />
+              ))}
+            {options.some(
+              (option) => option.category !== "model" && option.category !== "effort",
+            ) ? (
+              <details className="chat-other-options">
+                <summary>More options</summary>
+                {options
+                  .filter((option) => option.category !== "model" && option.category !== "effort")
+                  .map((option) => (
+                    <OptionPicker
+                      key={option.id}
+                      option={option}
+                      saving={optionsSaving.get(option.id) ?? null}
+                      enabled={optionsEnabled}
+                      onSet={onSetOption}
+                    />
+                  ))}
+              </details>
+            ) : null}
           </section>
         </div>
       </Popover>

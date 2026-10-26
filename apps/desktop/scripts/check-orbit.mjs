@@ -476,6 +476,7 @@ async function inspect(engine, launcher) {
     );
     await page.getByRole("button", { name: "Changes", exact: true }).click();
     await page.getByRole("checkbox", { name: "Select src/styles.css for revert" }).check();
+    await page.getByRole("button", { name: "Stop session to revert" }).click();
     await page.getByRole("button", { name: "Review revert" }).click();
     await page.getByRole("dialog").waitFor();
     assert.equal(await page.locator(".changes-confirm-files li").count(), 1);
@@ -486,6 +487,27 @@ async function inspect(engine, launcher) {
     await page.getByText("Reverted 1 file.", { exact: true }).waitFor();
     assert.equal(await page.locator(".changes-file-list > div").count(), 1);
     assert.equal(await page.getByTestId("composer-input").inputValue(), "Review ");
+    await page.getByRole("button", { name: "Close Changes" }).click();
+    await page.getByRole("button", { name: "Fork", exact: true }).click();
+    await page.getByRole("region", { name: "Exact continuation context" }).waitFor();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    assert.equal(
+      await page.locator(".chat-handoff").count(),
+      0,
+      "cancelled preview changed the chat",
+    );
+    await page.getByRole("button", { name: "Fork", exact: true }).click();
+    await page.getByRole("button", { name: "Create fork", exact: true }).click();
+    await page.locator(".chat-handoff").waitFor();
+    await page.keyboard.press("Control+k");
+    await page.getByRole("combobox", { name: "Search and commands" }).fill("active");
+    await page.getByRole("option").filter({ hasText: "Make the sidebar" }).waitFor();
+    const paletteScan = await new AxeBuilder({ page })
+      .include(".command-palette")
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+      .analyze();
+    assert.deepEqual(paletteScan.violations, [], "Command palette accessibility");
+    await page.keyboard.press("Escape");
 
     await page.emulateMedia({ colorScheme: "dark", reducedMotion: "no-preference" });
     await page.goto(`${url}/?preview=thinking`);

@@ -50,6 +50,9 @@ pub(crate) struct ApplyContinuation {
 
 #[derive(Clone)]
 pub(crate) enum ConversationCommand {
+    Pending {
+        chat_id: String,
+    },
     Turns {
         chat_id: String,
         before: Option<u32>,
@@ -64,6 +67,7 @@ pub(crate) enum ConversationCommand {
 }
 
 pub(crate) enum ConversationReply {
+    Pending(Option<aura_protocol::conversation::PendingHandoff>),
     Turns(ConversationTurns),
     Snapshot(Box<ConversationSnapshot>),
     Applied(Box<super::ChatLoad>),
@@ -109,6 +113,17 @@ pub(crate) fn execute(
     command: ConversationCommand,
 ) -> rusqlite::Result<ConversationReply> {
     match command {
+        ConversationCommand::Pending { chat_id } => {
+            let chat =
+                rows::chat(conn, device, &chat_id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+            Ok(ConversationReply::Pending(pending(conn, &chat_id)?.map(
+                |value| aura_protocol::conversation::PendingHandoff {
+                    agent_id: chat.agent_id,
+                    handoff: value.handoff,
+                    uses_native_fork: value.native_start.fork,
+                },
+            )))
+        }
         ConversationCommand::Turns { chat_id, before } => {
             let _ =
                 rows::chat(conn, device, &chat_id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;

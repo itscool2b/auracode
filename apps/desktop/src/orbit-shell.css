@@ -1186,3 +1186,197 @@
     color: var(--o-text-2);
   }
 }
+@layer components {
+  .chat-model-popover .chat-popover-panel {
+    width: min(640px, calc(100vw - 48px));
+    max-width: none;
+  }
+  .chat-model-columns[data-columns="three"] {
+    display: grid;
+    grid-template-columns: 1.3fr 1.2fr 1fr;
+  }
+  .chat-model-columns > section {
+    min-width: 0;
+  }
+  .chat-agent-choices {
+    display: grid;
+    max-height: 290px;
+    overflow: auto;
+    margin: 8px -6px;
+  }
+  .chat-agent-choices > button {
+    display: flex;
+    text-align: left;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    color: var(--o-text-2);
+  }
+  .chat-agent-choices > button[aria-pressed="true"] {
+    background: var(--o-selected);
+    box-shadow: inset 2px 0 0 var(--o-ink);
+  }
+  .chat-agent-choices > button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .chat-agent-choices strong {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .chat-agent-choices small {
+    display: block;
+    margin-top: 3px;
+    font: 10px var(--font-mono);
+    color: var(--o-text-3);
+  }
+  .chat-other-options {
+    margin-top: 24px;
+    color: var(--o-text-2);
+    font-size: 11px;
+  }
+  .conversation-dialog {
+    width: min(660px, calc(100vw - 40px));
+  }
+  .conversation-notice {
+    margin: 14px 0;
+    color: var(--o-text-2);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .conversation-notice .ui-button {
+    margin-top: 12px;
+  }
+  .conversation-target {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin: 20px 0;
+  }
+  .conversation-target strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .conversation-target span {
+    display: block;
+    color: var(--o-text-2);
+    margin-top: 4px;
+    font-size: 12px;
+  }
+  .conversation-context {
+    border: 1px solid var(--o-line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .conversation-context h3 {
+    padding: 10px 14px;
+    color: var(--o-text-2);
+    font-size: 11px;
+    border-bottom: 1px solid var(--o-line);
+    background: var(--o-raised-2);
+  }
+  .conversation-context pre {
+    padding: 14px;
+    margin: 0;
+    font: 11px / 1.7 var(--font-mono);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 240px;
+    overflow: auto;
+    color: var(--o-text-2);
+  }
+  .conversation-context p {
+    font-size: 12px;
+    padding: 14px;
+    color: var(--o-text-2);
+  }
+  .conversation-turns {
+    max-height: 50vh;
+    overflow: auto;
+    padding: 0;
+    list-style: none;
+  }
+  .conversation-turns li {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--o-line);
+  }
+  .conversation-turns li > div:first-child {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+  }
+  .conversation-turns li span {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .conversation-turns small {
+    color: var(--o-text-3);
+    font-size: 10px;
+  }
+  .conversation-turn-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    margin-top: 10px;
+  }
+  .conversation-edit {
+    margin-top: 20px;
+    display: grid;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--o-text-2);
+  }
+  .chat-user-actions > button,
+  .chat-receipt-actions > button {
+    padding: 3px 5px;
+    font-size: 11px;
+    color: var(--o-text-3);
+  }
+  .chat-user-actions > button:hover,
+  .chat-receipt-actions > button:hover {
+    color: var(--o-text-1);
+  }
+  @media (max-width: 1050px) {
+    .chat-model-columns[data-columns="three"] {
+      grid-template-columns: 1fr 1fr;
+    }
+    .chat-model-columns[data-columns="three"] > section:first-child {
+      grid-row: span 2;
+    }
+  }
+}
+@layer components {
+  .chat-handoff {
+    margin: 0 0 10px;
+    border: 1px solid var(--o-line);
+    border-radius: 10px;
+    background: var(--o-raised);
+    color: var(--o-text-2);
+  }
+  .chat-handoff > summary {
+    padding: 12px 14px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .chat-handoff > summary span {
+    float: right;
+    color: var(--o-text-1);
+  }
+  .chat-handoff pre {
+    margin: 0;
+    padding: 14px;
+    border-top: 1px solid var(--o-line);
+    max-height: 200px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: 11px / 1.7 var(--font-mono);
+  }
+}

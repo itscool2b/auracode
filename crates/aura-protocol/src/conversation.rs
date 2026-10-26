@@ -62,3 +62,10 @@ pub struct ContinuationResult {
     pub chat_id: String,
     pub prompt: Option<PromptAck>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct PendingHandoff {
+    pub agent_id: String,
+    pub handoff: String,
+    pub uses_native_fork: bool,
+}

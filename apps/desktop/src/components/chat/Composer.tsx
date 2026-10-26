@@ -24,6 +24,7 @@ export function Composer({
   agentName = "the agent",
   chatId,
   contextApi,
+  blocked = false,
 }: {
   readonly status: SessionStatus;
   readonly commands: readonly SlashCommand[];
@@ -36,6 +37,7 @@ export function Composer({
   readonly agentName?: string;
   readonly chatId?: string;
   readonly contextApi?: ComposerTransport;
+  readonly blocked?: boolean;
 }) {
   const [active, setActive] = useState(0);
   const [menuClosed, setMenuClosed] = useState(false);
@@ -83,7 +85,7 @@ export function Composer({
   const empty = text.trim() === "" && !context.attachments.length && !context.mentions.length;
 
   const send = async (): Promise<void> => {
-    if (sending || context.busy || empty) return;
+    if (sending || context.busy || blocked || empty) return;
     setSending(true);
     try {
       const sent = {
@@ -248,7 +250,7 @@ export function Composer({
             className="chat-send"
             data-kind="primary"
             data-testid="composer-send"
-            disabled={sending || context.busy || empty}
+            disabled={sending || context.busy || blocked || empty}
             onClick={() => void send()}
             aria-label={
               status === "running" || status === "starting" ? "Queue message" : "Send message"

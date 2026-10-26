@@ -331,6 +331,7 @@ function Preview() {
             : null;
     const initialHistory = before === null ? history : history.slice(before);
     let receive: ((batch: EventBatch) => void) | null = null;
+    let currentStatus = status;
     const publish = (updates: AuraEvent[]) => {
       receive?.(frame("preview", seq, updates));
       seq += updates.length;
@@ -348,11 +349,18 @@ function Preview() {
               before_seq: before,
               cut_turn_id: mode.startsWith("partial-") ? "long" : null,
             }),
-            { chat, session: sessionInfo({ agent_name: AGENT.name, status }) },
+            {
+              chat: { ...chat, status: currentStatus },
+              session: sessionInfo({ agent_name: AGENT.name, status: currentStatus }),
+            },
           );
         },
         history: async (chatId) => historyPage(chatId, history.slice(0, before ?? 0)),
         pickFolder: async () => "/workspace/auracode",
+        stop: async () => {
+          currentStatus = "stopped";
+          publish([ev.session(sessionInfo({ agent_name: AGENT.name, status: currentStatus }))]);
+        },
         respondPermission: async (_chatId, requestId, optionId) =>
           publish([ev.permissionResolved(requestId, optionId)]),
         send: async (_chatId, text) => {

@@ -863,3 +863,19 @@ attachment rollback, native fork identity, checkpoint/index protection and migra
 and CLI all-target Clippy and the desktop binding export pass. No real-agent prompt, vendor login,
 push or CI dispatch ran. UI integration, macOS execution, project default-model application, portable
 Git folder identity, missing-native-transcript fallback and M4 Git lifecycle remain pending.
+
+## Visible history continuations
+
+Message Edit, Retry and Fork actions and the paged conversation history now use content-bound Rust
+previews. The dialog shows exact handoff/prompt text and native resume/fork behavior, requires a
+stopped session and no queued prompts, and refreshes its preview after stopping changes the history.
+Confirmed mutations cannot be retried merely because a later UI refresh failed. The agent picker
+now lists real detected agents beside separate model and effort controls; changing agents opens the
+same review flow. No hidden model call summarizes the conversation.
+
+A pending handoff has a read-only Rust API and remains visibly inspectable above the composer after
+reopening a chat. Sending waits until its saved handoff can be read; a failure has an explicit retry.
+Core all-target compilation passes. A focused Chromium flow passed fork preview/confirmation, the
+persistent visible handoff and selected-file revert, with zero browser errors and zero accessibility
+violations in the continuation dialog. The complete browser/native verification and new bindings
+remain pending. No remote CI, push or paid-agent call.

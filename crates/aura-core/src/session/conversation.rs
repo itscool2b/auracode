@@ -23,6 +23,23 @@ fn invalid(message: impl Into<String>) -> SessionError {
 }
 
 impl SessionManager {
+    pub async fn conversation_pending(
+        &self,
+        chat_id: &str,
+    ) -> Result<Option<aura_protocol::conversation::PendingHandoff>, SessionError> {
+        match self
+            .ask(chat_id, |reply| ChatMsg::Conversation {
+                command: ConversationCommand::Pending {
+                    chat_id: chat_id.into(),
+                },
+                reply,
+            })
+            .await?
+        {
+            ConversationReply::Pending(pending) => Ok(pending),
+            _ => Err(invalid("The saved handoff response was invalid.")),
+        }
+    }
     pub async fn conversation_turns(
         &self,
         chat_id: &str,

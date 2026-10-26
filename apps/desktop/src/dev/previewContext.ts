@@ -1,13 +1,19 @@
 /** In-memory context fixtures for the development harness. No filesystem or native calls. */
-import type { ComposerInput } from "../bindings";
+import type { ComposerInput, ContinuationAction, PendingHandoff } from "../bindings";
 import type { ChangesTransport } from "../lib/changes";
 import type { Transport } from "../lib/chat/transport";
 import type { ComposerTransport } from "../lib/composer";
+import type { ConversationTransport } from "../lib/conversation";
 import type { SearchTransport } from "../lib/search";
 
 export function withPreviewContext<T extends Transport>(
   transport: T,
-): T & { composer: ComposerTransport; changes: ChangesTransport; search: SearchTransport } {
+): T & {
+  composer: ComposerTransport;
+  changes: ChangesTransport;
+  search: SearchTransport;
+  conversation: ConversationTransport;
+} {
   let input: ComposerInput = { text: "", attachments: [], mentions: [] };
   const attachment = {
     id: "preview-context",
@@ -121,5 +127,65 @@ export function withPreviewContext<T extends Transport>(
       projects: [],
     }),
   };
-  return Object.assign(transport, { composer, changes, search });
+  let pending: PendingHandoff | null = null;
+  let action: ContinuationAction | null = null;
+  const handoff =
+    "Visible context from auracode\n\nProject: auracode\nGoal: Make the sidebar easier to scan.\nLast answer: Keep the active chat visible when project groups collapse.\nFiles: src/components/Sidebar.tsx, src/styles.css";
+  const conversation: ConversationTransport = {
+    pending: async () => pending,
+    turns: async () => ({
+      turns: [
+        {
+          turn_id: "preview-turn",
+          ordinal: 1,
+          agent_id: "claude",
+          status: "completed",
+          prompt_preview: "Make the sidebar easier to scan.",
+          started_at: 0,
+        },
+      ],
+      before_ordinal: 1,
+      has_more: false,
+    }),
+    editable: async (_chat, turn_id) => ({
+      turn_id,
+      text: "Make the sidebar easier to scan.",
+      has_context: true,
+    }),
+    preview: async (source_chat_id, value) => {
+      action = value;
+      return {
+        token: "preview-continuation",
+        source_chat_id,
+        agent_id: value.type === "switch_agent" ? value.agent_id : "claude",
+        creates_chat: value.type === "fork",
+        resumes_native: false,
+        uses_native_fork: false,
+        handoff,
+        prompt:
+          value.type === "edit"
+            ? value.text
+            : value.type === "retry"
+              ? "Make the sidebar easier to scan."
+              : null,
+        warnings: ["This is a development fixture. No real agent receives this context."],
+        expires_at: Date.now() + 600_000,
+      };
+    },
+    apply: async (chat) => {
+      pending = {
+        agent_id: action?.type === "switch_agent" ? action.agent_id : "claude",
+        handoff,
+        uses_native_fork: false,
+      };
+      const prompt =
+        action?.type === "edit"
+          ? action.text
+          : action?.type === "retry"
+            ? "Make the sidebar easier to scan."
+            : null;
+      return { chat_id: chat, prompt: prompt === null ? null : await transport.send(chat, prompt) };
+    },
+  };
+  return Object.assign(transport, { composer, changes, search, conversation });
 }

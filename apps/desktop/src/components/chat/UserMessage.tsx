@@ -3,7 +3,13 @@ import { useCallback, useState } from "react";
 import type { UserItem } from "../../lib/chat/transcript";
 import { useDisclosure } from "./DisclosureMemory";
 
-export function UserMessage({ item }: { readonly item: UserItem }) {
+export function UserMessage({
+  item,
+  onEdit,
+}: {
+  readonly item: UserItem;
+  readonly onEdit?: () => void;
+}) {
   const [expanded, setExpanded] = useDisclosure(item.key, "prompt", false);
   const [long, setLong] = useState(() => item.text.split("\n").length > 12);
   const measure = useCallback((node: HTMLDivElement | null) => {
@@ -32,6 +38,11 @@ export function UserMessage({ item }: { readonly item: UserItem }) {
         ) : null}
       </div>
       <div className="chat-user-actions">
+        {onEdit ? (
+          <button type="button" onClick={onEdit}>
+            Edit prompt
+          </button>
+        ) : null}
         <CopyButton text={item.text} label="Copy prompt" />
       </div>
     </div>
