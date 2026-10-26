@@ -9,6 +9,9 @@ The owner narrowed the current release to Windows and macOS and deferred Linux/W
 reserved for a few deliberate integration checkpoints and the final verification, with failure
 fixes rerun as needed. Visual implementation must be checked against the exact original Mobbin
 and official-site references, including SpaceXAI/Grok Bot, X Money, Harvey and Aside.
+The product is dark only, as explicitly directed on 2026-10-26. No light mode, system theme
+switching or appearance selector ships in the app, onboarding or website. Older theme provisions
+below are historical and superseded.
 
 ## Context
 The user runs many coding agents (Claude Code, Codex, Antigravity, Pi / oh-my-pi, Cursor, Grok Build,

@@ -1,5 +1,10 @@
 # Orbit: the auracode visual language
 
+Current owner direction, 2026-10-26: the product is **dark only**. This overrides every light-theme,
+system-appearance and appearance-picker requirement below, including onboarding and website flows.
+The dark Orbit reference remains authoritative for layout, surfaces, typography and interaction.
+Historical light studies can stay in the Design Lab but must not appear in the shipped product.
+
 Status: the redesign direction for the Design Lab (M1a), written 2026-10-24 after the owner rejected
 Aurora, Noir and Halo, and built in the lab as `#/orbit` (`apps/design-lab/src/directions/orbit/`).
 Orbit is the chosen direction: the lab's gallery opens with it, marked as chosen, and it graduates

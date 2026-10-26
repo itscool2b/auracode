@@ -28,12 +28,14 @@ export function Transcript({
   live,
   actions,
   onLoadEarlier,
+  dockedRequests,
 }: {
   readonly state: ChatState;
   /** The session has a process (tools still running may finish). */
   readonly live: boolean;
   readonly actions: TurnActions;
   readonly onLoadEarlier: () => void;
+  readonly dockedRequests?: ReadonlySet<string>;
 }) {
   const [render] = useState(renderCache);
   const [disclosures] = useState<DisclosureChoices>(() => new Map());
@@ -139,6 +141,7 @@ export function Transcript({
     for (let index = 0; index < segment.items.length; index++) {
       const item = segment.items[index];
       if (!item) continue;
+      if (item.kind === "permission" && dockedRequests?.has(item.request.request_id)) continue;
       if (item.kind === "user")
         prompt = { key: JSON.stringify([segment.key, item.key]), text: item.text };
       const tools: Extract<RenderedItem, { kind: "tool" }>[] = [];

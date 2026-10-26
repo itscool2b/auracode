@@ -2,6 +2,24 @@
 
 Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b through M9.
 
+## Active integrated-product continuation
+
+- Owner corrections are authoritative: Windows/macOS only; batch implementation and CI; use the
+  actual original Mobbin references; dark appearance only across desktop, onboarding and website.
+- Inspected Grok, SpaceXAI, Harvey, Aside and X Money screens and the selected Orbit lab. Evidence
+  and UI mapping are in `docs/design/reference-audit.md`. Replaced the old frame with compact
+  navigation, live Needs you, project folds, agent dock, title header and a unified composer.
+- Session options and controls remain real but move into disclosures. Pending permissions replace
+  the composer without destroying the draft. The product no longer follows OS appearance.
+- Local `de4010f` preserves sticky prompt context, focused output, command output folding and the
+  native smoke helper's ability to find virtualized tools. Its final native rerun is pending.
+- Structural UI checkpoint: desktop TypeScript check passes; production preview visually inspected
+  in dark; changed-file Biome has no errors (three CSS ordering warnings). The full functional,
+  accessibility, responsive and native suite is reserved for integrated acceptance and is not done.
+- Rust project organization APIs, native shell and PTY work are implemented in parallel branches.
+  Integrating those implementations and completing their product surfaces is the next work.
+- No CI was dispatched for these local checkpoints. Full product completion remains pending.
+
 ## Completed before this continuation
 
 - M0 and M1a are merged. Main at `3b35c66` passes CI and installer builds on all three platforms.

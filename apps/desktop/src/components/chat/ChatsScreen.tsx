@@ -1,8 +1,10 @@
 import { useOrbitTheme } from "@auracode/ui/orbit";
+import { PanelLeft } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { AppInfo } from "../../bindings";
 import { type AppStore, NewChatDraft } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
+import { AgentDock } from "./AgentDock";
 import { Banners } from "./Banners";
 import { ChatList } from "./ChatList";
 import { ChatView } from "./ChatView";
@@ -30,6 +32,7 @@ export function ChatsScreen({
   const theme = useOrbitTheme();
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState(() => new NewChatDraft(transport));
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     app.start();
@@ -37,9 +40,23 @@ export function ChatsScreen({
   }, [app]);
 
   return (
-    <div className="chat-app orbit-theme" data-theme={theme} data-glass={info.glass}>
+    <div
+      className="chat-app orbit-theme"
+      data-theme={theme}
+      data-glass={info.glass}
+      data-sidebar-collapsed={collapsed}
+    >
       <aside className="chat-sidebar" aria-label="Sidebar">
         <div className="chat-drag" data-tauri-drag-region="" />
+        <button
+          type="button"
+          className="chat-sidebar-toggle chat-icon-button"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed((value) => !value)}
+        >
+          <PanelLeft size={16} />
+        </button>
         <ChatList
           chats={snapshot.chats}
           error={snapshot.chatsError}
@@ -50,11 +67,17 @@ export function ChatsScreen({
             setDraft(new NewChatDraft(transport));
           }}
         />
-        <div className="chat-sidebar-footer">
-          <button type="button" className="ui-button" data-kind="quiet" onClick={onDiagnostics}>
-            Diagnostics
-          </button>
-        </div>
+        <AgentDock
+          agents={snapshot.agents}
+          chats={snapshot.chats}
+          onDiagnostics={onDiagnostics}
+          onChoose={(agentId) => {
+            const next = new NewChatDraft(transport);
+            next.chooseAgent(agentId);
+            setDraft(next);
+            setSelected(null);
+          }}
+        />
       </aside>
       <main className="chat-main">
         <div className="chat-drag" data-tauri-drag-region="" />

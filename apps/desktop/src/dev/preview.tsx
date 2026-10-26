@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import fullAuto from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-full-auto.events.json";
 import thinking from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-thinking.events.json";
 import type { AgentEntry, AuraEvent, EventBatch, SessionStatus } from "../bindings";
+import { AgentDock } from "../components/chat/AgentDock";
 import { ChatList } from "../components/chat/ChatList";
 import { ChatView } from "../components/chat/ChatView";
 import { NewChat } from "../components/chat/NewChat";
@@ -264,7 +265,6 @@ function Preview() {
     ? requested
     : "settled";
   const systemTheme = useOrbitTheme();
-  const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
   const [selected, setSelected] = useState<string | null>(mode === "new" ? null : "preview");
   const status: SessionStatus =
     mode === "thinking" ||
@@ -368,11 +368,7 @@ function Preview() {
   }, [mode, status, chat]);
   const draft = useMemo(() => new NewChatDraft(transport), [transport]);
   return (
-    <div
-      className="chat-app orbit-theme"
-      data-theme={theme === "system" ? systemTheme : theme}
-      data-glass="none"
-    >
+    <div className="chat-app orbit-theme" data-theme={systemTheme} data-glass="none">
       <aside className="chat-sidebar" aria-label="Sidebar">
         <ChatList
           chats={[
@@ -389,23 +385,14 @@ function Preview() {
           onSelect={() => setSelected("preview")}
           onNewChat={() => setSelected(null)}
         />
-        <div className="chat-sidebar-footer">
-          <p className="ui-muted">
-            {mode.startsWith("recorded-") ? "Recorded Claude protocol" : "Synthetic UI fixture"}
-          </p>
-          <label className="ui-field">
-            Preview theme
-            <select
-              className="ui-select"
-              value={theme}
-              onChange={(event) => setTheme(event.currentTarget.value as typeof theme)}
-            >
-              <option>system</option>
-              <option>light</option>
-              <option>dark</option>
-            </select>
-          </label>
-        </div>
+        <AgentDock
+          agents={[AGENT]}
+          chats={[chat]}
+          onChoose={() => setSelected(null)}
+          onDiagnostics={() =>
+            alert("This is a development-only protocol fixture. No agents run here.")
+          }
+        />
       </aside>
       <main className="chat-main">
         {selected === null ? (

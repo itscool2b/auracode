@@ -39,6 +39,9 @@ Run `node .github/scripts/check-instructions.mjs` before committing. CI rejects 
 ## Product and safety invariants
 
 - Follow `docs/plan.md` and the chosen Orbit language in `docs/design/visual-language.md`.
+- The product is dark only, including desktop, onboarding and the website. Do not add a light
+  theme, system-theme switching or an appearance selector. Historical light design studies are
+  references, not product requirements.
 - Verify visual work against the original handoff's exact Mobbin and official-site references:
   SpaceXAI/Grok Bot, X Money, Harvey and Aside. Inspect actual screens before implementation;
   written tokens and passing functional tests alone do not establish visual fidelity.

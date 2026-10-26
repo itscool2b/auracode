@@ -7,6 +7,7 @@ import type { Transport } from "../../lib/chat/transport";
 import { AuthCard } from "./AuthCard";
 import { Composer } from "./Composer";
 import { Header } from "./Header";
+import { PermissionCard } from "./PermissionCard";
 import { Pickers } from "./Pickers";
 import { QueueList } from "./QueueList";
 import { Transcript } from "./Transcript";
@@ -57,6 +58,27 @@ export function ChatView({
   const resumable =
     (state.session?.native_session_id ?? null) !== null || hasTurns(state.transcript);
   const newestError = lastErrorKey(state.transcript);
+  const pendingPermissions = useMemo(
+    () =>
+      live
+        ? [...state.transcript.items.values()].filter(
+            (item) =>
+              item.kind === "permission" &&
+              item.resolution === null &&
+              state.requests.get(item.request.request_id)?.gone !== true,
+          )
+        : [],
+    [state.transcript.items, state.requests, live],
+  );
+  const dockedRequests = useMemo(
+    () =>
+      new Set(
+        pendingPermissions.flatMap((item) =>
+          item.kind === "permission" ? [item.request.request_id] : [],
+        ),
+      ),
+    [pendingPermissions],
+  );
 
   const actions = useMemo<TurnActions>(
     () => ({
@@ -123,16 +145,6 @@ export function ChatView({
         onStop={() => void store.stop()}
         onShowLog={() => void store.revealLog()}
       />
-      <Pickers
-        lists={state.lists}
-        autonomy={state.session?.autonomy ?? "full_auto"}
-        status={status}
-        error={state.listsError}
-        optionsSaving={state.optionsSaving}
-        autonomySaving={state.autonomySaving}
-        onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
-        onSetOption={(optionId, value) => void store.setOption(optionId, value)}
-      />
       {state.phase === "failed" ? (
         <div className="chat-banner" data-level="error">
           <span role="alert" data-testid="chat-attach-error">
@@ -149,6 +161,7 @@ export function ChatView({
         </div>
       ) : null}
       <Transcript
+        dockedRequests={dockedRequests}
         state={state}
         live={live}
         actions={actions}
@@ -170,14 +183,52 @@ export function ChatView({
           onRemove={(promptId) => void store.cancelQueued(promptId)}
           onSendQueued={() => void store.resumeQueue()}
         />
-        <Composer
-          status={status}
-          commands={state.lists?.commands ?? []}
-          error={state.sendError}
-          onSend={(text) => store.send(text)}
-          onStop={() => void store.interrupt()}
-          onForceStop={() => void store.forceStop()}
-        />
+        {pendingPermissions.length > 0 ? (
+          <section className="chat-permission-dock" aria-label="Waiting for your permission">
+            <div className="chat-permission-label">
+              Needs your permission
+              {pendingPermissions.length > 1 ? ` · ${pendingPermissions.length} requests` : ""}
+            </div>
+            {pendingPermissions.map((item) =>
+              item.kind === "permission" ? (
+                <PermissionCard
+                  key={item.key}
+                  item={item}
+                  request={state.requests.get(item.request.request_id)}
+                  onRespond={(optionId) =>
+                    void store.respondPermission(item.request.request_id, optionId)
+                  }
+                  blobs={state.blobs}
+                  onLoadBlob={(sha256) => void store.loadBlob(sha256)}
+                />
+              ) : null,
+            )}
+          </section>
+        ) : null}
+        <div className="chat-compose-slot" hidden={pendingPermissions.length > 0}>
+          <Composer
+            agentName={agent?.name ?? state.chat.agent_name}
+            controls={
+              <Pickers
+                agent={agent}
+                lists={state.lists}
+                autonomy={state.session?.autonomy ?? "full_auto"}
+                status={status}
+                error={state.listsError}
+                optionsSaving={state.optionsSaving}
+                autonomySaving={state.autonomySaving}
+                onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
+                onSetOption={(optionId, value) => void store.setOption(optionId, value)}
+              />
+            }
+            status={status}
+            commands={state.lists?.commands ?? []}
+            error={state.sendError}
+            onSend={(text) => store.send(text)}
+            onStop={() => void store.interrupt()}
+            onForceStop={() => void store.forceStop()}
+          />
+        </div>
       </div>
     </div>
   );

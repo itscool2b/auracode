@@ -1,5 +1,8 @@
+import { OrbitMark } from "@auracode/ui/orbit";
+import { ChevronDown, Signal } from "lucide-react";
 import { Fragment, useId } from "react";
 import type {
+  AgentEntry,
   Autonomy,
   ConfigOption,
   ConfigValue,
@@ -7,6 +10,7 @@ import type {
   SessionStatus,
 } from "../../bindings";
 import { AUTONOMIES, autonomyLabel, orderedOptions, pendingLabel } from "../../lib/chat/present";
+import { Popover } from "./Popover";
 
 /**
  * Autonomy (always enabled: it applies when the agent starts), with its note, the agent mode in
@@ -24,6 +28,7 @@ export function Pickers({
   autonomySaving = null,
   onSetAutonomy,
   onSetOption,
+  agent = null,
 }: {
   readonly lists: SessionLists | null;
   /** The chat's autonomy until the lists arrive. */
@@ -35,54 +40,114 @@ export function Pickers({
   readonly autonomySaving?: Autonomy | null;
   readonly onSetAutonomy: (autonomy: Autonomy) => void;
   readonly onSetOption: (optionId: string, value: ConfigValue) => void;
+  readonly agent?: AgentEntry | null;
 }) {
   const autonomyId = useId();
   const chosen = autonomySaving ?? lists?.autonomy.requested ?? autonomy;
   const optionsEnabled = status === "ready" || status === "running";
   const options = orderedOptions(lists?.options ?? []);
+  const choiceLabel = (option: ConfigOption) =>
+    option.kind.type === "select"
+      ? (option.kind.choices.find((choice) => choice.value === option.kind.current)?.name ?? null)
+      : null;
+  const model = options.find((option) => option.category === "model");
+  const effort = options.find((option) => option.category === "effort");
   return (
     <div className="chat-pickers">
-      <div className="ui-field">
-        <label htmlFor={autonomyId}>
-          Autonomy
-          {autonomySaving !== null ? <span className="ui-muted"> (saving…)</span> : null}
-        </label>
-        <select
-          id={autonomyId}
-          className="ui-select"
-          data-testid="picker-autonomy"
-          data-test-requested={lists?.autonomy.requested ?? ""}
-          data-test-native-mode={lists?.autonomy.native_mode ?? ""}
-          data-test-saving={String(autonomySaving !== null)}
-          value={chosen}
-          onChange={(event) => onSetAutonomy(event.currentTarget.value as Autonomy)}
-        >
-          {AUTONOMIES.map((value) => (
-            <option key={value} value={value}>
-              {autonomyLabel(value)}
-            </option>
-          ))}
-        </select>
-      </div>
-      {options.map((option) => (
-        <OptionPicker
-          key={option.id}
-          option={option}
-          saving={optionsSaving.get(option.id) ?? null}
-          enabled={optionsEnabled}
-          onSet={onSetOption}
+      <Popover
+        label="Agent and model"
+        className="chat-model-popover"
+        trigger={
+          <>
+            <OrbitMark agent={agent?.id ?? "generic"} size={16} />
+            <strong>{agent?.name ?? "Agent"}</strong>
+            {model ? <span className="chat-pill-model">{choiceLabel(model)}</span> : null}
+            {effort ? <span className="chat-pill-effort">{choiceLabel(effort)}</span> : null}
+            <ChevronDown size={12} />
+          </>
+        }
+      >
+        <div className="chat-model-columns">
+          <section>
+            <h3>Agent</h3>
+            <span className="chat-current-agent">
+              <OrbitMark agent={agent?.id ?? "generic"} size={20} />
+              {agent?.name ?? "Agent"}
+            </span>
+            <p>{agent?.description ?? "The agent attached to this chat."}</p>
+          </section>
+          <section>
+            <h3>Model and options</h3>
+            {options.length === 0 ? (
+              <p>
+                {optionsEnabled
+                  ? "This agent has no configurable options."
+                  : "Start the session to load its models and options."}
+              </p>
+            ) : null}
+            {options.map((option) => (
+              <OptionPicker
+                key={option.id}
+                option={option}
+                saving={optionsSaving.get(option.id) ?? null}
+                enabled={optionsEnabled}
+                onSet={onSetOption}
+              />
+            ))}
+          </section>
+        </div>
+      </Popover>
+      <Popover
+        label="Autonomy"
+        className="chat-autonomy-popover"
+        trigger={
+          <>
+            <Signal size={15} />
+            <span>{autonomyLabel(chosen)}</span>
+            <ChevronDown size={12} />
+          </>
+        }
+      >
+        <div className="ui-field">
+          <label htmlFor={autonomyId}>
+            Autonomy
+            {autonomySaving !== null ? <span className="ui-muted"> (saving…)</span> : null}
+          </label>
+          <select
+            id={autonomyId}
+            className="ui-select"
+            data-testid="picker-autonomy"
+            data-test-requested={lists?.autonomy.requested ?? ""}
+            data-test-native-mode={lists?.autonomy.native_mode ?? ""}
+            data-test-saving={String(autonomySaving !== null)}
+            value={chosen}
+            onChange={(event) => onSetAutonomy(event.currentTarget.value as Autonomy)}
+          >
+            {AUTONOMIES.map((value) => (
+              <option key={value} value={value}>
+                {autonomyLabel(value)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="chat-picker-note">
+          {chosen === "full_auto" ? <div>Full auto: changes are not checkpointed yet.</div> : null}
+          {lists?.autonomy.note ? <div>{lists.autonomy.note}</div> : null}
+          {lists?.autonomy.native_mode ? <div>Agent mode: {lists.autonomy.native_mode}</div> : null}
+          {error !== null ? (
+            <div role="alert" className="ui-error" data-testid="picker-error">
+              {error}
+            </div>
+          ) : null}
+        </div>
+      </Popover>
+      {error !== null ? (
+        <span
+          className="chat-picker-error-dot"
+          role="img"
+          aria-label="Session settings error. Open Autonomy for details."
         />
-      ))}
-      <div className="chat-picker-note">
-        {chosen === "full_auto" ? <div>Full auto: changes are not checkpointed yet.</div> : null}
-        {lists?.autonomy.note ? <div>{lists.autonomy.note}</div> : null}
-        {lists?.autonomy.native_mode ? <div>Agent mode: {lists.autonomy.native_mode}</div> : null}
-        {error !== null ? (
-          <div role="alert" className="ui-error" data-testid="picker-error">
-            {error}
-          </div>
-        ) : null}
-      </div>
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,5 @@
-import { useId, useState } from "react";
+import { ArrowUp, Square } from "lucide-react";
+import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
 import type { SessionStatus, SlashCommand } from "../../bindings";
 import { matchingCommands, slashQuery } from "../../lib/chat/present";
 import { SlashMenu } from "./SlashMenu";
@@ -16,6 +17,8 @@ export function Composer({
   onSend,
   onStop,
   onForceStop,
+  controls,
+  agentName = "the agent",
 }: {
   readonly status: SessionStatus;
   readonly commands: readonly SlashCommand[];
@@ -24,11 +27,20 @@ export function Composer({
   readonly onSend: (text: string) => Promise<boolean>;
   readonly onStop: () => void;
   readonly onForceStop: () => void;
+  readonly controls?: ReactNode;
+  readonly agentName?: string;
 }) {
   const [text, setText] = useState("");
   const [active, setActive] = useState(0);
   const [menuClosed, setMenuClosed] = useState(false);
   const [sending, setSending] = useState(false);
+  const input = useRef<HTMLTextAreaElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The value changes scrollHeight after React commits the textarea.
+  useLayoutEffect(() => {
+    if (!input.current) return;
+    input.current.style.height = "0px";
+    input.current.style.height = `${Math.min(240, Math.max(48, input.current.scrollHeight))}px`;
+  }, [text]);
   const fieldId = useId();
   const menuId = useId();
   const query = slashQuery(text);
@@ -64,11 +76,13 @@ export function Composer({
         Message
       </label>
       <textarea
+        ref={input}
         id={fieldId}
         className="ui-textarea"
         data-testid="composer-input"
         value={text}
-        placeholder="Message the agent. Enter sends, Shift+Enter adds a line, / lists commands."
+        placeholder={`Message ${agentName}`}
+        title="Enter sends, Shift+Enter adds a line, / lists commands"
         aria-controls={menuOpen ? menuId : undefined}
         onChange={(event) => {
           setText(event.currentTarget.value);
@@ -104,24 +118,31 @@ export function Composer({
           }
         }}
       />
-      <div className="ui-row">
-        <button
-          type="button"
-          className="ui-button"
-          data-kind="primary"
-          data-testid="composer-send"
-          disabled={sending || text.trim() === ""}
-          onClick={() => void send()}
-        >
-          Send
-        </button>
-        <StopButton status={status} onStop={onStop} onForceStop={onForceStop} />
-        {error !== null ? (
-          <span role="alert" className="ui-error" data-testid="composer-error">
-            {error}
-          </span>
-        ) : null}
+      <div className="chat-composer-controls">
+        {controls}
+        <div className="chat-composer-actions">
+          <StopButton status={status} onStop={onStop} onForceStop={onForceStop} />
+          <button
+            type="button"
+            className="chat-send"
+            data-kind="primary"
+            data-testid="composer-send"
+            disabled={sending || text.trim() === ""}
+            onClick={() => void send()}
+            aria-label={
+              status === "running" || status === "starting" ? "Queue message" : "Send message"
+            }
+            title={status === "running" || status === "starting" ? "Queue message" : "Send message"}
+          >
+            <ArrowUp size={18} />
+          </button>
+        </div>
       </div>
+      {error !== null ? (
+        <span role="alert" className="ui-error" data-testid="composer-error">
+          {error}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -151,8 +172,15 @@ export function StopButton({
   }
   if (status === "running" || status === "starting") {
     return (
-      <button type="button" className="ui-button" data-testid="composer-stop" onClick={onStop}>
-        Stop
+      <button
+        type="button"
+        className="chat-send"
+        data-testid="composer-stop"
+        onClick={onStop}
+        aria-label="Stop"
+        title="Stop"
+      >
+        <Square size={12} fill="currentColor" />
       </button>
     );
   }

@@ -91,8 +91,8 @@ async function inspect(engine, launcher) {
         );
         assert.equal(
           await page.locator(".chat-app").getAttribute("data-theme"),
-          theme,
-          "system theme was not applied",
+          "dark",
+          "the product must stay dark regardless of system appearance",
         );
         const scan = await new AxeBuilder({ page })
           .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])

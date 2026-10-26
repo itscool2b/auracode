@@ -1,9 +1,12 @@
 import { OrbitMark } from "@auracode/ui/orbit";
+import { Ellipsis } from "lucide-react";
 import type { AgentEntry, ChatSummary } from "../../bindings";
 import { chatActivity } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
 import { contextLabel, costLabel, folderStateLabel, statusWord } from "../../lib/chat/present";
 import { hasProcess } from "../../lib/chat/transcript";
+import { projectName } from "./ChatList";
+import { Popover } from "./Popover";
 
 /**
  * The chat's header: the agent and the version that runs (the user's own binary behind an
@@ -56,13 +59,12 @@ export function Header({
         label={`${name}, ${session?.detail ?? statusLabel}`}
       />
       <div className="chat-header-who">
-        <span className="chat-header-agent" title={ready?.path}>
-          {name}
-          {version ? <span className="ui-muted"> · {version}</span> : null}
+        <span className="chat-header-agent" title={chat?.title ?? "New chat"}>
+          {chat?.title ?? "New chat"}
         </span>
         {chat ? (
-          <span className="chat-header-folder">
-            {chat.folder}
+          <span className="chat-header-folder" title={chat.folder}>
+            {projectName(chat.folder)}
             {folderState !== null ? (
               <span className="chat-row-warning"> · {folderState}</span>
             ) : null}
@@ -79,61 +81,72 @@ export function Header({
         {statusLabel}
         {session?.detail ? <span className="ui-muted"> · {session.detail}</span> : null}
       </span>
-      {context !== null || cost !== null ? (
-        <span className="ui-muted" data-testid="chat-usage">
-          {[context, cost].filter((part) => part !== null).join(" · ")}
-        </span>
-      ) : null}
-      <div className="ui-row">
-        {live ? (
-          <button
-            type="button"
-            className="ui-button"
-            data-testid="chat-stop-session"
-            onClick={onStop}
-            disabled={status === "stopping"}
-          >
-            Stop session
-          </button>
-        ) : (
-          <>
+      <Popover
+        label="Chat details and controls"
+        className="chat-header-menu"
+        trigger={<Ellipsis size={18} />}
+      >
+        <div className="chat-session-info">
+          <strong>{name}</strong>
+          <span>{version ?? "Version not reported"}</span>
+          <span className="ui-mono">{ready?.path}</span>
+        </div>
+        {context !== null || cost !== null ? (
+          <span className="ui-muted" data-testid="chat-usage">
+            {[context, cost].filter((part) => part !== null).join(" · ")}
+          </span>
+        ) : null}
+        <div className="ui-row">
+          {live ? (
             <button
               type="button"
               className="ui-button"
-              data-kind="primary"
-              data-testid="chat-start"
-              data-test-resume={String(resumable)}
-              onClick={() => onStart(false)}
+              data-testid="chat-stop-session"
+              onClick={onStop}
+              disabled={status === "stopping"}
             >
-              {resumable ? "Resume session" : "Start session"}
+              Stop session
             </button>
-            {resumable ? (
+          ) : (
+            <>
               <button
                 type="button"
                 className="ui-button"
-                data-testid="chat-start-fresh"
-                onClick={() => onStart(true)}
+                data-kind="primary"
+                data-testid="chat-start"
+                data-test-resume={String(resumable)}
+                onClick={() => onStart(false)}
               >
-                Start fresh
+                {resumable ? "Resume session" : "Start session"}
               </button>
-            ) : null}
-          </>
-        )}
-        <button
-          type="button"
-          className="ui-button"
-          data-kind="quiet"
-          data-testid="chat-show-log"
-          onClick={onShowLog}
-        >
-          Show log
-        </button>
-      </div>
-      {state.actionError !== null ? (
-        <span role="alert" className="ui-error" data-testid="chat-action-error">
-          {state.actionError}
-        </span>
-      ) : null}
+              {resumable ? (
+                <button
+                  type="button"
+                  className="ui-button"
+                  data-testid="chat-start-fresh"
+                  onClick={() => onStart(true)}
+                >
+                  Start fresh
+                </button>
+              ) : null}
+            </>
+          )}
+          <button
+            type="button"
+            className="ui-button"
+            data-kind="quiet"
+            data-testid="chat-show-log"
+            onClick={onShowLog}
+          >
+            Show log
+          </button>
+        </div>
+        {state.actionError !== null ? (
+          <span role="alert" className="ui-error" data-testid="chat-action-error">
+            {state.actionError}
+          </span>
+        ) : null}
+      </Popover>
     </header>
   );
 }
