@@ -77,7 +77,7 @@ The chosen **Orbit** specification in [visual-language.md](design/visual-languag
 surface, token, type size, state, animation, and accessibility requirement. Use the working Orbit
 Design Lab prototype as the visual reference, adapted to the live protocol rather than M0 fixtures.
 
-- Light and dark themes, Geist and Geist Mono, solid panes on a neutral tray, hairline divisions.
+- Dark-only surfaces, Geist and Geist Mono, solid panes on a neutral tray, hairline divisions.
   Orange means attention, green success/addition, red failure/deletion; ink carries other states.
   No decorative gradients, glow, serif, italic, agent colors, or accent picker.
 - Native material only under the sidebar and its titlebar strip, with opaque platform fallbacks.
@@ -122,7 +122,7 @@ prerender public pages and serve static assets through Cloudflare. Rust owns API
 ## Projects, chats, agent switching
 - **Project** = name + colour + 1..n folders + optional default agent/model. Folders have a portable
   identity (git remote URL + default branch, or "local-only on <device>") separate from the device-local
-  path, which is what lets projects sync across macOS/Windows/Linux.
+  path, which is what lets projects sync across macOS and Windows.
 - **Chat** = one primary folder; extra folders become add-dirs only where the agent supports them, and the
   chat header shows exactly which folders it can reach.
 - **Isolation (M4):** "Direct" vs "Isolated" (git worktree on a new branch `aura/<slug>`). Until M4, a second

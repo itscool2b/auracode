@@ -233,9 +233,9 @@ We never copy logos, wordmarks, illustrations, photography or font files.
 
 ## 3. Tokens
 
-Both themes are first-class. The app follows the OS (`prefers-color-scheme`), with a Settings override
-(System, Light, Dark). In the lab, every token below lives under `[data-direction="orbit"]` with
-`[data-theme="light"]` and `[data-theme="dark"]` variants. Names use the `--o-` prefix.
+The product always uses the dark tokens, independent of the OS appearance. There is no appearance
+selector. The light columns below document the historical Design Lab study only. In the lab, tokens
+live under `[data-direction="orbit"]` with explicit theme variants. Names use the `--o-` prefix.
 
 ### 3.1 Color
 
@@ -1135,11 +1135,9 @@ step is skippable, keyboard-driven and resumable.
      field (radius 8, the input edge from 3.7), "A 6-digit code signs you in. No password, and agents
      keep their own keys." in `meta` `--o-text-3`, then "Continue" (or "Send code" once an email is
      typed) and "Skip, use auracode locally". The code entry and the recovery-key card follow in M6.
-  3. **Make it yours:** "Make it yours." / "Change it later in Settings." Appearance as three
-     preview tiles (System, Light, Dark; 104 x 72, radius 8, miniatures of the window drawn from the
-     theme swatch tokens; the selected tile takes the 1.5px ink rim and a filled check by its label)
-     and motion as a strong segmented control (Full, Reduced, Off). Both apply at once. Orbit has one
-     signal color and no agent hues, so the plan's accent choice becomes the appearance choice.
+  3. **Make it yours:** "Make it yours." / "Change it later in Settings." Motion uses a strong
+     segmented control (Full, Reduced, Off) and applies immediately. The interface remains dark.
+     Orbit has one signal color and no agent hues, accent choice or appearance choice.
   4. **First project:** "Add a first project." / "Any folder works." A 120px dashed drop zone (1px ink
      24%, radius 12): "Drop a folder" with "Choose folder" (outline, keycaps ⌘ O) and "Clone from
      GitHub" (ghost, with a branch icon, never the GitHub mark). A chosen folder replaces the zone's
