@@ -12,6 +12,7 @@
 //! chat reads `Stopped`.
 
 mod actor;
+mod changes;
 mod composer;
 mod live;
 mod login;
@@ -70,6 +71,8 @@ const FOLDER_NOT_ALLOWED: &str = "auracode isn't allowed to open this folder. Al
 /// `setup` hook and run-event callbacks run outside any Tokio context.
 pub struct ManagerDeps {
     pub store: Arc<ChatStore>,
+    /// Production enables checkpoints; deterministic driver-only test rigs may omit the service.
+    pub checkpoints: Option<Arc<crate::checkpoints::Checkpoints>>,
     pub env: Arc<EnvResolver>,
     /// `aura_process::Spawner`, or `FakeSpawner` in tests.
     pub spawner: Arc<dyn ProcessSpawner>,

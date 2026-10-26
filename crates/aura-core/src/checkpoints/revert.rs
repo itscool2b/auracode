@@ -6,6 +6,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use aura_protocol::changes::{RevertPreview, RevertResult};
+use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, OpenOptions};
 use sha2::{Digest, Sha256};
 
@@ -102,6 +103,18 @@ impl Checkpoints {
         folder: &Path,
         token: &str,
     ) -> Result<RevertResult> {
+        self.revert_guarded(chat_id, folder_id, folder, token, ())
+            .await
+    }
+
+    pub(crate) async fn revert_guarded<G: Send + 'static>(
+        &self,
+        chat_id: &str,
+        folder_id: &str,
+        folder: &Path,
+        token: &str,
+        guard: G,
+    ) -> Result<RevertResult> {
         super::valid_id(token)?;
         let _guard = self.gate.lock().await;
         let prepared = self
@@ -138,8 +151,17 @@ impl Checkpoints {
             replacements.insert(path.clone(), bytes);
         }
         let token = token.to_owned();
-        tokio::task::spawn_blocking(move || apply(&prepared, &token, replacements)).await
-            .map_err(|_| CheckpointError::Message("The revert operation stopped unexpectedly. Check the folder's recovery directory.".into()))?
+        tokio::task::spawn_blocking(move || {
+            let _guard = guard;
+            apply(&prepared, &token, replacements)
+        })
+        .await
+        .map_err(|_| {
+            CheckpointError::Message(
+                "The revert operation stopped unexpectedly. Check the folder's recovery directory."
+                    .into(),
+            )
+        })?
     }
 }
 
@@ -162,7 +184,7 @@ fn apply(
     let directory = Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
     let backup_name = format!(".auracode-revert-{token}");
     directory.create_dir(&backup_name)?;
-    let backup = directory.open_dir(&backup_name)?;
+    let backup = directory.open_dir_nofollow(&backup_name)?;
     let manifest = serde_json::json!({ "version": 1, "checkpoint_id": prepared.manifest.summary.id,
         "files": prepared.current.keys().enumerate().map(|(index, path)| serde_json::json!({"path": path, "backup": format!("original-{index}")})).collect::<Vec<_>>() });
     let mut journal = backup.open_with(
@@ -214,6 +236,21 @@ fn apply_file(
     replacement: Option<&(Fingerprint, Vec<u8>)>,
 ) -> Result<()> {
     scan::checked_path(root, path)?;
+    let mut parent = root_dir.try_clone()?;
+    if let Some(ancestors) = Path::new(path).parent() {
+        for component in ancestors.components() {
+            let name = component.as_os_str();
+            if replacement.is_some() {
+                match parent.create_dir(name) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            parent = parent.open_dir_nofollow(name)?;
+        }
+    }
+    let name = Path::new(path).file_name().ok_or_else(|| stale(path))?;
     let original = format!("original-{index}");
     let restored = format!("replacement-{index}");
     if let Some((fingerprint, bytes)) = replacement {
@@ -234,8 +271,10 @@ fn apply_file(
     if let Some(expected) = expected {
         // Move aside first, then inspect the object actually removed from the name. Newer work is
         // retained even if another editor changed the file between preview validation and rename.
-        root_dir.rename(path, backup, &original)?;
-        let saved = backup.open(&original)?.into_std();
+        parent.rename(name, backup, &original)?;
+        let mut options = OpenOptions::new();
+        options.read(true).follow(FollowSymlinks::No);
+        let saved = backup.open_with(&original, &options)?.into_std();
         let meta = saved.metadata()?;
         let mut bytes = Vec::new();
         saved
@@ -254,22 +293,16 @@ fn apply_file(
             || bytes.len() != expected.bytes as usize
             || mode_changed
         {
-            let _ = backup.hard_link(&original, root_dir, path);
+            let _ = backup.hard_link(&original, &parent, name);
             return Err(stale(path));
         }
     }
     if replacement.is_some() {
-        if let Some(parent) = Path::new(path)
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-        {
-            root_dir.create_dir_all(parent)?;
-        }
         // Hard-link publication is atomic and refuses to replace a path another writer created.
         // The complete original and replacement remain in the recovery directory on any failure.
-        if let Err(error) = backup.hard_link(&restored, root_dir, path) {
+        if let Err(error) = backup.hard_link(&restored, &parent, name) {
             if expected.is_some() {
-                let _ = backup.hard_link(&original, root_dir, path);
+                let _ = backup.hard_link(&original, &parent, name);
             }
             return Err(error.into());
         }

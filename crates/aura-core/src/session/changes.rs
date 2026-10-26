@@ -1,0 +1,140 @@
+use super::*;
+use aura_protocol::changes::{ChangeDiff, ChangesSnapshot, RevertPreview, RevertResult};
+
+pub(super) struct FolderMutation {
+    shared: Arc<Shared>,
+    folder: PathBuf,
+}
+
+impl Drop for FolderMutation {
+    fn drop(&mut self) {
+        self.shared.live.release_folder(&self.folder);
+    }
+}
+
+impl SessionManager {
+    pub async fn chat_changes(
+        &self,
+        chat_id: &str,
+        turn_id: Option<String>,
+    ) -> Result<ChangesSnapshot, SessionError> {
+        let (chat, checkpoint) = self
+            .ask(chat_id, |reply| ChatMsg::CheckpointContext {
+                turn_id: turn_id.clone(),
+                reply,
+            })
+            .await?;
+        let Some(checkpoint) = checkpoint else {
+            return Ok(ChangesSnapshot {
+                checkpoint: None,
+                files: Vec::new(),
+                unavailable_reason: Some("This turn has no saved checkpoint.".into()),
+            });
+        };
+        let service = self.checkpoint_service()?;
+        service
+            .changes(chat_id, folder_id(&chat)?, &chat.folder, &checkpoint)
+            .await
+            .map_err(checkpoint_error)
+    }
+
+    pub async fn chat_change_diff(
+        &self,
+        chat_id: &str,
+        checkpoint_id: &str,
+        path: &str,
+    ) -> Result<ChangeDiff, SessionError> {
+        let (chat, _) = self
+            .deps()
+            .store
+            .checkpoint_context(chat_id, None)
+            .await
+            .map_err(|error| storage_error(&error))?;
+        self.checkpoint_service()?
+            .diff(
+                chat_id,
+                folder_id(&chat)?,
+                &chat.folder,
+                checkpoint_id,
+                path,
+            )
+            .await
+            .map_err(checkpoint_error)
+    }
+
+    pub async fn checkpoint_revert_preview(
+        &self,
+        chat_id: &str,
+        checkpoint_id: &str,
+        paths: Vec<String>,
+    ) -> Result<RevertPreview, SessionError> {
+        let (chat, _) = self
+            .deps()
+            .store
+            .checkpoint_context(chat_id, None)
+            .await
+            .map_err(|error| storage_error(&error))?;
+        self.checkpoint_service()?
+            .preview_revert(
+                chat_id,
+                folder_id(&chat)?,
+                &chat.folder,
+                checkpoint_id,
+                paths,
+            )
+            .await
+            .map_err(checkpoint_error)
+    }
+
+    pub async fn checkpoint_revert(
+        &self,
+        chat_id: &str,
+        token: &str,
+    ) -> Result<RevertResult, SessionError> {
+        if self.shared().is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
+        let _organization = self.shared().organization.lock().await;
+        let (chat, _) = self
+            .deps()
+            .store
+            .checkpoint_context(chat_id, None)
+            .await
+            .map_err(|error| storage_error(&error))?;
+        folder_id(&chat)?;
+        self.checkpoint_service()?;
+        let path = chat.folder.clone();
+        let folder = tokio::task::spawn_blocking(move || live::normalize_path(path))
+            .await
+            .map_err(|_| SessionError::Organization("Resolving the folder failed.".into()))?;
+        if !self.shared().live.reserve_folder(&folder) {
+            return Err(SessionError::Organization("Stop chats using this folder and wait for agent startup or shutdown to finish before reverting files.".into()));
+        }
+        let guard = Arc::new(FolderMutation {
+            shared: Arc::clone(self.shared()),
+            folder,
+        });
+        self.ask(chat_id, |reply| ChatMsg::Revert {
+            token: token.into(),
+            guard: Arc::clone(&guard),
+            reply,
+        })
+        .await
+    }
+
+    fn checkpoint_service(&self) -> Result<Arc<crate::checkpoints::Checkpoints>, SessionError> {
+        self.deps().checkpoints.clone().ok_or_else(|| {
+            SessionError::Organization("Checkpoints are unavailable in this runtime.".into())
+        })
+    }
+}
+
+pub(super) fn checkpoint_error(error: crate::checkpoints::CheckpointError) -> SessionError {
+    SessionError::Organization(error.to_string())
+}
+
+fn folder_id(chat: &ChatRecord) -> Result<&str, SessionError> {
+    chat.folder_id.as_deref().ok_or_else(|| {
+        SessionError::Organization("Locate this chat's folder before using checkpoints.".into())
+    })
+}

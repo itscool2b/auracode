@@ -303,12 +303,38 @@ async fn agent_config_and_oversized_files_are_excluded_without_becoming_deletion
     )
     .expect("owned config fixture");
     std::fs::write(rig.work.join("grows.bin"), "small").expect("small");
+    std::fs::write(rig.work.join(".gitignore"), "private.txt\n").expect("ignore fixture");
+    std::fs::write(rig.work.join("private.txt"), "ignored fixture").expect("ignored fixture");
     let checkpoint = rig
         .service
         .capture(&rig.chat, &rig.folder, &rig.work, &crate::ids::new_id())
         .await
         .expect("checkpoint");
-    assert_eq!(checkpoint.file_count, 1);
+    assert_eq!(checkpoint.file_count, 2);
+    assert!(
+        rig.service
+            .diff(
+                &rig.chat,
+                &rig.folder,
+                &rig.work,
+                &checkpoint.id,
+                ".codex/auth.json"
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        rig.service
+            .diff(
+                &rig.chat,
+                &rig.folder,
+                &rig.work,
+                &checkpoint.id,
+                "private.txt"
+            )
+            .await
+            .is_err()
+    );
     let file = std::fs::OpenOptions::new()
         .write(true)
         .open(rig.work.join("grows.bin"))

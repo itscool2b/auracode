@@ -82,6 +82,15 @@ const ANSWERED_REMEMBERED: usize = 64;
 
 /// A message for a chat's actor. Every reply is a oneshot.
 pub(crate) enum ChatMsg {
+    CheckpointContext {
+        turn_id: Option<String>,
+        reply: oneshot::Sender<Result<(ChatRecord, Option<String>), SessionError>>,
+    },
+    Revert {
+        token: String,
+        guard: Arc<super::changes::FolderMutation>,
+        reply: oneshot::Sender<Result<aura_protocol::changes::RevertResult, SessionError>>,
+    },
     Organize {
         command: crate::chatstore::organization::OrganizationCommand,
         reply: oneshot::Sender<Result<crate::chatstore::organization::Organization, SessionError>>,
@@ -172,6 +181,8 @@ impl ChatMsg {
     /// Answers the message with `error` (a chat that does not exist, a store that is gone).
     fn refuse(self, error: SessionError) {
         match self {
+            ChatMsg::CheckpointContext { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::Revert { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Organize { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Attach { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::History { reply, .. } => drop(reply.send(Err(error))),
@@ -302,6 +313,7 @@ struct Preparing {
 
 /// What a preparation produces.
 struct Prepared {
+    folder_key: PathBuf,
     launch: LaunchSpec,
     env: Arc<ResolvedEnv>,
 }
@@ -335,6 +347,23 @@ struct NativeIdentitySave {
 
 /// What an `in_flight` future completes.
 enum Done {
+    CheckpointContext {
+        result: Result<(ChatRecord, Option<String>), SessionError>,
+        reply: oneshot::Sender<Result<(ChatRecord, Option<String>), SessionError>>,
+    },
+    Reverted {
+        result: Result<aura_protocol::changes::RevertResult, SessionError>,
+        reply: oneshot::Sender<Result<aura_protocol::changes::RevertResult, SessionError>>,
+    },
+    Checkpointed {
+        generation: u64,
+        prompt: Prompt,
+        turn_id: String,
+        result: Result<
+            crate::checkpoints::Result<aura_protocol::changes::CheckpointSummary>,
+            JoinError,
+        >,
+    },
     Organized {
         result: Result<crate::chatstore::organization::Organization, SessionError>,
         reply: oneshot::Sender<Result<crate::chatstore::organization::Organization, SessionError>>,
@@ -417,6 +446,7 @@ pub(crate) struct ChatActor {
     progress: Option<mpsc::UnboundedReceiver<String>>,
     in_flight: FuturesUnordered<BoxFuture<'static, Done>>,
     organizing: bool,
+    checkpointing: Option<(String, AbortHandle)>,
     generation: u64,
     /// Generations force-stopped or crashed whose processes or task still wind down, with how many
     /// FORCE chains and joins each still waits for. They keep the chat's live slot and native
@@ -518,6 +548,7 @@ impl ChatActor {
             progress: None,
             in_flight: FuturesUnordered::new(),
             organizing: false,
+            checkpointing: None,
             generation: 0,
             retiring: Vec::new(),
             winding_down: watch::Sender::new(0),
@@ -624,6 +655,46 @@ impl ChatActor {
 
     fn on_msg(&mut self, msg: ChatMsg) {
         match msg {
+            ChatMsg::CheckpointContext { turn_id, reply } => {
+                self.flush();
+                let barrier = if self.store.is_paused() {
+                    None
+                } else {
+                    let (saved, barrier) = oneshot::channel();
+                    self.queue_op(Op::Barrier(saved));
+                    Some(barrier)
+                };
+                let store = Arc::clone(&self.store);
+                let rt = self.shared.deps.rt.clone();
+                let chat_id = self.chat_id.clone();
+                self.in_flight.push(
+                    async move {
+                        let result = async {
+                            if let Some(barrier) = barrier {
+                                await_reply(&rt, barrier, Duration::from_secs(5))
+                                    .await
+                                    .map_err(|_| {
+                                        SessionError::StorageUnavailable(
+                                            "Checkpoint history is still saving. Try again.".into(),
+                                        )
+                                    })?;
+                            }
+                            store
+                                .checkpoint_context(&chat_id, turn_id)
+                                .await
+                                .map_err(|error| storage_error(&error))
+                        }
+                        .await;
+                        Done::CheckpointContext { result, reply }
+                    }
+                    .boxed(),
+                );
+            }
+            ChatMsg::Revert {
+                token,
+                guard,
+                reply,
+            } => self.revert(token, guard, reply),
             ChatMsg::Organize { command, reply } => self.organize(command, reply),
             ChatMsg::Attach {
                 sink,
@@ -858,6 +929,54 @@ impl ChatActor {
             .min()
     }
 
+    fn revert(
+        &mut self,
+        token: String,
+        guard: Arc<super::changes::FolderMutation>,
+        reply: oneshot::Sender<Result<aura_protocol::changes::RevertResult, SessionError>>,
+    ) {
+        if self.organizing
+            || self.driver.is_some()
+            || self.preparing.is_some()
+            || !self.retiring.is_empty()
+            || self.checkpointing.is_some()
+            || self.turn.is_some()
+            || !self.queue.is_empty()
+            || self.quitting
+            || self.shared.is_shutting_down()
+        {
+            let _ = reply.send(Err(SessionError::Organization(
+                "Stop the chat and clear queued prompts before reverting files.".into(),
+            )));
+            return;
+        }
+        let Some(service) = self.shared.deps.checkpoints.clone() else {
+            let _ = reply.send(Err(SessionError::Organization(
+                "Checkpoints are unavailable in this runtime.".into(),
+            )));
+            return;
+        };
+        let Some(folder_id) = self.chat.folder_id.clone() else {
+            let _ = reply.send(Err(SessionError::Organization(
+                "Locate this chat's folder before reverting files.".into(),
+            )));
+            return;
+        };
+        self.organizing = true;
+        let chat_id = self.chat_id.clone();
+        let folder = self.chat.folder.clone();
+        self.in_flight.push(
+            async move {
+                let result = service
+                    .revert_guarded(&chat_id, &folder_id, &folder, &token, guard)
+                    .await
+                    .map_err(super::changes::checkpoint_error);
+                Done::Reverted { result, reply }
+            }
+            .boxed(),
+        );
+    }
+
     fn organize(
         &mut self,
         command: crate::chatstore::organization::OrganizationCommand,
@@ -938,6 +1057,19 @@ impl ChatActor {
         if text.trim().is_empty() {
             return Err(SessionError::PromptEmpty);
         }
+        if parts
+            .iter()
+            .any(|part| matches!(part, PromptPart::Image { .. }))
+            && self
+                .capabilities
+                .as_ref()
+                .is_some_and(|capabilities| !capabilities.images)
+        {
+            return Err(SessionError::OptionInvalid(
+                "This agent does not support images. Remove the image or choose another agent."
+                    .into(),
+            ));
+        }
         let limit = self.shared.deps.limits.max_prompt_bytes;
         if text.len() > limit {
             return Err(SessionError::PromptTooLarge {
@@ -961,7 +1093,7 @@ impl ChatActor {
             });
             return Ok(PromptAck {
                 prompt_id,
-                queued: false,
+                queued: self.shared.deps.checkpoints.is_some(),
             });
         }
         let max_queue = self.shared.deps.limits.max_queue;
@@ -1004,6 +1136,7 @@ impl ChatActor {
     /// `Ready` with no turn: a prompt goes out now.
     fn can_dispatch(&self) -> bool {
         !self.organizing
+            && self.checkpointing.is_none()
             && self.status == SessionStatus::Ready
             && self.turn.is_none()
             && self.native_identity_pending.is_none()
@@ -1096,6 +1229,69 @@ impl ChatActor {
     /// Starts a turn for `prompt`: the turn's first rows go out in one `BeginTurn` (which removes
     /// the queued row), then the prompt goes to the driver.
     fn dispatch(&mut self, prompt: Prompt) {
+        let turn_id = new_id();
+        let Some(checkpoints) = self.shared.deps.checkpoints.clone() else {
+            self.dispatch_prepared(prompt, turn_id, None);
+            return;
+        };
+        let row = QueuedRow {
+            id: prompt.id.clone(),
+            chat_id: self.chat_id.clone(),
+            text: prompt.text.clone(),
+            parts: prompt.parts.clone(),
+            held: false,
+            created_at: prompt.created_at,
+        };
+        self.queue.push(row.clone());
+        self.queue_op(Op::QueuePut(row));
+        self.push(
+            AuraEvent::PromptLifecycle {
+                prompt_id: prompt.id.clone(),
+                state: PromptState::Queued,
+                preview: Some(cap_chars(prompt.text.clone(), PREVIEW_CHARS)),
+            },
+            None,
+        );
+        let chat_id = self.chat_id.clone();
+        let folder = self.chat.folder.clone();
+        let folder_id = self.chat.folder_id.clone();
+        let captured_turn = turn_id.clone();
+        let task = self.shared.deps.rt.spawn(async move {
+            let folder_id = folder_id.ok_or_else(|| {
+                crate::checkpoints::CheckpointError::Message(
+                    "Locate this chat's folder before saving a checkpoint.".into(),
+                )
+            })?;
+            checkpoints
+                .capture(&chat_id, &folder_id, &folder, &captured_turn)
+                .await
+        });
+        self.checkpointing = Some((prompt.id.clone(), task.abort_handle()));
+        let generation = self.generation;
+        self.in_flight.push(
+            async move {
+                Done::Checkpointed {
+                    generation,
+                    prompt,
+                    turn_id,
+                    result: task.await,
+                }
+            }
+            .boxed(),
+        );
+        self.set_status(
+            SessionStatus::Running,
+            Some("Saving checkpoint before sending the prompt".into()),
+        );
+        self.flush();
+    }
+
+    fn dispatch_prepared(
+        &mut self,
+        prompt: Prompt,
+        turn_id: String,
+        checkpoint_ref: Option<String>,
+    ) {
         let Some(driver) = &mut self.driver else {
             return;
         };
@@ -1105,10 +1301,10 @@ impl ChatActor {
         }
         self.queue.retain(|row| row.id != prompt.id);
         self.ordinal = self.ordinal.saturating_add(1);
-        let turn_id = new_id();
         let tag: Arc<str> = Arc::from(turn_id.as_str());
         let started_at = now_millis();
         self.begun = Some(TurnRow {
+            checkpoint_ref,
             parts: prompt.parts.clone(),
             id: turn_id.clone(),
             chat_id: self.chat_id.clone(),
@@ -1197,7 +1393,29 @@ impl ChatActor {
         self.publish();
     }
 
+    fn cancel_checkpoint(&mut self) {
+        if let Some((_, abort)) = &self.checkpointing {
+            abort.abort();
+        }
+    }
+
     fn interrupt(&mut self) {
+        if self.checkpointing.is_some() {
+            self.cancel_checkpoint();
+            self.hold_queue();
+            if self
+                .driver
+                .as_ref()
+                .is_none_or(|driver| driver.run_idle != Some(false))
+                && !self.normalizer.has_open_requests()
+            {
+                self.set_status(
+                    SessionStatus::Ready,
+                    Some("Prompt held before it reached the agent".into()),
+                );
+                return;
+            }
+        }
         match self.status {
             SessionStatus::Running => {
                 let turn = self.turn.as_mut().map(|turn| {
@@ -1230,6 +1448,7 @@ impl ChatActor {
     }
 
     fn force_stop(&mut self) {
+        self.cancel_checkpoint();
         if !matches!(
             self.status,
             SessionStatus::Running
@@ -1366,6 +1585,7 @@ impl ChatActor {
     }
 
     fn stop(&mut self) {
+        self.cancel_checkpoint();
         // Every Stop holds what is queued until now, one that repeats a stop in progress included: a
         // prompt typed while the agent stops is not held, and would start it again once it stopped.
         self.hold_queue();
@@ -1571,6 +1791,14 @@ impl ChatActor {
                 self.start_failed(failure.kind, failure.message, None, false);
             }
             Ok(Ok(prepared)) => {
+                if !self
+                    .shared
+                    .live
+                    .set_folder(&self.chat_id, prepared.folder_key.clone())
+                {
+                    self.start_failed(ErrorKind::AgentUnavailable, "This folder is being reverted. Wait for the file operation to finish before starting the agent.".into(), None, false);
+                    return;
+                }
                 self.folder_state = FolderState::Ok;
                 self.spawn_driver(prepared, preparing.fresh);
             }
@@ -1889,6 +2117,7 @@ impl ChatActor {
     }
 
     fn shutdown(&mut self, plan: StopPlan, reply: oneshot::Sender<()>) {
+        self.cancel_checkpoint();
         self.quitting = true;
         self.pending_start = None;
         if let Some(preparing) = self.preparing.take() {
@@ -1928,6 +2157,7 @@ impl ChatActor {
     fn finish_shutdown(&mut self) {
         if self.shutdown_reply.is_none()
             || self.organizing
+            || self.checkpointing.is_some()
             || self.driver.is_some()
             || self.preparing.is_some()
             || !self.outbox.is_empty()
@@ -1949,6 +2179,118 @@ impl ChatActor {
 
     fn on_done(&mut self, done: Done) {
         match done {
+            Done::CheckpointContext { result, reply } => {
+                drop(reply.send(result));
+            }
+            Done::Reverted { result, reply } => {
+                self.organizing = false;
+                if let Ok(report) = &result {
+                    self.push(
+                        AuraEvent::Notice {
+                            level: if report.error.is_some() {
+                                NoticeLevel::Warning
+                            } else {
+                                NoticeLevel::Info
+                            },
+                            message: format!(
+                                "Reverted {} file(s). {}",
+                                report.applied.len(),
+                                report
+                                    .error
+                                    .as_deref()
+                                    .unwrap_or("Original files were retained for recovery.")
+                            ),
+                        },
+                        None,
+                    );
+                    self.flush();
+                }
+                let _ = reply.send(result);
+            }
+            Done::Checkpointed {
+                generation,
+                prompt,
+                turn_id,
+                result,
+            } => {
+                if !self
+                    .checkpointing
+                    .as_ref()
+                    .is_some_and(|(id, _)| *id == prompt.id)
+                {
+                    return;
+                }
+                self.checkpointing = None;
+                if generation != self.generation {
+                    return;
+                }
+                if self
+                    .driver
+                    .as_ref()
+                    .is_some_and(|driver| driver.ready && driver.stop == Stop::None)
+                    && self.turn.is_none()
+                {
+                    let idle = self
+                        .driver
+                        .as_ref()
+                        .is_none_or(|driver| driver.run_idle != Some(false))
+                        && !self.normalizer.has_open_requests();
+                    self.set_status(
+                        if idle {
+                            SessionStatus::Ready
+                        } else {
+                            SessionStatus::Running
+                        },
+                        None,
+                    );
+                }
+                match result {
+                    Ok(Ok(checkpoint)) => {
+                        if self.can_dispatch()
+                            && self
+                                .queue
+                                .iter()
+                                .any(|row| row.id == prompt.id && !row.held)
+                        {
+                            if !checkpoint.warnings.is_empty() {
+                                self.push(
+                                    AuraEvent::Notice {
+                                        level: NoticeLevel::Warning,
+                                        message: format!(
+                                            "Checkpoint saved with exclusions: {}",
+                                            checkpoint.warnings.join("; ")
+                                        ),
+                                    },
+                                    None,
+                                );
+                            }
+                            self.dispatch_prepared(prompt, turn_id, Some(checkpoint.id));
+                        }
+                    }
+                    Err(error) if error.is_cancelled() => {}
+                    failed => {
+                        self.hold_queue();
+                        let message = match failed {
+                            Ok(Err(error)) => error.to_string(),
+                            _ => "Saving the checkpoint stopped unexpectedly.".into(),
+                        };
+                        self.push(
+                            AuraEvent::Notice {
+                                level: NoticeLevel::Error,
+                                message: format!(
+                                    "The prompt was held before reaching the agent: {message}"
+                                ),
+                            },
+                            None,
+                        );
+                        self.set_detail(Some(
+                            "Checkpoint failed; resolve the problem and resume queued prompts"
+                                .into(),
+                        ));
+                    }
+                }
+                self.dispatch_next();
+            }
             Done::Organized { result, reply } => {
                 self.organizing = false;
                 if let Ok(organization) = &result
@@ -1958,6 +2300,7 @@ impl ChatActor {
                         .find(|record| record.chat.id == self.chat_id)
                 {
                     self.chat.folder = record.chat.folder.clone();
+                    self.chat.folder_id = record.chat.folder_id.clone();
                     // A live automatic title can arrive while the transaction is in flight.
                     // Only the manual title is authoritative over that newer live state.
                     if record.chat.title_source == Some(TitleSource::Manual) {
@@ -3388,6 +3731,9 @@ impl ChatActor {
 
     /// An opted-in driver's prompt can finish while its background work is still running.
     fn refresh_run_status(&mut self) {
+        if self.checkpointing.is_some() {
+            return;
+        }
         let Some(driver) = &self.driver else {
             return;
         };
@@ -3513,6 +3859,12 @@ impl ChatActor {
             auth: self.auth.clone(),
             storage: self.store.status().borrow().clone(),
         }
+    }
+}
+
+impl Drop for ChatActor {
+    fn drop(&mut self) {
+        self.cancel_checkpoint();
     }
 }
 
@@ -3736,7 +4088,14 @@ async fn prepare(
             folder: None,
         });
     }
-    check_folder(folder).await?;
+    check_folder(folder.clone()).await?;
+    let folder_key = tokio::task::spawn_blocking(move || super::live::normalize_path(folder))
+        .await
+        .map_err(|_| StartFailure {
+            kind: ErrorKind::Internal,
+            message: "Resolving the folder failed.".into(),
+            folder: None,
+        })?;
     match detector.detect(&spec).await {
         Availability::Missing { reason } | Availability::Broken { reason } => {
             return Err(StartFailure {
@@ -3764,7 +4123,11 @@ async fn prepare(
         })?;
     let _ = progress.send("Reading your shell environment".into());
     let env = env.get().await;
-    Ok(Prepared { launch, env })
+    Ok(Prepared {
+        launch,
+        env,
+        folder_key,
+    })
 }
 
 /// Missing or not a folder: `FolderMissing`; refused by the OS (macOS privacy, no read

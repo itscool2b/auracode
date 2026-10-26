@@ -76,6 +76,7 @@ mod setup {
             env: EnvChoice::Fixed(machine.env(&[])),
             set_env: Vec::new(),
             app_version: "0.1.0".into(),
+            checkpoints: false,
         })
         .await
         .expect_err("refused");

@@ -1,6 +1,7 @@
 //! The session manager's tests that need the crate's internals: a store whose FIFO and retry are
 //! shrunk (saving pauses within a test), a small actor outbox, and the actor's panic hook.
 
+mod checkpoints;
 mod workspace;
 
 use std::sync::Mutex;
@@ -120,6 +121,7 @@ fn rig_with(drivers: Arc<dyn DriverFactory>, config: WriterConfig, knobs: Knobs)
     let manager = SessionManager::with_knobs(
         ManagerDeps {
             store: Arc::clone(&store),
+            checkpoints: None,
             env,
             spawner: spawner.clone(),
             detector,

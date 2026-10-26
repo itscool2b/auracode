@@ -2363,7 +2363,7 @@ mod tests {
         let (store, info) = Store::open_at(&p.db, &p.backups).unwrap();
         let OpenOutcome::Migrated {
             from: 2,
-            to: 3,
+            to: SCHEMA_VERSION,
             backup: Some(backup),
         } = info.outcome
         else {

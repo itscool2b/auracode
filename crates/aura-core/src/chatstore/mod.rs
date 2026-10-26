@@ -101,6 +101,35 @@ impl ChatStore {
         );
         answer.await.map_err(|_| StoreError::Closed)?
     }
+    pub(crate) async fn checkpoint_context(
+        &self,
+        chat_id: &str,
+        turn_id: Option<String>,
+    ) -> Result<(ChatRecord, Option<String>), StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if self.is_paused() {
+            return self
+                .saved(
+                    writer::SavedRead::CheckpointContext {
+                        chat_id: chat_id.into(),
+                        turn_id,
+                        reply,
+                    },
+                    answer,
+                )
+                .await?;
+        }
+        self.request(
+            Request::CheckpointContext {
+                chat_id: chat_id.into(),
+                turn_id,
+                reply,
+            },
+            answer,
+        )
+        .await?
+    }
+
     pub(crate) async fn organize(
         &self,
         command: organization::OrganizationCommand,
@@ -531,6 +560,7 @@ pub struct NewChat {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChatRecord {
     pub id: String,
+    pub folder_id: Option<String>,
     pub title: Option<String>,
     pub title_source: Option<TitleSource>,
     pub agent_id: String,
@@ -593,6 +623,7 @@ pub struct AgentSessionPatch {
 /// A `turns` row as it starts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TurnRow {
+    pub checkpoint_ref: Option<String>,
     pub parts: Vec<aura_protocol::PromptPart>,
     pub id: String,
     pub chat_id: String,
@@ -1033,6 +1064,7 @@ mod tests {
         };
         Op::BeginTurn {
             turn: TurnRow {
+                checkpoint_ref: None,
                 parts: Vec::new(),
                 id: "t1".into(),
                 chat_id: chat.into(),
@@ -1875,6 +1907,7 @@ mod tests {
                 &tx,
                 "dev",
                 &TurnRow {
+                    checkpoint_ref: None,
                     parts: Vec::new(),
                     id: "t1".into(),
                     chat_id: chat.clone(),
@@ -1969,6 +2002,7 @@ mod tests {
             store,
             Op::BeginTurn {
                 turn: TurnRow {
+                    checkpoint_ref: None,
                     parts: Vec::new(),
                     id: "t1".into(),
                     chat_id: chat.id.clone(),

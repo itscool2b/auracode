@@ -19,6 +19,18 @@ use crate::ids::new_id;
 /// How many of an agent session's newest turns the replay check looks through for the newest reply.
 const REPLY_SEARCH_TURNS: i64 = 50;
 
+pub(crate) fn checkpoint_context(
+    conn: &Connection,
+    device: &str,
+    chat_id: &str,
+    turn_id: Option<&str>,
+) -> rusqlite::Result<(ChatRecord, Option<String>)> {
+    let chat = chat(conn, device, chat_id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+    let reference = conn.query_row("SELECT checkpoint_ref FROM turns WHERE chat_id=?1 AND (?2 IS NULL OR id=?2) ORDER BY seq DESC LIMIT 1",
+        params![chat_id, turn_id], |row| row.get::<_, Option<String>>(0)).optional()?.flatten();
+    Ok((chat, reference))
+}
+
 /// The chat with this id, unless it was deleted.
 pub(crate) fn chat(
     conn: &Connection,
@@ -42,7 +54,7 @@ pub(crate) fn chats(conn: &Connection, device_id: &str) -> rusqlite::Result<Vec<
 
 /// A chat with this device's mapping only. A foreign path must never become a local launch cwd.
 const CHAT_SELECT: &str = "SELECT c.id, c.title, c.title_source, c.active_agent, c.created_at, c.updated_at, \
-     (SELECT fl.path FROM folder_locations fl WHERE fl.folder_id = c.folder_id AND fl.device_id = ?1), c.agent_host \
+     (SELECT fl.path FROM folder_locations fl WHERE fl.folder_id = c.folder_id AND fl.device_id = ?1), c.agent_host, c.folder_id \
      FROM chats c";
 
 fn chat_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatRecord> {
@@ -50,6 +62,7 @@ fn chat_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatRecord> {
     let folder: Option<String> = row.get(6)?;
     Ok(ChatRecord {
         id: row.get(0)?,
+        folder_id: row.get(8)?,
         title: row.get(1)?,
         title_source: title_source.as_deref().and_then(parse_title_source),
         agent_id: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
@@ -132,6 +145,7 @@ pub(crate) fn create_chat(conn: &Connection, new: &NewChat) -> rusqlite::Result<
         serde_json::to_string(&new.agent_host).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?])?;
     Ok(ChatRecord {
         id,
+        folder_id: Some(folder_id),
         title: None,
         title_source: None,
         agent_id: new.agent_id.clone(),
@@ -429,7 +443,7 @@ pub(crate) fn begin_turn(
 ) -> rusqlite::Result<()> {
     conn.prepare_cached(
         "INSERT INTO turns (id, chat_id, agent_session_id, seq, status, started_at, device_id, prompt_id, \
-         first_event_seq, prompt_parts_json) VALUES (?1, ?2, ?3, ?4, 'running', ?5, ?6, ?7, ?8, ?9)",
+         first_event_seq, prompt_parts_json, checkpoint_ref) VALUES (?1, ?2, ?3, ?4, 'running', ?5, ?6, ?7, ?8, ?9, ?10)",
     )?
     .execute(params![
         turn.id,
@@ -441,6 +455,7 @@ pub(crate) fn begin_turn(
         turn.prompt_id,
         turn.first_event_seq,
         serde_json::to_string(&turn.parts).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
+        turn.checkpoint_ref,
     ])?;
     append_events(conn, device_id, &turn.chat_id, rows)?;
     conn.prepare_cached("DELETE FROM queued_prompts WHERE id = ?1")?
@@ -741,6 +756,7 @@ pub(crate) mod tests {
             conn,
             "dev",
             &TurnRow {
+                checkpoint_ref: None,
                 parts: Vec::new(),
                 id: "t1".into(),
                 chat_id: chat.clone(),

@@ -146,6 +146,11 @@ pub(crate) enum Request {
         command: super::composer::ComposerCommand,
         reply: oneshot::Sender<Result<Vec<super::composer::StoredAttachment>, StoreError>>,
     },
+    CheckpointContext {
+        chat_id: String,
+        turn_id: Option<String>,
+        reply: oneshot::Sender<Result<(ChatRecord, Option<String>), StoreError>>,
+    },
     Organization {
         command: super::organization::OrganizationCommand,
         reply: oneshot::Sender<Result<super::organization::Organization, StoreError>>,
@@ -175,6 +180,11 @@ pub(crate) enum Request {
 
 /// A read served from saved data, outside the FIFO, even while the writer is stalled.
 pub(crate) enum SavedRead {
+    CheckpointContext {
+        chat_id: String,
+        turn_id: Option<String>,
+        reply: oneshot::Sender<Result<(ChatRecord, Option<String>), StoreError>>,
+    },
     Organization {
         filter: aura_protocol::workspace::WorkspaceFilter,
         reply: oneshot::Sender<Result<super::organization::Organization, StoreError>>,
@@ -602,6 +612,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::CreateChat { .. }) => "create_chat",
         Work::Request(Request::Organization { .. }) => "organization",
         Work::Request(Request::Composer { .. }) => "composer",
+        Work::Request(Request::CheckpointContext { .. }) => "checkpoint_context",
         Work::Request(Request::Chats { .. }) => "chats",
         Work::Request(Request::LoadChat { .. }) => "load_chat",
         Work::Request(Request::ReadBlob { .. }) => "read_blob",
@@ -1183,6 +1194,16 @@ impl Writer {
                 };
                 let _ = reply.send(result);
             }
+            Request::CheckpointContext {
+                chat_id,
+                turn_id,
+                reply,
+            } => {
+                let device = self.device_id.clone();
+                let _ = reply.send(self.read(|conn| {
+                    rows::checkpoint_context(conn, &device, &chat_id, turn_id.as_deref())
+                }));
+            }
             Request::Organization { command, reply } => {
                 let device = self.device_id.clone();
                 let now = now_millis();
@@ -1323,6 +1344,16 @@ impl Writer {
     /// Serves a read from saved data.
     fn serve_saved(&mut self, read: SavedRead) {
         match read {
+            SavedRead::CheckpointContext {
+                chat_id,
+                turn_id,
+                reply,
+            } => {
+                let device = self.device_id.clone();
+                let _ = reply.send(self.read(|conn| {
+                    rows::checkpoint_context(conn, &device, &chat_id, turn_id.as_deref())
+                }));
+            }
             SavedRead::Organization { filter, reply } => {
                 let device = self.device_id.clone();
                 let _ = reply.send(self.read(|conn| {

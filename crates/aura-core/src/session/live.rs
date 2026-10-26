@@ -188,6 +188,8 @@ pub(crate) struct LiveAgents {
 #[derive(Debug, Default)]
 struct Inner {
     slots: HashSet<String>,
+    folders: HashMap<String, PathBuf>,
+    mutations: HashSet<PathBuf>,
     /// `(provider realm, native_session_id)` -> the chat holding it.
     sessions: HashMap<(NativeSessionScope, String), String>,
 }
@@ -223,6 +225,7 @@ impl LiveAgents {
     pub(crate) fn release(&self, chat: &str) {
         let mut inner = self.lock();
         inner.slots.remove(chat);
+        inner.folders.remove(chat);
         inner.sessions.retain(|_, holder| holder != chat);
     }
 
@@ -257,6 +260,34 @@ impl LiveAgents {
         self.lock().slots.contains(chat)
     }
 
+    /// Canonical folder registration is atomic with revert reservations, before native spawn.
+    pub(crate) fn set_folder(&self, chat: &str, folder: PathBuf) -> bool {
+        let mut inner = self.lock();
+        if inner.mutations.contains(&folder) {
+            return false;
+        }
+        inner.folders.insert(chat.into(), folder);
+        true
+    }
+
+    pub(crate) fn reserve_folder(&self, folder: &Path) -> bool {
+        let mut inner = self.lock();
+        if inner.mutations.contains(folder)
+            || inner
+                .slots
+                .iter()
+                .any(|chat| inner.folders.get(chat).is_none_or(|held| held == folder))
+        {
+            return false;
+        }
+        inner.mutations.insert(folder.into());
+        true
+    }
+
+    pub(crate) fn release_folder(&self, folder: &Path) {
+        self.lock().mutations.remove(folder);
+    }
+
     pub(crate) fn max(&self) -> usize {
         self.max
     }
@@ -268,6 +299,34 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+
+    #[test]
+    fn folder_mutation_reservation_excludes_live_agents_and_late_starts() {
+        let live = LiveAgents::new(4);
+        let folder = PathBuf::from("/target");
+        assert!(live.acquire("starting"));
+        assert!(
+            !live.reserve_folder(&folder),
+            "an unresolved startup may target this folder"
+        );
+        assert!(live.set_folder("starting", PathBuf::from("/other")));
+        assert!(
+            live.reserve_folder(&folder),
+            "an unrelated running folder is allowed"
+        );
+        assert!(live.acquire("later"));
+        assert!(
+            !live.set_folder("later", folder.clone()),
+            "a later start cannot spawn in a reserved folder"
+        );
+        live.release("later");
+        live.release_folder(&folder);
+        assert!(live.acquire("target"));
+        assert!(live.set_folder("target", folder.clone()));
+        assert!(!live.reserve_folder(&folder));
+        live.release("target");
+        assert!(live.reserve_folder(&folder));
+    }
 
     fn scope(agent: &str, host: &str, vars: &[(&str, &str)]) -> NativeSessionScope {
         let env = ResolvedEnv {

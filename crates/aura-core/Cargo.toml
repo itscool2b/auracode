@@ -38,6 +38,7 @@ tempfile.workspace = true
 # Directory-relative operations keep checkpoint reads/reverts inside the selected folder during
 # concurrent path changes, including symlink and Windows reparse-point traversal.
 cap-std = "4.0.3"
+cap-fs-ext = "4.0.3"
 
 [target.'cfg(windows)'.dependencies]
 # The ACL calls that make `profiles\` private to the user (fsutil::restrict_to_owner). Raw bindings,

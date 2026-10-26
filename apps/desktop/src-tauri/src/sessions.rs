@@ -395,6 +395,11 @@ pub fn start_chats(
         }
     });
     let manager = SessionManager::new(ManagerDeps {
+        checkpoints: Some(aura_core::checkpoints::Checkpoints::new(
+            &profile,
+            Arc::clone(&env),
+            Arc::clone(&registry),
+        )),
         store: Arc::clone(&store),
         env,
         spawner,

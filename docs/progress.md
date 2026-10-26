@@ -60,9 +60,23 @@ writing. Directory-relative capability handles keep reads and restores inside th
 replaced/removed files remain in a visible recovery directory if a later step fails. Partial failure
 is an explicit result. Eight focused tests cover exact CRLF bytes, unchanged user index/HEAD, ignore
 changes, exclusions, restore, stale previews and a concurrent edit between validation and rename.
-Core Clippy and desktop binding export pass locally. The Changes DTO is generated, but automatic
-before-turn capture, persisted turn links, live-folder revert guarding and command wiring are still
-pending. The service is not yet enabled for production turns. No CI push was made.
+Core Clippy and desktop binding export pass locally. The Changes DTO is generated.
+
+Production desktop and CLI turns now save the checkpoint before forwarding their original typed
+prompt parts. Capture failure holds the queued prompt with a visible reason; interrupt cancels a
+pending capture. Native background activity still prevents dispatch until authoritative idle.
+The checkpoint reference is saved in the existing turn column, with no new migration. Changes
+waits for earlier actor writes before selecting the saved turn. Revert reserves the canonical
+folder until file writes finish, including when an RPC is abandoned, and refuses active, preparing
+or retiring agents. A later start cannot race that reservation. Diff reads only scanner-approved
+files and opens each component without following links. The same image capability guard used by
+the composer rejects unsupported images before enqueue without dropping typed parts.
+All 281 core unit tests and all-target core/CLI Clippy pass on Windows. The 12 focused checkpoint
+tests pass after the history barrier. CLI checks passed 44 unit, 4 demo, 6 headless and 3 scripted
+native smoke tests. The binary unit-test executable was blocked by Application Control (4551),
+so the full CLI integration command could not finish. The scripted fixture now uses its store's
+actual device ID instead of a mismatched literal, preserving device-local folder isolation. Tauri command wiring,
+macOS execution, edit/retry/fork and visible handoff remain pending. No CI push was made.
 
 The final local M1e follow-up resolves Windows Pi, OMP and Grok npm shims through the reviewed
 package's bounded `package.json` bin entry, using `node.exe` or a packaged executable. It never

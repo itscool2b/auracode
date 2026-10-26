@@ -162,6 +162,7 @@ impl Harness {
             rt.clone(),
         );
         let manager = SessionManager::new(ManagerDeps {
+            checkpoints: None,
             store: Arc::clone(&store),
             env,
             spawner: spawner.clone(),

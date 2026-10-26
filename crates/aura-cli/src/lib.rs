@@ -203,6 +203,7 @@ async fn run_headless(invocation: &Invocation, out: &Out) -> Result<Outcome, Cli
         env: EnvChoice::LoginShell,
         set_env,
         app_version: env!("CARGO_PKG_VERSION").to_owned(),
+        checkpoints: true,
     })
     .await;
     let headless = match started {

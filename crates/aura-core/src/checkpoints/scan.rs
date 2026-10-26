@@ -3,6 +3,7 @@ use std::fs;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
+use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -66,9 +67,12 @@ pub(super) fn validate(path: &str) -> Result<()> {
         || Path::new(path)
             .components()
             .any(|part| !matches!(part, Component::Normal(_)))
-        || path
-            .split('/')
-            .any(|part| part.eq_ignore_ascii_case(".git") || part.starts_with(".auracode-revert-"))
+        || path.split('/').any(|part| {
+            [".git", ".claude", ".codex", ".pi", ".omp", ".grok"]
+                .iter()
+                .any(|name| part.eq_ignore_ascii_case(name))
+                || part.starts_with(".auracode-revert-")
+        })
     {
         return Err(CheckpointError::Message(
             "The checkpoint contains an unsupported or unsafe file path.".into(),
@@ -128,8 +132,20 @@ pub(super) fn read(root: &Path, relative: &str) -> Result<Option<(Fingerprint, V
     }
     // Even if a directory changes after the metadata check, capability-relative open cannot
     // traverse beyond root. Metadata from the opened handle is authoritative for mode/size.
-    let directory = cap_std::fs::Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
-    let file = directory.open(relative)?.into_std();
+    let mut directory = cap_std::fs::Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
+    let mut components = Path::new(relative).components().peekable();
+    while let Some(component) = components.next() {
+        if components.peek().is_none() {
+            break;
+        }
+        directory = directory.open_dir_nofollow(component.as_os_str())?;
+    }
+    let name = Path::new(relative)
+        .file_name()
+        .ok_or_else(|| CheckpointError::Message("The checkpoint path has no file name.".into()))?;
+    let mut options = cap_std::fs::OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    let file = directory.open_with(name, &options)?.into_std();
     let meta = file.metadata()?;
     if !meta.is_file() || meta.len() > FILE_LIMIT as u64 {
         return Err(CheckpointError::Message(format!(

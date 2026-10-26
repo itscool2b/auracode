@@ -41,6 +41,7 @@ async fn headless(machine: &Machine, driver: ScriptedDriver) -> Headless {
     let redactor = Arc::new(Redactor::standard());
     let (spawner, _) = FakeSpawner::new();
     headless.manager = SessionManager::new(ManagerDeps {
+        checkpoints: None,
         store: Arc::clone(&headless.store),
         env: Arc::clone(&headless.env),
         spawner,
@@ -48,7 +49,13 @@ async fn headless(machine: &Machine, driver: ScriptedDriver) -> Headless {
         drivers: ScriptedDriverFactory::new(vec![driver]),
         logs: LogFactory::new(machine.path("logs"), Arc::clone(&redactor), rt.clone()),
         redactor,
-        device_id: "test-device".into(),
+        device_id: aura_core::device::DeviceIdentity::load_or_create(
+            &aura_core::paths::DataRoot::at(&machine.profile_root),
+        )
+        .expect("fixture device")
+        .identity()
+        .device_id
+        .clone(),
         app_version: "test".into(),
         limits: ManagerLimits::STANDARD,
         timings: SessionTimings::STANDARD,

@@ -66,6 +66,10 @@ struct Operation {
 }
 
 impl Checkpoints {
+    #[cfg(test)]
+    pub(crate) async fn hold_for_test(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.gate.lock().await
+    }
     pub fn new(
         profile: &Profile,
         env: Arc<EnvResolver>,
@@ -272,6 +276,14 @@ impl Checkpoints {
         let _guard = self.gate.lock().await;
         let manifest = self.load(chat_id, folder_id, folder, checkpoint_id)?;
         let operation = self.operation(folder_id, &manifest.root, false).await?;
+        let current = self.current(&operation, &manifest).await?;
+        if current.excluded.contains(path)
+            || (!manifest.files.contains_key(path) && !current.files.contains_key(path))
+        {
+            return Err(CheckpointError::Message(
+                "This file is outside the checkpoint's reviewable files.".into(),
+            ));
+        }
         let before = match manifest.files.get(path) {
             Some(file) => Some(self.blob(&operation, &manifest.root, file).await?),
             None => None,
@@ -353,22 +365,7 @@ impl Checkpoints {
             "--exclude=.grok".into(),
             "-z".into(),
         ];
-        for protected in operation
-            .git
-            .protected
-            .iter()
-            .map(PathBuf::as_path)
-            .chain(self.root.parent())
-        {
-            let protected = if protected.is_absolute() {
-                protected.to_path_buf()
-            } else {
-                root.join(protected)
-            };
-            let protected = std::fs::canonicalize(&protected).unwrap_or(protected);
-            if root.starts_with(&protected) {
-                return Err(CheckpointError::Message("Agent configuration and auracode profile folders cannot be checkpoint workspaces.".into()));
-            }
+        for protected in self.protected_paths(operation, root)? {
             if let Ok(relative) = protected.strip_prefix(root) {
                 let relative = relative.to_string_lossy().replace('\\', "/");
                 // Git exclude patterns quote metacharacters from the actual directory name.
@@ -393,16 +390,56 @@ impl Checkpoints {
         scan::paths(&bytes)
     }
 
+    fn protected_paths(&self, operation: &Operation, root: &Path) -> Result<Vec<PathBuf>> {
+        let mut paths = Vec::new();
+        for protected in operation
+            .git
+            .protected
+            .iter()
+            .map(PathBuf::as_path)
+            .chain(self.root.parent())
+        {
+            let protected = if protected.is_absolute() {
+                protected.to_path_buf()
+            } else {
+                root.join(protected)
+            };
+            let protected = std::fs::canonicalize(&protected).unwrap_or(protected);
+            if root.starts_with(&protected) {
+                return Err(CheckpointError::Message("Agent configuration and auracode profile folders cannot be checkpoint workspaces.".into()));
+            }
+            paths.push(protected);
+        }
+        Ok(paths)
+    }
+
     async fn current(&self, operation: &Operation, manifest: &Manifest) -> Result<scan::Scan> {
         let mut paths = self.paths(operation, &manifest.root).await?;
         // A newly added ignore rule must not make a previously saved file appear deleted.
         paths.extend(manifest.files.keys().cloned());
         paths.sort();
         paths.dedup();
+        let protected = self.protected_paths(operation, &manifest.root)?;
+        let mut excluded = std::collections::BTreeSet::new();
+        paths.retain(|path| {
+            if protected
+                .iter()
+                .any(|prefix| manifest.root.join(path).starts_with(prefix))
+            {
+                excluded.insert(path.clone());
+                false
+            } else {
+                true
+            }
+        });
         let root = manifest.root.clone();
-        tokio::task::spawn_blocking(move || scan::collect(&root, &paths, None))
-            .await
-            .map_err(|_| CheckpointError::Message("Reading changed files failed.".into()))?
+        tokio::task::spawn_blocking(move || {
+            let mut current = scan::collect(&root, &paths, None)?;
+            current.excluded.extend(excluded);
+            Ok(current)
+        })
+        .await
+        .map_err(|_| CheckpointError::Message("Reading changed files failed.".into()))?
     }
 
     fn load(
