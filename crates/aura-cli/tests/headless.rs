@@ -234,7 +234,14 @@ mod setup {
         .expect_err("unknown");
         assert_eq!(
             error.to_string(),
-            "auracode doesn't know an agent called \"gemini\"; the agents are hermes, claude, claude-acp, codex-acp, pi, mock"
+            format!(
+                "auracode doesn't know an agent called \"gemini\"; the agents are {}",
+                aura_agents::catalog()
+                    .iter()
+                    .map(|spec| spec.id)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         );
         headless.shutdown().await;
     }

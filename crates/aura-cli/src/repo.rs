@@ -194,7 +194,10 @@ fn npm_adapters() -> Vec<(&'static str, &'static str, &'static str)> {
                 bin,
                 ..
             } => Some((*package, *version, *bin)),
-            Recipe::Binary { .. } | Recipe::NativeBinary { .. } | Recipe::Builtin => None,
+            Recipe::Binary { .. }
+            | Recipe::NativeBinary { .. }
+            | Recipe::QualifiedBinary { .. }
+            | Recipe::Builtin => None,
         })
         .collect()
 }

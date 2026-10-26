@@ -198,6 +198,12 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   The last executed driver run passed 362 tests. Application Control subsequently blocked the
   newly linked test executables; the two newest callback regressions and doc-check compile but
   await branch CI execution. No binaries or security policy were changed to bypass the block.
+- The first ACP branch CI exposed omitted qualified-binary match arms in CLI probes and repository
+  inspection, plus the new spike report's required status/table format. Those integration fixes
+  are applied; catalog assertions now derive expected IDs from the shared catalog so combined Pi
+  integration does not retain a stale agent list. CLI all-target Clippy and its unknown-agent
+  regression pass. Desktop test compilation remains blocked by Application Control build scripts;
+  final combined CI remains pending.
 
 ## Decisions and constraints
 
