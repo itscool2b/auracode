@@ -436,7 +436,7 @@ impl Smoke<'_> {
         if scenario == Scenario::Permission {
             match self.chat.lists().await {
                 Ok(lists)
-                    if lists.capabilities.is_some_and(|capabilities| {
+                    if lists.capabilities.as_ref().is_some_and(|capabilities| {
                         !capabilities.permissions
                             || !capabilities.autonomy_levels.contains(&Autonomy::Ask)
                     }) =>
