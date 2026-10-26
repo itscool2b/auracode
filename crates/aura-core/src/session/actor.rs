@@ -2531,8 +2531,8 @@ impl ChatActor {
                     let idle = self
                         .driver
                         .as_ref()
-                        .is_none_or(|driver| driver.run_idle != Some(false))
-                        && !self.normalizer.has_open_requests();
+                        .and_then(|driver| driver.run_idle)
+                        .is_none_or(|idle| idle && !self.normalizer.has_open_requests());
                     self.set_status(
                         if idle {
                             SessionStatus::Ready

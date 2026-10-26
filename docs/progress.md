@@ -1269,3 +1269,15 @@ account-feature core all-target Clippy pass. No real profile or credential store
 Encrypted checkpoints, recovery UI, ledger projection/scheduling and account readiness remain
 pending; production account sessions must wait for that remaining wiring.
 
+
+## Hosted demo-agent regression fixes
+
+The first combined Windows run exposed an outdated empty-PATH desktop fixture after checkpoints
+became mandatory. It now keeps agent detection on an empty PATH and gives only the checkpoint helper
+a fixed Git directory with a fixture HOME. The prompt acknowledgment correctly describes its wait
+for checkpoint capture. A separate core defect treated a legacy driver's background permission as
+authoritative busy state when a checkpoint finished. Settlement now follows the same opt-in run-state
+rules as normal dispatch; native background work still waits for idle. Five focused checkpoint tests
+and all three real-startup desktop demo tests pass locally on Windows. The background test allows its
+late event to arrive between turns or inside the next turn, while still proving untagged persistence
+after the originating turn and permission survival. No real agent or login was invoked.

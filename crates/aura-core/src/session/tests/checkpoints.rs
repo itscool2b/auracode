@@ -223,3 +223,62 @@ async fn background_work_started_during_capture_keeps_prompt_queued_until_idle()
     handle.emit(DriverEvent::RunState { idle: true });
     handle.wait_for(CommandMatch::Prompt).await;
 }
+
+#[tokio::test]
+async fn a_legacy_background_permission_during_capture_does_not_block_the_next_turn() {
+    use aura_protocol::{PermissionOption, PermissionOptionKind, PermissionRequest};
+    let (driver, handle) = script();
+    let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let service = enable(&mut rig, true);
+    let gate = service.hold_for_test().await;
+    let chat = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("chat");
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let sink = Arc::new(Sink::default());
+    rig.manager
+        .attach(&chat.id, sink.clone())
+        .await
+        .expect("attach");
+    rig.manager
+        .send(&chat.id, "next legacy turn".into())
+        .await
+        .expect("send");
+    status(&rig, &chat.id, SessionStatus::Running).await;
+    handle.emit(DriverEvent::Permission {
+        turn: None,
+        request: PermissionRequest {
+            request_id: "background-during-capture".into(),
+            tool_call_id: None,
+            title: "Background action".into(),
+            kind: None,
+            raw_input: None,
+            content: vec![],
+            locations: vec![],
+            options: vec![PermissionOption {
+                option_id: "allow".into(),
+                kind: PermissionOptionKind::AllowOnce,
+                label: "Allow once".into(),
+            }],
+            truncated: None,
+        },
+    });
+    eventually("legacy background request observed", || {
+        lock(&sink.frames)
+            .iter()
+            .flat_map(|frame| &frame.events)
+            .any(|event| matches!(event, AuraEvent::PermissionRequested(_)))
+    })
+    .await;
+    drop(gate);
+    handle.wait_for(CommandMatch::Prompt).await;
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    assert!(
+        !handle
+            .commands()
+            .iter()
+            .any(|command| matches!(command, LoggedCommand::RespondPermission { .. }))
+    );
+}

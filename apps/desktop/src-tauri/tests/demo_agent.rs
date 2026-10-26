@@ -1,8 +1,8 @@
 //! The demo agent end to end through the desktop's own startup (spec 7.2): `boot` on a fresh data
 //! folder, then `start_chats` with the real chat store, leftover registry, sweep, shared redactor,
 //! protocol logs and session manager, over [`Outside::over_env`], which builds the real detector,
-//! process spawner and `StandardDriverFactory`. Only the env is fixed: its `PATH` is an empty
-//! folder, so detection finds no agent binary, and nothing here runs a real agent or a login shell.
+//! process spawner and `StandardDriverFactory`. Detection uses an empty `PATH`. Checkpoints use a
+//! separate Git-only `PATH` and fixture HOME, so no real agent or login shell is run.
 //!
 //! A chat is created with the demo agent, prompts run to the end of their turns, and the stored
 //! turns are read back through the history API: the same transcript the live frames showed, and
@@ -19,7 +19,9 @@ mod end_to_end {
 
     use aura_core::paths::DataRoot;
     use aura_core::session::{FrameSink, SessionManager, SinkGone};
-    use aura_process::{EnvKey, EnvMap, EnvResolver, EnvSource, ResolvedEnv};
+    use aura_process::{
+        EnvKey, EnvMap, EnvResolver, EnvSource, ResolvedEnv, find_exe, process_env,
+    };
     use aura_protocol::session::{Availability, HistoryItem, HistoryPage};
     use aura_protocol::{
         AuraEvent, Autonomy, EventBatch, NoticeLevel, ResolvedBy, SessionStatus, StopReason,
@@ -49,6 +51,7 @@ mod end_to_end {
         root: DataRoot,
         folder: PathBuf,
         env: Arc<EnvResolver>,
+        helper_env: Arc<EnvResolver>,
     }
 
     impl Rig {
@@ -58,11 +61,15 @@ mod end_to_end {
             let folder = dir.path().join("work");
             std::fs::create_dir_all(&folder).expect("chat folder");
             let env = no_agents_env(dir.path());
+            let git = find_exe("git", &process_env())
+                .expect("Git is required for checkpoint integration");
+            let helper_env = fixed_env(dir.path(), git.parent().expect("Git folder").to_owned());
             Rig {
                 dir,
                 root,
                 folder,
                 env,
+                helper_env,
             }
         }
 
@@ -76,12 +83,17 @@ mod end_to_end {
             let mut booted = boot_free(&self.root).await;
             assert_eq!(booted.fatal, None, "startup failed");
             let env = Arc::clone(&self.env);
+            let helper_env = Arc::clone(&self.helper_env);
             let chats = start_chats(
                 &mut booted,
                 "0.1.0",
                 &Handle::current(),
                 move |registry, _redactor, data_dir, rt| {
-                    Outside::over_env(env, registry, data_dir, rt)
+                    let mut outside = Outside::over_env(env, registry, data_dir, rt);
+                    // Detection must never discover installed agents. Only checkpoint helpers
+                    // need the installed Git directory, and they use the fixture's home.
+                    outside.env = helper_env;
+                    outside
                 },
             )
             .expect("the chats start");
@@ -96,13 +108,20 @@ mod end_to_end {
     /// An env that finds no agent: `PATH` is an empty folder, `HOME` one of the test's own.
     fn no_agents_env(dir: &Path) -> Arc<EnvResolver> {
         let bin = dir.join("empty-bin");
-        let home = dir.join("home");
         std::fs::create_dir_all(&bin).expect("bin folder");
+        fixed_env(dir, bin)
+    }
+
+    fn fixed_env(dir: &Path, bin: PathBuf) -> Arc<EnvResolver> {
+        let home = dir.join("home");
         std::fs::create_dir_all(&home).expect("home folder");
         let mut vars = EnvMap::new();
         vars.insert(EnvKey::from("PATH"), bin.into_os_string());
         vars.insert(EnvKey::from("HOME"), home.clone().into_os_string());
         vars.insert(EnvKey::from("USERPROFILE"), home.into_os_string());
+        if let Some(root) = process_env().get(&EnvKey::from("SystemRoot")) {
+            vars.insert(EnvKey::from("SystemRoot"), root.clone());
+        }
         EnvResolver::fixed(ResolvedEnv {
             vars,
             source: EnvSource::Fallback {
@@ -427,7 +446,10 @@ mod end_to_end {
             .send(&chat.id, echo.clone())
             .await
             .expect("the first prompt is taken");
-        assert!(!first.queued, "a ready agent takes the prompt at once");
+        assert!(
+            first.queued,
+            "the prompt waits for its before-turn checkpoint"
+        );
         wait_for_ended_turns(&chat.view, 1).await;
         wait_for_status(&chats.manager, &chat.id, SessionStatus::Ready).await;
         let second = chats
@@ -539,8 +561,8 @@ mod end_to_end {
     }
 
     /// A14 with the demo agent's `/background` and a prompt queued behind it: the output the agent
-    /// sends after the turn's reply is stored outside any turn, although the next turn already
-    /// runs, and its permission request outlives that turn and can still be answered.
+    /// sends after the turn's reply is stored outside any turn. Depending on checkpoint duration,
+    /// the next turn is preparing or running; the request survives that turn and can be answered.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn background_output_is_stored_outside_any_turn() {
         let rig = Rig::new();
@@ -592,10 +614,9 @@ mod end_to_end {
         assert!(
             matches!(&update.event, AuraEvent::ToolUpdate(update) if update.status == Some(ToolStatus::Completed))
         );
-        let (_, from, to) = &spans[1];
         assert!(
-            (*from..=*to).contains(&update.seq),
-            "it landed inside the second turn's span, untagged: {update:?} in {spans:?}"
+            update.seq > spans[0].2 && request.seq > spans[0].2,
+            "background output follows its originating turn, untagged: {update:?} in {spans:?}"
         );
         assert_tagged(&page, &[update.seq, request.seq]);
         let AuraEvent::PermissionRequested(asked) = &request.event else {
