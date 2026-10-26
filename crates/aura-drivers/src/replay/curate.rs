@@ -8,7 +8,7 @@
 //! order of first appearance, ISO timestamps as `<TIME>`; `t` becomes milliseconds since the first
 //! record.
 
-use std::sync::LazyLock;
+use std::{collections::BTreeMap, sync::LazyLock};
 
 use aura_process::Redactor;
 use regex::Regex;
@@ -127,6 +127,7 @@ pub fn curate(
     }
     // Longest first, so a path holding the home folder is replaced whole.
     needles.sort_by_key(|(needle, _)| std::cmp::Reverse(needle.len()));
+    curate_native_tool_json(&mut records, &needles, &redactor)?;
 
     let first_t = records
         .iter()
@@ -146,6 +147,106 @@ pub fn curate(
     } else {
         Err(CurateError::Unclean { findings })
     }
+}
+
+/// Native tool input is JSON split across arbitrary string boundaries. Redact complete values
+/// before replacing individual records, otherwise an escaped or split home path can survive and
+/// reappear in the replay's tool input. Preserve record order and count; changed inputs necessarily
+/// have synthetic chunk boundaries after redaction. Unchanged inputs retain their original chunks.
+fn curate_native_tool_json(
+    records: &mut [Value],
+    needles: &[(String, String)],
+    redactor: &Redactor,
+) -> Result<(), CurateError> {
+    let mut generations = BTreeMap::<String, usize>::new();
+    let mut groups = BTreeMap::<(String, String, u64), Vec<(usize, usize)>>::new();
+    for (position, record) in records.iter().enumerate() {
+        let message = &record["msg"];
+        if message["type"] != "stream_event" {
+            continue;
+        }
+        let parent = message["parent_tool_use_id"].as_str().unwrap_or_default();
+        let generation = generations.entry(parent.to_owned()).or_default();
+        let event = &message["event"];
+        if event["type"] == "message_start" {
+            *generation += 1;
+        }
+        if event["type"] != "content_block_delta" || event["delta"]["type"] != "input_json_delta" {
+            continue;
+        }
+        let (Some(index), Some(partial)) = (
+            event["index"].as_u64(),
+            event["delta"]["partial_json"].as_str(),
+        ) else {
+            continue;
+        };
+        let id = message["api_message_id"]
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("message-{generation}"));
+        groups
+            .entry((parent.to_owned(), id, index))
+            .or_default()
+            .push((position, partial.len()));
+    }
+    for (number, positions) in groups.values().enumerate() {
+        let original = positions
+            .iter()
+            .filter_map(|(position, _)| {
+                records[*position]
+                    .pointer("/msg/event/delta/partial_json")?
+                    .as_str()
+            })
+            .collect::<String>();
+        let curated = if let Ok(mut input) = serde_json::from_str::<Value>(&original) {
+            let before = input.clone();
+            redactor.redact_value(&mut input);
+            replace_strings(&mut input, needles);
+            if input == before {
+                original.clone()
+            } else {
+                input.to_string()
+            }
+        } else {
+            // Interrupted tool inputs may never form valid JSON. Replace the JSON-escaped spelling
+            // first, then redact free text. A remaining recognizable path/token fails closed below.
+            let mut partial = original.clone();
+            for (needle, placeholder) in needles {
+                let escaped = Value::String(needle.clone()).to_string();
+                partial = partial.replace(&escaped[1..escaped.len() - 1], placeholder);
+            }
+            let mut partial = Value::String(redactor.redact_text(&partial).into_owned());
+            replace_strings(&mut partial, needles);
+            partial.as_str().unwrap_or_default().to_owned()
+        };
+        let findings = scan_clean(&curated);
+        if !findings.is_empty() {
+            return Err(CurateError::Unclean {
+                findings: findings
+                    .into_iter()
+                    .map(|finding| format!("native tool input block {}: {finding}", number + 1))
+                    .collect(),
+            });
+        }
+        if curated == original {
+            continue;
+        }
+        let mut start = 0;
+        for (chunk, (position, length)) in positions.iter().enumerate() {
+            let mut end = if chunk + 1 == positions.len() {
+                curated.len()
+            } else {
+                (start + length).min(curated.len())
+            };
+            while !curated.is_char_boundary(end) {
+                end -= 1;
+            }
+            records[*position]["msg"]["event"]["delta"]["partial_json"] =
+                Value::String(curated[start..end].to_owned());
+            start = end;
+        }
+    }
+    Ok(())
 }
 
 /// What makes a fixture unfit to commit: email addresses, token shapes, home folders. Each finding
@@ -178,15 +279,40 @@ pub fn encode_project_dir(path: &str) -> String {
         .collect()
 }
 
-/// Every `sessionId` value, and the start note's `resume`, in order of first appearance.
+/// Session identities in ACP fields and native Claude envelopes, in first-appearance order.
 fn collect_sessions(value: &Value, sessions: &mut Vec<String>) {
     let mut note = |id: &str| {
         if !id.is_empty() && !sessions.iter().any(|known| known == id) {
             sessions.push(id.to_owned());
         }
     };
-    if let Some(resume) = value.pointer("/note/start/resume").and_then(Value::as_str) {
-        note(resume);
+    if let Some(start) = value.pointer("/note/start") {
+        let native = start["agent_id"] == "claude" || start["dialect"] == "claude";
+        if let Some(resume) = start["resume"].as_str()
+            && (!native || uuid::Uuid::parse_str(resume).is_ok())
+        {
+            note(resume);
+        }
+        if native {
+            for id in [
+                start["native_session_id"].as_str(),
+                start["native_start"]["new_session_id"].as_str(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if uuid::Uuid::parse_str(id).is_ok() {
+                    note(id);
+                }
+            }
+        }
+    }
+    if let Some(message) = value.get("msg")
+        && message.get("jsonrpc").is_none()
+        && message.get("type").is_some()
+        && let Some(id) = message["session_id"].as_str()
+    {
+        note(id);
     }
     walk_objects(value, &mut |object| {
         if let Some(id) = object.get("sessionId").and_then(Value::as_str) {
@@ -497,5 +623,135 @@ mod tests {
         let text = log(&[json!({"d": "err", "line": "the bob ran in /srv/x"})]);
         let curated = curate(&text, "", "/srv/x", "bob", "").expect("clean");
         assert!(curated.contains("the bob ran in <CWD>"), "{curated}");
+    }
+    #[test]
+    fn native_session_envelopes_and_start_ids_share_placeholders() {
+        let main = "019a0000-0000-7000-8000-000000000001";
+        let fork = "019a0000-0000-7000-8000-000000000002";
+        let text = log(&[
+            json!({"d":"note","note":{"start":{"agent_id":"claude","resume":main,"native_session_id":fork,"native_start":{"new_session_id":fork,"fork":true}}}}),
+            json!({"d":"in","msg":{"type":"system","subtype":"init","session_id":fork}}),
+            json!({"d":"out","msg":{"type":"user","session_id":fork,"message":{"content":"hello"}}}),
+            json!({"d":"in","msg":{"type":"control_request","request":{"input":{"session_id":"opaque-tool-value"}}}}),
+        ]);
+        let text = curate(&text, "", "", "", "").expect("native curation");
+        let lines = text
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).expect("JSON"))
+            .collect::<Vec<_>>();
+        assert_eq!(lines[0]["note"]["start"]["resume"], "<SESSION_1>");
+        assert_eq!(
+            lines[0]["note"]["start"]["native_session_id"],
+            "<SESSION_2>"
+        );
+        assert_eq!(
+            lines[0]["note"]["start"]["native_start"]["new_session_id"],
+            "<SESSION_2>"
+        );
+        assert_eq!(lines[1]["msg"]["session_id"], "<SESSION_2>");
+        assert_eq!(lines[2]["msg"]["session_id"], "<SESSION_2>");
+        assert_eq!(
+            lines[3]["msg"]["request"]["input"]["session_id"],
+            "opaque-tool-value"
+        );
+    }
+
+    fn partial(parent: Option<&str>, index: u64, text: &str) -> Value {
+        json!({"d":"in","msg":{"type":"stream_event","parent_tool_use_id":parent,
+            "event":{"type":"content_block_delta","index":index,
+                "delta":{"type":"input_json_delta","partial_json":text}}}})
+    }
+
+    fn input_text(records: &[Value], parent: Option<&str>) -> String {
+        records
+            .iter()
+            .filter(|record| record["msg"]["parent_tool_use_id"].as_str() == parent)
+            .filter_map(|record| {
+                record
+                    .pointer("/msg/event/delta/partial_json")
+                    .and_then(Value::as_str)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn native_split_tool_inputs_redact_escaped_paths_without_mixing_subagents() {
+        let windows_home = r"C:\Users\someone";
+        let windows_cwd = r"C:\Users\someone\scratch";
+        let main =
+            json!({"file_path":format!(r"{windows_cwd}\a.txt"),"content":"héllo"}).to_string();
+        let subagent = json!({"file_path":format!(r"{windows_home}\b.txt")}).to_string();
+        let split_main = main.find("Users").expect("path") + 2;
+        let split_subagent = subagent.find("someone").expect("user") + 3;
+        let records = [
+            partial(None, 0, &main[..split_main]),
+            partial(Some("tool-child"), 0, &subagent[..split_subagent]),
+            partial(None, 0, &main[split_main..]),
+            partial(Some("tool-child"), 0, &subagent[split_subagent..]),
+        ];
+        let curated = curate(
+            &log(&records),
+            windows_home,
+            windows_cwd,
+            "someone",
+            "host-name",
+        )
+        .expect("curated native input");
+        let curated: Vec<Value> = curated
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("JSON"))
+            .collect();
+        assert_eq!(curated.len(), records.len());
+        let main = input_text(&curated, None);
+        let subagent = input_text(&curated, Some("tool-child"));
+        assert_eq!(
+            serde_json::from_str::<Value>(&main).expect("main JSON"),
+            json!({"file_path":r"<CWD>\a.txt","content":"héllo"})
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&subagent).expect("subagent JSON"),
+            json!({"file_path":r"<HOME>\b.txt"})
+        );
+        assert!(scan_clean(&main).is_empty());
+        assert!(scan_clean(&subagent).is_empty());
+    }
+
+    #[test]
+    fn native_tool_json_keeps_unchanged_chunks_and_redacts_interrupted_values() {
+        let safe = [
+            partial(None, 0, "{\"text\": \""),
+            partial(None, 0, "safe\"}"),
+        ];
+        let curated = curate(&log(&safe), "", "", "", "").expect("safe input");
+        assert_eq!(curated, log(&safe));
+
+        let incomplete = [
+            partial(None, 0, r#"{"file_path":"C:\\Us"#),
+            partial(None, 0, r#"ers\\someone\\scratch\\a.txt"#),
+        ];
+        let curated = curate(
+            &log(&incomplete),
+            r"C:\Users\someone",
+            r"C:\Users\someone\scratch",
+            "someone",
+            "",
+        )
+        .expect("interrupted input");
+        let records = curated
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("JSON"))
+            .collect::<Vec<_>>();
+        assert_eq!(input_text(&records, None), r#"{"file_path":"<CWD>\\a.txt"#);
+    }
+
+    #[test]
+    fn native_split_unknown_home_path_is_refused_without_disclosing_it() {
+        let records = [
+            partial(None, 0, "{\"path\":\"/ho"),
+            partial(None, 0, "me/other/file\"}"),
+        ];
+        let error = curate(&log(&records), HOME, CWD, "someone", "").expect_err("unknown home");
+        assert!(error.to_string().contains("native tool input block"));
+        assert!(!error.to_string().contains("other"));
     }
 }

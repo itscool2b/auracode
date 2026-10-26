@@ -228,6 +228,181 @@ mod replay {
             }
             _ => {}
         }
+        if fixture.name.starts_with("recorded-") {
+            violations.extend(recorded_native_violations(fixture, events));
+        }
+        violations
+    }
+
+    fn recorded_native_violations(fixture: &Fixture, events: &[DriverEvent]) -> Vec<String> {
+        use aura_protocol::{StopReason, ToolStatus, session::ConfigKind};
+        let mut violations = Vec::new();
+        let endings: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                DriverEvent::TurnEnded {
+                    stop_reason, usage, ..
+                } => Some((stop_reason, usage)),
+                _ => None,
+            })
+            .collect();
+        let expected_turns = if fixture.name == "recorded-permission" {
+            2
+        } else {
+            1
+        };
+        let expected_reason = if fixture.name == "recorded-interrupt" {
+            StopReason::Cancelled
+        } else {
+            StopReason::EndTurn
+        };
+        if endings.len() != expected_turns
+            || endings
+                .iter()
+                .any(|(reason, _)| **reason != expected_reason)
+        {
+            violations.push(
+                "recorded prompts did not end exactly once with their recorded outcome".into(),
+            );
+        }
+        let text: String = events
+            .iter()
+            .filter_map(|event| match event {
+                DriverEvent::Event {
+                    event: AuraEvent::MessageDelta { text, .. },
+                    ..
+                } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        let committed: String = fixture
+            .records
+            .iter()
+            .filter_map(|record| match record {
+                FixtureRecord::In(message)
+                    if message["type"] == "assistant"
+                        && message["parent_tool_use_id"].is_null() =>
+                {
+                    message
+                        .pointer("/message/content")
+                        .and_then(Value::as_array)
+                }
+                _ => None,
+            })
+            .flatten()
+            .filter(|block| block["type"] == "text")
+            .filter_map(|block| block["text"].as_str())
+            .collect();
+        if fixture.name != "recorded-interrupt" && text != committed {
+            violations.push(
+                "streamed and committed assistant text duplicated or lost recorded content".into(),
+            );
+        }
+        if events.iter().any(|event| matches!(event, DriverEvent::Options(options) if options.iter().any(|option|
+            matches!(&option.kind, ConfigKind::Select { current, choices } if !choices.iter().any(|choice| choice.value == *current))))) {
+            violations.push("recorded native metadata advertised a current value outside its choices".into());
+        }
+        let tools: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                DriverEvent::Event {
+                    event: AuraEvent::ToolCall(call),
+                    ..
+                } => Some(call),
+                _ => None,
+            })
+            .collect();
+        let tool_finished = |index: usize, status| {
+            tools.get(index).is_some_and(|tool| {
+                events.iter().any(|event| {
+                    matches!(event, DriverEvent::Event { event: AuraEvent::ToolUpdate(update), .. }
+                if update.tool_call_id == tool.tool_call_id && update.status == Some(status))
+                })
+            })
+        };
+        match fixture.name.as_str() {
+            "recorded-basic" if text != "ok" => violations.push("basic response changed".into()),
+            "recorded-permission" => {
+                let decisions: Vec<_> = fixture
+                    .records
+                    .iter()
+                    .filter_map(|record| match record {
+                        FixtureRecord::Out(message) if message["type"] == "control_response" => {
+                            message
+                                .pointer("/response/response/behavior")
+                                .and_then(Value::as_str)
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                let permissions = events
+                    .iter()
+                    .filter(|event| matches!(event, DriverEvent::Permission { .. }))
+                    .count();
+                if decisions != ["deny", "allow"]
+                    || permissions != 2
+                    || tools.len() != 2
+                    || tools[0].tool_name.as_deref() != Some("Bash")
+                    || tools[1].tool_name.as_deref() != Some("Write")
+                    || !tool_finished(0, ToolStatus::Failed)
+                    || !tool_finished(1, ToolStatus::Completed)
+                {
+                    violations.push(
+                        "recorded deny then allow did not preserve both tool lifecycles".into(),
+                    );
+                }
+            }
+            "recorded-interrupt" | "recorded-after-interrupt" if text != "1" => {
+                violations
+                    .push("recorded interrupt partial text or next-turn memory changed".into());
+            }
+            "recorded-full-auto" => {
+                if events
+                    .iter()
+                    .any(|event| matches!(event, DriverEvent::Permission { .. }))
+                    || tools.len() != 1
+                    || tools[0].tool_name.as_deref() != Some("Write")
+                    || !tool_finished(0, ToolStatus::Completed)
+                {
+                    violations.push("native bypassPermissions no longer completed its recorded Write without a callback".into());
+                }
+            }
+            "recorded-resume"
+                if text != "aura-perm.txt\naura-auto.txt"
+                    || !fixture
+                        .start()
+                        .is_some_and(|start| start["resume"].is_string()) =>
+            {
+                violations
+                    .push("recorded resume did not preserve the saved file-name response".into());
+            }
+            "recorded-thinking" => {
+                let thoughts: Vec<_> = events
+                    .iter()
+                    .filter_map(|event| match event {
+                        DriverEvent::Event {
+                            event: AuraEvent::ThoughtDelta { thought_id, text },
+                            ..
+                        } => Some((thought_id, text)),
+                        _ => None,
+                    })
+                    .collect();
+                let completion = thoughts.first().is_some_and(|(id, _)| events.iter().any(|event|
+                    matches!(event, DriverEvent::Event { event: AuraEvent::ThoughtCompleted { thought_id, .. }, .. } if thought_id == *id)));
+                if thoughts.len() != 1
+                    || thoughts.iter().any(|(_, text)| !text.is_empty())
+                    || !completion
+                    || !endings.iter().any(|(_, usage)| {
+                        usage
+                            .as_ref()
+                            .is_some_and(|usage| usage.reasoning_tokens == Some(302))
+                    })
+                {
+                    violations.push("withheld reasoning must retain one empty completed thought and the recorded 302 reasoning tokens".into());
+                }
+            }
+            _ => {}
+        }
         violations
     }
 
@@ -299,6 +474,13 @@ mod replay {
             "bad-late-controls",
             "telemetry-merge",
             "telemetry-coalesced",
+            "recorded-basic",
+            "recorded-permission",
+            "recorded-interrupt",
+            "recorded-after-interrupt",
+            "recorded-full-auto",
+            "recorded-resume",
+            "recorded-thinking",
         ] {
             assert!(
                 native_names.contains(scenario),

@@ -999,11 +999,15 @@ impl Smoke<'_> {
             return;
         }
         let mut lines = vec!["Protocol logs, and the fixture each can become:".to_owned()];
+        let fixture_folder = if self.spec.kind == DriverKind::Claude {
+            "claude".to_owned()
+        } else {
+            format!("acp/{}", self.spec.id)
+        };
         for (log, name) in &self.logs {
             lines.push(format!(
-                "  aura-cli fixture {} --scenario {name} --out crates/aura-drivers/tests/fixtures/acp/{}/{name}.jsonl",
-                log.display(),
-                self.spec.id
+                "  aura-cli fixture {} --scenario {name} --out crates/aura-drivers/tests/fixtures/{fixture_folder}/{name}.jsonl",
+                log.display()
             ));
         }
         self.report.note(lines.join("\n"));

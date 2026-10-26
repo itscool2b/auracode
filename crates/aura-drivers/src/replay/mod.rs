@@ -64,6 +64,14 @@ fn curated_session_id(id: &str) -> bool {
             !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
         })
 }
+fn curated_session_uuid(id: &str) -> Option<String> {
+    let number = id
+        .strip_prefix("<SESSION_")?
+        .strip_suffix('>')?
+        .parse::<u64>()
+        .ok()?;
+    (number <= 0xffff_ffff_ffff).then(|| format!("019a0000-0000-7000-8000-{number:012x}"))
+}
 
 /// How long, in virtual time, a replay may take after its last record before it is given up.
 pub const REPLAY_END_LIMIT: Duration = Duration::from_secs(30 * 60);
@@ -149,10 +157,13 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
         }
         _ => BTreeMap::new(),
     };
-    let resume = start
-        .get("resume")
-        .and_then(Value::as_str)
-        .map(str::to_owned);
+    let resume = start.get("resume").and_then(Value::as_str).map(|id| {
+        if native {
+            curated_session_uuid(id).unwrap_or_else(|| id.to_owned())
+        } else {
+            id.to_owned()
+        }
+    });
     let mut native_start: NativeStartOptions = match start.get("native_start") {
         Some(value) => serde_json::from_value(value.clone())
             .map_err(|error| format!("native_start: {error}"))?,
@@ -165,12 +176,19 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
             .as_deref()
             .is_none_or(curated_session_id)
     {
+        let recorded = native_start
+            .new_session_id
+            .as_deref()
+            .or_else(|| start["native_session_id"].as_str());
         native_start.new_session_id = Some(
-            start["native_session_id"]
-                .as_str()
-                .filter(|id| uuid::Uuid::parse_str(id).is_ok())
-                .unwrap_or(REPLAY_NATIVE_SESSION_ID)
-                .into(),
+            recorded
+                .and_then(|id| {
+                    uuid::Uuid::parse_str(id)
+                        .ok()
+                        .map(|id| id.to_string())
+                        .or_else(|| curated_session_uuid(id))
+                })
+                .unwrap_or_else(|| REPLAY_NATIVE_SESSION_ID.into()),
         );
     }
     Ok(SessionSetup {
@@ -551,6 +569,20 @@ mod tests {
         let resumed = setup_from_start(&start).expect("resume setup");
         assert_eq!(resumed.resume.as_deref(), Some(source));
         assert_eq!(resumed.native_start.new_session_id, None);
+        start["resume"] = json!("<SESSION_2>");
+        start["native_session_id"] = json!("<SESSION_2>");
+        let resumed = setup_from_start(&start).expect("curated resume setup");
+        assert_eq!(
+            resumed.resume.as_deref(),
+            Some("019a0000-0000-7000-8000-000000000002")
+        );
+        start["native_start"] = json!({"fork":true,"new_session_id":"<SESSION_3>"});
+        let fork = setup_from_start(&start).expect("curated fork setup");
+        assert_eq!(
+            fork.native_start.new_session_id.as_deref(),
+            Some("019a0000-0000-7000-8000-000000000003")
+        );
+        assert_ne!(fork.native_start.new_session_id, fork.resume);
     }
 
     #[tokio::test(start_paused = true)]
