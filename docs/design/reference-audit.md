@@ -24,6 +24,9 @@ dock; a title-led header with session controls in a disclosure; and a single com
 model and autonomy controls. Pending permissions replace the composer while preserving its draft.
 Production theme selection is removed. The reference fixture has been visually inspected in dark.
 
-This is a structural checkpoint, not completed visual acceptance. Project management, the full
-three-column handoff picker, Changes panel, onboarding, settings and website are still being wired
-to their Rust implementations. Final responsive, accessibility and native acceptance remains pending.
+Project management, the three-column handoff picker, Changes panel, onboarding, settings and website
+are implemented. Their focused browser gates exercise production components with synthetic native
+responses and include accessibility and responsive checks. Local import, export, project terminals,
+Git initialization and interrupted profile recovery now use the same dark modal language. Account
+lifecycle and portable folder resolution are still being completed. Final integrated visuals and
+native Windows/macOS acceptance remain pending; the browser fixtures do not establish native parity.

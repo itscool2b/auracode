@@ -66,7 +66,7 @@ jobs:
     needs: bindings
     if: ${{ !cancelled() && (needs.bindings.result == 'success' || needs.bindings.result == 'skipped') }}
     runs-on: macos-26
-    timeout-minutes: 25
+    timeout-minutes: 60
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -108,14 +108,13 @@ jobs:
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: pnpm test
 
-      - name: Build and verify the Rust cloud runtime and website
+      - name: Build and verify the Rust cloud runtime
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: |
           rustup target add wasm32-unknown-unknown
           cargo install worker-build --version 0.8.7 --locked
           pnpm --filter @auracode/api worker:build
           pnpm --filter @auracode/api worker:test
-          pnpm --filter @auracode/web build
 
       - name: Install browser test engines
         id: browsers
@@ -129,6 +128,30 @@ jobs:
       - name: Check settings and explicit update controls
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         run: pnpm --filter @auracode/desktop check:settings
+
+      - name: Check Library and configuration recovery
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        run: |
+          pnpm --filter @auracode/desktop exec node scripts/check-library.mjs
+          pnpm --filter @auracode/desktop exec node scripts/check-config-recovery.mjs
+
+      - name: Check website accounts and verified release downloads
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        run: |
+          pnpm --filter @auracode/web test:release
+          pnpm --filter @auracode/web test:browser
+
+      - name: Keep account, Library and website browser evidence
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: account-library-web-browser
+          path: |
+            target/library-browser
+            target/config-recovery-browser
+            target/web-checks
+            target/release-preview-*/*.png
+          retention-days: 7
 
       - name: Keep Orbit browser evidence
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}

@@ -156,6 +156,8 @@ pnpm test
 pnpm --filter @auracode/desktop check:orbit
 pnpm --filter @auracode/desktop check:settings
 pnpm --filter @auracode/desktop check:setup
+pnpm --filter @auracode/desktop exec node scripts/check-library.mjs
+pnpm --filter @auracode/desktop exec node scripts/check-config-recovery.mjs
 pnpm --filter @auracode/web test:release
 pnpm --filter @auracode/web test:browser
 pnpm --filter @auracode/desktop tauri build --debug --no-bundle
@@ -205,9 +207,10 @@ qualified Windows ARM64 and both Mac architecture environments, and an unlocked 
 manual performance/privacy checks. No credential, certificate or account configuration was read or
 changed to prepare this tooling. Publication and native signed-upgrade acceptance remain pending.
 
-Remaining source work found in the M2-M5 audit is separate from those prerequisites: a reviewed
-non-Git initialize path, general project terminal and editor controls, and capability-qualified extra
-folder forwarding. These are assigned implementation tasks, not owner blockers. Exact older-message
+The M2-M5 audit's reviewed non-Git initialization, project terminal/editor controls and
+capability-qualified extra folder forwarding are implemented and have focused local verification.
+Their final integrated Windows/macOS qualification remains pending. Account lifecycle recovery and
+portable folder resolution are still being completed before that final batch. Exact older-message
 native truncation/fork and Pi steering remain unsupported where the recorded protocol cannot safely
 identify the requested boundary; the visible reviewed handoff keeps the source conversation intact.
 
