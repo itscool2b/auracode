@@ -1671,6 +1671,17 @@ application, secret-free MCP extraction and desktop orchestration remain pending
   Independent read-only review found the cached-shutdown report issue, fixed in 8567390, and no
   confirmed overwrite blocker. No real remote clone, installer, auth command, model prompt, push or
   CI dispatch was run. Clone source is reviewable; native/binding acceptance is still pending.
+The Account writer can now bind its confirmed account/device key and seal project, portable folder
+and chat metadata in the same transaction as each local edit. Per-field clocks retain untouched
+values; tombstones remain explicit and local clock rollback does not discard edits. Folder paths,
+setup recipes, native sessions, prompt queues and drafts are excluded. Embedded credentials and
+local paths in Git remotes are not projected. Outbox SQL failures retain their SQLite error class
+so disk-full and busy errors keep the writer's existing retry behavior.
+
+All twelve focused sync/Account-writer tests and Account-feature all-target Clippy pass, including
+transaction rollback, reopen durability, field clocks, privacy exclusion and Local refusal. This
+is a storage checkpoint: desktop attachment, remote row projection, transcript chunks and network
+scheduling remain pending. No network or agent call was made by these tests.
 ## M4 setup schema checkpoint, 2026-10-26
 
 Schema 8 adds device-local worktree setup recipes keyed by folder and device in the profile database. Account profiles use the existing SQLCipher connection; the table is outside sync projection. It stores paths and explicit command arguments only, never copied file contents, terminal output or execution grants. Existing database migration backup behavior remains in use. The separate reviewed copy and terminal service is still being verified and is not a completed M4 acceptance claim.

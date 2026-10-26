@@ -10,6 +10,33 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use std::collections::{BTreeMap, HashSet};
 
 use crate::store::Store;
+pub(crate) mod capture;
+
+/// An unlocked Account writer's identity and encryption authority. Never exported through IPC.
+#[derive(Clone)]
+pub struct SyncContext {
+    pub identity: SyncIdentity,
+    pub key: std::sync::Arc<AccountKey>,
+}
+impl SyncContext {
+    pub(crate) fn initialize(&self, store: &mut Store) -> Result<()> {
+        let _ = SyncLedger::new(store, self.identity.clone(), &self.key)?;
+        capture::install(store.conn())?;
+        // Existing encrypted profiles may predate writer integration. Seed bounded transactions;
+        // this reads portable metadata rows only, never the transcript or native credential files.
+        loop {
+            let tx = store
+                .conn_mut()
+                .transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let captured = capture::pending(&tx, self, crate::time::now_millis().max(0) as u64)?;
+            tx.commit()?;
+            if captured < capture::BATCH {
+                break;
+            }
+        }
+        Ok(())
+    }
+}
 
 const MAX_CURSOR: u64 = (1 << 53) - 1;
 
@@ -19,6 +46,10 @@ pub enum SyncError {
         "The sync state could not be saved. Its previous cursor and outgoing edits are retained."
     )]
     Database,
+    #[error(
+        "The sync state could not be saved. Its previous cursor and outgoing edits are retained."
+    )]
+    Sqlite(i32),
     #[error("Sync requires the matching unlocked account profile and device identity.")]
     Identity,
     #[error("The sync response contains invalid or inconsistent records.")]
@@ -33,8 +64,10 @@ pub enum SyncError {
     Merge(#[from] merge::MergeError),
 }
 impl From<rusqlite::Error> for SyncError {
-    fn from(_: rusqlite::Error) -> Self {
-        Self::Database
+    fn from(error: rusqlite::Error) -> Self {
+        error
+            .sqlite_error()
+            .map_or(Self::Database, |error| Self::Sqlite(error.extended_code))
     }
 }
 pub type Result<T> = std::result::Result<T, SyncError>;
@@ -371,7 +404,8 @@ fn seal(
         ciphertext: String::new(),
         key_version: identity.key_version,
     };
-    let plain = serde_json::to_vec(metadata).map_err(|_| SyncError::Invalid)?;
+    let plain =
+        zeroize::Zeroizing::new(serde_json::to_vec(metadata).map_err(|_| SyncError::Invalid)?);
     let sealed = crypto::seal_record(key, &context(identity, &record), &plain)?;
     record.nonce = sealed.nonce;
     record.ciphertext = sealed.ciphertext;

@@ -36,6 +36,8 @@ pub(crate) mod organization;
 mod recover;
 pub(crate) mod rows;
 pub(crate) mod search;
+#[cfg(feature = "account-sync")]
+mod sync;
 #[cfg(test)]
 pub(crate) mod test_support;
 pub(crate) mod worktree_setup;

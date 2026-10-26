@@ -38,6 +38,17 @@ pub(crate) fn recover(
     limits: &CompactLimits,
     now: Millis,
 ) -> rusqlite::Result<RecoveryReport> {
+    recover_with(conn, scope, device_id, limits, now, |_| Ok(()))
+}
+
+pub(crate) fn recover_with(
+    conn: &mut Connection,
+    scope: Scope<'_>,
+    device_id: &str,
+    limits: &CompactLimits,
+    now: Millis,
+    mut before_commit: impl FnMut(&Connection) -> rusqlite::Result<()>,
+) -> rusqlite::Result<RecoveryReport> {
     let chats = match scope {
         Scope::All => chats_needing_recovery(conn)?,
         Scope::Chat(chat_id) => vec![chat_id.to_owned()],
@@ -47,6 +58,7 @@ pub(crate) fn recover(
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         match recover_chat(&tx, &chat_id, device_id, limits, now) {
             Ok(chat) => {
+                before_commit(&tx)?;
                 tx.commit()?;
                 report.interrupted_turns += chat.interrupted_turns;
                 report.resolved_requests += chat.resolved_requests;

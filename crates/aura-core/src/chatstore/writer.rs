@@ -141,6 +141,11 @@ pub(crate) enum Work {
 
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
+    #[cfg(feature = "account-sync")]
+    ConfigureSync {
+        context: crate::sync::SyncContext,
+        reply: oneshot::Sender<Result<(), StoreError>>,
+    },
     Flush {
         reply: oneshot::Sender<Result<(), StoreError>>,
     },
@@ -630,6 +635,8 @@ fn replace<T: PartialEq>(slot: &mut T, value: T) -> bool {
 
 fn work_name(work: &Work) -> &'static str {
     match work {
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::ConfigureSync { .. }) => "configure_sync",
         Work::Request(Request::Flush { .. }) => "flush",
         Work::Op(op) => op_name(op),
         Work::Request(Request::CreateChat { .. }) => "create_chat",
@@ -793,6 +800,8 @@ enum Next {
 
 /// The thread that owns the store.
 pub(crate) struct Writer {
+    #[cfg(feature = "account-sync")]
+    sync: Option<crate::sync::SyncContext>,
     shared: Arc<Shared>,
     store: Option<Store>,
     owner: Option<ProfileOwner>,
@@ -813,6 +822,8 @@ impl Writer {
         recovered: watch::Sender<Option<RecoveryReport>>,
     ) -> Writer {
         Writer {
+            #[cfg(feature = "account-sync")]
+            sync: None,
             shared,
             store: Some(store),
             owner: Some(owner),
@@ -1118,6 +1129,8 @@ impl Writer {
             &self.device_id,
             &self.files.attachments,
             &self.shared.config.compact,
+            #[cfg(feature = "account-sync")]
+            self.sync.as_ref(),
         );
         #[cfg(test)]
         if result.is_ok() {
@@ -1204,6 +1217,19 @@ impl Writer {
 
     fn answer_request(&mut self, request: Request) {
         match request {
+            #[cfg(feature = "account-sync")]
+            Request::ConfigureSync { context, reply } => {
+                let result = match self.store.as_mut() {
+                    Some(store) if matches!(self.mode, Mode::Normal) => context
+                        .initialize(store)
+                        .map_err(|error| StoreError::Other(error.to_string())),
+                    _ => Err(StoreError::Closed),
+                };
+                if result.is_ok() {
+                    self.sync = Some(context);
+                }
+                let _ = reply.send(result);
+            }
             Request::Flush { reply } => {
                 let result = match self.mode {
                     Mode::Normal if self.store.is_some() => Ok(()),
@@ -1330,6 +1356,10 @@ impl Writer {
         let outcome = catch_unwind(AssertUnwindSafe(|| -> rusqlite::Result<T> {
             let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let value = write(&tx)?;
+            #[cfg(feature = "account-sync")]
+            if let Some(sync) = &self.sync {
+                crate::sync::capture::finish(&tx, sync, now_millis())?;
+            }
             tx.commit()?;
             Ok(value)
         }));
@@ -1354,12 +1384,21 @@ impl Writer {
                 return Err(StoreError::Closed);
             };
             let outcome = catch_unwind(AssertUnwindSafe(|| {
-                recover::recover(
+                recover::recover_with(
                     store.conn_mut(),
                     Scope::Chat(chat_id),
                     &device,
                     &limits,
                     now_millis(),
+                    |conn| {
+                        #[cfg(feature = "account-sync")]
+                        if let Some(sync) = &self.sync {
+                            crate::sync::capture::finish(conn, sync, now_millis())?;
+                        }
+                        #[cfg(not(feature = "account-sync"))]
+                        let _ = conn;
+                        Ok(())
+                    },
                 )
             }));
             settle(store.conn_mut());
@@ -1708,6 +1747,7 @@ fn commit(
     device_id: &str,
     attachments: &super::files::Attachments,
     limits: &CompactLimits,
+    #[cfg(feature = "account-sync")] sync: Option<&crate::sync::SyncContext>,
 ) -> Result<(), Failure> {
     let conn = store.conn_mut();
     let outcome = catch_unwind(AssertUnwindSafe(|| -> Result<(), Failure> {
@@ -1717,6 +1757,10 @@ fn commit(
         let now = now_millis();
         for item in writes {
             apply(&tx, item, device_id, attachments, limits, now)?;
+        }
+        #[cfg(feature = "account-sync")]
+        if let Some(sync) = sync {
+            crate::sync::capture::finish(&tx, sync, now).map_err(classify)?;
         }
         tx.commit().map_err(classify)
     }));
