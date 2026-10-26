@@ -53,6 +53,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::app_info,
             crate::accounts::account_config,
             crate::accounts::account_status,
+            crate::accounts::account_vault_status,
+            crate::accounts::account_vault_unlock,
             crate::accounts::account_request_code,
             crate::accounts::account_verify_code,
             crate::accounts::account_refresh,

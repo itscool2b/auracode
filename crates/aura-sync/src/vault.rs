@@ -9,6 +9,8 @@ use zeroize::{Zeroize, Zeroizing};
 
 mod passphrase;
 pub use passphrase::PassphraseStore;
+mod directory;
+pub use directory::PassphraseDirectory;
 
 const SERVICE: &str = "auracode.sync.v1";
 const MAX_SECRET: usize = 2048;

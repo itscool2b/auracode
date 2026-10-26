@@ -12,6 +12,20 @@ pub struct AccountConfiguration {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
+pub enum AccountVaultMode {
+    Native,
+    PassphraseLocked,
+    PassphraseUnlocked,
+    RestartRequired,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct AccountVaultStatus {
+    pub mode: AccountVaultMode,
+    pub can_create: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
 pub enum AccountAccess {
     SignedOut,
     VerificationRequired,

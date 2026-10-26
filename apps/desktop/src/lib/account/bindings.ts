@@ -56,6 +56,13 @@ export type AccountSyncStatus = {
 	message: string | null,
 };
 
+export type AccountVaultMode = "native" | "passphrase_locked" | "passphrase_unlocked" | "restart_required";
+
+export type AccountVaultStatus = {
+	mode: AccountVaultMode,
+	can_create: boolean,
+};
+
 /**
  *  The recovery key is intentionally shown only in response to an explicit setup action. Keep it
  *  in transient UI memory, never diagnostics, analytics, URLs or frontend persistence.

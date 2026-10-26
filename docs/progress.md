@@ -2113,6 +2113,24 @@ syntax-checked; it still needs execution with the next coherent Worker build. No
 was deployed. Desktop reset UI, durable retry, passphrase vault selection and device-local removal
 remain in progress; this does not complete account lifecycle acceptance.
 
+### Explicit desktop passphrase storage checkpoint
+
+Account settings now expose explicit creation and unlock of a bounded encrypted passphrase store.
+The existing authenticated vault format stores the profile index and account bundles independently;
+there is no OS credential enumeration or automatic migration. Its private app directory records the
+selection, so startup with a locked or incomplete selection cannot silently fall back to native
+credentials. Creation while native account services are already open reports that quitting and
+reopening is required. Unlock and create retain transition admission through owned Rust completion.
+
+Two temporary-directory vault regressions and aura-sync all-target Clippy passed, as did generated
+Account DTOs, desktop TypeScript and Biome. Chromium and WebKit verify zero writes before explicit
+confirmation, cancellation, wrong-passphrase preservation, unlock and the honest restart state;
+accessibility passed and the dark screen was inspected. Native service tests for restart/unlock and
+incomplete-choice admission are added, awaiting integrated native execution because this worktree's
+SQLite build script remains blocked by Application Control. Full native command export is also
+pending. Restoring bindings to existing encrypted profiles after keychain/index loss, durable client
+reset and device-local removal remain in progress. No real secure store was opened by these checks.
+
 ### Review pending work before sign-out
 Desktop sign-out now opens an explicit review with the last reported pending-change count, or an
 honest unknown-count explanation. It states that encrypted local data stays and sync pauses. Cancel

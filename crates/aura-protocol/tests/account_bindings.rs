@@ -6,6 +6,7 @@ use aura_protocol::account::*;
 fn export_account_bindings() {
     let types = specta::Types::default()
         .register::<AccountConfiguration>()
+        .register::<AccountVaultStatus>()
         .register::<AccountStatus>()
         .register::<SignInChallenge>()
         .register::<RecoverySetup>()

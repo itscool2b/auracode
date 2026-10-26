@@ -4,7 +4,14 @@ use crate::state::AppState;
 use aura_core::{accounts::Accounts, paths::DataRoot, profile::Profiles};
 use aura_protocol::account::*;
 use aura_sync::{api::ApiClient, vault::NativeStore, wire::Platform};
-use std::{future::Future, path::PathBuf, sync::Arc};
+use std::{
+    future::Future,
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 use tauri::State;
 use tokio::sync::OnceCell;
 
@@ -12,12 +19,14 @@ use tokio::sync::OnceCell;
 pub struct AccountService {
     root: Option<PathBuf>,
     accounts: Arc<OnceCell<Arc<Accounts>>>,
+    passphrase: Arc<AtomicBool>,
 }
 impl AccountService {
     pub fn new(root: Option<PathBuf>) -> Self {
         Self {
             root,
             accounts: Arc::new(OnceCell::new()),
+            passphrase: Arc::new(AtomicBool::new(false)),
         }
     }
     pub async fn get(&self) -> Result<Arc<Accounts>, AccountFailure> {
@@ -36,6 +45,12 @@ impl AccountService {
                         "The account service configuration is invalid.",
                     )
                 })?;
+                let inspect_root=root.clone();
+                let present=tokio::task::spawn_blocking(move||aura_core::accounts::passphrase::inspect(&inspect_root))
+                    .await.map_err(|_|failure(AccountFailureCode::LocalStorage,"Secure storage could not be inspected."))??;
+                if present!=aura_core::accounts::passphrase::Presence::Missing {
+                    return Err(failure(AccountFailureCode::SecureStorage,"Unlock your passphrase store to use account services. OS credentials were not read."));
+                }
                 let vault = tokio::task::spawn_blocking(NativeStore::new)
                     .await
                     .map_err(|_| {
@@ -53,6 +68,102 @@ impl AccountService {
             })
             .await
             .cloned()
+    }
+    async fn vault_status(&self) -> Result<AccountVaultStatus, AccountFailure> {
+        use aura_core::accounts::passphrase::{self, Presence};
+        let root = self.root.clone().ok_or_else(|| {
+            failure(
+                AccountFailureCode::LocalStorage,
+                "The local data folder is unavailable.",
+            )
+        })?;
+        let presence = tokio::task::spawn_blocking(move || passphrase::inspect(&root))
+            .await
+            .map_err(|_| {
+                failure(
+                    AccountFailureCode::LocalStorage,
+                    "Secure storage could not be inspected.",
+                )
+            })??;
+        let mode = if self.passphrase.load(Ordering::Acquire) {
+            AccountVaultMode::PassphraseUnlocked
+        } else if presence == Presence::Missing {
+            AccountVaultMode::Native
+        } else if self.accounts.get().is_some() {
+            AccountVaultMode::RestartRequired
+        } else {
+            AccountVaultMode::PassphraseLocked
+        };
+        Ok(AccountVaultStatus {
+            mode,
+            can_create: presence != Presence::Existing,
+        })
+    }
+    async fn unlock_vault(
+        &self,
+        passphrase: zeroize::Zeroizing<String>,
+        create: bool,
+    ) -> Result<AccountVaultStatus, AccountFailure> {
+        if !(12..=1024).contains(&passphrase.len()) {
+            return Err(failure(
+                AccountFailureCode::InvalidInput,
+                "Use a passphrase between 12 and 1024 bytes.",
+            ));
+        }
+        if let Some(accounts) = self.accounts.get() {
+            if !create || self.passphrase.load(Ordering::Acquire) {
+                return self.vault_status().await;
+            }
+            let accounts = accounts.clone();
+            tokio::task::spawn_blocking(move || accounts.prepare_passphrase_store(passphrase))
+                .await
+                .map_err(|_| {
+                    failure(
+                        AccountFailureCode::SecureStorage,
+                        "The passphrase store could not be created.",
+                    )
+                })??;
+            return self.vault_status().await;
+        }
+        let root = self.root.clone().ok_or_else(|| {
+            failure(
+                AccountFailureCode::LocalStorage,
+                "The local data folder is unavailable.",
+            )
+        })?;
+        let origin = configuration(option_env!("AURACODE_API_ORIGIN"))?.service_origin;
+        self.accounts
+            .get_or_try_init(|| async {
+                let selected_root = root.clone();
+                let selected_origin = origin.clone();
+                let vault = tokio::task::spawn_blocking(move || {
+                    aura_core::accounts::passphrase::open(
+                        &selected_root,
+                        &selected_origin,
+                        passphrase,
+                        create,
+                    )
+                })
+                .await
+                .map_err(|_| {
+                    failure(
+                        AccountFailureCode::SecureStorage,
+                        "The passphrase store could not be unlocked.",
+                    )
+                })??;
+                let api = ApiClient::new(&origin).map_err(|_| {
+                    failure(
+                        AccountFailureCode::Unavailable,
+                        "The account service configuration is invalid.",
+                    )
+                })?;
+                let accounts =
+                    Arc::new(Accounts::open(api, vault, Profiles::new(DataRoot::at(root))).await?);
+                self.passphrase.store(true, Ordering::Release);
+                Ok::<_, AccountFailure>(accounts)
+            })
+            .await?;
+        self.vault_status().await
     }
 }
 fn failure(code: AccountFailureCode, message: &str) -> AccountFailure {
@@ -193,6 +304,41 @@ where
 #[specta::specta]
 pub fn account_config() -> Result<AccountConfiguration, AccountFailure> {
     configuration(option_env!("AURACODE_API_ORIGIN"))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn account_vault_status(
+    state: State<'_, AppState>,
+) -> Result<AccountVaultStatus, AccountFailure> {
+    state.accounts.vault_status().await
+}
+#[tauri::command]
+#[specta::specta]
+pub async fn account_vault_unlock(
+    state: State<'_, AppState>,
+    passphrase: String,
+    create: bool,
+) -> Result<AccountVaultStatus, AccountFailure> {
+    let passphrase = zeroize::Zeroizing::new(passphrase);
+    let permit = state.transition.clone().try_lock_owned().map_err(|_| {
+        failure(
+            AccountFailureCode::Unavailable,
+            "Another account or profile operation is in progress.",
+        )
+    })?;
+    let info = state.app_info();
+    admit(
+        state.quit.is_quitting(),
+        info.profile_switching,
+        info.config_profile_recovery.as_ref(),
+        AccountAction::RecoverAccess,
+    )?;
+    let service = state.accounts.clone();
+    owned(permit, async move {
+        service.unlock_vault(passphrase, create).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -369,6 +515,60 @@ pub async fn account_sign_out(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn explicit_passphrase_selection_reopens_locked_without_native_access() {
+        let root = tempfile::tempdir().unwrap();
+        let service = AccountService::new(Some(root.path().to_owned()));
+        assert_eq!(
+            service.vault_status().await.unwrap().mode,
+            AccountVaultMode::Native
+        );
+        let pass = || zeroize::Zeroizing::new("synthetic account unlock phrase".into());
+        assert_eq!(
+            service.unlock_vault(pass(), true).await.unwrap().mode,
+            AccountVaultMode::PassphraseUnlocked
+        );
+        assert_eq!(
+            service.get().await.unwrap().status().await.unwrap().access,
+            AccountAccess::SignedOut
+        );
+        drop(service);
+        let service = AccountService::new(Some(root.path().to_owned()));
+        assert_eq!(
+            service.vault_status().await.unwrap().mode,
+            AccountVaultMode::PassphraseLocked
+        );
+        assert!(matches!(
+            service.get().await,
+            Err(AccountFailure {
+                code: AccountFailureCode::SecureStorage,
+                ..
+            })
+        ));
+        assert!(
+            service
+                .unlock_vault(
+                    zeroize::Zeroizing::new("incorrect synthetic phrase".into()),
+                    false
+                )
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            service.unlock_vault(pass(), false).await.unwrap().mode,
+            AccountVaultMode::PassphraseUnlocked
+        );
+    }
+    #[tokio::test]
+    async fn incomplete_passphrase_choice_never_falls_back_to_native_storage() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("account-passphrase-vault")).unwrap();
+        let service = AccountService::new(Some(root.path().to_owned()));
+        let status = service.vault_status().await.unwrap();
+        assert!(status.can_create);
+        assert_eq!(status.mode, AccountVaultMode::PassphraseLocked);
+        assert!(service.get().await.is_err());
+    }
     #[test]
     fn recovery_allows_only_explicit_access_restoration_and_never_resumes_sync() {
         let pending = crate::profile_config::ConfigProfileRecovery {

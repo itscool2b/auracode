@@ -13,6 +13,7 @@ import { type VerificationOrigin, verificationOrigin } from "../../lib/accountVe
 import { errorMessage } from "../../lib/errors";
 import { switchProfile } from "../../lib/profiles";
 import { Modal } from "../chat/Modal";
+import { AccountVault } from "./AccountVault";
 import { AccountVerification } from "./AccountVerification";
 import { SignOutDialog } from "./SignOutDialog";
 import "./account.css";
@@ -51,6 +52,7 @@ export function AccountPanel({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [signOutReview, setSignOutReview] = useState(false);
+  const [showVault, setShowVault] = useState(false);
   const [generation, setGeneration] = useState(0);
   const [email, setEmail] = useState("");
   const [proof, setProof] = useState("");
@@ -677,6 +679,15 @@ export function AccountPanel({
           Try again in {remaining} seconds.
         </p>
       ) : null}
+      <button
+        className="ui-button"
+        type="button"
+        disabled={busy}
+        onClick={() => setShowVault((value) => !value)}
+      >
+        {showVault ? "Close secure storage" : "Secure storage"}
+      </button>
+      {showVault ? <AccountVault onUnlocked={() => setGeneration((value) => value + 1)} /> : null}
       {!recoveryOnly && signOutReview ? (
         <SignOutDialog
           pending={status?.sync.pending_changes ?? null}

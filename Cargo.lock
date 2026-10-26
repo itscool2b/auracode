@@ -561,6 +561,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "windows-version",
+ "zeroize",
 ]
 
 [[package]]
