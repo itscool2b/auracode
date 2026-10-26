@@ -44,5 +44,26 @@ directories after reviewed file deletions.
 Windows temporary-fixture tests cover stale reviews, durable journal failure, final acknowledgment
 failure, partial trees, crash after displacement, changed original retention, explicit tombstones,
 private-field preservation, formatting, per-device skips and restart rollback. macOS execution,
-the encrypted profile sink and desktop orchestration are separate integration gates. Protected MCP
-entries still wait in this checkpoint; secret-free projection is a follow-up.
+the encrypted profile sink and desktop orchestration are separate integration gates.
+
+## MCP local fields
+
+Snapshots carry a default-empty `local_fields` list containing required field names only. Supported
+groups are `env` and the provider's static header fields, plus Codex environment-header mappings,
+forwarded variable names and its bearer-variable reference. Values remain local. These shapes follow
+the [Claude MCP documentation](https://code.claude.com/docs/en/mcp) and
+[Codex MCP configuration reference](https://developers.openai.com/codex/mcp/). Unknown vendor options,
+dynamic credential helpers, unsupported transports and credentials embedded in public arguments or
+URLs still wait for manual setup. The scanner never reads the referenced environment variables.
+
+Merge conservatively unions requirement names from present local, remote and base snapshots. It never
+silently downgrades a server to public-only. A new device missing a required local configuration field
+gets an explicit skipped item. Apply preserves raw private JSON fields and TOML tables, and refuses
+to redirect them to a changed command, argument list, transport or URL. A remote tombstone for an entry
+with private fields waits for explicit removal in the agent's configuration. Once removed there,
+normal observation can confirm absence. This avoids deleting local setup through another device's
+sync operation.
+
+Rollback preserves a later rotation of a local private value while restoring supported public
+settings. It also refuses endpoint redirection when private fields were added after the original
+apply. No missing field value is invented, requested through this API, or exported in a snapshot.

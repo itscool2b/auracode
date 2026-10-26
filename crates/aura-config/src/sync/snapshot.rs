@@ -58,6 +58,9 @@ pub struct ConfigSnapshot {
     pub identity: ConfigIdentity,
     /// None is an explicit tombstone. A missing remote head is not a tombstone.
     pub content: Option<ConfigContent>,
+    /// Names of device-local MCP fields only. Their values never enter a synced snapshot.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub local_fields: Vec<String>,
 }
 
 impl ConfigIdentity {
@@ -105,6 +108,7 @@ impl ConfigSnapshot {
             schema: 1,
             identity,
             content: None,
+            local_fields: Vec::new(),
         }
     }
 
@@ -136,6 +140,12 @@ impl ConfigSnapshot {
         self.identity.validate()?;
         if self.schema != 1 {
             return Err(ConfigPortError::Invalid);
+        }
+        if !self.local_fields.is_empty() {
+            if self.identity.format != ConfigFormat::Mcp || self.content.is_none() {
+                return Err(ConfigPortError::Invalid);
+            }
+            super::mcp::validate_requirements(&self.local_fields, self.identity.provider)?;
         }
         let Some(content) = &self.content else {
             return Ok(());

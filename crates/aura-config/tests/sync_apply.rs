@@ -96,6 +96,7 @@ fn snapshot(
 ) -> ConfigSnapshot {
     ConfigSnapshot {
         schema: 1,
+        local_fields: Vec::new(),
         identity: ConfigIdentity {
             provider: Provider::Codex,
             scope: ConfigScope::Portable,
@@ -701,4 +702,150 @@ fn symlink_replacement_of_target_or_parent_is_refused() {
         std::fs::read_to_string(outside.path().join("outside")).unwrap(),
         "private"
     );
+}
+
+#[test]
+fn mcp_public_edits_keep_raw_local_secrets_and_rollback_keeps_later_rotation() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("mcp.json");
+    let before = r#"{"mcpServers":{"demo":{"command":"fixture-tool","enabled":true,"env" : { "API_KEY" : "PRIVATE_ONE" }}},"other":1e2}"#;
+    std::fs::write(&path, before).unwrap();
+    let scan = scanner(temp.path(), Provider::Pi, true);
+    let mut desired = scan.scan().items.into_values().next().unwrap();
+    assert_eq!(desired.local_fields, vec!["env/API_KEY"]);
+    let Some(ConfigContent::Value(value)) = &mut desired.content else {
+        panic!("MCP value")
+    };
+    value["enabled"] = json!(false);
+    let journal = Journal::default();
+    let receipt = id(scan.apply(prepare(&scan, desired), &journal).unwrap());
+    let current = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(current, before.replace("true", "false"));
+    std::fs::write(&path, current.replace("PRIVATE_ONE", "PRIVATE_TWO")).unwrap();
+    id(scan.rollback_apply(&receipt, &journal).unwrap());
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        before.replace("PRIVATE_ONE", "PRIVATE_TWO")
+    );
+    let exported = scan
+        .scan()
+        .items
+        .into_values()
+        .next()
+        .unwrap()
+        .encode()
+        .unwrap();
+    assert!(!std::str::from_utf8(&exported).unwrap().contains("PRIVATE_"));
+}
+
+#[test]
+fn mcp_missing_local_requirements_and_secret_redirection_are_explicit_skips() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("mcp.json");
+    let before = r#"{"mcpServers":{"demo":{"url":"https://example.test/mcp","headers":{"Authorization":"PRIVATE_VALUE"},"enabled":true}}}"#;
+    std::fs::write(&path, before).unwrap();
+    let scan = scanner(temp.path(), Provider::Pi, true);
+    let desired = scan.scan().items.into_values().next().unwrap();
+    assert_eq!(desired.local_fields, vec!["headers/Authorization"]);
+    let empty = tempfile::tempdir().unwrap();
+    assert!(matches!(
+        scanner(empty.path(), Provider::Pi, true)
+            .prepare_apply(desired.clone(), &LocalSnapshot::Absent)
+            .unwrap(),
+        ConfigApplyPreparation::Skipped(_)
+    ));
+    let expected = scan.observe(&desired.identity).unwrap();
+    let mut redirect = desired.clone();
+    let Some(ConfigContent::Value(value)) = &mut redirect.content else {
+        panic!("MCP value")
+    };
+    value["url"] = json!("https://other.test/mcp");
+    assert!(matches!(
+        scan.prepare_apply(redirect, &expected).unwrap(),
+        ConfigApplyPreparation::Skipped(_)
+    ));
+    assert!(matches!(
+        scan.prepare_apply(ConfigSnapshot::tombstone(desired.identity), &expected)
+            .unwrap(),
+        ConfigApplyPreparation::Skipped(_)
+    ));
+    assert_eq!(std::fs::read_to_string(path).unwrap(), before);
+    assert!(!empty.path().join("mcp.json").exists());
+}
+
+#[test]
+fn codex_mcp_retains_private_header_tables_and_comments() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("config.toml");
+    let before = "[mcp_servers.demo]\nurl='https://example.test/mcp'\nenabled=true # chosen\nbearer_token_env_var='LOCAL_TOKEN'\n[mcp_servers.demo.http_headers]\nAuthorization = 'PRIVATE_VALUE' # keep\n";
+    std::fs::write(&path, before).unwrap();
+    let scan = scanner(temp.path(), Provider::Codex, true);
+    let mut desired = scan.scan().items.into_values().next().unwrap();
+    assert_eq!(
+        desired.local_fields,
+        vec!["bearer_token_env_var", "http_headers/Authorization"]
+    );
+    let Some(ConfigContent::Value(value)) = &mut desired.content else {
+        panic!("MCP value")
+    };
+    value["enabled"] = json!(false);
+    let journal = Journal::default();
+    let receipt = id(scan.apply(prepare(&scan, desired), &journal).unwrap());
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        before.replace("enabled=true", "enabled=false")
+    );
+    id(scan.rollback_apply(&receipt, &journal).unwrap());
+    assert_eq!(std::fs::read_to_string(path).unwrap(), before);
+}
+
+#[test]
+fn rollback_cannot_redirect_newly_added_local_secrets_to_the_previous_endpoint() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("mcp.json");
+    std::fs::write(
+        &path,
+        r#"{"mcpServers":{"demo":{"url":"https://old.test/mcp"}}}"#,
+    )
+    .unwrap();
+    let scan = scanner(temp.path(), Provider::Pi, true);
+    let mut desired = scan.scan().items.into_values().next().unwrap();
+    let Some(ConfigContent::Value(value)) = &mut desired.content else {
+        panic!("MCP value")
+    };
+    value["url"] = json!("https://new.test/mcp");
+    let journal = Journal::default();
+    let receipt = id(scan.apply(prepare(&scan, desired), &journal).unwrap());
+    let next = r#"{"mcpServers":{"demo":{"url":"https://new.test/mcp","headers":{"Authorization":"PRIVATE"}}}}"#;
+    std::fs::write(&path, next).unwrap();
+    assert_eq!(
+        scan.rollback_apply(&receipt, &journal).unwrap_err(),
+        ConfigPortError::Stale
+    );
+    assert_eq!(std::fs::read_to_string(path).unwrap(), next);
+}
+
+#[test]
+fn unchanged_home_relative_command_keeps_its_exact_local_spelling_with_private_env() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("mcp.json");
+    let command = temp
+        .path()
+        .join("fixture-tool")
+        .to_string_lossy()
+        .to_string();
+    std::fs::write(&path,serde_json::to_vec(&json!({"mcpServers":{"demo":{"command":command,"env":{"KEY":"PRIVATE"},"enabled":true}}})).unwrap()).unwrap();
+    let scan = scanner(temp.path(), Provider::Pi, true);
+    let mut desired = scan.scan().items.into_values().next().unwrap();
+    let Some(ConfigContent::Value(value)) = &mut desired.content else {
+        panic!("MCP value")
+    };
+    assert_eq!(value["command"], json!("~/fixture-tool"));
+    value["enabled"] = json!(false);
+    id(scan
+        .apply(prepare(&scan, desired), &Journal::default())
+        .unwrap());
+    let after: serde_json::Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    assert_eq!(after["mcpServers"]["demo"]["command"], json!(command));
+    assert_eq!(after["mcpServers"]["demo"]["env"]["KEY"], json!("PRIVATE"));
 }

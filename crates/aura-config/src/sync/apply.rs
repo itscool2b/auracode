@@ -161,7 +161,8 @@ impl ConfigScanner {
         let observed_raw = match &raw {
             None => LocalSnapshot::Absent,
             Some(content) => {
-                let (mut identity, content) = self.normalize(id.clone(), content.clone())?;
+                let (mut identity, content, local_fields) =
+                    self.normalize(id.clone(), content.clone())?;
                 if identity.scope == super::ConfigScope::Portable {
                     identity.scope = id.scope;
                 }
@@ -169,6 +170,7 @@ impl ConfigScanner {
                     schema: 1,
                     identity,
                     content: Some(content),
+                    local_fields,
                 })
             }
         };
@@ -182,13 +184,71 @@ impl ConfigScanner {
         // Authenticated foreign metadata can still lie about its OS scope. Normalize the actual
         // expanded payload before any write, using the same rules as discovery.
         if let Some(content) = &content {
-            let (mut observed, normalized) = self.normalize(id.clone(), content.clone())?;
+            let (mut observed, normalized, _) = self.normalize(id.clone(), content.clone())?;
             if observed.scope == super::ConfigScope::Portable {
                 observed.scope = id.scope;
             }
             if observed != *id || Some(normalized) != desired.content {
                 return Err(ConfigPortError::Invalid);
             }
+        }
+        if id.format == ConfigFormat::Mcp {
+            // Keep the exact local spelling of unchanged routing fields. Expanding a portable home
+            // path must not falsely appear to redirect credentials because of slash differences.
+            if let (
+                Some(ConfigContent::Value(local)),
+                Some(ConfigContent::Value(public)),
+                Some(ConfigContent::Value(desired_value)),
+            ) = (&raw, &mut content, &desired.content)
+            {
+                let (_, ConfigContent::Value(normalized), _) =
+                    self.normalize(id.clone(), ConfigContent::Value(local.clone()))?
+                else {
+                    return Err(ConfigPortError::Invalid);
+                };
+                for key in ["command", "args", "url", "type"] {
+                    if normalized.get(key) == desired_value.get(key) {
+                        let object = public.as_object_mut().ok_or(ConfigPortError::Invalid)?;
+                        if let Some(value) = local.get(key) {
+                            object.insert(key.into(), value.clone());
+                        } else {
+                            object.remove(key);
+                        }
+                    }
+                }
+            }
+            let local = match &raw {
+                Some(ConfigContent::Value(value)) => Some(value),
+                _ => None,
+            };
+            if content.is_some()
+                && local
+                    .map(|value| super::mcp::project(value, id.provider))
+                    .transpose()
+                    .map_err(|_| ConfigPortError::Invalid)?
+                    .is_some_and(|(_, fields)| {
+                        fields
+                            .iter()
+                            .any(|field| desired.local_fields.binary_search(field).is_err())
+                    })
+            {
+                return skip(
+                    "This MCP server has additional local setup requirements. Refresh its merge review before applying.",
+                );
+            }
+            let public = match &content {
+                Some(ConfigContent::Value(value)) => Some(value),
+                _ => None,
+            };
+            content = match super::mcp::preserve(public, local, &desired.local_fields, id.provider)
+            {
+                Ok(value) => value.map(ConfigContent::Value),
+                Err(_) => {
+                    return skip(
+                        "This MCP server needs local setup, or this change would redirect or remove its private settings. Review it in the agent's configuration.",
+                    );
+                }
+            };
         }
         let mutations = mutations(&root, id, raw.as_ref(), content.as_ref())?;
         let mut names = std::collections::HashSet::new();
@@ -378,7 +438,51 @@ impl ConfigScanner {
             if current == mutation.before {
                 continue;
             }
-            let before = if matches!(
+            let before = if original.identity.format == ConfigFormat::Mcp
+                && current != mutation.after
+            {
+                let Some(current) = &current else {
+                    return Err(ConfigPortError::Stale);
+                };
+                let selected = |file: &Option<ConfigFile>| {
+                    edit::selected(
+                        file.as_ref().map_or(&[], |file| file.bytes.as_slice()),
+                        &original.identity,
+                    )
+                    .map_err(|_| ConfigPortError::Stale)
+                };
+                let current_value = selected(&Some(current.clone()))?;
+                let before_value = selected(&mutation.before)?;
+                let after_value = selected(&mutation.after)?;
+                let project = |value: Option<&serde_json::Value>| {
+                    value
+                        .map(|value| super::mcp::project(value, original.identity.provider))
+                        .transpose()
+                        .map_err(|_| ConfigPortError::Stale)
+                };
+                let current_public = project(current_value.as_ref())?.map(|(value, _)| value);
+                let before_public = project(before_value.as_ref())?;
+                if current_public == before_public.as_ref().map(|(value, _)| value.clone()) {
+                    continue;
+                }
+                if current_public != project(after_value.as_ref())?.map(|(value, _)| value) {
+                    return Err(ConfigPortError::Stale);
+                }
+                let (public, required) = before_public
+                    .map_or((None, Vec::new()), |(value, fields)| (Some(value), fields));
+                let restored = super::mcp::preserve(
+                    public.as_ref(),
+                    current_value.as_ref(),
+                    &required,
+                    original.identity.provider,
+                )
+                .map_err(|_| ConfigPortError::Stale)?;
+                Some(ConfigFile {
+                    bytes: edit::document(&current.bytes, &original.identity, restored.as_ref())
+                        .map_err(|_| ConfigPortError::Stale)?,
+                    executable: current.executable,
+                })
+            } else if matches!(
                 original.identity.format,
                 ConfigFormat::Json | ConfigFormat::Toml | ConfigFormat::Mcp
             ) && current != mutation.after

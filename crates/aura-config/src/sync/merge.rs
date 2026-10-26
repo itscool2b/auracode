@@ -98,6 +98,7 @@ pub fn merge(
                     schema: 1,
                     identity: identity.clone(),
                     content,
+                    local_fields: Vec::new(),
                 })
             } else {
                 None
@@ -105,7 +106,26 @@ pub fn merge(
         }
         ConfigOperation::Merge | ConfigOperation::Wait => None,
     };
-    if let Some(result) = &decision.result {
+    if let Some(result) = &mut decision.result {
+        if result.content.is_some() {
+            let fields: Vec<_> = [base, Some(local), remote]
+                .into_iter()
+                .flatten()
+                .filter(|snapshot| snapshot.content.is_some())
+                .flat_map(|snapshot| snapshot.local_fields.iter().cloned())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            if fields != result.local_fields {
+                result.local_fields = fields;
+                if matches!(
+                    decision.operation,
+                    ConfigOperation::InSync | ConfigOperation::Apply
+                ) {
+                    decision.operation = ConfigOperation::Merge;
+                }
+            }
+        }
         result.encode()?;
     }
     Ok(decision)

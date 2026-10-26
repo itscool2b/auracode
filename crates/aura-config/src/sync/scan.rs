@@ -117,7 +117,7 @@ impl ConfigScanner {
             };
             let candidates = self.candidates(source, &root);
             for candidate in candidates {
-                let (identity, content) = match candidate {
+                let (identity, content, local_fields) = match candidate {
                     Ok(candidate) => candidate,
                     Err((identity, reason)) => {
                         skip(&mut scan, provider, identity, reason);
@@ -128,6 +128,7 @@ impl ConfigScanner {
                     schema: 1,
                     identity,
                     content: Some(content),
+                    local_fields,
                 };
                 let encoded = match snapshot.encode() {
                     Ok(value) => value,
@@ -180,7 +181,8 @@ impl ConfigScanner {
             Ok(Some(value)) => value,
             Err(_) => return Ok(LocalSnapshot::Unavailable),
         };
-        let Ok((mut observed, content)) = self.normalize(identity.clone(), content) else {
+        let Ok((mut observed, content, local_fields)) = self.normalize(identity.clone(), content)
+        else {
             return Ok(LocalSnapshot::Unavailable);
         };
         // A portable record cannot overwrite an item that now contains platform-specific paths.
@@ -195,6 +197,7 @@ impl ConfigScanner {
             schema: 1,
             identity: observed,
             content: Some(content),
+            local_fields,
         };
         if snapshot.encode().is_err() {
             return Ok(LocalSnapshot::Unavailable);
@@ -413,9 +416,16 @@ impl ConfigScanner {
         &self,
         mut id: ConfigIdentity,
         mut content: ConfigContent,
-    ) -> Result<(ConfigIdentity, ConfigContent), ConfigPortError> {
+    ) -> Result<(ConfigIdentity, ConfigContent, Vec<String>), ConfigPortError> {
         let mut scope = ConfigScope::Portable;
+        let mut local_fields = Vec::new();
         if let ConfigContent::Value(value) = &mut content {
+            if id.format == ConfigFormat::Mcp {
+                let (public, fields) = super::mcp::project(value, id.provider)
+                    .map_err(|_| ConfigPortError::Invalid)?;
+                *value = public;
+                local_fields = fields;
+            }
             validate_value(value, 0)?;
             normalize_value(
                 value,
@@ -439,11 +449,12 @@ impl ConfigScanner {
             }
         }
         id.scope = scope;
-        Ok((id, content))
+        Ok((id, content, local_fields))
     }
 }
 
-type Candidate = Result<(ConfigIdentity, ConfigContent), (Option<ConfigIdentity>, &'static str)>;
+type Candidate =
+    Result<(ConfigIdentity, ConfigContent, Vec<String>), (Option<ConfigIdentity>, &'static str)>;
 
 #[derive(Default)]
 struct Candidates {
@@ -457,17 +468,18 @@ impl Candidates {
             return;
         }
         let size = match &candidate {
-            Ok((identity, ConfigContent::Files(files))) => {
+            Ok((identity, ConfigContent::Files(files), _)) => {
                 identity.path.len()
                     + files
                         .iter()
                         .map(|(path, file)| path.len() + file.bytes.len().saturating_mul(4) + 64)
                         .sum::<usize>()
             }
-            Ok((identity, ConfigContent::Value(value))) => {
+            Ok((identity, ConfigContent::Value(value), fields)) => {
                 identity.path.len()
                     + serde_json::to_vec(value).map_or(SCAN_BYTES, |bytes| bytes.len())
                     + 1024
+                    + fields.iter().map(String::len).sum::<usize>()
             }
             Err(_) => 256,
         };

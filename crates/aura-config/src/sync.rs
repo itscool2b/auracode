@@ -8,6 +8,7 @@ use zeroize::Zeroizing;
 
 mod apply;
 mod edit;
+mod mcp;
 mod merge;
 mod review;
 mod scan;

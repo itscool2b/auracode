@@ -12,6 +12,7 @@ use serde_json::json;
 fn setting(value: serde_json::Value) -> ConfigSnapshot {
     ConfigSnapshot {
         schema: 1,
+        local_fields: Vec::new(),
         identity: ConfigIdentity {
             provider: Provider::Pi,
             scope: ConfigScope::Portable,
@@ -25,6 +26,7 @@ fn setting(value: serde_json::Value) -> ConfigSnapshot {
 fn text(value: &str) -> ConfigSnapshot {
     ConfigSnapshot {
         schema: 1,
+        local_fields: Vec::new(),
         identity: ConfigIdentity {
             provider: Provider::Codex,
             scope: ConfigScope::Portable,

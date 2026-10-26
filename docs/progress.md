@@ -1784,4 +1784,15 @@ all-target Clippy pass on Windows.
 - Added Account-profile-only inventory, expiring one-use reviews, apply, device-only controls and encrypted receipt history/rollback commands. Owned blocking work retains profile admission and the shared Library mutation guard through durable completion.
 - Applications re-resolve trusted sources and provider availability; changed bindings are refused before a receipt or file mutation. Failed application retains the old merge base and a skipped marker, and unresolved recovery prevents another apply.
 - Native Windows binding export passed. Focused configuration verification passed: 19 filesystem apply/recovery tests, 6 orchestration tests and exact DTO export. The broader product and platform acceptance remain pending; network delivery is still separate from local Account publication.
+### M9 MCP public projection and local requirements
+
+Added default-empty, bounded MCP `local_fields` metadata containing requirement names only. Discovery
+exports supported public settings while leaving environment/header values and bearer-variable
+references local. Merge preserves the union of existing requirements. Apply skips missing setup,
+unknown fields and credential redirection, retains exact private JSON/TOML spans, and keeps later
+local value rotations during rollback. Protected tombstones wait for explicit native removal.
+Source evidence and the closed supported subset are documented in `docs/config-apply.md`.
+All 75 aura-config tests and all-target Clippy pass on Windows, including five added MCP apply cases
+and four metadata/merge regressions. No real configuration, environment secrets or vendor credential
+stores were inspected. macOS and desktop/profile integration remain pending.
 

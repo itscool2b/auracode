@@ -239,7 +239,7 @@ fn skills_preserve_binary_dependencies_and_skip_protected_or_incomplete_bundles(
 }
 
 #[test]
-fn mcp_with_private_fields_waits_without_exporting_them() {
+fn mcp_private_values_stay_local_while_only_requirement_names_are_exported() {
     let temp = fixture();
     fs::write(
         temp.path().join("config/mcp.json"),
@@ -249,8 +249,8 @@ fn mcp_with_private_fields_waits_without_exporting_them() {
     .unwrap();
     let scanner = scanner(&temp, Provider::Pi, true);
     let scan = scanner.scan();
-    assert_eq!(scan.items.len(), 1);
-    assert_eq!(scan.skipped.len(), 1);
+    assert_eq!(scan.items.len(), 2);
+    assert!(scan.skipped.is_empty());
     let id = ConfigIdentity {
         provider: Provider::Pi,
         scope: ConfigScope::Portable,
@@ -258,11 +258,23 @@ fn mcp_with_private_fields_waits_without_exporting_them() {
         path: "mcp.json".into(),
         keys: vec!["private".into()],
     };
-    assert!(matches!(
-        scanner.observe(&id).unwrap(),
-        LocalSnapshot::Unavailable
-    ));
-    assert!(!scan.skipped[0].reason.contains("SYNTHETIC_PRIVATE"));
+    let LocalSnapshot::Present(observed) = scanner.observe(&id).unwrap() else {
+        panic!("public projection should be available")
+    };
+    assert_eq!(observed.local_fields, vec!["env/KEY"]);
+    assert!(
+        observed.content
+            == Some(ConfigContent::Value(
+                serde_json::json!({"command":"fixture-tool"})
+            ))
+    );
+    for item in scan.items.values() {
+        assert!(
+            !std::str::from_utf8(&item.encode().unwrap())
+                .unwrap()
+                .contains("SYNTHETIC_PRIVATE")
+        );
+    }
 }
 
 #[test]

@@ -48,9 +48,7 @@ pub(super) fn document(
 ) -> Result<Vec<u8>> {
     let text = crate::inventory::text(bytes)?;
     let updated = match id.format {
-        ConfigFormat::Mcp => {
-            return crate::mcp_document::replace(bytes, id.provider, &id.keys[0], value);
-        }
+        ConfigFormat::Mcp => return super::mcp::edit(bytes, id, value),
         ConfigFormat::Json => json(if text.is_empty() { "{}\n" } else { text }, &id.keys, value)?,
         ConfigFormat::Toml => {
             let mut document = text
