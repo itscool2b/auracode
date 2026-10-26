@@ -9,6 +9,7 @@ use aura_config::{
 };
 use tempfile::TempDir;
 
+#[allow(clippy::unwrap_used)] // Synthetic fixture construction only.
 fn scanner(temp: &TempDir, provider: Provider, installed: bool) -> ConfigScanner {
     ConfigScanner::new(
         vec![ConfigSource {
@@ -35,6 +36,7 @@ fn file_id(provider: Provider, path: &str) -> ConfigIdentity {
         keys: Vec::new(),
     }
 }
+#[allow(clippy::unwrap_used)] // Synthetic fixture construction only.
 fn fixture() -> TempDir {
     let temp = tempfile::tempdir().unwrap();
     fs::create_dir(temp.path().join("config")).unwrap();
