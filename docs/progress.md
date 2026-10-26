@@ -1185,3 +1185,19 @@ keys can be shared with the Rust writer without exposing them through IPC; nine 
 tests still pass, including no key handle before fingerprint confirmation and offline access after
 sign-out. Caller wiring and macOS filesystem qualification remain pending.
 
+## Dark settings and explicit update controls, 2026-10-26
+
+The settings control and Cmd/Ctrl+, now open a dark settings surface using the Orbit layout and
+Grok's list treatment. General exposes the existing Rust motion preference with revision-checked
+saves and failure recovery, setup replay and the guarded local-data-folder action. Shortcuts lists
+the actual implemented keys. About shows the running version and Rust updater status, download,
+release notes and an explicit install confirmation. Opening settings performs no update request.
+The UI reports unsigned builds and waits for active work instead of suggesting an update installed.
+
+The chat stays mounted while settings is open, preserving its selection and draft. Hidden chat
+keyboard handlers are disabled. Chromium and WebKit checks passed preference-save failure,
+keyboard focus, no automatic update calls, the separate install confirmation, idle refusal and
+unsigned-build behavior. Axe reported no violations on General, Shortcuts and About. Real
+screenshots were inspected. Typechecking still awaits exact integrated binding generation; its
+remaining errors name pre-existing missing generated commands/types. No CI dispatch was added.
+

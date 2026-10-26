@@ -22,6 +22,7 @@ export function projectName(folder: string): string {
 
 /** The project tray shares the selected Orbit frame, with live attention and folder state. */
 export function ChatList({
+  active = true,
   chats,
   error,
   selected,
@@ -35,6 +36,7 @@ export function ChatList({
   onShowArchived,
   onSearch,
 }: {
+  readonly active?: boolean;
   readonly chats: readonly ChatSummary[] | null;
   readonly error: string | null;
   readonly selected: string | null;
@@ -86,6 +88,7 @@ export function ChatList({
       }));
   const waiting = filtered.filter((chat) => chat.needs_attention);
   useEffect(() => {
+    if (!active) return;
     const keys = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !(event.metaKey || event.ctrlKey) || event.altKey) return;
       if (event.key.toLowerCase() === "k") {
@@ -99,7 +102,7 @@ export function ChatList({
     };
     window.addEventListener("keydown", keys);
     return () => window.removeEventListener("keydown", keys);
-  }, [onNewChat, onSearch]);
+  }, [onNewChat, onSearch, active]);
   useEffect(() => {
     if (searching) search.current?.focus();
   }, [searching]);

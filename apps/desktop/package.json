@@ -12,6 +12,7 @@
     "test": "node --test scripts/build-env.test.mjs && vitest run",
     "check:orbit": "node scripts/check-orbit.mjs",
     "check:setup": "node scripts/check-setup.mjs",
+    "check:settings": "node scripts/check-settings.mjs",
     "tauri": "tauri",
     "bundle": "node scripts/bundle.mjs",
     "signing": "sh scripts/macos-signing.sh"

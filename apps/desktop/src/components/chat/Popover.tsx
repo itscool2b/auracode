@@ -25,9 +25,9 @@ export function Popover({
       if (event.defaultPrevented || !(event.metaKey || event.ctrlKey) || event.key !== shortcut)
         return;
       if (document.querySelector("dialog[open]")) return;
-      event.preventDefault();
       const element = root.current;
-      if (!element) return;
+      if (!element || element.closest("[hidden]")) return;
+      event.preventDefault();
       element.open = !element.open;
       if (element.open) focusPickerChoice(element);
       else element.querySelector("summary")?.focus();
@@ -43,6 +43,7 @@ export function Popover({
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || !root.current) return;
+      if (root.current.closest("[hidden]")) return;
       if (event.target instanceof Element && event.target.closest("dialog[open]")) return;
       event.preventDefault();
       root.current.open = false;

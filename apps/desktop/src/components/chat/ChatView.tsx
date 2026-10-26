@@ -28,6 +28,7 @@ export function ChatView({
   storage,
   agents,
   onOpenChat,
+  active = true,
 }: {
   readonly chatId: string;
   readonly transport: Transport;
@@ -37,6 +38,7 @@ export function ChatView({
   readonly storage: StorageStatus | null;
   readonly agents: readonly AgentEntry[] | null;
   readonly onOpenChat?: (id: string) => void;
+  readonly active?: boolean;
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport));
   const [changesOpen, setChangesOpen] = useState(false);
@@ -57,6 +59,7 @@ export function ChatView({
   }, [store, storage]);
 
   useEffect(() => {
+    if (!active) return;
     const onKeyDown = (event: KeyboardEvent): void => {
       if (
         (event.ctrlKey || event.metaKey) &&
@@ -72,7 +75,7 @@ export function ChatView({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [store]);
+  }, [store, active]);
 
   const status = state.session?.status ?? state.chat?.status ?? "stopped";
   useEffect(() => {

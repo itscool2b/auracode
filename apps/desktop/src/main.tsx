@@ -23,7 +23,11 @@ const container = document.getElementById("root");
 if (container) {
   if (import.meta.env.DEV && new URLSearchParams(location.search).has("preview")) {
     const mode = new URLSearchParams(location.search).get("preview");
-    if (mode === "setup" || mode === "agents")
+    if (mode === "settings")
+      void import("./dev/settingsPreview").then(({ mountSettingsPreview }) =>
+        mountSettingsPreview(container),
+      );
+    else if (mode === "setup" || mode === "agents")
       void import("./dev/setupPreview").then(({ mountSetupPreview }) =>
         mountSetupPreview(container),
       );

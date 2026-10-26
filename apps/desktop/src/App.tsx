@@ -14,6 +14,7 @@ import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
 import { Sidebar } from "./components/Sidebar";
 import { StressView } from "./components/StressView";
+import { SettingsScreen } from "./components/settings/SettingsScreen";
 import { AgentsScreen } from "./components/setup/AgentsScreen";
 import { Onboarding } from "./components/setup/Onboarding";
 import type { AppStore } from "./lib/chat/appStore";
@@ -38,7 +39,7 @@ type Boot =
   | { readonly status: "failed"; readonly message: string };
 
 /** The chats (the default), the M0 home (the info card and the demo stream), or the stress view. */
-type View = "chats" | "diagnostics" | "stress" | "setup" | "agents";
+type View = "chats" | "diagnostics" | "stress" | "setup" | "agents" | "settings";
 
 /**
  * Switching views ends the current stream: the shell stops it (so it does not keep streaming into
@@ -64,6 +65,24 @@ export function App({
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
   const [view, setView] = useState<View>("setup");
   const [restartSetup, setRestartSetup] = useState(false);
+  useEffect(() => {
+    const openSettings = (event: KeyboardEvent) => {
+      if (
+        (view === "chats" || view === "settings") &&
+        (event.metaKey || event.ctrlKey) &&
+        event.key === "," &&
+        !event.altKey &&
+        !event.isComposing &&
+        !event.defaultPrevented &&
+        !document.querySelector('dialog[open], [role="dialog"]')
+      ) {
+        event.preventDefault();
+        setView((current) => (current === "settings" ? "chats" : "settings"));
+      }
+    };
+    document.addEventListener("keydown", openSettings);
+    return () => document.removeEventListener("keydown", openSettings);
+  }, [view]);
   const [openChatRequest, setOpenChatRequest] = useState<{ id: string }>();
   useEffect(
     () =>
@@ -254,18 +273,36 @@ export function App({
         }}
       />
     );
-  if (view === "chats") {
+  if (view === "chats" || view === "settings") {
     return (
-      <ChatsScreen
-        workspace={workspace}
-        openChatRequest={openChatRequest}
-        app={chats}
-        transport={transport}
-        info={info}
-        onRecoveryDismissed={onRecoveryDismissed}
-        onDiagnostics={() => setView("diagnostics")}
-        onAgents={() => setView("agents")}
-      />
+      <>
+        <div hidden={view === "settings"} style={{ height: "100%" }}>
+          <ChatsScreen
+            active={view === "chats"}
+            workspace={workspace}
+            openChatRequest={openChatRequest}
+            app={chats}
+            transport={transport}
+            info={info}
+            onRecoveryDismissed={onRecoveryDismissed}
+            onDiagnostics={() => setView("diagnostics")}
+            onAgents={() => setView("agents")}
+            onSettings={() => setView("settings")}
+          />
+        </div>
+        {view === "settings" ? (
+          <SettingsScreen
+            info={info}
+            onBack={() => setView("chats")}
+            onAgents={() => setView("agents")}
+            onDiagnostics={() => setView("diagnostics")}
+            onSetup={() => {
+              setRestartSetup(true);
+              setView("setup");
+            }}
+          />
+        ) : null}
+      </>
     );
   }
 

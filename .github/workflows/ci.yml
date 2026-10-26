@@ -117,6 +117,10 @@ jobs:
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         run: pnpm --filter @auracode/desktop check:orbit
 
+      - name: Check settings and explicit update controls
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        run: pnpm --filter @auracode/desktop check:settings
+
       - name: Keep Orbit browser evidence
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

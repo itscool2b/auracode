@@ -28,6 +28,8 @@ export function ChatsScreen({
   onRecoveryDismissed,
   onDiagnostics,
   onAgents,
+  onSettings,
+  active = true,
   workspace,
   openChatRequest,
 }: {
@@ -38,6 +40,8 @@ export function ChatsScreen({
   readonly onRecoveryDismissed: () => void;
   readonly onDiagnostics: () => void;
   readonly onAgents?: () => void;
+  readonly onSettings?: () => void;
+  readonly active?: boolean;
   readonly workspace?: WorkspaceStore;
   readonly openChatRequest?: { id: string };
 }) {
@@ -98,7 +102,8 @@ export function ChatsScreen({
           <PanelLeft size={16} />
         </button>
         <ChatList
-          onSearch={transport.search ? () => setPalette(true) : undefined}
+          active={active}
+          onSearch={transport.search && active ? () => setPalette(true) : undefined}
           chats={displayed}
           error={organization.error ?? snapshot.chatsError}
           organization={organization.data}
@@ -121,6 +126,7 @@ export function ChatsScreen({
           chats={snapshot.chats}
           onDiagnostics={onDiagnostics}
           onAgents={onAgents}
+          onSettings={onSettings}
           onChoose={(agentId) => {
             const next = new NewChatDraft(transport);
             next.chooseAgent(agentId);
@@ -154,6 +160,7 @@ export function ChatsScreen({
           />
         ) : (
           <ChatView
+            active={active}
             onOpenChat={(id) => {
               setSelected(id);
               void app.reloadChats();
@@ -168,7 +175,7 @@ export function ChatsScreen({
           />
         )}
       </main>
-      {palette ? (
+      {palette && active ? (
         <CommandPalette
           transport={transport}
           chatId={selected}
@@ -183,6 +190,16 @@ export function ChatsScreen({
               : undefined
           }
           commands={[
+            ...(onSettings
+              ? [
+                  {
+                    id: "settings",
+                    title: "Open settings",
+                    detail: "Preferences and application updates",
+                    run: onSettings,
+                  },
+                ]
+              : []),
             {
               id: "new",
               title: "New chat",

@@ -24,6 +24,7 @@ export function AgentDock({
   onChoose,
   onDiagnostics,
   onAgents,
+  onSettings,
   transport,
   onRefresh,
 }: {
@@ -32,6 +33,7 @@ export function AgentDock({
   readonly onChoose: (agentId: string) => void;
   readonly onDiagnostics: () => void;
   readonly onAgents?: () => void;
+  readonly onSettings?: () => void;
   readonly transport?: Transport;
   readonly onRefresh?: () => void;
 }) {
@@ -106,9 +108,9 @@ export function AgentDock({
         <button
           type="button"
           className="chat-icon-button"
-          aria-label="Open diagnostics"
-          title="Diagnostics"
-          onClick={onDiagnostics}
+          aria-label={onSettings ? "Open settings" : "Open diagnostics"}
+          title={onSettings ? "Settings" : "Diagnostics"}
+          onClick={onSettings ?? onDiagnostics}
         >
           <Settings2 size={16} />
         </button>
