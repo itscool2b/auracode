@@ -17,6 +17,11 @@ The runtime SHA-256 is
 `d534e0fa1484844a097963d5f4fb4df9397c5a1b5e29e42aed7575ab6f67989b`.
 Pi publishes TypeScript protocol types, rather than a JSON Schema. The fixtures are synthetic
 instances derived from those types, not recordings or claims of real-agent acceptance.
+`basic` covers prompt acceptance through settlement. `thinking-tool` covers reasoning deltas,
+tool-call arguments, partial/final tool results and the next assistant message. `interrupted-dialog`
+covers an unanswered confirm dialog, queue clearing, abort and preservation of partial text.
+Fixtures omit unused model pricing, provider metadata and message identifiers; none invent a real
+agent run or contain signatures, credentials or account fields.
 
 The driver completes started/queued prompts at `agent_settled`, not the prompt response or
 `agent_end`. Pi 1.0.2 emits `agent_settled` without fields; cancellation comes from an owned
@@ -55,4 +60,6 @@ test step exposed catalog assertions that still expected five agents and a known
 race from the base branch. CI run `40280216757` passed all applicable Linux/Windows gates for
 `fa41b80`. A subsequent audit corrected the synthetic settlement fixture to the actual empty
 event shape and added manual-compaction lifecycle coverage; those corrections need another CI
-run. Expanded replay evidence and authorized real-agent acceptance remain pending. M1d is not complete.
+run. The final lifecycle checkpoint `5146ee5` subsequently passed all applicable Linux/Windows gates
+in CI run `40282637352`. The expanded three-fixture replay and combined ACP branch checks remain
+pending, as does authorized real-agent acceptance. M1d is not complete.
