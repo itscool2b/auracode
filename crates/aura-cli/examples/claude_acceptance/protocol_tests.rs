@@ -218,3 +218,29 @@ async fn thinking_delta_is_recorded_without_a_second_prompt() {
             .any(|frame| frame["event"]["delta"]["type"] == "thinking_delta")
     );
 }
+
+#[tokio::test]
+async fn withheld_thinking_text_passes_with_lifecycle_and_reports_token_evidence() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let check = FakeCheck::start(dir.path(), true).await;
+    for event in [
+        json!({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}),
+        json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"","estimated_tokens":302}}),
+        json!({"type":"content_block_stop","index":0}),
+    ] {
+        send(&check.end, json!({"type":"stream_event","event":event}));
+    }
+    send(
+        &check.end,
+        json!({
+            "type":"result","subtype":"success","is_error":false,"result":"local result",
+            "session_id":NATIVE,"stop_reason":"end_turn",
+            "usage":{"input_tokens":12,"output_tokens":305,"output_tokens_details":{"thinking_tokens":302}}
+        }),
+    );
+    check.idle();
+    let summary = check.finish().await.expect("withheld thinking check");
+    assert_eq!(summary.thought_bytes, 0);
+    assert_eq!(summary.thoughts_completed, 1);
+    assert_eq!(summary.reasoning_tokens, Some(302));
+}

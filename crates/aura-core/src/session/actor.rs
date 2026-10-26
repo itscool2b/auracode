@@ -319,8 +319,20 @@ enum PageFor {
     },
 }
 
+struct NativeIdentitySave {
+    generation: u64,
+    native_id: String,
+    row_id: String,
+    previous_id: Option<String>,
+}
+
 /// What an `in_flight` future completes.
 enum Done {
+    NativeIdentitySaved {
+        generation: u64,
+        native_id: String,
+        result: Result<Result<(), StoreError>, WaitError>,
+    },
     Prepared {
         generation: u64,
         result: Result<Result<Prepared, StartFailure>, JoinError>,
@@ -409,6 +421,8 @@ pub(crate) struct ChatActor {
     agent_name: Option<String>,
     agent_version: Option<String>,
     native_session_id: Option<String>,
+    /// The row save outlives a driver generation, so stop/restart cannot bypass persistence.
+    native_identity_pending: Option<NativeIdentitySave>,
     usage: Option<UsageInfo>,
     limits: Option<Vec<LimitWindow>>,
     last_error: Option<ErrorInfo>,
@@ -503,6 +517,7 @@ impl ChatActor {
             agent_name: None,
             agent_version: None,
             native_session_id: None,
+            native_identity_pending: None,
             usage: None,
             limits: None,
             last_error: None,
@@ -910,6 +925,7 @@ impl ChatActor {
     fn can_dispatch(&self) -> bool {
         self.status == SessionStatus::Ready
             && self.turn.is_none()
+            && self.native_identity_pending.is_none()
             && self.driver.as_ref().is_some_and(|driver| {
                 driver.ready
                     && driver.stop == Stop::None
@@ -1818,6 +1834,43 @@ impl ChatActor {
 
     fn on_done(&mut self, done: Done) {
         match done {
+            Done::NativeIdentitySaved {
+                generation,
+                native_id,
+                result,
+            } => {
+                let current = self
+                    .native_identity_pending
+                    .as_ref()
+                    .is_some_and(|pending| {
+                        pending.generation == generation && pending.native_id == native_id
+                    });
+                if current && let Some(pending) = self.native_identity_pending.take() {
+                    if matches!(result, Ok(Ok(()))) {
+                        self.refresh_run_status();
+                        self.dispatch_next();
+                    } else {
+                        if let Some(session) = &mut self.agent_session
+                            && session.id == pending.row_id
+                        {
+                            session.native_session_id = pending.previous_id.clone();
+                        }
+                        if self.native_session_id.as_ref() == Some(&native_id) {
+                            self.native_session_id = pending.previous_id.clone();
+                        }
+                        if let Some(check) = &mut self.replay_check
+                            && check.native_session_id == native_id
+                        {
+                            if let Some(previous) = pending.previous_id {
+                                check.native_session_id = previous;
+                            } else {
+                                self.replay_check = None;
+                            }
+                        }
+                        self.reject_native_identity(ErrorKind::Storage, "The native session id could not be saved. Restart the session after saving is available.".into());
+                    }
+                }
+            }
             Done::Prepared { generation, result } => self.on_prepared(generation, result),
             Done::Page { purpose, result } => self.on_page(purpose, result),
             Done::OptionReply {
@@ -1936,6 +1989,7 @@ impl ChatActor {
                 }
             }
             DriverEvent::Ready(info) => self.on_ready(info),
+            DriverEvent::NativeSessionId(native_id) => self.on_native_session_id(native_id),
             DriverEvent::Event { turn, event } => {
                 let tag = self.open_tag(turn.as_deref());
                 match &event {
@@ -1988,6 +2042,120 @@ impl ChatActor {
             DriverEvent::AuthRequired(prompt) => self.auth = Some(prompt),
         }
         self.refresh_run_status();
+    }
+
+    fn on_native_session_id(&mut self, native_id: String) {
+        let Some(driver) = &mut self.driver else {
+            return;
+        };
+        if !driver.ready
+            || driver.stop != Stop::None
+            || self.native_session_id.as_ref() == Some(&native_id)
+        {
+            return;
+        }
+        if native_id.is_empty() || native_id.chars().count() > 96 {
+            self.reject_native_identity(
+                ErrorKind::ProtocolError,
+                "The agent reported an invalid native session id.".into(),
+            );
+            return;
+        }
+        if !self
+            .shared
+            .live
+            .claim(&driver.native_scope, &native_id, &self.chat_id)
+        {
+            self.reject_native_identity(
+                ErrorKind::Internal,
+                SessionError::Internal("this session is already open in another chat".into())
+                    .to_string(),
+            );
+            return;
+        }
+        let generation = driver.generation;
+        let Some(session) = &mut self.agent_session else {
+            self.reject_native_identity(
+                ErrorKind::Internal,
+                "The native session has no saved session row.".into(),
+            );
+            return;
+        };
+        let now = now_millis();
+        self.native_identity_pending = Some(NativeIdentitySave {
+            generation,
+            native_id: native_id.clone(),
+            row_id: session.id.clone(),
+            previous_id: session.native_session_id.clone(),
+        });
+        session.native_session_id = Some(native_id.clone());
+        session.updated_at = now;
+        let row_id = session.id.clone();
+        self.native_session_id = Some(native_id.clone());
+        if let Some(check) = &mut self.replay_check {
+            check.native_session_id = native_id.clone();
+        }
+        let (saved, acknowledgement) = oneshot::channel();
+        self.queue_op(Op::SaveNativeIdentity {
+            id: row_id,
+            native_id: native_id.clone(),
+            updated_at: now,
+            reply: saved,
+        });
+        self.in_flight.push(
+            async move {
+                Done::NativeIdentitySaved {
+                    generation,
+                    native_id,
+                    // A timed-out write may still commit later. Keep the gate until the
+                    // writer acknowledges its result, even across driver stop/restart.
+                    result: acknowledgement.await.map_err(|_| WaitError::Gone),
+                }
+            }
+            .boxed(),
+        );
+        self.revision = self.revision.wrapping_add(1);
+        self.info_dirty = true;
+        self.schedule_flush();
+    }
+
+    fn reject_native_identity(&mut self, kind: ErrorKind, message: String) {
+        self.hold_queue();
+        self.graceful_stop(
+            StopPlan {
+                cancel_grace: Duration::ZERO,
+                process: ShutdownPlan::STANDARD,
+            },
+            false,
+        );
+        self.conflict = true;
+        if let Some(turn_id) = self.turn.as_ref().map(|turn| turn.id.clone()) {
+            self.on_turn_ended(
+                &turn_id,
+                StopReason::Error,
+                None,
+                Some(DriverError {
+                    kind,
+                    message,
+                    detail: None,
+                }),
+            );
+        } else {
+            self.last_error = Some(ErrorInfo {
+                kind,
+                message: message.clone(),
+                detail: None,
+            });
+            self.push(
+                AuraEvent::Error {
+                    kind,
+                    message,
+                    detail: None,
+                    recoverable: true,
+                },
+                None,
+            );
+        }
     }
 
     /// The open turn's tag when `turn` names it; anything else is stored outside turns.

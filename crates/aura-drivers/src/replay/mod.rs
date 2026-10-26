@@ -216,7 +216,7 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
     })
 }
 
-/// A `set_option` or `set_autonomy` reply on its way.
+/// A typed control reply on its way.
 enum ReplyWait {
     Option(
         String,
@@ -225,6 +225,11 @@ enum ReplyWait {
     Autonomy(
         Autonomy,
         oneshot::Receiver<Result<aura_protocol::AutonomyState, crate::driver::DriverError>>,
+    ),
+    Rewind(
+        String,
+        bool,
+        oneshot::Receiver<Result<crate::driver::FileRewindResult, crate::driver::DriverError>>,
     ),
 }
 
@@ -414,6 +419,20 @@ fn command_for(logged: &LoggedCommand) -> (DriverCommand, Option<ReplyWait>) {
                 Some(ReplyWait::Autonomy(autonomy, wait)),
             )
         }
+        LoggedCommand::RewindFiles {
+            user_message_id,
+            dry_run,
+        } => {
+            let (reply, wait) = oneshot::channel();
+            (
+                DriverCommand::RewindFiles {
+                    user_message_id: user_message_id.clone(),
+                    dry_run,
+                    reply,
+                },
+                Some(ReplyWait::Rewind(user_message_id, dry_run, wait)),
+            )
+        }
         // The session's Stop: 3 s for a running turn's cancel, then the standard chain.
         LoggedCommand::Shutdown => (
             DriverCommand::Shutdown {
@@ -444,6 +463,14 @@ async fn reply_json(wait: ReplyWait) -> Value {
                 Err(_) => json!("dropped"),
             };
             json!({"set_autonomy": autonomy, "reply": reply})
+        }
+        ReplyWait::Rewind(user_message_id, dry_run, wait) => {
+            let reply = match wait.await {
+                Ok(Ok(result)) => json!({"ok": result}),
+                Ok(Err(error)) => json!({"err": error}),
+                Err(_) => json!("dropped"),
+            };
+            json!({"rewind_files": user_message_id, "dry_run": dry_run, "reply": reply})
         }
     }
 }

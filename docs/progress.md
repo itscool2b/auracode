@@ -22,8 +22,9 @@ Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b 
 
 M1b is in progress on `m1b-claude-native`. Native discovery, driver dispatch, transcript mapping,
 permissions, multi-question UI, run-idle gating and shared native-session ownership are implemented.
-Replay, shutdown and control-queue hardening are being integrated. The milestone is not yet ready
-for release or a PR. Foundation PR #4 has not been merged.
+Native live verification, recorded fixture curation, review fixes and local workspace gates are
+complete. CI and milestone installer builds are the remaining release gates before a PR.
+Foundation PR #4 has not been merged.
 
 M1b acceptance checklist (unchecked items remain required):
 
@@ -33,11 +34,11 @@ M1b acceptance checklist (unchecked items remain required):
 - [x] Separate prompt completion and native run idle; preserve ACP/mock behavior.
 - [x] Native/ACP ownership aliases scoped by local host and effective configuration directory.
 - [x] Multiple questions, multi-select/free text, preserved native input, generated UI bindings.
-- [ ] Finish driver control/cancellation/shutdown tests and integrated protocol replay goldens.
+- [x] Driver control/cancellation/shutdown tests and integrated protocol replay goldens.
 - [x] Coalesced usage/context refresh, advertised model metadata, structured auth-required handling.
-- [ ] Typed fork/resume-at startup and native rewind control with accurate capability reporting.
-- [ ] Full startup failure matrix, oversized frames, timeout/late-response reconciliation.
-- [ ] Verify compatible installed native CLI with free controls before the minimal paid smoke.
+- [x] Typed fork/resume-at startup and native rewind control with accurate capability reporting.
+- [x] Startup failure matrix, oversized frames, timeout/late-response reconciliation.
+- [x] Verify compatible installed native CLI with free controls before the minimal paid smoke.
 - [ ] Full workspace checks, frontend/build tests, CI, independent final review, completed PR.
 
 Observed checks during integration: core suite passed 327 Rust tests plus one doctest; the Questions
@@ -53,10 +54,65 @@ Independent review found fresh starts reused the chat UUID as the native session
 now allocate a UUIDv7 for each spawn. Typed native startup options validate fresh/fork IDs and
 resume-at message IDs before spawning, preserve ordinary resume sources, and enable SDK file
 checkpointing only when explicitly requested. Replay supplies a separate deterministic session seed.
-The actor still supplies default startup options; fork/resume-at UI and native rewind remain pending,
-and fork/rewind capabilities remain unadvertised. This step passed 304 driver unit tests, four
+The actor still supplies default startup options; fork/resume-at UI belongs to M2b,
+and fork/rewind capabilities remain unadvertised. This startup step passed 304 driver unit tests, four
 conformance tests, all 74 replay fixtures, targeted driver/core Clippy, and the mirrored instructions
-check. No paid calls were made and no M1b PR has been opened.
+check. These initial checks made no paid calls. Subsequent live acceptance is recorded below.
+No M1b PR has been opened.
+
+Further review fixes and verification:
+
+- Windows ownership keys now resolve existing directory aliases through metadata and fold path casing.
+  All eight local ownership tests pass, including differently cased paths with an uncreated config root
+  and equivalent UUID spellings.
+- The smoke runner tracks accepted queued prompts until native idle and removes its own queued work on
+  failure. Five CLI smoke integration tests and CLI Clippy pass.
+- Native file rewind now has a typed driver command and result. It requires explicit startup opt-in,
+  validates checkpoint IDs, waits for idle with no pending requests, and preserves link-safety skips.
+  Any failed real rewind or timeout closes the process before held prompts can run, since partial file
+  changes are possible. Six rewind
+  regression tests pass. The future M2b checkpoint UI remains required.
+- CI for checkpoint `08c19b1` passed Linux and Windows Rust checks, bindings, frontend lint, app streams
+  and chat smoke tests. macOS was skipped by the branch workflow. Newer review fixes still need CI.
+- One combined local workspace rerun was blocked by Windows Application Control refusing synthetic
+  test executables (error 4551). No policy bypass was attempted; the checkpoint's CI suite passed.
+- M1c native Codex implementation is progressing in its own `m1c-codex-native` worktree. It is not
+  complete or merged into this branch.
+
+Live Claude acceptance on Windows, with the installed native 2.1.310 CLI:
+
+- The final free probe passed 20 checks with five explicit skips. Its three spawn logs contain no
+  model prompts.
+- The minimal Haiku/low smoke passed all 20 checks across six scenarios and seven visible prompts:
+  streaming, deny then allow-once tool permissions, interrupted partial text, continuation after
+  interruption, full auto, and resumed conversation. Each turn was stored once.
+- Free `/usage` checks verified resume after changing cwd, native fork and reopening that fork,
+  and resume-at into a new fork followed by reopening. These establish native identity and lifecycle,
+  not a semantic memory-truncation claim. An initial resume check used a mistyped ID and failed;
+  the corrected observed session ID passed.
+- One Sonnet/medium thinking turn cost $0.1097759 and returned 302 thinking tokens. Claude supplied
+  empty thinking text, so the initial text-byte acceptance check failed. The driver now preserves
+  that activity and its duration without inventing reasoning or exposing signatures. Offline replay
+  of that same recording verifies the fix; no second paid call was sent. The acceptance harness
+  now checks completed thinking blocks and reports text bytes and token evidence separately.
+- Seven curated recordings cover the six smoke scenarios plus withheld thinking text. Curation
+  removes native identities and reconstructs split tool JSON before redacting paths. Original
+  records remain in order; replacement chunk boundaries are documented as synthetic.
+- Native init metadata now updates the effective model and permission mode. A resolved path-resume
+  identity must acquire ownership and be durably saved before queued work can run. The new checked
+  transaction acknowledgment reports real write success, including missing/rejected rows. Its gate
+  survives stop/restart and waits through stalled writes rather than timing out before a late commit.
+  Four core identity tests verify lock contention, rejected writes, conflicting ownership and restart.
+- Eleven native failure tests cover startup failures, mandatory oversized frames, stdin failure,
+  late replies and bounded shutdown. Content-only oversized frames retain the valid remainder.
+  Transport failures drain valid buffered content and the final result; identity failures discard
+  subsequent content from the rejected session. A known child exit cannot be misclassified as EPIPE.
+- Final local checks pass: full locked Rust workspace with all features, all-target workspace Clippy,
+  rustfmt, TypeScript bindings, pnpm check (813 frontend tests, 19 existing skips), both frontend builds,
+  and spike documentation checks. The driver suite includes 340 unit tests, four conformance tests
+  and 81 fixture replays. The six opt-in acceptance-harness unit tests also pass. The buffered-exit
+  regression passed 12 repeated runs after its race fix. Linux/Windows CI and installer builds for
+  the final checkpoint remain pending; macOS has not been run locally on this Windows host.
 
 1. M1b: native Claude driver, protocol replay, session readiness, permissions/questions, smoke tests.
 2. M1c: native Codex app-server driver and generated-schema compatibility.

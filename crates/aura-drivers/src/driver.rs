@@ -207,6 +207,18 @@ pub struct StopPlan {
     pub process: ShutdownPlan,
 }
 
+/// Native file checkpoint results. A preview does not modify files. A real rewind can skip
+/// paths for link safety; callers must report those skips rather than promise a complete restore.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRewindResult {
+    #[serde(default)]
+    pub files_changed: Vec<String>,
+    pub insertions: Option<u64>,
+    pub deletions: Option<u64>,
+    pub skipped_links: Option<u64>,
+}
+
 /// What the session actor asks of a driver.
 #[derive(Debug)]
 pub enum DriverCommand {
@@ -237,6 +249,13 @@ pub enum DriverCommand {
         autonomy: Autonomy,
         reply: oneshot::Sender<Result<AutonomyState, DriverError>>,
     },
+    /// Rewind native file checkpoints only. Conversation history is unchanged. Must be explicitly
+    /// enabled at startup, and runs only while idle with no outstanding approvals or mutations.
+    RewindFiles {
+        user_message_id: String,
+        dry_run: bool,
+        reply: oneshot::Sender<Result<FileRewindResult, DriverError>>,
+    },
     /// Graceful end: interrupt a running turn, wait `cancel_grace` for its reply, close stdin, run
     /// the shutdown chain.
     Shutdown { plan: StopPlan },
@@ -253,6 +272,9 @@ pub enum DriverEvent {
         idle: bool,
     },
     Ready(ReadyInfo),
+    /// After Ready, resolves a resume path to the authoritative native transcript id. The actor
+    /// must claim and save it before sending another prompt. It does not start a new session row.
+    NativeSessionId(String),
     /// Transcript events, tagged with their turn (rule 8). Never `TurnStarted`, `TurnEnded`,
     /// `UserMessageDelta`, `SessionUpdated`, `PromptLifecycle`, `PermissionRequested`,
     /// `PermissionResolved`, `UiRequest` or `UiResolved`: the actor emits those.
@@ -511,6 +533,10 @@ pub enum LoggedCommand {
     SetAutonomy {
         autonomy: Autonomy,
     },
+    RewindFiles {
+        user_message_id: String,
+        dry_run: bool,
+    },
     Shutdown,
 }
 
@@ -544,6 +570,14 @@ impl From<&DriverCommand> for LoggedCommand {
             },
             DriverCommand::SetAutonomy { autonomy, .. } => LoggedCommand::SetAutonomy {
                 autonomy: *autonomy,
+            },
+            DriverCommand::RewindFiles {
+                user_message_id,
+                dry_run,
+                ..
+            } => LoggedCommand::RewindFiles {
+                user_message_id: user_message_id.clone(),
+                dry_run: *dry_run,
             },
             DriverCommand::Shutdown { .. } => LoggedCommand::Shutdown,
         }

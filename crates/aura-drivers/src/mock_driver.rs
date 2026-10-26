@@ -593,6 +593,13 @@ impl Mock {
                 self.push(DriverEvent::Options(self.options.clone()));
                 let _ = reply.send(Ok(self.autonomy_state()));
             }
+            DriverCommand::RewindFiles { reply, .. } => {
+                let _ = reply.send(Err(DriverError {
+                    kind: ErrorKind::ProtocolError,
+                    message: "The demo agent does not rewind files.".into(),
+                    detail: None,
+                }));
+            }
         }
     }
 

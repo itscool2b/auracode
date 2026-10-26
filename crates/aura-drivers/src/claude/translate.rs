@@ -58,7 +58,9 @@ impl Block {
     }
 
     fn delta(&mut self, text: &str, events: &mut Vec<AuraEvent>) {
-        if text.is_empty() || self.committed {
+        // Native Claude can expose a thinking block and token counts without exposing its text.
+        // Emit one empty delta to open the activity, then preserve its completion and duration.
+        if self.committed || text.is_empty() && (self.kind != BlockKind::Thought || self.emitted) {
             return;
         }
         self.text.push_str(text);
@@ -115,6 +117,7 @@ pub struct Translator {
     messages: BTreeMap<String, BTreeMap<u64, Block>>,
     tools: HashMap<String, Tool>,
     seen_frames: HashSet<String>,
+    main_stop_reason: Option<String>,
 }
 
 impl Default for Translator {
@@ -137,6 +140,7 @@ impl Translator {
             messages: BTreeMap::new(),
             tools: HashMap::new(),
             seen_frames: HashSet::new(),
+            main_stop_reason: None,
         }
     }
 
@@ -145,6 +149,12 @@ impl Translator {
         self.current.clear();
         self.messages.clear();
         self.seen_frames.clear();
+        self.main_stop_reason = None;
+    }
+
+    /// The latest main message's API stop reason when the terminal result omits it.
+    pub fn main_stop_reason(&self) -> Option<&str> {
+        self.main_stop_reason.as_deref()
     }
 
     /// The already-shown tool id, suitable for a permission card's association.
@@ -225,6 +235,15 @@ impl Translator {
             return;
         };
         let family = string(event, "type").unwrap_or_default();
+        if matches!(frame.get("parent_tool_use_id"), None | Some(Value::Null)) {
+            if family == "message_start" {
+                self.main_stop_reason = None;
+            } else if family == "message_delta"
+                && let Some(reason) = string(&event["delta"], "stop_reason")
+            {
+                self.main_stop_reason = Some(reason.into());
+            }
+        }
         let message = self.message_id(frame, event.get("message"), family == "message_start");
         let index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
         match family {
@@ -704,9 +723,10 @@ pub fn options(
     current_model: &str,
     current_effort: Option<&str>,
 ) -> Vec<ConfigOption> {
-    let Some(models) = init.get("models").and_then(Value::as_array) else {
-        return Vec::new();
-    };
+    let models = init
+        .get("models")
+        .and_then(Value::as_array)
+        .map_or(&[][..], Vec::as_slice);
     let selected = models
         .iter()
         .find(|model| string(model, "value") == Some(current_model))
@@ -719,7 +739,7 @@ pub fn options(
         .and_then(|model| string(model, "value"))
         .unwrap_or(current_model);
     let mut seen = HashSet::new();
-    let choices = models
+    let mut choices = models
         .iter()
         .filter_map(|model| {
             let value = truncate(
@@ -742,6 +762,20 @@ pub fn options(
         })
         .take(MAX_CHOICES)
         .collect::<Vec<_>>();
+    let current = truncate(current, MAX_NAME_CHARS);
+    if !current.is_empty() && !choices.iter().any(|choice| choice.value == current) {
+        if choices.len() == MAX_CHOICES {
+            choices.pop();
+        }
+        choices.push(ConfigChoice {
+            value: current.clone(),
+            name: selected
+                .and_then(|model| string(model, "displayName"))
+                .map_or_else(|| current.clone(), |name| truncate(name, MAX_NAME_CHARS)),
+            description: Some("Current model reported by Claude.".into()),
+            group: None,
+        });
+    }
     let mut options = Vec::new();
     if !choices.is_empty() {
         options.push(ConfigOption {
@@ -749,10 +783,7 @@ pub fn options(
             name: "Model".to_owned(),
             description: None,
             category: ConfigCategory::Model,
-            kind: ConfigKind::Select {
-                current: truncate(current, MAX_NAME_CHARS),
-                choices,
-            },
+            kind: ConfigKind::Select { current, choices },
             pending: None,
         });
     }
@@ -1076,6 +1107,54 @@ mod tests {
                 .expect("serialize")
                 .contains("private-signature")
         );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn withheld_thinking_text_keeps_one_activity_and_its_duration() {
+        let mut translator = Translator::new();
+        let mut events = translator.ingest(&stream(
+            "m",
+            json!({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}),
+        ));
+        tokio::time::advance(std::time::Duration::from_millis(120)).await;
+        for frame in [
+            stream(
+                "m",
+                json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"","estimated_tokens":302}}),
+            ),
+            stream(
+                "m",
+                json!({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"private-signature"}}),
+            ),
+            stream("m", json!({"type":"content_block_stop","index":0})),
+            committed(
+                "m",
+                json!([{"type":"thinking","thinking":"","signature":"private-signature"}]),
+            ),
+            stream("m", json!({"type":"message_stop"})),
+        ] {
+            events.extend(translator.ingest(&frame));
+        }
+        assert!(matches!(events.as_slice(), [
+            AuraEvent::ThoughtDelta { text, thought_id },
+            AuraEvent::ThoughtCompleted { thought_id: completed_id, duration_ms: Some(120) }
+        ] if text.is_empty() && thought_id == completed_id));
+        assert!(
+            !serde_json::to_string(&events)
+                .expect("events")
+                .contains("private-signature")
+        );
+    }
+
+    #[test]
+    fn committed_only_withheld_thinking_has_a_complete_empty_activity() {
+        let mut translator = Translator::new();
+        let frame = committed("m", json!([{"type":"thinking","thinking":""}]));
+        let events = translator.ingest(&frame);
+        assert!(matches!(events.as_slice(), [
+            AuraEvent::ThoughtDelta { text, .. }, AuraEvent::ThoughtCompleted { .. }
+        ] if text.is_empty()));
+        assert!(translator.ingest(&frame).is_empty());
     }
 
     #[test]

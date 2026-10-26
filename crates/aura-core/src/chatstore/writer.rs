@@ -261,7 +261,9 @@ impl Pending {
                 self.sessions.insert(row.id.clone(), row.chat_id.clone());
                 Attribution::Chat(row.chat_id.clone())
             }
-            Op::UpdateAgentSession { id, .. } => known(&self.sessions, id),
+            Op::UpdateAgentSession { id, .. } | Op::SaveNativeIdentity { id, .. } => {
+                known(&self.sessions, id)
+            }
             Op::BeginTurn { turn, rows } => {
                 self.turns.insert(turn.id.clone(), turn.chat_id.clone());
                 ticket.min_seq = rows.iter().map(|row| row.seq).min();
@@ -401,6 +403,7 @@ pub(crate) fn op_bytes(op: &Op) -> usize {
         | Op::QueueHoldAll { .. }
         | Op::QueueReleaseAll { .. }
         | Op::ReadPage { .. }
+        | Op::SaveNativeIdentity { .. }
         | Op::Barrier(_) => SMALL,
     }
 }
@@ -417,7 +420,8 @@ fn work_bytes(work: &Work) -> usize {
 /// Whether the item answers someone, which ends a batch: it runs after the batch commits.
 fn ends_batch(work: &Work) -> bool {
     match work {
-        Work::Op(Op::ReadPage { .. } | Op::Barrier(_)) | Work::Request(_) => true,
+        Work::Op(Op::ReadPage { .. } | Op::SaveNativeIdentity { .. } | Op::Barrier(_))
+        | Work::Request(_) => true,
         Work::Op(_) => false,
         #[cfg(test)]
         Work::Test(_) => false,
@@ -595,6 +599,7 @@ fn op_name(op: &Op) -> &'static str {
     match op {
         Op::InsertAgentSession(_) => "insert_agent_session",
         Op::UpdateAgentSession { .. } => "update_agent_session",
+        Op::SaveNativeIdentity { .. } => "save_native_identity",
         Op::BeginTurn { .. } => "begin_turn",
         Op::AppendEvents { .. } => "append_events",
         Op::EndTurn(_) => "end_turn",
@@ -1122,6 +1127,22 @@ impl Writer {
             Work::Op(Op::Barrier(reply)) => {
                 let _ = reply.send(());
             }
+            Work::Op(Op::SaveNativeIdentity {
+                id,
+                native_id,
+                updated_at,
+                reply,
+            }) => {
+                let device = self.device_id.clone();
+                let result = if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.to_owned()))
+                } else {
+                    self.write_tx(|conn| {
+                        rows::save_native_identity(conn, &device, &id, &native_id, updated_at)
+                    })
+                };
+                let _ = reply.send(result);
+            }
             Work::Request(request) => self.answer_request(request),
             Work::Op(_) => {}
             #[cfg(test)]
@@ -1590,7 +1611,7 @@ fn apply(
         Op::QueueReleaseAll { chat_id } => {
             sql(rows::queue_hold(conn, Some(chat_id), false).map(|_| ()))
         }
-        Op::ReadPage { .. } | Op::Barrier(_) => Ok(()),
+        Op::ReadPage { .. } | Op::SaveNativeIdentity { .. } | Op::Barrier(_) => Ok(()),
     }
 }
 
@@ -1691,7 +1712,7 @@ fn dead_letter_line(item: &Item, error: &str, at: i64) -> Option<String> {
             Op::QueueRemove { id } => DeadOp::QueueRemove { id },
             Op::QueueHoldAll { chat_id } => DeadOp::QueueHoldAll { chat_id },
             Op::QueueReleaseAll { chat_id } => DeadOp::QueueReleaseAll { chat_id },
-            Op::ReadPage { .. } | Op::Barrier(_) => return None,
+            Op::ReadPage { .. } | Op::SaveNativeIdentity { .. } | Op::Barrier(_) => return None,
         },
         Work::Request(_) => return None,
         #[cfg(test)]

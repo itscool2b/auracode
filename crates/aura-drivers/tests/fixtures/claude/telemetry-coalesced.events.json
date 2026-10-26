@@ -27,7 +27,27 @@
     },
     {
       "type": "options",
-      "data": []
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "haiku",
+            "choices": [
+              {
+                "value": "haiku",
+                "name": "haiku",
+                "description": "Current model reported by Claude.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
     },
     {
       "type": "commands",

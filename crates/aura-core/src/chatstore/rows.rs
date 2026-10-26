@@ -379,6 +379,24 @@ pub(crate) fn update_agent_session(
     Ok(())
 }
 
+/// Updates exactly one existing session row; a skipped or missing row is not a saved identity.
+pub(crate) fn save_native_identity(
+    conn: &Connection,
+    device_id: &str,
+    id: &str,
+    native_id: &str,
+    updated_at: Millis,
+) -> rusqlite::Result<()> {
+    let changed = conn.execute(
+        "UPDATE agent_sessions SET native_session_id = ?2, updated_at = ?3, device_id = ?4 WHERE id = ?1",
+        params![id, native_id, updated_at, device_id],
+    )?;
+    if changed != 1 {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+    Ok(())
+}
+
 /// Inserts the turn, appends its first rows, and removes the queued prompt it came from.
 pub(crate) fn begin_turn(
     conn: &Connection,

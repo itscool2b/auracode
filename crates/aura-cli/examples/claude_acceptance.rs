@@ -56,8 +56,9 @@ Required for thinking:
 The three free cases print and send only the visible local command /usage. They verify startup
 identity, command completion, run-idle, and fork reopening. They do not claim a semantic memory
 check or inspect vendor transcripts/configuration. Resume-at always forks to preserve the source.
-Thinking prints its exact prompt, sets one turn and a $0.25 CLI budget, and fails without a recorded
-thinking delta. Any permission or question is denied and fails the check. No automatic retries.
+Thinking prints its exact prompt, sets one turn and a $0.25 CLI budget, and requires a completed
+thinking block. The agent may withhold its text; the summary records text bytes and reasoning tokens
+separately. Any permission or question is denied and fails the check. No automatic retries.
 Every owned process is stopped; logs and fresh directories are retained for fixture curation.
 "#;
 
@@ -255,6 +256,8 @@ struct Summary {
     prompt_id: String,
     prompt: String,
     thought_bytes: usize,
+    thoughts_completed: usize,
+    reasoning_tokens: Option<u64>,
     reply: String,
     logs: Vec<PathBuf>,
 }
@@ -343,6 +346,8 @@ async fn exercise(
     idle = false;
     let mut ended = false;
     let mut thought_bytes = 0usize;
+    let mut thoughts_completed = 0usize;
+    let mut reasoning_tokens = None;
     let mut reply = String::new();
     let deadline = tokio::time::Instant::now() + TURN_LIMIT;
     while !ended || !idle {
@@ -355,6 +360,10 @@ async fn exercise(
                 ..
             } => thought_bytes = thought_bytes.saturating_add(text.len()),
             DriverEvent::Event {
+                event: AuraEvent::ThoughtCompleted { .. },
+                ..
+            } => thoughts_completed = thoughts_completed.saturating_add(1),
+            DriverEvent::Event {
                 event: AuraEvent::MessageDelta { text, .. },
                 ..
             } => {
@@ -366,21 +375,22 @@ async fn exercise(
                 turn_id,
                 stop_reason,
                 error,
-                ..
+                usage,
             } if turn_id == prompt_id => {
                 if stop_reason != StopReason::EndTurn || error.is_some() {
                     return Err(format!(
                         "Claude ended this check with {stop_reason:?}; inspect the redacted log."
                     ));
                 }
+                reasoning_tokens = usage.and_then(|usage| usage.reasoning_tokens);
                 ended = true;
             }
             _ => {}
         }
     }
-    if thinking && thought_bytes == 0 {
+    if thinking && thoughts_completed == 0 {
         return Err(
-            "The single paid turn completed without a thinking delta. No retry was sent.".into(),
+            "The single paid turn completed without a thinking block. No retry was sent.".into(),
         );
     }
     Ok(Summary {
@@ -388,6 +398,8 @@ async fn exercise(
         prompt_id,
         prompt: prompt.into(),
         thought_bytes,
+        thoughts_completed,
+        reasoning_tokens,
         reply,
         logs: Vec::new(),
     })
@@ -614,8 +626,8 @@ async fn execute(mut args: Args) -> Result<(), String> {
         )
         .await?;
         println!(
-            "PASS native ID {}, result and run-idle observed; thinking bytes {}",
-            first.native_session_id, first.thought_bytes
+            "PASS native ID {}, result and run-idle observed; thinking blocks {}, text bytes {}, reasoning tokens {:?}",
+            first.native_session_id, first.thoughts_completed, first.thought_bytes, first.reasoning_tokens
         );
         let mut summaries = vec![first];
         if matches!(args.case, Case::Fork | Case::ResumeAt) {

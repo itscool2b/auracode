@@ -81,7 +81,10 @@ export const TurnView = memo(function TurnView({
                       : `Thought for ${formatDuration(item.durationMs)}`
                     : "Thinking…"}
                 </summary>
-                <p>{item.text}</p>
+                <p>
+                  {item.text ||
+                    (item.completed ? "The agent did not share its reasoning." : "Thinking…")}
+                </p>
               </details>
             );
           case "tool":

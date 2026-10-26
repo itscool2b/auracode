@@ -318,8 +318,8 @@ consumer-grade polish. MIT/Apache code may be read for reference; never AGPL (To
   `.env`, an install command), merge blocked while a Direct chat runs in the target.
 - **Tooling:** rustfmt and clippy for Rust (`-D warnings` in CI; no `dbg!`, no `unwrap()` or `expect()`
   outside tests). No `unsafe` except SAFETY-commented calls into Windows APIs that std does not wrap, each
-  item opting out of the denied `unsafe_code` lint on its own; in the app that is only aura-core's
-  `fsutil::win_acl`, which makes the profiles folder private to the user (M1a adds no `unsafe` module).
+  item opting out of the denied `unsafe_code` lint on its own. The app uses these narrow helpers for
+  private profile ACLs and invariant Windows path casing in native-session ownership checks.
   Biome alone lints and formats TypeScript, CSS, JSON, and YAML: one fast tool and one config instead of
   ESLint + Prettier. It does not format Markdown (its formatter re-pads hand-wrapped tables) and leaves
   `pnpm-lock.yaml` to pnpm. pnpm settings live in `pnpm-workspace.yaml` (pnpm 12 ignores them in

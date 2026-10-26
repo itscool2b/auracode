@@ -89,7 +89,12 @@ function ThoughtPill({ thought }: { readonly thought: ThoughtBlock }) {
       </button>
       {open ? (
         <p id={detailsId} className="thought-text">
-          <InlineText text={thought.text} />
+          <InlineText
+            text={
+              thought.text ||
+              (thought.completed ? "The agent did not share its reasoning." : "Thinking…")
+            }
+          />
         </p>
       ) : null}
     </div>

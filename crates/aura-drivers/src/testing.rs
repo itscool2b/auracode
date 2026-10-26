@@ -85,6 +85,7 @@ pub enum CommandMatch {
     },
     SetOption,
     SetAutonomy,
+    RewindFiles,
     Shutdown,
     Any,
 }
@@ -100,6 +101,7 @@ impl CommandMatch {
             | (CommandMatch::Interrupt, LoggedCommand::Interrupt)
             | (CommandMatch::SetOption, LoggedCommand::SetOption { .. })
             | (CommandMatch::SetAutonomy, LoggedCommand::SetAutonomy { .. })
+            | (CommandMatch::RewindFiles, LoggedCommand::RewindFiles { .. })
             | (CommandMatch::Shutdown, LoggedCommand::Shutdown) => true,
             (
                 CommandMatch::RespondPermission { request_id },
@@ -506,6 +508,13 @@ impl Runner {
             DriverCommand::SetAutonomy { autonomy, reply } => {
                 let _ = reply.send(self.shared.autonomy_reply(autonomy));
             }
+            DriverCommand::RewindFiles { reply, .. } => {
+                let _ = reply.send(Err(DriverError {
+                    kind: ErrorKind::ProtocolError,
+                    message: "The scripted agent does not rewind files.".into(),
+                    detail: None,
+                }));
+            }
             DriverCommand::Interrupt
             | DriverCommand::RespondPermission { .. }
             | DriverCommand::RespondUi { .. }
@@ -592,6 +601,7 @@ fn in_turn(event: DriverEvent, turn_id: String) -> DriverEvent {
         untagged @ (DriverEvent::Status(_)
         | DriverEvent::RunState { .. }
         | DriverEvent::Ready(_)
+        | DriverEvent::NativeSessionId(_)
         | DriverEvent::PermissionWithdrawn { .. }
         | DriverEvent::UiWithdrawn { .. }
         | DriverEvent::Commands(_)

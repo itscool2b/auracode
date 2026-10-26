@@ -405,6 +405,14 @@ pub enum Op {
         id: String,
         patch: AgentSessionPatch,
     },
+    /// Commits this native identity in its own transaction and acknowledges the actual result.
+    /// Unlike a barrier, a failed or dead-lettered earlier write cannot report success here.
+    SaveNativeIdentity {
+        id: String,
+        native_id: String,
+        updated_at: Millis,
+        reply: oneshot::Sender<Result<(), StoreError>>,
+    },
     /// Inserts the turn, appends `rows` (TurnStarted, the user's text, ...) and deletes the queued
     /// prompt `turn.prompt_id`, in one transaction: a crash keeps either the queued prompt or the
     /// started turn.

@@ -897,6 +897,13 @@ impl Session {
             DriverCommand::RespondUi { .. } => {
                 tracing::debug!("an answer to a question this driver never asks");
             }
+            DriverCommand::RewindFiles { reply, .. } => {
+                let _ = reply.send(Err(DriverError {
+                    kind: ErrorKind::ProtocolError,
+                    message: "This agent does not support native file rewinding.".into(),
+                    detail: None,
+                }));
+            }
             command @ (DriverCommand::SetOption { .. } | DriverCommand::SetAutonomy { .. }) => {
                 if self.ready {
                     self.queue_op(command, Instant::now());

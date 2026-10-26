@@ -3,7 +3,7 @@
 use super::{translate, wire};
 use crate::driver::{
     DriverCommand, DriverContext, DriverError, DriverEvent, DriverExit, DriverStatus,
-    LoggedCommand, PermissionOutcome, ReadyInfo, ResumeOutcome, SessionSetup,
+    FileRewindResult, LoggedCommand, PermissionOutcome, ReadyInfo, ResumeOutcome, SessionSetup,
 };
 use aura_process::{
     LineSink, LogNote, MAX_LINE_BYTES, PIPE_EOF_GRACE, ProtocolLog, STDERR_TAIL_BYTES,
@@ -148,19 +148,16 @@ fn usage_limits(payload: &Value) -> Vec<LimitWindow> {
         })
         .unwrap_or_default()
 }
-fn result_reason(frame: &Value) -> StopReason {
+fn result_reason(frame: &Value, stream_reason: Option<&str>) -> StopReason {
     let terminal = frame["terminal_reason"].as_str().unwrap_or_default();
     let subtype = frame["subtype"].as_str().unwrap_or_default();
+    let stop_reason = frame["stop_reason"].as_str().or(stream_reason);
     if auth_required(frame) {
         StopReason::Error
     } else if terminal.starts_with("aborted_") {
         StopReason::Cancelled
     } else if terminal == "max_turns" || subtype == "error_max_turns" {
         StopReason::MaxTurnRequests
-    } else if frame["stop_reason"] == "max_tokens" {
-        StopReason::MaxTokens
-    } else if frame["stop_reason"] == "refusal" {
-        StopReason::Refusal
     } else if frame["is_error"] == true
         || subtype.starts_with("error_")
         || matches!(
@@ -169,6 +166,10 @@ fn result_reason(frame: &Value) -> StopReason {
         )
     {
         StopReason::Error
+    } else if stop_reason == Some("max_tokens") {
+        StopReason::MaxTokens
+    } else if stop_reason == Some("refusal") {
+        StopReason::Refusal
     } else if terminal.is_empty() || terminal == "completed" {
         StopReason::EndTurn
     } else {
@@ -189,8 +190,26 @@ fn autonomy(requested: Autonomy, native: &str) -> AutonomyState {
         requested,
         native_mode: Some(native.into()),
         auto_answer: AutoAnswer::Never,
-        note: None,
+        note: (native != mode(requested)).then(|| {
+            "Claude is using a different permission mode from the requested setting.".into()
+        }),
     }
+}
+fn model_metadata<'a>(init: &'a Value, model: &str) -> Option<&'a Value> {
+    let models = init["models"].as_array()?;
+    models
+        .iter()
+        .find(|entry| entry["value"].as_str() == Some(model))
+        .or_else(|| {
+            models
+                .iter()
+                .find(|entry| entry["resolvedModel"].as_str() == Some(model))
+        })
+}
+fn model_identity<'a>(init: &'a Value, model: &'a str) -> &'a str {
+    model_metadata(init, model)
+        .and_then(|entry| entry["resolvedModel"].as_str())
+        .unwrap_or(model)
 }
 fn native_session_id(setup: &SessionSetup) -> Result<String, DriverError> {
     let invalid = |message| error(ErrorKind::ProtocolError, message);
@@ -226,7 +245,9 @@ fn native_session_id(setup: &SessionSetup) -> Result<String, DriverError> {
                     "An explicit new Claude session id requires a fresh start or fork.",
                 ));
             }
-            return Ok(source.clone());
+            return Ok(
+                uuid::Uuid::parse_str(source).map_or_else(|_| source.clone(), |id| id.to_string())
+            );
         }
         if explicit.is_some() && explicit == uuid::Uuid::parse_str(source).ok() {
             return Err(invalid(
@@ -307,6 +328,10 @@ enum Purpose {
         value: Autonomy,
         reply: oneshot::Sender<Result<AutonomyState, DriverError>>,
     },
+    Rewind {
+        dry_run: bool,
+        reply: oneshot::Sender<Result<FileRewindResult, DriverError>>,
+    },
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TelemetryKind {
@@ -359,8 +384,10 @@ struct Session {
     idle: bool,
     turn: Option<String>,
     model: String,
+    observed_model: Option<String>,
     effort: Option<String>,
     mode: String,
+    observed_mode: Option<String>,
     init_deadline: Instant,
     commands_due: Option<Instant>,
     command_list: Option<Vec<aura_protocol::SlashCommand>>,
@@ -402,6 +429,24 @@ impl Session {
             },
         });
     }
+    fn oversized(&mut self, kind: Option<&str>) {
+        if matches!(
+            kind,
+            Some(
+                "control_request"
+                    | "control_response"
+                    | "control_cancel_request"
+                    | "result"
+                    | "system"
+            )
+        ) {
+            let message = "Claude sent a required control update larger than 64 MiB. The session stopped with its partial output preserved.";
+            self.notice(message);
+            self.failure = Some(error(ErrorKind::ProtocolError, message));
+        } else {
+            self.notice("Claude sent an update larger than 64 MiB; it was skipped.");
+        }
+    }
     fn options(&mut self) {
         self.outbox
             .push_back(DriverEvent::Options(translate::options(
@@ -409,6 +454,89 @@ impl Session {
                 &self.model,
                 self.effort.as_deref(),
             )));
+    }
+    fn apply_model(&mut self, model: &str) -> bool {
+        if model.is_empty() || self.model == model {
+            return false;
+        }
+        if model_identity(&self.init, &self.model) != model_identity(&self.init, model) {
+            self.effort = None;
+        }
+        self.model = model.to_owned();
+        true
+    }
+    fn native_metadata(&mut self, frame: &Value) {
+        if frame["type"] != "system"
+            || self.stopping
+            || self.failure.is_some()
+            || frame
+                .get("parent_tool_use_id")
+                .is_some_and(|parent| !parent.is_null())
+        {
+            return;
+        }
+        let init = frame["subtype"] == "init";
+        if !init && frame["subtype"] != "status" {
+            return;
+        }
+        if init && !self.native_identity(frame) {
+            return;
+        }
+        if init && let Some(model) = frame["model"].as_str().filter(|value| !value.is_empty()) {
+            self.observed_model = Some(model.into());
+            if self.apply_model(model) && self.ready {
+                self.options();
+            }
+        }
+        if let Some(native) = frame["permissionMode"]
+            .as_str()
+            .filter(|value| !value.is_empty())
+        {
+            self.observed_mode = Some(native.into());
+            if self.mode != native {
+                self.mode = native.into();
+                if self.ready {
+                    self.outbox
+                        .push_back(DriverEvent::Autonomy(autonomy(self.setup.autonomy, native)));
+                }
+            }
+        }
+    }
+    fn native_identity(&mut self, frame: &Value) -> bool {
+        let actual = frame["session_id"]
+            .as_str()
+            .and_then(|id| uuid::Uuid::parse_str(id).ok());
+        let message = match actual {
+            None => Some(
+                "Claude reported an invalid native session id. Restart the session to continue.",
+            ),
+            Some(actual) => {
+                if let Ok(expected) = uuid::Uuid::parse_str(&self.native_id) {
+                    if actual == expected {
+                        return true;
+                    }
+                    Some(
+                        "Claude reported a different native session id than requested. The session was stopped to protect its transcript.",
+                    )
+                } else if self.setup.resume.is_some() && !self.setup.native_start.fork {
+                    self.native_id = actual.to_string();
+                    if self.ready {
+                        self.outbox
+                            .push_back(DriverEvent::NativeSessionId(self.native_id.clone()));
+                    }
+                    return true;
+                } else {
+                    Some(
+                        "Claude reported a different native session id than requested. The session was stopped to protect its transcript.",
+                    )
+                }
+            }
+        };
+        if let Some(message) = message {
+            self.notice(message);
+            self.failure = Some(error(ErrorKind::ProtocolError, message));
+        }
+        false
     }
     fn emit_usage(&mut self, update: UsageInfo, turn: Option<String>) {
         if merge_usage(&mut self.usage, update) {
@@ -468,11 +596,10 @@ impl Session {
         self.ready = true;
         self.outbox
             .push_back(DriverEvent::RunState { idle: self.idle });
-        let mut state = autonomy(self.setup.autonomy, &self.mode);
-        if self.mode != mode(self.setup.autonomy) {
-            state.note = Some("Claude's policy did not allow the requested mode.".into());
-        }
-        self.outbox.push_back(DriverEvent::Autonomy(state));
+        self.outbox.push_back(DriverEvent::Autonomy(autonomy(
+            self.setup.autonomy,
+            &self.mode,
+        )));
         self.options();
         self.outbox
             .push_back(DriverEvent::Commands(translate::reduce_commands(
@@ -525,12 +652,7 @@ impl Session {
         if effort == translate::DEFAULT_EFFORT {
             return Ok(json!({"subtype":"apply_flag_settings","settings":{"effortLevel":null}}));
         }
-        let model = self.init["models"].as_array().and_then(|models| {
-            models.iter().find(|m| {
-                m["value"].as_str() == Some(&self.model)
-                    || m["resolvedModel"].as_str() == Some(&self.model)
-            })
-        });
+        let model = model_metadata(&self.init, &self.model);
         if !model
             .and_then(|m| m["supportedEffortLevels"].as_array())
             .is_some_and(|levels| levels.iter().any(|l| l.as_str() == Some(effort)))
@@ -543,9 +665,12 @@ impl Session {
         Ok(json!({"subtype":"apply_flag_settings","settings":{"effortLevel":effort}}))
     }
     fn configuring(&self) -> bool {
-        self.pending
-            .values()
-            .any(|p| matches!(p.purpose, Purpose::Option { .. } | Purpose::Autonomy { .. }))
+        self.pending.values().any(|p| {
+            matches!(
+                p.purpose,
+                Purpose::Option { .. } | Purpose::Autonomy { .. } | Purpose::Rewind { .. }
+            )
+        })
     }
     fn command(&mut self, command: DriverCommand) {
         log_command(&self.log, &command);
@@ -600,6 +725,38 @@ impl Session {
                 self.send(json!({"type":"user","message":{"role":"user","content":text},"parent_tool_use_id":null,"session_id":self.native_id,"uuid":turn.turn_id}));
             }
             DriverCommand::Interrupt => self.interrupt(),
+            DriverCommand::RewindFiles {
+                user_message_id,
+                dry_run,
+                reply,
+            } => {
+                if reply.is_closed() {
+                    return;
+                }
+                let rejection = if !self.setup.native_start.file_checkpointing {
+                    Some("Native file checkpointing was not enabled for this session.")
+                } else if uuid::Uuid::parse_str(&user_message_id).is_err() {
+                    Some("The file checkpoint message id must be a UUID.")
+                } else if !self.ready
+                    || !self.idle
+                    || self.turn.is_some()
+                    || !self.approvals.is_empty()
+                    || !self.questions.is_empty()
+                    || self.configuring()
+                {
+                    Some("Wait for Claude to become idle before rewinding files.")
+                } else {
+                    None
+                };
+                if let Some(message) = rejection {
+                    let _ = reply.send(Err(error(ErrorKind::ProtocolError, message)));
+                    return;
+                }
+                self.request(
+                    json!({"subtype":"rewind_files","user_message_id":user_message_id,"dry_run":dry_run}),
+                    Purpose::Rewind { dry_run, reply },
+                );
+            }
             DriverCommand::RespondPermission {
                 request_id,
                 outcome,
@@ -814,7 +971,11 @@ impl Session {
     fn approval(&mut self, id: String, request: Value) {
         if request["subtype"] == "request_user_dialog" {
             // No dialog kinds were advertised by our initialize request. The native dialog
-            // payload is opaque, so do not claim to have answered an unsupported dialog.
+            // payload is opaque. Reject the control request explicitly so it cannot remain
+            // pending forever, without claiming to have answered its contents.
+            if !self.sink.is_closed() {
+                self.send(json!({"type":"control_response","response":{"subtype":"error","request_id":id,"error":"This native dialog is not supported by auracode."}}));
+            }
             self.notice("Claude requested an unsupported native dialog.");
             return;
         }
@@ -951,23 +1112,29 @@ impl Session {
                     return;
                 }
                 self.init = payload.clone();
-                self.mode = payload["current_permission_mode"]
-                    .as_str()
+                self.mode = self
+                    .observed_mode
+                    .as_deref()
+                    .or_else(|| payload["current_permission_mode"].as_str())
                     .unwrap_or("default")
                     .into();
                 self.idle = payload["session_state"] == "idle";
                 self.model = self
-                    .setup
-                    .desired
-                    .get("model")
-                    .and_then(|v| {
-                        if let ConfigValue::Choice { value: m } = v {
-                            Some(m.clone())
-                        } else {
-                            None
-                        }
+                    .observed_model
+                    .clone()
+                    .or_else(|| {
+                        self.setup
+                            .desired
+                            .get("model")
+                            .and_then(|v| {
+                                if let ConfigValue::Choice { value: m } = v {
+                                    Some(m.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .or_else(|| payload["model"].as_str().map(str::to_owned))
                     })
-                    .or_else(|| payload["model"].as_str().map(str::to_owned))
                     .unwrap_or_else(|| "default".into());
                 for key in [
                     "pending_permission_requests",
@@ -1031,8 +1198,7 @@ impl Session {
                 } else {
                     if let ConfigValue::Choice { value } = value {
                         if id == "model" {
-                            self.model = payload["model"].as_str().unwrap_or(&value).into();
-                            self.effort = None;
+                            self.apply_model(payload["model"].as_str().unwrap_or(&value));
                         } else {
                             self.effort = explicit_effort(&value);
                         }
@@ -1057,10 +1223,50 @@ impl Session {
                     self.notice(err.message);
                 }
             }
+            Purpose::Rewind { dry_run, reply } => {
+                let result = match failure {
+                    Some(err) => Err(err),
+                    None if payload["canRewind"] == false => Err(error(
+                        ErrorKind::AgentError,
+                        payload["error"]
+                            .as_str()
+                            .unwrap_or("Claude could not rewind this file checkpoint."),
+                    )),
+                    None if payload["canRewind"] == true => serde_json::from_value(payload.clone())
+                        .map_err(|_| {
+                            error(
+                                ErrorKind::ProtocolError,
+                                "Claude returned an invalid file rewind result.",
+                            )
+                        }),
+                    None => Err(error(
+                        ErrorKind::ProtocolError,
+                        "Claude did not confirm whether files can be rewound.",
+                    )),
+                };
+                // Rewinds are not transactional. Even an explicit vendor error can arrive after
+                // some files changed, so only a successful real rewind can release held work.
+                if !dry_run && result.is_err() {
+                    let message = "Claude did not confirm a successful file rewind. Check the files before restarting this session.";
+                    self.notice(message);
+                    self.failure = Some(error(ErrorKind::ProtocolError, message));
+                }
+                let _ = reply.send(result);
+            }
             Purpose::Telemetry(kind) => self.telemetry_reply(kind, payload, failure.is_some()),
         }
     }
     fn event(&mut self, frame: Value) {
+        let draining_transport_failure = self
+            .failure
+            .as_ref()
+            .is_some_and(|failure| failure.kind == ErrorKind::AgentExited);
+        self.native_metadata(&frame);
+        // Transport teardown can still have valid content buffered. A protocol or identity
+        // failure invalidates subsequent content too, since its provenance is no longer known.
+        if self.failure.is_some() && (!self.ready || !draining_transport_failure) {
+            return;
+        }
         if frame["type"] == "system"
             && frame["subtype"] == "session_state_changed"
             && let Some(state) = frame["state"].as_str()
@@ -1095,7 +1301,7 @@ impl Session {
         }
         if frame["type"] == "result" && self.turn.is_some() {
             let needs_auth = auth_required(&frame);
-            let reason = result_reason(&frame);
+            let reason = result_reason(&frame, self.translator.main_stop_reason());
             let failed = reason == StopReason::Error;
             self.withdraw_turn();
             if let Some(turn_id) = self.turn.take() {
@@ -1149,10 +1355,15 @@ impl Session {
             .map(|(id, _)| id.clone())
             .collect();
         for id in expired {
+            let rewinding = self.pending.get(&id).is_some_and(|pending| {
+                matches!(pending.purpose, Purpose::Rewind { dry_run: false, .. })
+            });
             if self.pending.get(&id).is_some_and(|pending| {
                 matches!(
                     pending.purpose,
-                    Purpose::Option { .. } | Purpose::Autonomy { .. }
+                    Purpose::Option { .. }
+                        | Purpose::Autonomy { .. }
+                        | Purpose::Rewind { dry_run: false, .. }
                 )
             }) {
                 if let Some(pending) = self.pending.remove(&id) {
@@ -1163,10 +1374,18 @@ impl Session {
                         Purpose::Autonomy { reply, .. } => {
                             let _ = reply.send(Err(config_timeout()));
                         }
+                        Purpose::Rewind { reply, .. } => {
+                            let _ = reply.send(Err(error(ErrorKind::ProtocolError,
+                                "Claude did not confirm the file rewind. Check the files before continuing.")));
+                        }
                         _ => {}
                     }
                 }
-                let message = "Claude did not confirm a settings change. Restart the session before sending another prompt.";
+                let message = if rewinding {
+                    "Claude did not confirm the file rewind. Check the files before restarting this session."
+                } else {
+                    "Claude did not confirm a settings change. Restart the session before sending another prompt."
+                };
                 self.notice(message);
                 self.failure = Some(error(ErrorKind::ProtocolError, message));
                 continue;
@@ -1330,8 +1549,10 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         idle: false,
         turn: None,
         model: "default".into(),
+        observed_model: None,
         effort: None,
         mode: "default".into(),
+        observed_mode: None,
         init_deadline: Instant::now(),
         commands_due: None,
         command_list: None,
@@ -1353,6 +1574,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         Purpose::Initialize,
     );
     let control = process.control;
+    let stdin_observer = s.sink.clone();
     let mut stdout = process.io.stdout;
     let mut exit = control.exited();
     let mut exited = None;
@@ -1426,13 +1648,25 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
             .min()
             .unwrap_or_else(|| Instant::now() + Duration::from_secs(86400));
         tokio::select! {
+            ()=stdin_observer.writer_closed(),if !s.stopping&&!process_done&&s.failure.is_none()=>{
+                if let Some(info)=control.try_exited() {
+                    // Process exit also closes stdin. It can win this select before `exit`;
+                    // keep draining stdout without misclassifying that race as a write failure.
+                    exited=Some(info);
+                    process_done=true;
+                } else {
+                    let message = "Claude stopped accepting input. Restart the session to continue.";
+                    s.notice(message);
+                    s.failure=Some(error(ErrorKind::AgentExited,message));
+                }
+            },
             command=commands.recv(),if !requested_close&&s.failure.is_none()&&!s.stopping&&!process_done=>{match command {
                 None|Some(DriverCommand::Shutdown {..})=>{let plan=match command {Some(DriverCommand::Shutdown {plan})=>plan,_=>crate::driver::StopPlan {cancel_grace:Duration::ZERO,process:ShutdownPlan::STANDARD}};
                     s.log.command(json!({"type":"shutdown"}));requested_close=true;s.stopping=true;s.outbox.push_back(DriverEvent::Status(DriverStatus::Closing));if !s.idle {s.interrupt();}closing=Some((Instant::now()+plan.cancel_grace,plan.process));},
                 Some(command)=>s.command(command),
             }},
             permit=events.reserve(bytes),if !s.outbox.is_empty()=>{let Ok(permit)=permit else {control.kill_tree();return DriverExit::Closed;};if let Some(event)=s.outbox.pop_front() {permit.send(event);}},
-            item=stdout.next(),if !eof&&!full=>match item {Some(StdoutItem::Line(line))=>s.incoming(wire::parse_line(&line)),Some(StdoutItem::Oversized {..})=>s.notice("Claude sent an update larger than 64 MiB; it was skipped."),None=>{eof=true;if !process_done && shutdown.is_none() {closing=Some((Instant::now()+Duration::from_secs(2),ShutdownPlan::FORCE));}}},
+            item=stdout.next(),if !eof&&!full=>match item {Some(StdoutItem::Line(line))=>s.incoming(wire::parse_line(&line)),Some(StdoutItem::Oversized {keys,..})=>s.oversized(keys.kind.as_deref()),None=>{eof=true;if !process_done && shutdown.is_none() {closing=Some((Instant::now()+Duration::from_secs(2),ShutdownPlan::FORCE));}}},
             info=&mut exit,if !process_done=>{exited=Some(info);process_done=true;},
             report=async {if let Some(task)=&mut shutdown {Some(task.await)} else {None}},if shutdown.is_some()=>{shutdown=None;process_done=true;if let Some(report)=report {exited=exited.or(report.exit);}},
             _=tokio::time::sleep_until(deadline)=>{s.expire();if drain_deadline.is_some_and(|due|Instant::now()>=due)&&!full {eof=true;}},
@@ -1459,6 +1693,10 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "metadata_tests.rs"]
+mod metadata_tests;
 
 #[cfg(test)]
 mod tests {
@@ -1716,7 +1954,7 @@ mod tests {
                 StopReason::Other,
             ),
         ] {
-            assert_eq!(result_reason(&frame), expected, "{frame}");
+            assert_eq!(result_reason(&frame, None), expected, "{frame}");
         }
     }
 }

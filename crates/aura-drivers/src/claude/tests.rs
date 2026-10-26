@@ -14,6 +14,11 @@ use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
+mod failures;
+mod identity;
+mod results;
+mod rewind;
+
 struct Quiet(Arc<FakeSpawner>);
 impl AgentSpawner for Quiet {
     fn spawn(&self, spec: SpawnSpec) -> BoxFuture<'static, Result<SpawnedProcess, SpawnError>> {
@@ -472,7 +477,7 @@ async fn exit_drain_budget_pauses_while_the_event_receiver_is_full() {
         tokio::task::yield_now().await;
     }
     tokio::time::advance(Duration::from_secs(20)).await;
-    let mut notices = 0;
+    let mut notices = BTreeMap::<String, usize>::new();
     let mut ended = 0;
     while let Some(event) = timeout(Duration::from_secs(2), h.events.recv())
         .await
@@ -480,14 +485,18 @@ async fn exit_drain_budget_pauses_while_the_event_receiver_is_full() {
     {
         match event {
             DriverEvent::Event {
-                event: aura_protocol::AuraEvent::Notice { .. },
+                event: aura_protocol::AuraEvent::Notice { message, .. },
                 ..
-            } => notices += 1,
+            } => *notices.entry(message).or_default() += 1,
             DriverEvent::TurnEnded { .. } => ended += 1,
             _ => {}
         }
     }
-    assert_eq!(notices, 420, "all buffered protocol frames drained");
+    assert_eq!(
+        notices.values().sum::<usize>(),
+        420,
+        "all buffered protocol frames drained: {notices:?}"
+    );
     assert_eq!(ended, 1);
     assert!(matches!(
         h.run.await.expect("task"),
