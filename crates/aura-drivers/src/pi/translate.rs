@@ -12,6 +12,7 @@ use tokio::time::Instant;
 
 const MAX_BUFFER: usize = 32 * 1024;
 const MAX_BLOCKS: usize = 256;
+const MAX_TRACKED_ITEMS: usize = 16384;
 
 pub fn id(native: &str) -> String {
     if native.chars().count() <= 96 {
@@ -98,6 +99,7 @@ pub struct Translator {
     ended: HashSet<String>,
     usage: Option<TokenUsage>,
     reason: StopReason,
+    exhausted: bool,
 }
 impl Translator {
     pub fn new(prefix: impl Into<String>) -> Self {
@@ -109,6 +111,7 @@ impl Translator {
             ended: HashSet::new(),
             usage: None,
             reason: StopReason::EndTurn,
+            exhausted: false,
         }
     }
     pub fn begin_turn(&mut self) {
@@ -117,6 +120,10 @@ impl Translator {
         self.ended.clear();
         self.usage = None;
         self.reason = StopReason::EndTurn;
+        self.exhausted = false;
+    }
+    pub fn is_exhausted(&self) -> bool {
+        self.exhausted
     }
     pub fn usage(&self) -> Option<TokenUsage> {
         self.usage.clone()
@@ -133,6 +140,7 @@ impl Translator {
     }
     fn block(&mut self, index: u64, thought: bool) -> Option<&mut Block> {
         if !self.blocks.contains_key(&index) && self.blocks.len() >= MAX_BLOCKS {
+            self.exhausted = true;
             return None;
         }
         Some(self.blocks.entry(index).or_insert_with(|| Block {
@@ -182,8 +190,8 @@ impl Translator {
             }));
         }
         // State is bounded independently of how long extensions keep an agent run alive.
-        if self.tools.len() > MAX_BLOCKS {
-            self.tools.clear();
+        if self.tools.len() > MAX_TRACKED_ITEMS {
+            self.exhausted = true;
         }
     }
     fn message(&mut self, message: &Value, out: &mut Vec<AuraEvent>) {
@@ -224,25 +232,20 @@ impl Translator {
             }
         }
         if let Some(usage) = metadata::tokens(&message["usage"], UsageScope::Turn) {
-            let total = self.usage.get_or_insert_with(|| TokenUsage {
-                cache_read_tokens: Some(0),
-                cache_write_tokens: Some(0),
-                ..Default::default()
-            });
-            total.input_tokens = total.input_tokens.saturating_add(usage.input_tokens);
-            total.output_tokens = total.output_tokens.saturating_add(usage.output_tokens);
-            total.cache_read_tokens = Some(
-                total
+            if let Some(total) = &mut self.usage {
+                total.input_tokens = total.input_tokens.saturating_add(usage.input_tokens);
+                total.output_tokens = total.output_tokens.saturating_add(usage.output_tokens);
+                total.cache_read_tokens = total
                     .cache_read_tokens
-                    .unwrap_or(0)
-                    .saturating_add(usage.cache_read_tokens.unwrap_or(0)),
-            );
-            total.cache_write_tokens = Some(
-                total
+                    .zip(usage.cache_read_tokens)
+                    .map(|(a, b)| a.saturating_add(b));
+                total.cache_write_tokens = total
                     .cache_write_tokens
-                    .unwrap_or(0)
-                    .saturating_add(usage.cache_write_tokens.unwrap_or(0)),
-            );
+                    .zip(usage.cache_write_tokens)
+                    .map(|(a, b)| a.saturating_add(b));
+            } else {
+                self.usage = Some(usage);
+            }
         }
         self.reason = match text(message, "stopReason") {
             Some("length") => StopReason::MaxTokens,
@@ -251,8 +254,8 @@ impl Translator {
             Some("stop" | "toolUse") => StopReason::EndTurn,
             _ => StopReason::Other,
         };
-        if self.ended.len() > MAX_BLOCKS {
-            self.ended.clear();
+        if self.ended.len() > MAX_TRACKED_ITEMS {
+            self.exhausted = true;
         }
     }
     pub fn ingest(&mut self, frame: &Value) -> Vec<AuraEvent> {
@@ -419,5 +422,18 @@ mod tests {
             matches!(&update[0],AuraEvent::ToolUpdate(v) if v.status==Some(ToolStatus::Completed))
         );
         assert!(id(&"x".repeat(500)).len() <= 96);
+    }
+
+    #[test]
+    fn retained_state_is_bounded_without_silently_ignoring_excess_blocks() {
+        let mut translator = Translator::new("test");
+        for index in 0..=MAX_BLOCKS {
+            translator.ingest(&json!({"type":"message_update",
+            "assistantMessageEvent":{"type":"text_start","contentIndex":index}}));
+        }
+        assert!(translator.is_exhausted());
+        assert_eq!(translator.blocks.len(), MAX_BLOCKS);
+        translator.begin_turn();
+        assert!(!translator.is_exhausted());
     }
 }

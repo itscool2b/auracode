@@ -135,6 +135,24 @@ pub fn request_method(message: &Value) -> Option<&str> {
         Some(method)
     } else if message["type"] == "control_request" && message["request_id"].is_string() {
         message.pointer("/request/subtype").and_then(Value::as_str)
+    } else if message["id"].is_string()
+        && matches!(
+            message["type"].as_str(),
+            Some(
+                "prompt"
+                    | "abort"
+                    | "clear_queue"
+                    | "get_state"
+                    | "get_available_models"
+                    | "get_available_thinking_levels"
+                    | "get_session_stats"
+                    | "get_commands"
+                    | "set_model"
+                    | "set_thinking_level"
+            )
+        )
+    {
+        message["type"].as_str()
     } else {
         None
     }
@@ -167,6 +185,9 @@ pub fn reply<'a>(records: &'a [Value], id: &Value) -> Option<&'a Value> {
                             msg.pointer("/response/subtype").and_then(Value::as_str),
                             Some("success" | "error")
                         ))
+                    || (msg["type"] == "response"
+                        && msg.get("id") == Some(id)
+                        && msg["success"].is_boolean())
             })
     })
 }
@@ -199,9 +220,10 @@ pub fn session_cwd(records: &[Value]) -> Option<&str> {
         .or_else(|| {
             // Native Claude opens its session through launch arguments, in the process cwd.
             let start = note(records, "start")?;
-            (start["agent_id"] == "claude" || start["dialect"] == "claude")
-                .then(|| note(records, "spawn")?.get("cwd")?.as_str())
-                .flatten()
+            (matches!(start["agent_id"].as_str(), Some("claude" | "pi"))
+                || matches!(start["dialect"].as_str(), Some("claude" | "pi")))
+            .then(|| note(records, "spawn")?.get("cwd")?.as_str())
+            .flatten()
         })
 }
 
