@@ -1864,3 +1864,7 @@ found a startup wake issue; the coalesced wake/priority fix and corrected timer-
 but Windows Application Control blocked the refreshed executable (4551), so their corrected runs remain
 pending. No policy workaround or real account request was performed. Transcript chunks, concurrent
 continuation markers, explicit Local import and remote-folder resolution remain pending M7 work.
+
+### Preview deployment and live API checks
+
+The preview D1 export was downloaded and verified before all three migrations were applied. The real Rust WASM Worker is deployed with preview-only data bindings, separate secret-store credentials and managed Turnstile widget, no workers.dev access, the same-origin API route and cleanup cron. Live health/configuration, missing-session and foreign-Origin checks passed. Production resources remain untouched. The website build is ready, but JWT-authenticated static asset upload returned Unauthorized after session registration; publication remains pending an authenticated supported upload path. Real email, browser challenge and signed-in multi-device acceptance are still pending. See infra/README.md for exact resource evidence.

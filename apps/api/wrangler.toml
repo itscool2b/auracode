@@ -67,6 +67,7 @@ routes = [{ pattern = "preview.auracode.si/api/*", zone_name = "auracode.si" }]
 [env.preview.vars]
 APP_ORIGIN = "https://preview.auracode.si"
 EMAIL_FROM = "signin@auracode.si"
+TURNSTILE_SITE_KEY = "0x4AAAAAAFmu9KbL2voFn5QY"
 
 [[env.preview.d1_databases]]
 binding = "DB"
