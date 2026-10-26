@@ -1431,3 +1431,17 @@ size rejection and existing descendant cleanup. No real GitHub or repository mut
 - Full desktop compilation/export remains pending because Application Control blocked an existing
   Tauri plugin build script. No bypass, real agent configuration read, native prompt or CI run occurred.
   Library presentation and broader MCP/config conversion acceptance remain in progress.
+
+### M8 Library presentation checkpoint, 2026-10-26
+
+- Added the dark standalone Library screen with project/source and agent filters, literal item
+  previews, before/after copy review, explicit apply, and retained-copy recovery. No route edits
+  overlap root's App/Settings work. Its seven-command transport uses generated Rust DTOs.
+- Chromium and WebKit synthetic checks pass for no mutation on mount, HTML escaping, review/cancel,
+  explicit copy and restore, stale apply rejection and cancellation of late abandoned preparations.
+  Both inspection and review pass axe; the actual screenshots were inspected against the current
+  dark Orbit frame and visual-language rules. The exact Harvey URL redirected to signup, so no new
+  reference login was attempted; connected Mobbin returned related Harvey imagery instead.
+- Focused Library TypeScript and Biome checks pass. Full app typechecking remains pending the
+  planned native binding refresh for preexisting conversation/search DTO changes. MCP/plugin apply
+  and broader Library acceptance continue; M8 is not complete.

@@ -68,5 +68,12 @@ Library DTOs also have an independent pure-crate Specta exporter, checked for dr
 desktop command compilation/export is pending: Windows Application Control blocked an existing
 Tauri plugin build script locally. No policy or blocked executable was changed.
 
-MCP/plugin apply, Library UI, duplicate precedence, nested skill discovery and macOS execution checks
+The dark Library screen supports source/agent/category filters, literal previews, a before/after
+copy review, explicit apply and restart recovery. Unsupported MCP/plugin/package copies explain
+the limitation instead of displaying a working action. A preparation that completes after its
+item is closed is canceled; stale apply errors close the consumed review and remain visible.
+Synthetic Chromium/WebKit tests cover these states and accessibility. Its standalone fixture
+is `library.html`, served only by the development entry, and reads no actual configuration.
+
+MCP/plugin apply, duplicate precedence, nested skill discovery and macOS native execution checks
 remain pending. M8 and M9 are not complete. No real agent configuration was read or changed.
