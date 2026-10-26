@@ -407,7 +407,13 @@ async fn native_execution_setup_failure_remains_a_visible_failed_tool_and_comple
                 event: AuraEvent::ToolUpdate(update),
                 ..
             } if update.status == Some(aura_protocol::ToolStatus::Failed) => {
-                saw_failure = update.content.as_ref().is_some_and(|content| content.iter().any(|part| matches!(part, aura_protocol::ToolContent::Text { text, .. } if text.contains(message))));
+                saw_failure = update.content.as_ref().is_some_and(|content| {
+                    content.iter().any(|part| {
+                        matches!(part, aura_protocol::ToolContent::Terminal {
+                            output, exit_code: Some(-1), ..
+                        } if output.contains(message))
+                    })
+                });
             }
             DriverEvent::TurnEnded { stop_reason, .. } => {
                 assert_eq!(stop_reason, StopReason::EndTurn);
