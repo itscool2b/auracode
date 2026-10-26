@@ -167,6 +167,7 @@ pub async fn run(
         spec,
         last_number: None,
         prompts: Vec::new(),
+        queued: Vec::new(),
         native: None,
         logs: Vec::new(),
     };
@@ -187,6 +188,8 @@ struct Smoke<'a> {
     last_number: Option<u64>,
     /// The prompt ids this run started, in order.
     prompts: Vec<String>,
+    /// Prompts this smoke owns that were queued, including the interrupt sentinel.
+    queued: Vec<String>,
     /// The native session the last start opened.
     native: Option<String>,
     /// Each scenario's protocol logs.
@@ -239,6 +242,7 @@ impl Smoke<'_> {
             let failures = self.report.failures();
             self.scenario(scenario).await;
             let stopped = matches!(self.chat.stop(self.timings.stop).await, Ok(true));
+            self.cancel_owned_queue().await;
             for log in self
                 .chat
                 .logs()
@@ -489,10 +493,10 @@ impl Smoke<'_> {
                 return None;
             }
         };
+        // A native result can precede run-idle. Keep tracking an accepted prompt while the
+        // session manager waits for that idle report, rather than abandoning queued work.
         if ack.queued {
-            self.report
-                .fail(step, "the prompt was queued instead of sent");
-            return None;
+            self.queued.push(ack.prompt_id.clone());
         }
         self.prompts.push(ack.prompt_id.clone());
         let Some(turn_id) = self
@@ -501,6 +505,7 @@ impl Smoke<'_> {
             .await
         else {
             self.report.fail(step, "the prompt's turn never started");
+            let _ = self.headless.manager.force_stop(&self.chat.chat_id).await;
             return None;
         };
         let mut cards = 0;
@@ -708,6 +713,9 @@ impl Smoke<'_> {
                 return;
             }
         };
+        if ack.queued {
+            self.queued.push(ack.prompt_id.clone());
+        }
         self.prompts.push(ack.prompt_id.clone());
         let Some(turn_id) = self
             .chat
@@ -715,6 +723,7 @@ impl Smoke<'_> {
             .await
         else {
             self.report.fail(step, "the prompt's turn never started");
+            let _ = self.headless.manager.force_stop(&self.chat.chat_id).await;
             return;
         };
         let Some(begun) = self.chat.first_delta(&turn_id, self.timings.turn).await else {
@@ -736,6 +745,9 @@ impl Smoke<'_> {
                 return;
             }
         };
+        if queued.queued {
+            self.queued.push(queued.prompt_id.clone());
+        }
         if let Err(error) = self.headless.manager.interrupt(&self.chat.chat_id).await {
             self.report
                 .fail(step, format!("the interrupt failed: {error}"));
@@ -979,6 +991,7 @@ impl Smoke<'_> {
                 .wait_status(SessionStatus::Stopped, self.timings.stop)
                 .await;
         }
+        self.cancel_owned_queue().await;
         if self.logs.is_empty() {
             if self.demo {
                 self.report.note("The demo agent writes no protocol log.");
@@ -994,6 +1007,24 @@ impl Smoke<'_> {
             ));
         }
         self.report.note(lines.join("\n"));
+    }
+
+    /// Called after stop has held the queue, so a timed-out smoke cannot run later on restart.
+    async fn cancel_owned_queue(&mut self) {
+        for prompt_id in std::mem::take(&mut self.queued) {
+            if let Err(error) = self
+                .headless
+                .manager
+                .cancel_queued(&self.chat.chat_id, &prompt_id)
+                .await
+                && !matches!(error, aura_core::session::SessionError::RequestNotPending)
+            {
+                self.report.fail(
+                    "end",
+                    format!("removing queued smoke prompt failed: {error}"),
+                );
+            }
+        }
     }
 }
 
