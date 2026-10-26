@@ -87,16 +87,38 @@ where
     Fut: Future<Output = Result<T, AccountFailure>> + Send + 'static,
 {
     let accounts = state.accounts.get().await?;
+    let engine = state
+        .chats()
+        .and_then(|chats| chats.sync_engine.get().cloned());
     // Dropping a JoinHandle detaches it. A webview reload cannot cancel a half-completed local
     // credential/index publication or leave the service's in-memory state behind its saved state.
-    tokio::spawn(async move { action(accounts).await })
-        .await
-        .map_err(|_| {
-            failure(
+    tokio::spawn(async move {
+        if let Some(engine) = &engine
+            && !engine.suspend(std::time::Duration::from_secs(5)).await
+        {
+            return Err(failure(
                 AccountFailureCode::Unavailable,
-                "The account action could not finish.",
-            )
-        })?
+                "Account sync could not pause. Try again after the current request finishes.",
+            ));
+        }
+        let result = action(accounts.clone()).await;
+        if let Some(engine) = engine
+            && accounts
+                .status()
+                .await
+                .is_ok_and(|status| status.access == AccountAccess::Ready)
+        {
+            engine.resume();
+        }
+        result
+    })
+    .await
+    .map_err(|_| {
+        failure(
+            AccountFailureCode::Unavailable,
+            "The account action could not finish.",
+        )
+    })?
 }
 
 #[tauri::command]
@@ -108,7 +130,8 @@ pub fn account_config() -> Result<AccountConfiguration, AccountFailure> {
 #[tauri::command]
 #[specta::specta]
 pub async fn account_status(state: State<'_, AppState>) -> Result<AccountStatus, AccountFailure> {
-    run(&state, |accounts| async move { accounts.status().await }).await
+    let status = state.accounts.get().await?.status().await?;
+    Ok(crate::account_sync::with_status(&state, status))
 }
 #[tauri::command]
 #[specta::specta]

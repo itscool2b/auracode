@@ -1846,3 +1846,21 @@ compacted transcript transfer remain in progress; this checkpoint made no networ
 The composer now offers an explicit Steer action only when the advertised capability, running status and exact open turn are available. Send retains its existing queue behavior. The chat store rejects stale or unsupported turns without a fallback send, permits one outstanding steering attempt, and keeps Stop available. Transcript messages retain pending, accepted, rejected or unconfirmed delivery outcomes across text deltas and late acknowledgements. An unresolved message in an ended or recovered turn displays delivery unconfirmed. Only an accepted acknowledgement clears a still-matching submitted draft; newer text or context is preserved. Rejected, uncertain and failed attempts are never retried automatically.
 
 The transcript's repeated virtual rows now use named groups instead of duplicate Turn landmarks, correcting the accessibility failure exposed by multiple user messages in one turn. Eighty-three focused reducer, chat store and draft tests passed, along with desktop typecheck, Biome, instruction parity and diff checks. The new browser-only steering fixture passed Chromium and WebKit checks for unsupported and idle controls, exact turn targeting, delivery outcomes, preserved drafts, Stop and late acceptance, plus an axe accessibility scan. No agent or native command ran. Full integrated Windows/macOS acceptance and the earlier Application Control-blocked default-model test execution remain pending.
+
+### Active Account sync worker
+
+Account profiles now attach one Rust worker after successful publication. It coalesces initial,
+turn-completion and requested focus triggers, polls every 60 seconds, transfers bounded encrypted
+metadata/config batches and blobs, and respects offline/rate-limit backoff. Explicit account actions
+suspend its owned in-flight request before changing authentication; revoked or expired authorization
+pauses automatic requests. Profile replacement and quit stop the worker without discarding its outbox.
+A profile-tagged public-status event and the existing AccountStatus.sync field expose its progress.
+The native focus forwarding hook is available for root integration.
+
+Core, sync and desktop all-target Clippy pass. Two keyed profiles exchanged config through a fake
+network and the real writer; owned in-flight suspension/stop passed. A loopback HTTP regression passed
+for a lost upload acknowledgement and rejection of substituted ciphertext. Two paused-clock tests
+found a startup wake issue; the coalesced wake/priority fix and corrected timer-wheel boundary compile,
+but Windows Application Control blocked the refreshed executable (4551), so their corrected runs remain
+pending. No policy workaround or real account request was performed. Transcript chunks, concurrent
+continuation markers, explicit Local import and remote-folder resolution remain pending M7 work.

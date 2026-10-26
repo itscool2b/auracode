@@ -250,6 +250,8 @@ pub struct ChatRuntime {
     pub late_notices: Arc<Mutex<Vec<String>>>,
     pub(crate) services: Arc<RuntimeServices>,
     pub(crate) account_config: Option<Arc<crate::account_config::AccountConfigServices>>,
+    pub(crate) sync_identity: Option<aura_core::sync::SyncIdentity>,
+    pub(crate) sync_engine: std::sync::OnceLock<Arc<aura_core::sync::engine::SyncEngine>>,
 }
 
 /// Process ownership and agent discovery belong to the app instance, not one profile. Reusing
@@ -499,6 +501,8 @@ pub(crate) fn start_profile_chats(
         late_notices,
         services,
         account_config: None,
+        sync_identity: None,
+        sync_engine: std::sync::OnceLock::new(),
     })
 }
 
@@ -938,6 +942,9 @@ impl QuitHost for AppQuitHost<'_> {
     }
 
     async fn stop_sessions(&self, deadline: Duration) -> ShutdownSummary {
+        if let Some(engine) = self.chats.sync_engine.get() {
+            engine.close(Duration::from_secs(2)).await;
+        }
         self.chats.manager.shutdown_all(deadline).await
     }
 
@@ -961,6 +968,9 @@ impl QuitHost for AppQuitHost<'_> {
 /// request). Every recorded agent process is killed at once, and the store closes within 1 s
 /// unless the quit flow closed it. Returns whether this closed the store.
 pub fn exit_last_resort(quit: &Quit, chats: &ChatRuntime) -> bool {
+    if let Some(engine) = chats.sync_engine.get() {
+        engine.stop();
+    }
     chats.manager.kill_all_now();
     if quit.store_closed() {
         return false;

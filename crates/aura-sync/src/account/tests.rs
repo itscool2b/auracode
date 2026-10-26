@@ -247,6 +247,50 @@ async fn auth_rejection_and_local_expiry_stop_network_without_deleting_the_data_
 }
 
 #[tokio::test]
+async fn lost_blob_upload_acknowledgement_accepts_only_exact_existing_ciphertext() {
+    for substituted in [false, true] {
+        let (mut account, _) = account().await;
+        ready(&mut account).await;
+        let sealed = crypto::seal_blob(
+            &key(),
+            &account.id,
+            "blob",
+            1,
+            b"private synthetic snapshot",
+        )
+        .unwrap();
+        let returned = if substituted {
+            crypto::seal_blob(&key(), &account.id, "blob", 1, b"different object").unwrap()
+        } else {
+            sealed.clone()
+        };
+        let (wire, done) = script(vec![
+            (
+                "PUT /api/v1/blobs/blob ",
+                "409 Conflict",
+                serde_json::json!({}),
+            ),
+            (
+                "GET /api/v1/blobs/blob ",
+                "200 OK",
+                serde_json::json!({"etag":crypto::encode(&[9;32]),"nonce":returned.nonce,"ciphertext":returned.ciphertext,"key_version":1,"size_bytes":crypto::decode(&returned.ciphertext,4*1024*1024).unwrap().len()}),
+            ),
+        ]);
+        account.api = wire;
+        let result = account.upload_blob("blob", &sealed, 1, 100).await;
+        if substituted {
+            assert!(matches!(result, Err(AccountError::Api(ApiError::Protocol))));
+        } else {
+            assert_eq!(result.unwrap(), crypto::encode(&[9; 32]));
+        }
+        let requests = done.join().unwrap();
+        assert_eq!(requests[0]["expected_etag"], serde_json::Value::Null);
+        assert_eq!(requests[0]["ciphertext"], sealed.ciphertext);
+        assert_eq!(account.access(), &Access::Ready);
+    }
+}
+
+#[tokio::test]
 async fn remote_key_swap_cannot_replace_a_pinned_or_locally_proven_key() {
     let (mut account, _) = account().await;
     ready(&mut account).await;

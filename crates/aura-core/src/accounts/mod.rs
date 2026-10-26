@@ -18,6 +18,7 @@ use zeroize::Zeroizing;
 mod audit;
 mod error;
 mod index;
+mod network;
 pub use audit::audit_profile;
 use index::Index;
 pub type Result<T> = std::result::Result<T, AccountFailure>;

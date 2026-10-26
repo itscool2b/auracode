@@ -123,8 +123,31 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
     // active pointer while leaving the old runtime in memory.
     tokio::spawn(async move {
         let state = app.state::<AppState>();
-        let resolved = resolve(&state, target).await?;
-        let result = activate(&state, resolved, Outside::real).await?;
+        let previous_engine = state
+            .chats()
+            .and_then(|chats| chats.sync_engine.get().cloned());
+        if let Some(engine) = &previous_engine
+            && !engine.suspend(Duration::from_secs(5)).await
+        {
+            return Err(unavailable(
+                "Account sync could not pause before the profile switch.",
+            ));
+        }
+        let result = async {
+            let resolved = resolve(&state, target).await?;
+            activate(&state, resolved, Outside::real).await
+        }
+        .await;
+        let result = match result {
+            Ok(info) => info,
+            Err(error) => {
+                if let Some(engine) = previous_engine {
+                    engine.resume();
+                }
+                return Err(error);
+            }
+        };
+        crate::account_sync::attach(&app).await;
         if let Some(library) = app.try_state::<Arc<crate::config_library::LibraryService>>() {
             library.reset_profile();
         }
@@ -255,6 +278,7 @@ async fn activate(
                 )
             })?;
         next.account_config = journal.map(|journal| Arc::new(crate::account_config::AccountConfigServices::new(&next.store, journal)));
+        next.sync_identity = selected.key.as_ref().map(|context| context.identity.clone());
         Ok::<_, AppError>((prepared, onboarding, Arc::new(next), selected.key))
     })
     .await
@@ -294,6 +318,9 @@ async fn activate(
     // a close failure is reported honestly while retaining its WAL/recovery files.
     state.integrity.close();
     if let Some(old) = &old {
+        if let Some(engine) = old.sync_engine.get() {
+            engine.close(Duration::from_secs(2)).await;
+        }
         if let Some(config) = &old.account_config {
             config.close();
         }
@@ -311,6 +338,9 @@ async fn activate(
     Ok(info)
 }
 async fn discard(runtime: &ChatRuntime) {
+    if let Some(engine) = runtime.sync_engine.get() {
+        engine.close(Duration::from_secs(2)).await;
+    }
     if let Some(config) = &runtime.account_config {
         config.close();
     }

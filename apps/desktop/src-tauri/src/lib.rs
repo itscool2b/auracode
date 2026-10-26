@@ -18,6 +18,7 @@
 //! asked for. `RunEvent::Exit` is the synchronous last resort ([`state::AppState::at_exit`]).
 
 pub mod account_config;
+pub mod account_sync;
 pub mod accounts;
 pub mod bindings;
 pub mod boot;

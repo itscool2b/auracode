@@ -479,6 +479,41 @@ impl Account {
         let reply = self.api.push(self.token()?, records).await;
         self.response(reply).await
     }
+    pub async fn blob(&mut self, id: &str, now: i64) -> Result<Blob> {
+        self.ready(now).await?;
+        let reply = self.api.blob(self.token()?, id).await;
+        self.response(reply).await
+    }
+    /// Blob IDs are immutable random IDs. A retried create after a lost acknowledgement accepts
+    /// only the exact prior ciphertext, never an unrelated server object or a blind replacement.
+    pub async fn upload_blob(
+        &mut self,
+        id: &str,
+        sealed: &crypto::SealedPayload,
+        version: u32,
+        now: i64,
+    ) -> Result<String> {
+        self.ready(now).await?;
+        let reply = self
+            .api
+            .put_blob(self.token()?, id, sealed, version, None)
+            .await;
+        match self.response(reply).await {
+            Err(AccountError::Api(ApiError::Conflict)) => {
+                let found = self.blob(id, now).await?;
+                if found.key_version != version
+                    || found.nonce != sealed.nonce
+                    || found.ciphertext != sealed.ciphertext
+                    || found.size_bytes
+                        != crypto::decode(&sealed.ciphertext, 4 * 1024 * 1024)?.len() as u64
+                {
+                    return Err(ApiError::Protocol.into());
+                }
+                Ok(found.etag)
+            }
+            other => other,
+        }
+    }
     pub async fn sign_out(&mut self) -> Result<SignOut> {
         // Halt immediately even if persistence or server revocation fails. Do not report success
         // when secure storage could not remove the session from its retained local bundle.
