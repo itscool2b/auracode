@@ -99,6 +99,7 @@ impl Preparation {
                 "supervisor preparation does not match this connection",
             ));
         }
+        self.verify_program(&launch.program)?;
         // Final driver flags may be added after discovery. Recompute the actual realm with all
         // final overrides instead of assuming those flags cannot change HOME, PATH or a root.
         let request = InspectRequest {
@@ -107,6 +108,22 @@ impl Preparation {
             ..self.request.clone()
         };
         self.verify_snapshot(&inspect(&request, env)?)
+    }
+
+    fn verify_program(&self, program: &str) -> io::Result<()> {
+        if !self
+            .prepared
+            .inspection
+            .executables
+            .iter()
+            .any(|executable| {
+                program == executable.launch_path
+                    || Some(program) == executable.resolved_path.as_deref()
+            })
+        {
+            return Err(invalid("supervisor launch program was not inspected"));
+        }
+        Ok(())
     }
 
     fn verify_snapshot(&self, current: &HostInspection) -> io::Result<()> {
@@ -258,6 +275,13 @@ mod tests {
             },
         };
         preparation.verify_snapshot(&snapshot).expect("unchanged");
+        preparation
+            .verify_program("/bin/claude")
+            .expect("stable path");
+        preparation
+            .verify_program("/opt/claude-1")
+            .expect("resolved path");
+        assert!(preparation.verify_program("/bin/uninspected").is_err());
         for field in ["cwd", "root", "executable"] {
             let mut changed = snapshot.clone();
             match field {

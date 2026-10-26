@@ -305,6 +305,10 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   fail before process spawn. Seventeen focused Windows tests and all-target Clippy pass after an
   ordinary Cargo retry. The Linux same-connection integration regression awaits CI; no WSL host
   capability is enabled by this server-only checkpoint.
+- Independent preparation review added binding of the actual launch program to the inspected
+  executable set. Stable and resolved paths are accepted only for that set, and adapters must
+  include Node explicitly. Pure mismatch coverage passes in the 17-test supervisor suite; Linux
+  integration also attempts an uninspected program and requires rejection before spawning.
 - The Rust Linux supervisor endpoint now handles bounded control frames, raw agent lines, parent
   leases, EOF/signals, malformed input, queued-prompt disposal and redacted exit diagnostics through
   the existing process services. Read-only inspection supplies executable paths, canonical cwd and

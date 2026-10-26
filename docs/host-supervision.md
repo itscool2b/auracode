@@ -50,6 +50,8 @@ symlink target or token from another connection rejects launch. Unreadable roots
 configuration symlinks fail inspection. Heartbeats keep preparation alive until launch; Stop
 discards it without starting an agent. The low-level unprepared Launch path is for endpoint tests
 and carries no host identity proof; the application bridge must always use preparation.
+The launched program must also be one of the inspected executable paths. Adapter preparation
+must explicitly include its Node executable; a valid token cannot authorize an unrelated binary.
 The bridge must translate Windows drive paths using the actual distribution's `wslpath`, since
 custom automount settings can change the mount root. Do not assume `/mnt/c` or normalize Linux
 configuration roots with Windows case folding.

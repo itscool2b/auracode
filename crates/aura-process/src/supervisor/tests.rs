@@ -396,7 +396,7 @@ async fn heartbeat_and_stop_before_launch_never_spawn() {
 #[tokio::test]
 async fn inspected_launch_uses_one_environment_and_rejects_a_changed_realm() {
     use inspect::{InspectRequest, Prepared};
-    for change_realm in [false, true] {
+    for change in ["none", "realm", "program"] {
         let folder = tempfile::tempdir().expect("folder");
         let (spawner, mut agents) = FakeSpawner::new();
         let (mut client, server) = tokio::io::duplex(4096);
@@ -406,12 +406,15 @@ async fn inspected_launch_uses_one_environment_and_rejects_a_changed_realm() {
             crate::EnvKey::from("HOME"),
             folder.path().as_os_str().to_owned(),
         );
+        Arc::make_mut(&mut context.env)
+            .vars
+            .insert(crate::EnvKey::from("PATH"), "/usr/bin:/bin".into());
         let task = tokio::spawn(serve(reader, writer, context));
         let inspection = InspectRequest {
             protocol: PROTOCOL_VERSION,
             cwd: folder.path().to_string_lossy().into_owned(),
             set_env: Default::default(),
-            executables: Vec::new(),
+            executables: vec!["sh".into()],
         };
         wire::write_frame(
             &mut client,
@@ -426,17 +429,21 @@ async fn inspected_launch_uses_one_environment_and_rejects_a_changed_realm() {
         assert_eq!(frame.tag, Tag::Inspection);
         let prepared: Prepared = frame.decode().expect("prepared");
         let mut launch = request();
+        launch.program = prepared.inspection.executables[0].launch_path.clone();
         launch.cwd = prepared.inspection.canonical_cwd.clone();
         launch.preparation = Some(prepared.preparation);
         launch
             .set_env
             .0
             .push(("CLAUDE_CODE_SDK_READS_SESSION_STATE".into(), "1".into()));
-        if change_realm {
+        if change == "realm" {
             launch
                 .set_env
                 .0
                 .push(("CLAUDE_CONFIG_DIR".into(), "/other-config".into()));
+        }
+        if change == "program" {
+            launch.program = "/uninspected/agent".into();
         }
         wire::write_frame(
             &mut client,
@@ -444,7 +451,7 @@ async fn inspected_launch_uses_one_environment_and_rejects_a_changed_realm() {
         )
         .await
         .expect("launch");
-        if change_realm {
+        if change != "none" {
             assert!(task.await.expect("join").is_err());
             assert!(agents.try_recv().is_err());
         } else {
