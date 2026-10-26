@@ -372,6 +372,16 @@ pub async fn chat_lists(
     Ok(state.sessions()?.lists(&chat_id).await?)
 }
 
+/// Exact device-local folders supplied to a live driver, or a preflight for its next start.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_folder_context(
+    state: State<'_, AppState>,
+    chat_id: String,
+) -> Result<aura_protocol::workspace::ChatFolderContext, AppError> {
+    Ok(state.sessions()?.chat_folder_context(&chat_id).await?)
+}
+
 /// Sends `text` as typed, or queues it behind the running turn (or the start). A stopped chat starts
 /// its agent.
 #[tauri::command]

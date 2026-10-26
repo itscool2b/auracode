@@ -131,7 +131,7 @@ pub struct SessionSetup {
     pub folder: PathBuf,
     /// The folder as the agent sees it (the ACP `cwd`); in M1a, `folder` as given.
     pub agent_folder: String,
-    /// Empty in M1a (M4).
+    /// Explicit device-local project folders, populated only for a supported native transport.
     pub add_dirs: Vec<PathBuf>,
     pub launch: LaunchSpec,
     pub env: Arc<ResolvedEnv>,

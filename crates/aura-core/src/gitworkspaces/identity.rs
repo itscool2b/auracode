@@ -29,6 +29,58 @@ impl FolderIdentity {
 }
 
 impl GitWorkspaces {
+    /// Local repository-family identity for isolation checks. No fetch, config expansion or index
+    /// operation. Subdirectories deliberately resolve to the same canonical common directory.
+    pub(crate) async fn repository_family(
+        &self,
+        folder: &Path,
+    ) -> Result<Option<std::path::PathBuf>> {
+        let git = self.git().await?;
+        let folder = folder.canonicalize()?;
+        if git.protected.iter().any(|path| {
+            path.canonicalize()
+                .is_ok_and(|path| folder.starts_with(path))
+        }) {
+            return Err(super::GitError::Message(
+                "This agent configuration folder is not a project workspace.".into(),
+            ));
+        }
+        let output = git
+            .output(
+                &folder,
+                args(&["rev-parse", "--path-format=absolute", "--git-common-dir"]),
+                8192,
+            )
+            .await?;
+        if output.exit.as_ref().and_then(|exit| exit.code) != Some(0) {
+            // A failed probe in an existing repository is unknown, not proof of an unrelated
+            // non-Git folder. Keep it out of an isolated session until it can be inspected.
+            for ancestor in folder.ancestors() {
+                match std::fs::symlink_metadata(ancestor.join(".git")) {
+                    Ok(_) => {
+                        return Err(super::GitError::Message(
+                            "This repository's isolation identity could not be verified.".into(),
+                        ));
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(_) => {
+                        return Err(super::GitError::Message(
+                            "This folder's repository metadata could not be inspected.".into(),
+                        ));
+                    }
+                }
+            }
+            return Ok(None);
+        }
+        let path = std::path::PathBuf::from(text(&output.stdout)?);
+        if !path.is_absolute() {
+            return Err(super::GitError::Message(
+                "Git did not return an absolute repository identity.".into(),
+            ));
+        }
+        Ok(Some(path.canonicalize()?))
+    }
+
     /// Only the repository root is portable: a subfolder has a different local meaning.
     /// Unavailable inspection leaves existing identity alone. A new unqualified folder stays local.
     pub(crate) async fn folder_identity(&self, folder: &Path) -> Result<FolderIdentity> {

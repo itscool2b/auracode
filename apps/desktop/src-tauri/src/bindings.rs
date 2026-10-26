@@ -174,6 +174,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::chat_detach,
             commands::chat_history,
             commands::chat_lists,
+            commands::chat_folder_context,
             commands::chat_send,
             commands::chat_cancel_queued,
             commands::chat_resume_queue,

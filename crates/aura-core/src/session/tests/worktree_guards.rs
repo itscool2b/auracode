@@ -1,6 +1,6 @@
 use super::*;
 
-async fn enable_worktree_fixture(rig: &mut Rig) {
+pub(super) async fn enable_worktree_fixture(rig: &mut Rig) {
     use aura_process::{
         HelperEnv, HelperSpec, LeftoverRegistry, find_exe, process_env, run_helper,
     };

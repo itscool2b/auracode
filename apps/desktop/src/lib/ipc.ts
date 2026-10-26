@@ -277,6 +277,10 @@ export function chatLists(chatId: string): Promise<SessionLists> {
   return settle(commands.chatLists(chatId));
 }
 
+export function chatFolderContext(chatId: string) {
+  return settle(commands.chatFolderContext(chatId));
+}
+
 export function chatSend(chatId: string, text: string): Promise<PromptAck> {
   return settle(commands.chatSend(chatId, text));
 }

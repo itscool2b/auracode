@@ -191,7 +191,7 @@ struct Inner {
     maintenance: usize,
     owned_draining: bool,
     slots: HashSet<String>,
-    folders: HashMap<String, PathBuf>,
+    folders: HashMap<String, Vec<PathBuf>>,
     mutations: HashSet<PathBuf>,
     /// `(provider realm, native_session_id)` -> the chat holding it.
     sessions: HashMap<(NativeSessionScope, String), String>,
@@ -336,12 +336,23 @@ impl LiveAgents {
     }
 
     /// Canonical folder registration is atomic with revert reservations, before native spawn.
+    #[cfg(test)]
     pub(crate) fn set_folder(&self, chat: &str, folder: PathBuf) -> bool {
+        self.set_folders(chat, vec![folder])
+    }
+    pub(crate) fn set_folders(&self, chat: &str, folders: Vec<PathBuf>) -> bool {
         let mut inner = self.lock();
-        if inner.mutations.contains(&folder) {
+        if folders.is_empty()
+            || folders.iter().any(|folder| {
+                inner
+                    .mutations
+                    .iter()
+                    .any(|held| folder.starts_with(held) || held.starts_with(folder))
+            })
+        {
             return false;
         }
-        inner.folders.insert(chat.into(), folder);
+        inner.folders.insert(chat.into(), folders);
         true
     }
 
@@ -349,11 +360,16 @@ impl LiveAgents {
         let mut inner = self.lock();
         if inner.quiescing
             || inner.owned_draining
-            || inner.mutations.contains(folder)
             || inner
-                .slots
+                .mutations
                 .iter()
-                .any(|chat| inner.folders.get(chat).is_none_or(|held| held == folder))
+                .any(|held| folder.starts_with(held) || held.starts_with(folder))
+            || inner.slots.iter().any(|chat| {
+                inner.folders.get(chat).is_none_or(|held| {
+                    held.iter()
+                        .any(|held| folder.starts_with(held) || held.starts_with(folder))
+                })
+            })
         {
             return false;
         }

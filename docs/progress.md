@@ -1975,3 +1975,20 @@ The desktop now has a compile-time stable/staging update channel. The endpoint a
 Nine release-tool tests passed on Windows, together with all six native updater tests, exact desktop binding export, release-tool and desktop Clippy, desktop/site typechecks, five build-environment tests and two static website tests. Chromium and WebKit passed a synthetic released-catalog build with JavaScript disabled, all three architecture links, checksums, escaped release notes, mobile overflow checks and rejection of a tampered stage. The rendered dark download page was inspected. The existing settings browser gate now includes explicit steering and reviewed missing-transcript recovery; both engines passed the complete gate, including staging labeling and accessibility. No hosted CI, push, paid prompt, signing operation, real installer, credential access or publication occurred.
 
 `docs/releases.md` records exact final source checks, native smoke commands, target-specific bundle commands, the staged upgrade procedure and the required evidence. Signing identities, protected updater-key backup, the dedicated release route, actual architecture-specific installation and visible-desktop power/privacy checks remain external acceptance prerequisites. General project terminal/editor controls, reviewed non-Git initialization and extra-folder forwarding are tracked as remaining source work, not owner blockers. Native signed-release qualification and M2-M5 product acceptance remain pending.
+
+### Device-local additional project folder context
+Native Claude sessions now receive available additional project folders through their supported
+add-dir arguments. Unsupported drivers receive only the primary folder, with an explicit notice.
+A read-only command and chat-details view show the exact context passed to the live generation,
+or the next-start preflight; paths never enter SessionUpdated events or encrypted transcript sync.
+The live folder set stays fixed until restart. Missing device mappings, unavailable paths and bounded
+scope limits remain visible. Isolated sessions exclude the original checkout, overlapping paths and
+its Git repository family. All passed folders participate in mutation admission until owned cleanup.
+ACP no longer advertises an additional-directories extension that its request adapter does not send.
+
+Three focused core regressions passed, including actual setup forwarding through a synthetic driver,
+current-generation stability, unsupported behavior and real temporary Git isolation. Two UI rendering
+checks and desktop TypeScript checking passed. The ordinary combined Windows native command build and
+exact binding export also passed. Source-only CSS specificity warnings remain unchanged; final full
+Windows/macOS checks, native visuals and packaging acceptance remain pending. No real agent prompt or
+user repository operation occurred.

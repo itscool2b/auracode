@@ -516,6 +516,27 @@
     gap: 4px;
     font-size: 12px;
   }
+
+  .chat-folder-context section {
+    margin-top: 12px;
+    max-height: 320px;
+    overflow: auto;
+    font-size: 12px;
+  }
+  .chat-folder-context ul {
+    list-style: none;
+    padding: 0;
+  }
+  .chat-folder-context li {
+    display: grid;
+    gap: 4px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--o-line);
+  }
+  .chat-folder-context code {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
   .chat-session-info span {
     color: var(--o-text-3);
     overflow-wrap: anywhere;

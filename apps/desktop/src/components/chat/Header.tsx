@@ -5,7 +5,9 @@ import { chatActivity } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
 import { contextLabel, costLabel, folderStateLabel, statusWord } from "../../lib/chat/present";
 import { hasProcess } from "../../lib/chat/transcript";
+import { inTauri } from "../../lib/ipc";
 import { projectName } from "./ChatList";
+import { FolderContext } from "./FolderContext";
 import { Popover } from "./Popover";
 
 /**
@@ -132,6 +134,9 @@ export function Header({
           <span className="ui-muted" data-testid="chat-usage">
             {[context, cost].filter((part) => part !== null).join(" · ")}
           </span>
+        ) : null}
+        {chat && inTauri() ? (
+          <FolderContext key={chat.id} chatId={chat.id} status={status} />
         ) : null}
         <div className="ui-row">
           {onHistory ? (

@@ -1563,7 +1563,8 @@ impl Session {
             usage: true,
             limits: false,
             slash_commands: true,
-            add_dirs: self.init.additional_directories,
+            // An advertised extension is insufficient without an implemented request contract.
+            add_dirs: false,
             autonomy_levels: self.dialect.autonomy_levels(),
         }
     }

@@ -83,6 +83,17 @@ const ANSWERED_REMEMBERED: usize = 64;
 
 /// A message for a chat's actor. Every reply is a oneshot.
 pub(crate) enum ChatMsg {
+    FolderContext {
+        reply: oneshot::Sender<
+            Result<
+                (
+                    ChatRecord,
+                    Option<aura_protocol::workspace::ChatFolderContext>,
+                ),
+                SessionError,
+            >,
+        >,
+    },
     ReserveGit {
         id: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
@@ -217,6 +228,7 @@ impl ChatMsg {
             ChatMsg::Attach { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::History { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Lists { reply } => drop(reply.send(Err(error))),
+            ChatMsg::FolderContext { reply } => drop(reply.send(Err(error))),
             ChatMsg::Send { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Steer { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::SetOption { reply, .. } | ChatMsg::SetAutonomy { reply, .. } => {
@@ -318,6 +330,7 @@ enum Stop {
 
 /// The current driver.
 struct LiveDriver {
+    folder_context: aura_protocol::workspace::ChatFolderContext,
     generation: u64,
     commands: mpsc::UnboundedSender<DriverCommand>,
     /// `None` once the driver dropped its sender.
@@ -344,6 +357,7 @@ struct Preparing {
 
 /// What a preparation produces.
 struct Prepared {
+    folder_context: aura_protocol::workspace::ChatFolderContext,
     folder_key: PathBuf,
     launch: LaunchSpec,
     env: Arc<ResolvedEnv>,
@@ -822,6 +836,14 @@ impl ChatActor {
                 self.read_page(before_seq, max_bytes, PageFor::History { reply });
             }
             ChatMsg::Lists { reply } => drop(reply.send(Ok(self.lists()))),
+            ChatMsg::FolderContext { reply } => drop(
+                reply.send(Ok((
+                    self.chat.clone(),
+                    self.driver
+                        .as_ref()
+                        .map(|driver| driver.folder_context.clone()),
+                ))),
+            ),
             ChatMsg::Send { text, parts, reply } => {
                 let ack = self.send(text, parts);
                 drop(reply.send(ack));
@@ -2018,11 +2040,14 @@ impl ChatActor {
         self.auth = None;
         let (progress, details) = mpsc::unbounded_channel();
         self.progress = Some(details);
-        let folder = self.chat.folder.clone();
         let winding_down = self.winding_down.subscribe();
         let deps = &self.shared.deps;
         let task = deps.rt.spawn(prepare(
-            folder,
+            super::workspace_folders::LaunchFolders {
+                chat: self.chat.clone(),
+                store: Arc::clone(&deps.store),
+                worktrees: deps.worktrees.clone(),
+            },
             self.chat.agent_host.clone(),
             spec.clone(),
             Arc::clone(&deps.detector),
@@ -2084,11 +2109,18 @@ impl ChatActor {
                 self.start_failed(failure.kind, failure.message, None, false);
             }
             Ok(Ok(prepared)) => {
-                if !self
-                    .shared
-                    .live
-                    .set_folder(&self.chat_id, prepared.folder_key.clone())
-                {
+                if !self.shared.live.set_folders(
+                    &self.chat_id,
+                    std::iter::once(prepared.folder_key.clone())
+                        .chain(
+                            prepared
+                                .folder_context
+                                .additional
+                                .iter()
+                                .map(|path| super::live::normalize_path(PathBuf::from(path))),
+                        )
+                        .collect(),
+                ) {
                     self.start_failed(ErrorKind::AgentUnavailable, "This folder is being reverted. Wait for the file operation to finish before starting the agent.".into(), None, false);
                     return;
                 }
@@ -2166,7 +2198,12 @@ impl ChatActor {
             dialect: spec.dialect.to_owned(),
             folder: self.chat.folder.clone(),
             agent_folder: self.chat.folder.to_string_lossy().into_owned(),
-            add_dirs: Vec::new(),
+            add_dirs: prepared
+                .folder_context
+                .additional
+                .iter()
+                .map(PathBuf::from)
+                .collect(),
             launch: prepared.launch,
             env: prepared.env,
             resume: resume.clone(),
@@ -2184,6 +2221,10 @@ impl ChatActor {
             setup,
         }));
         self.driver = Some(LiveDriver {
+            folder_context: aura_protocol::workspace::ChatFolderContext {
+                active: true,
+                ..prepared.folder_context
+            },
             generation,
             commands,
             events: Some(event_rx),
@@ -4429,7 +4470,7 @@ async fn next_progress(progress: &mut Option<mpsc::UnboundedReceiver<String>>) -
 /// once no earlier generation of the chat winds down: a process still being killed holds its native
 /// session, which this start may resume.
 async fn prepare(
-    folder: PathBuf,
+    context: super::workspace_folders::LaunchFolders,
     agent_host: aura_protocol::agents::AgentHost,
     spec: AgentSpec,
     detector: Arc<aura_agents::Detector>,
@@ -4437,6 +4478,7 @@ async fn prepare(
     progress: mpsc::UnboundedSender<String>,
     mut winding_down: watch::Receiver<usize>,
 ) -> Result<Prepared, StartFailure> {
+    let folder = context.chat.folder.clone();
     // The actor holds the sender for as long as this task can matter.
     let _ = winding_down.wait_for(|retiring| *retiring == 0).await;
     if let aura_process::HostAvailability::Unavailable { reason } =
@@ -4483,7 +4525,19 @@ async fn prepare(
         })?;
     let _ = progress.send("Reading your shell environment".into());
     let env = env.get().await;
+    let folder_context = super::workspace_folders::resolve(
+        context,
+        super::workspace_folders::supported(Some(&spec), &agent_host),
+    )
+    .await
+    .map_err(|_| StartFailure {
+        kind: ErrorKind::Storage,
+        message: "Additional project folders could not be read. Retry before starting the agent."
+            .into(),
+        folder: None,
+    })?;
     Ok(Prepared {
+        folder_context,
         launch,
         env,
         folder_key,

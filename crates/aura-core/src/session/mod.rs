@@ -29,6 +29,7 @@ mod spawner;
 #[cfg(test)]
 mod tests;
 mod workspace;
+mod workspace_folders;
 mod worktree_setup;
 
 pub use config_library::LibraryRoots;

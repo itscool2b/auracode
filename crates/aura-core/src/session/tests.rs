@@ -3,6 +3,7 @@
 
 mod checkpoints;
 mod conversation;
+mod folder_context;
 mod steering;
 mod workspace;
 mod worktree_guards;
@@ -84,6 +85,20 @@ fn rig(drivers: Vec<ScriptedDriver>, config: WriterConfig, knobs: Knobs) -> Rig 
 }
 
 fn rig_with(drivers: Arc<dyn DriverFactory>, config: WriterConfig, knobs: Knobs) -> Rig {
+    rig_with_spec(
+        drivers,
+        config,
+        knobs,
+        aura_agents::get("mock").expect("mock").clone(),
+    )
+}
+
+fn rig_with_spec(
+    drivers: Arc<dyn DriverFactory>,
+    config: WriterConfig,
+    knobs: Knobs,
+    spec: aura_agents::AgentSpec,
+) -> Rig {
     let dir = tempfile::tempdir().expect("tempdir");
     let profile = Profiles::new(DataRoot::at(dir.path().join("data")))
         .open_active()
@@ -105,7 +120,6 @@ fn rig_with(drivers: Arc<dyn DriverFactory>, config: WriterConfig, knobs: Knobs)
         warnings: Vec::new(),
         resolved_at_ms: 0,
     });
-    let spec = aura_agents::get("mock").expect("mock").clone();
     let detector = Detector::fixed(vec![FixedAgent::new(
         spec,
         aura_protocol::session::Availability::Ready {

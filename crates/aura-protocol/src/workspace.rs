@@ -20,6 +20,17 @@ pub struct WorkspaceSnapshot {
     pub chats: Vec<WorkspaceChat>,
 }
 
+/// Device-local launch context. This is never part of a stored transcript or sync record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ChatFolderContext {
+    pub primary: String,
+    pub additional: Vec<String>,
+    pub notices: Vec<String>,
+    /// True once these exact folders have been passed to the current driver generation.
+    pub active: bool,
+    pub supports_additional: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct ProjectSummary {
     pub id: String,

@@ -207,6 +207,8 @@ export const commands = {
 	 *  session's `revision` changes.
 	 */
 	chatLists: (chatId: string) => typedError<SessionLists, AppError>(__TAURI_INVOKE("chat_lists", { chatId })),
+	/**  Exact device-local folders supplied to a live driver, or a preflight for its next start. */
+	chatFolderContext: (chatId: string) => typedError<ChatFolderContext, AppError>(__TAURI_INVOKE("chat_folder_context", { chatId })),
 	/**
 	 *  Sends `text` as typed, or queues it behind the running turn (or the start). A stopped chat starts
 	 *  its agent.
@@ -629,6 +631,16 @@ export type ChatCreatePreview = {
 	folder: ProjectFolder,
 	/**  Sessions holding this canonical folder, including preparation and shutdown. */
 	busy_chats: ChatSummary[],
+};
+
+/**  Device-local launch context. This is never part of a stored transcript or sync record. */
+export type ChatFolderContext = {
+	primary: string,
+	additional: string[],
+	notices: string[],
+	/**  True once these exact folders have been passed to the current driver generation. */
+	active: boolean,
+	supports_additional: boolean,
 };
 
 export type ChatMove = {
