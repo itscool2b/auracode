@@ -13,6 +13,11 @@ IPC. `local_key()` is a Rust-only backend seam for the encrypted profile and syn
 survive sign-out, session expiry and device revocation. A replacement Account owner invalidates older
 owners' network and persistence capabilities within the process.
 
+`local_key_handle()` shares only a durably confirmed key with the Rust profile writer through an
+`Arc`; it is never an IPC payload. Last-owner drop zeroizes the key. This handle deliberately keeps
+offline storage available after sign-out or revocation and grants no network permission. Unconfirmed
+remote keys are unavailable through both local-key APIs.
+
 The visible sign-in view solves Turnstile and calls `ApiClient::begin_auth` and `verify_auth`. After
 the user chooses available OS storage, or explicitly chooses a passphrase fallback, call
 `Account::signed_in`. The vault scope derives from the API client's actual HTTPS origin; it cannot be
@@ -94,6 +99,13 @@ not invoke plaintext salvage, `VACUUM INTO`, schema-page rewriting, or unkeyed s
 encrypted-backup restoration still needs its product flow. SQLCipher encrypts the database, WAL and
 backup data only. External attachment/checkpoint files and protocol logging must be handled separately
 before enabling production account sessions; this checkpoint does not claim those files are encrypted.
+
+The `EncryptedFiles` backend now publishes only ciphertext in a capability-bound profile directory.
+Its bounded format marker pins the file key and purpose. Reads refuse final-component links and
+immutable writes validate existing ciphertext before treating a repeat as success. Synced temporary
+ciphertext is published with a non-replacing hard link, so unsupported filesystems report an error
+rather than silently overwriting data. Failed writes remove their own temporary object. Actual
+attachment, dead-letter and checkpoint callers still need this backend wired into their paths.
 
 ## Transaction-bound sync ledger
 

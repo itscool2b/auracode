@@ -1177,3 +1177,11 @@ files. Five focused tests cover chunk boundaries, empty files, nonce carry, subs
 and reordered chunks. Core file publication, attachment/dead-letter wiring and encrypted checkpoint
 storage are still being connected; the codec alone does not enable account sessions.
 
+The core encrypted object backend now uses capability-relative non-following reads, a bounded key-
+and purpose-bound marker, owner-private temporary ciphertext, and atomic non-replacing publication.
+Three focused Windows tests verify ciphertext-only files, reopening, duplicate validation, legacy/
+wrong-key preservation, failed publication cleanup and corrupt-object rejection. Confirmed account
+keys can be shared with the Rust writer without exposing them through IPC; nine account lifecycle
+tests still pass, including no key handle before fingerprint confirmation and offline access after
+sign-out. Caller wiring and macOS filesystem qualification remain pending.
+

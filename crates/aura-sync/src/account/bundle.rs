@@ -4,6 +4,7 @@ use crate::{
     crypto::{self, AccountKey, DeviceKey},
     wire::SessionToken,
 };
+use std::sync::Arc;
 use zeroize::Zeroizing;
 
 const MAGIC: &[u8] = b"AURA-ACCOUNT\x01";
@@ -18,7 +19,7 @@ pub(super) struct SavedSession {
     pub expires_at: i64,
 }
 pub(super) struct SavedKey {
-    pub key: AccountKey,
+    pub key: Arc<AccountKey>,
     pub version: u32,
     pub confirmed: bool,
     pub local_proof: bool,
@@ -103,7 +104,7 @@ impl Bundle {
             let confirmed = cursor.flag()?;
             let local_proof = cursor.flag()?;
             Some(SavedKey {
-                key: AccountKey::restore(cursor.take(32)?)?,
+                key: Arc::new(AccountKey::restore(cursor.take(32)?)?),
                 version,
                 confirmed,
                 local_proof,

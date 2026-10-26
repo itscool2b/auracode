@@ -41,6 +41,8 @@ pub mod onboarding;
 pub mod owner;
 pub mod paths;
 pub mod profile;
+#[cfg(feature = "account-sync")]
+pub mod profile_files;
 pub mod session;
 pub mod store;
 #[cfg(feature = "account-sync")]

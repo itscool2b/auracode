@@ -181,7 +181,16 @@ impl Account {
             .account_key
             .as_ref()
             .filter(|key| key.confirmed)
-            .map(|key| (&key.key, key.version))
+            .map(|key| (key.key.as_ref(), key.version))
+    }
+    /// Rust-only handle for the profile's storage writer. It grants offline data access, never
+    /// network authorization. The last owner zeroizes the key; unconfirmed remote keys stay private.
+    pub fn local_key_handle(&self) -> Option<(Arc<AccountKey>, u32)> {
+        self.bundle
+            .account_key
+            .as_ref()
+            .filter(|key| key.confirmed)
+            .map(|key| (Arc::clone(&key.key), key.version))
     }
     /// Show this on the trusted approving device for comparison with the new device's fingerprint.
     pub fn key_fingerprint(&self) -> Result<Option<String>> {
@@ -337,7 +346,7 @@ impl Account {
         let recovery = crypto::wrap_recovery(&setup.key, &setup.recovery, &self.id, 1)?;
         let verifier = setup.recovery.verifier(&self.id, 1)?;
         self.bundle.account_key = Some(SavedKey {
-            key: setup.key,
+            key: Arc::new(setup.key),
             version: 1,
             confirmed: false,
             local_proof: true,
@@ -375,7 +384,7 @@ impl Account {
         let proof = recovery.auth_proof(&self.id, keys.key_version)?;
         self.check_pinned_key(&key, keys.key_version)?;
         self.bundle.account_key = Some(SavedKey {
-            key,
+            key: Arc::new(key),
             version: keys.key_version,
             confirmed: false,
             local_proof: true,
@@ -497,7 +506,7 @@ impl Account {
         let was_confirmed = self.local_key().is_some();
         let fingerprint = key.fingerprint(&self.id, keys.key_version)?;
         let previous = self.bundle.account_key.replace(SavedKey {
-            key,
+            key: Arc::new(key),
             version: keys.key_version,
             confirmed: proven,
             local_proof: false,

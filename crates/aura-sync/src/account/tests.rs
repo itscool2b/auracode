@@ -87,7 +87,7 @@ fn json_keys(keys: &Keys) -> serde_json::Value {
 async fn ready(account: &mut Account) {
     account.bundle.device_id = Some("device".into());
     account.bundle.account_key = Some(SavedKey {
-        key: key(),
+        key: Arc::new(key()),
         version: 1,
         confirmed: false,
         local_proof: true,
@@ -190,6 +190,7 @@ async fn lost_registration_response_is_reconciled_but_first_remote_key_needs_hum
         }
     );
     assert!(account.local_key().is_none());
+    assert!(account.local_key_handle().is_none());
     assert!(matches!(
         account.pull(0, 100).await,
         Err(AccountError::State)
@@ -442,6 +443,8 @@ async fn recovery_pins_the_key_opened_with_the_user_held_master_before_server_co
 async fn failed_signout_storage_is_reported_and_still_halts_the_live_owner() {
     let (mut account, store) = account().await;
     ready(&mut account).await;
+    let (writer_key, version) = account.local_key_handle().unwrap();
+    let pinned = writer_key.fingerprint(account.id(), version).unwrap();
     store.fail.store(true, Ordering::SeqCst);
     let (wire, done) = script(vec![(
         "POST /api/v1/auth/logout ",
@@ -456,6 +459,11 @@ async fn failed_signout_storage_is_reported_and_still_halts_the_live_owner() {
     assert_eq!(account.access, Access::SignedOut);
     assert!(account.bundle.session.is_none());
     assert!(account.local_key().is_some());
+    assert_eq!(account.key_fingerprint().unwrap(), Some(pinned));
+    assert_eq!(
+        writer_key.fingerprint(account.id(), version).unwrap(),
+        account.key_fingerprint().unwrap().unwrap()
+    );
     assert!(matches!(
         account.pull(0, 100).await,
         Err(AccountError::State)
