@@ -3,6 +3,7 @@
 
 mod checkpoints;
 mod conversation;
+mod steering;
 mod workspace;
 mod worktree_guards;
 

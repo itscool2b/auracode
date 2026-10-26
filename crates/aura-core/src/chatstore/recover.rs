@@ -100,6 +100,9 @@ fn is_fatal(error: &rusqlite::Error) -> bool {
 /// through `turns`. Per-chat recovery reads all of a chat's request rows.
 fn chats_needing_recovery(conn: &Connection) -> rusqlite::Result<Vec<String>> {
     let mut chats = BTreeSet::new();
+    for chat in conn.prepare("SELECT DISTINCT e.chat_id FROM events e WHERE e.kind='steering_status' AND json_extract(e.payload,'$.state')='pending' AND NOT EXISTS(SELECT 1 FROM events newer WHERE newer.chat_id=e.chat_id AND newer.kind='steering_status' AND newer.seq>e.seq AND json_extract(newer.payload,'$.message_id')=json_extract(e.payload,'$.message_id'))")?.query_map([], |row| row.get::<_,String>(0))? {
+        chats.insert(chat?);
+    }
     let mut running =
         conn.prepare("SELECT DISTINCT chat_id FROM turns WHERE status = 'running'")?;
     for chat in running.query_map([], |row| row.get::<_, String>(0))? {
@@ -239,6 +242,7 @@ fn recover_chat(
         next: max_seq.map_or(0, |max| max.saturating_add(1)),
         rows: Vec::new(),
     };
+    recover_steering(conn, chat_id, &mut out, now)?;
 
     // The running turns that end here, interrupted; their open requests are resolved inside them.
     let mut interrupted: BTreeSet<&str> = BTreeSet::new();
@@ -309,6 +313,45 @@ fn recover_chat(
     }
     rows::queue_hold(conn, Some(chat_id), true)?;
     Ok(report)
+}
+
+/// Restore any outcome committed just before the actor could publish it. An interrupted native
+/// request without an acknowledgement remains explicitly unconfirmed and is never resent.
+fn recover_steering(
+    conn: &Connection,
+    chat_id: &str,
+    out: &mut Appender,
+    now: Millis,
+) -> rusqlite::Result<()> {
+    use aura_protocol::composer::SteeringState;
+    let values = conn.prepare("SELECT json_extract(e.payload,'$.message_id'),e.turn_id,s.state,s.detail FROM events e LEFT JOIN steering_inputs s ON s.message_id=json_extract(e.payload,'$.message_id') AND s.chat_id=e.chat_id WHERE e.chat_id=?1 AND e.kind='steering_status' AND json_extract(e.payload,'$.state')='pending' AND NOT EXISTS(SELECT 1 FROM events newer WHERE newer.chat_id=e.chat_id AND newer.kind='steering_status' AND newer.seq>e.seq AND json_extract(newer.payload,'$.message_id')=json_extract(e.payload,'$.message_id'))")?
+        .query_map([chat_id], |row| Ok((row.get::<_,String>(0)?,row.get::<_,Option<String>>(1)?,row.get::<_,Option<String>>(2)?,row.get::<_,Option<String>>(3)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (message_id, turn_id, state, detail) in values {
+        let (state, detail) = match state.as_deref() {
+            Some("accepted") => (SteeringState::Accepted, detail),
+            Some("rejected") => (SteeringState::Rejected, detail),
+            Some("unconfirmed") => (SteeringState::Unconfirmed, detail),
+            _ => (
+                SteeringState::Unconfirmed,
+                Some(
+                    "The app closed before delivery was confirmed. This message was not retried."
+                        .into(),
+                ),
+            ),
+        };
+        conn.execute("UPDATE steering_inputs SET state=?2,detail=?3,updated_at=?4 WHERE message_id=?1 AND state='pending'",params![message_id,super::steering::state_name(state),detail,now])?;
+        out.push(
+            turn_id.as_deref(),
+            &AuraEvent::SteeringStatus {
+                message_id,
+                state,
+                detail,
+            },
+            now,
+        );
+    }
+    Ok(())
 }
 
 /// How a running turn ended, from its saved `TurnEnded` row (read leniently, as history pages read

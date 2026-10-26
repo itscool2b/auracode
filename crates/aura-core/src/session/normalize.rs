@@ -202,6 +202,15 @@ impl Normalizer {
                 recoverable,
             },
             AuraEvent::SessionUpdated(info) => AuraEvent::SessionUpdated(fit_info(info)),
+            AuraEvent::SteeringStatus {
+                message_id,
+                state,
+                detail,
+            } => AuraEvent::SteeringStatus {
+                message_id,
+                state,
+                detail: detail.map(|detail| cap_escaped(detail, MESSAGE_BYTES)),
+            },
             AuraEvent::UsageUpdated(mut usage) => {
                 if let Some(cost) = &mut usage.cost {
                     cost.currency = cap_chars(std::mem::take(&mut cost.currency), CURRENCY_CHARS);

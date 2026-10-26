@@ -141,6 +141,10 @@ pub(crate) enum Work {
 
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
+    Steering {
+        command: super::steering::Command,
+        reply: oneshot::Sender<Result<(), StoreError>>,
+    },
     #[cfg(feature = "account-sync")]
     Config {
         command: crate::sync::config::Command,
@@ -466,6 +470,7 @@ fn work_bytes(work: &Work) -> usize {
         Work::Op(op) => op_bytes(op),
         Work::Request(Request::Organization { command, .. }) => command.bytes(),
         Work::Request(Request::WorktreeSetup { command, .. }) => command.bytes(),
+        Work::Request(Request::Steering { command, .. }) => command.bytes(),
         Work::Request(Request::Composer { command, .. }) => command.bytes(),
         #[cfg(feature = "account-sync")]
         Work::Request(Request::Config { command, .. }) => command.bytes(),
@@ -652,6 +657,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::CreateChat { .. }) => "create_chat",
         Work::Request(Request::Organization { .. }) => "organization",
         Work::Request(Request::WorktreeSetup { .. }) => "worktree setup",
+        Work::Request(Request::Steering { .. }) => "steering",
         Work::Request(Request::Composer { .. }) => "composer",
         Work::Request(Request::CheckpointContext { .. }) => "checkpoint_context",
 
@@ -1227,6 +1233,15 @@ impl Writer {
 
     fn answer_request(&mut self, request: Request) {
         match request {
+            Request::Steering { command, reply } => {
+                let now = now_millis();
+                let result = if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| super::steering::execute(conn, now, command))
+                };
+                let _ = reply.send(result);
+            }
             #[cfg(feature = "account-sync")]
             Request::Config { command, reply } => {
                 let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {

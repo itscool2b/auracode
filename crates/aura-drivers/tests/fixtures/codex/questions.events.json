@@ -92,7 +92,7 @@
         "agent_version": "0.162.1",
         "capabilities": {
           "images": true,
-          "steer": false,
+          "steer": true,
           "interrupt": true,
           "resume": true,
           "fork": false,

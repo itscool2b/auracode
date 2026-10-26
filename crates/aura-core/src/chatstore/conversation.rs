@@ -244,6 +244,33 @@ fn read_turn(conn: &Connection, chat_id: &str, turn_id: &str) -> rusqlite::Resul
     let mut parts: Vec<PromptPart> = serde_json::from_str(&json)
         .map_err(|_| invalid("The original prompt is not supported by this version."))?;
     let mut prompt = String::new();
+    let steering_bytes: i64 = conn.query_row("SELECT COALESCE(SUM(octet_length(parts_json)),0) FROM steering_inputs WHERE chat_id=?1 AND turn_id=?2",params![chat_id,turn_id],|row| row.get(0))?;
+    if steering_bytes > 4 * 1024 * 1024 {
+        return Err(invalid(
+            "This turn's steering inputs exceed the continuation limit. Its original transcript is still available.",
+        ));
+    }
+    let steering = conn.prepare("SELECT message_id,state,parts_json FROM steering_inputs WHERE chat_id=?1 AND turn_id=?2 ORDER BY seq")?
+        .query_map(params![chat_id,turn_id], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut steering_ids = std::collections::BTreeSet::new();
+    let mut accepted = std::collections::BTreeSet::new();
+    // Status-only attempts may precede an unsuccessful durable input write. They are still
+    // excluded from context unless the confirmed input row exists.
+    for id in conn.prepare("SELECT DISTINCT json_extract(payload,'$.message_id') FROM events WHERE chat_id=?1 AND turn_id=?2 AND kind='steering_status'")?
+        .query_map(params![chat_id,turn_id], |row| row.get::<_,String>(0))? {
+        steering_ids.insert(id?);
+    }
+    for (id, state, json) in steering {
+        steering_ids.insert(id.clone());
+        if state == "accepted" {
+            let added: Vec<PromptPart> = serde_json::from_str(&json)
+                .map_err(|_| invalid("The saved steering context is damaged."))?;
+            parts.extend(added);
+            accepted.insert(id);
+        }
+    }
+    let mut steering_text = BTreeMap::<String, String>::new();
     let mut messages = BTreeMap::<String, String>::new();
     let mut last_message = None;
     let mut statement = conn.prepare("SELECT payload FROM events WHERE chat_id=?1 AND turn_id=?2 AND kind IN ('user_message_delta','message_delta','message_completed') ORDER BY seq LIMIT 10001")?;
@@ -258,7 +285,13 @@ fn read_turn(conn: &Connection, chat_id: &str, turn_id: &str) -> rusqlite::Resul
             ));
         }
         match serde_json::from_str::<AuraEvent>(&value) {
-            Ok(AuraEvent::UserMessageDelta { text, .. }) => prompt.push_str(&text),
+            Ok(AuraEvent::UserMessageDelta { message_id, text }) => {
+                if !steering_ids.contains(&message_id) {
+                    prompt.push_str(&text);
+                } else if accepted.contains(&message_id) {
+                    steering_text.entry(message_id).or_default().push_str(&text);
+                }
+            }
             Ok(AuraEvent::MessageDelta { message_id, text }) => {
                 messages.entry(message_id).or_default().push_str(&text)
             }
@@ -273,6 +306,11 @@ fn read_turn(conn: &Connection, chat_id: &str, turn_id: &str) -> rusqlite::Resul
         if matches!(parts.first(),Some(PromptPart::Text { text }) if text == &prefix) {
             parts.remove(0);
         }
+    }
+    // Preserve steering order from its original transcript sequence, not UUID sort order.
+    for id in conn.prepare("SELECT message_id FROM steering_inputs WHERE chat_id=?1 AND turn_id=?2 AND state='accepted' ORDER BY seq")?
+        .query_map(params![chat_id,turn_id], |row| row.get::<_,String>(0))? {
+        if let Some(text) = steering_text.remove(&id?) { prompt.push_str("\n\n"); prompt.push_str(&text); }
     }
     let answer = if status == "completed" {
         last_message

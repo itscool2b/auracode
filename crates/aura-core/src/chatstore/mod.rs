@@ -36,6 +36,7 @@ pub(crate) mod organization;
 mod recover;
 pub(crate) mod rows;
 pub(crate) mod search;
+pub(crate) mod steering;
 #[cfg(feature = "account-sync")]
 mod sync;
 #[cfg(test)]
@@ -142,6 +143,21 @@ impl ChatStore {
             .ok_or(StoreError::Closed)?;
         self.shared.push(
             Work::Request(Request::WorktreeSetup { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+    pub(crate) async fn steering(&self, command: steering::Command) -> Result<(), StoreError> {
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let (reply, answer) = oneshot::channel();
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::Steering { command, reply }),
             Some(permits),
         );
         answer.await.map_err(|_| StoreError::Closed)?

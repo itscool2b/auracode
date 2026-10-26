@@ -19,6 +19,7 @@ mod conformance {
             "thread/resume" => "v2/ThreadResumeResponse",
             "thread/fork" => "v2/ThreadForkResponse",
             "turn/start" => "v2/TurnStartResponse",
+            "turn/steer" => "v2/TurnSteerResponse",
             "turn/interrupt" => "v2/TurnInterruptResponse",
             "model/list" => "v2/ModelListResponse",
             "account/rateLimits/read" => "v2/GetAccountRateLimitsResponse",

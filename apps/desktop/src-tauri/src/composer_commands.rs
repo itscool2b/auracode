@@ -33,6 +33,20 @@ use tauri::{AppHandle, Manager as _, State};
 
 #[tauri::command]
 #[specta::specta]
+pub async fn composer_steer(
+    state: State<'_, AppState>,
+    chat_id: String,
+    expected_turn_id: String,
+    input: ComposerInput,
+) -> Result<aura_protocol::composer::SteeringAck, AppError> {
+    let sessions = state.sessions()?;
+    Ok(sessions
+        .composer_steer(&chat_id, expected_turn_id, input)
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn project_file_preview(
     state: State<'_, AppState>,
     chat_id: String,

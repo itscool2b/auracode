@@ -297,7 +297,7 @@ pub enum DriverEvent {
     /// must claim and save it before sending another prompt. It does not start a new session row.
     NativeSessionId(String),
     /// Transcript events, tagged with their turn (rule 8). Never `TurnStarted`, `TurnEnded`,
-    /// `UserMessageDelta`, `SessionUpdated`, `PromptLifecycle`, `PermissionRequested`,
+    /// `UserMessageDelta`, `SteeringStatus`, `SessionUpdated`, `PromptLifecycle`, `PermissionRequested`,
     /// `PermissionResolved`, `UiRequest` or `UiResolved`: the actor emits those.
     Event {
         turn: Option<String>,

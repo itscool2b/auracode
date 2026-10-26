@@ -284,7 +284,7 @@ async fn handshake_uses_thread_identity_and_advertises_only_implemented_capabili
     assert_eq!(ready.native_session_id.as_deref(), Some("thread-1"));
     assert_eq!(ready.agent_version.as_deref(), Some("0.162.1"));
     assert!(
-        !ready.capabilities.steer
+        ready.capabilities.steer
             && !ready.capabilities.fork
             && ready.capabilities.images
             && !ready.capabilities.add_dirs

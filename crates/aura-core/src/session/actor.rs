@@ -18,6 +18,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+mod steering;
 
 use aura_agents::{AgentSpec, LaunchError, Recipe};
 use aura_drivers::batch::{FrameBatcher, TurnTag};
@@ -138,6 +139,12 @@ pub(crate) enum ChatMsg {
         parts: Vec<PromptPart>,
         reply: oneshot::Sender<Result<PromptAck, SessionError>>,
     },
+    Steer {
+        expected_turn_id: String,
+        text: String,
+        parts: Vec<PromptPart>,
+        reply: oneshot::Sender<Result<aura_protocol::composer::SteeringAck, SessionError>>,
+    },
     CancelQueued {
         prompt_id: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
@@ -211,6 +218,7 @@ impl ChatMsg {
             ChatMsg::History { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Lists { reply } => drop(reply.send(Err(error))),
             ChatMsg::Send { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::Steer { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::SetOption { reply, .. } | ChatMsg::SetAutonomy { reply, .. } => {
                 drop(reply.send(Err(error)));
             }
@@ -370,6 +378,7 @@ struct NativeIdentitySave {
 
 /// What an `in_flight` future completes.
 enum Done {
+    Steering(Box<steering::Completion>),
     Conversation {
         result: Result<crate::chatstore::conversation::ConversationReply, SessionError>,
         reply: oneshot::Sender<
@@ -481,6 +490,7 @@ pub(crate) struct ChatActor {
     progress: Option<mpsc::UnboundedReceiver<String>>,
     in_flight: FuturesUnordered<BoxFuture<'static, Done>>,
     organizing: bool,
+    steering_pending: bool,
     git_reservation: Option<String>,
     checkpointing: Option<(String, AbortHandle)>,
     generation: u64,
@@ -592,6 +602,7 @@ impl ChatActor {
             progress: None,
             in_flight: FuturesUnordered::new(),
             organizing: false,
+            steering_pending: false,
             git_reservation: None,
             checkpointing: None,
             generation: 0,
@@ -702,6 +713,7 @@ impl ChatActor {
         match msg {
             ChatMsg::ReserveGit { id, reply } => {
                 let result = if self.organizing
+                    || self.steering_pending
                     || self.driver.is_some()
                     || self.preparing.is_some()
                     || !self.retiring.is_empty()
@@ -817,6 +829,12 @@ impl ChatActor {
                 let ack = self.send(text, parts);
                 drop(reply.send(ack));
             }
+            ChatMsg::Steer {
+                expected_turn_id,
+                text,
+                parts,
+                reply,
+            } => self.steer(expected_turn_id, text, parts, reply),
             ChatMsg::CancelQueued { prompt_id, reply } => {
                 let result = self.cancel_queued(&prompt_id);
                 drop(reply.send(result));
@@ -1058,6 +1076,7 @@ impl ChatActor {
         >,
     ) {
         if self.organizing
+            || self.steering_pending
             || self.driver.is_some()
             || self.preparing.is_some()
             || !self.retiring.is_empty()
@@ -1172,6 +1191,7 @@ impl ChatActor {
         reply: oneshot::Sender<Result<aura_protocol::changes::RevertResult, SessionError>>,
     ) {
         if self.organizing
+            || self.steering_pending
             || self.driver.is_some()
             || self.preparing.is_some()
             || !self.retiring.is_empty()
@@ -1227,7 +1247,8 @@ impl ChatActor {
             return;
         }
         if moving
-            && (self.driver.is_some()
+            && (self.steering_pending
+                || self.driver.is_some()
                 || self.preparing.is_some()
                 || !self.retiring.is_empty()
                 || self.turn.is_some()
@@ -1377,6 +1398,7 @@ impl ChatActor {
     /// `Ready` with no turn: a prompt goes out now.
     fn can_dispatch(&self) -> bool {
         !self.organizing
+            && !self.steering_pending
             && self.checkpointing.is_none()
             && self.status == SessionStatus::Ready
             && self.turn.is_none()
@@ -1919,6 +1941,11 @@ impl ChatActor {
 
     /// Starts the agent. `explicit` (`chat_start`): a full slot is an error; otherwise a card.
     fn start(&mut self, fresh: bool, explicit: bool) -> Result<(), SessionError> {
+        if self.steering_pending {
+            return Err(SessionError::OptionInvalid(
+                "Wait for steering delivery to finish before restarting.".into(),
+            ));
+        }
         let fresh = fresh
             || self
                 .continuation
@@ -2446,6 +2473,7 @@ impl ChatActor {
     /// Replies to a quit once the driver ended and everything was handed to the store.
     fn finish_shutdown(&mut self) {
         if self.shutdown_reply.is_none()
+            || self.steering_pending
             || self.organizing
             || self.checkpointing.is_some()
             || self.driver.is_some()
@@ -2469,6 +2497,7 @@ impl ChatActor {
 
     fn on_done(&mut self, done: Done) {
         match done {
+            Done::Steering(completion) => self.steering_done(*completion),
             Done::Conversation { result, reply } => {
                 drop(reply.send(result));
             }
@@ -2771,6 +2800,9 @@ impl ChatActor {
             DriverEvent::Ready(info) => self.on_ready(info),
             DriverEvent::NativeSessionId(native_id) => self.on_native_session_id(native_id),
             DriverEvent::Event { turn, event } => {
+                if matches!(event, AuraEvent::SteeringStatus { .. }) {
+                    return;
+                }
                 let tag = self.open_tag(turn.as_deref());
                 match &event {
                     AuraEvent::MessageDelta { text, .. } => {
@@ -3525,7 +3557,11 @@ impl ChatActor {
     /// Gives the chat's live slot and native sessions back once nothing of it runs: no driver, no
     /// start preparation, and no retired generation whose processes or task still wind down.
     fn release_if_idle(&self) {
-        if self.driver.is_none() && self.preparing.is_none() && self.retiring.is_empty() {
+        if !self.steering_pending
+            && self.driver.is_none()
+            && self.preparing.is_none()
+            && self.retiring.is_empty()
+        {
             self.shared.live.release(&self.chat_id);
         }
     }

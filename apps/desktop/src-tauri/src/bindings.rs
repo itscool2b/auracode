@@ -129,6 +129,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::composer_commands::composer_mentions,
             crate::composer_commands::project_file_preview,
             crate::composer_commands::composer_send,
+            crate::composer_commands::composer_steer,
             crate::composer_commands::composer_draft,
             crate::composer_commands::composer_save_draft,
             crate::changes_commands::chat_changes,

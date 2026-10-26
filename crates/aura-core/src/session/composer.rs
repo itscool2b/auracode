@@ -184,6 +184,36 @@ impl SessionManager {
         chat_id: &str,
         input: ComposerInput,
     ) -> Result<PromptAck, SessionError> {
+        let (text, parts) = self.prepare_composer_input(chat_id, input).await?;
+        self.ask(chat_id, |reply| ChatMsg::Send {
+            text: text.clone(),
+            parts: parts.clone(),
+            reply,
+        })
+        .await
+    }
+
+    pub async fn composer_steer(
+        &self,
+        chat_id: &str,
+        expected_turn_id: String,
+        input: ComposerInput,
+    ) -> Result<aura_protocol::composer::SteeringAck, SessionError> {
+        let (text, parts) = self.prepare_composer_input(chat_id, input).await?;
+        self.ask(chat_id, |reply| ChatMsg::Steer {
+            expected_turn_id: expected_turn_id.clone(),
+            text: text.clone(),
+            parts: parts.clone(),
+            reply,
+        })
+        .await
+    }
+
+    async fn prepare_composer_input(
+        &self,
+        chat_id: &str,
+        input: ComposerInput,
+    ) -> Result<(String, Vec<PromptPart>), SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
@@ -281,12 +311,7 @@ impl SessionManager {
             })
             .await
             .map_err(|_| invalid("The message context could not be prepared."))??;
-        self.ask(chat_id, |reply| ChatMsg::Send {
-            text: text.clone(),
-            parts: parts.clone(),
-            reply,
-        })
-        .await
+        Ok((text, parts))
     }
 
     async fn composer_folder(&self, chat_id: &str) -> Result<PathBuf, SessionError> {

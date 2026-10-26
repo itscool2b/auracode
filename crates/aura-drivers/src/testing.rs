@@ -75,6 +75,7 @@ pub enum Step {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommandMatch {
     Prompt,
+    Steer,
     Interrupt,
     /// `Some` matches that request id only.
     RespondPermission {
@@ -98,6 +99,7 @@ impl CommandMatch {
         match (self, command) {
             (CommandMatch::Any, _)
             | (CommandMatch::Prompt, LoggedCommand::Prompt { .. })
+            | (CommandMatch::Steer, LoggedCommand::Steer { .. })
             | (CommandMatch::Interrupt, LoggedCommand::Interrupt)
             | (CommandMatch::SetOption, LoggedCommand::SetOption { .. })
             | (CommandMatch::SetAutonomy, LoggedCommand::SetAutonomy { .. })
@@ -144,6 +146,7 @@ struct Shared {
     /// How many commands arrived, so `wait_for` wakes on each.
     arrived: watch::Sender<usize>,
     option_reply: Mutex<Result<(), DriverError>>,
+    steer_reply: Mutex<crate::driver::SteerResult>,
     /// `None`: the requested level, no native mode, `Never`.
     autonomy_reply: Mutex<Option<Result<AutonomyState, DriverError>>>,
 }
@@ -166,6 +169,9 @@ impl ScriptedDriver {
             commands: Mutex::new(Vec::new()),
             arrived: watch::Sender::new(0),
             option_reply: Mutex::new(Ok(())),
+            steer_reply: Mutex::new(crate::driver::SteerResult::Rejected {
+                message: "The scripted agent does not steer turns.".into(),
+            }),
             autonomy_reply: Mutex::new(None),
         });
         let (inject, injected) = mpsc::unbounded_channel();
@@ -227,6 +233,9 @@ impl ScriptHandle {
     /// that refused the value (ACP -32602) or did not answer in time.
     pub fn set_option_reply(&self, reply: Result<(), DriverError>) {
         *lock(&self.shared.option_reply) = reply;
+    }
+    pub fn set_steer_reply(&self, reply: crate::driver::SteerResult) {
+        *lock(&self.shared.steer_reply) = reply;
     }
 
     /// What `SetAutonomy` answers from now on. The default is the requested level, no native mode,
@@ -502,9 +511,7 @@ impl Runner {
         self.shared.record(logged.clone());
         match command {
             DriverCommand::Steer { reply, .. } => {
-                let _ = reply.send(crate::driver::SteerResult::Rejected {
-                    message: "The scripted agent does not steer turns.".into(),
-                });
+                let _ = reply.send(lock(&self.shared.steer_reply).clone());
             }
             DriverCommand::Prompt { turn, .. } => self.current_turn = Some(turn.turn_id),
             DriverCommand::SetOption { reply, .. } => {

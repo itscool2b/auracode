@@ -252,6 +252,7 @@ impl Session {
                 ResumeOutcome::New
             },
             capabilities: Capabilities {
+                steer: true,
                 images: true,
                 interrupt: true,
                 resume: true,

@@ -2,6 +2,26 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+crate::lenient::lenient_enum! {
+    /// Pending after a crash or a closed turn is unconfirmed, never proof of delivery.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+    #[serde(rename_all = "snake_case")]
+    pub enum SteeringState {
+        Pending = "pending",
+        Accepted = "accepted",
+        Rejected = "rejected",
+        Unconfirmed = "unconfirmed",
+    }
+    fallback = Unconfirmed;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct SteeringAck {
+    pub message_id: String,
+    pub state: SteeringState,
+    pub detail: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct ComposerAttachment {
     pub id: String,

@@ -64,6 +64,12 @@ pub enum AuraEvent {
         message_id: String,
         text: String,
     },
+    // Delivery state for an explicit user message directed to an already running turn.
+    SteeringStatus {
+        message_id: String,
+        state: composer::SteeringState,
+        detail: Option<String>,
+    },
     MessageDelta {
         message_id: String,
         text: String,
@@ -130,6 +136,7 @@ impl AuraEvent {
             AuraEvent::TurnStarted { .. } => "turn_started",
             AuraEvent::TurnEnded { .. } => "turn_ended",
             AuraEvent::UserMessageDelta { .. } => "user_message_delta",
+            AuraEvent::SteeringStatus { .. } => "steering_status",
             AuraEvent::MessageDelta { .. } => "message_delta",
             AuraEvent::MessageCompleted { .. } => "message_completed",
             AuraEvent::ThoughtDelta { .. } => "thought_delta",
@@ -164,6 +171,7 @@ impl AuraEvent {
             AuraEvent::TurnStarted { .. }
             | AuraEvent::TurnEnded { .. }
             | AuraEvent::UserMessageDelta { .. }
+            | AuraEvent::SteeringStatus { .. }
             | AuraEvent::MessageDelta { .. }
             | AuraEvent::MessageCompleted { .. }
             | AuraEvent::ThoughtDelta { .. }
@@ -750,10 +758,11 @@ mod tests {
             AuraEvent::PromptLifecycle { .. } => 17,
             AuraEvent::Notice { .. } => 18,
             AuraEvent::Error { .. } => 19,
+            AuraEvent::SteeringStatus { .. } => 20,
         }
     }
 
-    const VARIANTS: usize = 20;
+    const VARIANTS: usize = 21;
 
     fn truncation() -> Option<Truncation> {
         Some(Truncation {
@@ -766,6 +775,11 @@ mod tests {
     /// unset somewhere.
     fn samples() -> Vec<AuraEvent> {
         vec![
+            AuraEvent::SteeringStatus {
+                message_id: "steer".into(),
+                state: composer::SteeringState::Accepted,
+                detail: None,
+            },
             AuraEvent::TurnStarted {
                 turn_id: "t".into(),
                 prompt_id: Some("p".into()),
