@@ -174,12 +174,19 @@ fn validate_id(context: &SyncContext, id: &str) -> PortResult<String> {
         .map_err(|_| ConfigPortError::Invalid)
 }
 fn decode(context: &SyncContext, record: &EncryptedRecord) -> PortResult<Payload> {
-    if record.collection != "config" || record.key_version != context.identity.key_version {
+    decode_with(&context.identity, &context.key, record)
+}
+fn decode_with(
+    identity: &SyncIdentity,
+    key: &AccountKey,
+    record: &EncryptedRecord,
+) -> PortResult<Payload> {
+    if record.collection != "config" || record.key_version != identity.key_version {
         return Err(ConfigPortError::Invalid);
     }
     let bytes = crypto::open_record(
-        &context.key,
-        &super::context(&context.identity, record),
+        key,
+        &super::context(identity, record),
         &SealedPayload {
             nonce: record.nonce.clone(),
             ciphertext: record.ciphertext.clone(),
@@ -191,7 +198,10 @@ fn decode(context: &SyncContext, record: &EncryptedRecord) -> PortResult<Payload
         || payload.head.schema == 0
         || payload.head.revision != record.hlc
         || payload.head.deleted != record.deleted
-        || validate_id(context, &payload.id)? != record.id
+        || key
+            .config_record_id(&identity.account, &payload.id)
+            .map_err(|_| ConfigPortError::Invalid)?
+            != record.id
         || !valid_hash(&payload.head.content_hash)
     {
         return Err(ConfigPortError::Invalid);
@@ -205,6 +215,69 @@ fn decode(context: &SyncContext, record: &EncryptedRecord) -> PortResult<Payload
         return Err(ConfigPortError::Invalid);
     }
     Ok(payload)
+}
+
+/// Config item revisions are complete snapshots. The three-way merge happens above this port with
+/// each device's retained base; receipt of a newer head never writes vendor configuration files.
+pub(crate) fn accept_remote(
+    conn: &Connection,
+    identity: &SyncIdentity,
+    key: &AccountKey,
+    change: &Change,
+) -> Result<()> {
+    let remote = &change.record;
+    if remote.key_version != identity.key_version {
+        return Err(SyncError::Identity);
+    }
+    let bytes = crypto::open_record(
+        key,
+        &super::context(identity, remote),
+        &SealedPayload {
+            nonce: remote.nonce.clone(),
+            ciphertext: remote.ciphertext.clone(),
+        },
+    )?;
+    let version = serde_json::from_slice::<serde_json::Value>(&bytes)
+        .map_err(|_| SyncError::Invalid)?
+        .get("schema_version")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or(SyncError::Invalid)?;
+    if version > 1 {
+        return retain(conn, change, "future_schema");
+    }
+    let payload = decode_with(identity, key, remote).map_err(|_| SyncError::Invalid)?;
+    if deferred(conn, "config", &remote.id)? {
+        return retain(conn, change, "blocked_by_future_schema");
+    }
+    let local = head(conn, "config", &remote.id)?;
+    if let Some(local) = local {
+        let local_clock: Hlc = local.hlc.parse()?;
+        let remote_clock: Hlc = remote.hlc.parse()?;
+        let previous = decode_with(identity, key, &local).map_err(|_| SyncError::Invalid)?;
+        if local_clock > remote_clock {
+            enqueue(conn, &local)?;
+            return Ok(());
+        }
+        if local_clock == remote_clock && previous != payload {
+            return Err(merge::MergeError::ClockCollision.into());
+        }
+    } else {
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM sync_heads WHERE collection='config'",
+            [],
+            |row| row.get(0),
+        )?;
+        if count >= MAX_SYNC_ITEMS as i64 {
+            return Err(SyncError::Invalid);
+        }
+    }
+    save_head(conn, remote)?;
+    conn.execute(
+        "DELETE FROM sync_outbox WHERE collection='config' AND id=?1",
+        [&remote.id],
+    )?;
+    conn.execute("INSERT INTO sync_blob_refs(collection,id,blob_id) VALUES('config',?1,?2) ON CONFLICT(collection,id) DO UPDATE SET blob_id=excluded.blob_id", params![remote.id, payload.head.blob_id])?;
+    Ok(())
 }
 fn valid_hash(hash: &str) -> bool {
     hash.len() == 64

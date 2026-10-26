@@ -13,6 +13,7 @@ use crate::store::Store;
 pub(crate) mod capture;
 pub(crate) mod config;
 pub mod journal;
+mod projection;
 
 /// An unlocked Account writer's identity and encryption authority. Never exported through IPC.
 #[derive(Clone)]
@@ -116,6 +117,17 @@ impl<'a> SyncLedger<'a> {
     pub fn cursor(&self) -> Result<u64> {
         cursor(self.conn)
     }
+    pub fn accept_workspace_pull(&mut self, page: &Pull, now_ms: u64) -> Result<()> {
+        self.accept_pull(page, now_ms, projection::queue)
+    }
+    pub fn accept_workspace_heads(
+        &mut self,
+        sent: &[EncryptedRecord],
+        heads: &[Change],
+        now_ms: u64,
+    ) -> Result<()> {
+        self.accept_heads(sent, heads, now_ms, projection::queue)
+    }
 
     /// Coalesced unsent heads, with a fixed wire batch bound. Unsupported items stay durable but are
     /// excluded until their newer schema can be processed. Never delete merely because HTTP sent.
@@ -199,6 +211,7 @@ impl<'a> SyncLedger<'a> {
                 &mut project,
             )?;
         }
+        projection::drain(&tx, &self.identity, self.key, now_ms)?;
         save_clock(&tx, &clock)?;
         tx.execute(
             "UPDATE sync_state SET pull_cursor=?1 WHERE singleton=1",
@@ -244,6 +257,7 @@ impl<'a> SyncLedger<'a> {
                 &mut project,
             )?;
         }
+        projection::drain(&tx, &self.identity, self.key, now_ms)?;
         save_clock(&tx, &clock)?;
         tx.commit()?;
         Ok(())
@@ -458,6 +472,9 @@ fn accept(
         return Err(SyncError::Invalid);
     }
     clock.observe(&remote_clock, now)?;
+    if remote.collection == "config" {
+        return config::accept_remote(tx, identity, key, change);
+    }
     if !matches!(remote.collection.as_str(), "projects" | "chats") {
         if remote.key_version != identity.key_version {
             return Err(SyncError::Identity);

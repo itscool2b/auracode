@@ -1811,3 +1811,18 @@ Codex now advertises steering through this path. Pi and all other drivers keep t
 ## Project default model startup, 2026-10-26
 
 A fresh chat now loads its project's default model into the driver's existing desired startup options when the project default agent matches, or when no default agent is selected. An established agent session keeps its saved settings even after project defaults change. The same initialization is used when an explicitly confirmed continuation selects a fresh agent. No fake native identity or extra migration is created. Two regressions cover startup delivery, saved-setting precedence and provider separation. They compile, but Windows Application Control blocked the test executable with OS error 4551 before execution; that execution gate remains pending. Core all-target Clippy, rustfmt and mirrored-instruction checks passed. No paid or live vendor call was made.
+
+### Authenticated remote metadata projection
+
+Schema 11 adds a durable bounded-work projection queue for authenticated records whose project or
+folder has not arrived yet. Cursor advancement and queued dependencies commit together. Portable
+project/folder/chat fields merge into existing rows without manufacturing paths, native sessions or
+queued inputs; remote deletes remain tombstones and retain local folder locations. Projection clears
+its capture triggers so incoming changes are not echoed as fresh local edits. Config heads now accept
+newer authenticated snapshots, retain newer unsent local revisions, and leave missing blobs unavailable
+until transfer verifies them. Future config schemas remain retained rather than overwritten.
+
+All 24 focused sync tests passed, including the previously blocked missing-index journal regression,
+child-before-parent pages, per-field merge, tombstones, malformed-page rollback and config clock
+collisions. Core all-target Clippy and the schema foreign-key/index check passed. This remains a storage
+checkpoint: the network scheduler, blob transfer and transcript chunk import are not attached yet.

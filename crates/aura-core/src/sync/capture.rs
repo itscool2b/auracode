@@ -240,7 +240,7 @@ fn snapshot(conn: &Connection, entity: &str, id: &str) -> Result<Option<Snapshot
 
 // Never sync an embedded password/token or a local filesystem remote. Unqualified values stay on
 // this device until the user gives the folder a credential-free portable remote.
-fn safe_remote(value: &str) -> bool {
+pub(super) fn safe_remote(value: &str) -> bool {
     if value.chars().any(char::is_control) || value.contains(['?', '#']) {
         return false;
     }

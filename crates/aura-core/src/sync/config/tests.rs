@@ -6,11 +6,13 @@ use crate::{
 use std::sync::Arc;
 
 fn fixture() -> (tempfile::TempDir, Store, SyncContext) {
+    fixture_with(Arc::new(AccountKey::generate().unwrap()), "device")
+}
+fn fixture_with(key: Arc<AccountKey>, device: &str) -> (tempfile::TempDir, Store, SyncContext) {
     let temp = tempfile::tempdir().unwrap();
     let profile = Profiles::new(DataRoot::at(temp.path()))
         .create(ProfileKind::Account, "Account")
         .unwrap();
-    let key = Arc::new(AccountKey::generate().unwrap());
     let (mut store, _) = Store::open_encrypted(
         &profile,
         Arc::new(key.database_key("account", &profile.meta.id).unwrap()),
@@ -20,12 +22,142 @@ fn fixture() -> (tempfile::TempDir, Store, SyncContext) {
         key,
         identity: SyncIdentity {
             account: "account".into(),
-            device: "device".into(),
+            device: device.into(),
             key_version: 1,
         },
     };
     context.initialize(&mut store).unwrap();
     (temp, store, context)
+}
+
+fn page(record: EncryptedRecord, sequence: u64) -> Pull {
+    Pull {
+        records: vec![Change {
+            device_id: record.hlc.parse::<Hlc>().unwrap().device().into(),
+            record,
+            server_seq: sequence,
+        }],
+        next_cursor: sequence,
+        has_more: false,
+    }
+}
+
+#[test]
+fn pulled_config_heads_wait_for_blobs_and_keep_newer_unsent_edits() {
+    let (_temp, mut source, context) = fixture();
+    let (_other, mut target, target_context) = fixture_with(context.key.clone(), "other-device");
+    let id = "e".repeat(64);
+    let first = publish_one(&mut source, &context, &id, None, b"remote config");
+    let wire = validate_id(&context, &id).unwrap();
+    let record = head(source.conn(), "config", &wire).unwrap().unwrap();
+    let incoming = page(record.clone(), 1);
+    SyncLedger::new(&mut target, target_context.identity.clone(), &context.key)
+        .unwrap()
+        .accept_pull(&incoming, crate::time::now_millis() as u64, |_, _, _| {
+            panic!("config is not metadata")
+        })
+        .unwrap();
+    assert_eq!(
+        read_head(target.conn(), &target_context, &id)
+            .unwrap()
+            .unwrap()
+            .head,
+        first
+    );
+    assert_eq!(
+        read_snapshot(target.conn(), &target_context, &id, &first),
+        Err(ConfigPortError::Offline)
+    );
+    let local = publish_one(
+        &mut target,
+        &target_context,
+        &id,
+        Some(first.revision.clone()),
+        b"new local edit",
+    );
+    let later = page(record, 2);
+    SyncLedger::new(&mut target, target_context.identity.clone(), &context.key)
+        .unwrap()
+        .accept_pull(
+            &later,
+            crate::time::now_millis() as u64,
+            |_, _, _| unreachable!(),
+        )
+        .unwrap();
+    assert_eq!(
+        read_head(target.conn(), &target_context, &id)
+            .unwrap()
+            .unwrap()
+            .head,
+        local
+    );
+    assert_eq!(
+        target
+            .conn()
+            .query_row(
+                "SELECT count(*) FROM sync_outbox WHERE collection='config'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        &*read_snapshot(target.conn(), &target_context, &id, &local).unwrap(),
+        b"new local edit"
+    );
+}
+
+#[test]
+fn config_clock_collision_rolls_back_page_and_future_payload_is_retained() {
+    let (_temp, mut store, context) = fixture();
+    let id = "f".repeat(64);
+    publish_one(&mut store, &context, &id, None, b"original");
+    let wire = validate_id(&context, &id).unwrap();
+    let original = head(store.conn(), "config", &wire).unwrap().unwrap();
+    let mut payload = decode(&context, &original).unwrap();
+    payload.head.content_hash = "0".repeat(64);
+    let mut forged = original.clone();
+    let sealed = crypto::seal_record(
+        &context.key,
+        &super::super::context(&context.identity, &forged),
+        &serde_json::to_vec(&payload).unwrap(),
+    )
+    .unwrap();
+    forged.nonce = sealed.nonce;
+    forged.ciphertext = sealed.ciphertext;
+    let mut ledger = SyncLedger::new(&mut store, context.identity.clone(), &context.key).unwrap();
+    assert!(
+        ledger
+            .accept_pull(
+                &page(forged, 1),
+                crate::time::now_millis() as u64,
+                |_, _, _| unreachable!()
+            )
+            .is_err()
+    );
+    assert_eq!(ledger.cursor().unwrap(), 0);
+
+    payload.schema_version = 2;
+    let mut future = original;
+    let sealed = crypto::seal_record(
+        &context.key,
+        &super::super::context(&context.identity, &future),
+        &serde_json::to_vec(&payload).unwrap(),
+    )
+    .unwrap();
+    future.nonce = sealed.nonce;
+    future.ciphertext = sealed.ciphertext;
+    ledger
+        .accept_pull(
+            &page(future.clone(), 1),
+            crate::time::now_millis() as u64,
+            |_, _, _| unreachable!(),
+        )
+        .unwrap();
+    assert_eq!(ledger.cursor().unwrap(), 1);
+    assert_eq!(ledger.deferred_records(0).unwrap()[0].1, future);
+    assert!(ledger.outgoing().unwrap().is_empty());
 }
 fn metadata() -> ConfigSnapshotMetadata {
     ConfigSnapshotMetadata {
