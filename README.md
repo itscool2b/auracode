@@ -4,7 +4,7 @@ One beautiful home for all your coding agents.
 
 auracode is a desktop app for macOS, Windows, and Linux that drives the coding agents you already use
 (Claude Code, Codex, Pi, Antigravity, Cursor, Grok Build, OpenCode, Hermes, and any ACP-compatible agent)
-through their real harnesses, rendered in one fast, glassy chat interface. Projects on the left, chats inside
+through their real harnesses, rendered in one fast Orbit chat interface. Projects on the left, chats inside
 projects, switch agents and models mid-chat, run several at once.
 
 - No login needed for the app. Agents are detected automatically, with their versions, sign-in status, and
@@ -14,11 +14,17 @@ projects, switch agents and models mid-chat, run several at once.
 
 ## Status
 
-Early development. The full plan, decisions, and milestones live in [docs/plan.md](docs/plan.md).
+Early development. The full plan and decisions live in [docs/plan.md](docs/plan.md);
+[docs/progress.md](docs/progress.md) records remaining milestones.
+
+Backend and cloud services are Rust-first. The selected cloud architecture is Rust Workers, D1, R2
+and Cloudflare Email Service. Only the D1 database and R2 buckets are provisioned so far; the cloud
+API and email delivery are not deployed. React/TypeScript handles interfaces. Root AGENTS.md and
+CLAUDE.md are identical project instructions, enforced by the lint gate.
 
 ### M0: scaffold and spikes
 
-Built and pushed on the `m0-scaffold` branch, not merged yet.
+Merged into main.
 
 Done:
 
@@ -53,7 +59,7 @@ Pending, each waiting on the repository owner:
 
 ### M1a: sessions, processes, the ACP client and the bare chat UI
 
-Built on the `m1a-core-acp` branch from [its spec](docs/design/m1a.md): agent processes and their
+Merged into main from the `m1a-core-acp` branch, following [its spec](docs/design/m1a.md): agent processes and their
 environment, the session manager and its store, the ACP driver, the chat commands and channels, a bare
 chat UI styled through tokens, and `aura-cli`. Verified against real agents on this Mac (spec 10.6):
 Hermes, Claude Code through claude-agent-acp and Codex through codex-acp each pass the free probes, the
@@ -71,22 +77,22 @@ crates/aura-drivers/    the driver contract, frame batching, the scripted mock a
 crates/aura-cli/        dev CLI: probes and smoke-tests agents headlessly, records and replays fixtures
 apps/desktop/           Tauri v2 app: Rust shell in src-tauri/, React UI in src/
 apps/design-lab/        M1a Design Lab: visual directions rendered from a recorded chat (see its README)
-packages/ui/            Aura design system: tokens, fonts, glass, motion, Orb, AuraField
+packages/ui/            shared design system; Orbit production migration follows in M2a
 docs/                   plan and spike write-ups; spike code sits next to its write-up in docs/spikes/,
                         and docs/spikes/doc-check/ tests the write-ups against the code they cite
 .github/workflows/      CI checks and unsigned desktop bundles
 .github/scripts/        the scripts those workflows run (smoke run, spike staging, checks) and their tests
 ```
 
-Planned, not created yet:
+Cloud application components (resource inventory already exists in infra/README.md):
 
 ```
 crates/aura-sync/       M6, M7, M9  API client, merge engines, end-to-end encryption
 crates/aura-config/     M8          per-agent config adapters for the Config Library
 apps/web/               M6          auracode.si (React Router 7 on Cloudflare Workers)
-services/api/           M6          account and sync API (Cloudflare Workers, Neon Postgres)
+services/api/           M6          Rust account and sync API (Cloudflare Workers, D1)
 packages/api-types/     M6          TypeScript types generated from aura-protocol for the app, site, API
-infra/                  M5, M6      release scripts, Wrangler configs, Neon migrations
+infra/                  M5, M6      release scripts, Wrangler configs, D1 migrations
 ```
 
 ## Development
