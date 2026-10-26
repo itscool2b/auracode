@@ -194,3 +194,8 @@ Wrangler keeps existing secrets; secret names were rechecked after upload and no
 
 The production website and production API staging await explicit owner approval. Production
 still serves website deployment `c200b10b…` and staged API `08607e5f…`, with no `/api/*` route.
+
+Production website `auracode-web` version `0d0ca4e4-5884-4151-9ea0-ce639629867f` now serves the same
+tested modules as preview (JS `7fea5f5a…`, Wasm `e926c1c6…`). All 53 public files match over
+`https://auracode.si`, with ten page HEAD checks, the notices page and policy, footer link and
+missing-asset 404. The unrouted `/api/v1/config` still returns a plain non-HTML 404.
