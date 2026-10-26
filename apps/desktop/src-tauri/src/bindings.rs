@@ -67,6 +67,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::chat_reveal_log,
             commands::status_subscribe,
             commands::storage_status,
+            crate::native_shell::shell_take_navigation,
         ])
         // aura-protocol's timestamps (`Millis`) are i64 Unix milliseconds and its token counts,
         // byte counts and offsets are u64, all sent by serde_json as plain JSON numbers and exact

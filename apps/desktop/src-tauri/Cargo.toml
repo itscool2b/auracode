@@ -37,7 +37,7 @@ serde.workspace = true
 serde_json.workspace = true
 specta.workspace = true
 specta-typescript.workspace = true
-tauri.workspace = true
+tauri = { workspace = true, features = ["tray-icon"] }
 tauri-plugin-dialog.workspace = true
 tauri-plugin-opener.workspace = true
 tauri-plugin-single-instance.workspace = true
@@ -49,6 +49,10 @@ tokio.workspace = true
 tokio-util = "0.7.20"
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+keepawake = "=0.6.1"
+tauri-plugin-notification = "=2.7.0"
 
 [target.'cfg(windows)'.dependencies]
 # Already in the tree through tao and window-vibrancy; it reads the real build number (Mica needs

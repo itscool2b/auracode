@@ -67,6 +67,20 @@ acceptance gaps, WSL discovery and launch, Windows vendor-daemon breakaway, and 
 sign-in terminal remain pending. No paid prompts, real vendor login, credentials or agent config
 were accessed during this checkpoint.
 
+## M2b native shell checkpoint
+
+- Added Rust tray, generic background notifications with retained chat navigation, active-work quit
+  confirmation, and same-thread idle-sleep assertions on Windows/macOS. Native appearance is dark
+  regardless of the system theme. Windows minimize/restore and tray hide update WebView2 visibility.
+- Regenerated the `shellTakeNavigation(): Promise<string | null>` binding. Frontend event/focus
+  integration remains with the application integration branch; details are in `docs/native-shell.md`.
+- Windows desktop all-target Clippy passed. The desktop library run passed 163 tests with one stale
+  catalog assertion excluded; that assertion is already corrected by the later M1d integration.
+  New checks cover concurrency, stale notifications, power release, visibility retry and guarded quit.
+- Installed Windows/macOS tray, notification routing, real sleep behavior, dark material and rendering
+  acceptance remain pending. Linux/WSL and CI pushes are deferred by owner direction. No credentials,
+  native agent prompts, login flows or vendor process changes were used.
+
 ## Completed before this continuation
 
 - M0 and M1a are merged. Main at `3b35c66` passes CI and installer builds on all three platforms.

@@ -25,6 +25,7 @@ pub mod error;
 pub mod glass;
 pub mod integrity;
 pub mod launch;
+pub mod native_shell;
 pub mod os;
 pub mod reveal;
 pub mod sessions;
@@ -87,6 +88,10 @@ pub fn run() {
             .menu(macos::app_menu)
             .on_menu_event(macos::on_menu_event);
     }
+    #[cfg(any(windows, target_os = "macos"))]
+    {
+        builder = builder.plugin(tauri_plugin_notification::init());
+    }
     let app = builder
         .plugin(
             tauri_plugin_window_state::Builder::new()
@@ -122,6 +127,8 @@ pub fn run() {
 /// screen (`boot`), and a window that cannot be created at all is logged and ends the app with
 /// [`STARTUP_FAILED`].
 fn setup(app: &mut tauri::App, launch: LaunchOptions) {
+    // Product appearance is always dark, including native menus and macOS materials.
+    app.set_theme(Some(tauri::Theme::Dark));
     if let Some(Err(error)) = &launch.smoke {
         // Automation is waiting for a result: say why no scenario runs, and with
         // AURACODE_SMOKE_EXIT end here, before any data opens or any agent starts.
@@ -164,6 +171,9 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     let reported = Arc::clone(&state.smoke_reported);
     let quit = Arc::clone(&state.quit);
     app.manage(state);
+    #[cfg(windows)]
+    app.manage(window::WebviewVisibility::default());
+    native_shell::setup(app.handle());
 
     #[cfg(unix)]
     {
@@ -253,14 +263,27 @@ fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
 
 fn on_event(app: &tauri::AppHandle, event: RunEvent) {
     match event {
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen {
+            has_visible_windows: false,
+            ..
+        } => window::focus_main(app),
         RunEvent::ExitRequested { code, api, .. } => on_exit_requested(app, code, &api),
-        // Closing the window quits (M1a has no tray), through the quit flow while the window
-        // still exists, so keeping auracode open can show it again.
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::Resized(_) | WindowEvent::Focused(_),
+            ..
+        } if label == window::MAIN_WINDOW => window::sync_webview_visibility(app),
+        // Closing retains sessions in the tray. If tray setup failed, use the safe quit path.
         RunEvent::WindowEvent {
             label,
             event: WindowEvent::CloseRequested { api, .. },
             ..
         } if label == window::MAIN_WINDOW => {
+            if native_shell::close_to_tray(app) {
+                api.prevent_close();
+                return;
+            }
             if let Some(state) = app.try_state::<AppState>()
                 && state.chats().is_some()
                 && !state.quit.is_done()
@@ -270,6 +293,9 @@ fn on_event(app: &tauri::AppHandle, event: RunEvent) {
             }
         }
         RunEvent::Exit => {
+            if let Some(shell) = app.try_state::<Arc<native_shell::NativeShell>>() {
+                shell.shutdown();
+            }
             if let Some(state) = app.try_state::<AppState>() {
                 state.at_exit();
             }

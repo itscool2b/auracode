@@ -20,6 +20,77 @@ use tauri_plugin_window_state::StateFlags;
 use crate::error::{AppError, AppErrorCode};
 use crate::glass::GlassPlan;
 use crate::state::AppState;
+#[cfg(any(windows, test))]
+use crate::sync::lock;
+
+/// Last successful WebView2 visibility change. Window visibility alone does not update the
+/// controller's IsVisible flag. Failed transitions remain retryable on the next native event.
+#[derive(Default)]
+#[cfg(any(windows, test))]
+pub struct WebviewVisibility(std::sync::Mutex<Option<bool>>);
+
+#[cfg(any(windows, test))]
+impl WebviewVisibility {
+    fn apply<E>(&self, visible: bool, set: impl FnOnce(bool) -> Result<(), E>) -> Result<(), E> {
+        let mut current = lock(&self.0);
+        if *current != Some(visible) {
+            set(visible)?;
+            *current = Some(visible);
+        }
+        Ok(())
+    }
+}
+
+/// Keep native window controls and the taskbar alive while hiding only the rendering webview.
+/// Session actors, persistence and notifications run in Rust and do not depend on webview timers.
+pub fn sync_webview_visibility(app: &AppHandle) {
+    #[cfg(windows)]
+    {
+        let Some(state) = app.try_state::<AppState>() else {
+            return;
+        };
+        if state.launch.is_smoke() || !state.window_shown.is_claimed() {
+            return;
+        }
+        let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
+            return;
+        };
+        let visible = match (window.is_visible(), window.is_minimized()) {
+            (Ok(visible), Ok(minimized)) => visible && !minimized,
+            _ => return,
+        };
+        set_webview_visible(app, visible);
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
+pub fn set_webview_visible(app: &AppHandle, visible: bool) {
+    #[cfg(windows)]
+    {
+        if app
+            .try_state::<AppState>()
+            .is_some_and(|state| state.launch.is_smoke())
+        {
+            return;
+        }
+        let (Some(window), Some(state)) = (
+            app.get_webview_window(MAIN_WINDOW),
+            app.try_state::<WebviewVisibility>(),
+        ) else {
+            return;
+        };
+        let view: &tauri::Webview = window.as_ref();
+        if let Err(error) = state.apply(
+            visible,
+            |visible| if visible { view.show() } else { view.hide() },
+        ) {
+            tracing::warn!(%error, visible, "could not update webview visibility");
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = (app, visible);
+}
 
 /// Label of the one window M0 has.
 pub const MAIN_WINDOW: &str = "main";
@@ -87,6 +158,7 @@ pub fn create_main(
     let handle = app.handle().clone();
 
     let mut builder = WebviewWindowBuilder::from_config(app.handle(), &config)?
+        .theme(Some(tauri::Theme::Dark))
         .visible(false)
         .transparent(plan.transparent)
         .on_navigation(move |url| {
@@ -178,6 +250,7 @@ pub fn show_and_focus(app: &AppHandle) -> Result<(), AppError> {
     let unavailable =
         |error: tauri::Error| AppError::new(AppErrorCode::WindowUnavailable, error.to_string());
     window.show().map_err(unavailable)?;
+    set_webview_visible(app, true);
     // On screen now, even if focusing fails below.
     if let Some(state) = app.try_state::<AppState>() {
         state.integrity.window_shown();
@@ -280,6 +353,22 @@ fn leave_for_browser(app: &AppHandle, url: &Url) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn webview_visibility_retries_failed_changes_and_restores_after_minimize() {
+        let state = super::WebviewVisibility::default();
+        assert!(state.apply(false, |_| Err::<(), _>("failed")).is_err());
+        let mut changes = Vec::new();
+        for visible in [false, false, true, true, false, true] {
+            state
+                .apply(visible, |value| {
+                    changes.push(value);
+                    Ok::<(), ()>(())
+                })
+                .expect("visibility");
+        }
+        assert_eq!(changes, [false, true, false, true]);
+    }
+
     use super::*;
     use std::sync::atomic::AtomicUsize;
 

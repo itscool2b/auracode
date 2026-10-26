@@ -151,6 +151,11 @@ export const commands = {
 	statusSubscribe: (channel: Channel<ChatStatusUpdate>) => typedError<string, AppError>(__TAURI_INVOKE("status_subscribe", { channel })),
 	/**  Whether the profile database is saving, paused (with how much is unsaved), or failed. */
 	storageStatus: () => __TAURI_INVOKE<StorageStatus>("storage_status"),
+	/**
+	 *  Drain-on-read makes notification navigation survive a suspended or reloaded webview. The UI
+	 *  calls this on startup, focus, and `auracode-open-chat` and selects the returned local chat ID.
+	 */
+	shellTakeNavigation: () => __TAURI_INVOKE<string | null>("shell_take_navigation"),
 };
 
 /* Constants */

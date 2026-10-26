@@ -550,6 +550,10 @@ pub trait QuitHost: Send + Sync {
     fn hide_window(&self);
     fn show_window(&self);
     fn storage(&self) -> StorageStatus;
+    /// Running/starting/stopping work or unresolved requests, excluding merely idle processes.
+    fn active_work_count(&self) -> usize {
+        0
+    }
     /// Asks whether to quit although saving is paused; `true` quits.
     fn ask_to_quit_unsaved(&self, question: QuitQuestion) -> impl Future<Output = bool> + Send;
     fn stop_sessions(&self, deadline: Duration) -> impl Future<Output = ShutdownSummary> + Send;
@@ -591,6 +595,28 @@ pub fn quit_question(storage: &StorageStatus) -> Option<QuitQuestion> {
     })
 }
 
+pub fn quit_question_with_work(storage: &StorageStatus, active: usize) -> Option<QuitQuestion> {
+    let mut question = quit_question(storage);
+    if active > 0 {
+        let work = if active == 1 {
+            "One chat is still active. Quitting stops its agent.".to_owned()
+        } else {
+            format!("{active} chats are still active. Quitting stops their agents.")
+        };
+        match &mut question {
+            Some(question) => question.message = format!("{work}\n\n{}", question.message),
+            None => {
+                question = Some(QuitQuestion {
+                    message: work,
+                    quit: "Stop agents and quit".into(),
+                    keep: "Keep auracode open".into(),
+                })
+            }
+        }
+    }
+    question
+}
+
 /// How a quit flow ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QuitOutcome {
@@ -606,7 +632,7 @@ pub enum QuitOutcome {
 }
 
 /// The quit flow, after the first exit request was prevented: hide the window; when saving is
-/// paused with unsaved data, ask first (keeping auracode open shows the window again and ends the
+/// paused with unsaved data or work is active, ask first (keeping auracode open shows the window again and ends the
 /// quit); then stop every session within 8 s, commit and close the store within 5 s, delete the
 /// registry file, and exit with `code`. The next exit request passes ([`Quit::on_exit_requested`]).
 ///
@@ -615,12 +641,12 @@ pub enum QuitOutcome {
 /// then kills whatever runs, and closes the store if it did not close here.
 pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutcome {
     host.hide_window();
-    if let Some(question) = quit_question(&host.storage())
+    if let Some(question) = quit_question_with_work(&host.storage(), host.active_work_count())
         && !host.ask_to_quit_unsaved(question).await
     {
         host.show_window();
         quit.keep_running();
-        tracing::info!("kept auracode open: saving is paused");
+        tracing::info!("kept auracode open after the quit question");
         return QuitOutcome::Kept;
     }
     let summary = tokio::time::timeout(
@@ -684,13 +710,18 @@ impl QuitHost for AppQuitHost<'_> {
     }
 
     fn show_window(&self) {
-        if let Err(error) = crate::window::show_and_focus(self.app) {
-            tracing::warn!(%error, "could not show the window again");
-        }
+        crate::window::focus_main(self.app);
     }
 
     fn storage(&self) -> StorageStatus {
         self.chats.manager.storage_status()
+    }
+
+    fn active_work_count(&self) -> usize {
+        use tauri::Manager as _;
+        self.app
+            .try_state::<Arc<crate::native_shell::NativeShell>>()
+            .map_or(0, |shell| shell.active_work_count())
     }
 
     async fn ask_to_quit_unsaved(&self, question: QuitQuestion) -> bool {
@@ -1362,6 +1393,7 @@ mod tests {
         chats: Option<ChatRuntime>,
         stuck_sessions: bool,
         stuck_store: bool,
+        active_work: usize,
     }
 
     impl FakeHost {
@@ -1373,6 +1405,7 @@ mod tests {
                 chats: None,
                 stuck_sessions: false,
                 stuck_store: false,
+                active_work: 0,
             }
         }
 
@@ -1396,6 +1429,10 @@ mod tests {
 
         fn storage(&self) -> StorageStatus {
             self.storage.clone()
+        }
+
+        fn active_work_count(&self) -> usize {
+            self.active_work
         }
 
         async fn ask_to_quit_unsaved(&self, question: QuitQuestion) -> bool {
@@ -1484,6 +1521,44 @@ mod tests {
             ExitRequest::Allow,
             "the exit the flow asked for passes"
         );
+    }
+
+    #[tokio::test]
+    async fn quit_with_active_work_can_be_cancelled_without_stopping_or_closing_anything() {
+        let quit = Quit::default();
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+        let mut host = FakeHost::new(StorageStatus::default(), false);
+        host.active_work = 2;
+        assert_eq!(run_quit(&quit, &host, 0).await, QuitOutcome::Kept);
+        let calls = host.calls();
+        assert!(
+            matches!(calls.as_slice(), [Call::Hide, Call::Ask(message), Call::Show] if message.contains("2 chats"))
+        );
+        assert!(!quit.is_quitting());
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+    }
+
+    #[tokio::test]
+    async fn active_work_and_paused_storage_share_one_confirmation_before_cleanup() {
+        let quit = Quit::default();
+        quit.on_exit_requested();
+        let mut host = FakeHost::new(paused(PauseReason::DiskFull, 10), true);
+        host.active_work = 1;
+        assert!(matches!(
+            run_quit(&quit, &host, 0).await,
+            QuitOutcome::Exited { .. }
+        ));
+        let calls = host.calls();
+        let questions: Vec<_> = calls
+            .iter()
+            .filter_map(|call| match call {
+                Call::Ask(message) => Some(message),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(questions.len(), 1);
+        assert!(questions[0].contains("One chat") && questions[0].contains("disk is full"));
+        assert!(matches!(calls.get(2), Some(Call::StopSessions(_))));
     }
 
     #[tokio::test]
