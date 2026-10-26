@@ -215,7 +215,7 @@ export function TerminalSheet({
             {purpose === "installation"
               ? "Review and run the package manager. Terminal output is not saved."
               : purpose === "setup"
-                ? "Run the reviewed command in this worktree. Terminal output is not saved."
+                ? "Run the reviewed command. Terminal output is not saved."
                 : "Run the agent's own sign-in flow. Terminal output is not saved."}
           </p>
         </div>

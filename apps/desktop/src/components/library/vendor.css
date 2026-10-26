@@ -1,0 +1,109 @@
+.vendor-dialog {
+  width: min(590px, calc(100vw - 32px));
+}
+.vendor-intro,
+.vendor-note {
+  color: var(--o-dim);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.vendor-dialog form {
+  display: grid;
+  gap: 20px;
+}
+.vendor-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+.vendor-dialog label {
+  display: grid;
+  gap: 8px;
+  color: var(--o-ink);
+  font-size: 12px;
+}
+.vendor-dialog select,
+.vendor-dialog input {
+  min-width: 0;
+  color: var(--o-ink);
+  background: var(--o-pane);
+  border: 1px solid var(--o-line);
+  border-radius: 6px;
+  padding: 10px;
+  font: inherit;
+}
+.vendor-dialog input {
+  font-family: var(--o-mono);
+}
+.vendor-dialog :is(select, input, button):focus-visible {
+  outline: 2px solid var(--o-signal);
+  outline-offset: 3px;
+}
+.vendor-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--o-line);
+  padding-top: 18px;
+}
+.vendor-primary {
+  background: var(--o-ink);
+  color: var(--o-pane);
+}
+.vendor-warning {
+  color: var(--o-signal);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.vendor-command {
+  padding: 18px 24px;
+  max-height: 38vh;
+  overflow: auto;
+  border-bottom: 1px solid var(--o-line);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.vendor-command h3 {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.vendor-command dl {
+  display: grid;
+  grid-template-columns: 145px 1fr;
+  gap: 8px 18px;
+}
+.vendor-command dt {
+  color: var(--o-dim);
+}
+.vendor-command dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.vendor-command code {
+  font-family: var(--o-mono);
+}
+.vendor-command ol {
+  margin: 0;
+  padding-left: 20px;
+}
+.vendor-command > ul {
+  padding-left: 18px;
+  color: var(--o-dim);
+}
+.vendor-command > ul li + li {
+  margin-top: 6px;
+}
+@media (max-width: 560px) {
+  .vendor-fields {
+    grid-template-columns: 1fr;
+  }
+  .vendor-command dl {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .vendor-command dd {
+    margin-bottom: 8px;
+  }
+}

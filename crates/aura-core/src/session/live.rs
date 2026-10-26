@@ -200,7 +200,7 @@ struct Inner {
 pub(crate) struct MaintenanceGuard<'a>(&'a LiveAgents);
 impl Drop for MaintenanceGuard<'_> {
     fn drop(&mut self) {
-        self.0.lock().maintenance -= 1;
+        self.0.end_maintenance();
     }
 }
 
@@ -259,12 +259,23 @@ impl LiveAgents {
     }
 
     pub(crate) fn try_maintenance(&self) -> Option<MaintenanceGuard<'_>> {
+        self.begin_maintenance().then(|| MaintenanceGuard(self))
+    }
+
+    pub(crate) fn begin_maintenance(&self) -> bool {
         let mut inner = self.lock();
         if inner.quiescing || inner.owned_draining {
-            return None;
+            return false;
         }
-        inner.maintenance = inner.maintenance.checked_add(1)?;
-        Some(MaintenanceGuard(self))
+        let Some(count) = inner.maintenance.checked_add(1) else {
+            return false;
+        };
+        inner.maintenance = count;
+        true
+    }
+
+    pub(crate) fn end_maintenance(&self) {
+        self.lock().maintenance -= 1;
     }
 
     pub(crate) fn begin_owned_drain(&self) -> bool {
@@ -414,6 +425,24 @@ mod tests {
         assert!(live.try_maintenance().is_none());
         live.resume_admission();
         assert!(live.try_maintenance().is_some());
+    }
+
+    #[test]
+    fn owned_terminal_maintenance_stays_counted_during_quit_and_preserves_session_cap() {
+        let live = LiveAgents::new(1);
+        assert!(live.begin_maintenance());
+        assert!(live.acquire("one"));
+        assert!(!live.acquire("two"));
+        assert_eq!(live.owned_work_count(), 1);
+        assert!(live.begin_owned_drain());
+        assert!(!live.begin_maintenance());
+        assert!(live.try_maintenance().is_none());
+        assert_eq!(live.owned_work_count(), 1);
+        live.end_maintenance();
+        assert_eq!(live.owned_work_count(), 0);
+        live.end_owned_drain();
+        live.release("one");
+        assert!(live.try_quiesce());
     }
 
     #[test]

@@ -12,6 +12,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { vendorApi as nativeVendorApi, type VendorApi } from "../../lib/config-vendor/api";
 import { errorMessage } from "../../lib/errors";
 import { type LibraryApi, libraryApi } from "../../lib/library/api";
 import type {
@@ -24,6 +25,7 @@ import type {
   LibrarySourceStatus,
 } from "../../lib/library/bindings";
 import { Modal } from "../chat/Modal";
+import { VendorDialog } from "./VendorDialog";
 import "./library.css";
 
 const LABELS = { claude: "Claude", codex: "Codex", pi: "Pi", shared: "Shared" };
@@ -51,11 +53,13 @@ export function LibraryScreen({
   initialFolderId = null,
   folders = [],
   api = libraryApi,
+  vendorApi = nativeVendorApi,
 }: {
   readonly onBack: () => void;
   readonly initialFolderId?: string | null;
   readonly folders?: readonly LibraryFolder[];
   readonly api?: LibraryApi;
+  readonly vendorApi?: VendorApi;
 }) {
   const [folder, setFolder] = useState(initialFolderId);
   const [generation, setGeneration] = useState(0);
@@ -69,6 +73,7 @@ export function LibraryScreen({
   const [selected, setSelected] = useState<string | null>(null);
   const [history, setHistory] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [vendor, setVendor] = useState<{ item: LibraryItem | null } | null>(null);
   const refresh = () => setGeneration((value) => value + 1);
   // biome-ignore lint/correctness/useExhaustiveDependencies: generation is the explicit Refresh action.
   useEffect(() => {
@@ -117,6 +122,13 @@ export function LibraryScreen({
           <p>The instructions and tools your agents use.</p>
         </div>
         <div className="library-heading-actions">
+          <button
+            type="button"
+            className="library-button"
+            onClick={() => setVendor({ item: null })}
+          >
+            <Package size={15} /> Manage integrations
+          </button>
           <button
             type="button"
             className="library-button"
@@ -293,6 +305,7 @@ export function LibraryScreen({
                 item={chosen}
                 sources={inventory?.sources ?? []}
                 complete={complete}
+                manage={() => setVendor({ item: chosen })}
               />
             ) : (
               <section className="library-detail library-unselected" aria-label="Item preview">
@@ -304,6 +317,16 @@ export function LibraryScreen({
           </>
         )}
       </div>
+      {vendor ? (
+        <VendorDialog
+          api={vendorApi}
+          initial={vendor.item}
+          onClose={() => {
+            setVendor(null);
+            refresh();
+          }}
+        />
+      ) : null}
     </main>
   );
 }
@@ -314,12 +337,14 @@ function ItemDetail({
   item,
   sources,
   complete,
+  manage,
 }: {
   readonly api: LibraryApi;
   readonly folder: string | null;
   readonly item: LibraryItem;
   readonly sources: readonly LibrarySourceStatus[];
   readonly complete: (message: string) => void;
+  readonly manage: () => void;
 }) {
   const [preview, setPreview] = useState<LibraryItemPreview | null>(null);
   const [plan, setPlan] = useState<LibraryCopyPreview | null>(null);
@@ -414,6 +439,19 @@ function ItemDetail({
           {LABELS[item.provider]} · {item.scope === "user" ? "Personal" : "Project"}
         </p>
         <code>{item.relative_path}</code>
+        {(item.item.kind === "plugin" || item.item.kind === "package") &&
+        item.provider !== "shared" ? (
+          item.scope === "user" ? (
+            <button type="button" className="library-button" onClick={manage}>
+              Manage with {LABELS[item.provider]}
+            </button>
+          ) : (
+            <p>
+              Manage this project integration through its vendor. Personal actions are available in
+              Manage integrations.
+            </p>
+          )
+        ) : null}
       </header>
       {error ? (
         <p className="library-feedback" role="alert">

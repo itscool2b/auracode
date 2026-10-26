@@ -1,5 +1,19 @@
 # Auracode implementation progress
 
+## 2026-10-26: explicit vendor integration reviews
+
+Added personal Claude plugin/marketplace, Codex plugin/marketplace and Pi package command planning,
+an explicit Library form and an owned terminal flow. Starts consume a ten-minute page/profile token
+and recheck executable bytes, config realm and selected public declarations. The terminal retains
+profile, mutation and quit/update maintenance guards through confirmed cleanup. Unsupported vendor
+commands and private/ambiguous targets remain explicit errors. See `docs/vendor-integrations.md`.
+Three synthetic planner tests, agent all-target Clippy, generated protocol DTO export and three
+frontend tests passed. Chromium and WebKit fixtures verified separate review and explicit Start,
+terminal cancellation and accessible dark forms. Full native compilation/test execution remains
+pending where Application Control blocks dependency build scripts. Existing steering-event frontend
+type errors are outside this checkpoint. No real integrations, credentials, vendor prompts,
+remote CI or deployment ran.
+
 Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b through M9.
 
 ## Active integrated-product continuation

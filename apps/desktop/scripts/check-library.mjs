@@ -62,6 +62,26 @@ try {
       await page.goto(`${url}/library.html`);
       await page.getByRole("button", { name: /Review changes Claude/ }).waitFor();
       assert.deepEqual(await calls(), ["snapshot:null", "history"]);
+      await page.getByRole("button", { name: "Manage integrations", exact: true }).click();
+      await page.getByRole("dialog", { name: "Manage integrations" }).waitFor();
+      assert.equal((await calls()).includes("vendor-review"), false);
+      await page.getByLabel("Plugin and marketplace").fill("tools@team");
+      await page.screenshot({ path: resolve(out, `${engine}-vendor-form.png`) });
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).analyze()).violations,
+        [],
+        `${engine} vendor form accessibility`,
+      );
+      await page.getByRole("button", { name: "Review command", exact: true }).click();
+      await page.getByLabel("Integration command review").waitFor();
+      assert.equal((await calls()).includes("vendor-start"), false);
+      assert.equal((await calls()).includes("vendor-reserve"), false);
+      await page.screenshot({ path: resolve(out, `${engine}-vendor-review.png`) });
+      await page.getByRole("button", { name: "Start setup", exact: true }).click();
+      await page.waitForFunction(() => window.libraryFixture.calls().includes("vendor-start"));
+      await page.getByRole("button", { name: "Close setup terminal", exact: true }).click();
+      await page.waitForFunction(() => window.libraryFixture.calls().includes("vendor-cancel"));
+      assert.equal((await calls()).filter((call) => call === "vendor-start").length, 1);
       await choose();
       assert.equal(await page.locator(".library-code script").count(), 0);
       await page.screenshot({ path: resolve(out, `${engine}-library.png`) });

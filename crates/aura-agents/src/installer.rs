@@ -109,7 +109,7 @@ fn plan(agent: &str, node: &Path, npm: &Path, folder: &Path) -> Result<InstallPl
     })
 }
 
-fn hash_file(hash: &mut Sha256, path: &Path) -> Result<(), InstallError> {
+pub(crate) fn hash_file(hash: &mut Sha256, path: &Path) -> Result<(), InstallError> {
     let mut file = std::fs::File::open(path).map_err(|_| InstallError::Changed)?;
     let length = file.metadata().map_err(|_| InstallError::Changed)?.len();
     if length > 256 * 1024 * 1024 {

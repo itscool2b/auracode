@@ -16,6 +16,7 @@ mod changes;
 mod cloning;
 mod composer;
 mod config_library;
+mod config_vendor;
 mod conversation;
 mod gitworkspaces;
 mod installer;
@@ -31,6 +32,7 @@ mod workspace;
 mod worktree_setup;
 
 pub use config_library::LibraryRoots;
+pub use config_vendor::{PreparedVendor, VendorLaunch};
 pub use worktree_setup::WorktreeSetupLaunch;
 
 use std::collections::HashMap;

@@ -5,6 +5,7 @@ import "../chat.css";
 import "../orbit-shell.css";
 import { createRoot } from "react-dom/client";
 import { LibraryScreen } from "../components/library/LibraryScreen";
+import type { VendorApi } from "../lib/config-vendor/api";
 import type { LibraryApi } from "../lib/library/api";
 import type {
   LibraryCopyReceipt,
@@ -175,8 +176,52 @@ function fixture() {
       };
     },
   };
+  const vendorApi: VendorApi = {
+    review: async (request) => {
+      calls.push("vendor-review");
+      return {
+        token: "vendor-review",
+        request,
+        program: "C:/fixture/claude.exe",
+        arguments: ["plugin", "install", request.target, "--scope", "user"],
+        working_directory: "C:/fixture",
+        config_directory: "C:/fixture/.claude",
+        revision: "fixture",
+        timeout_seconds: 600,
+        notices: [
+          "Synthetic fixture. No vendor command runs.",
+          "The vendor may download and execute third-party code.",
+        ],
+      };
+    },
+    cancel: async () => {
+      calls.push("vendor-cancel");
+    },
+    terminal: () => ({
+      reserve: async () => {
+        calls.push("vendor-reserve");
+        return "vendor-terminal";
+      },
+      start: async () => {
+        calls.push("vendor-start");
+        return "vendor-terminal";
+      },
+      read: async () => ({
+        bytes: [...new TextEncoder().encode("Synthetic command completed.\r\n")],
+        done: true,
+        exit_code: 0,
+        truncated: false,
+      }),
+      write: async () => {},
+      resize: async () => {},
+      close: async () => {
+        calls.push("vendor-close");
+      },
+    }),
+  };
   return {
     api,
+    vendorApi,
     calls: () => [...calls],
     finishPreparation: () => resolvePreparation?.(),
     pending: () => pending,
@@ -195,6 +240,7 @@ if (import.meta.env.DEV && container) {
   createRoot(container).render(
     <LibraryScreen
       api={data.api}
+      vendorApi={data.vendorApi}
       onBack={() => {
         container.textContent = "Back to chats";
       }}

@@ -52,7 +52,8 @@
   overflow-wrap: anywhere;
   user-select: text;
 }
-.terminal-sheet[data-purpose="installation"][data-state="idle"] .terminal-sheet__viewport {
+.terminal-sheet:is([data-purpose="installation"], [data-purpose="setup"])[data-state="idle"]
+  .terminal-sheet__viewport {
   height: 180px;
 }
 .terminal-sheet__link a {

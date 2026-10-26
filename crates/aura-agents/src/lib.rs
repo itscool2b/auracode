@@ -15,6 +15,7 @@
 //! [`Availability`]: aura_protocol::session::Availability
 
 pub mod catalog;
+pub mod config_vendor;
 mod detect;
 pub mod hosts;
 mod install;

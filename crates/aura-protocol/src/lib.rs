@@ -17,6 +17,7 @@ pub mod account;
 pub mod agents;
 pub mod changes;
 pub mod composer;
+pub mod config_vendor;
 pub mod conversation;
 pub mod git;
 mod lenient;

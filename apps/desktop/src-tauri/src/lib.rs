@@ -28,6 +28,7 @@ pub mod commands;
 pub mod composer_commands;
 pub mod config_library;
 pub mod config_sync;
+pub mod config_vendor;
 pub mod conversation_commands;
 pub mod demo;
 pub mod error;
@@ -193,6 +194,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     #[cfg(windows)]
     app.manage(window::WebviewVisibility::default());
     app.manage(Arc::new(config_library::LibraryService::default()));
+    app.manage(Arc::new(config_vendor::VendorService::default()));
     app.manage(Arc::new(config_sync::ConfigSyncService::default()));
     app.manage(Arc::new(aura_core::cloning::Clones::default()));
     native_shell::setup(app.handle());
@@ -282,6 +284,9 @@ fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
     let chats = state.chats();
     sessions::page_load(&state.pages, webview.label(), payload.event(), |owner| {
         state.terminals.drop_owner(owner);
+        if let Some(vendor) = webview.try_state::<Arc<config_vendor::VendorService>>() {
+            vendor.drop_owner(owner);
+        }
         if let Some(clones) = webview.try_state::<Arc<aura_core::cloning::Clones>>() {
             clones.drop_owner(owner);
         }
