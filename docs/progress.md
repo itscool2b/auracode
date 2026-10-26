@@ -936,3 +936,16 @@ read/write was performed.
 - Secure storage, durable sync state, encrypted account profiles, account UI and config adapters are
   still pending. No real auth, credential access, cloud mutation, deployment or paid call was run.
 
+# M7 local secure-store foundation (2026-10-26)
+
+- Added app-only native secret storage for Windows Credential Manager and macOS login Keychain,
+  scoped by HTTPS service origin and account. Windows persistence is explicitly local. There is no
+  credential enumeration, automatic plaintext fallback, or raw provider error output.
+- Added an explicit passphrase store using Argon2id and XChaCha20-Poly1305, bounded files, exclusive
+  locking, atomic replacement, and account-bound authenticated context. Wrong passphrases and damaged
+  files preserve the existing ciphertext. Session and local key bundles can be replaced atomically.
+- Fourteen focused crypto, local HTTP and vault tests pass; all-target Clippy passes. Native calls are
+  tested through an in-memory provider and the fallback uses temporary files. No real keychain entry
+  was read or changed. Native macOS execution, account state/IPC, SQLCipher profile integration and
+  durable sync/config adapters remain pending.
+

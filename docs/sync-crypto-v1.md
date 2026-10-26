@@ -65,3 +65,38 @@ The deterministic fixture is `crates/aura-sync/tests/fixtures/crypto-v1.json`. I
 material: account key `[1;32]`, device secret `[2;32]`, ephemeral secret `[3;32]`, nonce `[4;24]`,
 recovery key `[5;32]`, account `account`, device `device`, and key version 1. It is a protocol regression
 vector, not an independent audit of the underlying cryptographic libraries.
+# Local secret storage
+
+The desktop `aura-sync::vault` API addresses only `auracode.sync.v1` entries. Entry identities are
+SHA256 of the compact JSON tuple `["auracode.sync.v1", canonical_https_origin, account_id]`, encoded
+base64url without padding. An account's bounded 2048-byte secret bundle is replaced as one value.
+Removing a session from that bundle must retain the keys needed for encrypted local data.
+
+Native Windows storage uses Credential Manager with explicit `Local` persistence, never the
+provider's default roaming persistence. macOS uses the user's login Keychain. The API does not search
+or enumerate credentials, and the Windows provider's search feature is disabled. No provider error
+payload is logged or passed to the UI. Native operations run on a blocking worker and are serialized
+within the application process.
+
+An explicit passphrase fallback is a separate store, never selected automatically after keychain
+failure. Its file is in an existing auracode-owned private profile directory. Version 1 uses the
+11-byte prefix `AURA-VAULT` followed by byte `01`, a 16-byte random salt, a 24-byte random nonce and
+XChaCha20-Poly1305 ciphertext. Argon2id version 19 derives a 32-byte key with 65536 KiB, three passes
+and one lane. Parameters are fixed by the format version, so files cannot request excessive KDF work.
+AAD is compact JSON `["auracode-passphrase-vault-v1", entry_identity]`. Plaintext is byte `00` for an
+empty store, or byte `01` followed by the bundle. A new nonce is generated for every replacement.
+Passphrases must be 12 to 1024 UTF-8 bytes; the caller still needs guidance about choosing a strong
+passphrase. The passphrase is never retained after deriving the unlocked key.
+
+An exclusive lock is held while this fallback is open. Files are bounded before decryption and
+replaced through a synced temporary file in the same directory. Unix files are owner-only and the
+directory is synced after replacement. Windows metadata durability depends on the filesystem's
+atomic rename/journaling guarantees. Existing files are never overwritten by `create`; corrupt or
+unknown formats remain untouched. Unlock keys and loaded secret buffers are zeroized on drop.
+Copies inside HTTP/OS libraries are outside this guarantee.
+
+Sources: [keyring-core](https://docs.rs/keyring-core/latest/keyring_core/),
+[Windows store](https://docs.rs/windows-native-keyring-store/latest/windows_native_keyring_store/),
+[macOS store](https://docs.rs/apple-native-keyring-store/latest/apple_native_keyring_store/), and
+[Argon2 key derivation](https://docs.rs/argon2/latest/argon2/).
+
