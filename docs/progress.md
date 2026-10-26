@@ -1745,3 +1745,16 @@ base and become explicitly skipped. Five orchestration regressions, pure sync DT
 configuration Clippy passed. The final skipped-state helper and sixth regression compile, but Windows
 Application Control blocked the updated test executable with 4551 before execution. No workaround was
 attempted. Native service, recovery UI and automatic network attachment remain in progress.
+### M9 reviewed filesystem apply and recovery
+
+Implemented consuming, expiring configuration reviews, root identity and complete-content checks,
+format-preserving JSON/TOML edits, home expansion, explicit per-device/vendor skips, and bounded
+encrypted before/after receipts. No-clobber publication retains uncertain originals; temporary
+publication files stay inside the original config realm and have verified crash cleanup. Restart
+rollback preserves later unrelated settings, refuses selected user edits and has its own inverse
+receipt. Tree deletes remove only empty directories. The full 64-test aura-config suite and all-target
+Clippy pass on Windows, including 16 new apply/recovery regressions and four document-edit tests.
+No real configuration was read or changed. macOS execution, the encrypted profile sink, desktop
+orchestration and secret-free MCP projection remain integration work. See `docs/config-apply.md` for
+the transient publication-file constraint and required host mutation guards.
+

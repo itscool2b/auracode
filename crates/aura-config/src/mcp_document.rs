@@ -136,7 +136,7 @@ impl<'a> RawObject<'a> {
             .map(|(_, value)| *value)
     }
 
-    fn replace(&self, text: &str, key: &str, value: Option<&str>) -> Result<String> {
+    pub(crate) fn replace(&self, text: &str, key: &str, value: Option<&str>) -> Result<String> {
         if let Some(index) = self.0.iter().position(|(name, _)| name == key) {
             let entry = self.0[index].1;
             if let Some(value) = value {

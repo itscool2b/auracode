@@ -395,7 +395,7 @@ impl ConfigScanner {
         }
     }
 
-    fn normalize(
+    pub(super) fn normalize(
         &self,
         mut id: ConfigIdentity,
         mut content: ConfigContent,
