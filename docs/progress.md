@@ -81,6 +81,18 @@ test executables with error 4551 before any test ran. The new replay golden is a
 result derived from its prior passing fixture and still requires CI execution. Live acceptance
 remains pending the native helper issue and the remaining four smoke scenarios.
 
+Read-only follow-up found no removed or overridden variables in either owned smoke spawn log.
+The environment resolver preserves Windows runtime variables, and a direct child inheriting the
+shell environment reproduced the same error. There is no evidence that auracode's scrub caused it.
+The [official 0.162.1 setup helper source](https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/windows-sandbox-rs/src/setup_provisioning.rs)
+uses this generic error after accumulated runtime or filesystem ACL failures; the exact local
+failure remains unknown. The [readiness implementation](https://github.com/openai/codex/blob/rust-v0.164.0/codex-rs/app-server/src/request_processors/windows_sandbox_processor.rs)
+checks setup state, not whether a fresh sandboxed command succeeds.
+The official latest stable CLI release is 0.164.0 as checked on 2026-10-26, and the installed CLI
+offers `codex update`, but its help exposes no check-only switch. The desktop updater reports the
+installed 26.1021.31345 production release is up to date. No CLI update, setup mutation, policy
+change or doctor run was performed; no claim is made that an upgrade fixes this helper failure.
+
 M1c requirements still pending: opt-in prompted verification, generated
 schema verification for the historical 0.164.0 baseline, independent verification of review fixes,
 and final combined verification. Steer, fork, image attachments,
