@@ -174,6 +174,7 @@ try {
       };
       let revoked = false;
       let restricted = false;
+      let devicesUnavailable = false;
       await page.route("**/api/v1/auth/session", (route) =>
         route.fulfill({
           json: {
@@ -205,9 +206,11 @@ try {
       );
       await page.route("**/api/v1/devices", (route) =>
         route.fulfill(
-          restricted
-            ? { status: 403, json: { error: "invite_required" } }
-            : { json: { devices: [{ ...device, revoked_at: revoked ? now : null }] } },
+          devicesUnavailable
+            ? { status: 503, json: { error: "unavailable" } }
+            : restricted
+              ? { status: 403, json: { error: "invite_required" } }
+              : { json: { devices: [{ ...device, revoked_at: revoked ? now : null }] } },
         ),
       );
       await page.route("**/api/v1/devices/d", async (route) => {
@@ -253,8 +256,24 @@ try {
         fullPage: true,
       });
       restricted = false;
+      devicesUnavailable = true;
       await page.reload();
       await page.getByRole("heading", { name: "person@example.invalid" }).waitFor();
+      await page.getByRole("alert").filter({ hasText: "Device list unavailable" }).waitFor();
+      assert.equal(
+        await page.getByRole("link", { name: "Download encrypted archive" }).getAttribute("href"),
+        "/api/v1/account/export",
+      );
+      assert.equal(
+        await page.getByRole("button", { name: "Sign out ↗", exact: true }).isEnabled(),
+        true,
+      );
+      assert.equal(
+        await page.getByRole("button", { name: "Sign out all", exact: true }).isEnabled(),
+        true,
+      );
+      assert.equal(await page.getByText("No devices connected yet.", { exact: true }).count(), 0);
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page
         .locator("#security")
         .getByRole("button", { name: "Delete account", exact: true })
@@ -265,6 +284,13 @@ try {
         true,
       );
       await page.keyboard.press("Escape");
+      devicesUnavailable = false;
+      await page.getByRole("button", { name: "Retry devices" }).click();
+      await page.getByText("Revoked", { exact: true }).waitFor();
+      assert.equal(
+        await page.getByRole("alert").filter({ hasText: "Device list unavailable" }).count(),
+        0,
+      );
       await page.route("**/api/v1/account", (route) =>
         route.fulfill({ status: 410, json: { error: "account_deleted" } }),
       );

@@ -17,6 +17,7 @@ export default function AccountPage() {
   const [signedOut, setSignedOut] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [inviteRequired, setInviteRequired] = useState(false);
+  const [deviceError, setDeviceError] = useState("");
   const [busy, setBusy] = useState(false);
   const [emailForm, setEmailForm] = useState(false);
   const [action, setAction] = useState<Action | null>(null);
@@ -29,18 +30,24 @@ export default function AccountPage() {
         api<SessionResponse>("/auth/session"),
         api<{ account: Account }>("/account"),
         api<{ devices: Device[] }>("/devices").then(
-          (value) => ({ ...value, restricted: false }),
+          (value) => ({ ...value, restricted: false, error: "" }),
           (error) => {
-            if (error instanceof ApiError && error.code === "invite_required")
-              return { devices: [] as Device[], restricted: true };
-            throw error;
+            if (error instanceof ApiError) {
+              if (error.status === 401 || error.code === "account_deleted") throw error;
+              if (error.status === 403 && error.code === "invite_required")
+                return { devices: [] as Device[], restricted: true, error: "" };
+            }
+            // Device metadata is a cloud feature. Its outage must not hide authenticated
+            // export/logout/deletion, which the API keeps available without invitation config.
+            return { devices: [] as Device[], restricted: null, error: (error as Error).message };
           },
         ),
       ]);
       setData({ account: result.account, devices: devices.devices, session });
       setSignedOut(false);
       setDeleted(false);
-      setInviteRequired(devices.restricted);
+      setInviteRequired((previous) => devices.restricted ?? previous);
+      setDeviceError(devices.error);
       if (devices.restricted) setEmailForm(false);
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.code === "account_deleted")) {
@@ -207,7 +214,14 @@ export default function AccountPage() {
                 Approve new devices in the desktop app. Revocation stops future cloud access; it
                 cannot erase data already downloaded.
               </p>
-              {inviteRequired ? (
+              {deviceError ? (
+                <Notice error>
+                  Device list unavailable. {deviceError}{" "}
+                  <button type="button" className="text-button" onClick={() => void reload()}>
+                    Retry devices
+                  </button>
+                </Notice>
+              ) : inviteRequired ? (
                 <p className="empty">Device management requires cloud preview access.</p>
               ) : data.devices.length === 0 ? (
                 <div className="empty">

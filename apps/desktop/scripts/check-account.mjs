@@ -136,6 +136,48 @@ export async function checkAccount(browser, url, out, engine) {
     assert.equal(await page.getByRole("button", { name: "Register this device" }).count(), 0);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await page.screenshot({ path: resolve(out, `${engine}-cloud-restricted.png`) });
+    for (const stage of ["ready-restricted", "sync-restricted"]) {
+      await page.goto(`${url}/?preview=account&stage=${stage}&active=fixture-profile`);
+      if (stage === "sync-restricted") {
+        await page.getByText("This device is approved", { exact: true }).waitFor();
+        await page.evaluate(() => window.accountAccessFixture.restrictSync());
+      }
+      await page.getByRole("heading", { name: "Cloud access requires an invitation" }).waitFor();
+      assert.equal(
+        await page.evaluate(
+          () => window.accountAccessFixture.calls().filter((call) => call === "refresh").length,
+        ),
+        0,
+      );
+      await page
+        .getByText("Your retained encrypted workspace remains available", { exact: false })
+        .waitFor();
+      await page.getByRole("button", { name: "Check cloud access" }).click();
+      await page.getByText("This device is approved", { exact: true }).waitFor();
+      assert.equal(
+        await page.evaluate(
+          () => window.accountAccessFixture.calls().filter((call) => call === "refresh").length,
+        ),
+        1,
+      );
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+    }
+    await page.goto(`${url}/?preview=account&stage=sync-stale&active=fixture-profile`);
+    await page.getByText("This device is approved", { exact: true }).waitFor();
+    await page.evaluate(() => window.accountAccessFixture.restrictSync());
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Sign out now", exact: true })
+      .click();
+    await page.getByLabel("Email address").waitFor();
+    await page.evaluate(() => window.accountAccessFixture.releaseStatus());
+    await page.waitForTimeout(75);
+    assert.equal(
+      await page.getByRole("heading", { name: "Cloud access requires an invitation" }).count(),
+      0,
+    );
+    await page.getByLabel("Email address").waitFor();
     assert.deepEqual(errors, []);
   } finally {
     await context.close();

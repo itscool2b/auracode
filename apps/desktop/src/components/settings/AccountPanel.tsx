@@ -38,6 +38,7 @@ export function AccountPanel({
   recoveryProfileId = null,
   recoveryActionLabel = "Unlock selected account",
   initialEmail = "",
+  subscribeSync = subscribeAccountSync,
 }: {
   readonly api?: AccountApi;
   readonly deviceName?: string;
@@ -47,6 +48,7 @@ export function AccountPanel({
   readonly recoveryProfileId?: string | null;
   readonly recoveryActionLabel?: string;
   readonly initialEmail?: string;
+  readonly subscribeSync?: typeof subscribeAccountSync;
   readonly Verification?: ComponentType<{
     onToken: (token: string) => void;
     origin?: VerificationOrigin;
@@ -79,15 +81,34 @@ export function AccountPanel({
   const [now, setNow] = useState(Date.now());
   const mounted = useRef(false);
   const acting = useRef(false);
-  useEffect(
-    () =>
-      subscribeAccountSync(activeProfileId, (sync) => {
-        setStatus((current) =>
-          current?.profile_id === activeProfileId ? { ...current, sync } : current,
-        );
-      }),
-    [activeProfileId],
-  );
+  const statusEpoch = useRef(0);
+  useEffect(() => {
+    let live = true;
+    const stop = subscribeSync(activeProfileId, (sync) => {
+      setStatus((current) =>
+        current?.profile_id === activeProfileId ? { ...current, sync } : current,
+      );
+      if (sync.state !== "paused" || acting.current) return;
+      const epoch = statusEpoch.current;
+      // This is the native cached account state, not a cloud retry. A paused sync event can
+      // arrive after the panel loaded Ready, so its access actions must follow that state too.
+      void api.status().then(
+        (fresh) => {
+          if (!live || acting.current || epoch !== statusEpoch.current) return;
+          setStatus((current) =>
+            current?.profile_id === activeProfileId && current.account_id === fresh.account_id
+              ? { ...fresh, sync: current.sync }
+              : current,
+          );
+        },
+        () => {},
+      );
+    });
+    return () => {
+      live = false;
+      stop();
+    };
+  }, [api, activeProfileId, subscribeSync]);
 
   useEffect(() => {
     mounted.current = true;
@@ -101,15 +122,16 @@ export function AccountPanel({
   useEffect(() => {
     void generation;
     let live = true;
+    const epoch = ++statusEpoch.current;
     void Promise.all([api.config(), api.status()]).then(
       ([configuration, current]) => {
-        if (!live) return;
+        if (!live || epoch !== statusEpoch.current) return;
         setConfig(configuration);
         setStatus(current);
         setError(null);
       },
       (failure) => {
-        if (live) setError(errorMessage(failure));
+        if (live && epoch === statusEpoch.current) setError(errorMessage(failure));
       },
     );
     return () => {
@@ -127,8 +149,17 @@ export function AccountPanel({
       (value) => {
         if (live) setDevices(value);
       },
-      (failure) => {
-        if (live) setDeviceError(errorMessage(failure));
+      async (failure) => {
+        if (!live) return;
+        setDeviceError(errorMessage(failure));
+        if (failure instanceof AccountCommandError && failure.code === "invite_required") {
+          const epoch = statusEpoch.current;
+          const fresh = await api.status().catch(() => null);
+          if (!live || acting.current || epoch !== statusEpoch.current || !fresh) return;
+          setStatus((current) =>
+            current?.account_id === fresh.account_id ? { ...fresh, sync: current.sync } : current,
+          );
+        }
       },
     );
     return () => {
@@ -146,6 +177,7 @@ export function AccountPanel({
 
   const run = async (action: () => Promise<void>) => {
     if (acting.current) return;
+    statusEpoch.current++;
     acting.current = true;
     setBusy(true);
     setError(null);
@@ -171,6 +203,9 @@ export function AccountPanel({
       if (mounted.current) setBusy(false);
     }
   };
+  useEffect(() => {
+    if (status?.access === "invite_required" && !busy) setDeviceAction(null);
+  }, [status?.access, busy]);
   const update = async (operation: Promise<AccountStatus>) => {
     const value = await operation;
     if (mounted.current) {
