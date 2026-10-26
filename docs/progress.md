@@ -49,8 +49,14 @@ explicitly skipped (including resume without a persisted transcript). Its first 
 effort choice bug, now fixed with an explicit Default/reset choice and regression coverage.
 Full workspace Clippy, frontend check (813 tests, 19 existing skips), and both frontend builds pass.
 Workspace test reruns corrected stale catalog assertions; final combined verification is pending.
-Independent review found explicit fresh starts currently reuse the chat UUID as the native session
-ID. Fixing that identity bug is required before paid smoke tests. No M1b PR has been opened.
+Independent review found fresh starts reused the chat UUID as the native session ID. Fresh starts
+now allocate a UUIDv7 for each spawn. Typed native startup options validate fresh/fork IDs and
+resume-at message IDs before spawning, preserve ordinary resume sources, and enable SDK file
+checkpointing only when explicitly requested. Replay supplies a separate deterministic session seed.
+The actor still supplies default startup options; fork/resume-at UI and native rewind remain pending,
+and fork/rewind capabilities remain unadvertised. This step passed 304 driver unit tests, four
+conformance tests, all 74 replay fixtures, targeted driver/core Clippy, and the mirrored instructions
+check. No paid calls were made and no M1b PR has been opened.
 
 1. M1b: native Claude driver, protocol replay, session readiness, permissions/questions, smoke tests.
 2. M1c: native Codex app-server driver and generated-schema compatibility.

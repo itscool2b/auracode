@@ -93,6 +93,29 @@ impl fmt::Debug for DriverContext {
     }
 }
 
+/// Native startup choices. Drivers that do not support these keep the defaults.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NativeStartOptions {
+    /// An explicit new transcript UUID, used by deterministic replay. Fresh starts otherwise
+    /// allocate their own UUID, independently of the chat id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_session_id: Option<String>,
+    /// Continue `SessionSetup::resume` into a new transcript, preserving the source.
+    #[serde(skip_serializing_if = "is_false")]
+    pub fork: bool,
+    /// Resume through this native user message UUID. Requires a resume source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resume_at: Option<String>,
+    /// Explicitly enable the native SDK's file checkpointing.
+    #[serde(skip_serializing_if = "is_false")]
+    pub file_checkpointing: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
+}
+
 /// How the session wants the agent started.
 #[derive(Debug, Clone)]
 pub struct SessionSetup {
@@ -109,6 +132,7 @@ pub struct SessionSetup {
     pub env: Arc<ResolvedEnv>,
     /// The native session to continue.
     pub resume: Option<String>,
+    pub native_start: NativeStartOptions,
     pub autonomy: Autonomy,
     /// The user's explicit choices, by option id, re-applied when the agent starts.
     pub desired: BTreeMap<String, ConfigValue>,
@@ -123,14 +147,18 @@ impl SessionSetup {
     /// `{"agent_id":"hermes","dialect":"hermes","resume":null,"autonomy":"full_auto","desired":{},
     /// "spawn_id":"019a..."}`
     pub fn start_note(&self, spawn_id: &str) -> serde_json::Value {
-        serde_json::json!({
+        let mut note = serde_json::json!({
             "agent_id": self.agent_id,
             "dialect": self.dialect,
             "resume": self.resume,
             "autonomy": self.autonomy,
             "desired": self.desired,
             "spawn_id": spawn_id,
-        })
+        });
+        if self.native_start != NativeStartOptions::default() {
+            note["native_start"] = serde_json::json!(self.native_start);
+        }
+        note
     }
 }
 
@@ -766,7 +794,7 @@ mod tests {
     fn the_start_note_names_the_setup_but_never_the_env() {
         let mut vars = EnvMap::new();
         vars.insert("ANTHROPIC_API_KEY".into(), "sk-ant-secret".into());
-        let setup = SessionSetup {
+        let mut setup = SessionSetup {
             chat_id: "c".into(),
             agent_id: "hermes".into(),
             dialect: "hermes".into(),
@@ -791,6 +819,7 @@ mod tests {
                 resolved_at_ms: 0,
             }),
             resume: None,
+            native_start: NativeStartOptions::default(),
             autonomy: Autonomy::FullAuto,
             desired: BTreeMap::new(),
             timings: DriverTimings::STANDARD,
@@ -802,5 +831,17 @@ mod tests {
             r#"{"agent_id":"hermes","dialect":"hermes","resume":null,"autonomy":"full_auto","desired":{},"spawn_id":"019a"}"#
         );
         assert!(!format!("{setup:?}").contains("sk-ant-secret"));
+        setup.native_start.fork = true;
+        setup.native_start.resume_at = Some("019a0000-0000-7000-8000-000000000009".into());
+        let note = setup.start_note("019a");
+        assert_eq!(
+            note["native_start"],
+            serde_json::json!({"fork":true,"resume_at":"019a0000-0000-7000-8000-000000000009"})
+        );
+        assert_eq!(
+            serde_json::from_value::<NativeStartOptions>(note["native_start"].clone())
+                .expect("native options round trip"),
+            setup.native_start
+        );
     }
 }

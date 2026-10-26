@@ -1,7 +1,7 @@
 use super::*;
 use crate::driver::{
-    AgentSpawner, DriverCommand, DriverEvent, DriverTimings, EventReceiver, SessionSetup, StopPlan,
-    TurnRef, event_channel,
+    AgentSpawner, DriverCommand, DriverEvent, DriverTimings, EventReceiver, NativeStartOptions,
+    SessionSetup, StopPlan, TurnRef, event_channel,
 };
 use aura_process::testing::{FakeAgentEnd, FakeLine, FakeSpawner};
 use aura_process::{
@@ -46,6 +46,7 @@ fn setup() -> SessionSetup {
             resolved_at_ms: 0,
         }),
         resume: None,
+        native_start: Default::default(),
         autonomy: Autonomy::Ask,
         desired: BTreeMap::new(),
         timings: DriverTimings::STANDARD,
@@ -60,6 +61,9 @@ pub(super) struct Harness {
 }
 impl Harness {
     pub(super) async fn start() -> Self {
+        Self::start_with(setup()).await
+    }
+    async fn start_with(setup: SessionSetup) -> Self {
         let (spawner, mut ends) = FakeSpawner::new();
         let (tx, commands) = mpsc::unbounded_channel();
         let (events, rx) = event_channel();
@@ -67,7 +71,7 @@ impl Harness {
             commands,
             events,
             spawner: Arc::new(Quiet(spawner)),
-            setup: setup(),
+            setup,
         }));
         let end = timeout(Duration::from_secs(2), ends.recv())
             .await
@@ -122,6 +126,16 @@ impl Harness {
             .expect("event deadline")
             .expect("event")
     }
+    fn native_id(&self) -> &str {
+        let args = &self.end.spec.launch.args;
+        args.iter()
+            .find_map(|arg| arg.to_str()?.strip_prefix("--session-id="))
+            .or_else(|| {
+                args.iter()
+                    .find_map(|arg| arg.to_str()?.strip_prefix("--resume="))
+            })
+            .expect("native session identity")
+    }
     pub(super) async fn ready(&mut self) {
         let init = self.wire().await;
         assert_eq!(init["request"]["subtype"], "initialize");
@@ -131,7 +145,21 @@ impl Harness {
             "response":{"claude_code_version":"2.1.310","current_permission_mode":"default","session_state":"idle","models":[],"commands":[]}}})).await;
         loop {
             if let DriverEvent::Ready(info) = self.event().await {
-                assert_eq!(info.native_session_id, setup().chat_id);
+                let args = &self.end.spec.launch.args;
+                assert_eq!(info.native_session_id, self.native_id());
+                assert_eq!(
+                    info.resumed,
+                    if args.iter().any(|arg| arg == "--fork-session")
+                        || !args
+                            .iter()
+                            .any(|arg| arg.to_string_lossy().starts_with("--resume="))
+                    {
+                        crate::driver::ResumeOutcome::New
+                    } else {
+                        crate::driver::ResumeOutcome::Resumed
+                    }
+                );
+                assert!(!info.capabilities.fork && !info.capabilities.rewind);
                 break;
             }
         }
@@ -163,6 +191,165 @@ impl Harness {
             .expect("stop");
         while self.events.recv().await.is_some() {}
         assert_eq!(self.run.await.expect("driver task"), DriverExit::Closed);
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn fresh_starts_of_the_same_chat_get_distinct_transcript_ids() {
+    let mut first = Harness::start().await;
+    first.ready().await;
+    let first_id = first.native_id().to_owned();
+    first.stop().await;
+    let mut second = Harness::start().await;
+    second.ready().await;
+    let second_id = second.native_id().to_owned();
+    assert_ne!(first_id, second_id);
+    assert_ne!(first_id, setup().chat_id);
+    assert_ne!(second_id, setup().chat_id);
+    for id in [first_id, second_id] {
+        assert_eq!(
+            uuid::Uuid::parse_str(&id).expect("UUID").get_version_num(),
+            7
+        );
+    }
+    second.stop().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn ordinary_resume_retains_the_source_and_has_no_new_session_flag() {
+    for source in [
+        "019a0000-0000-7000-8000-000000000009",
+        "C:\\transcripts\\session with spaces.jsonl",
+    ] {
+        let mut settings = setup();
+        settings.resume = Some(source.into());
+        let mut h = Harness::start_with(settings).await;
+        h.ready().await;
+        assert_eq!(h.native_id(), source);
+        assert!(!h.end.spec.launch.args.iter().any(|arg| {
+            arg.to_string_lossy().starts_with("--session-id=") || arg == "--fork-session"
+        }));
+        h.stop().await;
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn fork_uses_a_new_id_and_explicit_resume_at_and_checkpointing_options() {
+    let source = "019a0000-0000-7000-8000-000000000009";
+    let message = "019a0000-0000-7000-8000-000000000008";
+    for seed in [None, Some("019a0000-0000-7000-8000-000000000007")] {
+        let mut settings = setup();
+        settings.resume = Some(source.into());
+        settings.native_start = NativeStartOptions {
+            new_session_id: seed.map(str::to_owned),
+            fork: true,
+            resume_at: Some(message.into()),
+            file_checkpointing: true,
+        };
+        let mut h = Harness::start_with(settings.clone()).await;
+        h.ready().await;
+        assert_ne!(h.native_id(), source);
+        if let Some(seed) = seed {
+            assert_eq!(h.native_id(), seed);
+        }
+        let args = &h.end.spec.launch.args;
+        assert!(
+            args.iter()
+                .any(|arg| arg == format!("--resume={source}").as_str())
+        );
+        assert!(args.iter().any(|arg| arg == "--fork-session"));
+        assert!(
+            args.iter()
+                .any(|arg| arg == format!("--resume-session-at={message}").as_str())
+        );
+        assert!(
+            !args.iter().any(|arg| arg == "--resume"
+                || arg == "--session-id"
+                || arg == "--resume-session-at")
+        );
+        assert!(h.end.spec.launch.set_env.iter().any(|(key, value)| key
+            == "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"
+            && value == "true"));
+        assert_eq!(settings.resume.as_deref(), Some(source));
+        assert!(settings.launch.args.is_empty());
+        assert!(settings.launch.set_env.is_empty());
+        h.stop().await;
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn malformed_native_startup_is_rejected_before_spawning() {
+    let source = "019a0000-0000-7000-8000-000000000009";
+    let cases = [
+        (
+            None,
+            NativeStartOptions {
+                fork: true,
+                ..Default::default()
+            },
+        ),
+        (
+            None,
+            NativeStartOptions {
+                resume_at: Some(source.into()),
+                ..Default::default()
+            },
+        ),
+        (
+            None,
+            NativeStartOptions {
+                new_session_id: Some("invalid".into()),
+                ..Default::default()
+            },
+        ),
+        (
+            Some(source),
+            NativeStartOptions {
+                resume_at: Some("--not-a-uuid".into()),
+                ..Default::default()
+            },
+        ),
+        (
+            Some(source),
+            NativeStartOptions {
+                new_session_id: Some(source.into()),
+                ..Default::default()
+            },
+        ),
+        (
+            Some(source),
+            NativeStartOptions {
+                fork: true,
+                new_session_id: Some(source.into()),
+                ..Default::default()
+            },
+        ),
+        (Some(" "), NativeStartOptions::default()),
+        (Some("a\0b"), NativeStartOptions::default()),
+    ];
+    for (source, native_start) in cases {
+        let (spawner, mut ends) = FakeSpawner::new();
+        let (_tx, commands) = mpsc::unbounded_channel();
+        let (events, mut rx) = event_channel();
+        let mut settings = setup();
+        settings.resume = source.map(str::to_owned);
+        settings.native_start = native_start;
+        let exit = Box::new(ClaudeDriver::new())
+            .run(DriverContext {
+                commands,
+                events,
+                spawner: Arc::new(Quiet(spawner)),
+                setup: settings,
+            })
+            .await;
+        assert!(
+            matches!(exit, DriverExit::StartFailed(error) if error.kind == aura_protocol::ErrorKind::ProtocolError)
+        );
+        assert!(ends.try_recv().is_err(), "invalid startup must never spawn");
+        assert!(
+            rx.recv().await.is_none(),
+            "invalid startup must never become Ready"
+        );
     }
 }
 
@@ -394,6 +581,12 @@ fn launch_preserves_harness_and_uses_unambiguous_resume_values() {
             .any(|(key, value)| key == "CLAUDE_CODE_SDK_READS_SESSION_STATE" && value == "1")
     );
     assert_eq!(launch.program, settings.launch.program);
+    assert!(
+        !launch
+            .set_env
+            .iter()
+            .any(|(key, _)| key == "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING")
+    );
 }
 
 #[tokio::test(start_paused = true)]

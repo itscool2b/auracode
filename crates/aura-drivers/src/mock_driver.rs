@@ -1529,6 +1529,7 @@ mod tests {
                 resolved_at_ms: 0,
             }),
             resume: Some("an-old-session".into()),
+            native_start: Default::default(),
             autonomy,
             desired,
             timings: DriverTimings::STANDARD,

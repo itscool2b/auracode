@@ -1499,6 +1499,7 @@ impl ChatActor {
             launch: prepared.launch,
             env: prepared.env,
             resume: resume.clone(),
+            native_start: Default::default(),
             autonomy: self.autonomy,
             desired: self.desired.clone(),
             timings: DriverTimings::STANDARD,

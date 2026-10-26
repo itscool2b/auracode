@@ -60,6 +60,7 @@ fn setup(dialect: &str) -> SessionSetup {
             resolved_at_ms: 0,
         }),
         resume: None,
+        native_start: Default::default(),
         autonomy: Autonomy::FullAuto,
         desired: BTreeMap::new(),
         timings: DriverTimings::STANDARD,

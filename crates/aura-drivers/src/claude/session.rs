@@ -192,6 +192,51 @@ fn autonomy(requested: Autonomy, native: &str) -> AutonomyState {
         note: None,
     }
 }
+fn native_session_id(setup: &SessionSetup) -> Result<String, DriverError> {
+    let invalid = |message| error(ErrorKind::ProtocolError, message);
+    let options = &setup.native_start;
+    if setup
+        .resume
+        .as_ref()
+        .is_some_and(|source| source.trim().is_empty() || source.contains('\0'))
+    {
+        return Err(invalid(
+            "Claude's resume source must be a nonempty session id or transcript path.",
+        ));
+    }
+    if (options.fork || options.resume_at.is_some()) && setup.resume.is_none() {
+        return Err(invalid(
+            "Claude's fork and resume-at options require a resume source.",
+        ));
+    }
+    if let Some(at) = &options.resume_at {
+        uuid::Uuid::parse_str(at)
+            .map_err(|_| invalid("Claude's resume-at message id must be a UUID."))?;
+    }
+    let explicit = options
+        .new_session_id
+        .as_deref()
+        .map(uuid::Uuid::parse_str)
+        .transpose()
+        .map_err(|_| invalid("Claude's new session id must be a UUID."))?;
+    if let Some(source) = &setup.resume {
+        if !options.fork {
+            if explicit.is_some() {
+                return Err(invalid(
+                    "An explicit new Claude session id requires a fresh start or fork.",
+                ));
+            }
+            return Ok(source.clone());
+        }
+        if explicit.is_some() && explicit == uuid::Uuid::parse_str(source).ok() {
+            return Err(invalid(
+                "A Claude fork must use a different session id from its source.",
+            ));
+        }
+    }
+    Ok(explicit.unwrap_or_else(uuid::Uuid::now_v7).to_string())
+}
+
 pub(super) fn launch(setup: &SessionSetup, native_id: &str) -> aura_process::LaunchSpec {
     let mut launch = setup.launch.clone();
     // Apply Full auto only after initialize and before any prompt. A policy refusal can then
@@ -213,6 +258,15 @@ pub(super) fn launch(setup: &SessionSetup, native_id: &str) -> aura_process::Lau
         }
         .into(),
     );
+    if setup.native_start.fork {
+        launch.args.extend([
+            "--fork-session".into(),
+            format!("--session-id={native_id}").into(),
+        ]);
+    }
+    if let Some(at) = &setup.native_start.resume_at {
+        launch.args.push(format!("--resume-session-at={at}").into());
+    }
     if let Some(ConfigValue::Choice { value: model }) = setup.desired.get("model") {
         launch.args.push(format!("--model={model}").into());
     }
@@ -227,6 +281,15 @@ pub(super) fn launch(setup: &SessionSetup, native_id: &str) -> aura_process::Lau
     launch
         .set_env
         .push(("CLAUDE_CODE_SDK_READS_SESSION_STATE".into(), "1".into()));
+    if setup.native_start.file_checkpointing {
+        launch
+            .set_env
+            .retain(|(key, _)| key != "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING");
+        launch.set_env.push((
+            "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING".into(),
+            "true".into(),
+        ));
+    }
     launch
 }
 enum Purpose {
@@ -432,7 +495,7 @@ impl Session {
                 autonomy_levels: vec![Autonomy::FullAuto, Autonomy::AutoEdit, Autonomy::Ask],
                 ..Default::default()
             },
-            resumed: if self.setup.resume.is_some() {
+            resumed: if self.setup.resume.is_some() && !self.setup.native_start.fork {
                 ResumeOutcome::Resumed
             } else {
                 ResumeOutcome::New
@@ -1223,11 +1286,10 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         spawner,
         setup,
     } = ctx;
-    let native_id = setup.resume.clone().unwrap_or_else(|| {
-        uuid::Uuid::parse_str(&setup.chat_id)
-            .map(|id| id.to_string())
-            .unwrap_or_else(|_| uuid::Uuid::now_v7().to_string())
-    });
+    let native_id = match native_session_id(&setup) {
+        Ok(id) => id,
+        Err(error) => return DriverExit::StartFailed(error),
+    };
     let spec = SpawnSpec {
         launch: launch(&setup, &native_id),
         folder: setup.folder.clone(),

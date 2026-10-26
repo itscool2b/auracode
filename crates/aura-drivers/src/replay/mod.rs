@@ -43,8 +43,8 @@ use crate::acp::AcpDriver;
 use crate::claude::ClaudeDriver;
 use crate::driver::{
     AgentDriver, AgentSpawner, DriverCommand, DriverContext, DriverEvent, DriverTimings,
-    EventReceiver, LoggedCommand, PermissionOutcome, SessionSetup, StopPlan, TurnRef,
-    event_channel,
+    EventReceiver, LoggedCommand, NativeStartOptions, PermissionOutcome, SessionSetup, StopPlan,
+    TurnRef, event_channel,
 };
 use fake_agent::FakeAgent;
 
@@ -56,6 +56,14 @@ pub const REPLAY_CLIENT_VERSION: &str = "0.0.0-replay";
 
 /// Stable new-session identity when curation replaced the recorded Claude UUID with a placeholder.
 const REPLAY_NATIVE_SESSION_ID: &str = "019a0000-0000-7000-8000-000000000001";
+
+fn curated_session_id(id: &str) -> bool {
+    id.strip_prefix("<SESSION_")
+        .and_then(|rest| rest.strip_suffix('>'))
+        .is_some_and(|number| {
+            !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+        })
+}
 
 /// How long, in virtual time, a replay may take after its last record before it is given up.
 pub const REPLAY_END_LIMIT: Duration = Duration::from_secs(30 * 60);
@@ -141,16 +149,32 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
         }
         _ => BTreeMap::new(),
     };
-    Ok(SessionSetup {
-        chat_id: if native {
+    let resume = start
+        .get("resume")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let mut native_start: NativeStartOptions = match start.get("native_start") {
+        Some(value) => serde_json::from_value(value.clone())
+            .map_err(|error| format!("native_start: {error}"))?,
+        None => NativeStartOptions::default(),
+    };
+    if native
+        && (resume.is_none() || native_start.fork)
+        && native_start
+            .new_session_id
+            .as_deref()
+            .is_none_or(curated_session_id)
+    {
+        native_start.new_session_id = Some(
             start["native_session_id"]
                 .as_str()
                 .filter(|id| uuid::Uuid::parse_str(id).is_ok())
                 .unwrap_or(REPLAY_NATIVE_SESSION_ID)
-                .into()
-        } else {
-            "replay".into()
-        },
+                .into(),
+        );
+    }
+    Ok(SessionSetup {
+        chat_id: "replay".into(),
         launch: replay_launch(if native { "claude" } else { &agent_id }),
         dialect: text("dialect")?,
         agent_id,
@@ -165,10 +189,8 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
             warnings: Vec::new(),
             resolved_at_ms: 0,
         }),
-        resume: start
-            .get("resume")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
+        resume,
+        native_start,
         autonomy,
         desired,
         timings: DriverTimings::STANDARD,
@@ -215,9 +237,12 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
     let (sender, events) = event_channel();
     let native = setup.agent_id == "claude" || setup.dialect == "claude";
     let native_session = setup
-        .resume
+        .native_start
+        .new_session_id
         .clone()
-        .unwrap_or_else(|| setup.chat_id.clone());
+        .map(|id| uuid::Uuid::parse_str(&id).map_or(id, |uuid| uuid.to_string()))
+        .or_else(|| setup.resume.clone())
+        .unwrap_or_default();
     let ctx = DriverContext {
         commands: receiver,
         events: sender,
@@ -454,15 +479,23 @@ mod tests {
     fn native_start_reuses_a_recorded_uuid_and_has_a_stable_curated_fallback() {
         let mut start = json!({"agent_id":"claude","dialect":"claude","native_session_id":"019a0000-0000-7000-8000-000000000009"});
         let setup = setup_from_start(&start).expect("native setup");
-        assert_eq!(setup.chat_id, start["native_session_id"]);
+        assert_eq!(
+            setup.native_start.new_session_id.as_deref(),
+            start["native_session_id"].as_str()
+        );
+        assert_eq!(setup.chat_id, "replay");
         assert_eq!(
             setup.launch.program,
             PathBuf::from("/opt/agents/bin/claude")
         );
         start["native_session_id"] = json!("<SESSION_1>");
         assert_eq!(
-            setup_from_start(&start).expect("curated setup").chat_id,
-            REPLAY_NATIVE_SESSION_ID
+            setup_from_start(&start)
+                .expect("curated setup")
+                .native_start
+                .new_session_id
+                .as_deref(),
+            Some(REPLAY_NATIVE_SESSION_ID)
         );
         start["agent_id"] = json!("custom-claude");
         assert_eq!(
@@ -488,7 +521,59 @@ mod tests {
         assert_eq!(setup.desired.len(), 1);
         assert_eq!(setup.agent_folder, REPLAY_FOLDER);
         assert_eq!(setup.launch.args, ["acp"]);
+        assert_eq!(setup.native_start, NativeStartOptions::default());
         assert!(setup_from_start(&serde_json::json!({"dialect": "x"})).is_err());
+    }
+
+    #[test]
+    fn native_fork_replay_seeds_the_new_id_and_preserves_the_source() {
+        let source = "019a0000-0000-7000-8000-000000000009";
+        let fork = "019a0000-0000-7000-8000-000000000008";
+        let message = "019a0000-0000-7000-8000-000000000007";
+        let mut start = json!({"agent_id":"claude","dialect":"claude","resume":source,"native_session_id":fork,
+            "native_start":{"fork":true,"resume_at":message,"file_checkpointing":true}});
+        let setup = setup_from_start(&start).expect("fork setup");
+        assert_eq!(setup.resume.as_deref(), Some(source));
+        assert_eq!(setup.native_start.new_session_id.as_deref(), Some(fork));
+        assert_eq!(setup.native_start.resume_at.as_deref(), Some(message));
+        assert!(setup.native_start.fork && setup.native_start.file_checkpointing);
+        assert_eq!(
+            setup_from_start(&setup.start_note("replay"))
+                .expect("round trip")
+                .native_start,
+            setup.native_start
+        );
+        start
+            .as_object_mut()
+            .expect("start object")
+            .remove("native_start");
+        start["native_session_id"] = json!(source);
+        let resumed = setup_from_start(&start).expect("resume setup");
+        assert_eq!(resumed.resume.as_deref(), Some(source));
+        assert_eq!(resumed.native_start.new_session_id, None);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_curated_native_fork_replays_with_deterministic_ids() {
+        let mut fixture = Fixture::parse(
+            "fork",
+            include_str!("../../tests/fixtures/claude/basic.jsonl"),
+        )
+        .expect("fixture");
+        for record in &mut fixture.records {
+            if let FixtureRecord::Start(start) = record {
+                start["resume"] = json!("<SESSION_2>");
+                start["native_start"] = json!({"fork":true,"new_session_id":"<SESSION_1>","resume_at":"019a0000-0000-7000-8000-000000000007"});
+            }
+        }
+        let first = run(&fixture).await;
+        let second = run(&fixture).await;
+        assert!(first.mismatches.is_empty(), "{:?}", first.mismatches);
+        assert!(second.mismatches.is_empty(), "{:?}", second.mismatches);
+        assert_eq!(first.events, second.events);
+        assert_eq!(first.exit, second.exit);
+        assert!(first.events.iter().any(|event| matches!(serde_json::from_value::<DriverEvent>(event.clone()),
+            Ok(DriverEvent::Ready(info)) if info.native_session_id == REPLAY_NATIVE_SESSION_ID && info.resumed == crate::driver::ResumeOutcome::New)));
     }
 
     #[tokio::test(start_paused = true)]
