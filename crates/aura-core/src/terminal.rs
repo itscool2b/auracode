@@ -78,6 +78,16 @@ impl Drop for Slot {
 struct Inner {
     slots: Mutex<HashMap<String, Arc<Slot>>>,
     stopped: AtomicBool,
+    quiescing: AtomicBool,
+}
+
+/// Blocks new terminal reservations without canceling any existing terminal.
+pub struct IdleTerminalGuard<'a>(&'a Inner);
+
+impl Drop for IdleTerminalGuard<'_> {
+    fn drop(&mut self) {
+        self.0.quiescing.store(false, Ordering::Release);
+    }
 }
 impl Drop for Inner {
     fn drop(&mut self) {
@@ -141,9 +151,22 @@ impl TerminalTicket {
 }
 
 impl Terminals {
+    /// Only succeeds with no reserved or running terminal. Uses the reservation lock so a new
+    /// login cannot slip between the idle check and an application update.
+    pub fn try_quiesce_when_idle(&self) -> Option<IdleTerminalGuard<'_>> {
+        let slots = lock(&self.0.slots);
+        if !slots.is_empty()
+            || self.0.stopped.load(Ordering::Acquire)
+            || self.0.quiescing.swap(true, Ordering::AcqRel)
+        {
+            return None;
+        }
+        Some(IdleTerminalGuard(&self.0))
+    }
+
     pub fn reserve(&self, owner: &str) -> Result<TerminalTicket, TerminalError> {
         let mut slots = lock(&self.0.slots);
-        if self.0.stopped.load(Ordering::Acquire) {
+        if self.0.stopped.load(Ordering::Acquire) || self.0.quiescing.load(Ordering::Acquire) {
             return Err(TerminalError::Closed);
         }
         if slots.values().any(|slot| slot.owner == owner) {
@@ -283,6 +306,29 @@ mod tests {
 
     // A harmless test-harness subprocess. The ordinary unit test returns immediately; only the
     // explicit PTY test below supplies this marker and invokes this exact test name.
+    #[test]
+    fn updater_admission_never_cancels_a_terminal_or_reopens_permanent_stop() {
+        let terminals = Terminals::default();
+        let pending = terminals.reserve("main").unwrap();
+        assert!(terminals.try_quiesce_when_idle().is_none());
+        drop(pending);
+        let barrier = terminals.try_quiesce_when_idle().unwrap();
+        assert!(matches!(
+            terminals.reserve("main"),
+            Err(TerminalError::Closed)
+        ));
+        assert!(terminals.try_quiesce_when_idle().is_none());
+        drop(barrier);
+        drop(terminals.reserve("main").unwrap());
+        let barrier = terminals.try_quiesce_when_idle().unwrap();
+        terminals.stop_all();
+        drop(barrier);
+        assert!(matches!(
+            terminals.reserve("main"),
+            Err(TerminalError::Closed)
+        ));
+    }
+
     #[test]
     fn terminal_child() {
         if std::env::var_os("AURACODE_TERMINAL_TEST_CHILD").is_none() {

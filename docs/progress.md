@@ -1133,3 +1133,13 @@ is a backend checkpoint, not M4 completion. No real-repository mutation, paid pr
   they pass alongside Biome, workflow pin checks and instruction parity.
 - Cross-platform bundling, native installer acceptance, signing, update service and release
   publication remain pending. No build or CI dispatch was started. See docs/releases.md.
+
+### Update admission barriers, 2026-10-26
+
+- Added reversible core admission guards for an idle session manager and empty terminal service.
+  Live or starting agents and owned folder mutations prevent quiescence; once admitted, new agent
+  starts, folder mutations and terminal reservations are refused until the guard drops. Draft
+  persistence remains available for the final flush. Permanent terminal shutdown stays permanent.
+- Three focused tests cover folder/agent exclusion, a concurrent start race, terminal reservations
+  and permanent shutdown; core library Clippy passes. The updater will use these guards before
+  invoking any installer. No installer, credentials or real agent ran.

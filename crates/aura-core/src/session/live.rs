@@ -187,6 +187,7 @@ pub(crate) struct LiveAgents {
 
 #[derive(Debug, Default)]
 struct Inner {
+    quiescing: bool,
     slots: HashSet<String>,
     folders: HashMap<String, PathBuf>,
     mutations: HashSet<PathBuf>,
@@ -211,6 +212,9 @@ impl LiveAgents {
     /// Takes a slot for `chat` (idempotent); false when every slot is taken.
     pub(crate) fn acquire(&self, chat: &str) -> bool {
         let mut inner = self.lock();
+        if inner.quiescing {
+            return false;
+        }
         if inner.slots.contains(chat) {
             return true;
         }
@@ -219,6 +223,24 @@ impl LiveAgents {
         }
         inner.slots.insert(chat.to_owned());
         true
+    }
+
+    pub(crate) fn quiescing(&self) -> bool {
+        self.lock().quiescing
+    }
+
+    /// Atomically excludes new starts and folder mutations while the caller prepares an update.
+    pub(crate) fn try_quiesce(&self) -> bool {
+        let mut inner = self.lock();
+        if inner.quiescing || !inner.slots.is_empty() || !inner.mutations.is_empty() {
+            return false;
+        }
+        inner.quiescing = true;
+        true
+    }
+
+    pub(crate) fn resume_admission(&self) {
+        self.lock().quiescing = false;
     }
 
     /// Gives `chat`'s slot back, and every native session it held.
@@ -272,7 +294,8 @@ impl LiveAgents {
 
     pub(crate) fn reserve_folder(&self, folder: &Path) -> bool {
         let mut inner = self.lock();
-        if inner.mutations.contains(folder)
+        if inner.quiescing
+            || inner.mutations.contains(folder)
             || inner
                 .slots
                 .iter()
@@ -299,6 +322,41 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+
+    #[test]
+    fn update_quiesce_excludes_agent_starts_and_git_mutations_atomically() {
+        let live = LiveAgents::new(12);
+        let folder = Path::new("/fixture");
+        assert!(live.acquire("one"));
+        assert!(!live.try_quiesce());
+        live.release("one");
+        assert!(live.reserve_folder(folder));
+        assert!(!live.try_quiesce());
+        live.release_folder(folder);
+        assert!(live.try_quiesce());
+        assert!(!live.try_quiesce());
+        assert!(!live.acquire("two"));
+        assert!(!live.reserve_folder(folder));
+        live.resume_admission();
+        assert!(live.acquire("two"));
+    }
+
+    #[test]
+    fn racing_start_and_update_cannot_both_be_admitted() {
+        for _ in 0..32 {
+            let live = LiveAgents::new(12);
+            let barrier = std::sync::Barrier::new(2);
+            std::thread::scope(|scope| {
+                let start = scope.spawn(|| {
+                    barrier.wait();
+                    live.acquire("racing")
+                });
+                barrier.wait();
+                let update = live.try_quiesce();
+                assert_ne!(start.join().unwrap(), update);
+            });
+        }
+    }
 
     #[test]
     fn folder_mutation_reservation_excludes_live_agents_and_late_starts() {

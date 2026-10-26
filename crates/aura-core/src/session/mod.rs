@@ -70,6 +70,19 @@ const BLOB_WAIT: Duration = Duration::from_secs(5);
 
 /// Permission denied, as `create_chat` reports it.
 const FOLDER_NOT_ALLOWED: &str = "auracode isn't allowed to open this folder. Allow it in System Settings > Privacy & Security > Files and Folders, then try again.";
+
+/// An update admission barrier. Dropping it before shutdown lets the user continue normally.
+/// It does not close storage, so editor drafts can still be flushed while it is held.
+pub struct IdleSessionGuard<'a> {
+    live: &'a LiveAgents,
+}
+
+impl Drop for IdleSessionGuard<'_> {
+    fn drop(&mut self) {
+        self.live.resume_admission();
+    }
+}
+
 /// Everything the manager runs on. Every constructor that spawns tasks takes `rt`, because Tauri's
 /// `setup` hook and run-event callbacks run outside any Tokio context.
 pub struct ManagerDeps {
@@ -957,6 +970,17 @@ impl SessionManager {
             || lock(&self.inner.actors)
                 .values()
                 .any(|entry| !entry.book.is_empty())
+    }
+
+    /// Refuses live/starting/stopping agents and owned folder mutations, then atomically blocks
+    /// their admission. Parked queued prompts remain persisted for the next app launch.
+    pub fn try_quiesce_when_idle(&self) -> Option<IdleSessionGuard<'_>> {
+        if self.shared().is_shutting_down() || !self.shared().live.try_quiesce() {
+            return None;
+        }
+        Some(IdleSessionGuard {
+            live: &self.shared().live,
+        })
     }
 
     /// Stops every live agent gracefully within `deadline`, then kills what is left. No new starts

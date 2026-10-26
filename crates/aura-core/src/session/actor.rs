@@ -1977,6 +1977,9 @@ impl ChatActor {
             return Ok(());
         }
         if !self.shared.live.acquire(&self.chat_id) {
+            if self.shared.live.quiescing() {
+                return Err(SessionError::ShuttingDown);
+            }
             let error = SessionError::TooManyAgents(self.shared.live.max());
             if explicit {
                 return Err(error);
