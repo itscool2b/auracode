@@ -1778,3 +1778,10 @@ Follow-up checks also reject case-colliding remote filenames before review and v
 created after durable receipt publication is never overwritten. All 18 apply integration tests and
 all-target Clippy pass on Windows.
 
+
+### M9 native review and recovery admission
+
+- Added Account-profile-only inventory, expiring one-use reviews, apply, device-only controls and encrypted receipt history/rollback commands. Owned blocking work retains profile admission and the shared Library mutation guard through durable completion.
+- Applications re-resolve trusted sources and provider availability; changed bindings are refused before a receipt or file mutation. Failed application retains the old merge base and a skipped marker, and unresolved recovery prevents another apply.
+- Native Windows binding export passed. Focused configuration verification passed: 19 filesystem apply/recovery tests, 6 orchestration tests and exact DTO export. The broader product and platform acceptance remain pending; network delivery is still separate from local Account publication.
+

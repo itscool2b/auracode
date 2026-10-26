@@ -115,6 +115,34 @@ fn file(text: &str) -> ConfigContent {
         },
     )]))
 }
+
+#[test]
+fn application_refuses_changed_provider_binding_before_receipt_creation() {
+    let first = tempfile::tempdir().unwrap();
+    let second = tempfile::tempdir().unwrap();
+    let original = scanner(first.path(), Provider::Codex, true);
+    let missing = scanner(first.path(), Provider::Codex, false);
+    let moved = scanner(second.path(), Provider::Codex, true);
+    assert!(!original.same_sources(&missing));
+    assert!(!original.same_sources(&moved));
+    for current in [missing, moved] {
+        let desired = snapshot(
+            ConfigFormat::File,
+            "AGENTS.md",
+            &[],
+            Some(file("Reviewed instructions")),
+        );
+        let prepared = prepare(&original, desired);
+        let journal = Journal::default();
+        assert_eq!(
+            current.apply(prepared, &journal),
+            Err(ConfigPortError::Stale)
+        );
+        assert!(journal.list().unwrap().is_empty());
+        assert!(!first.path().join("AGENTS.md").exists());
+        assert!(!second.path().join("AGENTS.md").exists());
+    }
+}
 fn prepare(scanner: &ConfigScanner, desired: ConfigSnapshot) -> PreparedConfigApply {
     let expected = scanner.observe(&desired.identity).unwrap();
     match scanner.prepare_apply(desired, &expected).unwrap() {

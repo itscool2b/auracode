@@ -20,8 +20,9 @@ pub use apply::{
 };
 pub use merge::{ConfigDecision, ConfigOperation, LocalSnapshot, merge};
 pub use review::{
-    ConfigChoice, ConfigSyncInventory, ConfigSyncItem, ConfigSyncPreview, PreparedConfigReview,
-    inventory, prepare_review, set_device_only,
+    ConfigChoice, ConfigReceiptStatus, ConfigSyncInventory, ConfigSyncItem, ConfigSyncOutcome,
+    ConfigSyncPreview, ConfigSyncReceipt, PreparedConfigReview, inventory, prepare_review,
+    set_device_only,
 };
 pub use scan::{ConfigScan, ConfigScanner, ConfigSkipped, ConfigSource};
 pub use snapshot::{ConfigContent, ConfigFile, ConfigFormat, ConfigIdentity, ConfigSnapshot};

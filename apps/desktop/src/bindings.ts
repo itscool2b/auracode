@@ -36,6 +36,13 @@ export const commands = {
 	setupSnapshot: () => typedError<SetupSnapshot, AppError>(__TAURI_INVOKE("setup_snapshot")),
 	setupApply: (revision: number, action: SetupAction) => typedError<SetupSnapshot, AppError>(__TAURI_INVOKE("setup_apply", { revision, action })),
 	librarySnapshot: (folderId: string | null) => typedError<LibraryInventory, AppError>(__TAURI_INVOKE("library_snapshot", { folderId })),
+	configSyncInventory: (after: string | null) => typedError<ConfigSyncInventory, AppError>(__TAURI_INVOKE("config_sync_inventory", { after })),
+	configSyncPreview: (id: string, choice: ConfigSyncChoice) => typedError<ConfigSyncPreview, AppError>(__TAURI_INVOKE("config_sync_preview", { id, choice })),
+	configSyncCancel: (token: string) => __TAURI_INVOKE<void>("config_sync_cancel", { token }),
+	configSyncApply: (token: string) => typedError<ConfigSyncOutcome, AppError>(__TAURI_INVOKE("config_sync_apply", { token })),
+	configSyncDeviceOnly: (id: string, deviceOnly: boolean) => typedError<null, AppError>(__TAURI_INVOKE("config_sync_device_only", { id, deviceOnly })),
+	configSyncHistory: () => typedError<ConfigSyncReceipt[], AppError>(__TAURI_INVOKE("config_sync_history")),
+	configSyncRollback: (id: string) => typedError<ConfigSyncOutcome, AppError>(__TAURI_INVOKE("config_sync_rollback", { id })),
 	libraryCopyHistory: (folderId: string | null) => typedError<LibraryCopyReceipt[], AppError>(__TAURI_INVOKE("library_copy_history", { folderId })),
 	libraryItemPreview: (folderId: string | null, item: LibraryItemRef, revision: string) => typedError<LibraryItemPreview, AppError>(__TAURI_INVOKE("library_item_preview", { folderId, item, revision })),
 	libraryCopyPreview: (folderId: string | null, item: LibraryItemRef, revision: string, toSource: string) => typedError<LibraryCopyPreview, AppError>(__TAURI_INVOKE("library_copy_preview", { folderId, item, revision, toSource })),
@@ -745,6 +752,8 @@ export type ConfigChoice = {
 
 export type ConfigKind = { type: "select"; current: string; choices: ConfigChoice[] } | { type: "toggle"; current: boolean };
 
+export type ConfigOperation = "in_sync" | "apply" | "publish" | "merge" | "conflict" | "wait";
+
 /**  One session option the agent offers (or the driver synthesized from its legacy lists). */
 export type ConfigOption = {
 	/**  Opaque to the UI; the driver maps it back to the wire. */
@@ -755,6 +764,59 @@ export type ConfigOption = {
 	kind: ConfigKind,
 	/**  A change waiting for the turn to end (Hermes changes mode only while idle). */
 	pending: ConfigValue | null,
+};
+
+export type ConfigReceiptStatus = "applied" | "recovery_required" | "rolled_back";
+
+export type ConfigScope = "portable" | "windows" | "macos";
+
+export type ConfigSyncChoice = "automatic" | "keep_local" | "use_remote";
+
+export type ConfigSyncInventory = {
+	items: ConfigSyncItem[],
+	next_cursor: string | null,
+	notices: string[],
+};
+
+export type ConfigSyncItem = {
+	id: string,
+	label: string,
+	provider: LibraryProvider | null,
+	scope: ConfigScope | null,
+	operation: ConfigOperation,
+	first_link: boolean,
+	device_only: boolean,
+	skipped: boolean,
+	detail: string | null,
+};
+
+export type ConfigSyncOutcome = {
+	item_id: string,
+	receipt_id: string | null,
+	completed: boolean,
+	message: string,
+};
+
+export type ConfigSyncPreview = {
+	token: string,
+	item: ConfigSyncItem,
+	choice: ConfigSyncChoice,
+	base: string | null,
+	local: string | null,
+	remote: string | null,
+	result: string | null,
+	conflicts: string[],
+	deletes_item: boolean,
+	can_apply: boolean,
+	warnings: string[],
+};
+
+export type ConfigSyncReceipt = {
+	id: string,
+	item_id: string,
+	label: string,
+	provider: LibraryProvider,
+	status: ConfigReceiptStatus,
 };
 
 /**  A value for a [`ConfigOption`]: a choice for a select, a flag for a toggle. */

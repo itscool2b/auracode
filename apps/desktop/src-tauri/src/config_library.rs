@@ -27,7 +27,7 @@ struct Pending {
 
 pub struct LibraryService {
     pending: Mutex<HashMap<String, Pending>>,
-    mutation: Arc<tokio::sync::Mutex<()>>,
+    pub(crate) mutation: Arc<tokio::sync::Mutex<()>>,
     previews: Arc<tokio::sync::Semaphore>,
 }
 

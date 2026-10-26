@@ -46,6 +46,20 @@ pub struct ConfigSkipped {
 }
 
 impl ConfigScanner {
+    /// A preview cannot carry old provider availability or a retired configuration root into apply.
+    pub fn same_sources(&self, other: &Self) -> bool {
+        self.home == other.home
+            && self.platform == other.platform
+            && self.sources.len() == other.sources.len()
+            && self
+                .sources
+                .iter()
+                .zip(&other.sources)
+                .all(|(left, right)| {
+                    left.source == right.source && left.installed == right.installed
+                })
+    }
+
     pub fn new(
         sources: Vec<ConfigSource>,
         home: PathBuf,

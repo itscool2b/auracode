@@ -16,6 +16,7 @@ const PREVIEW_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
+#[serde(rename = "ConfigSyncChoice")]
 pub enum ConfigChoice {
     Automatic,
     KeepLocal,
@@ -40,6 +41,31 @@ pub struct ConfigSyncInventory {
     pub items: Vec<ConfigSyncItem>,
     pub next_cursor: Option<String>,
     pub notices: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigReceiptStatus {
+    Applied,
+    RecoveryRequired,
+    RolledBack,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ConfigSyncReceipt {
+    pub id: String,
+    pub item_id: String,
+    pub label: String,
+    pub provider: Provider,
+    pub status: ConfigReceiptStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ConfigSyncOutcome {
+    pub item_id: String,
+    pub receipt_id: Option<String>,
+    pub completed: bool,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -288,32 +314,32 @@ impl PreparedConfigReview {
     /// Call only after every required local file action completed. Failed or skipped applies must
     /// retain the old base. Publication and base CAS failures remain visible, with the receipt kept.
     pub async fn complete(
-        self,
+        &self,
         port: &dyn ConfigSyncPort,
         scanner: &ConfigScanner,
     ) -> Result<(), ConfigPortError> {
         if !self.preview.can_apply {
             return Err(ConfigPortError::Invalid);
         }
-        let desired = self.desired.ok_or(ConfigPortError::Invalid)?;
+        let desired = self.desired.as_ref().ok_or(ConfigPortError::Invalid)?;
         let observed = scanner.observe(&desired.identity)?;
         let complete = match &observed {
             LocalSnapshot::Absent => desired.content.is_none(),
-            LocalSnapshot::Present(value) => value == &desired,
+            LocalSnapshot::Present(value) => value == desired,
             LocalSnapshot::Unavailable => false,
         };
         if !complete {
             return Err(ConfigPortError::Stale);
         }
         let encoded = desired.encode()?;
-        let id = self.preview.item.id;
+        let id = &self.preview.item.id;
         let head = if matches!(
             self.preview.item.operation,
             ConfigOperation::Publish | ConfigOperation::Merge
         ) {
             Some(
                 port.publish_snapshot(
-                    &id,
+                    id,
                     self.remote_head.as_ref().map(|head| head.revision.as_str()),
                     encoded.clone(),
                     ConfigSnapshotMetadata {
@@ -325,7 +351,7 @@ impl PreparedConfigReview {
                 .await?,
             )
         } else {
-            self.remote_head
+            self.remote_head.clone()
         };
         // An entirely absent first-link item has nothing to publish or acknowledge.
         let Some(head) = head else { return Ok(()) };
@@ -335,10 +361,13 @@ impl PreparedConfigReview {
             .and_then(|state| state.head.as_ref())
             .map(|head| head.revision.clone());
         port.save_device_state(
-            &id,
+            id,
             expected.as_deref(),
             ConfigDeviceState {
-                revision: self.device.and_then(|state| state.revision),
+                revision: self
+                    .device
+                    .as_ref()
+                    .and_then(|state| state.revision.clone()),
                 head: Some(head),
                 snapshot: Some(encoded),
                 device_only: false,

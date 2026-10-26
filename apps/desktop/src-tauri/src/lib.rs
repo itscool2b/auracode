@@ -26,6 +26,7 @@ pub mod clone_commands;
 pub mod commands;
 pub mod composer_commands;
 pub mod config_library;
+pub mod config_sync;
 pub mod conversation_commands;
 pub mod demo;
 pub mod error;
@@ -191,6 +192,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     #[cfg(windows)]
     app.manage(window::WebviewVisibility::default());
     app.manage(Arc::new(config_library::LibraryService::default()));
+    app.manage(Arc::new(config_sync::ConfigSyncService::default()));
     app.manage(Arc::new(aura_core::cloning::Clones::default()));
     native_shell::setup(app.handle());
     let account_app = app.handle().clone();

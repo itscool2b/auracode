@@ -243,6 +243,13 @@ impl ConfigScanner {
         if prepared.created.elapsed() > Duration::from_secs(600) {
             return Err(ConfigPortError::Stale);
         }
+        if !prepared.receipt.identity.applies_on(self.platform)
+            || self
+                .source(&prepared.receipt.identity)
+                .is_none_or(|current| !current.installed || current.source != prepared.source)
+        {
+            return Err(ConfigPortError::Stale);
+        }
         self.check_root(&prepared.source, &prepared.root, &prepared.receipt)?;
         check_files(&prepared.root, &prepared.receipt.files)?;
         // Also detect new or removed dependencies not in the reviewed tree's changed-file list.

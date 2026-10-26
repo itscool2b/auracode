@@ -17,6 +17,91 @@ pub struct LibraryRoots {
 }
 
 impl SessionManager {
+    pub async fn config_sync_scanner(
+        &self,
+    ) -> Result<(aura_config::sync::ConfigScanner, Vec<String>), SessionError> {
+        use aura_config::sync::{ConfigScanner, ConfigScope, ConfigSource};
+        let env = self.deps().env.get().await;
+        let variable = |name: &str| {
+            env.vars
+                .get(&EnvKey::from(name))
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+        };
+        let home = if cfg!(windows) {
+            variable("USERPROFILE").or_else(|| variable("HOME"))
+        } else {
+            variable("HOME")
+        }
+        .filter(|path| path.is_absolute())
+        .ok_or_else(|| {
+            SessionError::Organization("The native home folder is unavailable.".into())
+        })?;
+        let roots = roots(&env.vars, None);
+        let agents = self.agents(false).await;
+        let sources = roots
+            .sources
+            .into_iter()
+            .map(|source| {
+                let name = match source.provider {
+                    Provider::Claude => "claude",
+                    Provider::Codex => "codex",
+                    Provider::Pi => "pi",
+                    Provider::Shared => "",
+                };
+                let installed = source.provider == Provider::Shared
+                    || agents.iter().any(|agent| {
+                        agent.id == name
+                            && matches!(
+                                agent.availability,
+                                aura_protocol::session::Availability::Ready { .. }
+                            )
+                    });
+                ConfigSource { source, installed }
+            })
+            .collect();
+        let platform = if cfg!(windows) {
+            ConfigScope::Windows
+        } else if cfg!(target_os = "macos") {
+            ConfigScope::Macos
+        } else {
+            ConfigScope::Portable
+        };
+        let scanner = ConfigScanner::new(sources, home, platform)
+            .map_err(|error| SessionError::Organization(error.to_string()))?;
+        Ok((scanner, roots.notices))
+    }
+
+    /// Own a bounded configuration task through renderer cancellation and the quit/update drain.
+    /// The desktop closure also retains its profile admission and serializes filesystem mutations.
+    pub async fn config_sync_work<T, F>(&self, work: F) -> Result<T, SessionError>
+    where
+        T: Send + 'static,
+        F: FnOnce() -> Result<T, aura_config::sync::ConfigPortError> + Send + 'static,
+    {
+        let manager = self.clone();
+        self.deps()
+            .rt
+            .spawn_blocking(move || {
+                let _owner = manager
+                    .shared()
+                    .live
+                    .try_maintenance()
+                    .ok_or(SessionError::ShuttingDown)?;
+                if manager.shared().is_shutting_down() {
+                    return Err(SessionError::ShuttingDown);
+                }
+                work().map_err(|error| SessionError::Organization(error.to_string()))
+            })
+            .await
+            .map_err(|_| {
+                SessionError::Internal(
+                    "Configuration work stopped unexpectedly. Its recovery records were retained."
+                        .into(),
+                )
+            })?
+    }
+
     pub async fn config_library_roots(
         &self,
         folder_id: Option<&str>,
