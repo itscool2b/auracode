@@ -140,7 +140,7 @@ impl Harness {
         }
         loop {
             if let DriverEvent::Ready(info) = self.event().await {
-                assert_eq!(info.native_session_id, self.id());
+                assert_eq!(info.native_session_id, Some(self.id()));
                 assert!(
                     !info.capabilities.fork
                         && !info.capabilities.steer

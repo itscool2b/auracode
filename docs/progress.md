@@ -2,6 +2,25 @@
 
 Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b through M9.
 
+## M1e combined agent checkpoint (2026-10-26)
+
+The catalog branch now includes native Codex, native Pi, the qualified ACP catalog and restricted
+text fallbacks, including M1d's notification attachment regression. Pi's readiness assertion uses
+the shared optional native identity contract. Catalog assertions derive from the registered data.
+The supervisor includes reviewed environment overlays, same-connection inspection and launch, and
+an explicit binding from the launched executable to the prepared executable set. WSL launch stays
+unavailable until the owned bridge and deployment are qualified.
+
+Local workspace/all-target compilation, full workspace Clippy with all features, generated bindings,
+rustfmt, spike documentation checks, and pnpm check pass. The combined agents, CLI, core and driver
+test targets pass. All 17 focused supervisor tests pass after correcting the redaction expectation.
+The broader process integration targets remain unverified locally because Windows Application
+Control blocked the synthetic process helper and one supervisor test executable with error 4551;
+no policy bypass was attempted. Fresh combined Linux and Windows CI is pending. Native smoke
+acceptance gaps, WSL discovery and launch, Windows vendor-daemon breakaway, and the explicit vendor
+sign-in terminal remain pending. No paid prompts, real vendor login, credentials or agent config
+were accessed during this checkpoint.
+
 ## Completed before this continuation
 
 - M0 and M1a are merged. Main at `3b35c66` passes CI and installer builds on all three platforms.
