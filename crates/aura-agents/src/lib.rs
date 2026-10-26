@@ -16,7 +16,9 @@
 
 pub mod catalog;
 mod detect;
+pub mod hosts;
 mod install;
+pub mod installation;
 mod launch;
 mod probe;
 mod shared;

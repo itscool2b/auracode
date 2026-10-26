@@ -235,6 +235,13 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
 
 ## Decisions and constraints
 
+M1e is progressing in the isolated `m1e-agent-catalog` worktree. Its first checkpoint adds typed
+native/WSL host identity, bounded WSL distribution decoding, installation channel classification from
+resolved paths, provider alias identity, and exact-version verification metadata. Detection and UI
+integration are still pending; no host capability is advertised by these standalone types. The 31
+agent tests, protocol host regression, all-target agent/protocol Clippy, and bindings export pass on
+Windows. No real agent configuration or credentials were read or changed.
+
 - Rust owns backend logic. TypeScript remains for React and necessary platform/build glue.
 - D1 and Cloudflare Email Service replace Neon/Postgres, Neon Auth, Hyperdrive, and Resend.
 - Reuse the existing targeted environment scrub, not the handoff's older blanket prefix scrub.
