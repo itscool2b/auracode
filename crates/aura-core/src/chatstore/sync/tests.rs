@@ -38,6 +38,29 @@ async fn every_acknowledged_account_metadata_edit_has_a_durable_sealed_head() {
         key: key.clone(),
     };
     chats.configure_sync(context.clone()).await.unwrap();
+    let port = chats.config_sync_port();
+    let config_id = "a".repeat(64);
+    let config_head = port
+        .publish_snapshot(
+            &config_id,
+            None,
+            Zeroizing::new(b"native config port".to_vec()),
+            ConfigSnapshotMetadata {
+                schema: 1,
+                scope: ConfigScope::Portable,
+                deleted: false,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        port.read_head(&config_id).await.unwrap(),
+        Some(config_head.clone())
+    );
+    assert_eq!(
+        &*port.read_snapshot(&config_id, &config_head).await.unwrap(),
+        b"native config port"
+    );
     let chat = chats
         .create_chat(NewChat {
             agent_id: "mock".into(),
@@ -62,6 +85,10 @@ async fn every_acknowledged_account_metadata_edit_has_a_durable_sealed_head() {
     });
     chats.flush(Duration::from_secs(5)).await.unwrap();
     assert!(chats.shutdown(Duration::from_secs(5)).await);
+    assert!(matches!(
+        port.read_head(&config_id).await,
+        Err(ConfigPortError::Unavailable)
+    ));
     drop(chats);
     let (mut store, _) = Store::open_encrypted(&profile, db_key).unwrap();
     let outgoing = SyncLedger::new(&mut store, context.identity.clone(), &key)

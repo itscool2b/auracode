@@ -56,6 +56,9 @@ pub struct ConfigSnapshotRef {
 /// Per-device merge base. Snapshot contents stay in the encrypted profile, never the agent's
 /// configuration folder or a plaintext sidecar. The port zeroizes returned bytes when dropped.
 pub struct ConfigDeviceState {
+    /// Opaque local state revision returned by read and echoed on save. None means create-only;
+    /// this also detects changes to device-only/skipped flags when the merge base is unchanged.
+    pub revision: Option<String>,
     pub head: Option<ConfigSnapshotHead>,
     pub snapshot: Option<Zeroizing<Vec<u8>>>,
     pub device_only: bool,

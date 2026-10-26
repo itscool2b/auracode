@@ -1676,6 +1676,16 @@ application, secret-free MCP extraction and desktop orchestration remain pending
   Independent read-only review found the cached-shutdown report issue, fixed in 8567390, and no
   confirmed overwrite blocker. No real remote clone, installer, auth command, model prompt, push or
   CI dispatch was run. Clone source is reviewable; native/binding acceptance is still pending.
+The Account writer now implements `ConfigSyncPort` for bounded encrypted snapshots and local
+merge bases. Wire item IDs are derived with the account key; logical IDs, scope, content hashes
+and revisions stay in authenticated payloads. Snapshot reads bind the exact item/head and verify
+the content hash. Publication checks the current head and queues its encrypted blob atomically;
+the head is ineligible for upload until the blob is acknowledged. Device-state writes check both
+the previous base and an independent local revision, so concurrent skipped/device-only changes
+cannot erase each other. Fifteen focused sync tests and core/sync all-target Clippy pass. Network
+blob transfer, remote projection, the active desktop service and encrypted apply journal follow;
+this storage checkpoint does not claim a completed sync session.
+
 The Account writer can now bind its confirmed account/device key and seal project, portable folder
 and chat metadata in the same transaction as each local edit. Per-field clocks retain untouched
 values; tombstones remain explicit and local clock rollback does not discard edits. Folder paths,

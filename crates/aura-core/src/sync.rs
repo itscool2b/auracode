@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use crate::store::Store;
 pub(crate) mod capture;
+pub(crate) mod config;
 
 /// An unlocked Account writer's identity and encryption authority. Never exported through IPC.
 #[derive(Clone)]
@@ -118,7 +119,7 @@ impl<'a> SyncLedger<'a> {
     /// Coalesced unsent heads, with a fixed wire batch bound. Unsupported items stay durable but are
     /// excluded until their newer schema can be processed. Never delete merely because HTTP sent.
     pub fn outgoing(&self) -> Result<Vec<EncryptedRecord>> {
-        let mut query = self.conn.prepare("SELECT o.record_json FROM sync_outbox o WHERE NOT EXISTS(SELECT 1 FROM sync_deferred d WHERE d.collection=o.collection AND d.id=o.id) ORDER BY o.hlc,o.collection,o.id LIMIT 32")?;
+        let mut query = self.conn.prepare("SELECT o.record_json FROM sync_outbox o WHERE NOT EXISTS(SELECT 1 FROM sync_deferred d WHERE d.collection=o.collection AND d.id=o.id) AND (o.collection<>'config' OR EXISTS(SELECT 1 FROM sync_blob_refs r JOIN sync_blobs b ON b.id=r.blob_id WHERE r.collection=o.collection AND r.id=o.id AND b.uploaded=1)) ORDER BY o.hlc,o.collection,o.id LIMIT 32")?;
         query
             .query_map([], |row| row.get::<_, String>(0))?
             .map(|row| decode_record(&row?))

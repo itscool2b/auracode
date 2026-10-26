@@ -142,6 +142,12 @@ pub(crate) enum Work {
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
     #[cfg(feature = "account-sync")]
+    Config {
+        command: crate::sync::config::Command,
+        reply:
+            oneshot::Sender<Result<crate::sync::config::Reply, aura_config::sync::ConfigPortError>>,
+    },
+    #[cfg(feature = "account-sync")]
     ConfigureSync {
         context: crate::sync::SyncContext,
         reply: oneshot::Sender<Result<(), StoreError>>,
@@ -461,6 +467,8 @@ fn work_bytes(work: &Work) -> usize {
         Work::Request(Request::Organization { command, .. }) => command.bytes(),
         Work::Request(Request::WorktreeSetup { command, .. }) => command.bytes(),
         Work::Request(Request::Composer { command, .. }) => command.bytes(),
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::Config { command, .. }) => command.bytes(),
         Work::Request(Request::Search { query, .. }) => 256 + query.len(),
         Work::Request(_) => 256,
         #[cfg(test)]
@@ -637,6 +645,8 @@ fn work_name(work: &Work) -> &'static str {
     match work {
         #[cfg(feature = "account-sync")]
         Work::Request(Request::ConfigureSync { .. }) => "configure_sync",
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::Config { .. }) => "config_sync",
         Work::Request(Request::Flush { .. }) => "flush",
         Work::Op(op) => op_name(op),
         Work::Request(Request::CreateChat { .. }) => "create_chat",
@@ -1217,6 +1227,16 @@ impl Writer {
 
     fn answer_request(&mut self, request: Request) {
         match request {
+            #[cfg(feature = "account-sync")]
+            Request::Config { command, reply } => {
+                let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {
+                    (Some(store), Some(context), Mode::Normal) => {
+                        crate::sync::config::execute(store, context, command)
+                    }
+                    _ => Err(aura_config::sync::ConfigPortError::Unavailable),
+                };
+                let _ = reply.send(result);
+            }
             #[cfg(feature = "account-sync")]
             Request::ConfigureSync { context, reply } => {
                 let result = match self.store.as_mut() {

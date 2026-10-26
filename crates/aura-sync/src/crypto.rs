@@ -62,6 +62,25 @@ impl DatabaseKey {
 }
 
 impl AccountKey {
+    /// Dictionary-resistant wire identity for a portable config item. The caller's logical hash
+    /// remains inside encrypted payloads and local storage, never in cloud record metadata.
+    pub fn config_record_id(&self, account: &str, logical_id: &str) -> Result<String> {
+        identifier(account)?;
+        if logical_id.len() != 64
+            || !logical_id
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err(CryptoError::Invalid);
+        }
+        Ok(encode(
+            derive(
+                self.0.as_ref(),
+                &json_context(&("auracode-config-record-id-v1", account, logical_id))?,
+            )?
+            .as_ref(),
+        ))
+    }
     /// A distinct local-profile key, recoverable from the retained account key and opaque profile
     /// identity. It is never the raw record key and never serialized into a query or UI response.
     #[cfg(feature = "sqlcipher")]
