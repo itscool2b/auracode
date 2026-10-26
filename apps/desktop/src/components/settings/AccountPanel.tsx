@@ -30,6 +30,7 @@ export function AccountPanel({
   onActivate = switchProfile,
   recoveryOnly = false,
   recoveryProfileId = null,
+  recoveryActionLabel = "Unlock selected account",
 }: {
   readonly api?: AccountApi;
   readonly deviceName?: string;
@@ -37,6 +38,7 @@ export function AccountPanel({
   readonly onActivate?: () => Promise<void>;
   readonly recoveryOnly?: boolean;
   readonly recoveryProfileId?: string | null;
+  readonly recoveryActionLabel?: string;
   readonly Verification?: ComponentType<{
     onToken: (token: string) => void;
     origin?: VerificationOrigin;
@@ -564,7 +566,7 @@ export function AccountPanel({
                     disabled={locked || wrongRecoveryAccount}
                     onClick={() => void run(onActivate)}
                   >
-                    {recoveryOnly ? "Unlock selected account" : "Open account workspace"}
+                    {recoveryOnly ? recoveryActionLabel : "Open account workspace"}
                   </button>
                 </div>
               ) : null}

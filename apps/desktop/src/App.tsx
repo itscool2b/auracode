@@ -15,6 +15,11 @@ import { Home } from "./components/Home";
 import { LibraryScreen } from "./components/library/LibraryScreen";
 import { Sidebar } from "./components/Sidebar";
 import { StressView } from "./components/StressView";
+import { AccountPanel } from "./components/settings/AccountPanel";
+import {
+  ConfigurationRecovery,
+  recoverProfileConfiguration,
+} from "./components/settings/ConfigurationRecovery";
 import { LockedProfile } from "./components/settings/LockedProfile";
 import { SettingsScreen } from "./components/settings/SettingsScreen";
 import { AgentsScreen } from "./components/setup/AgentsScreen";
@@ -27,7 +32,7 @@ import { useStream } from "./lib/hooks";
 import { getAppInfo, inTauri, sendSmokeReport, windowReady } from "./lib/ipc";
 import { subscribeNativeNavigation } from "./lib/nativeNavigation";
 import { LATE_NOTICE_CHECKS_MS, withLateNotices } from "./lib/notices";
-import { installProfileEvents } from "./lib/profiles";
+import { installProfileEvents, switchProfile } from "./lib/profiles";
 import { afterPaint, whenPainted } from "./lib/ready";
 import { isRunning, type StreamStore } from "./lib/session";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
@@ -232,6 +237,53 @@ export function App({
   }
 
   const { info } = boot;
+  if (info.config_profile_recovery) {
+    const selectedProfile = info.profile?.id;
+    const ownerProfile = info.config_profile_recovery.owner_profile;
+    const access =
+      ownerProfile && info.config_profile_recovery.phase !== "unavailable" ? (
+        <AccountPanel
+          recoveryOnly
+          recoveryProfileId={ownerProfile}
+          recoveryActionLabel={
+            info.profile_locked ? "Unlock selected account" : "Recover configuration"
+          }
+          deviceName={info.device?.name ?? "My computer"}
+          onActivate={async () => {
+            if (info.profile_locked && selectedProfile) {
+              await switchProfile(selectedProfile);
+            } else {
+              const recovered = await recoverProfileConfiguration();
+              if (recovered.config_profile_recovery)
+                throw new Error(recovered.config_profile_recovery.detail);
+              window.location.reload();
+            }
+          }}
+        />
+      ) : null;
+    return (
+      <ConfigurationRecovery recovery={info.config_profile_recovery} locked={info.profile_locked}>
+        {info.notices.map((notice) => (
+          <p className="settings-footnote" key={notice}>
+            {notice}
+          </p>
+        ))}
+        {info.fatal ? (
+          <p role="alert" className="settings-error">
+            {info.fatal}
+          </p>
+        ) : null}
+        {info.profile_locked ? (
+          access
+        ) : access ? (
+          <details>
+            <summary>Restore access to the account used by this switch</summary>
+            {access}
+          </details>
+        ) : null}
+      </ConfigurationRecovery>
+    );
+  }
   if (info.profile_locked) return <LockedProfile info={info} />;
   if (info.fatal !== null) {
     return (

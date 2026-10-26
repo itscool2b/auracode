@@ -31,33 +31,38 @@ function AuthPreview({ mode }: { readonly mode: string }) {
       fingerprint: null,
       sync: { state: "paused", pending_changes: null, last_sync_at: null, message: null },
     };
-    return new Proxy(
-      {
-        config: async () => ({
-          service_origin: "https://auracode.si",
-          verification_url: "https://auracode.si/verify-device",
-        }),
-        status: async () => status,
-        recover: async () => {
-          status = {
-            ...status,
-            access: "ready",
-            profile_id: "owner-profile",
-            local_key_available: true,
-          };
-          return status;
-        },
+    const forbiddenCall = async () => {
+      setForbidden((value) => value + 1);
+      throw new Error("Unexpected management call in recovery-only UI.");
+    };
+    return {
+      config: async () => ({
+        service_origin: "https://auracode.si",
+        verification_url: "https://auracode.si/verify-device",
+      }),
+      status: async () => status,
+      recover: async () => {
+        status = {
+          ...status,
+          access: "ready",
+          profile_id: "owner-profile",
+          local_key_available: true,
+        };
+        return status;
       },
-      {
-        get(target, name) {
-          if (name in target) return target[name as keyof typeof target];
-          return async () => {
-            setForbidden((value) => value + 1);
-            throw new Error("Unexpected management call in recovery-only UI.");
-          };
-        },
-      },
-    ) as AccountApi;
+      requestCode: forbiddenCall,
+      verifyCode: forbiddenCall,
+      refresh: forbiddenCall,
+      register: forbiddenCall,
+      prepareRecovery: forbiddenCall,
+      confirmRecovery: forbiddenCall,
+      cancelSetup: forbiddenCall,
+      confirmFingerprint: forbiddenCall,
+      devices: forbiddenCall,
+      approve: forbiddenCall,
+      revoke: forbiddenCall,
+      signOut: forbiddenCall,
+    } satisfies AccountApi;
   }, [mode]);
   return (
     <main className="orbit-theme settings-content">

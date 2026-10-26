@@ -6,12 +6,12 @@ import { errorMessage } from "../../lib/errors";
 import "./settings.css";
 import "./configuration-recovery.css";
 
-const recover = () => invoke<AppInfo>("config_profile_recover");
+export const recoverProfileConfiguration = () => invoke<AppInfo>("config_profile_recover");
 
 export function ConfigurationRecovery({
   recovery,
   locked = false,
-  recoverConfiguration = recover,
+  recoverConfiguration = recoverProfileConfiguration,
   onRecovered = () => window.location.reload(),
   children,
 }: {

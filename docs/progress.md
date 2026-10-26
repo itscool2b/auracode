@@ -2084,3 +2084,15 @@ suppresses management calls and controls and requires the matching profile befor
 Chromium and WebKit checks pass for correct/wrong account, existing-key recovery, first-key refusal
 and zero management calls, alongside the prior configuration recovery coverage. No native auth ran.
 
+### Recovery shell integration
+The app now renders configuration recovery before locked-profile, setup or chat controls. Its access
+panel targets the transaction's owning Account and restores only the selected profile or the pending
+transaction. A Local workspace can restore the inactive owner's access without switching into it.
+Ambiguous recovery offers no account or profile action. Native notices and startup errors remain
+visible; failed actions do not reload away their explanation. The recovery-only fixture now satisfies
+the full typed Account API without an unsafe partial cast.
+
+Desktop TypeScript, Biome, all three native account-admission tests and both recovery browser engines
+passed. The dark recovery screen was visually inspected. Earlier integrated profile checks passed all
+13 cases. Final combined tests, native platform acceptance and real account recovery remain pending.
+
