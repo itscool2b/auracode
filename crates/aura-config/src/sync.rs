@@ -7,9 +7,11 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 mod merge;
+mod scan;
 mod snapshot;
 
 pub use merge::{ConfigDecision, ConfigOperation, LocalSnapshot, merge};
+pub use scan::{ConfigScan, ConfigScanner, ConfigSkipped, ConfigSource};
 pub use snapshot::{ConfigContent, ConfigFile, ConfigFormat, ConfigIdentity, ConfigSnapshot};
 
 /// A single item snapshot fits below the authenticated cloud blob plaintext limit. Larger bundles

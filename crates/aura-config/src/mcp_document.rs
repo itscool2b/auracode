@@ -126,10 +126,10 @@ fn toml_item(value: &Value) -> Result<toml_edit::Item> {
     Ok(toml_edit::Item::Table(table))
 }
 
-struct RawObject<'a>(Vec<(String, &'a RawValue)>);
+pub(crate) struct RawObject<'a>(pub(crate) Vec<(String, &'a RawValue)>);
 
 impl<'a> RawObject<'a> {
-    fn get(&self, key: &str) -> Option<&'a RawValue> {
+    pub(crate) fn get(&self, key: &str) -> Option<&'a RawValue> {
         self.0
             .iter()
             .find(|(name, _)| name == key)

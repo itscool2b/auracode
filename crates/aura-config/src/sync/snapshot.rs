@@ -144,6 +144,7 @@ impl ConfigSnapshot {
             (ConfigFormat::File | ConfigFormat::Tree, ConfigContent::Files(files)) => {
                 if files.is_empty()
                     || files.len() > safe_fs::FILE_COUNT
+                    || self.identity.format == ConfigFormat::Tree && !files.contains_key("SKILL.md")
                     || self.identity.format == ConfigFormat::File
                         && (files.len() != 1 || !files.contains_key(""))
                 {

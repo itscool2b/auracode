@@ -1622,3 +1622,14 @@ Unsaved drafts and native refusal preserve the current page. Locked startup pres
 and Local selection. Three frontend transition tests, complete TypeScript, and Chromium/WebKit picker,
 unsaved-draft, active-work refusal, locked recovery and accessibility checks pass. Full native two-profile
 interaction and real account-key restoration remain final qualification gates.
+
+### M9 bounded discovery checkpoint
+
+Added explicit user-root discovery for Claude, Codex, Pi and shared skills, with independent settings
+key paths, binary skill dependencies, home-path normalization and platform scopes. Known credential
+and trust fields are excluded. Protected MCP entries currently wait rather than exporting their secret
+fields. Missing agents, malformed or duplicate-key documents, incomplete/protected bundles and read
+failures cannot establish deletion. Empty settings containers never create overlapping parent items.
+Aggregate discovery and each snapshot are bounded. All nine discovery and thirteen merge regressions
+pass using temporary synthetic files. No real agent configuration was inspected or changed. Reviewed
+application, secret-free MCP extraction and desktop orchestration remain pending.

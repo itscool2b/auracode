@@ -240,13 +240,13 @@ fn merge_file(
                 .ok()
                 .filter(|text| text.len() <= 128 * 1024 && text.lines().count() <= 4096)
         });
-        if let [Some(base), Some(local), Some(remote)] = text {
-            if let Ok(merged) = diffy::merge(base, local, remote) {
-                return Some(ConfigFile {
-                    bytes: merged.into_bytes(),
-                    executable: mode,
-                });
-            }
+        if let [Some(base), Some(local), Some(remote)] = text
+            && let Ok(merged) = diffy::merge(base, local, remote)
+        {
+            return Some(ConfigFile {
+                bytes: merged.into_bytes(),
+                executable: mode,
+            });
         }
     }
     conflicts.push(if path.is_empty() {
