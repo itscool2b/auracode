@@ -23,8 +23,10 @@ the bucket were deleted on 2026-10-26. `wps-service-cache` and unrelated KV reso
 Application code goes in Rust Workers. Use checked-in Wrangler configuration and SQL migrations,
 separate local/preview data from production, and store credentials only in Cloudflare/GitHub secrets.
 Cloudflare Email Sending provisioned the return path `cf-bounce.auracode.si`, SPF, DKIM and DMARC
-records on 2026-10-26. Its DNS status is `ready`, with no reported errors. Actual delivery and
-Workers paid-plan eligibility remain unverified. Production Turnstile configuration is pending.
+records on 2026-10-26. Its DNS status is `ready`, with no reported errors. Sending is enabled,
+reputation is healthy, and account metadata now reports a daily quota of 200 emails with zero sent.
+Workers uses the Standard model; subscription billing was not queried. Actual delivery remains
+unverified. Production Turnstile and API preparation are recorded below.
 No Neon project, Neon Auth service, Hyperdrive connection, or Resend domain is needed.
 
 The preview bucket's managed public domain is disabled and its custom domain list is empty.
@@ -78,3 +80,48 @@ and actual email/Turnstile/device acceptance remain pending.
 
 Universal SSL is enabled. An active Let's Encrypt certificate covers `auracode.si` and
 `*.auracode.si`, expires 2027-01-22 and is renewed by Cloudflare. No registrar certificate is needed.
+
+## Production preparation, public API route inactive
+
+On 2026-10-26, email-content previews were disabled for the existing `auracode.si` sending domain
+(`84273eb1ef3c4b108b774bc0e0a000ed`). Readback confirms `preview_enabled:false`, `enabled:true` and
+`drop_suppressed_recipients:false`. This avoids retaining sign-in-code message bodies in the Email
+Service Activity log. No email was sent and no message content or existing secret was read.
+
+Before any production schema write, inspection found only D1's internal `_cf_KV` table. The complete
+SQL export was downloaded to ignored `target/backups/auracode-production-before-migrations.sql` in
+the `auracode-web-worker` managed worktree. The backup is 32 bytes, SHA-256
+`309d1516f5d4f4f792b17106f7b761312f848c634e3028d70e6eb8ed39df7398`, export bookmark
+`00000001-00000000-00005110-0d7425c001b1a6491da77902b2cb9de5`.
+Migrations 0001 through 0005 and the same `d1_migrations` tracker used in preview were then applied
+to `b5b9de26-4714-4475-aacc-9f599a7c2eb2`. All 35 statements succeeded. All five migration names are
+recorded, `PRAGMA foreign_key_check` returns no rows, and users, sessions and devices each count zero.
+
+The separate managed production Turnstile widget is named `auracode production sign-in`, public
+site key `0x4AAAAAAFnCekg62MEAwe_j`, with the single allowed-domain entry `auracode.si`. Cloudflare
+domain entries also permit their subdomains; the Rust API independently requires the exact
+`APP_ORIGIN` hostname and `signin` action. Preview retains its separate widget and secret.
+The new widget secret and a freshly generated 32-byte HMAC key were written directly into production
+Worker secret bindings. Their values were never returned, logged, copied into a local file or read back.
+
+`auracode-api` contains the root task's already-tested compiled modules: 1,059,109-byte Wasm,
+SHA-256 `2ea77875999f5bd52ee6bd1b2ee45293d864bdceb399f64f5663fe5e5996fcbe`, and 29,811-byte generated
+JavaScript, SHA-256 `20f208e0d5dfee4413440affbc90e9ae9d9e5990ebf07135d5427223331f8dfb`.
+Bytes were verified again inside the connector before ordinary multipart code upload. Code was
+initially staged without an authentication key, so it failed closed while public development
+endpoints were disabled. Production bindings were added only after that disabled state was verified.
+The configured deployment is `35304950-7ef5-4b73-bfc1-011877401f54`, with version
+`a6b23422-0e67-44b8-bbec-d6bd17404ea0` at 100 percent.
+
+Readback confirms the production D1 ID, private `auracode-blobs`, `APP_ORIGIN=https://auracode.si`,
+`EMAIL_FROM=signin@auracode.si`, the exact sender allowlist and both secret binding names. The bucket's
+`r2.dev` access is disabled and its custom-domain list is empty. `workers.dev` and version preview
+URLs are disabled; observability was configured disabled, Logpush is false, and the five-minute
+cleanup cron is verified. No public API route or apex DNS record was added by this preparation.
+
+Activation remains gated on the root task's source-check confirmation. Root owns the apex DNS and
+production website route. Before opening accounts publicly, complete actual email delivery,
+Turnstile/hostname/action acceptance, signed-in device approval/sync/revocation/cleanup checks and
+the operator identity, legal contact and retention review described in `apps/web/README.md`.
+The legal pages remain drafts. Preparation does not qualify those real-user flows or authorize
+test bypasses, and no denied Assets upload, auth or billing endpoint was retried.

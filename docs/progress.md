@@ -2587,3 +2587,9 @@ The ordinary application CLI rebuilt after the fix and the real installed Codex 
 all seven checks from an equally long isolated profile: GPT-6-Luna, low effort, one `ok` response,
 streaming, normal completion and turn-scoped usage. The earlier held prompt was cancelled by the
 smoke cleanup and never retried automatically. Final CI and unsigned bundles must include this fix.
+
+### Production Cloudflare API preparation
+
+- Disabled and verified email-content previews on the existing Auracode sending domain. Downloaded/checksummed the empty production D1 export before applying migrations 0001 through 0005 with the preview-compatible tracker; all 35 statements succeeded, foreign keys are clean and user/session/device counts remain zero.
+- Created a separate production Turnstile widget and wrote its new secret plus a fresh 32-byte authentication HMAC directly into the production Worker secret bindings without returning or logging values. Uploaded the exact previously tested Rust API module bytes, verified production resource/origin/sender bindings, private R2, disabled development/preview endpoints and the five-minute cleanup schedule.
+- Production public API routing remains inactive pending root's source-gate confirmation. Root owns apex DNS and website activation. No emails, account authentication, user data, credential reads or billing changes were involved. Live auth/device acceptance and operator/legal/retention review remain unverified; details and nonsecret identifiers are in infra/README.md.

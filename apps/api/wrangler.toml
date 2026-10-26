@@ -40,6 +40,7 @@ routes = [{ pattern = "auracode.si/api/*", zone_name = "auracode.si" }]
 [env.production.vars]
 APP_ORIGIN = "https://auracode.si"
 EMAIL_FROM = "signin@auracode.si"
+TURNSTILE_SITE_KEY = "0x4AAAAAAFnCekg62MEAwe_j"
 
 [[env.production.d1_databases]]
 binding = "DB"
