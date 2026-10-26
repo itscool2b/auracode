@@ -57,6 +57,7 @@ const LINGER: &str = "--linger";
 
 /// How long the slow child lives when nothing signals it, so a failed test leaves nothing behind
 /// for long.
+#[cfg(unix)]
 const LINGER_LIFETIME: Duration = Duration::from_secs(60);
 
 fn main() -> ExitCode {

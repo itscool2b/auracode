@@ -35,6 +35,13 @@ static TIMESTAMP: LazyLock<Option<Regex>> = LazyLock::new(|| {
     Regex::new(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?").ok()
 });
 
+/// A Windows profile folder in any spelling the home needle misses: the 8.3 short name Windows
+/// gives the temp folder (`C:\Users\RUNNER~1\AppData\Local\Temp`), forward slashes, and the `\\?\`
+/// prefix of a canonical path, which stays in front of a `<HOME>` the needle already put there.
+static WINDOWS_HOME: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r#"(?i)(?:\\\\\?\\)?(?:[a-z]:[\\/]users[\\/][^\\/"\s]+|<HOME>)"#).ok()
+});
+
 /// Token shapes, with the name a finding gives each.
 static TOKENS: LazyLock<Vec<(&'static str, Regex)>> = LazyLock::new(|| {
     [
@@ -218,6 +225,11 @@ fn replace_strings(value: &mut Value, needles: &[(String, String)]) {
             {
                 *text = timestamp.replace_all(text, "<TIME>").into_owned();
             }
+            if let Some(home) = WINDOWS_HOME.as_ref()
+                && home.is_match(text)
+            {
+                *text = home.replace_all(text, "<HOME>").into_owned();
+            }
         }
         Value::Array(items) => {
             for item in items {
@@ -363,6 +375,36 @@ mod tests {
         );
         assert_eq!(lines[1]["msg"]["params"]["cwd"], "<CWD>");
         assert_eq!(lines[2]["line"], "loaded <ADAPTER>/node_modules/x.js");
+    }
+
+    /// Recorded on CI's Windows runner: its temp folder is spelled with the profile's 8.3 short
+    /// name, which the home needle (the long name) misses, so the scan refused the fixture.
+    #[test]
+    fn windows_profile_folders_in_any_spelling_become_home() {
+        let text = log(&[
+            json!({"t": 1, "d": "note", "note": {"spawn": {"label": "hermes acp",
+                "program": r"C:\Users\RUNNER~1\AppData\Local\Temp\.tmpA\bin\hermes.exe",
+                "args": [r"\\?\C:\Users\runneradmin\AppData\Local\x.js", "c:/users/Someone/x"],
+                "cwd": CWD, "pid": 5001}}}),
+        ]);
+        let curated = curate(
+            &text,
+            r"C:\Users\runneradmin",
+            CWD,
+            "runneradmin",
+            "host-name",
+        )
+        .expect("clean");
+        let line: Value =
+            serde_json::from_str(curated.lines().next().expect("a line")).expect("json");
+        assert_eq!(
+            line["note"]["spawn"]["program"],
+            r"<HOME>\AppData\Local\Temp\.tmpA\bin\hermes.exe"
+        );
+        assert_eq!(
+            line["note"]["spawn"]["args"],
+            json!([r"<HOME>\AppData\Local\x.js", "<HOME>/x"])
+        );
     }
 
     #[test]
