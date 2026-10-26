@@ -147,6 +147,9 @@ impl Api {
                 return Err(ApiError::Unavailable);
             }
         };
+        if !(200..300).contains(&response.status_code()) {
+            return Err(ApiError::Unavailable);
+        }
         let value: Value = response.json().await.map_err(unavailable)?;
         let expected = worker::Url::parse(&self.origin).map_err(unavailable)?;
         if value["success"] != true

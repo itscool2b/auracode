@@ -13,3 +13,11 @@ routes = [{ pattern = "auracode.si/*", zone_name = "auracode.si" }]
 [env.production.assets]
 directory = "./build/client"
 not_found_handling = "404-page"
+
+[env.preview]
+name = "auracode-web-preview"
+account_id = "5feb14f2fe605875bcf1472f348cb7ed"
+routes = [{ pattern = "preview.auracode.si/*", zone_name = "auracode.si" }]
+[env.preview.assets]
+directory = "./build/client"
+not_found_handling = "404-page"

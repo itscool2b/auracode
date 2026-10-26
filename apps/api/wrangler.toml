@@ -57,3 +57,30 @@ allowed_sender_addresses = ["signin@auracode.si"]
 
 [env.production.triggers]
 crons = ["*/5 * * * *"]
+
+# Isolated acceptance environment with separate secrets and a separate Turnstile widget.
+[env.preview]
+name = "auracode-api-preview"
+account_id = "5feb14f2fe605875bcf1472f348cb7ed"
+routes = [{ pattern = "preview.auracode.si/api/*", zone_name = "auracode.si" }]
+
+[env.preview.vars]
+APP_ORIGIN = "https://preview.auracode.si"
+EMAIL_FROM = "signin@auracode.si"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "auracode-preview"
+database_id = "11d6fa29-5c39-49c5-a85b-1ecc7645dbd5"
+migrations_dir = "../../infra/migrations"
+
+[[env.preview.r2_buckets]]
+binding = "BLOBS"
+bucket_name = "auracode-preview-blobs"
+
+[[env.preview.send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["signin@auracode.si"]
+
+[env.preview.triggers]
+crons = ["*/5 * * * *"]

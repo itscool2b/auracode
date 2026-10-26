@@ -23,6 +23,7 @@ const verifier = (domain, fields) => {
 };
 let runtime;
 let db;
+const turnstileSeen = new Set();
 
 before(async () => {
   runtime = new Miniflare({
@@ -40,9 +41,24 @@ before(async () => {
         TURNSTILE_SECRET: "synthetic-unused",
         EMAIL_FROM: "signin@auracode.test",
       },
-      // Any accidental network subrequest fails the test instead of reaching a real service.
-      outboundService() {
-        throw new Error("unexpected external request");
+      // Only this synthetic provider response is allowed. No request reaches the network.
+      async outboundService(request) {
+        assert.equal(request.url, "https://challenges.cloudflare.com/turnstile/v0/siteverify");
+        const input = await request.json();
+        assert.equal(input.secret, "synthetic-unused");
+        assert.equal(input.remoteip, "127.0.0.1");
+        const token = input.response;
+        assert.ok(token.startsWith("synthetic-"));
+        const replayed = turnstileSeen.has(token);
+        turnstileSeen.add(token);
+        return Response.json(
+          {
+            success: !replayed && token !== "synthetic-rejected",
+            hostname: token === "synthetic-wrong-host" ? "foreign.invalid" : "auracode.test",
+            action: token === "synthetic-wrong-action" ? "different-action" : "signin",
+          },
+          { status: token === "synthetic-unavailable" ? 503 : 200 },
+        );
       },
     }),
     cf: false,
@@ -318,4 +334,144 @@ test("verified email change preserves account data, revokes other sessions and r
   assert.equal((await call("/account", "GET", undefined, secondary)).status, 401);
   assert.equal((await call("/auth/logout-all", "POST")).status, 200);
   assert.equal((await call("/account")).status, 401);
+});
+
+test("sign-in rejects failed, wrong-site, wrong-action and replayed verification before creating a challenge", async () => {
+  const begin = (turnstile_token) =>
+    request("/auth/challenges", "POST", {
+      email: "provider-check@example.invalid",
+      client_kind: "desktop",
+      turnstile_token,
+    });
+  for (const value of ["synthetic-rejected", "synthetic-wrong-host", "synthetic-wrong-action"])
+    assert.equal((await begin(value)).status, 403);
+  assert.equal((await begin("synthetic-unavailable")).status, 503);
+  assert.equal(
+    await db
+      .prepare("SELECT COUNT(*) AS n FROM auth_challenges WHERE email=?")
+      .bind("provider-check@example.invalid")
+      .first("n"),
+    0,
+  );
+  // An accepted provider proof reaches the deliberately unavailable email binding once.
+  assert.equal((await begin("synthetic-once")).status, 503);
+  assert.equal((await begin("synthetic-once")).status, 403);
+  assert.equal(
+    await db
+      .prepare("SELECT COUNT(*) AS n FROM users WHERE email=?")
+      .bind("provider-check@example.invalid")
+      .first("n"),
+    0,
+  );
+});
+
+test("delivery failure leaves an unusable challenge and enforces a fresh-code cooldown", async () => {
+  const email = "delivery-check@example.invalid";
+  const begin = (turnstile_token) =>
+    request("/auth/challenges", "POST", { email, client_kind: "desktop", turnstile_token });
+  const failed = await begin("synthetic-delivery-first");
+  assert.equal(failed.status, 503);
+  assert.equal((await failed.json()).error, "delivery_failed");
+  assert.equal(failed.headers.get("Retry-After"), "60");
+  const row = await db
+    .prepare("SELECT id,email_key,delivery FROM auth_challenges WHERE email=?")
+    .bind(email)
+    .first();
+  assert.equal(row.delivery, "failed");
+  const code = "012345";
+  await db
+    .prepare("UPDATE auth_challenges SET verifier=? WHERE id=?")
+    .bind(verifier("code", [row.id, row.email_key, code]), row.id)
+    .run();
+  assert.equal((await request("/auth/verify", "POST", { challenge_id: row.id, code })).status, 400);
+  assert.equal((await begin("synthetic-delivery-cooldown")).status, 429);
+  await db
+    .prepare("UPDATE auth_challenges SET created_at=created_at-61 WHERE id=?")
+    .bind(row.id)
+    .run();
+  assert.equal((await begin("synthetic-delivery-retry")).status, 503);
+  const replacement = await db
+    .prepare("SELECT id,delivery,attempts FROM auth_challenges WHERE email=?")
+    .bind(email)
+    .first();
+  assert.notEqual(replacement.id, row.id);
+  assert.equal(replacement.delivery, "failed");
+  assert.equal(replacement.attempts, 0);
+  assert.equal((await request("/auth/verify", "POST", { challenge_id: row.id, code })).status, 400);
+});
+
+test("browser verification emits a protected cookie and never returns its session token in JSON", async () => {
+  const challenge = Buffer.alloc(32, 40).toString("base64url");
+  const email = "cookie-check@example.invalid";
+  const emailKey = verifier("email", [email]);
+  const code = "246810";
+  await db
+    .prepare(
+      "INSERT INTO auth_challenges(id,email_key,email,verifier,client_kind,created_at,expires_at,delivery) VALUES(?,?,?,?,'browser',?,?,'sent')",
+    )
+    .bind(challenge, emailKey, email, verifier("code", [challenge, emailKey, code]), now, now + 600)
+    .run();
+  const payload = { challenge_id: challenge, code };
+  assert.equal((await request("/auth/verify", "POST", payload)).status, 403);
+  const response = await request("/auth/verify", "POST", payload, {
+    Origin: "https://auracode.test",
+  });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.token, null);
+  const cookie = response.headers.get("Set-Cookie");
+  assert.match(cookie, /^__Host-auracode=[A-Za-z0-9_-]+;/);
+  for (const attribute of ["Path=/", "Secure", "HttpOnly", "SameSite=Strict"])
+    assert.ok(cookie.includes(attribute));
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+});
+
+test("account deletion immediately revokes access and scheduled cleanup only purges its owned ciphertext", async () => {
+  const value = Buffer.alloc(32, 50).toString("base64url");
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO users(id,email_key,email,created_at) VALUES('cleanup-account','cleanup-key','cleanup@example.invalid',?)",
+      )
+      .bind(now),
+    db
+      .prepare(
+        "INSERT INTO sessions(token_hash,user_id,client_kind,csrf_hash,created_at,expires_at) VALUES(?,'cleanup-account','desktop','csrf',?,?)",
+      )
+      .bind(hash(value), now - 301, now + 1000),
+  ]);
+  const call = (path, method = "GET") =>
+    request(path, method, undefined, { Authorization: `Bearer ${value}` });
+  assert.equal((await call("/account", "DELETE")).status, 403);
+  await db
+    .prepare("UPDATE sessions SET created_at=? WHERE token_hash=?")
+    .bind(now, hash(value))
+    .run();
+  const bucket = await runtime.getR2Bucket("BLOBS");
+  await bucket.put("cleanup-account/owned", "synthetic ciphertext");
+  await bucket.put("foreign/keep", "foreign ciphertext");
+  assert.equal((await call("/account", "DELETE")).status, 200);
+  assert.equal((await call("/account")).status, 401);
+  assert.equal((await call("/sync")).status, 401);
+  const worker = await runtime.getWorker();
+  assert.equal((await worker.scheduled({ cron: "*/5 * * * *" })).outcome, "ok");
+  assert.equal(await bucket.get("cleanup-account/owned"), null);
+  assert.equal(await (await bucket.get("foreign/keep")).text(), "foreign ciphertext");
+  const tombstone = await db
+    .prepare("SELECT email,purged_at FROM users WHERE id='cleanup-account'")
+    .first();
+  assert.equal(tombstone.email, "deleted-cleanup-account@invalid");
+  assert.ok(tombstone.purged_at);
+  assert.equal(
+    await db
+      .prepare("SELECT COUNT(*) AS n FROM sessions WHERE user_id='cleanup-account'")
+      .first("n"),
+    0,
+  );
+  // An upload already in flight at revocation is caught by a later retained-prefix scan.
+  await bucket.put("cleanup-account/late", "late ciphertext");
+  await db.prepare("UPDATE users SET cleanup_after=0 WHERE id='cleanup-account'").run();
+  await worker.scheduled({ cron: "*/5 * * * *" });
+  assert.equal(await bucket.get("cleanup-account/late"), null);
+  assert.ok(await bucket.get("foreign/keep"));
 });

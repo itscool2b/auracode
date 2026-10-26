@@ -9,6 +9,8 @@ These identifiers are not credentials.
 | R2 bucket | `auracode-blobs` | Private encrypted attachments and config blobs |
 | R2 bucket | `auracode-releases` | Installers, checksums, updater manifests |
 | Email Sending domain | `auracode.si`, `84273eb1ef3c4b108b774bc0e0a000ed` | Passwordless sign-in sender |
+| Preview D1 database | `auracode-preview`, `11d6fa29-5c39-49c5-a85b-1ecc7645dbd5` | Isolated acceptance data, US jurisdiction |
+| Preview R2 bucket | `auracode-preview-blobs` | Private acceptance ciphertext |
 
 D1 uses US jurisdiction, with read replication disabled. R2 was created with the eastern North
 America location hint, which is not a data-residency guarantee. Both buckets start private; release
@@ -24,3 +26,10 @@ Cloudflare Email Sending provisioned the return path `cf-bounce.auracode.si`, SP
 records on 2026-10-26. Its DNS status is `ready`, with no reported errors. Actual delivery and
 Workers paid-plan eligibility remain unverified. Turnstile configuration is still pending.
 No Neon project, Neon Auth service, Hyperdrive connection, or Resend domain is needed.
+
+The preview database and bucket were created on 2026-10-26. The database has no application tables
+yet. The preview bucket's managed public domain is disabled and its custom domain list is empty.
+The two checked-in `--env preview` configurations reserve `preview.auracode.si` for acceptance;
+they do not publish it. Database backup/migrations, separate secrets/widget and deployment remain
+pending. The compiled Rust API passed twelve local runtime cases, including failed email binding,
+Turnstile rejection/replay, cookies, revocation and scheduled ciphertext cleanup. No email was sent.

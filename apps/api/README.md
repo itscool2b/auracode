@@ -24,9 +24,12 @@ runtime tests. Default bindings name local resources and contain a placeholder D
 accidentally address the production database. Production requires explicit `--env production`.
 
 After building, `corepack pnpm --filter @auracode/api worker:test` runs the compiled Rust Worker in
-Miniflare with isolated D1/R2, fixed synthetic secrets and all outbound subrequests blocked. The
+Miniflare with isolated D1/R2, fixed synthetic secrets and a synthetic Turnstile response. Unexpected
+outbound subrequests fail and no request reaches the network. The
 JavaScript file supplies platform bindings and test assertions, not another implementation of the
 backend. Miniflare disposes its owned runtime after the suite. These tests create no real accounts.
+The twelve cases include delivery failure and cooldown, wrong-site/action and replayed Turnstile
+proofs, browser cookie protections, immediate revocation and scheduled private-object cleanup.
 
 ## Production prerequisites
 

@@ -1379,3 +1379,18 @@ Application update cleanup delegates the same guard. Forced OS termination relie
 operation journal. Eight desktop quit tests, the core admission/drain regression and core/desktop
 Clippy pass on Windows. No real vendor maintenance or native prompts ran.
 
+## Cloud acceptance preparation
+
+The compiled Rust Worker passes twelve isolated runtime cases. New cases exercise Turnstile
+hostname/action/replay rejection, provider outage, failed email delivery and cooldown, secure cookie
+issuance, immediate account revocation and scheduled cleanup including a late ciphertext upload.
+Provider non-success HTTP status now fails before accepting its JSON. All network responses and
+email failure are synthetic; actual delivery acceptance remains pending.
+
+An isolated US-jurisdiction `auracode-preview` D1 and private `auracode-preview-blobs` R2 bucket are
+provisioned. The R2 public managed domain is disabled and no custom domains exist. Preview Wrangler
+configuration points only at those resources. Backup/migrations, secrets, widget, deployment and
+public account acceptance remain pending. Local Wrangler is unauthenticated. The production build
+dry run succeeds, but neither environment has been deployed. The combined CI workflow now includes
+the compiled Worker runtime and site build, and its encrypted gate covers the full core library.
+
