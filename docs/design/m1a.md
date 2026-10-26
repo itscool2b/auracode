@@ -2994,6 +2994,42 @@ with the floor in its reason (P50).
 | the adapter download fits in 10 minutes, Hermes' gateway start in 60 s | both are catalog or constant values; Retry works |
 | `preserve_order` breaks no existing test | P0 runs the whole suite right after enabling it |
 
+
+### 10.6 Results (2026-10-25)
+
+Run on macOS against Hermes Agent 0.22.5 (its free tier, `nous/welcome`), Claude Code 2.1.310 through claude-agent-acp
+0.95.0 (Haiku 5.5, effort low) and codex-cli 0.164.0 through codex-acp 2.2.2 (gpt-6-luna, effort low). Every run
+checked afterwards that Claude's daemon and Hermes' gateway were alive and unchanged and that nothing of auracode's
+was left running.
+
+| Agent | Free probes | Paid scenarios | Chat UI (`AURACODE_SMOKE_AGENT`) |
+|---|---|---|---|
+| hermes | pass; `probe-*` fixtures | 18 of 18 checks | pass |
+| claude-acp | pass; `probe-*` fixtures | 20 of 20, including the model and effort switches | pass |
+| codex-acp | pass; `probe-*` fixtures | 19 of 19; after-interrupt informational (below) | pass |
+
+Bugs the runs found in auracode, each fixed with a test:
+
+- A prompt went out while a mode change was still on its way, so it ran under the agent's previous mode: after a
+  switch from Full auto to Ask, Hermes made the next edit without asking. A prompt now waits for the mode and option
+  changes queued before it (5.2); an interrupt or a close ends a waiting prompt once.
+- Hermes refuses a mode change that reaches its gateway before the previous one landed (-32603 with `details:
+  "stale_generation"`). The driver sends it again after 250, 500 and 750 ms (`AcpDialect::mode_change_retryable`),
+  instead of falling back as if the mode did not exist. Fixture `hermes/mode-retry-stale`.
+
+What the agents do that the scenarios had assumed otherwise:
+
+- Hermes' Ask (`default`) asks before edits made with its file tools; shell commands go to Hermes' own approval
+  model (an auxiliary model call), which runs harmless ones such as `touch` without asking. Its permission scenario
+  asks for `write_file`, and its Ask carries a note saying so.
+- Codex's Ask (codex-acp's `read-only`, approvals `on-request`) asks only when the model requests more access;
+  gpt-6-luna sometimes just said the folder was read-only. Its permission scenario names the command and asks it to
+  request approval, and its Ask carries a note. A deterministic Ask waits for M1c's app-server driver, which sets the
+  approval policy itself.
+- After an interrupt and a restart, Codex's resumed thread holds every completed turn but not the interrupted
+  answer, so after-interrupt is informational for codex-acp. auracode keeps the partial answer (scenario 3).
+- Claude Code asked before a shell command in Ask, as the scenario assumed; its usage arrives per turn.
+
 ---
 
 ## Appendix A: constants

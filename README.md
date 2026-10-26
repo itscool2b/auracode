@@ -27,11 +27,11 @@ Done:
   (`aura-protocol`); the data folder, device identity, profiles, and per-profile database (`aura-core`);
   frame batching and the scripted mock agent (`aura-drivers`); the design system and WebGL orb renderer
   (`packages/ui`); the desktop shell with its glass window, typed commands and channels, and a demo stream;
-  the CI and bundle workflows (written, but they have not run yet: see below).
+  the CI and bundle workflows, which run on Linux and Windows (see [Checks](#checks)).
 - **Spikes.** [Claude Code's control protocol](docs/spikes/claude-control.md) is decided.
-  [Windows spawning](docs/spikes/windows-spawn.md) and
-  [the Windows titlebar](docs/spikes/windows-titlebar.md) are designed and implemented, and wait for
-  their first Windows run.
+  [Windows spawning](docs/spikes/windows-spawn.md) passes its automated tests on Windows and Linux in
+  CI; its manual checklist and [the Windows titlebar](docs/spikes/windows-titlebar.md) wait for a
+  Windows PC.
   [Render and power](docs/spikes/render-power.md) has measured the hidden window and the page in WebKit;
   the visible window and Windows remain.
 
@@ -50,6 +50,15 @@ Pending, each waiting on the repository owner:
   [render and power](docs/spikes/render-power.md#windows-webview2-half-still-to-run) need a Windows
   PC.
 - **An app screenshot.** It needs an unlocked screen: a locked Mac hides every window.
+
+### M1a: sessions, processes, the ACP client and the bare chat UI
+
+Built on the `m1a-core-acp` branch from [its spec](docs/design/m1a.md): agent processes and their
+environment, the session manager and its store, the ACP driver, the chat commands and channels, a bare
+chat UI styled through tokens, and `aura-cli`. Verified against real agents on this Mac (spec 10.6):
+Hermes, Claude Code through claude-agent-acp and Codex through codex-acp each pass the free probes, the
+six paid scenarios and a chat through the UI, with recorded fixtures replayed in CI. The visual
+language the UI moves to next is [Orbit](docs/design/visual-language.md), prototyped in the Design Lab.
 
 ## Layout
 
@@ -147,8 +156,8 @@ while the app runs on it. `aura-cli help` lists every option; `RUST_LOG` shows i
 
 ### Checks
 
-GitHub Actions cannot run for this account yet (see [M0](#m0-scaffold-and-spikes)), so for now these
-checks run locally on a Mac, and nothing runs them on Linux or Windows. From the repository root:
+CI runs these on Linux and Windows for every pull request and every push to a milestone branch, and adds
+macOS for `main` (see below). To run them locally, from the repository root:
 
 ```sh
 pnpm check                      # pnpm lint, pnpm typecheck, pnpm test (Vitest)
