@@ -273,6 +273,29 @@ impl AppState {
         })?;
         Ok(self.lease(service))
     }
+    pub fn account_config(
+        &self,
+    ) -> Result<ProfileLease<Arc<crate::account_config::AccountConfigServices>>, AppError> {
+        if self.quit.is_quitting() {
+            return Err(AppError::new(
+                AppErrorCode::ShuttingDown,
+                "auracode is closing.",
+            ));
+        }
+        let runtime = lock(&self.runtime);
+        self.check_profile_access(&runtime)?;
+        let service = runtime
+            .chats
+            .as_ref()
+            .and_then(|chats| chats.account_config.clone())
+            .ok_or_else(|| {
+                AppError::new(
+                    AppErrorCode::StorageUnavailable,
+                    "Open an unlocked Account profile to sync configuration.",
+                )
+            })?;
+        Ok(self.lease(service))
+    }
     fn check_profile_access(&self, runtime: &ProfileRuntime) -> Result<(), AppError> {
         if runtime.info.profile_switching {
             Err(AppError::new(

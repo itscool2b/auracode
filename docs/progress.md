@@ -1758,3 +1758,19 @@ No real configuration was read or changed. macOS execution, the encrypted profil
 orchestration and secret-free MCP projection remain integration work. See `docs/config-apply.md` for
 the transient publication-file constraint and required host mutation guards.
 
+
+### Account-bound configuration services
+
+Account activation now verifies its sync ledger before publishing the profile and exposes a Rust-only
+configuration service through the profile admission lease. Its port and encrypted apply journal are
+bound to that writer/key. Local and locked profiles cannot obtain them; a failed target preparation
+keeps the old service usable, and successful switching invalidates retained old handles. The journal
+uses encrypted receipt objects and an encrypted UUID index, exact-byte retry after partial publication,
+SHA-256 compare-and-swap replacement, fixed size/count limits, and fail-closed missing-index recovery.
+No receipt or config content is persisted in plaintext.
+
+Six focused native profile tests and three initial journal regressions passed on Windows. Core and
+desktop all-target Clippy passed. The fourth missing-index regression compiled, but Windows Application
+Control blocked the refreshed core test executable (4551); it remains pending execution in the final
+qualified test batch. No policy workaround, credential access, network call or real config edit was
+performed. Remote projection, blob transfer, transcript sync and scheduling remain in progress.

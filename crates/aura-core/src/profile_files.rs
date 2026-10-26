@@ -275,6 +275,21 @@ impl EncryptedRecord {
             Err(error) => Err(error),
         }
     }
+    /// Initialize an index only in a newly marked, otherwise empty directory. An absent index next
+    /// to existing objects is missing recovery metadata, never an invitation to erase its history.
+    pub(crate) fn initialize_empty_directory(&self, bytes: &[u8]) -> io::Result<()> {
+        if self.read()?.is_some() {
+            return Ok(());
+        }
+        for entry in self.files.dir.entries()? {
+            if entry?.file_name() != MARKER {
+                return Err(invalid(
+                    "The encrypted directory index is missing. Existing objects were preserved.",
+                ));
+            }
+        }
+        self.write(bytes)
+    }
     pub fn write(&self, bytes: &[u8]) -> io::Result<()> {
         if bytes.len() > self.limit {
             return Err(invalid("Encrypted metadata exceeds its limit."));

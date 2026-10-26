@@ -12,6 +12,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::store::Store;
 pub(crate) mod capture;
 pub(crate) mod config;
+pub mod journal;
 
 /// An unlocked Account writer's identity and encryption authority. Never exported through IPC.
 #[derive(Clone)]

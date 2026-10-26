@@ -1,6 +1,18 @@
 use super::*;
 use crate::{glass::GlassEffect, launch::LaunchOptions, os::OsInfo};
 use aura_core::{chatstore::NewChat, owner::ProfileOwner};
+use aura_sync::crypto::AccountKey;
+
+fn sync_context(key: Arc<AccountKey>) -> SyncContext {
+    SyncContext {
+        identity: SyncIdentity {
+            account: "synthetic-account".into(),
+            device: "synthetic-device".into(),
+            key_version: 1,
+        },
+        key,
+    }
+}
 
 fn state(root: &DataRoot) -> AppState {
     let mut booted = boot::boot(Ok(root.clone()));
@@ -151,7 +163,7 @@ async fn account_activation_is_keyed_and_wrong_key_never_replaces_current_datase
     let key = Arc::new(AccountKey::generate().unwrap());
     let resolved = || Resolved {
         profile: account.clone(),
-        key: Some(("synthetic-account".into(), key.clone())),
+        key: Some(sync_context(key.clone())),
     };
     activate(&state, resolved(), sessions::testing::outside)
         .await
@@ -171,10 +183,7 @@ async fn account_activation_is_keyed_and_wrong_key_never_replaces_current_datase
     let before = std::fs::read(account.db_path()).unwrap();
     let wrong = Resolved {
         profile: account.clone(),
-        key: Some((
-            "synthetic-account".into(),
-            Arc::new(AccountKey::generate().unwrap()),
-        )),
+        key: Some(sync_context(Arc::new(AccountKey::generate().unwrap()))),
     };
     assert!(
         activate(&state, wrong, sessions::testing::outside)
@@ -207,4 +216,91 @@ async fn selected_account_starts_locked_without_touching_its_database() {
     assert!(!account.db_path().exists());
     assert!(!account.dir.join("aura.db").exists());
     let _owner = ProfileOwner::acquire(&account).unwrap();
+}
+
+#[tokio::test]
+async fn account_config_services_are_keyed_persistent_and_invalidated_on_switch() {
+    use aura_config::sync::{ConfigPortError, ConfigScope, ConfigSnapshotMetadata};
+
+    let temp = tempfile::tempdir().unwrap();
+    let root = DataRoot::at(temp.path().join("data"));
+    let state = state(&root);
+    assert!(state.account_config().is_err());
+    let profiles = Profiles::new(root);
+    let local_profile = profiles.open_active().unwrap();
+    let account = profiles.create(ProfileKind::Account, "Account").unwrap();
+    let key = Arc::new(AccountKey::generate().unwrap());
+    let resolved = || Resolved {
+        profile: account.clone(),
+        key: Some(sync_context(key.clone())),
+    };
+    activate(&state, resolved(), sessions::testing::outside)
+        .await
+        .unwrap();
+
+    let lease = state.account_config().unwrap();
+    let generation = lease.generation();
+    let retained = Arc::clone(&lease);
+    let id = aura_core::ids::new_id();
+    let content = b"synthetic private apply receipt";
+    lease.journal.create(&id, content.to_vec().into()).unwrap();
+    let item = "ab".repeat(32);
+    let head = lease
+        .port
+        .publish_snapshot(
+            &item,
+            None,
+            b"private config".to_vec().into(),
+            ConfigSnapshotMetadata {
+                schema: 1,
+                scope: ConfigScope::Portable,
+                deleted: false,
+            },
+        )
+        .await
+        .unwrap();
+    drop(lease);
+
+    let broken = profiles
+        .create(ProfileKind::Account, "Broken journal")
+        .unwrap();
+    std::fs::create_dir(broken.dir.join("config-apply")).unwrap();
+    std::fs::write(
+        broken.dir.join("config-apply").join("legacy.txt"),
+        b"preserved",
+    )
+    .unwrap();
+    assert!(
+        activate(
+            &state,
+            Resolved {
+                profile: broken,
+                key: Some(sync_context(key.clone()))
+            },
+            sessions::testing::outside
+        )
+        .await
+        .is_err()
+    );
+    assert!(generation.is_current());
+    assert_eq!(retained.journal.read(&id).unwrap().as_slice(), content);
+
+    activate(&state, local(local_profile), sessions::testing::outside)
+        .await
+        .unwrap();
+    assert!(!generation.is_current());
+    assert!(state.account_config().is_err());
+    assert_eq!(retained.journal.list(), Err(ConfigPortError::Unavailable));
+    assert_eq!(
+        retained.port.list_heads().await,
+        Err(ConfigPortError::Unavailable)
+    );
+    activate(&state, resolved(), sessions::testing::outside)
+        .await
+        .unwrap();
+    let lease = state.account_config().unwrap();
+    assert_eq!(lease.journal.read(&id).unwrap().as_slice(), content);
+    assert_eq!(lease.port.read_head(&item).await.unwrap(), Some(head));
+    drop(lease);
+    close(&state).await;
 }

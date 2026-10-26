@@ -249,6 +249,7 @@ pub struct ChatRuntime {
     /// Sentences that arrive after startup (the sweep's), shown with `app_info`'s notices.
     pub late_notices: Arc<Mutex<Vec<String>>>,
     pub(crate) services: Arc<RuntimeServices>,
+    pub(crate) account_config: Option<Arc<crate::account_config::AccountConfigServices>>,
 }
 
 /// Process ownership and agent discovery belong to the app instance, not one profile. Reusing
@@ -497,6 +498,7 @@ pub(crate) fn start_profile_chats(
         registry,
         late_notices,
         services,
+        account_config: None,
     })
 }
 

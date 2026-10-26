@@ -11,8 +11,9 @@ use crate::{
 use aura_core::{
     paths::DataRoot,
     profile::{Profile, ProfileKind, ProfileMeta, Profiles},
+    sync::{SyncContext, SyncIdentity, journal::AccountConfigJournal},
 };
-use aura_sync::crypto::{AccountKey, files::ProfileFileKey};
+use aura_sync::crypto::files::ProfileFileKey;
 use std::{sync::Arc, time::Duration};
 use tauri::{Emitter, Manager, State};
 
@@ -25,7 +26,22 @@ enum Target {
 }
 struct Resolved {
     profile: Profile,
-    key: Option<(String, Arc<AccountKey>)>,
+    key: Option<SyncContext>,
+}
+impl Resolved {
+    fn account(unlocked: aura_core::accounts::AccountProfile) -> Result<Self, AppError> {
+        Ok(Self {
+            profile: unlocked.profile,
+            key: Some(SyncContext {
+                identity: SyncIdentity {
+                    account: unlocked.account_id,
+                    device: unlocked.device_id.ok_or_else(|| unavailable("This account profile has no bound device identity. Reconnect the account before opening it."))?,
+                    key_version: unlocked.key_version,
+                },
+                key: unlocked.key,
+            }),
+        })
+    }
 }
 struct Switching<'a> {
     state: &'a AppState,
@@ -95,17 +111,11 @@ async fn resolve(state: &AppState, target: Target) -> Result<Resolved, AppError>
                 "The account key does not belong to the selected profile.",
             ));
         }
-        return Ok(Resolved {
-            profile,
-            key: Some((unlocked.account_id, unlocked.key)),
-        });
+        return Resolved::account(unlocked);
     }
     let accounts = state.accounts.get().await.map_err(account_error)?;
     let unlocked = accounts.local_profile().await.map_err(account_error)?;
-    Ok(Resolved {
-        profile: unlocked.profile,
-        key: Some((unlocked.account_id, unlocked.key)),
-    })
+    Resolved::account(unlocked)
 }
 
 async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError> {
@@ -202,20 +212,20 @@ async fn activate(
     let rt = tokio::runtime::Handle::current();
     let version = state.app_info().app_version;
     let reuse = old.as_ref().map(|old| old.services.clone());
-    let (mut prepared, onboarding, next) = tokio::task::spawn_blocking(move || {
+    let (mut prepared, onboarding, next, context) = tokio::task::spawn_blocking(move || {
         if selected.key.is_some() {
             aura_core::accounts::audit_profile(&selected.profile).map_err(account_error)?;
         }
-        let (database_key, file_key): (_, Option<Arc<ProfileFileKey>>) = match selected.key {
-            Some((account, key)) => (
+        let (database_key, file_key): (_, Option<Arc<ProfileFileKey>>) = match &selected.key {
+            Some(context) => (
                 Some(Arc::new(
-                    key.database_key(&account, &selected.profile.meta.id)
+                    context.key.database_key(&context.identity.account, &selected.profile.meta.id)
                         .map_err(|_| {
                             unavailable("The account database key could not be derived.")
                         })?,
                 )),
                 Some(Arc::new(
-                    key.profile_file_key(&account, &selected.profile.meta.id)
+                    context.key.profile_file_key(&context.identity.account, &selected.profile.meta.id)
                         .map_err(|_| unavailable("The account file key could not be derived."))?,
                 )),
             ),
@@ -229,7 +239,9 @@ async fn activate(
             Some(key) => SetupService::account(&selected.profile, key.clone())?,
             None => SetupService::new(selected.profile.dir.clone()),
         });
-        let next =
+        let journal = file_key.as_ref().map(|key| AccountConfigJournal::open(selected.profile.dir.join("config-apply"), key.clone()))
+            .transpose().map_err(|_| unavailable("The account configuration journal could not be authenticated. Existing data was preserved."))?;
+        let mut next =
             sessions::start_profile_chats(&mut prepared, &version, &rt, outside, file_key, reuse)
                 .ok_or_else(|| {
                 unavailable(
@@ -239,7 +251,8 @@ async fn activate(
                         .unwrap_or("The selected profile could not start."),
                 )
             })?;
-        Ok::<_, AppError>((prepared, onboarding, Arc::new(next)))
+        next.account_config = journal.map(|journal| Arc::new(crate::account_config::AccountConfigServices::new(&next.store, journal)));
+        Ok::<_, AppError>((prepared, onboarding, Arc::new(next), selected.key))
     })
     .await
     .map_err(|_| {
@@ -255,6 +268,17 @@ async fn activate(
             "The selected profile could not confirm its storage, or auracode is closing. Nothing was switched.",
         ));
     }
+    if let Some(context) = context
+        && !matches!(
+            tokio::time::timeout(Duration::from_secs(5), next.store.configure_sync(context)).await,
+            Ok(Ok(()))
+        )
+    {
+        discard(&next).await;
+        return Err(unavailable(
+            "The account sync ledger could not be authenticated. Nothing was switched.",
+        ));
+    }
     let profiles = Profiles::new(root(state)?);
     let published = tokio::task::spawn_blocking(move || profiles.set_active(&profile_id)).await;
     if !matches!(published, Ok(Ok(_))) {
@@ -267,6 +291,9 @@ async fn activate(
     // a close failure is reported honestly while retaining its WAL/recovery files.
     state.integrity.close();
     if let Some(old) = &old {
+        if let Some(config) = &old.account_config {
+            config.close();
+        }
         for owner in state.pages.invalidate_all() {
             old.manager.drop_owner(&owner);
         }
@@ -281,6 +308,9 @@ async fn activate(
     Ok(info)
 }
 async fn discard(runtime: &ChatRuntime) {
+    if let Some(config) = &runtime.account_config {
+        config.close();
+    }
     runtime.manager.shutdown_all(Duration::from_secs(2)).await;
     runtime.store.shutdown(Duration::from_secs(5)).await;
 }
