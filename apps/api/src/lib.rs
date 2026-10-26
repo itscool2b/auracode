@@ -2,6 +2,7 @@
 
 pub mod crypto;
 pub mod policy;
+pub mod possession;
 pub mod sql;
 pub mod types;
 

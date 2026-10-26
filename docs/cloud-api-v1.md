@@ -79,6 +79,27 @@ ciphertext, but never another device's key envelope. The server has neither mast
 
 ## Records, cursors and private blobs
 
+### Retained-device sign-in
+
+A fresh desktop session can regain an existing approved device only by proving possession of its
+retained private key. POST `/api/v1/devices/rebind/challenges` with `{device_id}` returns
+`{challenge_id,device_id,envelope,expires_in:300}`. POST `/api/v1/devices/rebind/verify` with
+`{challenge_id,proof}` returns `{device_id,rebound:true}`. Fetch `/keys` after success.
+
+The envelope algorithm is `x25519-hkdf-sha256-xchacha20poly1305-rebind-v1`. Its random 32-byte
+plaintext is a one-use possession proof, never an account key. HKDF-SHA256 uses the same fixed salt
+`auracode-hkdf-sha256-v1`, with both info and AEAD AAD equal to compact UTF-8 JSON:
+
+`["auracode-device-rebind-v1",account_id,device_id,challenge_id,recipient_public_key,ephemeral_public_key]`
+
+The proof is canonical base64url. The server stores only its domain-separated HMAC verifier and
+atomically consumes it into the fresh session's device binding. It allows five attempts, expires
+after five minutes, and rechecks account/session/device revocation during the transaction. Merely
+matching a public key never approves a device. A lost successful response can be reconciled through
+GET session, which reports the bound device ID.
+
+### Encrypted changes
+
 POST `/api/v1/sync` accepts `{records:[Record]}`, at most 32 per request with no repeated
 collection/id pair. `Record` contains:
 

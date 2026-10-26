@@ -1,5 +1,26 @@
 //! Queries are shared by the D1 adapter and SQLite concurrency/authorization regressions.
 pub const MIGRATION: &str = include_str!("../../../infra/migrations/0001_accounts_sync.sql");
+pub const REBIND_MIGRATION: &str = include_str!("../../../infra/migrations/0002_device_rebind.sql");
+
+pub const BEGIN_REBIND: &str = "INSERT INTO device_rebind_challenges(id,session_hash,device_id,verifier,created_at,expires_at)
+SELECT ?1,s.token_hash,d.id,?4,?5,?5+300 FROM sessions s JOIN users u ON u.id=s.user_id
+JOIN devices d ON d.user_id=s.user_id AND d.id=?3
+WHERE s.token_hash=?2 AND s.client_kind='desktop' AND s.device_id IS NULL AND s.revoked_at IS NULL
+AND s.expires_at>?5 AND u.deletion_requested_at IS NULL AND d.approved_at IS NOT NULL AND d.revoked_at IS NULL
+ON CONFLICT(session_hash) DO UPDATE SET id=excluded.id,device_id=excluded.device_id,verifier=excluded.verifier,
+created_at=excluded.created_at,expires_at=excluded.expires_at,attempts=0,consumed_at=NULL,consumed_by=NULL RETURNING id";
+
+pub const CONSUME_REBIND: &str = "UPDATE device_rebind_challenges SET attempts=attempts+1,
+consumed_at=CASE WHEN verifier=?3 THEN ?4 ELSE NULL END,consumed_by=CASE WHEN verifier=?3 THEN ?5 ELSE NULL END
+WHERE id=?1 AND session_hash=?2 AND attempts<5 AND consumed_at IS NULL AND expires_at>?4
+AND EXISTS(SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id JOIN devices d ON d.user_id=s.user_id
+WHERE s.token_hash=?2 AND s.client_kind='desktop' AND s.device_id IS NULL AND s.expires_at>?4
+AND s.revoked_at IS NULL AND u.deletion_requested_at IS NULL AND d.id=device_rebind_challenges.device_id
+AND d.approved_at IS NOT NULL AND d.revoked_at IS NULL)";
+
+pub const FINISH_REBIND: &str = "UPDATE sessions SET device_id=(SELECT device_id FROM device_rebind_challenges
+WHERE id=?1 AND session_hash=?2 AND consumed_by=?3) WHERE token_hash=?2 AND device_id IS NULL
+AND EXISTS(SELECT 1 FROM device_rebind_challenges WHERE id=?1 AND session_hash=?2 AND consumed_by=?3)";
 
 pub const RATE: &str =
     "INSERT INTO rate_limits(key,window_start,count,expires_at) VALUES(?1,?2,1,?3)
@@ -109,6 +130,8 @@ mod tests {
     fn db() -> Connection {
         let db = Connection::open_in_memory().expect("db");
         db.execute_batch(MIGRATION).expect("migration");
+        db.execute_batch(REBIND_MIGRATION)
+            .expect("rebind migration");
         db
     }
     fn challenge(db: &Connection) {
@@ -554,5 +577,113 @@ mod tests {
                 .expect("row")
                 .is_none()
         );
+    }
+
+    fn rebind_session(db: &Connection) {
+        db.execute("INSERT INTO sessions(token_hash,user_id,client_kind,csrf_hash,created_at,expires_at) VALUES('fresh','user','desktop','csrf',120,1000)",[]).expect("session");
+        assert_eq!(
+            returned(
+                db,
+                BEGIN_REBIND,
+                params!["challenge", "fresh", "device", "proof", 120]
+            )
+            .expect("challenge"),
+            1
+        );
+    }
+    fn finish_rebind(db: &mut Connection, session: &str, proof: &str, now: i64, claim: &str) {
+        let tx = db.transaction().expect("tx");
+        tx.execute(
+            CONSUME_REBIND,
+            params!["challenge", session, proof, now, claim],
+        )
+        .expect("consume");
+        tx.execute(FINISH_REBIND, params!["challenge", session, claim])
+            .expect("bind");
+        tx.commit().expect("commit");
+    }
+    #[test]
+    fn retained_device_rebind_requires_one_use_proof_bound_to_the_fresh_session() {
+        let mut db = db();
+        approved(&mut db);
+        rebind_session(&db);
+        finish_rebind(&mut db, "token", "proof", 130, "wrong-session");
+        finish_rebind(&mut db, "fresh", "wrong", 130, "wrong-proof");
+        let device: Option<String> = db
+            .query_row(
+                "SELECT device_id FROM sessions WHERE token_hash='fresh'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("device");
+        assert_eq!(device, None);
+        finish_rebind(&mut db, "fresh", "proof", 131, "winner");
+        finish_rebind(&mut db, "fresh", "proof", 132, "replay");
+        assert_eq!(
+            db.query_row(
+                "SELECT consumed_by FROM device_rebind_challenges",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .expect("claim"),
+            "winner"
+        );
+        assert_eq!(
+            db.query_row(
+                "SELECT device_id FROM sessions WHERE token_hash='fresh'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .expect("device"),
+            "device"
+        );
+    }
+    #[test]
+    fn rebind_expiry_attempt_limit_and_revocation_cannot_be_bypassed() {
+        for failure in ["expired", "attempts", "device", "session", "account"] {
+            let mut db = db();
+            approved(&mut db);
+            rebind_session(&db);
+            match failure {
+                "attempts" => {
+                    for attempt in 0..5 {
+                        finish_rebind(&mut db, "fresh", "wrong", 130, &attempt.to_string());
+                    }
+                }
+                "device" => {
+                    db.execute("UPDATE devices SET revoked_at=130", [])
+                        .expect("revoke");
+                }
+                "session" => {
+                    db.execute(
+                        "UPDATE sessions SET revoked_at=130 WHERE token_hash='fresh'",
+                        [],
+                    )
+                    .expect("revoke");
+                }
+                "account" => {
+                    db.execute("UPDATE users SET deletion_requested_at=130", [])
+                        .expect("delete");
+                }
+                _ => {}
+            }
+            finish_rebind(
+                &mut db,
+                "fresh",
+                "proof",
+                if failure == "expired" { 420 } else { 131 },
+                "invalid",
+            );
+            assert!(
+                db.query_row(
+                    "SELECT device_id FROM sessions WHERE token_hash='fresh'",
+                    [],
+                    |r| r.get::<_, Option<String>>(0)
+                )
+                .expect("device")
+                .is_none(),
+                "{failure}"
+            );
+        }
     }
 }

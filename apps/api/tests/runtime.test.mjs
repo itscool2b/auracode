@@ -1,7 +1,7 @@
 // Platform integration tests only. All backend behavior under test is the compiled Rust Worker.
 import assert from "node:assert/strict";
 import { createHash, createHmac } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
@@ -49,11 +49,11 @@ before(async () => {
     telemetry: { enabled: false },
   });
   db = await runtime.getD1Database("DB");
-  const migration = await readFile(
-    new URL("../../infra/migrations/0001_accounts_sync.sql", root),
-    "utf8",
-  );
-  await db.batch(unstable_splitSqlQuery(migration).map((statement) => db.prepare(statement)));
+  const migrations = new URL("../../infra/migrations/", root);
+  for (const name of (await readdir(migrations)).filter((name) => name.endsWith(".sql")).sort()) {
+    const migration = await readFile(new URL(name, migrations), "utf8");
+    await db.batch(unstable_splitSqlQuery(migration).map((statement) => db.prepare(statement)));
+  }
   await db.batch([
     db
       .prepare(
@@ -187,4 +187,35 @@ test("browser cookie mutations require both same Origin and matching CSRF", asyn
     (await call({ Origin: "https://auracode.test", "X-Auracode-CSRF": csrf })).status,
     401,
   );
+});
+
+test("retained-device proof binds only its fresh desktop session and cannot be replayed", async () => {
+  const fresh = Buffer.alloc(32, 10).toString("base64url");
+  const challenge = Buffer.alloc(32, 11).toString("base64url");
+  const proof = Buffer.alloc(32, 12).toString("base64url");
+  await db
+    .prepare(
+      "INSERT INTO sessions(token_hash,user_id,client_kind,csrf_hash,created_at,expires_at) VALUES(?,'account','desktop','csrf',?,?)",
+    )
+    .bind(hash(fresh), now, now + 1000)
+    .run();
+  // Fixed synthetic challenge fixture. Rust unit tests cover sealing, low-order keys and AAD.
+  await db
+    .prepare(
+      "INSERT INTO device_rebind_challenges(id,session_hash,device_id,verifier,created_at,expires_at) VALUES(?,?,'device',?,?,?)",
+    )
+    .bind(challenge, hash(fresh), verifier("device-rebind", [challenge, proof]), now, now + 300)
+    .run();
+  const call = (proof) =>
+    request(
+      "/devices/rebind/verify",
+      "POST",
+      { challenge_id: challenge, proof },
+      { Authorization: `Bearer ${fresh}` },
+    );
+  assert.equal((await call(Buffer.alloc(32, 13).toString("base64url"))).status, 403);
+  const response = await call(proof);
+  assert.equal(response.status, 200, await response.clone().text());
+  assert.deepEqual(await response.json(), { device_id: "device", rebound: true });
+  assert.equal((await call(proof)).status, 403);
 });

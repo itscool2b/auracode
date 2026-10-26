@@ -3,6 +3,7 @@ mod auth;
 mod cleanup;
 mod db;
 mod devices;
+mod rebind;
 mod sync;
 
 use crate::{
@@ -129,6 +130,12 @@ impl Api {
             (Method::Post, "/api/v1/devices") => self.register_device(request, &identity).await,
             (Method::Post, "/api/v1/devices/approve") => {
                 self.approve_device(request, &identity).await
+            }
+            (Method::Post, "/api/v1/devices/rebind/challenges") => {
+                self.begin_rebind(request, &identity).await
+            }
+            (Method::Post, "/api/v1/devices/rebind/verify") => {
+                self.verify_rebind(request, &identity).await
             }
             (Method::Post, "/api/v1/devices/recover") => {
                 self.recover_device(request, &identity).await

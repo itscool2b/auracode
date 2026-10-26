@@ -133,6 +133,18 @@ pub struct RecoverDevice {
     pub wrapped_key: KeyEnvelope,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BeginRebind {
+    pub device_id: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerifyRebind {
+    pub challenge_id: String,
+    pub proof: String,
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Record {
