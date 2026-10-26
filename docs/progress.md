@@ -2,6 +2,17 @@
 
 Updated 2026-10-26. Scope: the accepted Rust-first, Cloudflare-hosted plan, M1b through M9.
 
+Current owner correction: Windows and macOS are the supported targets. Linux and WSL work and
+acceptance are deferred. Implementation checkpoints are committed locally with focused checks;
+the root task will run CI at major integration and final verification points.
+
+The final local M1e follow-up resolves Windows Pi, OMP and Grok npm shims through the reviewed
+package's bounded `package.json` bin entry, using `node.exe` or a packaged executable. It never
+interprets shim content. Package name, relative entry containment and canonical target are checked;
+unknown shims and project-local packages stay unavailable. Channel metadata and update validation
+refer to the actual package entry. Fake Windows package/launch/update checks, bounded manifest
+tests and all-target aura-agents Clippy pass. No vendor binary was invoked for these tests.
+
 ## M1e combined agent checkpoint (2026-10-26)
 
 The catalog branch now includes native Codex, native Pi, the qualified ACP catalog and restricted

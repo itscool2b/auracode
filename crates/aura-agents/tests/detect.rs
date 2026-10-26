@@ -27,6 +27,83 @@ fn ready_path(availability: &Availability) -> PathBuf {
     }
 }
 
+#[cfg(windows)]
+#[tokio::test]
+async fn reviewed_npm_bins_launch_through_node_without_running_shell_shims() {
+    use aura_protocol::agents::InstallChannel;
+
+    for (id, package, version) in [
+        ("pi", "@earendil-works/pi-coding-agent", "1.0.2"),
+        ("omp", "@oh-my-pi/pi-coding-agent", "18.12.6"),
+        ("grok", "@xai-official/grok", "1.0.70"),
+    ] {
+        let machine = Machine::with_tools(&["node", "npm"]);
+        let shim = machine.bin.join(format!("{id}.cmd"));
+        std::fs::write(&shim, "@exit /b 99\r\n").unwrap();
+        let root = machine.bin.join("node_modules").join(package);
+        std::fs::create_dir_all(root.join("dist")).unwrap();
+        let entry = root.join("dist/cli.js");
+        std::fs::write(&entry, format!("FAKE_ADAPTER_VERSION={version}\n")).unwrap();
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::json!({
+                "name":package,"bin":{id:"dist/cli.js"}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let env = machine.env(&[]);
+        let detector = machine.detector(env.clone());
+        let agent = spec(id);
+        assert_eq!(ready_path(&detector.detect(&agent).await), shim);
+        let launch = detector.prepare_launch(&agent, progress()).await.unwrap();
+        assert_eq!(launch.program, machine.tool("node"));
+        assert_eq!(
+            launch.args[0],
+            std::fs::canonicalize(&entry).unwrap().into_os_string()
+        );
+        let installed = detector
+            .detect_all(false)
+            .await
+            .into_iter()
+            .find(|agent| agent.id == id)
+            .unwrap()
+            .installation
+            .unwrap();
+        assert_eq!(
+            installed.channel,
+            InstallChannel::Npm {
+                package: package.into()
+            }
+        );
+        aura_agents::maintenance::check_unchanged(&installed).unwrap();
+        let update = aura_agents::maintenance::update_command(&installed, &env.vars).unwrap();
+        assert_eq!(update.program, machine.tool("npm"));
+        assert!(
+            update
+                .args
+                .iter()
+                .any(|arg| arg == std::ffi::OsStr::new(&format!("{package}@latest")))
+        );
+        assert!(machine.runs("node").iter().any(|run| {
+            run["argv"] == serde_json::json!([std::fs::canonicalize(&entry).unwrap(), "--version"])
+        }));
+        std::fs::write(root.join("dist/other.js"), "replacement").unwrap();
+        std::fs::write(
+            root.join("package.json"),
+            serde_json::json!({
+                "name":package,"bin":{id:"dist/other.js"}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            aura_agents::maintenance::check_unchanged(&installed),
+            Err(aura_agents::maintenance::MaintenanceError::Changed)
+        );
+    }
+}
+
 #[tokio::test]
 async fn cursor_never_probes_an_unrelated_agent_executable() {
     let machine = Machine::with_tools(&["agent"]);

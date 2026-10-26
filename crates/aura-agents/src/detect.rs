@@ -247,7 +247,9 @@ impl Live {
                 let located = located.ok_or_else(|| LaunchError::Missing {
                     reason: format!("{program} was not found on your PATH."),
                 })?;
-                Ok(launch::binary(spec, &located.program, program, args))
+                let mut launch = launch::binary(spec, &located.program, program, args);
+                launch.args.splice(0..0, located.prefix_args);
+                Ok(launch)
             }
             Recipe::NativeBinary { user_binary, args } => {
                 let located = located.ok_or_else(|| LaunchError::Missing {

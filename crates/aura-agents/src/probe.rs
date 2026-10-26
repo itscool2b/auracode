@@ -35,6 +35,8 @@ pub(crate) struct Detection {
 pub(crate) struct Located {
     /// The agent's binary, or the user's own CLI behind an adapter.
     pub(crate) program: PathBuf,
+    /// Fixed package entry arguments, preceding protocol and session arguments.
+    pub(crate) prefix_args: Vec<OsString>,
     /// An adapter's `node`.
     pub(crate) node: Option<PathBuf>,
 }
@@ -222,6 +224,17 @@ async fn probe(
     args: &[&str],
     cwd: &Path,
 ) -> Result<String, String> {
+    probe_with_prefix(registry, env, program, &[], args, cwd).await
+}
+
+async fn probe_with_prefix(
+    registry: &LeftoverRegistry,
+    env: &Arc<ResolvedEnv>,
+    program: &Path,
+    prefix: &[OsString],
+    args: &[&str],
+    cwd: &Path,
+) -> Result<String, String> {
     let name = command_name(program);
     let command = std::iter::once(name.as_str())
         .chain(args.iter().copied())
@@ -231,7 +244,11 @@ async fn probe(
         registry,
         HelperSpec {
             program: program.to_path_buf(),
-            args: args.iter().map(OsString::from).collect(),
+            args: prefix
+                .iter()
+                .cloned()
+                .chain(args.iter().map(OsString::from))
+                .collect(),
             cwd: cwd.to_path_buf(),
             env: HelperEnv::Resolved(Arc::clone(env)),
             set: Vec::new(),
@@ -275,6 +292,17 @@ async fn probe(
         return Ok(output.stderr_tail);
     }
     Ok(stdout)
+}
+
+async fn launch_command(
+    id: &str,
+    path: &Path,
+    env: &EnvMap,
+) -> Result<(PathBuf, Vec<OsString>), String> {
+    let (id, path, env) = (id.to_owned(), path.to_owned(), env.clone());
+    tokio::task::spawn_blocking(move || crate::npm_entry::command(&id, &path, &env))
+        .await
+        .map_err(|_| "The agent package could not be inspected.".to_owned())?
 }
 
 /// The program as a user types it in messages: its file name, without the `.exe` Windows adds.
@@ -345,7 +373,20 @@ async fn detect_inner(
             let Some(path) = find_program(program, &env.vars) else {
                 return Detection::missing(format!("{program} was not found on your PATH."));
             };
-            let printed = match probe(registry, env, &path, version_args, &home(env)).await {
+            let (program, prefix_args) = match launch_command(spec.id, &path, &env.vars).await {
+                Ok(command) => command,
+                Err(reason) => return Detection::broken(reason),
+            };
+            let printed = match probe_with_prefix(
+                registry,
+                env,
+                &program,
+                &prefix_args,
+                version_args,
+                &home(env),
+            )
+            .await
+            {
                 Ok(printed) => printed,
                 Err(reason) => return Detection::broken(reason),
             };
@@ -382,7 +423,8 @@ async fn detect_inner(
                 },
                 needs_download: false,
                 located: Some(Located {
-                    program: path,
+                    program,
+                    prefix_args,
                     node: None,
                 }),
             }
@@ -422,6 +464,7 @@ async fn detect_inner(
                 needs_download: false,
                 located: Some(Located {
                     program: path,
+                    prefix_args: Vec::new(),
                     node: None,
                 }),
             }
@@ -439,7 +482,20 @@ async fn detect_inner(
                     spec.name
                 ));
             };
-            let printed = match probe(registry, env, &path, version_args, &home(env)).await {
+            let (program, prefix_args) = match launch_command(spec.id, &path, &env.vars).await {
+                Ok(command) => command,
+                Err(reason) => return Detection::broken(reason),
+            };
+            let printed = match probe_with_prefix(
+                registry,
+                env,
+                &program,
+                &prefix_args,
+                version_args,
+                &home(env),
+            )
+            .await
+            {
                 Ok(printed) => printed,
                 Err(reason) => return Detection::broken(reason),
             };
@@ -455,7 +511,8 @@ async fn detect_inner(
                 },
                 needs_download: false,
                 located: Some(Located {
-                    program: path,
+                    program,
+                    prefix_args,
                     node: None,
                 }),
             }
@@ -533,6 +590,7 @@ async fn detect_inner(
                 needs_download: !installed,
                 located: Some(Located {
                     program: user,
+                    prefix_args: Vec::new(),
                     node: Some(node),
                 }),
             }

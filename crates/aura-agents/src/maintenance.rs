@@ -178,8 +178,12 @@ fn npm_global_prefix(installation: &AgentInstallation) -> Option<String> {
 
 /// Before any helper runs, reject a launch symlink that now points at a different installation.
 pub fn check_unchanged(installation: &AgentInstallation) -> Result<(), MaintenanceError> {
-    let actual =
-        std::fs::canonicalize(&installation.launch_path).map_err(|_| MaintenanceError::Changed)?;
+    let path = std::path::Path::new(&installation.launch_path);
+    let actual = if cfg!(windows) && crate::npm_entry::is_shim(path) {
+        crate::npm_entry::entry(&installation.agent_id, path).ok_or(MaintenanceError::Changed)?
+    } else {
+        std::fs::canonicalize(path).map_err(|_| MaintenanceError::Changed)?
+    };
     let expected = installation
         .resolved_path
         .as_deref()

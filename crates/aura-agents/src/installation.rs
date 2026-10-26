@@ -9,8 +9,14 @@ pub(crate) fn native(
     launch_path: &str,
 ) -> Option<AgentInstallation> {
     let version = crate::catalog::parse_version(printed_version)?;
-    let resolved_path = std::fs::canonicalize(launch_path)
-        .ok()
+    let resolved_entry =
+        if cfg!(windows) && crate::npm_entry::is_shim(std::path::Path::new(launch_path)) {
+            crate::npm_entry::entry(agent_id, std::path::Path::new(launch_path))
+        } else {
+            None
+        };
+    let resolved_path = resolved_entry
+        .or_else(|| std::fs::canonicalize(launch_path).ok())
         .and_then(|path| path.into_os_string().into_string().ok());
     let channel = resolved_path
         .as_deref()
