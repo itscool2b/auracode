@@ -257,6 +257,11 @@ Application Control (4551), so this follow-up needs CI verification. No policy b
   nine helper tests before Application Control blocked a remaining integration executable. Linux
   ownership tests are added but await CI. WSL deployment/bridge and Windows daemon breakaway remain
   gated and pending; see [the host contract](host-supervision.md).
+- Independent review tightened cleanup confirmation further: unreadable escaped identities and
+  incomplete group enumeration remain unknown and retain recovery metadata. They never authorize
+  a signal; only matching pid/start identities do. Injected permission/parsing failures and pid
+  replacement regressions compile, and Windows all-target Clippy passes. Application Control
+  blocked their test executable and the macOS cross-check build scripts; execution awaits CI.
 
 M1e is progressing in the isolated `m1e-agent-catalog` worktree. Its first checkpoint adds typed
 native/WSL host identity, bounded WSL distribution decoding, installation channel classification from
