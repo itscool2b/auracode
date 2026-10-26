@@ -2642,3 +2642,42 @@ a checkout containing neither file, but still rejects a missing counterpart or a
 All six checker tests pass. A separate tracked-history and publication audit is underway because
 ignoring a file does not remove it from past commits. No remote history or repository visibility
 was changed.
+
+### Invitation enforcement and publication review
+
+The Rust API now enforces a bounded secret-backed invitation list for cloud access. Unknown excluded
+addresses cannot start account creation, and verification rechecks membership. Device, key, reset,
+record and blob routes check current eligibility even for an existing approved-device token. Missing
+or malformed configuration fails closed. Removed invitees retain authenticated account inspection,
+encrypted export, logout and freshly verified deletion. Verification cannot recreate a deleted,
+excluded account through a race. A real local email binding exposed a missing Message-ID; composed
+messages now include a random Message-ID and Date, and local invited delivery succeeds.
+
+Desktop and website explain the private preview without adding billing or publishing membership.
+The Rust client retains the session and local encryption key on invitation denial and pauses sync
+until an explicit refresh. It now also recognizes the API's bounded account-deleted response.
+Generated bindings are updated. Focused API, client, scheduler, browser and accessibility checks
+passed in the implementation worktrees; integrated deployment and final CI remain pending.
+
+The owner explicitly deferred license selection for further discussion. A bounded publication audit
+of reachable history found credential-shaped matches only in synthetic fixtures or a UI false
+positive, but this is not an exhaustive secret guarantee. Private instructions and planning notes
+remain in history, and the raw plan contains personal contact details. The recommended publication
+path is a reviewed sanitized snapshot with fresh public history after a license decision, preserving
+this repository privately. No export, history rewrite, repository visibility or project license
+change has been authorized or performed. Third-party font and dependency notices are being prepared
+separately from the project's own license.
+
+### Website performance and injected analytics
+
+The initial live PageSpeed laboratory report measured mobile performance 95, accessibility 100,
+best practices 92 and SEO 100, with LCP 2.551s on the emulated slow 4G profile. Desktop performance 100
+had LCP 0.562s, with the same other category scores. This is laboratory evidence, not field data or
+native desktop performance acceptance. The [baseline report](https://pagespeed.web.dev/analysis/https-auracode-si/hnq3mjyvfp?form_factor=desktop)
+predates the responsive WebP sources and must be remeasured after the integrated website deployment.
+
+The best-practices issue was Cloudflare-injected analytics blocked by the site's strict CSP. A
+host-scoped Cloudflare configuration rule now disables that injection on the apex and preview only;
+an HTML fetch confirms the beacon is absent. The CSP was not weakened. Responsive product screenshot
+variants are now wired into the website, reducing the small-screen image from 70,006 to 6,662 bytes at
+480px while preserving larger variants for larger displays. No CI run was dispatched for these edits.

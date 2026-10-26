@@ -143,3 +143,20 @@ Turnstile/hostname/action acceptance, signed-in device approval/sync/revocation/
 the operator identity, legal contact and retention review described in `apps/web/README.md`.
 The legal pages remain drafts. Preparation does not qualify those real-user flows or authorize
 test bypasses, and no denied Assets upload, auth or billing endpoint was retried.
+
+## Private preview and website analytics
+
+The current access policy is an invitation-only cloud preview, with no payment flows. Before
+activating the new API build, set `CLOUD_ACCOUNT_ALLOWLIST` independently on production and preview
+as a secret JSON array of reviewed addresses. Never put membership in source, logs or browser code.
+Missing, empty or malformed configuration denies cloud access. Existing accounts retain their
+authenticated export, logout and fresh-verification deletion paths when membership is removed.
+This is distinct from public account launch and does not resolve the legal-review requirements.
+
+Cloudflare automatically injected an analytics beacon which the strict website CSP rejected. On
+2026-10-26, the zone configuration ruleset `ac102c9e05884870928e61c835bccb08` was created in phase
+`http_config_settings` with rule `7cfc6746108a4bbc9879589be10f6262`, reference
+`auracode_disable_injected_analytics`. Its `set_config` action sets `disable_rum: true` for exactly
+`http.host in {"auracode.si" "preview.auracode.si"}`. Readback verified the rule and a browser-agent
+HTML fetch found no injected analytics. Unrelated sites and security controls were not changed.
+See Cloudflare's [configuration-rule settings](https://developers.cloudflare.com/rules/configuration-rules/settings/).
