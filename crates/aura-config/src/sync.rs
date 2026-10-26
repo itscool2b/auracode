@@ -8,11 +8,16 @@ use zeroize::Zeroizing;
 
 mod apply;
 mod merge;
+mod review;
 mod scan;
 mod snapshot;
 
 pub use apply::{ConfigApplyJournal, MAX_APPLY_RECEIPT_BYTES, MAX_APPLY_RECEIPTS};
 pub use merge::{ConfigDecision, ConfigOperation, LocalSnapshot, merge};
+pub use review::{
+    ConfigChoice, ConfigSyncInventory, ConfigSyncItem, ConfigSyncPreview, PreparedConfigReview,
+    inventory, prepare_review, set_device_only,
+};
 pub use scan::{ConfigScan, ConfigScanner, ConfigSkipped, ConfigSource};
 pub use snapshot::{ConfigContent, ConfigFile, ConfigFormat, ConfigIdentity, ConfigSnapshot};
 
@@ -21,7 +26,7 @@ pub use snapshot::{ConfigContent, ConfigFile, ConfigFormat, ConfigIdentity, Conf
 pub const MAX_SNAPSHOT_BYTES: usize = 3 * 1024 * 1024;
 pub const MAX_SYNC_ITEMS: usize = 8192;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigScope {
     Portable,

@@ -1734,3 +1734,14 @@ final combined CI remain pending.
 
 Added the profile-bound ConfigApplyJournal port with durable create, authenticated reads, compare-and-swap replacement, a bounded encrypted UUID index, and an 8 MiB receipt limit. Filesystem application and recovery remain in progress. The 44 existing aura-config tests pass against temporary synthetic files; no real configuration was read or changed.
 
+
+### M9 reviewed orchestration
+
+Added a paged read-only sync inventory and item-bound review of local, base, remote and merged content.
+Explicit conflict choices and device-only flags retain per-device state with revision checks. Missing
+blobs wait rather than becoming deletion or publication. Completion re-observes the local target and
+refuses to advance its base after a failed or partial apply. Interrupted applications keep the prior
+base and become explicitly skipped. Five orchestration regressions, pure sync DTO export and all-target
+configuration Clippy passed. The final skipped-state helper and sixth regression compile, but Windows
+Application Control blocked the updated test executable with 4551 before execution. No workaround was
+attempted. Native service, recovery UI and automatic network attachment remain in progress.

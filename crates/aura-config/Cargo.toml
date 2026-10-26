@@ -27,6 +27,7 @@ diffy = "0.5.2"
 tempfile.workspace = true
 specta-typescript.workspace = true
 specta-serde = "=0.0.13"
+tokio.workspace = true
 
 [lints]
 workspace = true
