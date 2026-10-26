@@ -1,11 +1,12 @@
 use super::{MAX_SECRET, Result, SecretStore, VaultEntry, VaultError, validate};
 use argon2::{Algorithm, Argon2, Params, Version};
+use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsSyncExt};
 use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
     aead::{Aead, KeyInit, Payload},
 };
 use std::{
-    fs::{self, File, OpenOptions, TryLockError},
+    fs::{self, File, TryLockError},
     io::{Read, Write},
     path::{Path, PathBuf},
     sync::Mutex,
@@ -63,9 +64,15 @@ impl PassphraseStore {
             return Err(VaultError::Corrupt);
         }
         let mut bytes = Vec::new();
-        File::open(&path)
-            .map_err(|_| VaultError::Unavailable)?
-            .take(MAX_FILE as u64 + 1)
+        let file = open_regular(
+            path.parent().ok_or(VaultError::Invalid)?,
+            &format!("{}.vault", entry.0),
+            false,
+        )?;
+        if file.metadata().map_err(|_| VaultError::Unavailable)?.len() > MAX_FILE as u64 {
+            return Err(VaultError::Corrupt);
+        }
+        file.take(MAX_FILE as u64 + 1)
             .read_to_end(&mut bytes)
             .map_err(|_| VaultError::Unavailable)?;
         if bytes.len() < HEADER + 17 || bytes.len() > MAX_FILE || !bytes.starts_with(MAGIC) {
@@ -206,19 +213,61 @@ fn location(directory: &Path, entry: &VaultEntry) -> Result<(PathBuf, File)> {
     {
         return Err(VaultError::Invalid);
     }
-    let mut options = OpenOptions::new();
-    options.create(true).truncate(false).read(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let lock = options
-        .open(lock_path)
-        .map_err(|_| VaultError::Unavailable)?;
+    let lock = open_regular(&directory, &format!("{}.lock", entry.0), true)?;
     lock.try_lock().map_err(|error| match error {
         TryLockError::WouldBlock => VaultError::Busy,
         TryLockError::Error(_) => VaultError::Unavailable,
     })?;
     Ok((path, lock))
+}
+
+/// Check the opened handle, not just a path that could change between metadata and open.
+fn open_regular(directory: &Path, name: &str, lock: bool) -> Result<File> {
+    let directory = cap_std::fs::Dir::open_ambient_dir(directory, cap_std::ambient_authority())
+        .map_err(|_| VaultError::Unavailable)?;
+    let mut options = cap_std::fs::OpenOptions::new();
+    options
+        .create(lock)
+        .truncate(false)
+        .read(true)
+        .write(lock)
+        .follow(FollowSymlinks::No)
+        .nonblock(true);
+    #[cfg(unix)]
+    {
+        use cap_std::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let file = directory
+        .open_with(name, &options)
+        .map_err(|_| VaultError::Unavailable)?
+        .into_std();
+    if !file
+        .metadata()
+        .map_err(|_| VaultError::Unavailable)?
+        .is_file()
+    {
+        return Err(VaultError::Invalid);
+    }
+    Ok(file)
+}
+
+#[cfg(test)]
+mod nofollow_tests {
+    use super::*;
+    #[test]
+    fn vault_and_lock_opens_reject_links_and_special_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let target = directory.path().join("target");
+        fs::write(&target, b"preserved").unwrap();
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&target, directory.path().join("link")).unwrap();
+            assert!(open_regular(directory.path(), "link", false).is_err());
+            assert!(open_regular(directory.path(), "link", true).is_err());
+        }
+        fs::create_dir(directory.path().join("directory")).unwrap();
+        assert!(open_regular(directory.path(), "directory", false).is_err());
+        assert_eq!(fs::read(target).unwrap(), b"preserved");
+    }
 }

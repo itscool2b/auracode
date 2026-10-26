@@ -15,6 +15,8 @@ sqlcipher = ["dep:rusqlite"]
 [dependencies]
 argon2 = { version = "0.6.0", default-features = false, features = ["alloc", "zeroize"] }
 base64 = "0.22.1"
+cap-std = "4.0.3"
+cap-fs-ext = "4.0.3"
 chacha20poly1305 = { version = "0.11.0", default-features = false, features = ["alloc", "zeroize"] }
 getrandom = "0.4.3"
 hkdf = "0.13.0"
