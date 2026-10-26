@@ -14,6 +14,7 @@
 //!
 //! [`Availability`]: aura_protocol::session::Availability
 
+mod candidates;
 pub mod catalog;
 pub mod config_vendor;
 mod detect;
@@ -24,6 +25,7 @@ pub mod installer;
 mod launch;
 pub mod maintenance;
 mod npm_entry;
+mod preferences;
 mod probe;
 pub mod releases;
 mod shared;

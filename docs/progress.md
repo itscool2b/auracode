@@ -2375,3 +2375,35 @@ All fourteen compiled Worker runtime cases pass, including the new Rust-client c
 unit is ignored in ordinary Cargo runs and invoked explicitly by the existing Worker runtime gate,
 which supplies only its own 127.0.0.1 endpoint and deterministic disposable session fixtures. This
 adds cross-component evidence without changing the production client's HTTPS-only rule.
+### Device-local executable selection
+
+The Agents screen now lists discovered executable entries in environment-override and PATH order,
+including broken entries and shadowed alternatives. Opening the picker explicitly probes versions;
+mounting the screen never selects a binary. The user can pin a ready executable or restore the
+environment default. Native transports retain their executable-only Windows policy; reviewed npm
+packages still resolve through their package bin without interpreting shell shims.
+
+Selections are provider-wide across alternate transports and saved atomically in auracode's local
+`agent-executables.json`, separate from portable Account data and vendor configuration. A missing or
+broken pinned executable refuses new starts. Corrupt preference data also fails closed. Changing a
+choice invalidates stale probe generations but never changes an already prepared launch or owned
+session. A file lock prevents lost updates between app processes. Refresh rechecks the exact chosen
+entry, and the desktop observes bin-directory/file metadata and symlink/package-bin targets every
+30 seconds; unchanged metadata does not launch probes. Existing throttled focus refresh remains.
+
+Discovery is bounded to eight executable entries and 256 PATH directories, with visible truncation
+and an additional saved choice when needed. Candidate version helpers retain their existing owned
+process timeout/output limits, with at most four candidate probes in flight per picker. Metadata
+polling can take up to one interval to notice changes; same-size replacements preserving all metadata
+are still checked by explicit/focus refresh. No executable contents, credential stores or vendor
+configuration files are scanned.
+
+Focused Windows tests cover ordered discovery, override rules, bounds, metadata additions/removals,
+in-place changes, durable selections, provider aliases, broken-first behavior, missing-selection
+refusal, default reset, corrupt preferences and selection during an older in-flight probe. Existing
+vendor maintenance regressions still pass. Exact native binding export, agents all-target Clippy,
+desktop library Clippy, desktop TypeScript and Chromium/WebKit selection/retry/reset/accessibility
+checks passed. The combined core all-target check exposed unrelated private key-restore calls in
+the existing Account fixtures; the lifecycle owner supplied their separate correction. Native macOS qualification and
+final integrated acceptance remain pending. No real agent, login, paid prompt, remote mutation,
+push or CI dispatch was performed.

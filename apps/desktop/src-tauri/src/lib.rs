@@ -21,6 +21,7 @@ pub mod account_config;
 pub mod account_preservation_commands;
 pub mod account_sync;
 pub mod accounts;
+pub mod agent_installation_commands;
 pub mod bindings;
 pub mod boot;
 pub mod catalog_refresh;

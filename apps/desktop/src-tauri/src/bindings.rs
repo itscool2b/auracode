@@ -109,6 +109,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::smoke_report,
             commands::agents_list,
             commands::agents_refresh,
+            crate::agent_installation_commands::agent_installations,
+            crate::agent_installation_commands::agent_select_installation,
             commands::agent_maintenance,
             commands::agent_auth_status,
             commands::agent_update,

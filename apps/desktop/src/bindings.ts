@@ -105,6 +105,8 @@ export const commands = {
 	 *  probe has not ended by then keep their last known availability.
 	 */
 	agentsRefresh: () => __TAURI_INVOKE<AgentEntry[]>("agents_refresh"),
+	agentInstallations: (agentId: string) => typedError<AgentInstallations, AppError>(__TAURI_INVOKE("agent_installations", { agentId })),
+	agentSelectInstallation: (agentId: string, path: string | null) => typedError<AgentInstallations, AppError>(__TAURI_INVOKE("agent_select_installation", { agentId, path })),
 	/**  Reviewed capabilities for the detected install, without running authentication or updates. */
 	agentMaintenance: (agentId: string) => typedError<AgentMaintenance, AppError>(__TAURI_INVOKE("agent_maintenance", { agentId })),
 	/**  Ask the vendor CLI for local auth status, retaining no account details or raw output. */
@@ -418,6 +420,25 @@ export type AgentInstallation = {
 	version: string,
 	channel: InstallChannel,
 	verification: VersionVerification,
+};
+
+/**  One executable in discovery order. Failed version probes remain visible and cannot be selected. */
+export type AgentInstallationCandidate = {
+	path: string,
+	availability: Availability,
+	installation: AgentInstallation | null,
+	selected: boolean,
+	source: string,
+};
+
+/**  Device-local executable preference. Paths never become portable chat or account metadata. */
+export type AgentInstallations = {
+	agent_id: string,
+	/**  None follows the environment override, then PATH order. An explicit missing path stays selected. */
+	preferred_path: string | null,
+	candidates: AgentInstallationCandidate[],
+	truncated: boolean,
+	notice: string | null,
 };
 
 /**  Actions this exact detected installation can perform through reviewed vendor commands. */

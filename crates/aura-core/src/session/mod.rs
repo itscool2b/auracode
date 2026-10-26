@@ -12,6 +12,7 @@
 //! chat reads `Stopped`.
 
 mod actor;
+mod agent_installations;
 mod changes;
 mod cloning;
 mod composer;

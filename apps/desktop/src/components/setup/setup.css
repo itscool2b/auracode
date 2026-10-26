@@ -630,3 +630,55 @@ html[data-motion="off"] * {
 .setup-clone-history li {
   margin-bottom: 18px;
 }
+
+.setup-installations {
+  margin-top: 16px;
+}
+.setup-installations fieldset {
+  border: 0;
+  padding: 0;
+  margin: 16px 0;
+  min-width: 0;
+}
+.setup-installations legend {
+  color: var(--o-text-2);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.setup-executable {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--o-line);
+  cursor: pointer;
+}
+.setup-executable > span {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.setup-executable input {
+  margin-top: 4px;
+  accent-color: var(--o-ink);
+}
+.setup-executable code {
+  overflow-wrap: anywhere;
+  font-family: var(--o-mono);
+  font-size: 12px;
+}
+.setup-executable small {
+  color: var(--o-text-2);
+  overflow-wrap: anywhere;
+}
+.setup-executable-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+}
+.setup-executable-actions > span {
+  color: var(--o-text-2);
+  font-size: 12px;
+}

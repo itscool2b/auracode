@@ -316,11 +316,12 @@ impl Outside {
         data_dir: &Path,
         rt: &Handle,
     ) -> Outside {
-        let detector = Detector::new(
+        let detector = Detector::with_preferences(
             Arc::clone(&env),
             Arc::clone(registry),
             data_dir.join(ADAPTERS_DIR),
             rt.clone(),
+            data_dir.join("agent-executables.json"),
         );
         Outside {
             env,

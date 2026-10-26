@@ -109,7 +109,7 @@ pub(crate) fn locate_user_binary(
 }
 
 /// Under Windows rules a program is a `.exe` file; on Unix, a file with an execute bit.
-fn runnable(path: &Path, windows: bool) -> bool {
+pub(crate) fn runnable(path: &Path, windows: bool) -> bool {
     if windows {
         return path.is_file()
             && path
@@ -129,7 +129,7 @@ fn runnable(path: &Path, windows: bool) -> bool {
 }
 
 /// `PATH` split the Windows way (`;`, quotes trimmed), absolute entries only.
-fn windows_path_dirs(vars: &EnvMap) -> Vec<PathBuf> {
+pub(crate) fn windows_path_dirs(vars: &EnvMap) -> Vec<PathBuf> {
     let Some(path) = vars.get(&EnvKey::from("PATH")) else {
         return Vec::new();
     };
@@ -322,14 +322,20 @@ fn command_name(program: &Path) -> String {
     )
 }
 
-/// Detects one agent with `env`.
-pub(crate) async fn detect(
+/// A reviewed candidate is probed directly, without rewriting PATH or its helper resolution.
+pub(crate) async fn detect_at(
     spec: &AgentSpec,
     env: &Arc<ResolvedEnv>,
     registry: &LeftoverRegistry,
     adapters_dir: &Path,
+    candidate: Option<&Path>,
 ) -> Detection {
-    let mut detected = detect_inner(spec, env, registry, adapters_dir).await;
+    if let Some(path) = candidate
+        && (!path.is_absolute() || !path.is_file())
+    {
+        return Detection::missing("The selected executable is no longer available. Choose another installation or use the default.".into());
+    }
+    let mut detected = detect_inner(spec, env, registry, adapters_dir, candidate).await;
     if let Availability::Ready {
         version: Some(version),
         path,
@@ -353,6 +359,7 @@ async fn detect_inner(
     env: &Arc<ResolvedEnv>,
     registry: &LeftoverRegistry,
     adapters_dir: &Path,
+    candidate: Option<&Path>,
 ) -> Detection {
     match &spec.recipe {
         Recipe::Builtin => Detection {
@@ -370,7 +377,10 @@ async fn detect_inner(
             min_version,
             ..
         } => {
-            let Some(path) = find_program(program, &env.vars) else {
+            let Some(path) = candidate
+                .map(Path::to_owned)
+                .or_else(|| find_program(program, &env.vars))
+            else {
                 return Detection::missing(format!("{program} was not found on your PATH."));
             };
             let (program, prefix_args) = match launch_command(spec.id, &path, &env.vars).await {
@@ -430,10 +440,18 @@ async fn detect_inner(
             }
         }
         Recipe::NativeBinary { user_binary, .. } => {
-            let path = match locate_user_binary(user_binary, &env.vars, cfg!(windows)) {
+            let path = match candidate
+                .map(|path| UserBinaryLookup::Found(path.to_owned()))
+                .unwrap_or_else(|| locate_user_binary(user_binary, &env.vars, cfg!(windows)))
+            {
                 UserBinaryLookup::Found(path) => path,
                 lookup => return Detection::missing(missing_native_binary(user_binary, &lookup)),
             };
+            if !runnable(&path, cfg!(windows)) {
+                return Detection::broken(
+                    "This native driver requires an executable, not a shell shim.".into(),
+                );
+            }
             let printed =
                 match probe(registry, env, &path, user_binary.version_args, &home(env)).await {
                     Ok(printed) => printed,
@@ -476,7 +494,10 @@ async fn detect_inner(
             major,
             ..
         } => {
-            let Some(path) = find_program(program, &env.vars) else {
+            let Some(path) = candidate
+                .map(Path::to_owned)
+                .or_else(|| find_program(program, &env.vars))
+            else {
                 return Detection::missing(format!(
                     "{program} was not found on your PATH. Install the official {} distribution first.",
                     spec.name
@@ -550,10 +571,18 @@ async fn detect_inner(
                     node_version.as_deref().unwrap_or("an unknown version"),
                 ));
             }
-            let user = match locate_user_binary(user_binary, &env.vars, cfg!(windows)) {
+            let user = match candidate
+                .map(|path| UserBinaryLookup::Found(path.to_owned()))
+                .unwrap_or_else(|| locate_user_binary(user_binary, &env.vars, cfg!(windows)))
+            {
                 UserBinaryLookup::Found(path) => path,
                 lookup => return Detection::missing(missing_user_binary(user_binary, &lookup)),
             };
+            if !runnable(&user, cfg!(windows)) {
+                return Detection::broken(
+                    "This adapter requires an executable, not a shell shim.".into(),
+                );
+            }
             let printed =
                 match probe(registry, env, &user, user_binary.version_args, &probe_dir).await {
                     Ok(printed) => printed,

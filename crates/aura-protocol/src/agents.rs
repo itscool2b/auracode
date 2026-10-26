@@ -108,6 +108,27 @@ pub struct AgentInstallation {
     pub verification: VersionVerification,
 }
 
+/// One executable in discovery order. Failed version probes remain visible and cannot be selected.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct AgentInstallationCandidate {
+    pub path: String,
+    pub availability: crate::session::Availability,
+    pub installation: Option<AgentInstallation>,
+    pub selected: bool,
+    pub source: String,
+}
+
+/// Device-local executable preference. Paths never become portable chat or account metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct AgentInstallations {
+    pub agent_id: String,
+    /// None follows the environment override, then PATH order. An explicit missing path stays selected.
+    pub preferred_path: Option<String>,
+    pub candidates: Vec<AgentInstallationCandidate>,
+    pub truncated: bool,
+    pub notice: Option<String>,
+}
+
 /// The vendor's own local authentication check. This does not promise a successful paid request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(tag = "state", rename_all = "snake_case")]

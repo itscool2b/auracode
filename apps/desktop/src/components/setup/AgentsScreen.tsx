@@ -5,6 +5,7 @@ import type { AgentEntry } from "../../bindings";
 import { type AppStore, agentChoice } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
 import { AgentActions } from "../chat/AgentActions";
+import { AgentInstallations } from "./AgentInstallations";
 import { InstallAgent } from "./InstallAgent";
 import "./setup.css";
 
@@ -85,7 +86,12 @@ export function AgentRoster({
                   </p>
                 ) : null}
                 {ready ? (
-                  <AgentActions agent={agent} transport={transport} onRefresh={onRefresh} />
+                  <AgentActions
+                    key={`${agent.id}:${agent.installation?.launch_path}:${agent.installation?.version}`}
+                    agent={agent}
+                    transport={transport}
+                    onRefresh={onRefresh}
+                  />
                 ) : (
                   <div>
                     <p>
@@ -107,6 +113,9 @@ export function AgentRoster({
                     ) : null}
                   </div>
                 )}
+                {agent.id !== "demo" ? (
+                  <AgentInstallations agentId={agent.id} onChanged={onRefresh} />
+                ) : null}
                 {!compact ? (
                   <p className="setup-meta">
                     Transport: {agent.id} · Last checked integration: {agent.last_verified}

@@ -33,6 +33,8 @@ use crate::launch::{self, LaunchError};
 use crate::probe::{self, BUILT_IN, Detection};
 use crate::shared::SharedTask;
 
+mod selections;
+
 /// Detects agents and prepares their launches.
 #[derive(Debug)]
 pub struct Detector {
@@ -65,10 +67,16 @@ struct Live {
     adapters_dir: PathBuf,
     rt: Handle,
     state: Mutex<LiveState>,
+    preferences: Option<PathBuf>,
+    selection_gate: tokio::sync::Mutex<()>,
 }
 
 #[derive(Default)]
 struct LiveState {
+    metadata_fingerprint: Option<u64>,
+    selections: crate::preferences::Selections,
+    preference_error: Option<String>,
+    configuration_revision: u64,
     release_checks_enabled: bool,
     releases: HashMap<String, aura_protocol::agents::LatestRelease>,
     maintenance: HashSet<String>,
@@ -139,9 +147,28 @@ impl Live {
         let live = Arc::clone(self);
         let id = spec.id;
         let spec = spec.clone();
+        let selected = state
+            .selections
+            .get(crate::installation::provider_namespace(spec.id))
+            .cloned();
+        let preference_error = state.preference_error.clone();
         let probe = SharedTask::spawn(&self.rt, async move {
             let env = live.env.get().await;
-            let detection = probe::detect(&spec, &env, &live.registry, &live.adapters_dir).await;
+            let detection = match preference_error {
+                Some(reason) if !matches!(spec.recipe, Recipe::Builtin) => {
+                    Detection::missing(reason)
+                }
+                _ => {
+                    probe::detect_at(
+                        &spec,
+                        &env,
+                        &live.registry,
+                        &live.adapters_dir,
+                        selected.as_deref(),
+                    )
+                    .await
+                }
+            };
             let mut state = lock(&live.state);
             let newer = state
                 .results
@@ -177,7 +204,11 @@ impl Live {
             return detection;
         }
         for _ in 0..ATTEMPTS {
+            let revision = lock(&self.state).configuration_revision;
             if let Some(detection) = self.probe(spec, false).wait().await {
+                if lock(&self.state).configuration_revision != revision {
+                    continue;
+                }
                 return detection;
             }
         }
@@ -740,6 +771,10 @@ impl Detector {
         let Mode::Live(live) = &self.mode else {
             return Err(MaintenanceError::Unsupported);
         };
+        let _selection = live
+            .selection_gate
+            .try_lock()
+            .map_err(|_| MaintenanceError::AlreadyRunning)?;
         let spec = self.spec(id).ok_or(MaintenanceError::Unsupported)?;
         let provider = crate::installation::provider_namespace(id).to_owned();
         if !lock(&live.state).maintenance.insert(provider.clone()) {
@@ -799,16 +834,50 @@ impl Detector {
         adapters_dir: PathBuf,
         rt: Handle,
     ) -> Arc<Detector> {
+        Self::create(env, registry, adapters_dir, rt, None)
+    }
+
+    /// Device-local app preferences are loaded before any startup probe. Tests and CLI callers
+    /// using `new` retain an isolated, non-persistent detector.
+    pub fn with_preferences(
+        env: Arc<EnvResolver>,
+        registry: Arc<LeftoverRegistry>,
+        adapters_dir: PathBuf,
+        rt: Handle,
+        preferences: PathBuf,
+    ) -> Arc<Detector> {
+        Self::create(env, registry, adapters_dir, rt, Some(preferences))
+    }
+
+    fn create(
+        env: Arc<EnvResolver>,
+        registry: Arc<LeftoverRegistry>,
+        adapters_dir: PathBuf,
+        rt: Handle,
+        preferences: Option<PathBuf>,
+    ) -> Arc<Detector> {
+        let mut state = LiveState::default();
+        if let Some(path) = &preferences {
+            match crate::preferences::read(path) {
+                Ok(selections) => state.selections = selections,
+                Err(error) => state.preference_error = Some(error),
+            }
+        }
         let live = Arc::new(Live {
             specs: catalog().to_vec(),
             env,
             registry,
             adapters_dir,
             rt: rt.clone(),
-            state: Mutex::new(LiveState::default()),
+            state: Mutex::new(state),
+            preferences,
+            selection_gate: tokio::sync::Mutex::new(()),
         });
         let background = Arc::clone(&live);
         rt.spawn(async move { background.detect_every(false).await });
+        if live.preferences.is_some() {
+            selections::observe(&live);
+        }
         Arc::new(Detector {
             mode: Mode::Live(live),
             forgotten: Mutex::new(Vec::new()),
@@ -866,6 +935,7 @@ impl Detector {
                     }
                 }
                 Mode::Live(live) => {
+                    selections::refresh_preferences(live).await;
                     live.env.refresh();
                     live.detect_every(true).await;
                 }
