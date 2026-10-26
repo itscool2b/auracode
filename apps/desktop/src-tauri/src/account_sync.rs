@@ -76,11 +76,22 @@ pub(crate) async fn attach(app: &tauri::AppHandle) {
     let mut status = engine.subscribe();
     let app = app.clone();
     tokio::spawn(async move {
+        let mut configured_at = None;
         loop {
             if !generation.is_current() {
                 break;
             }
             let value = status.borrow().clone();
+            if value.state == aura_protocol::account::AccountSyncState::Idle
+                && value.last_sync_at.is_some()
+                && configured_at != value.last_sync_at
+            {
+                configured_at = value.last_sync_at;
+                crate::config_sync::after_exchange(&app, generation.clone()).await;
+                if !generation.is_current() {
+                    break;
+                }
+            }
             let _ = app.emit(SYNC_CHANGED, (&profile.id, &value));
             if value.state == aura_protocol::account::AccountSyncState::Inactive {
                 break;

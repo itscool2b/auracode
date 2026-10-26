@@ -120,7 +120,10 @@ export function ConfigSyncPanel({
   return (
     <section className="settings-section config-sync" aria-label="Configuration sync">
       <div className="config-sync-toolbar">
-        <p>Review changes before they reach your agents. Credentials stay on each device.</p>
+        <p>
+          Choose what to sync once. Selected items stay in sync automatically; conflicts need your
+          review. Credentials stay on each device.
+        </p>
         <button
           type="button"
           className="ui-button"

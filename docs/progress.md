@@ -1909,3 +1909,17 @@ The ordinary Windows native build now compiles the integrated Account worker, st
 Start fresh in the production header and error card now opens a visible continuation review. The new FreshSession action builds bounded context from the current agent's complete saved conversation, preserving the existing accepted-steering filter. Confirmation saves the exact handoff, retains source turns and archive state, and starts no agent or prompt. The next explicit message starts without the missing native ID and includes the reviewed context. Existing resume/retry controls keep their meaning, and no vendor stderr is guessed to trigger an automatic fallback.
 
 All seven core continuation tests passed, including a failed native resume followed by reviewed recovery, archive preservation, same-chat history retention and exact next-message context. Fifty-one focused frontend tests, TypeScript checking, exact Windows binding export, Biome, instruction parity and diff checks passed. Chromium and WebKit verified both Start fresh entry points, cancellation, visible context, confirmation without a send, retained source text and the saved handoff, with an axe scan. Core-only all-target Clippy passed; the dependency-inclusive run exposed an inherited collapsible_if warning in aura-config/src/sync/review.rs, reported to its owner. Native live-agent and full Windows/macOS integrated acceptance remain pending. No paid prompt or real native session was used.
+
+### Managed configuration automation and acknowledgment recovery
+- Integrated encrypted ownership claims into every reviewed configuration application. A fresh
+  explicit review can reconcile an uncertain claim while preserving its original device baseline.
+- Successful Account exchanges process at most eight previously selected items per batch, under
+  profile admission and the Library mutation lock. First-link, open reviews, device-only/skipped
+  items, vendor declarations, conflicts and unfinished receipts remain manual. Unchanged bases
+  do not generate writes. History restoration pauses automatic sync before changing files.
+- Twenty-seven focused aura-config library/review tests pass, including the previously pending
+  manual MCP requirements and Codex plugin regressions, automatic selection/base preservation,
+  conflict exclusions and failed-acknowledgment recovery. Desktop TypeScript checking passes.
+- Native all-target Clippy reached the changed configuration crate but Windows Application Control
+  blocked darling_macro-b433f63937ec6736.dll with error 4551. No policy changes or bypass attempted;
+  combined native qualification remains pending the final permitted Windows/macOS verification.

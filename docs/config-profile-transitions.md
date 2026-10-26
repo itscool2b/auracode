@@ -34,6 +34,14 @@ Automatic sync considers only `store.load()?.document.items` entries with `commi
 `pending == None`, plus an established merge base. First-link, vendor-required, device-only,
 conflicting, skipped and recovery cases remain manual. The store has no implicit network behavior.
 
+The desktop runs at most eight managed identities after a successful encrypted Account exchange,
+using a rotating cursor. Open manual reviews are excluded. It shares the Library mutation lock and
+profile admission with manual application, and unchanged bases do not generate writes. The shared
+executor revalidates each review, records ownership before effects and commits ownership only after
+file/publication/base acknowledgment. History restoration persists a skipped marker before changing
+files, so an automatic cycle cannot immediately republish the restored version. Configuration sync
+shows pending claims and offers a fresh explicit review after filesystem recovery.
+
 The whole ownership document is one authenticated, atomically replaced encrypted record, bounded
 to 8 MiB and the existing maximum item count. This avoids a crash gap between an item index and its
 snapshots. A size-limit failure occurs before replacement or vendor mutation. Missing/corrupt state

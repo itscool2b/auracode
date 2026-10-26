@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 mod apply;
+pub mod automatic;
 mod edit;
 pub mod managed;
 mod mcp;

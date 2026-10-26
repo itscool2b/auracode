@@ -10,6 +10,7 @@ struct Data {
     device: BTreeMap<String, ConfigDeviceState>,
     writes: usize,
     offline: bool,
+    fail_save: bool,
 }
 #[derive(Default)]
 struct Port(Mutex<Data>);
@@ -108,6 +109,9 @@ impl ConfigSyncPort for Port {
     ) -> ConfigFuture<'a, ()> {
         Box::pin(async move {
             let mut data = self.0.lock().unwrap();
+            if std::mem::take(&mut data.fail_save) {
+                return Err(ConfigPortError::Storage);
+            }
             let old = data.device.get(id);
             if old.and_then(|state| state.revision.as_ref()) != state.revision.as_ref()
                 || old
@@ -353,4 +357,259 @@ async fn interrupted_application_marks_waiting_without_advancing_base() {
     assert_eq!(view.items[0].operation, ConfigOperation::Wait);
     assert!(view.items[0].skipped);
     assert_eq!(port.0.lock().unwrap().device[&id].snapshot, before);
+}
+
+struct Managed(Mutex<Vec<u8>>);
+impl Default for Managed {
+    fn default() -> Self {
+        Self(Mutex::new(
+            managed::ManagedDocument::default()
+                .encode()
+                .unwrap()
+                .to_vec(),
+        ))
+    }
+}
+fn hash(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    format!("{:x}", sha2::Sha256::digest(bytes))
+}
+impl managed::ConfigManagedStore for Managed {
+    fn load(&self) -> Result<managed::ManagedRead, ConfigPortError> {
+        let bytes = self.0.lock().unwrap();
+        Ok(managed::ManagedRead {
+            revision: hash(&bytes),
+            document: managed::ManagedDocument::decode(&bytes)?,
+        })
+    }
+    fn save(
+        &self,
+        expected: &str,
+        document: &managed::ManagedDocument,
+    ) -> Result<(), ConfigPortError> {
+        let mut bytes = self.0.lock().unwrap();
+        if hash(&bytes) != expected {
+            return Err(ConfigPortError::Stale);
+        }
+        *bytes = document.encode()?.to_vec();
+        Ok(())
+    }
+}
+#[derive(Default)]
+struct Journal(Mutex<BTreeMap<String, Vec<u8>>>);
+impl ConfigApplyJournal for Journal {
+    fn create(&self, id: &str, bytes: Zeroizing<Vec<u8>>) -> Result<(), ConfigPortError> {
+        let mut items = self.0.lock().unwrap();
+        if items.contains_key(id) {
+            return Err(ConfigPortError::Stale);
+        }
+        items.insert(id.into(), bytes.to_vec());
+        Ok(())
+    }
+    fn read(&self, id: &str) -> Result<Zeroizing<Vec<u8>>, ConfigPortError> {
+        self.0
+            .lock()
+            .unwrap()
+            .get(id)
+            .cloned()
+            .map(Zeroizing::new)
+            .ok_or(ConfigPortError::Invalid)
+    }
+    fn replace(
+        &self,
+        id: &str,
+        expected: &str,
+        bytes: Zeroizing<Vec<u8>>,
+    ) -> Result<(), ConfigPortError> {
+        let mut items = self.0.lock().unwrap();
+        if items.get(id).map(|item| hash(item)).as_deref() != Some(expected) {
+            return Err(ConfigPortError::Stale);
+        }
+        items.insert(id.into(), bytes.to_vec());
+        Ok(())
+    }
+    fn list(&self) -> Result<Vec<String>, ConfigPortError> {
+        Ok(self.0.lock().unwrap().keys().cloned().collect())
+    }
+}
+fn revised(snapshot: &ConfigSnapshot, text: &str) -> ConfigSnapshot {
+    let mut remote = snapshot.clone();
+    let Some(ConfigContent::Files(files)) = &mut remote.content else {
+        panic!("file fixture")
+    };
+    files.get_mut("").unwrap().bytes = text.as_bytes().to_vec();
+    remote
+}
+
+#[tokio::test]
+async fn automatic_sync_requires_explicit_ownership_and_preserves_its_original_baseline() {
+    use managed::ConfigManagedStore;
+    let (temp, scanner, local) = fixture();
+    let port = Port::default();
+    let store = Managed::default();
+    let journal = Journal::default();
+    let id = local.identity.id().unwrap();
+    // A base predating managed claims is not permission to change this device.
+    prepare_review(&port, &scanner, &id, ConfigChoice::Automatic)
+        .await
+        .unwrap()
+        .complete(&port, &scanner)
+        .await
+        .unwrap();
+    let remote = revised(&local, "remote instructions\n");
+    port.remote(&remote);
+    let untouched =
+        automatic::automatic_batch(&port, &scanner, &journal, &store, None, &Default::default())
+            .await
+            .unwrap();
+    assert_eq!(untouched.completed, 0);
+    assert_eq!(
+        fs::read_to_string(temp.path().join("config/AGENTS.md")).unwrap(),
+        "local instructions\n"
+    );
+    let review = prepare_review(&port, &scanner, &id, ConfigChoice::Automatic)
+        .await
+        .unwrap();
+    let ConfigApplyPreparation::Ready(files) = scanner
+        .prepare_apply(remote.clone(), &review.local)
+        .unwrap()
+    else {
+        panic!("ready")
+    };
+    assert!(
+        automatic::execute_review(
+            &port,
+            &scanner,
+            &journal,
+            &store,
+            &review,
+            Some(files),
+            None
+        )
+        .await
+        .unwrap()
+        .completed
+    );
+    let later = revised(&local, "later remote instructions\n");
+    port.remote(&later);
+    let batch =
+        automatic::automatic_batch(&port, &scanner, &journal, &store, None, &Default::default())
+            .await
+            .unwrap();
+    assert_eq!(batch.completed, 1);
+    let managed = store.load().unwrap().document;
+    assert!(managed.items[&id].baseline == local);
+    assert!(managed.items[&id].saved == later);
+    assert!(!managed.has_pending());
+    let before = port.0.lock().unwrap().writes;
+    assert_eq!(
+        automatic::automatic_batch(&port, &scanner, &journal, &store, None, &Default::default())
+            .await
+            .unwrap()
+            .completed,
+        0
+    );
+    assert_eq!(port.0.lock().unwrap().writes, before);
+}
+
+#[tokio::test]
+async fn automatic_sync_respects_open_reviews_device_only_and_conflicts() {
+    let (temp, scanner, local) = fixture();
+    let port = Port::default();
+    let store = Managed::default();
+    let journal = Journal::default();
+    let id = local.identity.id().unwrap();
+    let review = prepare_review(&port, &scanner, &id, ConfigChoice::Automatic)
+        .await
+        .unwrap();
+    automatic::execute_review(&port, &scanner, &journal, &store, &review, None, None)
+        .await
+        .unwrap();
+    port.remote(&revised(&local, "remote replacement\n"));
+    let open = [id.clone()].into_iter().collect();
+    assert_eq!(
+        automatic::automatic_batch(&port, &scanner, &journal, &store, None, &open)
+            .await
+            .unwrap()
+            .completed,
+        0
+    );
+    set_device_only(&port, &scanner, &id, true).await.unwrap();
+    assert_eq!(
+        automatic::automatic_batch(&port, &scanner, &journal, &store, None, &Default::default())
+            .await
+            .unwrap()
+            .completed,
+        0
+    );
+    set_device_only(&port, &scanner, &id, false).await.unwrap();
+    fs::write(
+        temp.path().join("config/AGENTS.md"),
+        "conflicting local replacement\n",
+    )
+    .unwrap();
+    let batch =
+        automatic::automatic_batch(&port, &scanner, &journal, &store, None, &Default::default())
+            .await
+            .unwrap();
+    assert_eq!(batch.completed, 0);
+    assert!(batch.needs_attention);
+    assert_eq!(
+        fs::read_to_string(temp.path().join("config/AGENTS.md")).unwrap(),
+        "conflicting local replacement\n"
+    );
+    assert!(journal.list().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn uncertain_acknowledgment_stays_pending_until_a_fresh_explicit_review_recovers_it() {
+    use managed::ConfigManagedStore;
+    let (_temp, scanner, local) = fixture();
+    let port = Port::default();
+    let store = Managed::default();
+    let journal = Journal::default();
+    let id = local.identity.id().unwrap();
+    let review = prepare_review(&port, &scanner, &id, ConfigChoice::Automatic)
+        .await
+        .unwrap();
+    port.0.lock().unwrap().fail_save = true;
+    let outcome = automatic::execute_review(&port, &scanner, &journal, &store, &review, None, None)
+        .await
+        .unwrap();
+    assert!(!outcome.completed);
+    let pending = store.load().unwrap().document;
+    let token = pending.items[&id].pending.as_ref().unwrap().token.clone();
+    assert!(pending.items[&id].baseline == local);
+    assert_eq!(
+        automatic::automatic_batch(&port, &scanner, &journal, &store, None, &Default::default())
+            .await
+            .unwrap()
+            .completed,
+        0
+    );
+    let fresh = prepare_review(&port, &scanner, &id, ConfigChoice::Automatic)
+        .await
+        .unwrap();
+    let claim = managed::ConfigClaim {
+        id: id.clone(),
+        token,
+    };
+    assert!(
+        automatic::execute_review(
+            &port,
+            &scanner,
+            &journal,
+            &store,
+            &fresh,
+            None,
+            Some(&claim)
+        )
+        .await
+        .unwrap()
+        .completed
+    );
+    let recovered = store.load().unwrap().document;
+    assert!(recovered.items[&id].baseline == local);
+    assert!(recovered.items[&id].committed);
+    assert!(!recovered.has_pending());
 }

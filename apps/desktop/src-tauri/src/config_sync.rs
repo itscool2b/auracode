@@ -1,7 +1,7 @@
 //! Account-bound configuration reviews. A renderer never chooses a profile, root, key or receipt
 //! payload. Owned work keeps profile and filesystem admission until durable completion.
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -11,8 +11,10 @@ use aura_config::sync::{
     ConfigOperation, ConfigPortError, ConfigReceiptStatus, ConfigScanner, ConfigSyncInventory,
     ConfigSyncOutcome, ConfigSyncPreview, ConfigSyncReceipt, PreparedConfigApply,
     PreparedConfigReview,
+    automatic::{automatic_batch, execute_review},
+    managed::ConfigClaim,
 };
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::{
     account_config::AccountConfigServices,
@@ -30,11 +32,14 @@ struct Pending {
     scanner: ConfigScanner,
     review: PreparedConfigReview,
     files: Option<Box<PreparedConfigApply>>,
+    claim: Option<ConfigClaim>,
 }
 
 pub struct ConfigSyncService {
     pending: Mutex<HashMap<String, Pending>>,
     previews: Arc<tokio::sync::Semaphore>,
+    automatic_cursor: Mutex<Option<String>>,
+    automatic_notice: Mutex<Option<String>>,
 }
 
 impl Default for ConfigSyncService {
@@ -42,6 +47,8 @@ impl Default for ConfigSyncService {
         Self {
             pending: Mutex::default(),
             previews: Arc::new(tokio::sync::Semaphore::new(4)),
+            automatic_cursor: Mutex::default(),
+            automatic_notice: Mutex::default(),
         }
     }
 }
@@ -52,6 +59,8 @@ impl ConfigSyncService {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clear();
+        *crate::sync::lock(&self.automatic_cursor) = None;
+        *crate::sync::lock(&self.automatic_notice) = None;
     }
     fn prune(&self) {
         self.pending
@@ -102,8 +111,10 @@ where
 pub async fn config_sync_inventory(
     state: State<'_, AppState>,
     library: State<'_, Arc<LibraryService>>,
+    service: State<'_, Arc<ConfigSyncService>>,
     after: Option<String>,
 ) -> Result<ConfigSyncInventory, AppError> {
+    let notice = crate::sync::lock(&service.automatic_notice).clone();
     run(&state, &library, move |work, account| {
         let mut result = work.runtime.block_on(sync::inventory(
             account.port.as_ref(),
@@ -112,6 +123,14 @@ pub async fn config_sync_inventory(
             after.as_deref(),
         ))?;
         result.notices.extend(work.notices);
+        result.notices.extend(notice);
+        let claims = account.managed.load()?.document;
+        for item in &mut result.items {
+            if claims.items.get(&item.id).is_some_and(|claim| claim.pending.is_some()) {
+                item.skipped = true;
+                item.detail = Some("An earlier synchronization was not fully acknowledged. Resolve any History recovery, then review this item again before switching profiles.".into());
+            }
+        }
         Ok(result)
     })
     .await
@@ -144,6 +163,12 @@ pub async fn config_sync_preview(
             choice,
         ))?;
         review.preview.warnings.extend(work.notices);
+        let claim = account.managed.load()?.document.items.get(&id)
+            .and_then(|item| item.pending.as_ref())
+            .map(|pending| ConfigClaim { id: id.clone(), token: pending.token.clone() });
+        if claim.is_some() {
+            review.preview.warnings.push("This fresh review reconciles an unfinished Account claim. The original device baseline is preserved.".into());
+        }
         let unresolved = work
             .scanner
             .apply_history(account.journal.as_ref())?
@@ -190,6 +215,7 @@ pub async fn config_sync_preview(
                         scanner: work.scanner,
                         review,
                         files,
+                        claim,
                     },
                 );
         }
@@ -206,30 +232,6 @@ pub fn config_sync_cancel(service: State<'_, Arc<ConfigSyncService>>, token: Str
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .remove(&token);
-}
-
-fn incomplete(
-    review: &PreparedConfigReview,
-    work: &Work,
-    account: &AccountConfigServices,
-    receipt_id: Option<String>,
-    message: String,
-) -> ConfigSyncOutcome {
-    let retained = work
-        .runtime
-        .block_on(review.retain_skipped(account.port.as_ref()));
-    ConfigSyncOutcome {
-        item_id: review.preview.item.id.clone(),
-        receipt_id,
-        completed: false,
-        message: if retained.is_ok() {
-            message
-        } else {
-            format!(
-                "{message} The skipped marker could not be saved. The previous base and any recovery receipt remain available; refresh before retrying."
-            )
-        },
-    }
 }
 
 #[tauri::command]
@@ -253,33 +255,73 @@ pub async fn config_sync_apply(
             )
         })?;
     run(&state, &library, move |work, account| {
-        if !pending.generation.is_current() || pending.created.elapsed() >= REVIEW_LIFETIME { return Err(ConfigPortError::Stale); }
-        if !pending.scanner.same_sources(&work.scanner) { return Err(ConfigPortError::Stale); }
-        let scanner = &work.scanner;
-        let review = &pending.review;
-        if scanner.apply_history(account.journal.as_ref())?.iter().any(|record|
-            record.identity.id().as_deref() == Ok(review.preview.item.id.as_str()) && record.status == ConfigApplyStatus::RecoveryRequired) {
+        if !pending.generation.is_current() || pending.created.elapsed() >= REVIEW_LIFETIME {
             return Err(ConfigPortError::Stale);
         }
-        work.runtime.block_on(review.revalidate(account.port.as_ref(), scanner))?;
-        let mut receipt_id = None;
-        if let Some(prepared) = pending.files {
-            let id = prepared.preview().id.clone();
-            match scanner.apply(*prepared, account.journal.as_ref()) {
-                Ok(ConfigApplyResult::Applied { id }) => receipt_id = Some(id),
-                Ok(ConfigApplyResult::NeedsRecovery { id }) => return Ok(incomplete(review, &work, account, Some(id), "The local change needs recovery. Open History to restore it before retrying.".into())),
-                Err(error) => {
-                    let recorded = scanner.apply_history(account.journal.as_ref()).ok().filter(|items| items.iter().any(|item|item.id == id)).map(|_|id);
-                    return Ok(incomplete(review, &work, account, recorded, format!("The local change could not finish: {error}")));
-                }
-            }
+        if !pending.scanner.same_sources(&work.scanner) {
+            return Err(ConfigPortError::Stale);
         }
-        if let Err(error) = work.runtime.block_on(review.complete(account.port.as_ref(), scanner)) {
-            return Ok(incomplete(review, &work, account, receipt_id, format!("The configuration was not acknowledged as synchronized: {error} Review the item again.")));
+        let scanner = &work.scanner;
+        let review = &pending.review;
+        if scanner
+            .apply_history(account.journal.as_ref())?
+            .iter()
+            .any(|record| {
+                record.identity.id().as_deref() == Ok(review.preview.item.id.as_str())
+                    && record.status == ConfigApplyStatus::RecoveryRequired
+            })
+        {
+            return Err(ConfigPortError::Stale);
         }
-        Ok(ConfigSyncOutcome { item_id: review.preview.item.id.clone(), receipt_id, completed: true,
-            message: "Configuration saved to this Account profile. Cloud delivery is shown in Account sync status.".into() })
-    }).await
+        work.runtime.block_on(execute_review(
+            account.port.as_ref(),
+            scanner,
+            account.journal.as_ref(),
+            account.managed.as_ref(),
+            review,
+            pending.files,
+            pending.claim.as_ref(),
+        ))
+    })
+    .await
+}
+
+/// Runs after a successful encrypted exchange. The owned worker retains all profile and mutation
+/// guards; profile publication cannot race a late batch from the departing Account.
+pub(crate) async fn after_exchange(app: &tauri::AppHandle, generation: ProfileGeneration) {
+    if !generation.is_current() {
+        return;
+    }
+    let state = app.state::<AppState>();
+    if state.quit.is_quitting() || state.app_info().profile_switching {
+        return;
+    }
+    let library = app.state::<Arc<LibraryService>>();
+    let service = Arc::clone(&app.state::<Arc<ConfigSyncService>>());
+    let worker = service.clone();
+    let expected = generation.clone();
+    let result = run(&state, &library, move |work, account| {
+        if !expected.is_current() { return Err(ConfigPortError::Stale); }
+        worker.prune();
+        let reviewed: BTreeSet<_> = crate::sync::lock(&worker.pending).values()
+            .map(|item| item.review.preview.item.id.clone()).collect();
+        let cursor = crate::sync::lock(&worker.automatic_cursor).clone();
+        let batch = work.runtime.block_on(automatic_batch(account.port.as_ref(), &work.scanner,
+            account.journal.as_ref(), account.managed.as_ref(), cursor.as_deref(), &reviewed))?;
+        *crate::sync::lock(&worker.automatic_cursor) = batch.next_cursor;
+        *crate::sync::lock(&worker.automatic_notice) = batch.needs_attention.then(||
+            "Some configuration needs your review. Conflicts and unfinished changes stay out of automatic sync.".into());
+        Ok(batch.completed)
+    }).await;
+    if !generation.is_current() {
+        return;
+    }
+    match result {
+        Ok(completed) if completed > 0 => crate::account_sync::trigger(app),
+        Ok(_) => {},
+        Err(_) => *crate::sync::lock(&service.automatic_notice) = Some(
+            "Automatic configuration sync could not finish. Existing settings and recovery records are retained. Open a review for details.".into()),
+    }
 }
 
 #[tauri::command]
@@ -349,6 +391,16 @@ pub async fn config_sync_rollback(
     run(&state, &library, move |work, account| {
         let record = work.scanner.apply_history(account.journal.as_ref())?.into_iter().find(|record|record.id == id).ok_or(ConfigPortError::Invalid)?;
         let item_id = record.identity.id()?;
+        // Pause before restoring files, so the next polling cycle cannot immediately publish the
+        // restored local content as a new automatic change. Failed persistence leaves files alone.
+        work.runtime.block_on(async {
+            let mut device = account.port.read_device_state(&item_id).await?.unwrap_or(sync::ConfigDeviceState {
+                revision: None, head: None, snapshot: None, device_only: false, skipped: None,
+            });
+            let expected = device.head.as_ref().map(|head| head.revision.clone());
+            device.skipped = Some("Local configuration was restored from History. Review it before synchronizing again.".into());
+            account.port.save_device_state(&item_id, expected.as_deref(), device).await
+        })?;
         match work.scanner.rollback_apply(&id, account.journal.as_ref())? {
             ConfigApplyResult::Applied { id } => Ok(ConfigSyncOutcome { item_id, receipt_id: Some(id), completed: true,
                 message: "Local configuration restored. Review the item before synchronizing this change.".into() }),

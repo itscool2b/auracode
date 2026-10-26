@@ -39,7 +39,6 @@ Run `node .github/scripts/check-instructions.mjs` before committing. CI rejects 
 ## Product and safety invariants
 
 - Follow `docs/plan.md` and the chosen Orbit language in `docs/design/visual-language.md`.
-- Ship dark mode only. Do not add light mode, automatic theme switching or an appearance selector.
 - The product is dark only, including desktop, onboarding and the website. Do not add a light
   theme, system-theme switching or an appearance selector. Historical light design studies are
   references, not product requirements.
