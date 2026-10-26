@@ -392,6 +392,7 @@ async function inspect(engine, launcher) {
     await lastTool.locator("summary").click();
     await page.getByTestId("composer-input").focus();
     await page.getByTestId("transcript").evaluate((node) => {
+      node.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
       node.scrollTop = 0;
     });
     await page.waitForTimeout(300);
@@ -406,6 +407,7 @@ async function inspect(engine, launcher) {
       "tool disclosure choice was forgotten",
     );
     await page.getByTestId("transcript").evaluate((node) => {
+      node.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
       node.scrollTop = 0;
     });
     await thought.waitFor();
@@ -597,6 +599,23 @@ async function inspect(engine, launcher) {
     await page.setViewportSize({ width: 960, height: 640 });
     await page.goto(`${url}/?preview=permission`);
     await page.locator('[data-test-phase="live"]').waitFor();
+    const permission = await page.evaluate(async () => {
+      const { readTranscript } = await import("/src/lib/smokePage.ts");
+      return readTranscript().map((segment) => ({
+        prompt: segment.prompt,
+        items: segment.items,
+        actionable: segment.views
+          .filter((item) => item.kind === "permission")
+          .every((item) => item.element.isConnected),
+      }));
+    });
+    assert.ok(
+      permission.some(
+        (segment) =>
+          segment.prompt && segment.items.includes("permission:open") && segment.actionable,
+      ),
+      "native smoke reader must associate the docked permission with its turn and live controls",
+    );
     assert.equal(
       await page.evaluate(() => document.body.scrollWidth > innerWidth),
       false,

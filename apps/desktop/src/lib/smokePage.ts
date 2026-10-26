@@ -244,7 +244,8 @@ export function readTranscript(within: ParentNode = document): SegmentView[] {
   const transcript = one("transcript", within);
   if (transcript === null) return [];
   const groups = new Map<string, HTMLElement[]>();
-  for (const element of transcript.querySelectorAll<HTMLElement>("[data-test-segment-key]")) {
+  // A pending permission moves to the composer dock while retaining its original segment.
+  for (const element of within.querySelectorAll<HTMLElement>("[data-test-segment-key]")) {
     const key = attr(element, "segment-key");
     const group = groups.get(key) ?? [];
     group.push(element);

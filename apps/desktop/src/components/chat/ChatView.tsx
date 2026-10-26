@@ -271,20 +271,36 @@ export function ChatView({
                   Needs your permission
                   {pendingPermissions.length > 1 ? ` · ${pendingPermissions.length} requests` : ""}
                 </div>
-                {pendingPermissions.map((item) =>
-                  item.kind === "permission" ? (
-                    <PermissionCard
+                {pendingPermissions.map((item) => {
+                  if (item.kind !== "permission") return null;
+                  const segment = state.transcript.segments.find((entry) =>
+                    entry.itemKeys.includes(item.key),
+                  );
+                  const user = segment?.itemKeys
+                    .map((key) => state.transcript.items.get(key))
+                    .find((entry) => entry?.kind === "user");
+                  return (
+                    <div
                       key={item.key}
-                      item={item}
-                      request={state.requests.get(item.request.request_id)}
-                      onRespond={(optionId) =>
-                        void store.respondPermission(item.request.request_id, optionId)
-                      }
-                      blobs={state.blobs}
-                      onLoadBlob={(sha256) => void store.loadBlob(sha256)}
-                    />
-                  ) : null,
-                )}
+                      data-test-segment-key={segment?.key}
+                      data-test-kind={segment?.turnId ? "turn" : "outside"}
+                      data-test-turn-id={segment?.turnId ?? ""}
+                      data-test-prompt={user?.kind === "user" ? user.text : ""}
+                      data-test-stop-reason={segment?.end?.stopReason ?? ""}
+                      data-test-recovered={String(segment?.end?.recovered ?? false)}
+                    >
+                      <PermissionCard
+                        item={item}
+                        request={state.requests.get(item.request.request_id)}
+                        onRespond={(optionId) =>
+                          void store.respondPermission(item.request.request_id, optionId)
+                        }
+                        blobs={state.blobs}
+                        onLoadBlob={(sha256) => void store.loadBlob(sha256)}
+                      />
+                    </div>
+                  );
+                })}
               </section>
             ) : null}
             <div className="chat-compose-slot" hidden={pendingPermissions.length > 0}>

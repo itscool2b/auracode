@@ -54,6 +54,7 @@ export function AgentDock({
       </h2>
       <div className="chat-agent-dock">
         {(agents ?? []).map((agent) => {
+          const code = CODES[agent.id] ?? agent.name.slice(0, 2).toUpperCase();
           const choice = agentChoice(agent);
           const sessions = (chats ?? []).filter((chat) => chat.agent_id === agent.id);
           const state = sessions.some((chat) => chat.needs_attention)
@@ -65,11 +66,12 @@ export function AgentDock({
             <Popover
               key={agent.id}
               label={agent.name}
+              triggerLabel={`${code} ${agent.name}`}
               className="chat-agent-popover"
               trigger={
                 <>
                   <OrbitMark agent={agent.id} state={state} size={24} ghost={!choice.enabled} />
-                  <span>{CODES[agent.id] ?? agent.name.slice(0, 2).toUpperCase()}</span>
+                  <span>{code}</span>
                 </>
               }
             >
@@ -110,7 +112,10 @@ export function AgentDock({
           className="chat-icon-button"
           aria-label={onSettings ? "Open settings" : "Open diagnostics"}
           title={onSettings ? "Settings" : "Diagnostics"}
-          onClick={onSettings ?? onDiagnostics}
+          onClick={(event) => {
+            event.currentTarget.focus();
+            (onSettings ?? onDiagnostics)();
+          }}
         >
           <Settings2 size={16} />
         </button>

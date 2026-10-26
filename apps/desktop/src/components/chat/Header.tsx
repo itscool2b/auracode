@@ -94,7 +94,10 @@ export function Header({
           aria-label="Changes"
           title="Changes"
           aria-expanded={changesOpen}
-          onClick={onChanges}
+          onClick={(event) => {
+            event.currentTarget.focus();
+            onChanges();
+          }}
         >
           <PanelRight size={16} />
         </button>
