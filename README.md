@@ -24,8 +24,10 @@ isolated preview;
 the Rust API is available only in preview. Production API resources are prepared, but public API
 routing remains closed and accounts and downloads are not enabled. Real email/device acceptance
 remains pending. Production account storage remains empty.
-React/TypeScript handles interfaces. Root AGENTS.md and CLAUDE.md are identical project instructions,
-enforced by the lint gate. Public installer signing is deferred at the owner's request.
+React/TypeScript handles interfaces. Optional local AGENTS.md and CLAUDE.md files are ignored by
+Git. When present, the lint gate requires both files to be identical; a clean checkout needs neither.
+Public installer signing is deferred at the owner's request. The repository remains private while
+the open-source license and publication audit are being discussed. No license change is implied.
 
 Current source includes native agent drivers, the dark Orbit workspace, onboarding, project and Git
 controls, configuration Library, encrypted account sync, local import and readable export. Account

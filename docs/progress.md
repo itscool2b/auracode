@@ -2626,3 +2626,19 @@ its current catalog no longer offers it; its catalog also exposes no effort opti
 advertised `openai-codex:gpt-6-luna` choice and no unsupported effort override, its single-response
 smoke passed all six checks, including streamed `ok`, normal completion and session-scoped usage.
 Only those three minimal real responses were sent. Final package and CI results remain pending.
+
+### Invite-only cloud access and open-source preparation
+
+The owner changed hosted accounts and transfer/sync to an invite-only private preview, with the
+allowed addresses held in Cloudflare secret configuration. The local desktop stays free and works
+without an account. Payment and subscription implementation are explicitly deferred. Rust API
+enforcement and corresponding website/desktop states are being implemented; no frontend-only
+allowlist or hardcoded invitation address is acceptable.
+
+The owner also requested an open-source repository, with a license discussion before publication.
+The repository remains private and its existing license is unchanged. Root AGENTS.md and CLAUDE.md
+are now untracked and ignored while retained locally with identical bytes. The parity gate accepts
+a checkout containing neither file, but still rejects a missing counterpart or any byte drift.
+All six checker tests pass. A separate tracked-history and publication audit is underway because
+ignoring a file does not remove it from past commits. No remote history or repository visibility
+was changed.

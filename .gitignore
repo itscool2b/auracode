@@ -9,6 +9,12 @@ Desktop.ini
 !.vscode/extensions.json
 *.swp
 
+# Local project instructions and assistant state, never part of the public source.
+/AGENTS.md
+/CLAUDE.md
+/.codex/
+/.claude/
+
 # Rust
 /target/
 **/target/
