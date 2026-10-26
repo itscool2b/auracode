@@ -351,7 +351,9 @@ async fn bounded_response(
 struct UpdateQuit<H>(H);
 impl<H: QuitHost> QuitHost for UpdateQuit<H> {
     fn owned_work_guard(&self) -> Option<Box<dyn Send + '_>> {
-        self.0.owned_work_guard()
+        // install retains the transition, session-idle and terminal-idle barriers through this
+        // entire flow and installation. Ordinary drain admission correctly refuses that state.
+        Some(Box::new(()))
     }
     async fn wait_owned_work(&self, deadline: Duration) -> bool {
         self.0.wait_owned_work(deadline).await
@@ -505,6 +507,10 @@ mod tests {
         calls: Mutex<Vec<&'static str>>,
     }
     impl QuitHost for FakeQuit {
+        fn owned_work_guard(&self) -> Option<Box<dyn Send + '_>> {
+            // Match a real host while install already holds the stronger idle admission barrier.
+            None
+        }
         async fn flush_drafts(&self) -> bool {
             lock(&self.calls).push("flush");
             self.drafts
