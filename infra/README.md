@@ -172,3 +172,25 @@ pass on these root-built modules. Live preview health/config return 200, unauthe
 returns 401, and an excluded synthetic email receives 403 `invite_required` before any challenge.
 Preview user, session and challenge counts remain zero. Production API routing remains inactive.
 No real email was sent, and the websites still need the newest invitation UI/assets deployment.
+
+## Notices and invitation-order update (2026-10-26)
+
+Deployments now use Wrangler with temporary configs under ignored `target/deploy-*` that mirror
+the checked-in environment sections, set `no_bundle` and upload the tested modules unchanged.
+Wrangler keeps existing secrets; secret names were rechecked after upload and no values were read.
+
+- `auracode-web-preview` version `e31091c4-83c3-448b-aa5d-00f448bdeca4`: JS 20,473 bytes, SHA-256
+  `7fea5f5a1ed14314a3fac9d81f3037e8375a9a4db3b535fe546813fc83a41eeb` (unchanged); Wasm 1,107,745
+  bytes, SHA-256 `e926c1c676e2aa179e619160ee45457ef95a479378b8e23f1da9ce6cfcee7ff0`. All 53 public
+  files match the local build over HTTPS, including `/third-party-notices` and its notice text; ten
+  page HEAD checks, the notices frame policy, footer link, API precedence and missing-asset 404 pass.
+- `auracode-api-preview` version `e4550760-f4c9-47fe-b1f9-24b2b09d5a55`: JS unchanged
+  (`ea31dab3…`); Wasm 1,087,289 bytes, SHA-256
+  `9d545e661c1928e3a8fa355d196bed041364342b58ebf8cea77391e28d800d6a`. Membership is answered only
+  after the per-IP limit and Turnstile. Live: config and health 200, unauthenticated account 401,
+  uninvited address with no token 400 and with an invalid token 403, never `invite_required`.
+  Preview D1 still has zero users, sessions and challenges; one HMAC-keyed IP rate row exists.
+  Bindings, cron, disabled `workers.dev`/preview URLs and all routes are unchanged.
+
+The production website and production API staging await explicit owner approval. Production
+still serves website deployment `c200b10b…` and staged API `08607e5f…`, with no `/api/*` route.
