@@ -273,6 +273,34 @@ impl Turn {
             },
         });
     }
+    fn normalize_usage(&mut self, previous: &mut Option<TokenUsage>) {
+        let Some((_, Some(total), _)) = self.terminal.as_mut() else {
+            // A later difference would span this unreported turn, not just the next turn.
+            *previous = None;
+            return;
+        };
+        if total.scope != UsageScope::Session {
+            return;
+        }
+        let current = total.clone();
+        if let Some(before) = previous.as_ref()
+            && total.input_tokens >= before.input_tokens
+            && total.output_tokens >= before.output_tokens
+        {
+            total.input_tokens -= before.input_tokens;
+            total.output_tokens -= before.output_tokens;
+            let difference = |now: Option<u64>, before: Option<u64>| {
+                now.zip(before)
+                    .and_then(|(now, before)| now.checked_sub(before))
+            };
+            total.cache_read_tokens = difference(total.cache_read_tokens, before.cache_read_tokens);
+            total.cache_write_tokens =
+                difference(total.cache_write_tokens, before.cache_write_tokens);
+            total.reasoning_tokens = difference(total.reasoning_tokens, before.reasoning_tokens);
+            total.scope = UsageScope::Turn;
+        }
+        *previous = Some(current);
+    }
     fn finish(self, out: &mut VecDeque<DriverEvent>) {
         if self.bytes > 0 {
             out.push_back(DriverEvent::Event {
@@ -536,6 +564,8 @@ async fn run_process(
     let mut drain_since = None;
     let mut terminal_received = false;
     let mut identity_announced = setup.resume.is_some();
+    // Agy's totals are cumulative over its session, but the baseline belongs to this process.
+    let mut usage_total = None;
     loop {
         if failed.is_some() && shutdown.is_none() && !process_done {
             sink.close();
@@ -621,7 +651,12 @@ async fn run_process(
                             }
                         } else if let (Some(turn_ref), Some(id)) = (&mut turn, native_id.as_deref()) {
                             match frame(turn_ref, &value, family, id, &mut out) {
-                                Ok(true) if family == Family::Agy => { if let Some(finished) = turn.take() { finished.finish(&mut out); } }
+                                Ok(true) if family == Family::Agy => {
+                                    if let Some(mut finished) = turn.take() {
+                                        finished.normalize_usage(&mut usage_total);
+                                        finished.finish(&mut out);
+                                    }
+                                }
                                 Ok(true) => {
                                     if !identity_announced && value["sessionId"].as_str() == Some(id) {
                                         out.push_back(DriverEvent::NativeSessionId(id.into()));

@@ -254,6 +254,109 @@ async fn agy_waits_for_its_identity_then_sends_the_documented_stdin_shape() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn agy_reports_cumulative_usage_once_per_process_then_turn_differences() {
+    let mut reported = Vec::new();
+    for counters in [
+        vec![(30384, 4, 20000), (30662, 8, 50214)],
+        vec![(30940, 12, 80428)],
+    ] {
+        let (fake, mut ends) = FakeSpawner::new();
+        let (tx, commands) = mpsc::unbounded_channel();
+        let (events, mut receive) = event_channel();
+        let run = tokio::spawn(Box::new(HeadlessDriver).run(DriverContext {
+            commands,
+            events,
+            spawner: Arc::new(Quiet(fake)),
+            setup: setup(Family::Agy),
+        }));
+        let mut end = ends.recv().await.unwrap();
+        send(&end, json!({"event":"init","conversation_id":SESSION}));
+        while !matches!(next(&mut receive).await, DriverEvent::Ready(_)) {}
+        for (index, (input, output, cached)) in counters.into_iter().enumerate() {
+            tx.send(DriverCommand::Prompt {
+                turn: TurnRef {
+                    turn_id: format!("T{index}"),
+                },
+                parts: vec![PromptPart::Text {
+                    text: "Visible".into(),
+                }],
+            })
+            .unwrap();
+            end.from_client.recv().await.unwrap();
+            send(
+                &end,
+                json!({"event":"result","result":{"conversation_id":SESSION,"status":"SUCCESS","response":"ok",
+                "usage":{"input_tokens":input,"output_tokens":output,"cache_read_tokens":cached}}}),
+            );
+            loop {
+                if let DriverEvent::TurnEnded { usage, .. } = next(&mut receive).await {
+                    reported.push(usage.unwrap());
+                    break;
+                }
+            }
+        }
+        tx.send(DriverCommand::Interrupt).unwrap();
+        while receive.recv().await.is_some() {}
+        assert_eq!(run.await.unwrap(), DriverExit::Closed);
+    }
+    assert_eq!(
+        (reported[0].input_tokens, reported[0].scope),
+        (30384, UsageScope::Session)
+    );
+    assert_eq!(
+        (
+            reported[1].input_tokens,
+            reported[1].output_tokens,
+            reported[1].cache_read_tokens,
+            reported[1].scope
+        ),
+        (278, 4, Some(30214), UsageScope::Turn)
+    );
+    assert_eq!(
+        (reported[2].input_tokens, reported[2].scope),
+        (30940, UsageScope::Session)
+    );
+}
+
+#[test]
+fn agy_missing_or_decreasing_totals_reset_the_usage_baseline() {
+    let mut previous = None;
+    for (counts, expected) in [
+        (Some((20, 4)), Some((20, 4, UsageScope::Session))),
+        (None, None),
+        (Some((30, 8)), Some((30, 8, UsageScope::Session))),
+        (Some((2, 1)), Some((2, 1, UsageScope::Session))),
+        (Some((5, 3)), Some((3, 2, UsageScope::Turn))),
+    ] {
+        let mut turn = Turn::new("T".into());
+        let mut result = json!({"conversation_id":SESSION,"status":"SUCCESS","response":"ok"});
+        if let Some((input, output)) = counts {
+            result["usage"] = json!({"input_tokens":input,"output_tokens":output});
+        }
+        frame(
+            &mut turn,
+            &json!({"event":"result","result":result}),
+            Family::Agy,
+            SESSION,
+            &mut VecDeque::new(),
+        )
+        .unwrap();
+        turn.normalize_usage(&mut previous);
+        let usage = &turn.terminal.as_ref().unwrap().1;
+        assert_eq!(
+            usage
+                .as_ref()
+                .map(|usage| (usage.input_tokens, usage.output_tokens, usage.scope)),
+            expected
+        );
+        if let Some(usage) = usage {
+            assert_eq!(usage.cache_read_tokens, None);
+            assert_eq!(usage.reasoning_tokens, None);
+        }
+    }
+}
+
+#[tokio::test(start_paused = true)]
 async fn grok_confirms_identity_only_after_a_vendor_terminal_frame() {
     let (fake, mut ends) = FakeSpawner::new();
     let (tx, commands) = mpsc::unbounded_channel();
