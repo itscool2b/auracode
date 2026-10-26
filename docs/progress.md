@@ -1671,3 +1671,6 @@ application, secret-free MCP extraction and desktop orchestration remain pending
   Independent read-only review found the cached-shutdown report issue, fixed in 8567390, and no
   confirmed overwrite blocker. No real remote clone, installer, auth command, model prompt, push or
   CI dispatch was run. Clone source is reviewable; native/binding acceptance is still pending.
+## M4 setup schema checkpoint, 2026-10-26
+
+Schema 8 adds device-local worktree setup recipes keyed by folder and device in the profile database. Account profiles use the existing SQLCipher connection; the table is outside sync projection. It stores paths and explicit command arguments only, never copied file contents, terminal output or execution grants. Existing database migration backup behavior remains in use. The separate reviewed copy and terminal service is still being verified and is not a completed M4 acceptance claim.
