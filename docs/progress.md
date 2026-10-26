@@ -1171,3 +1171,9 @@ is a backend checkpoint, not M4 completion. No real-repository mutation, paid pr
   pin/runner checks and instruction parity pass; hosted feature-matrix execution remains pending.
 - Matched root's workflow correction by removing `save-if` from the Rust cache action. GitHub does
   not permit the earlier status function in that action input. The cancellation safeguard remains.
+The local external-file codec now provides bounded chunked authenticated encryption, purpose/object
+binding, opaque keyed filenames, authenticated lengths and range reads without plaintext temporary
+files. Five focused tests cover chunk boundaries, empty files, nonce carry, substitution, truncation
+and reordered chunks. Core file publication, attachment/dead-letter wiring and encrypted checkpoint
+storage are still being connected; the codec alone does not enable account sessions.
+

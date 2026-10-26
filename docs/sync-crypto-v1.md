@@ -163,3 +163,28 @@ Sources: [SQLCipher API](https://www.zetetic.net/sqlcipher/sqlcipher-api/),
 [encrypted online backup support](https://discuss.zetetic.net/t/using-the-sqlite-online-backup-api/2631/4),
 and [OpenSSL Perl requirements](https://github.com/openssl/openssl/blob/master/NOTES-PERL.md).
 
+## Encrypted local profile files
+
+The local-file codec is separate from the cloud's bounded blob envelope. Its profile key is HKDF of
+the account key with the fixed salt above and info
+`["auracode-profile-files-v1", account_id, profile_id]`. Files contain at most 64 MiB of plaintext,
+split into 65536-byte chunks. The 42-byte header is the nine ASCII bytes `AURA-FILE`, version byte
+`01`, total plaintext length as an eight-byte big-endian integer, and a fresh random 24-byte starting
+nonce. Each chunk is XChaCha20-Poly1305 ciphertext plus its 16-byte tag. Empty files still contain
+one authenticated empty chunk. Exact ciphertext length is checked before decryption.
+
+Chunk `i` uses the starting nonce plus `i`, as unsigned big-endian addition modulo 2^192. Its compact
+JSON AAD is `["auracode-profile-file-v1", purpose, object_id, total_plaintext_length, i]`. Purposes
+are `attachment`, `dead_letter`, and `checkpoint`. A file has at most 1024 distinct nonces; all 192
+starting bits are random for every new write. The reader authenticates chunk zero before exposing
+the length, then authenticates every requested chunk before returning any bytes. A failed later
+chunk returns no partial range. Reading a range does not claim unread chunks have been verified.
+Ranges are at most 256 KiB and plaintext buffers are zeroized on drop. No plaintext scratch file is
+required by the codec; its caller must publish ciphertext atomically and clean up failed writes.
+
+Object filenames are base64url of a 32-byte HKDF output from the profile-file key, using the same
+fixed salt and info `["auracode-profile-file-name-v1", purpose, object_id]`, followed by `.enc`.
+The object ID is authenticated but is not written into the public header. This avoids exposing a
+known attachment's public content hash as its filename. The codec uses the existing reviewed AEAD
+library; its application framing still requires independent security review and platform acceptance.
+

@@ -18,6 +18,8 @@ const RECOVERY_PREFIX: &str = "aura-recovery-v1-";
 pub const MAX_RECORD_PLAINTEXT: usize = 64 * 1024 - 16;
 pub const MAX_BLOB_PLAINTEXT: usize = 4 * 1024 * 1024 - 16;
 
+pub mod files;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum CryptoError {
     #[error("Secure randomness is unavailable.")]
