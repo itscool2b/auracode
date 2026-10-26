@@ -157,3 +157,52 @@ textarea.account-secret {
   justify-content: flex-end;
   margin-top: 24px;
 }
+.account-profiles {
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--o-line);
+  margin: 20px 0 24px;
+}
+.account-profiles li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--o-line);
+  font-size: 12px;
+}
+.account-profiles li > div {
+  flex: 1;
+  min-width: 0;
+}
+.account-profiles strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.account-profiles p {
+  margin: 5px 0 0;
+  color: var(--o-text-3);
+  line-height: 1.7;
+}
+.profile-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  color: var(--o-text-1);
+  background: var(--o-pane);
+  font: 14px var(--o-sans);
+}
+.locked-profile {
+  height: 100%;
+  overflow-y: auto;
+  background: var(--o-pane);
+  color: var(--o-text-1);
+  font-family: var(--o-sans);
+}
+.locked-profile > main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 64px 40px;
+}

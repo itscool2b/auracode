@@ -18,6 +18,8 @@ const INFO: AppInfo = {
   data_dir: "/data",
   device: null,
   profile: null,
+  profile_locked: false,
+  profile_switching: false,
   db: null,
   glass: "liquid_glass",
   launch: { type: "normal" },

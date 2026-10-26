@@ -12,9 +12,11 @@ import { AppStore } from "./lib/chat/appStore";
 import { tauriTransport } from "./lib/chat/transport";
 import { installDraftQuit } from "./lib/draftQuit";
 import { cancelDemoStream, startDemoStream } from "./lib/ipc";
+import { installProfileEvents } from "./lib/profiles";
 import { StreamStore } from "./lib/session";
 import { WorkspaceStore, workspaceApi } from "./lib/workspace";
 
+installProfileEvents();
 const store = new StreamStore({ start: startDemoStream, cancel: cancelDemoStream });
 const chats = new AppStore(tauriTransport);
 const workspace = new WorkspaceStore(workspaceApi);
@@ -24,7 +26,11 @@ const container = document.getElementById("root");
 if (container) {
   if (import.meta.env.DEV && new URLSearchParams(location.search).has("preview")) {
     const mode = new URLSearchParams(location.search).get("preview");
-    if (mode === "account")
+    if (mode === "profiles")
+      void import("./dev/profilesPreview").then(({ mountProfilesPreview }) =>
+        mountProfilesPreview(container),
+      );
+    else if (mode === "account")
       void import("./dev/accountPreview").then(({ mountAccountPreview }) =>
         mountAccountPreview(container),
       );

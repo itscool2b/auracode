@@ -1612,3 +1612,13 @@ An ordinary native build now permits the full command exporter, which passed and
 committed TypeScript without a policy workaround. Sync projection/scheduling, encrypted recovery
 browsing and macOS runtime qualification remain pending; no real account login was performed.
 
+
+### Profile switching interface
+
+Settings now lists Local and remembered Account profiles and exposes explicit activation after device
+approval. Switching freezes interaction, saves drafts, waits for native preparation and reloads the
+whole webview after publication so old stores, promises and channels cannot leak into the new dataset.
+Unsaved drafts and native refusal preserve the current page. Locked startup presents account unlock
+and Local selection. Three frontend transition tests, complete TypeScript, and Chromium/WebKit picker,
+unsaved-draft, active-work refusal, locked recovery and accessibility checks pass. Full native two-profile
+interaction and real account-key restoration remain final qualification gates.

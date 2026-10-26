@@ -7,6 +7,7 @@ import { revealDataDir } from "../../lib/ipc";
 import { type SetupApi, setMotionPreference, setupApi } from "../../lib/setup";
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
 import { AccountPanel } from "./AccountPanel";
+import { ProfilePicker } from "./ProfilePicker";
 import { UpdatePanel } from "./UpdatePanel";
 import "./settings.css";
 
@@ -271,7 +272,13 @@ export function SettingsScreen({
             <General info={info} api={setup} onSetup={onSetup} reveal={reveal} />
           ) : null}
           {page === "account" ? (
-            <AccountPanel deviceName={info.device?.name ?? "My computer"} />
+            <>
+              <ProfilePicker activeId={info.profile?.id ?? null} />
+              <AccountPanel
+                deviceName={info.device?.name ?? "My computer"}
+                activeProfileId={info.profile?.id ?? null}
+              />
+            </>
           ) : null}
           {page === "shortcuts" ? (
             <section className="settings-section">

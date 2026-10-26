@@ -15,6 +15,7 @@ import { Home } from "./components/Home";
 import { LibraryScreen } from "./components/library/LibraryScreen";
 import { Sidebar } from "./components/Sidebar";
 import { StressView } from "./components/StressView";
+import { LockedProfile } from "./components/settings/LockedProfile";
 import { SettingsScreen } from "./components/settings/SettingsScreen";
 import { AgentsScreen } from "./components/setup/AgentsScreen";
 import { Onboarding } from "./components/setup/Onboarding";
@@ -216,6 +217,7 @@ export function App({
   }
 
   const { info } = boot;
+  if (info.profile_locked) return <LockedProfile info={info} />;
   if (info.fatal !== null) {
     return (
       <ErrorScreen

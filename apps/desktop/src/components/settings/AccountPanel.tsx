@@ -10,6 +10,7 @@ import type {
 } from "../../lib/account/bindings";
 import { type VerificationOrigin, verificationOrigin } from "../../lib/accountVerification";
 import { errorMessage } from "../../lib/errors";
+import { switchProfile } from "../../lib/profiles";
 import { Modal } from "../chat/Modal";
 import { AccountVerification } from "./AccountVerification";
 import "./account.css";
@@ -24,9 +25,13 @@ export function AccountPanel({
   api = accountApi,
   deviceName = "My computer",
   Verification = AccountVerification,
+  activeProfileId = null,
+  onActivate = switchProfile,
 }: {
   readonly api?: AccountApi;
   readonly deviceName?: string;
+  readonly activeProfileId?: string | null;
+  readonly onActivate?: () => Promise<void>;
   readonly Verification?: ComponentType<{
     onToken: (token: string) => void;
     origin?: VerificationOrigin;
@@ -522,6 +527,18 @@ export function AccountPanel({
                 ) : null}
               </dl>
               {status.sync.message ? <p role="status">{status.sync.message}</p> : null}
+              {status.profile_id !== activeProfileId ? (
+                <div className="account-actions">
+                  <button
+                    className="ui-button ui-button-primary"
+                    type="button"
+                    disabled={locked}
+                    onClick={() => void run(onActivate)}
+                  >
+                    Open account workspace
+                  </button>
+                </div>
+              ) : null}
               <details>
                 <summary>Account fingerprint</summary>
                 <code className="account-fingerprint">{status.fingerprint}</code>

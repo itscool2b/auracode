@@ -10,6 +10,7 @@ import { chromium, webkit } from "playwright";
 import { checkAccount } from "./check-account.mjs";
 import { checkAccountVerification } from "./check-account-verification.mjs";
 import { checkGitReview } from "./check-git-review.mjs";
+import { checkProfiles } from "./check-profiles.mjs";
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const url = process.argv[2] ?? "http://127.0.0.1:1464";
@@ -128,6 +129,7 @@ try {
       await checkGitReview(page, url, out, engine);
       await checkAccountVerification(browser, url, out, engine);
       await checkAccount(browser, url, out, engine);
+      await checkProfiles(browser, url, out, engine);
       assert.deepEqual(errors, []);
       console.log(
         `${engine}: settings persistence failures, focus, accessibility and explicit updater actions passed`,

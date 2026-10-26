@@ -25,6 +25,8 @@ function info(fatal: string | null = null): AppInfo {
     data_dir: "/data",
     device: null,
     profile: null,
+    profile_locked: false,
+    profile_switching: false,
     db: null,
     glass: "none",
     launch: { type: "smoke", plan: PLAN },
