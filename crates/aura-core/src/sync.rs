@@ -12,6 +12,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::store::Store;
 pub(crate) mod capture;
 pub(crate) mod config;
+pub mod config_transition;
 pub mod engine;
 pub mod exchange;
 pub mod journal;

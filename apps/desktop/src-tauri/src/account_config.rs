@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use aura_config::sync::managed::ConfigManagedStore;
 use aura_config::sync::{ConfigApplyJournal, ConfigSyncPort};
+use aura_core::sync::config_transition::AccountConfigTransitions;
 use aura_core::sync::managed_config::AccountManagedConfig;
 use aura_core::{chatstore::ChatStore, sync::journal::AccountConfigJournal};
 
@@ -11,6 +12,7 @@ pub struct AccountConfigServices {
     pub port: Arc<dyn ConfigSyncPort>,
     pub journal: Arc<dyn ConfigApplyJournal>,
     pub managed: Arc<dyn ConfigManagedStore>,
+    pub transitions: Arc<AccountConfigTransitions>,
     owned_journal: Arc<AccountConfigJournal>,
     owned_managed: Arc<AccountManagedConfig>,
 }
@@ -20,6 +22,7 @@ impl AccountConfigServices {
         store: &Arc<ChatStore>,
         journal: AccountConfigJournal,
         managed: AccountManagedConfig,
+        transitions: AccountConfigTransitions,
     ) -> Self {
         let owned_journal = Arc::new(journal);
         let owned_managed = Arc::new(managed);
@@ -27,6 +30,7 @@ impl AccountConfigServices {
             port: store.config_sync_port(),
             journal: owned_journal.clone(),
             managed: owned_managed.clone(),
+            transitions: Arc::new(transitions),
             owned_journal,
             owned_managed,
         }
@@ -34,5 +38,6 @@ impl AccountConfigServices {
     pub(crate) fn close(&self) {
         self.owned_journal.close();
         self.owned_managed.close();
+        self.transitions.close();
     }
 }

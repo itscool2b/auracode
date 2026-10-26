@@ -96,6 +96,13 @@ impl TransitionRecord {
                 || step.action.desired.identity.requires_vendor()
                 || step.receipt.as_ref().is_some_and(|id| !canonical_uuid(id))
                 || step.applied && step.receipt.is_none()
+                || step.restored && step.receipt.is_none()
+                || self.phase == TransitionPhase::Prepared
+                    && (step.receipt.is_some() || step.applied || step.restored)
+                || self.phase == TransitionPhase::FilesReady && (!step.applied || step.restored)
+                || self.phase == TransitionPhase::Restored
+                    && step.receipt.is_some()
+                    && !step.restored
             {
                 return Err(ConfigPortError::Invalid);
             }

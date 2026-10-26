@@ -54,8 +54,11 @@ The pure transition planner and executor now snapshot outgoing managed content, 
 baselines and apply the incoming Account snapshots using encrypted-store and apply-journal ports.
 Incoming baselines must match the restored device state; unavailable, conflicting, overlapping and
 unresolved items fail visibly. Step receipt IDs persist before dispatch, so lost completion
-acknowledgments reopen for rollback instead of replaying commands. A nonsecret, strictly validated root locator will
-identify the encrypted pending transaction before any mutation. Interrupted work must block native
+acknowledgments reopen for rollback instead of replaying commands. A nonsecret, strictly validated root locator
+identifies the encrypted pending transaction before any mutation. Its lease serializes one data
+root only. Normal desktop execution uses the existing single-instance gate; separate custom data
+roots are not coordinated by this lease. The dedicated Account transition store and per-transaction
+apply journals retain encrypted recovery data and close with the profile. Interrupted work must block native
 launches and expose a typed recovery action until completion or rollback. Profile publication comes
 only after successful file and encrypted-state acknowledgments. No isolated agent home or implicit
 re-login is introduced.
@@ -63,3 +66,5 @@ re-login is introduced.
 The desktop coordinator and startup/recovery gate are still pending. Five pure transaction tests
 cover outgoing edits, unmanaged conflicts, overlapping identities, complete apply/rollback and a
 lost step acknowledgment followed by rollback that preserves a concurrent unmanaged edit.
+The native locator and encrypted-store regression tests are present, but local execution is blocked
+by Windows Application Control refusing dependency build scripts (4551). No policy workaround was used.

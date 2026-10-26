@@ -1992,3 +1992,12 @@ checks and desktop TypeScript checking passed. The ordinary combined Windows nat
 exact binding export also passed. Source-only CSS specificity warnings remain unchanged; final full
 Windows/macOS checks, native visuals and packaging acceptance remain pending. No real agent prompt or
 user repository operation occurred.
+# Account transition storage checkpoint
+
+Added the strict nonsecret transaction locator with exclusive same-data-root lease and complete-file
+publication, plus a dedicated encrypted transition store and per-transaction bounded apply journals.
+Account close invalidates the stores and journal handles. Five pure transition regressions pass after
+tightening phase validation. Native locator/store tests are added but could not run: Application
+Control blocked num-traits and libsqlite3-sys build scripts with error 4551. Desktop switch and typed
+startup recovery wiring remain pending; no real configuration, credentials or agents were accessed.
+
