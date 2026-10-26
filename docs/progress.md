@@ -440,6 +440,12 @@ CLI smoke assertion: force stop reaches `Stopped` before the retired driver's jo
 live slot. The smoke regression now waits within its existing stop deadline for that release,
 before any shutdown fallback, and still verifies that the removed prompt never runs. The corrected
 Windows gate remains pending; native-agent acceptance and macOS verification remain outstanding.
+A subsequent Pi dialog review found that core's fixed display limits could shorten native
+confirmation text or select labels before an answer. Pi now cancels unsupported oversized dialogs
+with a notice, as ACP callbacks already do. Pure regressions cover escaped text, Unicode character
+limits and aggregate size; a fake-wire regression requires cancellation without a partial question
+and verifies the next supported dialog remains answerable. Execution awaits branch CI because
+ordinary local Cargo is still blocked by Application Control.
 
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its

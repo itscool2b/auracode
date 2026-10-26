@@ -37,6 +37,8 @@ dialog timeout zero means no timeout, matching the native runtime.
 Only Full auto is offered because Pi RPC has no native Ask/Auto edit permission policy. All
 extension select/confirm/input dialogs require a user answer. Unsupported editor prefills are
 cancelled explicitly; terminal widgets, titles and composer replacements have no product surface.
+Dialogs that exceed the UI's message, option-label, placeholder or event-size limits are cancelled
+with a notice before display. The adapter never asks for approval with shortened native text.
 The driver does not advertise images, steer, fork, rewind or permission-policy enforcement.
 Fresh starts allocate transcript IDs independently of chat IDs. Native fork startup preserves its
 source. Resume paths resolve to the real native ID before Ready; unexpected later session changes
