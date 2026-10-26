@@ -115,7 +115,7 @@ fn record_aad_authenticates_routing_clock_and_deletion() {
             ..context()
         },
         RecordContext {
-            hlc: "later",
+            hlc: "1793000000000:0000000002:device",
             ..context()
         },
         RecordContext {

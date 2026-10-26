@@ -966,3 +966,17 @@ read/write was performed.
   SQLCipher profiles, account IPC/UI, durable sync/merge/config adapters and macOS execution remain
   pending. No real sign-in, credential access, cloud mutation, deployment or paid prompt was run.
 
+# M7 deterministic sync merge foundation (2026-10-26)
+
+- Added fixed-width HLC parsing, monotonic local/received clocks, restart restoration, bounded future
+  skew and overflow handling. API and encryption context validation share the same parser.
+- Added per-field metadata LWW with independent object tombstones and explicit restoration. Identical
+  clocks containing different edits fail visibly instead of discarding either value. Future schemas
+  are reported as opaque records to retain, and payload clocks cannot outrun the encrypted envelope.
+- Added the pure config Base/Local/Remote decision table, explicit tombstones, first-link union-only
+  previews, and unavailable/skipped observations that never become uninstall requests. Text merging,
+  append-only chat chunk union, actual adapters, previews/applies and rollback remain pending.
+- Thirty-four focused aura-sync tests and all-target Clippy pass. Durable outbox/cursor transactions,
+  SQLCipher account profiles and desktop integration are the next required work; no real config,
+  credential store, cloud state or existing database was read or modified.
+

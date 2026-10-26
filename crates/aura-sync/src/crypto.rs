@@ -367,7 +367,7 @@ impl RecordContext<'_> {
         if !matches!(
             self.collection,
             "projects" | "chats" | "chat_chunks" | "config"
-        ) || self.hlc.len() > 160
+        ) || self.hlc.parse::<crate::clock::Hlc>().is_err()
         {
             return Err(CryptoError::Invalid);
         }

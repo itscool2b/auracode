@@ -2,6 +2,8 @@
 //! or reveal their contents through Debug. The cloud receives authenticated ciphertext only.
 pub mod account;
 pub mod api;
+pub mod clock;
 pub mod crypto;
+pub mod merge;
 pub mod vault;
 pub mod wire;

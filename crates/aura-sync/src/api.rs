@@ -580,22 +580,11 @@ fn binary(value: &str, min: usize, max: usize) -> bool {
     crypto::decode(value, max).is_ok_and(|bytes| bytes.len() >= min)
 }
 fn valid_record(record: &EncryptedRecord) -> bool {
-    let mut parts = record.hlc.split(':');
-    let timestamp = parts.next().unwrap_or_default();
-    let counter = parts.next().unwrap_or_default();
-    let device = parts.next().unwrap_or_default();
     matches!(
         record.collection.as_str(),
         "projects" | "chats" | "chat_chunks" | "config"
     ) && id(&record.id).is_ok()
-        && timestamp.len() == 13
-        && counter.len() == 10
-        && timestamp
-            .bytes()
-            .chain(counter.bytes())
-            .all(|byte| byte.is_ascii_digit())
-        && id(device).is_ok()
-        && parts.next().is_none()
+        && record.hlc.parse::<crate::clock::Hlc>().is_ok()
         && (1..=1_000_000).contains(&record.key_version)
         && binary(&record.nonce, 24, 24)
         && binary(&record.ciphertext, 16, crypto::MAX_RECORD_PLAINTEXT + 16)
