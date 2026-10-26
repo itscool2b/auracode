@@ -1,5 +1,8 @@
-//! Byte-preserving checkpoints in a private shadow Git repository. User Git state is never written.
+//! Byte-preserving checkpoints in private Local Git objects or encrypted Account objects.
+//! User Git state is never written.
 
+#[cfg(feature = "account-sync")]
+mod encrypted;
 mod git;
 mod revert;
 mod scan;
@@ -32,11 +35,19 @@ pub enum CheckpointError {
 
 pub struct Checkpoints {
     root: PathBuf,
+    storage: Storage,
     env: Arc<EnvResolver>,
     registry: Arc<LeftoverRegistry>,
     /// Git refs/index/manifest publication and revert previews serialize for this profile.
     gate: Mutex<()>,
     previews: std::sync::Mutex<std::collections::HashMap<String, revert::Prepared>>,
+}
+
+enum Storage {
+    Local,
+    Locked,
+    #[cfg(feature = "account-sync")]
+    Encrypted(crate::profile_files::EncryptedFiles),
 }
 
 impl std::fmt::Debug for Checkpoints {
@@ -77,6 +88,11 @@ impl Checkpoints {
     ) -> Arc<Self> {
         Arc::new(Self {
             root: profile.checkpoints_dir(),
+            storage: if profile.meta.kind == crate::profile::ProfileKind::Account {
+                Storage::Locked
+            } else {
+                Storage::Local
+            },
             env,
             registry,
             gate: Mutex::new(()),
@@ -104,6 +120,11 @@ impl Checkpoints {
         }
         let operation = self.operation(folder_id, &root, true).await?;
         let paths = self.paths(&operation, &root).await?;
+        #[cfg(feature = "account-sync")]
+        if let Storage::Encrypted(files) = &self.storage {
+            return encrypted::capture(files.clone(), chat_id, folder_id, root, turn_id, paths)
+                .await;
+        }
         let copies = operation.scratch.path().join("blobs");
         std::fs::create_dir(&copies)?;
         let root_copy = root.clone();
@@ -250,8 +271,8 @@ impl Checkpoints {
         Ok((files, tree))
     }
 
-    /// Computes Git's real stat against the saved checkpoint using only private object trees.
-    /// No user index, repository filters, external diff command or credential file is consulted.
+    /// Local uses Git's stat against private trees; Account uses a labeled byte-size summary to
+    /// avoid plaintext Git objects. Neither reads user indexes, filters or credential files.
     pub async fn diff_stat(
         &self,
         chat_id: &str,
@@ -262,6 +283,11 @@ impl Checkpoints {
         let _guard = self.gate.lock().await;
         let manifest = self.load(chat_id, folder_id, folder, checkpoint_id)?;
         let operation = self.operation(folder_id, &manifest.root, false).await?;
+        #[cfg(feature = "account-sync")]
+        if matches!(self.storage, Storage::Encrypted(_)) {
+            let current = self.current(&operation, &manifest).await?;
+            return Ok(encrypted::stat(&manifest, &current));
+        }
         let copies = operation.scratch.path().join("stat-blobs");
         std::fs::create_dir(&copies)?;
         let current = self
@@ -387,14 +413,23 @@ impl Checkpoints {
 
     async fn operation(&self, folder_id: &str, folder: &Path, create: bool) -> Result<Operation> {
         valid_id(folder_id)?;
+        if matches!(self.storage, Storage::Locked) {
+            return Err(CheckpointError::Message(
+                "Unlock this account's checkpoint storage before starting a turn.".into(),
+            ));
+        }
         std::fs::create_dir_all(&self.root)?;
         let scratch = tempfile::Builder::new()
             .prefix("operation-")
             .tempdir_in(&self.root)?;
         let git = git::Git::new(&self.env, Arc::clone(&self.registry), scratch.path()).await?;
-        let repo = self.root.join(format!("{folder_id}.git"));
+        let repo = match &self.storage {
+            #[cfg(feature = "account-sync")]
+            Storage::Encrypted(_) => scratch.path().join("empty.git"),
+            _ => self.root.join(format!("{folder_id}.git")),
+        };
         if !repo.exists() {
-            if !create {
+            if !create && matches!(self.storage, Storage::Local) {
                 return Err(CheckpointError::Message(
                     "This checkpoint repository is missing.".into(),
                 ));
@@ -501,6 +536,12 @@ impl Checkpoints {
         manifest: &Manifest,
         copies: Option<PathBuf>,
     ) -> Result<scan::Scan> {
+        #[cfg(feature = "account-sync")]
+        if matches!(self.storage, Storage::Encrypted(_)) && copies.is_some() {
+            return Err(CheckpointError::Message(
+                "Encrypted checkpoints cannot create plaintext scratch copies.".into(),
+            ));
+        }
         let mut paths = self.paths(operation, &manifest.root).await?;
         // A newly added ignore rule must not make a previously saved file appear deleted.
         paths.extend(manifest.files.keys().cloned());
@@ -539,22 +580,41 @@ impl Checkpoints {
         valid_id(chat_id)?;
         valid_id(folder_id)?;
         valid_id(checkpoint_id)?;
-        let path = self
-            .root
-            .join(format!("{folder_id}.git/auracode/{checkpoint_id}.json"));
-        let file = std::fs::File::open(path)?;
-        use std::io::Read;
-        let mut bytes = Vec::new();
-        file.take(16 * 1024 * 1024 + 1).read_to_end(&mut bytes)?;
-        if bytes.len() > 16 * 1024 * 1024 {
-            return Err(CheckpointError::Message(
-                "Checkpoint metadata exceeds its limit.".into(),
-            ));
-        }
+        let bytes = match &self.storage {
+            Storage::Locked => {
+                return Err(CheckpointError::Message(
+                    "Unlock this account's checkpoint storage.".into(),
+                ));
+            }
+            #[cfg(feature = "account-sync")]
+            Storage::Encrypted(files) => {
+                files.read(&format!("manifest-{checkpoint_id}"), 16 * 1024 * 1024)?
+            }
+            Storage::Local => {
+                let path = self
+                    .root
+                    .join(format!("{folder_id}.git/auracode/{checkpoint_id}.json"));
+                let file = std::fs::File::open(path)?;
+                use std::io::Read;
+                let mut bytes = Vec::new();
+                file.take(16 * 1024 * 1024 + 1).read_to_end(&mut bytes)?;
+                if bytes.len() > 16 * 1024 * 1024 {
+                    return Err(CheckpointError::Message(
+                        "Checkpoint metadata exceeds its limit.".into(),
+                    ));
+                }
+                bytes
+            }
+        };
         let manifest: Manifest = serde_json::from_slice(&bytes).map_err(|_| {
             CheckpointError::Message("This checkpoint metadata is damaged or unsupported.".into())
         })?;
-        if manifest.version != 1
+        let expected_version = if matches!(self.storage, Storage::Local) {
+            1
+        } else {
+            2
+        };
+        if manifest.version != expected_version
             || manifest.chat_id != chat_id
             || manifest.folder_id != folder_id
             || manifest.summary.id != checkpoint_id
@@ -566,22 +626,36 @@ impl Checkpoints {
         }
         for (path, file) in &manifest.files {
             scan::validate(path)?;
-            git::oid(file.oid.as_bytes())?;
+            if matches!(self.storage, Storage::Local) {
+                git::oid(file.oid.as_bytes())?;
+            } else if file.oid != file.fingerprint.sha256
+                || !crate::chatstore::blobs::is_sha256(&file.oid)
+            {
+                return Err(CheckpointError::Message(
+                    "The encrypted checkpoint has an invalid file identity.".into(),
+                ));
+            }
         }
         Ok(manifest)
     }
 
     async fn blob(&self, operation: &Operation, root: &Path, file: &SavedFile) -> Result<Vec<u8>> {
-        let bytes = operation
-            .git
-            .run(
-                &operation.repo,
-                root,
-                &operation.index,
-                vec!["cat-file".into(), "blob".into(), file.oid.clone().into()],
-                scan::FILE_LIMIT,
-            )
-            .await?;
+        let bytes = match &self.storage {
+            #[cfg(feature = "account-sync")]
+            Storage::Encrypted(files) => files.read(&file.oid, scan::FILE_LIMIT)?,
+            _ => {
+                operation
+                    .git
+                    .run(
+                        &operation.repo,
+                        root,
+                        &operation.index,
+                        vec!["cat-file".into(), "blob".into(), file.oid.clone().into()],
+                        scan::FILE_LIMIT,
+                    )
+                    .await?
+            }
+        };
         use sha2::{Digest, Sha256};
         if bytes.len() != file.fingerprint.bytes as usize
             || crate::chatstore::rows::hex(&Sha256::digest(&bytes)) != file.fingerprint.sha256

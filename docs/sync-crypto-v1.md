@@ -200,6 +200,19 @@ with object IDs `<UUID>-<part number>`. An encrypted `<UUID>-manifest` is publis
 `{version:1, parts, bytes}`. These IDs bind every part to its journal. A crash can leave authenticated
 parts without a completion manifest; they remain available for explicit recovery and are never
 mistaken for a complete stream. Serialization buffers are bounded and no plaintext recovery JSONL
-is created. Recovery browsing/export and encrypted checkpoints remain required before production
-Account sessions are enabled.
+is created. Recovery browsing/export and the remaining profile readiness checks are required before
+production Account sessions are enabled.
+
+Account checkpoints use the `checkpoint` purpose for file hashes and `manifest-<checkpoint UUID>`
+for their encrypted metadata. Version2 manifests retain the existing byte fingerprints, permissions,
+chat/folder identity and warnings. Git runs with an empty operation-scoped repository only to apply
+the existing path/ignore policy. No file contents, trees, indexes or manifests are saved in it, and
+the account handoff summary reports byte sizes instead of pretending to be a Git line-count stat.
+The ordinary checkpoint constructor refuses Account capture; callers must supply the unlocked file
+key to `new_account`. Existing plaintext checkpoint directories require explicit import.
+
+Explicit revert still mutates the user's chosen working files and preserves race-safe recovery
+copies under `.auracode-revert-<token>` in that working folder. Those are user workspace files, not
+encrypted profile copies. This boundary preserves newer external edits if a file changes during
+rename and is disclosed by the existing revert preview. Account profile snapshots remain encrypted.
 

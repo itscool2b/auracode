@@ -1300,3 +1300,13 @@ changes. Fourteen Git tests, five checkpoint lifecycle tests and all three deskt
 tests pass on Windows. Core, CLI and desktop all-target Clippy and binding export pass. macOS execution,
 chat relocation, optional bring-changes/setup, PR creation and missing-directory recreation remain
 pending. No remote CI, push, real-agent prompt or login ran for this checkpoint.
+Encrypted checkpoints now capture and reopen exact file bytes and manifests without plaintext Git
+objects or scratch copies. Empty temporary Git repositories retain the existing path/ignore policy;
+account handoffs use an explicitly labeled byte summary. Explicit user-workspace reverts retain
+their existing atomic recovery behavior. Fourteen focused checkpoint/session tests pass on Windows,
+including encrypted capture/diff/reopen/revert, plain-constructor refusal, legacy preservation and
+the existing user-index/race/interrupt gates. Default and account-feature core all-target Clippy
+pass. The profile-wide audit identified M4's worktree registry as another content-bearing file that
+needs encryption before Account activation. The sync writer projection, scheduler and account UI
+are still pending.
+
