@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig } from "vite";
+import { noticesPlugin } from "../../.github/scripts/third-party-notices.mjs";
 
 const app = fileURLToPath(new URL(".", import.meta.url));
 const stage = process.env.AURACODE_RELEASE_STAGE;
@@ -18,7 +19,7 @@ if (stage) {
   }
 }
 export default defineConfig({
-  plugins: [reactRouter()],
+  plugins: [reactRouter(), noticesPlugin("web")],
   resolve: {
     alias: {
       "#release-catalog": stage

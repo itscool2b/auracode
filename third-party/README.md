@@ -1,0 +1,58 @@
+# Third-party notices
+
+These files preserve third-party terms. They do not select, grant or change a license for auracode.
+The project license remains a separate owner decision. Nothing here publishes the repository.
+
+`catalogue.json` contains the locked production dependency closure of the desktop and website,
+source archive links and SHA-256 hashes. `texts.json` preserves the original license texts. The desktop set covers Windows
+x64/ARM64 and macOS x64/ARM64. The website set contains only its frontend production dependencies.
+The three bundled Fontsource packages retain their full OFL text and copyright notices. OGL's full
+Unlicense section comes from its installed README. This is a conservative manifest-based inventory;
+tree shaking and native linking can remove components from a particular binary.
+
+Rust traversal follows normal dependency edges and excludes build-only dependencies, test
+dependencies and procedural macro executables. SQLCipher and Windows vendored OpenSSL are explicit
+exceptions because their native code is compiled into the product through build dependencies.
+Playwright, Biome, Sharp, Cargo build helpers and the test-only Codex schema are not added to runtime
+notices. The schema instead has its own pinned upstream `LICENSE` and `NOTICE` beside the fixture.
+
+Some published Rust archives omit their license files. `overrides.json` identifies the exact
+`.cargo_vcs_info.json` revision and the authoritative upstream source used for each replacement.
+`upstream/` preserves those texts with hashes. The standard MPL-2.0 text for selectors is identical
+to the text in the locked cssparser archive; selectors' own source header names MPL-2.0. Source
+archive links in the notices identify the corresponding unmodified MPL-covered source.
+
+## Reproduce
+
+Install dependencies from the lockfiles first. Refreshing reads installed npm packages and Cargo's
+registry sources. Cargo metadata is offline and does not compile or run the application. No vendor
+configuration or credentials are read, and the generator performs no network fetches.
+
+```sh
+node .github/scripts/third-party-notices.mjs --write
+node .github/scripts/third-party-notices.mjs
+node --test .github/scripts/third-party-notices.test.mjs
+```
+
+Review changed dependencies and original texts before committing a refresh. An absent license or
+changed upstream revision fails closed. Both Vite builds verify the recorded lockfile/manifest
+hashes and emit `third-party-notices.txt` and a dark, script-free `third-party-notices.html` alongside
+their frontend assets. No dependency resolution or download runs from the Vite hook.
+
+## Remaining release qualification
+
+- The new hooks have focused tests, but their final desktop installer and deployed website outputs
+  have not yet been built or inspected with this checkpoint.
+- Add a user-facing About/footer entry to the notices. The emitted files alone do not establish
+  that desktop users can discover the notices through the app.
+- Verify WebView2Loader's Microsoft SDK redistribution terms and exact bundled loader version.
+  The Rust `webview2-com` wrapper's MIT text does not substitute for those terms. The independently
+  downloaded WebView2 runtime/bootstrapper also needs its installer review.
+- Inspect actual Windows and macOS release artifacts for other bundled native SDK files, linked
+  libraries, installer components and system-vs-bundled crypto. This inventory is not a completed
+  binary-level compliance certification. In particular, a custom macOS OpenSSL override needs its
+  own matched notice rather than assuming the Windows vendored version.
+- Keep unmodified third-party source archives available at the listed source locations when
+  distributing MPL-covered binaries. Modified dependencies would require a new source review.
+
+These gaps do not authorize publication, signing, a new project license, or an unreviewed release.
