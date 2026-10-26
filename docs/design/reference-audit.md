@@ -28,5 +28,7 @@ Project management, the three-column handoff picker, Changes panel, onboarding, 
 are implemented. Their focused browser gates exercise production components with synthetic native
 responses and include accessibility and responsive checks. Local import, export, project terminals,
 Git initialization and interrupted profile recovery now use the same dark modal language. Account
-lifecycle and portable folder resolution are still being completed. Final integrated visuals and
-native Windows/macOS acceptance remain pending; the browser fixtures do not establish native parity.
+lifecycle and portable folder resolution are implemented with focused browser verification. The
+website is published, and an isolated native Windows inspection covered onboarding and the workspace.
+Final integrated visuals and native Windows/macOS acceptance remain pending; these checks do not
+establish complete native parity or performance qualification.

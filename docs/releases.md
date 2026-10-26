@@ -27,9 +27,9 @@ and uses encoded arguments so Windows paths containing spaces remain intact. Thi
 runtime update and release validation logic remain Rust. Existing macOS local-signing behavior is
 preserved, while CI explicitly selects its ad-hoc identity.
 
-The release milestone still needs a backed-up Tauri updater key, trusted public key configuration,
-macOS Developer ID signing and notarization, the selected Windows signing mechanism, signed updater
-artifacts, the public release-only R2 route, and an old-build update dry run. The private
+When public distribution resumes, it needs a backed-up Tauri updater key, trusted public key
+configuration, macOS Developer ID signing and notarization, the selected Windows signing mechanism,
+signed updater artifacts, the public release-only R2 route, and an old-build update dry run. The private
 encrypted blob bucket must stay private. No signing key is fabricated or recovered from credentials.
 
 ## Signed updater preparation
@@ -243,10 +243,12 @@ changed to prepare this tooling. Publication and native signed-upgrade acceptanc
 
 The M2-M5 audit's reviewed non-Git initialization, project terminal/editor controls and
 capability-qualified extra folder forwarding are implemented and have focused local verification.
-Their final integrated Windows/macOS qualification remains pending. Account lifecycle recovery and
-portable folder resolution are still being completed before that final batch. Exact older-message
-native truncation/fork and Pi steering remain unsupported where the recorded protocol cannot safely
-identify the requested boundary; the visible reviewed handoff keeps the source conversation intact.
+Account lifecycle recovery, explicit passphrase storage, reset sync, device removal, Keep as Local,
+Local import, readable chat export and portable folder resolution are also implemented with focused
+verification. Their final integrated Windows/macOS and live account qualification remain pending.
+Exact older-message native truncation/fork and Pi steering remain unsupported where the recorded
+protocol cannot safely identify the requested boundary; the visible reviewed handoff keeps the source
+conversation intact.
 
 Source references checked for this implementation:
 [Tauri Windows installers](https://v2.tauri.app/distribute/windows-installer/),

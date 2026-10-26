@@ -19,16 +19,21 @@ live in [docs/plan.md](docs/plan.md); [docs/progress.md](docs/progress.md) recor
 verification evidence. Windows and macOS are the current targets. Linux and WSL are deferred.
 
 Backend and cloud services are Rust-first. The selected cloud architecture is Rust Workers, D1, R2
-and Cloudflare Email Service. The Rust API is deployed to an isolated preview environment; website
-deployment and real email/device acceptance remain pending. Production storage remains empty.
+and Cloudflare Email Service. The website is published at [auracode.si](https://auracode.si) and its
+isolated preview;
+the Rust API is available only in preview. Production API resources are prepared, but public API
+routing remains closed and accounts and downloads are not enabled. Real email/device acceptance
+remains pending. Production account storage remains empty.
 React/TypeScript handles interfaces. Root AGENTS.md and CLAUDE.md are identical project instructions,
 enforced by the lint gate. Public installer signing is deferred at the owner's request.
 
 Current source includes native agent drivers, the dark Orbit workspace, onboarding, project and Git
 controls, configuration Library, encrypted account sync, local import and readable export. Account
-recovery and portable folder resolution are being completed. The milestone notes below describe the
-earlier merged foundation, not the current branch's full implementation. Release requirements and
-the deliberate final verification batch are in [docs/releases.md](docs/releases.md).
+recovery, explicit passphrase storage, reset sync, device removal and portable folder resolution are
+implemented with focused verification. Final integrated and native acceptance remain pending. The
+milestone notes below describe the earlier merged foundation, not the current branch's full
+implementation. Release requirements and the deliberate final verification batch are in
+[docs/releases.md](docs/releases.md).
 
 ### M0: scaffold and spikes
 

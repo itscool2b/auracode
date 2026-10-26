@@ -45,23 +45,29 @@ entrances. No third-party reference image is shipped.
 ## Deployment prerequisites
 
 The assets-only `wrangler.toml` remains available. The separate [Rust website Worker](../web-worker/README.md)
-embeds the same public build for ordinary code deployment without an Assets upload. Deploy one
-implementation for a given website route, and rebuild from the final integrated source. Neither
-implementation has been deployed by this source checkpoint. `/api/*` must resolve to the more-specific Rust API Worker route on the same
-origin. Verify this precedence in a separate preview before publishing the site. The generated
-`_headers` supplies a hash-based CSP for the exact prerendered framework scripts. Rebuild headers
+embeds the same public build for ordinary code deployment without an Assets upload. It is deployed
+at [auracode.si](https://auracode.si) and [preview.auracode.si](https://preview.auracode.si).
+Live checks verified all 48 public files, nine page HEAD responses, security headers and missing-asset
+handling. Preview `/api/*` resolves to
+the more-specific Rust API Worker route on the same origin. Production `/api/*` remains closed with
+404 responses; public accounts are not enabled. Deploy only one website implementation per route
+and rebuild from the final integrated source. The generated `_headers` supplies a hash-based CSP
+for the exact prerendered framework scripts. Rebuild headers
 whenever HTML changes. Turnstile is the only permitted third-party script and frame origin.
 
-Complete API Email Service onboarding, secrets and migrations, and set the public
-`TURNSTILE_SITE_KEY` Worker variable for the intended hostname. A missing key disables sign-in with
-a clear message, never a test-key bypass. Preview tests must exercise actual delivery, expiration,
+Production API Email Service configuration, secrets, migrations and the hostname-specific public
+`TURNSTILE_SITE_KEY` are prepared; nonsecret deployment evidence is in [infra/README.md](../../infra/README.md).
+Email-content previews are disabled. A missing site key disables sign-in with a
+clear message, never a test-key bypass. Preview tests must still exercise actual delivery, expiration,
 resend/rate limits, CSRF/cookie behavior, account changes and streaming downloads against the Rust
 Worker. Browser fixture tests do not qualify those external services.
 
-Publish signed Windows/macOS installers, per-artifact SHA-256 checksums and release notes before
-enabling download links. No version or download is invented here. Confirm the supported ARM64
-builds in the final release matrix. Final operator identity, legal contacts, retention/legal review
-and desktop plaintext export/import acceptance are required before opening accounts publicly.
+Public installer signing is deferred at the owner's request. Downloads remain disabled until
+reviewed Windows/macOS installers, per-artifact SHA-256 checksums and release notes are published
+under [docs/releases.md](../../docs/releases.md). Unsigned package compilation and native installation
+checks remain separate acceptance gates, including the supported ARM64 builds. Final operator identity, legal
+contacts, retention/legal review and live desktop E2E acceptance are required before opening accounts
+publicly. Desktop readable export and Local import are implemented with focused fixture checks.
 The pre-release legal pages explicitly state their draft status.
 
 The API export is a streamed encrypted JSONL archive, not a readable chat export. It must end with
