@@ -1020,6 +1020,17 @@ impl Smoke<'_> {
             }
             return;
         }
+        if self.spec.kind == DriverKind::Headless {
+            let mut lines =
+                vec!["Protocol logs (text fallback replay is not supported yet):".to_owned()];
+            lines.extend(
+                self.logs
+                    .iter()
+                    .map(|(log, name)| format!("  {name}: {}", log.display())),
+            );
+            self.report.note(lines.join("\n"));
+            return;
+        }
         let mut lines = vec!["Protocol logs, and the fixture each can become:".to_owned()];
         let fixture_folder = if self.spec.kind == DriverKind::Pi {
             "pi".to_owned()
@@ -1082,6 +1093,9 @@ impl Answer {
 /// session-scope ones (Hermes), the session total on a spawn's first turn and deltas after it
 /// (spec 5.5.4).
 pub fn expected_scope(spec: &AgentSpec, first_of_spawn: bool) -> UsageScope {
+    if spec.kind == DriverKind::Headless && spec.dialect == "grok-stream" {
+        return UsageScope::Turn;
+    }
     if matches!(
         spec.kind,
         DriverKind::Mock | DriverKind::Claude | DriverKind::Pi
@@ -1160,6 +1174,16 @@ mod tests {
         assert_eq!(expected_scope(&codex, true), UsageScope::Turn);
         let mock = aura_agents::get("mock").expect("mock").clone();
         assert_eq!(expected_scope(&mock, true), UsageScope::Turn);
+        for first in [true, false] {
+            assert_eq!(
+                expected_scope(aura_agents::get("grok-stream").unwrap(), first),
+                UsageScope::Turn
+            );
+        }
+        assert_eq!(
+            expected_scope(aura_agents::get("agy-stream").unwrap(), true),
+            UsageScope::Session
+        );
     }
 
     #[test]

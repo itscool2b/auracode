@@ -214,6 +214,8 @@ cross-package catalog assertions through the shared catalog. The free probe expl
 text fallbacks to executable detection and starts no chat or prompt, with a real fake-process
 version-check regression. The permission smoke scenario explicitly skips unsupported Ask modes.
 Combined verification and real-agent acceptance are still pending; no new paid calls were made.
+Grok text smoke expects native per-turn usage; the text fallbacks' logs are listed without claiming
+the ACP replay path supports them. Text fallback replay remains an explicit acceptance limitation.
 
 - M1d ACP subtask: deferred Cursor questions/plan approval and OMP form elicitation are implemented
   with fake-pipe and pure conversion regressions. OMP advertises form support to prevent its
