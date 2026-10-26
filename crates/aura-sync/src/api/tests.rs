@@ -1,4 +1,14 @@
 use super::*;
+
+#[test]
+fn deleted_requires_the_exact_status_and_error_code() {
+    assert_eq!(failure(410, Some("account_deleted"), 0), ApiError::Deleted);
+    assert_eq!(failure(410, None, 0), ApiError::Protocol);
+    assert_eq!(
+        failure(401, Some("account_deleted"), 0),
+        ApiError::Unauthorized
+    );
+}
 use std::{
     io::{Read, Write},
     net::TcpListener,

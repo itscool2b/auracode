@@ -27,6 +27,8 @@ pub enum ApiError {
     TimedOut,
     #[error("Sign in again. Local data remains on this device.")]
     Unauthorized,
+    #[error("This account was deleted. Retained local data is still available.")]
+    Deleted,
     #[error("This device is not approved or the request is not allowed.")]
     Forbidden,
     #[error("The code is invalid or expired.")]
@@ -611,6 +613,7 @@ fn failure(status: u16, code: Option<&str>, retry: u32) -> ApiError {
         403 => ApiError::Forbidden,
         404 => ApiError::NotFound,
         409 => ApiError::Conflict,
+        410 if code == Some("account_deleted") => ApiError::Deleted,
         413 => ApiError::Quota,
         429 => ApiError::RateLimited {
             retry_after_seconds: retry,

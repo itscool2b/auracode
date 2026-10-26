@@ -184,8 +184,16 @@ records, keys, devices and private objects, then erases the email and retains a 
 Its R2 prefix is rescanned so a write already in flight at deletion cannot leave an untracked object.
 Cleanup is bounded and retries failed work; no unrelated bucket or prefix is touched.
 
+Deletion records minimal receipts only for sessions still valid inside the same guarded transaction.
+An exact unexpired token and matching client type may receive HTTP 410 `account_deleted`; browser
+mutations retain the Origin and CSRF checks. Unknown, expired or previously revoked tokens still
+receive HTTP 401. Receipts contain token/CSRF hashes, client type and deletion/expiry times, with no
+account ID or email. They expire no later than the original session, capped at 30 days, and the
+scheduled cleanup deletes expired receipts. This permits a device to distinguish deletion from
+sign-in expiry while retaining its encrypted local workspace and decryption key.
+
 `invalid_request`, `invalid_code`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `quota`,
-`rate_limited`, `delivery_failed` and `unavailable` are the defined error codes. Rate/delivery failures
+`rate_limited`, `delivery_failed`, `account_deleted` and `unavailable` are the defined error codes. Rate/delivery failures
 include Retry-After. Clients must keep local encrypted data on all network/auth errors and never
 substitute a new empty account state for a failed pull. A response lost after a successful mutation
 is reconciled by fetching authoritative state. Code verification itself is single-use; a lost token

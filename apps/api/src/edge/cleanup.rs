@@ -85,6 +85,7 @@ async fn cleanup(env: Env) -> Result<()> {
         db.run("DELETE FROM blob_objects WHERE object_key=?1 AND NOT EXISTS(SELECT 1 FROM blobs b WHERE b.object_key=?1)",vec![json!(key)]).await?;
     }
     db.batch(vec![
+        (crate::deletion_sql::CLEANUP, vec![json!(now)]),
         (
             "DELETE FROM sync_reset_reviews WHERE expires_at<?1",
             vec![json!(now - 86400)],

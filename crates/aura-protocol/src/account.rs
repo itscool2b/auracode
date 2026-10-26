@@ -22,6 +22,7 @@ pub enum AccountAccess {
     Ready,
     Expired,
     Denied,
+    Deleted,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -108,6 +109,7 @@ pub enum AccountFailureCode {
     Offline,
     TimedOut,
     Unauthorized,
+    Deleted,
     Forbidden,
     InvalidCode,
     Conflict,

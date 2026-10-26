@@ -281,21 +281,35 @@ impl Api {
         Ok(response)
     }
     pub(super) async fn delete_account(&self, identity: &Identity) -> Result<Response> {
-        if self.now - identity.session.created_at > 300 {
+        if !(0..=300).contains(&(self.now - identity.session.created_at)) {
             return Err(ApiError::Forbidden);
         }
         self.db
             .batch(vec![
                 (
-                    "UPDATE users SET deletion_requested_at=?2 WHERE id=?1",
-                    vec![json!(identity.session.user_id), json!(self.now)],
+                    crate::deletion_sql::REMEMBER,
+                    vec![json!(identity.hash), json!(self.now)],
                 ),
                 (
-                    "UPDATE sessions SET revoked_at=?2 WHERE user_id=?1",
-                    vec![json!(identity.session.user_id), json!(self.now)],
+                    crate::deletion_sql::DELETE,
+                    vec![json!(identity.hash), json!(self.now)],
+                ),
+                (
+                    crate::deletion_sql::REVOKE,
+                    vec![json!(identity.hash), json!(self.now)],
                 ),
             ])
             .await?;
+        let receipt: Option<Value> = self
+            .db
+            .first(
+                crate::deletion_sql::RECEIPT,
+                vec![json!(identity.hash), json!(self.now)],
+            )
+            .await?;
+        if receipt.is_none() {
+            return Err(ApiError::Unauthorized);
+        }
         json_response(json!({"deletion_pending":true}))
     }
 }

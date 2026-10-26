@@ -29,6 +29,7 @@ pub enum Access {
     SignedOut,
     Expired,
     Denied,
+    Deleted,
 }
 #[derive(Debug, thiserror::Error)]
 pub enum AccountError {
@@ -111,6 +112,9 @@ impl Account {
             Some(bundle) => bundle,
             None => Bundle::new()?,
         };
+        if bundle.account_deleted {
+            return Err(ApiError::Deleted.into());
+        }
         bundle.session = Some(SavedSession {
             token: verified.token,
             expires_at: verified.expires_at,
@@ -142,7 +146,9 @@ impl Account {
         let Some(bundle) = load(&store, &entry).await? else {
             return Ok(None);
         };
-        let access = if bundle.session.is_some() {
+        let access = if bundle.account_deleted {
+            Access::Deleted
+        } else if bundle.session.is_some() {
             Access::VerificationRequired
         } else {
             Access::SignedOut
@@ -610,6 +616,9 @@ impl Account {
     }
     async fn check(&mut self, now: i64) -> Result<()> {
         self.current()?;
+        if self.bundle.account_deleted {
+            return Err(ApiError::Deleted.into());
+        }
         let session = self.bundle.session.as_ref().ok_or(AccountError::State)?;
         if session.expires_at <= now {
             self.clear_session(Access::Expired).await?;
@@ -627,6 +636,11 @@ impl Account {
     async fn response<T>(&mut self, result: std::result::Result<T, ApiError>) -> Result<T> {
         self.current()?;
         match result {
+            Err(ApiError::Deleted) => {
+                self.bundle.account_deleted = true;
+                self.clear_session(Access::Deleted).await?;
+                Err(ApiError::Deleted.into())
+            }
             Err(ApiError::Unauthorized) => {
                 self.clear_session(Access::Expired).await?;
                 Err(ApiError::Unauthorized.into())
@@ -640,7 +654,11 @@ impl Account {
     }
     async fn clear_session(&mut self, access: Access) -> Result<()> {
         self.bundle.session = None;
-        self.access = access;
+        self.access = if self.bundle.account_deleted {
+            Access::Deleted
+        } else {
+            access
+        };
         self.persist().await
     }
     async fn persist(&self) -> Result<()> {

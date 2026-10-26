@@ -49,6 +49,13 @@ export default function Privacy() {
           already in flight can be removed later. Local copies and data already downloaded by a
           device are not remotely erased.
         </p>
+        <p>
+          A receipt of each session valid at deletion retains only its token hash, client type,
+          request-verification hash and deletion and expiry times. It lets that device recognize
+          deletion without signing in again. Receipts expire with the original session, within
+          30 days, and scheduled cleanup removes expired receipts. They contain no email or account
+          identifier.
+        </p>
         <h2>Your controls</h2>
         <p>
           Use Account to revoke a device, sign out everywhere, change your verified email, download

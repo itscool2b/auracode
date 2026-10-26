@@ -17,6 +17,8 @@ pub enum ApiError {
     InvalidRequest,
     #[error("Sign in again")]
     Unauthorized,
+    #[error("This account was deleted; retained local data is still available")]
+    AccountDeleted,
     #[error("This operation is not allowed")]
     Forbidden,
     #[error("The code is invalid or expired")]
@@ -43,6 +45,7 @@ impl ApiError {
             Self::Forbidden => 403,
             Self::NotFound => 404,
             Self::Conflict => 409,
+            Self::AccountDeleted => 410,
             Self::Quota => 413,
             Self::RateLimited => 429,
             Self::DeliveryFailed | Self::Unavailable => 503,

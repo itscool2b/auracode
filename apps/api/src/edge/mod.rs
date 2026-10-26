@@ -208,12 +208,42 @@ impl Api {
         };
         crypto::decode(token, 32, 32).map_err(|_| ApiError::Unauthorized)?;
         let hash = crypto::hash(token);
-        let session: Session = self
+        let session: Option<Session> = self
             .db
             .first(crate::sql::AUTHENTICATE, vec![json!(hash), json!(self.now)])
-            .await?
-            .ok_or(ApiError::Unauthorized)?;
-        if session.client_kind != kind {
+            .await?;
+        let Some(session) = session else {
+            #[derive(serde::Deserialize)]
+            struct Receipt {
+                client_kind: ClientKind,
+                csrf_hash: String,
+            }
+            let receipt: Receipt = self
+                .db
+                .first(
+                    crate::deletion_sql::RECEIPT,
+                    vec![json!(hash), json!(self.now)],
+                )
+                .await?
+                .ok_or(ApiError::Unauthorized)?;
+            self.check_request_kind(request, kind, receipt.client_kind, &receipt.csrf_hash)?;
+            return Err(ApiError::AccountDeleted);
+        };
+        self.check_request_kind(request, kind, session.client_kind, &session.csrf_hash)?;
+        Ok(Identity {
+            session,
+            hash,
+            token: token.into(),
+        })
+    }
+    fn check_request_kind(
+        &self,
+        request: &Request,
+        kind: ClientKind,
+        expected: ClientKind,
+        csrf_hash: &str,
+    ) -> Result<()> {
+        if expected != kind {
             return Err(ApiError::Unauthorized);
         }
         if kind == ClientKind::Browser && !matches!(request.method(), Method::Get | Method::Head) {
@@ -230,15 +260,11 @@ impl Api {
                 .get("X-Auracode-CSRF")
                 .map_err(unavailable)?
                 .ok_or(ApiError::Forbidden)?;
-            if !crypto::equal(&crypto::hash(&csrf), &session.csrf_hash) {
+            if !crypto::equal(&crypto::hash(&csrf), csrf_hash) {
                 return Err(ApiError::Forbidden);
             }
         }
-        Ok(Identity {
-            session,
-            hash,
-            token: token.into(),
-        })
+        Ok(())
     }
     fn csrf(&self, token: &str) -> Result<String> {
         crypto::verifier(&self.key, "csrf", &[token])

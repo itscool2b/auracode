@@ -6,6 +6,67 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[tokio::test]
+async fn deleted_account_retains_its_key_and_durable_state_without_network_retries() {
+    let (mut account, store) = account().await;
+    ready(&mut account).await;
+    let id = account.id.clone();
+    assert!(matches!(
+        account.response::<()>(Err(ApiError::Deleted)).await,
+        Err(AccountError::Api(ApiError::Deleted))
+    ));
+    assert_eq!(account.access(), &Access::Deleted);
+    assert!(account.bundle.session.is_none());
+    assert!(account.local_key_handle().is_some());
+    let mut restored = Account::restore(api(), &id, store.clone(), 100)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(restored.access(), &Access::Deleted);
+    assert!(restored.local_key_handle().is_some());
+    assert!(matches!(
+        restored.check(100).await,
+        Err(AccountError::Api(ApiError::Deleted))
+    ));
+    restored.clear_session(Access::SignedOut).await.unwrap();
+    assert_eq!(restored.access(), &Access::Deleted);
+    assert!(matches!(
+        Account::signed_in(
+            api(),
+            VerifiedSession {
+                user_id: id,
+                token: token(),
+                expires_at: 10_000,
+            },
+            store
+        )
+        .await,
+        Err(AccountError::Api(ApiError::Deleted))
+    ));
+}
+
+#[test]
+fn bundle_v2_reads_v1_and_rejects_unknown_or_inconsistent_deleted_states() {
+    let bundle = Bundle::new().unwrap();
+    let mut bytes = bundle.encode().unwrap();
+    assert_eq!(bytes[12], 2);
+    bytes[12] = 1;
+    bytes.pop();
+    assert!(!Bundle::decode(&bytes).unwrap().account_deleted);
+    bytes[12] = 3;
+    assert!(Bundle::decode(&bytes).is_err());
+    bytes[12] = 2;
+    bytes.push(2);
+    assert!(Bundle::decode(&bytes).is_err());
+    let mut bundle = Bundle::new().unwrap();
+    bundle.account_deleted = true;
+    bundle.session = Some(SavedSession {
+        token: token(),
+        expires_at: 1000,
+    });
+    assert!(Bundle::decode(&bundle.encode().unwrap()).is_err());
+}
+
 #[derive(Default)]
 struct Memory {
     values: Mutex<HashMap<VaultEntry, Zeroizing<Vec<u8>>>>,

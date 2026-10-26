@@ -51,6 +51,7 @@ pub(super) fn api(error: ApiError) -> AccountFailure {
         ApiError::Offline => Code::Offline,
         ApiError::TimedOut => Code::TimedOut,
         ApiError::Unauthorized => Code::Unauthorized,
+        ApiError::Deleted => Code::Deleted,
         ApiError::Forbidden => Code::Forbidden,
         ApiError::InvalidCode => Code::InvalidCode,
         ApiError::Conflict => Code::Conflict,

@@ -7,12 +7,13 @@ use crate::{
 use std::sync::Arc;
 use zeroize::Zeroizing;
 
-const MAGIC: &[u8] = b"AURA-ACCOUNT\x01";
+const MAGIC: &[u8] = b"AURA-ACCOUNT";
 pub(super) struct Bundle {
     pub device_key: DeviceKey,
     pub device_id: Option<String>,
     pub session: Option<SavedSession>,
     pub account_key: Option<SavedKey>,
+    pub account_deleted: bool,
 }
 pub(super) struct SavedSession {
     pub token: SessionToken,
@@ -31,11 +32,13 @@ impl Bundle {
             device_id: None,
             session: None,
             account_key: None,
+            account_deleted: false,
         })
     }
     pub fn encode(&self) -> Result<Zeroizing<Vec<u8>>> {
         let mut value = Zeroizing::new(Vec::with_capacity(256));
         value.extend_from_slice(MAGIC);
+        value.push(2);
         value.extend_from_slice(self.device_key.secret());
         let id = self.device_id.as_deref().unwrap_or_default();
         if !id.is_empty() {
@@ -55,11 +58,16 @@ impl Bundle {
             value.push(u8::from(key.local_proof));
             value.extend_from_slice(key.key.secret());
         }
+        value.push(u8::from(self.account_deleted));
         Ok(value)
     }
     pub fn decode(value: &[u8]) -> Result<Self> {
         let mut cursor = Cursor(value);
         if cursor.take(MAGIC.len())? != MAGIC {
+            return Err(AccountError::StoredData);
+        }
+        let version = cursor.take(1)?[0];
+        if !matches!(version, 1 | 2) {
             return Err(AccountError::StoredData);
         }
         let device_key = DeviceKey::restore(cursor.take(32)?)?;
@@ -112,7 +120,8 @@ impl Bundle {
         } else {
             None
         };
-        if !cursor.0.is_empty() {
+        let account_deleted = version >= 2 && cursor.flag()?;
+        if !cursor.0.is_empty() || (account_deleted && session.is_some()) {
             return Err(AccountError::StoredData);
         }
         Ok(Self {
@@ -120,6 +129,7 @@ impl Bundle {
             device_id,
             session,
             account_key,
+            account_deleted,
         })
     }
 }
