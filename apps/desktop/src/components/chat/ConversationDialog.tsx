@@ -167,13 +167,15 @@ export function ConversationDialog({
   };
   const agent = agents?.find((agent) => agent.id === preview?.agent_id);
   const label =
-    intent.type === "switch_agent"
-      ? `Switch to ${agent?.name ?? preview?.agent_id ?? "agent"}`
-      : intent.type === "fork"
-        ? "Create fork"
-        : intent.type === "edit"
-          ? "Send edited prompt"
-          : "Retry prompt";
+    intent.type === "fresh_session"
+      ? "Use handoff in a fresh session"
+      : intent.type === "switch_agent"
+        ? `Switch to ${agent?.name ?? preview?.agent_id ?? "agent"}`
+        : intent.type === "fork"
+          ? "Create fork"
+          : intent.type === "edit"
+            ? "Send edited prompt"
+            : "Retry prompt";
   return (
     <Modal
       title={

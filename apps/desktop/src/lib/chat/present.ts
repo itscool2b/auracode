@@ -138,7 +138,7 @@ export function questionResolutionLabel(resolution: QuestionResolution, prompt: 
 export interface ErrorActions {
   /** Start the agent again (`chat_start`), continuing its session. */
   readonly retry: boolean;
-  /** Start a new native session (`chat_start` with `fresh`): when continuing the old one failed. */
+  /** Review a visible handoff into a fresh native session when continuing the old one failed. */
   readonly startFresh: boolean;
 }
 

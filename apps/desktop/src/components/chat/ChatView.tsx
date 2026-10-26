@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { AgentEntry, ChatSummary, PendingHandoff, StorageStatus } from "../../bindings";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
@@ -128,6 +128,14 @@ export function ChatView({
     [pendingPermissions],
   );
 
+  const startSession = useCallback(
+    (fresh: boolean) => {
+      if (fresh && transport.conversation) setContinuation({ type: "fresh_session" });
+      else void store.start(fresh);
+    },
+    [store, transport.conversation],
+  );
+
   const actions = useMemo<TurnActions>(
     () => ({
       blobs: state.blobs,
@@ -138,12 +146,21 @@ export function ChatView({
       onRespondUi: (requestId, answer) => void store.respondUi(requestId, answer),
       errorActions: (key, kind) =>
         errorActions(kind, { newest: key === newestError, live, resumable }),
-      onStart: (fresh) => void store.start(fresh),
+      onStart: startSession,
       onShowLog: () => void store.revealLog(),
       canResume: !live,
       onContinue: transport.conversation ? (intent) => setContinuation(intent) : undefined,
     }),
-    [store, state.blobs, state.requests, newestError, live, resumable, transport.conversation],
+    [
+      store,
+      state.blobs,
+      state.requests,
+      newestError,
+      live,
+      resumable,
+      transport.conversation,
+      startSession,
+    ],
   );
 
   if (state.chat === null) {
@@ -190,7 +207,7 @@ export function ChatView({
         listed={listed}
         agent={agent}
         resumable={resumable}
-        onStart={(fresh) => void store.start(fresh)}
+        onStart={startSession}
         onStop={() => void store.stop()}
         onShowLog={() => void store.revealLog()}
         onHistory={transport.conversation ? () => setContinuation({ type: "history" }) : undefined}

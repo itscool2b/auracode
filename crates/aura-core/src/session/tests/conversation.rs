@@ -169,6 +169,137 @@ async fn changed_preview_and_live_session_cannot_change_conversation() {
 }
 
 type Starts = Arc<Mutex<Vec<(String, Option<String>, NativeStartOptions)>>>;
+
+#[tokio::test]
+async fn fresh_session_reviews_complete_context_and_waits_for_the_next_visible_prompt() {
+    let (first, h1) = turn_driver("missing-native", "saved final answer");
+    let (second, h2) = turn_driver("fresh-native", "new answer");
+    let (missing, _) = ScriptedDriver::new(vec![Step::Exit(DriverExit::StartFailed(
+        aura_drivers::driver::DriverError {
+            kind: aura_protocol::ErrorKind::AgentExited,
+            message: "The native session is unavailable.".into(),
+            detail: None,
+        },
+    ))]);
+    let starts = Arc::new(Mutex::new(Vec::new()));
+    let factory = Arc::new(RecordingFactory {
+        inner: aura_drivers::testing::ScriptedDriverFactory::new(vec![first, missing, second]),
+        starts: Arc::clone(&starts),
+    });
+    let rig = rig_with(factory, WriterConfig::STANDARD, Knobs::STANDARD);
+    let chat = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("chat");
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let original = turn(&rig, &chat.id, &h1, "saved original prompt").await;
+    stop(&rig, &chat.id).await;
+    rig.manager
+        .start(&chat.id, false)
+        .await
+        .expect("attempt resume");
+    status(&rig, &chat.id, SessionStatus::Failed).await;
+    eventually("failed resume retired", || {
+        !rig.manager.shared().live.contains(&chat.id)
+    })
+    .await;
+    assert_eq!(lock(&starts)[1].1.as_deref(), Some("missing-native"));
+    rig.manager
+        .chat_archive(&chat.id, true)
+        .await
+        .expect("archive source");
+    let preview = rig
+        .manager
+        .continuation_preview(&chat.id, ContinuationAction::FreshSession)
+        .await
+        .expect("fresh preview");
+    assert!(preview.handoff.contains("saved original prompt"));
+    assert!(preview.handoff.contains("saved final answer"));
+    assert!(!preview.resumes_native && !preview.uses_native_fork && !preview.creates_chat);
+    assert!(preview.prompt.is_none());
+    assert_eq!(lock(&starts).len(), 2, "preview must not start an agent");
+    let applied = rig
+        .manager
+        .continuation_apply(&chat.id, &preview.token)
+        .await
+        .expect("confirm handoff");
+    assert_eq!(applied.chat_id, chat.id);
+    assert!(applied.prompt.is_none());
+    assert_eq!(
+        lock(&starts).len(),
+        2,
+        "confirmation sends no prompt or agent start"
+    );
+    let pending = rig
+        .manager
+        .conversation_pending(&chat.id)
+        .await
+        .expect("pending")
+        .expect("saved handoff");
+    assert_eq!(pending.handoff, preview.handoff);
+    let original_turns = rig
+        .manager
+        .conversation_turns(&chat.id, None)
+        .await
+        .expect("preserved turns");
+    assert_eq!(original_turns.turns.len(), 1);
+    assert_eq!(original_turns.turns[0].turn_id, original);
+    let workspace = rig
+        .manager
+        .workspace_snapshot(aura_protocol::workspace::WorkspaceFilter {
+            include_archived: true,
+            project_id: None,
+        })
+        .await
+        .expect("workspace");
+    assert!(
+        workspace
+            .chats
+            .iter()
+            .find(|saved| saved.chat.id == chat.id)
+            .expect("source")
+            .archived
+    );
+    rig.manager
+        .chat_archive(&chat.id, false)
+        .await
+        .expect("restore before continuing");
+    turn(&rig, &chat.id, &h2, "continue now").await;
+    {
+        let starts = lock(&starts);
+        assert_eq!(starts.len(), 3);
+        assert!(
+            starts[2].1.is_none(),
+            "purged native id must never be resumed"
+        );
+        assert!(!starts[2].2.fork);
+    }
+    let prompt = h2
+        .commands()
+        .into_iter()
+        .find_map(|command| match command {
+            LoggedCommand::Prompt { parts, .. } => Some(parts),
+            _ => None,
+        })
+        .expect("sent prompt");
+    assert!(matches!(&prompt[0], PromptPart::Text { text } if text.starts_with(&preview.handoff)));
+    assert_eq!(
+        prompt[1],
+        PromptPart::Text {
+            text: "continue now".into()
+        }
+    );
+    assert_eq!(
+        rig.manager
+            .conversation_turns(&chat.id, None)
+            .await
+            .expect("turns")
+            .turns
+            .len(),
+        2
+    );
+}
 struct RecordingFactory {
     inner: Arc<dyn DriverFactory>,
     starts: Starts,

@@ -29,6 +29,14 @@ function Preview() {
       ev.user("original", "Review this change"),
     ];
     if (scenario === "idle") events.push(ev.turnEnded("fixture-turn"));
+    if (scenario === "missing-native") {
+      events.push(
+        ev.turnEnded("fixture-turn"),
+        ev.error("agent_exited", "The saved native transcript is unavailable."),
+      );
+      status = "failed";
+      turn = null;
+    }
     if (scenario === "recovered") {
       events.push(
         { type: "steering_status", message_id: "recovered-steer", state: "pending", detail: null },
@@ -42,6 +50,7 @@ function Preview() {
     let pending: ((value: SteeringAck) => void) | null = null;
     let message = "";
     const calls = { steer: 0, send: 0, expected: "" };
+    const recovery = { starts: 0, previews: [] as string[], applied: 0 };
     const publish = (updates: AuraEvent[]) => {
       const seq = events.length;
       events.push(...updates);
@@ -67,6 +76,9 @@ function Preview() {
     const transport = withPreviewContext(
       new FakeTransport({
         lists: async () => lists(1, { capabilities }),
+        start: async () => {
+          recovery.starts++;
+        },
         attach: async (_id, onFrame) => {
           receive = onFrame;
           return attachResult(
@@ -109,7 +121,25 @@ function Preview() {
         pending = resolve;
       });
     };
-    Object.assign(window, { steeringCalls: calls });
+    const originalPreview = transport.conversation.preview;
+    transport.conversation.preview = async (id, action) => {
+      recovery.previews.push(action.type);
+      const preview = await originalPreview(id, action);
+      return action.type === "fresh_session" ? { ...preview, agent_id: chat.agent_id } : preview;
+    };
+    const originalPending = transport.conversation.pending;
+    transport.conversation.pending = async (id) => {
+      const pending = await originalPending(id);
+      return pending && recovery.previews.at(-1) === "fresh_session"
+        ? { ...pending, agent_id: chat.agent_id }
+        : pending;
+    };
+    const originalApply = transport.conversation.apply;
+    transport.conversation.apply = (id, token) => {
+      recovery.applied++;
+      return originalApply(id, token);
+    };
+    Object.assign(window, { steeringCalls: calls, sessionRecoveryCalls: recovery });
     return {
       chat,
       transport,

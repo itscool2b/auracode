@@ -126,6 +126,7 @@ impl SessionManager {
             return Err(SessionError::ShuttingDown);
         }
         let (selected, target, include_selected) = match &action {
+            ContinuationAction::FreshSession => (None, None, true),
             ContinuationAction::SwitchAgent { agent_id } => (None, Some(agent_id.clone()), true),
             ContinuationAction::Retry { turn_id } | ContinuationAction::Edit { turn_id, .. } => {
                 (Some(turn_id.clone()), None, false)
@@ -182,6 +183,9 @@ impl SessionManager {
                 .and_then(|session| session.capabilities.as_ref())
                 .is_some_and(|capabilities| capabilities.resume);
         let mut warnings = Vec::new();
+        if matches!(action, ContinuationAction::FreshSession) {
+            warnings.push("A new native session will use only the handoff shown here. Earlier messages and saved sessions remain intact. No files are changed and no prompt is sent until your next message.".into());
+        }
         if switch
             && !resumes_native
             && snapshot
@@ -210,7 +214,7 @@ impl SessionManager {
         if creates_chat {
             warnings.push("The new chat uses the same working folder. The source conversation remains available.".into());
         }
-        if !switch {
+        if !switch && !matches!(action, ContinuationAction::FreshSession) {
             warnings.push("Continuing from an earlier message does not revert files. Review Changes separately if the folder should be restored.".into());
         }
         let (files, diff_stat) = match self.chat_changes(chat_id, None).await {

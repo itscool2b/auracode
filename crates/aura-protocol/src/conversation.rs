@@ -34,6 +34,8 @@ pub struct EditablePrompt {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContinuationAction {
+    // Rebuild visible context in a fresh session when native history cannot be resumed.
+    FreshSession,
     SwitchAgent { agent_id: String },
     Retry { turn_id: String },
     Edit { turn_id: String, text: String },
