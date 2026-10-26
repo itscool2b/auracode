@@ -1,11 +1,11 @@
 import type { AgentBrandId } from "@auracode/ui";
-import type { AuraEvent } from "../../../desktop/src/bindings";
+import type { AuraEvent } from "./m0-protocol";
 
 /*
- * The event model is aura-protocol's AuraEvent (crates/aura-protocol/src/lib.rs, the source of
- * truth), exported to TypeScript by tauri-specta into apps/desktop/src/bindings.ts. These are
- * type-only re-exports: nothing from the desktop app is bundled into the lab, and when the protocol
- * changes, the fixture stops type-checking instead of drifting from it.
+ * The event model is aura-protocol's AuraEvent as of M0, the vocabulary the fixtures were recorded
+ * in (./m0-protocol.ts, a snapshot of the tauri-specta types). The lab stays on it on purpose: M2a
+ * ports the chosen direction into the app against the live protocol, so the prototype does not
+ * chase every protocol change.
  */
 export type {
   AuraEvent,
@@ -30,7 +30,7 @@ export type {
   ToolUpdate,
   UsageInfo,
   Value,
-} from "../../../desktop/src/bindings";
+} from "./m0-protocol";
 
 /**
  * What the user sent. Not an AuraEvent: the UI already knows what it sent, and the core stores it
