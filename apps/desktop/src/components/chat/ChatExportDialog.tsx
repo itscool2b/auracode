@@ -49,7 +49,7 @@ export function ChatExportDialog({
           replaced.
         </p>
         {path ? (
-          <p role="status" style={{ overflowWrap: "anywhere" }}>
+          <p role="status" className="wrap-anywhere">
             Saved to {path}
           </p>
         ) : null}

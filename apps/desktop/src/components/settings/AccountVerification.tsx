@@ -67,7 +67,7 @@ export function AccountVerification({
         title="Cloudflare sign-in verification"
         sandbox="allow-scripts allow-same-origin"
         referrerPolicy="no-referrer"
-        style={{ width: "100%", height: 190, border: 0, colorScheme: "dark" }}
+        className="account-verification-frame"
       />
       <p role="status">
         {phase === "verified"

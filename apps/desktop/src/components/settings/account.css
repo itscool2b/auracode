@@ -312,6 +312,14 @@ textarea.account-secret {
   margin: var(--g-space-8) 0 0 calc(var(--g-space-12) * -1);
 }
 
+/* Turnstile's widget, framed by the website: its own height, no border, dark. */
+.account-verification-frame {
+  width: 100%;
+  height: 190px;
+  border: 0;
+  color-scheme: dark;
+}
+
 .account-verification {
   display: grid;
   gap: var(--g-space-8);

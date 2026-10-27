@@ -10,7 +10,16 @@ import { projectName } from "./ChatList";
 import { Modal } from "./Modal";
 import { WorkspaceRemovalDialog } from "./WorkspaceRemovalDialog";
 
-const COLORS = ["#8a98a6", "#a59e92", "#8c9c88", "#a88e80"];
+/**
+ * The colours a project can carry, as stored with the project, each drawn by its Graphite tone
+ * (--g-project-*). The stored values are data and must not change.
+ */
+const COLORS = [
+  { value: "#8a98a6", tone: "slate" },
+  { value: "#a59e92", tone: "sand" },
+  { value: "#8c9c88", tone: "sage" },
+  { value: "#a88e80", tone: "clay" },
+] as const;
 export function ProjectDialog({
   project,
   store,
@@ -33,7 +42,7 @@ export function ProjectDialog({
   const [removal, setRemoval] = useState<{ target: WorkspaceRemovalTarget | null } | null>(null);
   const [name, setName] = useState(project?.name ?? "");
   const [folder, setFolder] = useState<string | null>(null);
-  const [color, setColor] = useState(project?.color ?? COLORS[0]);
+  const [color, setColor] = useState<string | null>(project?.color ?? COLORS[0].value);
   const [agent, setAgent] = useState(project?.default_agent ?? "");
   const [model, setModel] = useState(project?.default_model ?? "");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -119,8 +128,8 @@ export function ProjectDialog({
         </label>
         <fieldset className="chat-color-choices">
           <legend>Project color</legend>
-          {COLORS.map((value) => (
-            <label key={value} style={{ color: value }}>
+          {COLORS.map(({ value, tone }) => (
+            <label key={value} data-tone={tone}>
               <input
                 type="radio"
                 name="project-color"

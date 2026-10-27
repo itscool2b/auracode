@@ -725,9 +725,50 @@
     margin-left: calc(var(--g-space-20) * -1);
   }
 
-  .answer li.task input {
-    margin: 0 var(--g-space-8) 0 0;
-    vertical-align: -1px;
+  /* A task's box sits on the line like a glyph, 8px before its words. */
+  .md-task-box {
+    display: inline-block;
+    margin-right: var(--g-space-8);
+    vertical-align: -2px;
+  }
+
+  /* Nested list items step in by the list's own indent; deeper than four levels stays at four. */
+  .answer li[data-depth="1"] {
+    margin-left: var(--g-space-20);
+  }
+
+  .answer li[data-depth="2"] {
+    margin-left: var(--g-space-40);
+  }
+
+  .answer li[data-depth="3"] {
+    margin-left: calc(var(--g-space-20) * 3);
+  }
+
+  .answer li[data-depth="4"] {
+    margin-left: var(--g-space-80);
+  }
+
+  /* Table columns keep the alignment their Markdown asked for. */
+  :is(th, td)[data-align="left"] {
+    text-align: left;
+  }
+
+  :is(th, td)[data-align="center"] {
+    text-align: center;
+  }
+
+  :is(th, td)[data-align="right"] {
+    text-align: right;
+  }
+
+  /* Somewhere the whole view fills its parent: the chats behind Settings and the Library. */
+  .app-view {
+    height: 100%;
+  }
+
+  .wrap-anywhere {
+    overflow-wrap: anywhere;
   }
 
   .answer :not(pre) > code {

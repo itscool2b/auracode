@@ -386,7 +386,7 @@ export function App({
   if (view === "chats" || view === "settings" || view === "library") {
     return (
       <>
-        <div hidden={view !== "chats"} style={{ height: "100%" }}>
+        <div hidden={view !== "chats"} className="app-view">
           <ChatsScreen
             active={view === "chats"}
             workspace={workspace}

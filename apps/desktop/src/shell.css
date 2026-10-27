@@ -1195,6 +1195,22 @@
   background-color: currentColor;
 }
 
+.chat-color-choices [data-tone="slate"] {
+  color: var(--g-project-slate);
+}
+
+.chat-color-choices [data-tone="sand"] {
+  color: var(--g-project-sand);
+}
+
+.chat-color-choices [data-tone="sage"] {
+  color: var(--g-project-sage);
+}
+
+.chat-color-choices [data-tone="clay"] {
+  color: var(--g-project-clay);
+}
+
 /* ---------- Continuations (retry, edit, fork, switch agent) ---------- */
 
 .conversation-notice {
