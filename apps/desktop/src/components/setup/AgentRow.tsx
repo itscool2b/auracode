@@ -181,7 +181,8 @@ function RowMenu({
     else if (event.key === "Home") go(0);
     else if (event.key === "End") go(entries.length - 1);
     else if (event.key === "Escape") close();
-    else if (event.key === "Tab") close(false);
+    // Tab leaves from the trigger, so focus continues to the next row instead of the page's end.
+    else if (event.key === "Tab") close();
     else return;
     if (event.key !== "Tab") event.preventDefault();
     event.stopPropagation();
@@ -249,7 +250,8 @@ function RowMenu({
                 ),
               )}
             </div>,
-            document.body,
+            // Into the page's landmark, so the menu belongs to it; fixed, so the list cannot clip it.
+            trigger.current?.closest("main") ?? document.body,
           )
         : null}
     </>

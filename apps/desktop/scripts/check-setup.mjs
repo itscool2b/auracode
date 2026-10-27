@@ -203,6 +203,28 @@ try {
       await page.reload();
       await page.getByRole("heading", { name: "Workspace ready" }).waitFor();
       await page.getByRole("button", { name: "Agents", exact: true }).click();
+      // Agents: a row's menu owns the keyboard while open and hands focus back on Escape; the
+      // page has no axe violations with it open, and opening it runs no vendor command.
+      await page.getByRole("button", { name: "Claude Code actions" }).focus();
+      await page.keyboard.press("ArrowDown");
+      await page.getByRole("menu", { name: "Claude Code actions" }).waitFor();
+      assert.equal(
+        await page.evaluate(() => document.activeElement?.getAttribute("role")),
+        "menuitem",
+      );
+      await settled(page);
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).analyze()).violations,
+        [],
+        `${engine} Agents accessibility`,
+      );
+      await page.keyboard.press("Escape");
+      assert.equal(await page.getByRole("menu").count(), 0);
+      assert.equal(
+        await page.evaluate(() => document.activeElement?.getAttribute("aria-label")),
+        "Claude Code actions",
+      );
+      await assertNoVendorCalls();
       await page.getByRole("button", { name: "Run setup again" }).click();
       await page.getByRole("button", { name: "Get started" }).waitFor();
       await page.getByRole("button", { name: "Skip setup", exact: true }).click();
@@ -234,7 +256,7 @@ try {
       await intro.close();
       assert.deepEqual(errors, [], `${engine} page errors`);
       console.log(
-        `${engine}: setup persistence, restart/skip, storage retry without duplicate project, retired-step resume, centred layout, local demo, passive detection and accessibility passed`,
+        `${engine}: setup persistence, restart/skip, storage retry without duplicate project, retired-step resume, centred layout, Agents menu keyboard, local demo, passive detection and accessibility passed`,
       );
     } finally {
       await browser.close();
