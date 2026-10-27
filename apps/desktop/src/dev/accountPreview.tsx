@@ -205,10 +205,7 @@ function Preview() {
     <main className="settings-shell g-root">
       <div className="settings-main">
         <div className="settings-content">
-          <header>
-            <h1>Account</h1>
-            <p>Profiles, sign-in, devices and recovery.</p>
-          </header>
+          <h1>Account</h1>
           {open ? (
             <AccountPanel
               api={api}
@@ -220,9 +217,16 @@ function Preview() {
           ) : (
             <p>Account closed.</p>
           )}
-          <button className="g-button g-button-ghost" type="button" onClick={() => setOpen(!open)}>
-            {open ? "Close account" : "Open account"}
-          </button>
+          {/* Unmounts the panel, as leaving the page does; not part of the product. */}
+          <p className="settings-footnote">
+            <button
+              className="g-button g-button-ghost g-button-24"
+              type="button"
+              onClick={() => setOpen(!open)}
+            >
+              {open ? "Close account" : "Open account"}
+            </button>
+          </p>
         </div>
       </div>
     </main>

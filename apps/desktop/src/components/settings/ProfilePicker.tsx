@@ -6,6 +6,7 @@ import { type ProfileApi, profileApi, switchProfile } from "../../lib/profiles";
 import "./settings.css";
 import "./account.css";
 
+/** Profiles as X Money rows: an icon, the name, where it lives, and Open or Current. */
 export function ProfilePicker({
   activeId,
   locked = false,
@@ -54,30 +55,29 @@ export function ProfilePicker({
   };
   return (
     <section className="settings-section" aria-labelledby="profile-title">
-      <h2 id="profile-title">Your profiles</h2>
-      <p className="account-notice">
-        Each profile has its own projects, chats and drafts. Local is free and stays on this
-        computer. Cloud profiles require an invitation during private preview.
-      </p>
+      <h2 id="profile-title">Profiles</h2>
+      <p className="settings-lead">Each profile keeps its own projects, chats and drafts.</p>
       {!profiles && !error ? (
         <p role="status" className="settings-footnote">
           Loading profiles…
         </p>
       ) : null}
-      <ul className="account-profiles">
+      <ul className="settings-group">
         {profiles?.map((profile) => {
           const current = profile.id === activeId;
           const Icon =
             current && locked ? LockKeyhole : profile.kind === "local" ? HardDrive : Cloud;
           return (
-            <li key={profile.id}>
-              <Icon size={16} aria-hidden="true" />
-              <div>
-                <strong>{profile.display_name}</strong>
-                <p>
-                  {profile.kind === "local" ? "On this computer" : "Encrypted account workspace"}
-                  {current ? (locked ? " · Locked" : " · Open") : ""}
-                </p>
+            <li className="settings-row" key={profile.id}>
+              <div className="settings-row-text">
+                <Icon size={16} aria-hidden="true" />
+                <div>
+                  <strong>{profile.display_name}</strong>
+                  <p>
+                    {profile.kind === "local" ? "On this computer" : "Encrypted account workspace"}
+                    {current ? (locked ? " · Locked" : " · Open") : ""}
+                  </p>
+                </div>
               </div>
               <button
                 className="g-button g-button-outline g-button-28"
@@ -97,7 +97,7 @@ export function ProfilePicker({
           <p>{error}</p>
           {!profiles ? (
             <button
-              className="g-button"
+              className="g-button g-button-28"
               type="button"
               onClick={() => setAttempt((value) => value + 1)}
             >

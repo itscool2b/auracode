@@ -65,16 +65,27 @@ export function KeepAsLocalPanel({
     }
   };
   return (
-    <section className="settings-section local-import-panel" aria-labelledby="keep-local-title">
-      <h3 id="keep-local-title">Keep your workspace</h3>
-      <p>This account was deleted. Its encrypted workspace remains on this computer.</p>
+    <section className="account-subsection" aria-labelledby="keep-local-title">
+      <div>
+        <h4 id="keep-local-title" className="settings-row-label">
+          Keep your workspace
+        </h4>
+        <p className="settings-note">
+          Copy its projects and chats into a separate Local profile on this computer.
+        </p>
+      </div>
       {!result ? (
-        <button type="button" className="g-button" disabled={busy} onClick={() => void preview()}>
+        <button
+          type="button"
+          className="g-button g-button-outline g-button-28"
+          disabled={busy}
+          onClick={() => void preview()}
+        >
           Review Keep as Local
         </button>
       ) : (
         <>
-          <p role="status">
+          <p className="settings-note" role="status">
             Saved {result.projects} project(s) and {result.chats} chat(s) in a separate Local
             profile.
             {result.missing_attachments > 0 &&
@@ -82,7 +93,7 @@ export function KeepAsLocalPanel({
           </p>
           <button
             type="button"
-            className="g-button"
+            className="g-button g-button-outline g-button-28"
             disabled={busy}
             onClick={() => void activate()}
           >
@@ -96,9 +107,14 @@ export function KeepAsLocalPanel({
         </p>
       )}
       {open && (
-        <Modal title="Keep a Local copy" onClose={() => setOpen(false)} closeDisabled={busy}>
+        <Modal
+          title="Keep a Local copy"
+          className="local-import-dialog"
+          onClose={() => setOpen(false)}
+          closeDisabled={busy}
+        >
           {busy && (
-            <p role="status" className="settings-footnote">
+            <p role="status" className="settings-note">
               Preparing the Local copy…
             </p>
           )}
@@ -109,15 +125,17 @@ export function KeepAsLocalPanel({
           )}
           {review && (
             <>
-              <p>
+              <p className="local-import-count">
                 {review.projects} project(s), {review.chats} chat(s), {review.turns} turn(s).
               </p>
-              <ul className="local-import-notices">
-                {review.notices.map((notice) => (
-                  <li key={notice}>{notice}</li>
-                ))}
-              </ul>
-              <label className="keep-local-consent">
+              {review.notices.length ? (
+                <ul className="local-import-notices">
+                  {review.notices.map((notice) => (
+                    <li key={notice}>{notice}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <label className="settings-check keep-local-consent">
                 <input
                   type="checkbox"
                   checked={accepted}
@@ -128,7 +146,7 @@ export function KeepAsLocalPanel({
               </label>
             </>
           )}
-          <footer className="local-import-actions">
+          <footer className="g-dialog-actions local-import-actions">
             <button
               type="button"
               className="g-button"

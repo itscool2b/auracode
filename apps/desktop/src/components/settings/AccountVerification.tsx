@@ -1,3 +1,5 @@
+import { PixelLoader } from "@auracode/ui/graphite";
+import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   VERIFICATION_ORIGIN,
@@ -59,34 +61,46 @@ export function AccountVerification({
     };
   }, [attempt, origin]);
   return (
-    <div className="account-verification">
-      <iframe
-        key={attempt}
-        ref={frame}
-        src={`${origin}/verify-device`}
-        title="Cloudflare sign-in verification"
-        sandbox="allow-scripts allow-same-origin"
-        referrerPolicy="no-referrer"
-        className="account-verification-frame"
-      />
-      <p role="status">
-        {phase === "verified"
-          ? "Verification complete."
-          : phase === "failed"
-            ? "Verification could not load. Check your connection and retry."
-            : phase === "loading"
-              ? "Loading verification…"
-              : "Complete verification above to continue."}
-      </p>
-      {phase === "failed" || phase === "pending" ? (
-        <button
-          type="button"
-          className="g-button g-button-28"
-          onClick={() => setAttempt((value) => value + 1)}
-        >
-          Retry verification
-        </button>
-      ) : null}
+    <div className="account-verification" data-phase={phase}>
+      <div className="account-verification-well">
+        <iframe
+          key={attempt}
+          ref={frame}
+          src={`${origin}/verify-device`}
+          title="Cloudflare sign-in verification"
+          sandbox="allow-scripts allow-same-origin"
+          referrerPolicy="no-referrer"
+          className="account-verification-frame"
+        />
+      </div>
+      <div className="account-verification-status">
+        {/* One mark for the phase: the loader while it loads, a check once done, red on failure. */}
+        {phase === "loading" ? (
+          <PixelLoader size={12} tempo="thinking" />
+        ) : phase === "verified" ? (
+          <Check size={14} aria-hidden="true" />
+        ) : (
+          <span className="account-verification-square" aria-hidden="true" />
+        )}
+        <p role="status">
+          {phase === "verified"
+            ? "Verification complete."
+            : phase === "failed"
+              ? "Verification could not load. Check your connection and retry."
+              : phase === "loading"
+                ? "Loading verification…"
+                : "Complete the check above to continue."}
+        </p>
+        {phase === "failed" || phase === "pending" ? (
+          <button
+            type="button"
+            className="g-button g-button-ghost g-button-24"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
+            Retry verification
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

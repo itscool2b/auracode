@@ -3,6 +3,10 @@ import type { AccountVaultStatus } from "../../lib/account/bindings";
 import { type AccountVaultApi, accountVaultApi } from "../../lib/account/vault";
 import { errorMessage } from "../../lib/errors";
 
+/**
+ * Where this computer keeps the account keys, opened under Security's "Secure storage" row: one
+ * line on the current store, the explicit switch to a passphrase store, and its form.
+ */
 export function AccountVault({
   api = accountVaultApi,
   onUnlocked,
@@ -57,31 +61,32 @@ export function AccountVault({
   };
   const form = creating || (status?.mode === "passphrase_locked" && !status.can_create);
   return (
-    <section className="account-card" aria-labelledby={`${id}-title`}>
-      <h3 id={`${id}-title`}>Secure storage</h3>
+    <div className="settings-form account-vault">
       {status?.mode === "native" ? (
-        <p>
-          Your account keys use this computer's secure storage. You can explicitly choose an
-          encrypted passphrase store if it is unavailable.
+        <p className="settings-note">
+          Your account keys use this computer's secure storage. If it is unavailable, you can choose
+          an encrypted passphrase store instead.
         </p>
       ) : null}
       {status?.mode === "restart_required" ? (
-        <p role="status">
-          The passphrase store is ready. Quit and reopen auracode to use it. Current account
-          services stay in place until then.
+        <p className="settings-note" role="status">
+          The passphrase store is ready. Quit and reopen auracode to use it. Account services stay
+          as they are until then.
         </p>
       ) : null}
       {status?.mode === "passphrase_unlocked" ? (
-        <p role="status">Your passphrase store is unlocked until auracode closes.</p>
+        <p className="settings-note" role="status">
+          Your passphrase store is unlocked until auracode closes.
+        </p>
       ) : null}
       {status?.mode === "passphrase_locked" ? (
-        <p>
-          Unlock your selected passphrase store. Account data remains encrypted while it is locked.
+        <p className="settings-note">
+          Unlock your passphrase store. Account data stays encrypted while it is locked.
         </p>
       ) : null}
       {status?.can_create && !creating ? (
         <button
-          className="g-button"
+          className="g-button g-button-outline g-button-28"
           type="button"
           disabled={busy}
           onClick={() => setCreating(true)}
@@ -91,22 +96,25 @@ export function AccountVault({
       ) : null}
       {form ? (
         <form
+          className="settings-form"
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
           }}
         >
           {creating ? (
-            <p>
-              Choose a passphrase you can retain. Existing OS-stored accounts remain there; restore
-              access to each account with device approval or its recovery key to use this store.
-              Forgetting this passphrase can lock its local data.
+            <p className="settings-note">
+              Choose a passphrase you will keep. Accounts already in the OS store stay there; each
+              moves here after device approval or its recovery key. Forgetting this passphrase can
+              lock its local data.
             </p>
           ) : null}
-          <label htmlFor={`${id}-passphrase`}>Passphrase</label>
+          <label className="settings-field" htmlFor={`${id}-passphrase`}>
+            Passphrase
+          </label>
           <input
             id={`${id}-passphrase`}
-            className="g-input"
+            className="g-input account-short-input"
             type="password"
             autoComplete={creating ? "new-password" : "current-password"}
             minLength={12}
@@ -118,10 +126,12 @@ export function AccountVault({
           />
           {creating ? (
             <>
-              <label htmlFor={`${id}-confirm`}>Confirm passphrase</label>
+              <label className="settings-field" htmlFor={`${id}-confirm`}>
+                Confirm passphrase
+              </label>
               <input
                 id={`${id}-confirm`}
-                className="g-input"
+                className="g-input account-short-input"
                 type="password"
                 autoComplete="new-password"
                 value={confirmation}
@@ -131,7 +141,7 @@ export function AccountVault({
               />
             </>
           ) : null}
-          <div className="account-actions">
+          <div className="settings-actions">
             <button
               className="g-button g-button-primary"
               type="submit"
@@ -161,15 +171,15 @@ export function AccountVault({
         </form>
       ) : null}
       {!status && !error ? (
-        <p role="status" className="settings-footnote">
+        <p role="status" className="settings-note">
           Checking storage selection…
         </p>
       ) : null}
       {error ? (
-        <p className="settings-error" role="alert">
+        <p className="settings-alert" role="alert">
           {error}
         </p>
       ) : null}
-    </section>
+    </div>
   );
 }

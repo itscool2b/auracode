@@ -1,5 +1,5 @@
-import { Check, Laptop, RefreshCw } from "lucide-react";
-import { type ComponentType, useEffect, useRef, useState } from "react";
+import { Check, ChevronRight, Laptop, RefreshCw } from "lucide-react";
+import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react";
 import { type AccountApi, AccountCommandError, accountApi } from "../../lib/account/api";
 import type {
   AccountConfiguration,
@@ -28,6 +28,35 @@ type Recovery = RecoverySetup & { expiresAt: number };
 type DeviceAction = { device: AccountDevice; kind: "approve" | "revoke" };
 const time = (value: number | null) =>
   value === null ? "Not yet" : new Date(value).toLocaleString();
+
+/**
+ * One step of the account flow as a settings row: its title, one line on what it does, at most one
+ * control at right, and anything the step needs (a form, a key, a list) under them.
+ */
+function Step({
+  title,
+  detail,
+  control,
+  children,
+}: {
+  readonly title: string;
+  readonly detail?: ReactNode;
+  readonly control?: ReactNode;
+  readonly children?: ReactNode;
+}) {
+  return (
+    <div className="settings-row">
+      <div className="settings-row-text">
+        <div>
+          <h3 className="settings-row-label">{title}</h3>
+          {detail ? <p>{detail}</p> : null}
+        </div>
+      </div>
+      {control}
+      {children ? <div className="settings-span account-step">{children}</div> : null}
+    </div>
+  );
+}
 
 export function AccountPanel({
   api = accountApi,
@@ -271,14 +300,26 @@ export function AccountPanel({
           : "Signed out on this device. Remote sign-out could not be confirmed; reconnect to revoke that session.",
       );
     });
+  const sync = status?.sync;
+  const syncSummary = sync
+    ? [
+        sync.state === "inactive"
+          ? "Profile not active"
+          : `${sync.state.charAt(0).toUpperCase()}${sync.state.slice(1)}`,
+        `Last synced ${time(sync.last_sync_at).replace(/^Not yet$/, "not yet")}`,
+        sync.pending_changes !== null ? `${sync.pending_changes} waiting to sync` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
 
   return (
     <div className="account-panel" aria-busy={busy}>
       <section className="settings-section">
-        <h2>{recoveryOnly ? "Unlock the account for this recovery" : "Your account"}</h2>
-        <p className="account-description">
+        <h2>{recoveryOnly ? "Unlock the account for this recovery" : "Cloud account"}</h2>
+        <p className="settings-lead">
           {recoveryOnly
-            ? "Sign in to the existing account that owns the saved configuration. Account and device changes stay unavailable until recovery finishes."
+            ? "Sign in to the account that owns the saved configuration. Account and device changes wait until recovery finishes."
             : "Local is free and works offline. Cloud accounts, encrypted sync and transfers are invite-only during private preview."}
         </p>
         {!status && !error ? (
@@ -286,539 +327,564 @@ export function AccountPanel({
             Reading account status…
           </p>
         ) : null}
-        {signedOut ? (
-          <div className="settings-group account-card">
-            <h3>
-              {status.access === "expired"
-                ? "Sign in again"
-                : status.access === "denied"
-                  ? "This device needs access"
-                  : "Sign in to auracode"}
-            </h3>
-            <p>
-              Use the email address on your invitation. Your coding agents keep their own accounts;
-              this sign-in is for your auracode workspace.
-            </p>
-            {challenge ? (
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void run(async () => {
-                    const entered = code;
-                    setCode("");
-                    await update(api.verifyCode(challenge.id, entered));
-                    if (mounted.current) setChallenge(null);
-                    await update(api.refresh());
-                  });
-                }}
-              >
-                <label className="settings-field">
-                  Code sent to {email}
-                  <input
-                    className="g-input account-code-input"
-                    autoComplete="one-time-code"
-                    inputMode="numeric"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
-                    required
-                    value={code}
-                    disabled={locked}
-                    onChange={(event) =>
-                      setCode(event.currentTarget.value.replace(/\D/g, "").slice(0, 6))
-                    }
-                  />
-                </label>
-                <p className="settings-footnote">
-                  {challenge.expiresAt <= now
-                    ? "This code expired. Request a new one."
-                    : `Code expires in ${Math.ceil((challenge.expiresAt - now) / 60000)} minutes.`}
-                </p>
-                <div className="account-actions">
-                  <button
-                    className="g-button g-button-primary"
-                    disabled={locked || code.length !== 6 || challenge.expiresAt <= now}
-                    type="submit"
-                  >
-                    Verify code
-                  </button>
-                  <button
-                    className="g-button"
-                    type="button"
-                    disabled={locked || challenge.resendAt > now}
-                    onClick={() => {
-                      setChallenge(null);
-                      setCode("");
-                    }}
-                  >
-                    {challenge.resendAt > now
-                      ? `New code in ${Math.ceil((challenge.resendAt - now) / 1000)}s`
-                      : "Request another code"}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void requestCode();
-                }}
-              >
-                <label className="settings-field">
-                  Email address
-                  <input
-                    className="g-input"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    maxLength={254}
-                    placeholder="you@example.com"
-                    value={email}
-                    disabled={locked}
-                    onChange={(event) => setEmail(event.currentTarget.value)}
-                  />
-                </label>
-                {origin ? (
-                  <Verification key={verificationAttempt} origin={origin} onToken={setProof} />
-                ) : (
-                  <p className="settings-error">Verification is unavailable for this build.</p>
-                )}
-                <button
-                  className="g-button g-button-primary"
-                  type="submit"
-                  disabled={locked || !proof || !email.trim()}
-                >
-                  Send sign-in code
-                </button>
-              </form>
-            )}
-          </div>
-        ) : null}
-        {status?.access === "invite_required" ? (
-          <div className="settings-group account-card">
-            <h3>Cloud access requires an invitation</h3>
-            <p>
-              Cloud sync and transfers are paused. Your session and any saved encryption keys stay
-              on this device. Local is free and works offline.
-            </p>
-            {status.local_key_available ? (
-              <p>Your retained encrypted workspace remains available for local work and exports.</p>
-            ) : null}
-            <div className="account-actions">
-              {status.local_key_available && status.profile_id !== activeProfileId ? (
-                <button
-                  className="g-button"
-                  type="button"
-                  disabled={locked || wrongRecoveryAccount}
-                  onClick={() => void run(onActivate)}
-                >
-                  Open retained account workspace
-                </button>
-              ) : null}
-              <button
-                className="g-button"
-                type="button"
-                disabled={locked}
-                onClick={() => void run(() => update(api.refresh()))}
-              >
-                Check cloud access
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {status?.access === "verification_required" ? (
-          <div className="settings-group account-card">
-            <h3>Finish checking your session</h3>
-            <p>Your email code was accepted. Continue to check this device.</p>
-            <button
-              className="g-button"
-              disabled={locked}
-              onClick={() => void run(() => update(api.refresh()))}
-              type="button"
-            >
-              Continue
-            </button>
-          </div>
-        ) : null}
-        {status?.access === "needs_device" ? (
-          <form
-            className="settings-group account-card"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void run(() => update(api.register(name.trim())));
-            }}
-          >
-            <h3>Name this device</h3>
-            <p>You will see this name when approving access from another device.</p>
-            <label className="settings-field">
-              Device name
-              <input
-                className="g-input"
-                required
-                maxLength={80}
-                value={name}
-                disabled={locked}
-                onChange={(event) => setName(event.currentTarget.value)}
-              />
-            </label>
-            <button
-              className="g-button g-button-primary"
-              type="submit"
-              disabled={locked || !name.trim()}
-            >
-              Register this device
-            </button>
-          </form>
-        ) : null}
-        {status?.access === "needs_first_key" && !recoveryOnly ? (
-          <div className="settings-group account-card">
-            <h3>Keep a way back in</h3>
-            <p>
-              Your recovery key unlocks your account data if you lose access to every approved
-              device. Save it somewhere private.
-            </p>
-            {recovery ? (
-              <>
-                <label className="settings-field">
-                  Recovery key
-                  <textarea
-                    className="g-textarea account-secret"
-                    readOnly
-                    spellCheck={false}
-                    autoComplete="off"
-                    value={recovery.recovery_key}
-                  />
-                </label>
-                <p className="settings-footnote">
-                  This key is shown only during this setup. There is no account recovery without it
-                  or an approved device.
-                </p>
-                <label className="account-check">
-                  <input
-                    type="checkbox"
-                    checked={retained}
-                    disabled={locked}
-                    onChange={(event) => setRetained(event.currentTarget.checked)}
-                  />
-                  I saved my recovery key somewhere safe
-                </label>
-                <button
-                  className="g-button g-button-primary"
-                  type="button"
-                  disabled={locked || !retained}
-                  onClick={() =>
-                    void run(async () => {
-                      await update(api.confirmRecovery(recovery.id));
-                      if (mounted.current) {
-                        setRecovery(null);
-                        setRetained(false);
-                      }
-                    })
-                  }
-                >
-                  Confirm saved key
-                </button>
-              </>
-            ) : (
-              <button
-                className="g-button g-button-primary"
-                type="button"
-                disabled={locked}
-                onClick={() => void prepareRecovery()}
-              >
-                Create recovery key
-              </button>
-            )}
-          </div>
-        ) : null}
-        {status?.access === "pending_approval" ? (
-          <div className="settings-group account-card">
-            <h3>Approve this device</h3>
-            <p>
-              On an approved device, open Settings, then Account. Select this device and enter the
-              code below.
-            </p>
-            <code className="account-fingerprint">
-              {status.approval_code ?? "Code unavailable. Refresh to try again."}
-            </code>
-            <button
-              className="g-button"
-              type="button"
-              disabled={locked}
-              onClick={() => void run(() => update(api.refresh()))}
-            >
-              <RefreshCw size={14} aria-hidden="true" />
-              Check approval
-            </button>
-            <details className="account-recovery">
-              <summary>Use my recovery key instead</summary>
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const key = recoveryInput;
-                  setRecoveryInput("");
-                  void run(() => update(api.recover(key)));
-                }}
-              >
-                <label className="settings-field">
-                  Recovery key
-                  <input
-                    className="g-input account-secret"
-                    type="password"
-                    autoComplete="off"
-                    spellCheck={false}
-                    required
-                    value={recoveryInput}
-                    disabled={locked}
-                    onChange={(event) => setRecoveryInput(event.currentTarget.value)}
-                  />
-                </label>
-                <button
-                  className="g-button"
-                  type="submit"
-                  disabled={locked || !recoveryInput.trim()}
-                >
-                  Unlock with recovery key
-                </button>
-              </form>
-            </details>
-          </div>
-        ) : null}
-        {status?.access === "verify_account_key" ? (
-          <div className="settings-group account-card">
-            <h3>Compare your account fingerprint</h3>
-            <p>
-              Compare every group below with the fingerprint in Account on your trusted device.
-              Continue only when they match.
-            </p>
-            <code className="account-fingerprint">{status.fingerprint}</code>
-            <label className="account-check">
-              <input
-                type="checkbox"
-                checked={compared}
-                disabled={locked}
-                onChange={(event) => setCompared(event.currentTarget.checked)}
-              />
-              I compared the complete fingerprint and it matches
-            </label>
-            <button
-              className="g-button g-button-primary"
-              type="button"
-              disabled={locked || !compared || !status.fingerprint}
-              onClick={() =>
-                void run(() => update(api.confirmFingerprint(status.fingerprint ?? "")))
+        <div className="settings-group">
+          {signedOut ? (
+            <Step
+              title={
+                status.access === "expired"
+                  ? "Sign in again"
+                  : status.access === "denied"
+                    ? "This device needs access"
+                    : "Sign in to auracode"
               }
+              detail="Use the email on your invitation. Your agents keep their own sign-ins."
             >
-              Trust this account key
-            </button>
-          </div>
-        ) : null}
-        {status?.access === "ready" ? (
-          <>
-            <div className="settings-group account-card">
-              <div className="account-heading">
-                <Check size={16} aria-hidden="true" />
-                <h3>This device is approved</h3>
-              </div>
-              <dl className="account-facts">
-                <dt>Sync</dt>
-                <dd>
-                  {status.sync.state === "inactive" ? "Profile not active" : status.sync.state}
-                </dd>
-                <dt>Last synced</dt>
-                <dd>{time(status.sync.last_sync_at)}</dd>
-                {status.sync.pending_changes !== null ? (
-                  <>
-                    <dt>Waiting to sync</dt>
-                    <dd>{status.sync.pending_changes}</dd>
-                  </>
-                ) : null}
-              </dl>
-              {status.sync.message ? <p role="status">{status.sync.message}</p> : null}
-              {recoveryOnly && wrongRecoveryAccount ? (
-                <p role="status">
-                  This account does not match the saved recovery. Sign in to the owning account
-                  above.
-                </p>
-              ) : null}
-              {recoveryOnly || !status.profile_id || status.profile_id !== activeProfileId ? (
-                <div className="account-actions">
+              {challenge ? (
+                <form
+                  className="settings-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void run(async () => {
+                      const entered = code;
+                      setCode("");
+                      await update(api.verifyCode(challenge.id, entered));
+                      if (mounted.current) setChallenge(null);
+                      await update(api.refresh());
+                    });
+                  }}
+                >
+                  <label className="settings-field">
+                    Code sent to {email}
+                    <input
+                      className="g-input account-code-input"
+                      autoComplete="one-time-code"
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      required
+                      value={code}
+                      disabled={locked}
+                      onChange={(event) =>
+                        setCode(event.currentTarget.value.replace(/\D/g, "").slice(0, 6))
+                      }
+                    />
+                  </label>
+                  <p className="settings-note">
+                    {challenge.expiresAt <= now
+                      ? "This code expired. Request a new one."
+                      : `The code expires in ${Math.ceil((challenge.expiresAt - now) / 60000)} minutes.`}
+                  </p>
+                  <div className="settings-actions">
+                    <button
+                      className="g-button g-button-primary"
+                      disabled={locked || code.length !== 6 || challenge.expiresAt <= now}
+                      type="submit"
+                    >
+                      Verify code
+                    </button>
+                    <button
+                      className="g-button g-button-ghost"
+                      type="button"
+                      disabled={locked || challenge.resendAt > now}
+                      onClick={() => {
+                        setChallenge(null);
+                        setCode("");
+                      }}
+                    >
+                      {challenge.resendAt > now
+                        ? `New code in ${Math.ceil((challenge.resendAt - now) / 1000)}s`
+                        : "Request another code"}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <form
+                  className="settings-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void requestCode();
+                  }}
+                >
+                  <label className="settings-field">
+                    Email address
+                    <input
+                      className="g-input account-short-input"
+                      type="email"
+                      autoComplete="email"
+                      required
+                      maxLength={254}
+                      placeholder="you@example.com"
+                      value={email}
+                      disabled={locked}
+                      onChange={(event) => setEmail(event.currentTarget.value)}
+                    />
+                  </label>
+                  {origin ? (
+                    <Verification key={verificationAttempt} origin={origin} onToken={setProof} />
+                  ) : (
+                    <p className="settings-alert">Verification is unavailable for this build.</p>
+                  )}
                   <button
                     className="g-button g-button-primary"
+                    type="submit"
+                    disabled={locked || !proof || !email.trim()}
+                  >
+                    Send sign-in code
+                  </button>
+                </form>
+              )}
+            </Step>
+          ) : null}
+          {status?.access === "invite_required" ? (
+            <Step
+              title="Cloud access requires an invitation"
+              detail="Cloud sync and transfers are paused. Your session and saved keys stay on this device."
+            >
+              {status.local_key_available ? (
+                <p className="settings-note">
+                  Your retained encrypted workspace remains available for local work and exports.
+                </p>
+              ) : null}
+              <div className="settings-actions">
+                {status.local_key_available && status.profile_id !== activeProfileId ? (
+                  <button
+                    className="g-button g-button-outline g-button-28"
                     type="button"
                     disabled={locked || wrongRecoveryAccount}
                     onClick={() => void run(onActivate)}
                   >
-                    {recoveryOnly ? recoveryActionLabel : "Open account workspace"}
+                    Open retained account workspace
+                  </button>
+                ) : null}
+                <button
+                  className="g-button g-button-outline g-button-28"
+                  type="button"
+                  disabled={locked}
+                  onClick={() => void run(() => update(api.refresh()))}
+                >
+                  Check cloud access
+                </button>
+              </div>
+            </Step>
+          ) : null}
+          {status?.access === "verification_required" ? (
+            <Step
+              title="Finish checking your session"
+              detail="Your email code was accepted. Continue to check this device."
+              control={
+                <button
+                  className="g-button g-button-primary g-button-28"
+                  disabled={locked}
+                  onClick={() => void run(() => update(api.refresh()))}
+                  type="button"
+                >
+                  Continue
+                </button>
+              }
+            />
+          ) : null}
+          {status?.access === "needs_device" ? (
+            <Step
+              title="Name this device"
+              detail="Your other devices show this name when they approve it."
+            >
+              <form
+                className="settings-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void run(() => update(api.register(name.trim())));
+                }}
+              >
+                <label className="settings-field">
+                  Device name
+                  <input
+                    className="g-input account-short-input"
+                    required
+                    maxLength={80}
+                    value={name}
+                    disabled={locked}
+                    onChange={(event) => setName(event.currentTarget.value)}
+                  />
+                </label>
+                <button
+                  className="g-button g-button-primary"
+                  type="submit"
+                  disabled={locked || !name.trim()}
+                >
+                  Register this device
+                </button>
+              </form>
+            </Step>
+          ) : null}
+          {status?.access === "needs_first_key" && !recoveryOnly ? (
+            <Step
+              title="Keep a way back in"
+              detail="A recovery key unlocks your data if you lose every approved device."
+              control={
+                recovery ? null : (
+                  <button
+                    className="g-button g-button-primary g-button-28"
+                    type="button"
+                    disabled={locked}
+                    onClick={() => void prepareRecovery()}
+                  >
+                    Create recovery key
+                  </button>
+                )
+              }
+            >
+              {recovery ? (
+                <div className="settings-form">
+                  <label className="settings-field">
+                    Recovery key
+                    <textarea
+                      className="g-textarea account-secret"
+                      readOnly
+                      spellCheck={false}
+                      autoComplete="off"
+                      value={recovery.recovery_key}
+                    />
+                  </label>
+                  <p className="settings-note">
+                    Shown only during this setup. Without it or an approved device, your account
+                    cannot be recovered.
+                  </p>
+                  <label className="settings-check">
+                    <input
+                      type="checkbox"
+                      checked={retained}
+                      disabled={locked}
+                      onChange={(event) => setRetained(event.currentTarget.checked)}
+                    />
+                    I saved my recovery key somewhere safe
+                  </label>
+                  <button
+                    className="g-button g-button-primary"
+                    type="button"
+                    disabled={locked || !retained}
+                    onClick={() =>
+                      void run(async () => {
+                        await update(api.confirmRecovery(recovery.id));
+                        if (mounted.current) {
+                          setRecovery(null);
+                          setRetained(false);
+                        }
+                      })
+                    }
+                  >
+                    Confirm saved key
                   </button>
                 </div>
               ) : null}
-              <details>
+            </Step>
+          ) : null}
+          {status?.access === "pending_approval" ? (
+            <Step
+              title="Approve this device"
+              detail="On an approved device, open Settings, then Account, choose this device and enter this code."
+            >
+              <code className="settings-well account-code">
+                {status.approval_code ?? "Code unavailable. Refresh to try again."}
+              </code>
+              <div className="settings-actions">
+                <button
+                  className="g-button g-button-outline g-button-28"
+                  type="button"
+                  disabled={locked}
+                  onClick={() => void run(() => update(api.refresh()))}
+                >
+                  <RefreshCw size={14} aria-hidden="true" />
+                  Check approval
+                </button>
+              </div>
+              <details className="settings-disclosure">
+                <summary>Use my recovery key instead</summary>
+                <form
+                  className="settings-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const key = recoveryInput;
+                    setRecoveryInput("");
+                    void run(() => update(api.recover(key)));
+                  }}
+                >
+                  <label className="settings-field">
+                    Recovery key
+                    <input
+                      className="g-input account-secret"
+                      type="password"
+                      autoComplete="off"
+                      spellCheck={false}
+                      required
+                      value={recoveryInput}
+                      disabled={locked}
+                      onChange={(event) => setRecoveryInput(event.currentTarget.value)}
+                    />
+                  </label>
+                  <button
+                    className="g-button g-button-outline g-button-28"
+                    type="submit"
+                    disabled={locked || !recoveryInput.trim()}
+                  >
+                    Unlock with recovery key
+                  </button>
+                </form>
+              </details>
+            </Step>
+          ) : null}
+          {status?.access === "verify_account_key" ? (
+            <Step
+              title="Compare your account fingerprint"
+              detail="Continue only when every group matches Account on your trusted device."
+            >
+              <div className="settings-form">
+                <code className="settings-well">{status.fingerprint}</code>
+                <label className="settings-check">
+                  <input
+                    type="checkbox"
+                    checked={compared}
+                    disabled={locked}
+                    onChange={(event) => setCompared(event.currentTarget.checked)}
+                  />
+                  I compared the complete fingerprint and it matches
+                </label>
+                <button
+                  className="g-button g-button-primary"
+                  type="button"
+                  disabled={locked || !compared || !status.fingerprint}
+                  onClick={() =>
+                    void run(() => update(api.confirmFingerprint(status.fingerprint ?? "")))
+                  }
+                >
+                  Trust this account key
+                </button>
+              </div>
+            </Step>
+          ) : null}
+          {status?.access === "ready" ? (
+            <div className="settings-row">
+              <div className="settings-row-text">
+                <span className="account-badge" aria-hidden="true">
+                  <Check size={16} />
+                </span>
+                <div>
+                  <strong>This device is approved</strong>
+                  <p>{syncSummary}</p>
+                </div>
+              </div>
+              {recoveryOnly || !status.profile_id || status.profile_id !== activeProfileId ? (
+                <button
+                  className="g-button g-button-primary g-button-28"
+                  type="button"
+                  disabled={locked || wrongRecoveryAccount}
+                  onClick={() => void run(onActivate)}
+                >
+                  {recoveryOnly ? recoveryActionLabel : "Open account workspace"}
+                </button>
+              ) : null}
+              {status.sync.message ? (
+                <p className="settings-note settings-span" role="status">
+                  {status.sync.message}
+                </p>
+              ) : null}
+              {recoveryOnly && wrongRecoveryAccount ? (
+                <p className="settings-note settings-span" role="status">
+                  This account does not match the saved recovery. Sign in to the owning account
+                  above.
+                </p>
+              ) : null}
+              <details className="settings-disclosure settings-span">
                 <summary>Account fingerprint</summary>
-                <code className="account-fingerprint">{status.fingerprint}</code>
+                <code className="settings-well">{status.fingerprint}</code>
               </details>
             </div>
-            {!recoveryOnly ? (
-              <section className="settings-section">
-                <div className="account-heading">
-                  <h2>Devices</h2>
+          ) : null}
+          {status?.access === "deleted" ? (
+            <Step
+              title="This account was deleted"
+              detail="Network sync has stopped. Its encrypted workspace stays on this computer."
+              control={
+                status.local_key_available &&
+                (!status.profile_id || status.profile_id !== activeProfileId || recoveryOnly) ? (
                   <button
-                    className="g-button g-button-ghost g-button-28"
-                    type="button"
-                    disabled={locked}
-                    onClick={() => setDeviceGeneration((value) => value + 1)}
-                  >
-                    <RefreshCw size={14} aria-hidden="true" />
-                    Refresh devices
-                  </button>
-                </div>
-                {!devices && !deviceError ? (
-                  <p role="status" className="settings-footnote">
-                    Loading devices…
-                  </p>
-                ) : null}
-                {deviceError ? (
-                  <p role="alert" className="settings-error">
-                    {deviceError}
-                  </p>
-                ) : null}
-                <ul className="account-devices">
-                  {devices?.map((device) => (
-                    <li key={device.id}>
-                      <Laptop size={16} aria-hidden="true" />
-                      <div>
-                        <strong>
-                          {device.name}
-                          {device.current ? " · This device" : ""}
-                        </strong>
-                        <p>
-                          {device.platform} ·{" "}
-                          {device.revoked_at !== null
-                            ? "Revoked"
-                            : device.approved_at === null
-                              ? "Waiting for approval"
-                              : `Last seen ${time(device.last_seen)}`}
-                        </p>
-                      </div>
-                      {device.revoked_at === null ? (
-                        <button
-                          className="g-button g-button-outline g-button-28"
-                          type="button"
-                          disabled={locked}
-                          onClick={() => {
-                            setDeviceAction({
-                              device,
-                              kind: device.approved_at === null ? "approve" : "revoke",
-                            });
-                            setDeviceCode("");
-                          }}
-                        >
-                          {device.approved_at === null ? "Review approval" : "Revoke"}
-                        </button>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-          </>
-        ) : null}
-        {status?.access === "deleted" ? (
-          <div className="settings-group account-card">
-            <h3>This account was deleted</h3>
-            <p>Network sync has stopped. Its encrypted workspace stays on this computer.</p>
-            {status.local_key_available ? (
-              <>
-                {!status.profile_id || status.profile_id !== activeProfileId || recoveryOnly ? (
-                  <button
-                    className="g-button"
+                    className="g-button g-button-outline g-button-28"
                     type="button"
                     disabled={locked || wrongRecoveryAccount}
                     onClick={() => void run(onActivate)}
                   >
                     {recoveryOnly ? recoveryActionLabel : "Open retained account workspace"}
                   </button>
-                ) : null}
-                {!recoveryOnly && status.profile_id && status.profile_id === activeProfileId ? (
-                  <KeepAsLocalPanel onOpen={(profileId) => switchProfile(profileId)} />
-                ) : null}
-              </>
-            ) : (
-              <p>The local account key is unavailable. Existing encrypted files were preserved.</p>
-            )}
-          </div>
-        ) : null}
-        {!recoveryOnly && status && !signedOut && status.access !== "deleted" ? (
-          <button
-            className="g-button"
-            type="button"
-            disabled={locked}
-            onClick={() => {
-              setError(null);
-              setSignOutReview(true);
-            }}
-          >
-            Sign out
-          </button>
-        ) : null}
-      </section>
-      {notice ? (
-        <p className="account-notice" role="status">
-          {notice}
-        </p>
-      ) : null}
-      {error ? (
-        <div className="settings-error" role="alert">
-          <p>{error}</p>
-          {!status ? (
-            <button
-              className="g-button"
-              type="button"
-              onClick={() => setGeneration((value) => value + 1)}
+                ) : null
+              }
             >
-              Retry account status
+              {!status.local_key_available ? (
+                <p className="settings-note">
+                  The local account key is unavailable. Existing encrypted files were preserved.
+                </p>
+              ) : !recoveryOnly && status.profile_id && status.profile_id === activeProfileId ? (
+                <KeepAsLocalPanel onOpen={(profileId) => switchProfile(profileId)} />
+              ) : null}
+            </Step>
+          ) : null}
+          {!recoveryOnly && status && !signedOut && status.access !== "deleted" ? (
+            <button
+              className="settings-link"
+              type="button"
+              disabled={locked}
+              onClick={() => {
+                setError(null);
+                setSignOutReview(true);
+              }}
+            >
+              <span>Sign out</span>
+              <ChevronRight size={16} aria-hidden="true" />
             </button>
           ) : null}
         </div>
+        {notice ? (
+          <p className="settings-footnote" role="status">
+            {notice}
+          </p>
+        ) : null}
+        {error ? (
+          <div className="settings-error" role="alert">
+            <p>{error}</p>
+            {!status ? (
+              <button
+                className="g-button g-button-28"
+                type="button"
+                onClick={() => setGeneration((value) => value + 1)}
+              >
+                Retry account status
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {remaining > 0 ? (
+          <p role="status" className="settings-footnote">
+            Try again in {remaining} seconds.
+          </p>
+        ) : null}
+      </section>
+      {status?.access === "ready" && !recoveryOnly ? (
+        <section className="settings-section" aria-labelledby="account-devices-title">
+          <div className="settings-heading">
+            <h2 id="account-devices-title">Devices</h2>
+            <button
+              className="g-button g-button-ghost g-button-icon g-button-28"
+              type="button"
+              aria-label="Refresh devices"
+              title="Refresh devices"
+              disabled={locked}
+              onClick={() => setDeviceGeneration((value) => value + 1)}
+            >
+              <RefreshCw size={14} aria-hidden="true" />
+            </button>
+          </div>
+          {!devices && !deviceError ? (
+            <p role="status" className="settings-footnote">
+              Loading devices…
+            </p>
+          ) : null}
+          {deviceError ? (
+            <p role="alert" className="settings-error">
+              {deviceError}
+            </p>
+          ) : null}
+          <ul className="settings-group">
+            {devices?.map((device) => (
+              <li className="settings-row" key={device.id}>
+                <div className="settings-row-text">
+                  <Laptop size={16} aria-hidden="true" />
+                  <div>
+                    <strong>
+                      {device.name}
+                      {device.current ? " · This device" : ""}
+                    </strong>
+                    <p>
+                      {device.platform} ·{" "}
+                      {device.revoked_at !== null
+                        ? "Revoked"
+                        : device.approved_at === null
+                          ? "Waiting for approval"
+                          : `Last seen ${time(device.last_seen)}`}
+                    </p>
+                  </div>
+                </div>
+                {device.revoked_at === null ? (
+                  <button
+                    className="g-button g-button-outline g-button-28"
+                    type="button"
+                    disabled={locked}
+                    onClick={() => {
+                      setDeviceAction({
+                        device,
+                        kind: device.approved_at === null ? "approve" : "revoke",
+                      });
+                      setDeviceCode("");
+                    }}
+                  >
+                    {device.approved_at === null ? "Review approval" : "Revoke"}
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
-      {remaining > 0 ? (
-        <p role="status" className="settings-footnote">
-          Try again in {remaining} seconds.
-        </p>
-      ) : null}
-      <button
-        className="g-button g-button-ghost g-button-28 account-vault-toggle"
-        type="button"
-        disabled={busy}
-        onClick={() => setShowVault((value) => !value)}
-      >
-        {showVault ? "Close secure storage" : "Secure storage"}
-      </button>
-      {showVault ? <AccountVault onUnlocked={() => setGeneration((value) => value + 1)} /> : null}
-      {status?.local_key_available && !status.profile_id ? (
-        <RebindProfilePanel
-          key={status.account_id}
-          profileId={recoveryOnly ? recoveryProfileId : null}
-          disabled={locked}
-          onStatus={setStatus}
-        />
-      ) : null}
-      {!recoveryOnly && status?.account_id && status.access !== "deleted" ? (
-        <ResetSyncPanel
-          key={status.account_id}
-          access={status.access}
-          allowReview={!status.local_key_available}
-          disabled={locked}
-          onStatus={(value) => setStatus(value)}
-        />
-      ) : null}
-      {!recoveryOnly ? (
-        <RemoveAccountPanel
-          localActive={activeProfileId === "local"}
-          disabled={locked}
-          onLocal={() => switchProfile("local")}
-          onStatus={setStatus}
-        />
-      ) : null}
+      <section className="settings-section" aria-labelledby="account-security-title">
+        <h2 id="account-security-title">Security</h2>
+        <div className="settings-group">
+          <div className="settings-row">
+            <div className="settings-row-text">
+              <div>
+                <strong>Secure storage</strong>
+                <p>Where this computer keeps your account keys.</p>
+              </div>
+            </div>
+            <button
+              className="g-button g-button-outline g-button-28"
+              type="button"
+              aria-expanded={showVault}
+              aria-label={showVault ? "Close secure storage" : "Manage secure storage"}
+              disabled={busy}
+              onClick={() => setShowVault((value) => !value)}
+            >
+              {showVault ? "Close" : "Manage"}
+            </button>
+            {showVault ? (
+              <div className="settings-span">
+                <AccountVault onUnlocked={() => setGeneration((value) => value + 1)} />
+              </div>
+            ) : null}
+          </div>
+          {status?.local_key_available && !status.profile_id ? (
+            <RebindProfilePanel
+              key={status.account_id}
+              profileId={recoveryOnly ? recoveryProfileId : null}
+              disabled={locked}
+              onStatus={setStatus}
+            />
+          ) : null}
+          {!recoveryOnly && status?.account_id && status.access !== "deleted" ? (
+            <ResetSyncPanel
+              key={status.account_id}
+              access={status.access}
+              allowReview={!status.local_key_available}
+              disabled={locked}
+              onStatus={(value) => setStatus(value)}
+            />
+          ) : null}
+          {!recoveryOnly ? (
+            <RemoveAccountPanel
+              localActive={activeProfileId === "local"}
+              disabled={locked}
+              onLocal={() => switchProfile("local")}
+              onStatus={setStatus}
+            />
+          ) : null}
+        </div>
+      </section>
       {!recoveryOnly && signOutReview ? (
         <SignOutDialog
           pending={status?.sync.pending_changes ?? null}
@@ -835,38 +901,33 @@ export function AccountPanel({
           onClose={() => setDeviceAction(null)}
           className="account-device-dialog"
         >
-          <div className="account-card">
-            <h3>{deviceAction.device.name}</h3>
+          <div className="account-dialog">
+            <p>
+              <strong>{deviceAction.device.name}</strong>
+              {deviceAction.kind === "approve"
+                ? " gets access to your encrypted account data once you enter the code it shows."
+                : " loses sync access. Its existing local files stay on that device."}
+            </p>
             {deviceAction.kind === "approve" ? (
-              <>
-                <p>
-                  Enter the verification code shown on that device. This gives it access to your
-                  encrypted account data.
-                </p>
-                <label className="settings-field">
-                  Recipient verification code
-                  <input
-                    className="g-input account-secret"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={deviceCode}
-                    maxLength={128}
-                    disabled={locked}
-                    onChange={(event) => setDeviceCode(event.currentTarget.value)}
-                  />
-                </label>
-              </>
-            ) : (
-              <p>
-                This device will lose sync access. Its existing local files stay on that device.
-              </p>
-            )}
+              <label className="settings-field">
+                Recipient verification code
+                <input
+                  className="g-input account-secret"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={deviceCode}
+                  maxLength={128}
+                  disabled={locked}
+                  onChange={(event) => setDeviceCode(event.currentTarget.value)}
+                />
+              </label>
+            ) : null}
             {error ? (
               <p role="alert" className="settings-error">
                 {error}
               </p>
             ) : null}
-            <div className="account-actions">
+            <div className="g-dialog-actions">
               <button
                 className="g-button"
                 type="button"

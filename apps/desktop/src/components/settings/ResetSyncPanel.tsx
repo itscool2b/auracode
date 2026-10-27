@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type {
   AccountAccess,
@@ -83,136 +84,153 @@ export function ResetSyncPanel({
   const authenticated = !["signed_out", "expired", "denied", "deleted"].includes(access);
   if (!pending?.pending && !expanded)
     return allowReview ? (
+      // X Money's chevron row: the whole row opens the reset review.
       <button
-        className="g-button g-button-ghost g-button-28 account-reset-toggle"
+        className="settings-link"
         type="button"
         disabled={locked}
         onClick={() => setExpanded(true)}
       >
-        Lost every device and recovery key?
+        <span>Lost every device and recovery key?</span>
+        <ChevronRight size={16} aria-hidden="true" />
       </button>
     ) : null;
   if (!pending?.pending && !allowReview) return null;
   return (
-    <section className="settings-group account-card" aria-labelledby={`${id}-title`}>
-      <h3 id={`${id}-title`}>Start encrypted sync again</h3>
-      <p>
-        Use this only if every approved device and your recovery key are lost. Reset permanently
-        removes existing encrypted cloud data and revokes your other devices. It cannot recover the
-        old conversations. Local encrypted profiles remain on their computers.
-      </p>
-      {!authenticated ? <p>Sign in again to verify your email before continuing.</p> : null}
-      {pending?.pending ? (
-        <>
-          <p role="status">
-            A reset request is already saved. Its new key is retained until the result is verified.
-            Retrying sends the same request.
-          </p>
-          <div className="account-actions">
-            <button
-              className="g-button"
-              type="button"
-              disabled={locked || !authenticated}
-              onClick={() => void run(() => finish(api.retry()))}
-            >
-              {pending.committed ? "Finish reset locally" : "Retry saved reset"}
-            </button>
-            <button
-              className="g-button"
-              type="button"
-              disabled={locked || !authenticated}
-              onClick={() => void run(() => finish(api.cancel()))}
-            >
-              Cancel pending reset safely
-            </button>
-          </div>
-        </>
-      ) : null}
-      {pending && !pending.pending && !review ? (
-        <button
-          className="g-button"
-          type="button"
-          disabled={locked || access !== "pending_approval"}
-          onClick={() =>
-            void run(async () => {
-              const next = await api.review();
-              if (mounted.current) {
-                setReview(next);
-                setRetained(false);
-                setConfirmation("");
-              }
-            })
-          }
-        >
-          Review reset sync
-        </button>
-      ) : null}
-      {review && !pending?.pending ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void run(() => finish(api.confirm(review.id, confirmation, retained)));
-          }}
-        >
+    <section className="settings-row" aria-labelledby={`${id}-title`}>
+      <div className="settings-row-text">
+        <div>
+          <h3 id={`${id}-title`} className="settings-row-label">
+            Start encrypted sync again
+          </h3>
           <p>
-            This reset removes {review.records} encrypted cloud records and {review.blobs} encrypted
-            blobs, and revokes {review.other_devices} other devices. Your new key generation is{" "}
-            {review.key_version}. The email verification and review must still be fresh when you
-            confirm.
+            Only when every approved device and your recovery key are lost. Reset permanently
+            removes the encrypted cloud data and revokes your other devices; old conversations
+            cannot be recovered. Local encrypted profiles stay on their computers.
           </p>
-          <label htmlFor={`${id}-key`}>New recovery key</label>
-          <textarea
-            id={`${id}-key`}
-            className="g-textarea account-secret"
-            value={review.recovery_key}
-            readOnly
-            spellCheck={false}
-          />
-          <label className="account-check">
-            <input
-              type="checkbox"
-              checked={retained}
-              disabled={locked}
-              onChange={(event) => setRetained(event.currentTarget.checked)}
-            />
-            I saved this new recovery key somewhere safe
-          </label>
-          <label htmlFor={`${id}-confirm`}>
-            Type RESET SYNC to permanently remove the old cloud data
-          </label>
-          <input
-            id={`${id}-confirm`}
-            className="g-input"
-            value={confirmation}
-            disabled={locked}
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(event) => setConfirmation(event.currentTarget.value)}
-          />
-          <div className="account-actions">
+        </div>
+      </div>
+      <div className="settings-span account-step">
+        {!authenticated ? (
+          <p className="settings-note">Sign in again to verify your email before continuing.</p>
+        ) : null}
+        {pending?.pending ? (
+          <>
+            <p className="settings-note" role="status">
+              A reset request is already saved. Its new key is kept until the result is verified,
+              and retrying sends the same request.
+            </p>
+            <div className="settings-actions">
+              <button
+                className="g-button g-button-outline g-button-28"
+                type="button"
+                disabled={locked || !authenticated}
+                onClick={() => void run(() => finish(api.retry()))}
+              >
+                {pending.committed ? "Finish reset locally" : "Retry saved reset"}
+              </button>
+              <button
+                className="g-button g-button-ghost g-button-28"
+                type="button"
+                disabled={locked || !authenticated}
+                onClick={() => void run(() => finish(api.cancel()))}
+              >
+                Cancel pending reset safely
+              </button>
+            </div>
+          </>
+        ) : null}
+        {pending && !pending.pending && !review ? (
+          <div className="settings-actions">
             <button
-              className="g-button g-button-danger"
-              type="submit"
-              disabled={locked || !retained || confirmation !== "RESET SYNC"}
-            >
-              Permanently reset sync
-            </button>
-            <button
-              className="g-button"
+              className="g-button g-button-outline g-button-28"
               type="button"
-              disabled={locked}
-              onClick={() => void run(() => finish(api.dismiss()))}
+              disabled={locked || access !== "pending_approval"}
+              onClick={() =>
+                void run(async () => {
+                  const next = await api.review();
+                  if (mounted.current) {
+                    setReview(next);
+                    setRetained(false);
+                    setConfirmation("");
+                  }
+                })
+              }
             >
-              Cancel review
+              Review reset sync
             </button>
           </div>
-        </form>
-      ) : null}
-      {error ? (
-        <p className="settings-error" role="alert">
-          {error}
-        </p>
-      ) : null}
+        ) : null}
+        {review && !pending?.pending ? (
+          <form
+            className="settings-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void run(() => finish(api.confirm(review.id, confirmation, retained)));
+            }}
+          >
+            <p className="settings-note">
+              This removes {review.records} encrypted cloud records and {review.blobs} encrypted
+              blobs, and revokes {review.other_devices} other devices. The new key generation is{" "}
+              {review.key_version}. Your email check and this review must still be fresh when you
+              confirm.
+            </p>
+            <label className="settings-field" htmlFor={`${id}-key`}>
+              New recovery key
+            </label>
+            <textarea
+              id={`${id}-key`}
+              className="g-textarea account-secret"
+              value={review.recovery_key}
+              readOnly
+              spellCheck={false}
+            />
+            <label className="settings-check">
+              <input
+                type="checkbox"
+                checked={retained}
+                disabled={locked}
+                onChange={(event) => setRetained(event.currentTarget.checked)}
+              />
+              I saved this new recovery key somewhere safe
+            </label>
+            <label className="settings-field" htmlFor={`${id}-confirm`}>
+              Type RESET SYNC to permanently remove the old cloud data
+            </label>
+            <input
+              id={`${id}-confirm`}
+              className="g-input account-short-input"
+              value={confirmation}
+              disabled={locked}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => setConfirmation(event.currentTarget.value)}
+            />
+            <div className="settings-actions">
+              <button
+                className="g-button g-button-danger"
+                type="submit"
+                disabled={locked || !retained || confirmation !== "RESET SYNC"}
+              >
+                Permanently reset sync
+              </button>
+              <button
+                className="g-button g-button-ghost"
+                type="button"
+                disabled={locked}
+                onClick={() => void run(() => finish(api.dismiss()))}
+              >
+                Cancel review
+              </button>
+            </div>
+          </form>
+        ) : null}
+        {error ? (
+          <p className="settings-alert" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 }

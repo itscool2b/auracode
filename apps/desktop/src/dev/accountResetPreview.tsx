@@ -134,24 +134,26 @@ function Preview() {
     <main className="settings-shell g-root" style={{ display: "block", overflow: "auto" }}>
       <div className="account-panel settings-content">
         <h1>Account recovery</h1>
-        <h2>Your account</h2>
-        {mode?.startsWith("remove") ? (
-          <RemoveAccountPanel
-            api={removalApi}
-            localActive={localActive}
-            onLocal={async () => setLocalActive(true)}
-            onStatus={setStatus}
-          />
-        ) : mode === "rebind" ? (
-          <RebindProfilePanel api={rebindApi} onStatus={setStatus} />
-        ) : (
-          <ResetSyncPanel
-            api={api}
-            access={status.access}
-            allowReview={!status.local_key_available}
-            onStatus={setStatus}
-          />
-        )}
+        <h2 className="settings-heading">Security</h2>
+        <div className="settings-group">
+          {mode?.startsWith("remove") ? (
+            <RemoveAccountPanel
+              api={removalApi}
+              localActive={localActive}
+              onLocal={async () => setLocalActive(true)}
+              onStatus={setStatus}
+            />
+          ) : mode === "rebind" ? (
+            <RebindProfilePanel api={rebindApi} onStatus={setStatus} />
+          ) : (
+            <ResetSyncPanel
+              api={api}
+              access={status.access}
+              allowReview={!status.local_key_available}
+              onStatus={setStatus}
+            />
+          )}
+        </div>
         <output aria-label="Rebind calls">{JSON.stringify(rebindCalls)}</output>
         <output aria-label="Removal calls">{JSON.stringify(removalCalls)}</output>
         <output aria-label="Bound profile">{status.profile_id}</output>

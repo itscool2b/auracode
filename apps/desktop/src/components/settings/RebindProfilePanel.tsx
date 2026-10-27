@@ -49,56 +49,70 @@ export function RebindProfilePanel({
     }
   };
   return (
-    <section className="settings-group account-card" aria-labelledby={`${id}-title`}>
-      <h3 id={`${id}-title`}>Restore an existing workspace</h3>
-      <p>
-        Your account key is available, but this secure store has no saved workspace binding. Choose
-        the existing Account workspace to restore. Its encrypted identity must match this key. No
-        conversations are moved or replaced.
-      </p>
+    <section className="settings-row" aria-labelledby={`${id}-title`}>
+      <div className="settings-row-text">
+        <div>
+          <h3 id={`${id}-title`} className="settings-row-label">
+            Restore an existing workspace
+          </h3>
+          <p>
+            Your account key is here, but this secure store has no saved workspace. Choose the
+            Account workspace it belongs to; nothing is moved or replaced.
+          </p>
+        </div>
+      </div>
       {choices === null ? (
         <button
-          className="g-button"
+          className="g-button g-button-outline g-button-28"
           type="button"
           disabled={busy || disabled}
           onClick={() => void open()}
         >
           Choose existing workspace
         </button>
-      ) : (
-        <>
-          <label htmlFor={`${id}-profile`}>Existing Account workspace</label>
-          <select
-            id={`${id}-profile`}
-            className="g-select"
-            value={selected}
-            disabled={busy || disabled || !!profileId}
-            onChange={(event) => setSelected(event.currentTarget.value)}
-          >
-            <option value="">Choose a workspace</option>
-            {choices.map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.display_name} · {profile.id}
-              </option>
-            ))}
-          </select>
-          {choices.length === 0 ? (
-            <p>No matching Account workspace was found. Existing files were preserved.</p>
+      ) : null}
+      {choices !== null || error ? (
+        <div className="settings-span settings-form">
+          {choices !== null ? (
+            <>
+              <label className="settings-field" htmlFor={`${id}-profile`}>
+                Existing Account workspace
+              </label>
+              <select
+                id={`${id}-profile`}
+                className="g-select account-short-input"
+                value={selected}
+                disabled={busy || disabled || !!profileId}
+                onChange={(event) => setSelected(event.currentTarget.value)}
+              >
+                <option value="">Choose a workspace</option>
+                {choices.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.display_name} · {profile.id}
+                  </option>
+                ))}
+              </select>
+              {choices.length === 0 ? (
+                <p className="settings-note">
+                  No matching Account workspace was found. Existing files were preserved.
+                </p>
+              ) : null}
+              <button
+                type="button"
+                className="g-button g-button-primary g-button-28"
+                disabled={busy || disabled || !choices.some((profile) => profile.id === selected)}
+                onClick={() => void restore()}
+              >
+                Restore workspace binding
+              </button>
+            </>
           ) : null}
-          <button
-            type="button"
-            className="g-button"
-            disabled={busy || disabled || !choices.some((profile) => profile.id === selected)}
-            onClick={() => void restore()}
-          >
-            Restore workspace binding
-          </button>
-        </>
-      )}
-      {error ? (
-        <p className="settings-error" role="alert">
-          {error}
-        </p>
+          {error ? (
+            <p className="settings-alert" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );

@@ -7,9 +7,7 @@ function Preview() {
   return (
     <main className="settings-shell g-root" style={{ display: "block", overflow: "auto" }}>
       <div className="settings-content">
-        <header>
-          <h1>Sign-in verification fixture</h1>
-        </header>
+        <h1>Sign-in verification fixture</h1>
         <AccountVerification onToken={setToken} />
         <button type="button" className="g-button g-button-primary" disabled={!token}>
           Request sign-in code

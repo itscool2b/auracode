@@ -15,7 +15,7 @@ export function SignOutDialog({
 }) {
   return (
     <Modal title="Sign out of auracode?" closeDisabled={busy} onClose={onCancel}>
-      <div className="account-card">
+      <div className="account-dialog">
         <p>
           {pending === null
             ? "Sync has not confirmed how many changes are waiting. Some of your work may exist only on this device."
@@ -29,7 +29,7 @@ export function SignOutDialog({
             {error}
           </p>
         ) : null}
-        <div className="account-actions">
+        <div className="g-dialog-actions">
           <button className="g-button" type="button" disabled={busy} onClick={onCancel}>
             Stay signed in
           </button>

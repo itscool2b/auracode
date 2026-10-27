@@ -51,6 +51,8 @@ export function mountAccountPreservationPreview(container: HTMLElement) {
     <StrictMode>
       <main className="g-root settings-content">
         <h1>Account</h1>
+        <h2 className="settings-heading">Cloud account</h2>
+        <h3 className="settings-row-label">This account was deleted</h3>
         <KeepAsLocalPanel
           api={api}
           onOpen={async (id) => {

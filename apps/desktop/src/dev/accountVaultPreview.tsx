@@ -29,8 +29,19 @@ function Preview() {
     <main className="settings-shell g-root" style={{ display: "block", overflow: "auto" }}>
       <div className="account-panel settings-content">
         <h1>Secure account storage</h1>
-        <h2>Your account</h2>
-        <AccountVault api={api} onUnlocked={() => setUnlocked(true)} />
+        <h2 className="settings-heading">Security</h2>
+        <div className="settings-group">
+          <div className="settings-row">
+            <div className="settings-row-text">
+              <div>
+                <strong>Secure storage</strong>
+              </div>
+            </div>
+            <div className="settings-span">
+              <AccountVault api={api} onUnlocked={() => setUnlocked(true)} />
+            </div>
+          </div>
+        </div>
         <output aria-label="Vault writes">{calls}</output>
         {unlocked ? <p role="status">Account access can continue</p> : null}
       </div>
