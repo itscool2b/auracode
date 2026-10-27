@@ -2795,3 +2795,12 @@ after left nothing to signal and nothing re-read the exit, and terminal cleanup 
 unconfirmed. The chain now takes the recorded exit at the end (07a6774). Removing the WebView2
 profile override did not fix the Windows WebDriver session; the gate now records WebView2 process
 switches and DevTools port file locations while the direct attempt is still pending.
+
+CI 40415942110 (bc5fe0d): both macOS jobs passed for the first time, confirming the lock and
+shutdown fixes; Windows encrypted storage and PowerShell passed. A WebKit focus assertion in the
+settings check raced the next-frame focus move and now waits for it. WebDriver process evidence was
+decisive: the WebView2 browser ran in Edge WebDriver's profile but only with wry's default
+switches, never the driver's remote-debugging ones, because WebView2 ignores
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` when an app passes its own and wry always does. Debug
+builds launched with `TAURI_WEBVIEW_AUTOMATION=true` now keep wry's switches and append the
+driver's; release builds never read the variable.
