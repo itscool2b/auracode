@@ -56,8 +56,9 @@
   letter-spacing: var(--g-tracking-title);
 }
 
+/* As on Agents: the title and its line stack to 48px, so the actions centre 8px down. */
 .library-heading p {
-  margin: var(--g-space-4) 0 0;
+  margin: 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -146,11 +147,14 @@
   background-color: var(--g-bg);
 }
 
-/* The views: plain rows, the current one filled (Vercel's sidebar), one divider before history. */
+/*
+ * The views: plain rows, the current one filled (Vercel's sidebar), one divider before history. The
+ * rows sit 4px apart, as in the chat and settings sidebars.
+ */
 .library-categories {
   display: flex;
   flex-direction: column;
-  gap: var(--g-space-2);
+  gap: var(--g-space-4);
   overflow-y: auto;
   padding: var(--g-space-8);
 }
@@ -208,13 +212,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The settings nav's divider: an 8px band with its hairline 4px down, so the rows stay on the grid. */
 .library-categories > hr {
   flex: none;
   width: 100%;
-  height: 1px;
-  margin: var(--g-space-6) 0;
+  height: 8px;
+  margin: 0;
   border: 0;
-  background-color: var(--g-line);
+  background: linear-gradient(var(--g-line), var(--g-line)) 0 4px / 100% 1px no-repeat;
 }
 
 /* A copy that needs recovery: the one volt mark on the page. */

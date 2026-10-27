@@ -414,6 +414,9 @@ sit above in 14/20 500 fg-1, with help text under in 12/16 fg-3.
 14/20 500 fg-2, hover fg-1. Active (`aria-pressed`, `aria-selected`, `aria-checked` or
 `data-active`): a white pill with a black label (strong, SpaceXAI). `.g-segmented-quiet` makes
 the active segment surface-1 with a 1px line-strong inset ring and fg-1 (Harvey). Colour 150ms.
+In the desktop app the strong control sits on the 4px grid: a 36px track (an input's height) with
+its 28px segments 4px in and 4px apart, in settings rows and dialogs alike; the picker's quiet
+effort track is 32px with 24px levels (6.10).
 `.g-switch` (a native checkbox with `role="switch"`): 32x18 track, 12px knob 3px in; off surface-4
 with a line-strong ring and an fg-3 knob; on white with a black knob moved 14px over 150ms.
 
