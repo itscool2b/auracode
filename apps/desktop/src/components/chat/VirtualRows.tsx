@@ -91,7 +91,13 @@ export function VirtualRows({
     reading.current && reading.current.revision !== historyRevision ? () => false : undefined;
   const total = virtual.getTotalSize();
   const visibleItems = virtual.getVirtualItems();
-  const firstVisible = visibleItems.find((item) => item.end > (virtual.scrollOffset ?? 0) + 1);
+  // When the content shrinks to fit, the browser clamps scrollTop without a scroll event, so the
+  // remembered offset can point past the end. Clamp it before choosing the first visible row.
+  const offset = Math.min(
+    virtual.scrollOffset ?? 0,
+    Math.max(0, total - (virtual.scrollRect?.height ?? 0)),
+  );
+  const firstVisible = visibleItems.find((item) => item.end > offset + 1);
   const prompt = firstVisible && rows[firstVisible.index]?.prompt;
   const promptIndex = prompt ? rows.findIndex((row) => row.key === prompt.key) : -1;
   const showPrompt = prompt && promptIndex >= 0 && firstVisible && promptIndex < firstVisible.index;
