@@ -7,6 +7,12 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 
+// Graphite settles a control's colours over 300ms when its state changes; audit the settled page.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document.getAnimations().every((animation) => !(animation instanceof CSSTransition)),
+  );
+
 const root = resolve(fileURLToPath(new URL("../build/client/", import.meta.url)));
 const headerText = await readFile(join(root, "_headers"), "utf8");
 const csp = headerText.match(/Content-Security-Policy: ([^\n]+)/)[1];
@@ -77,6 +83,7 @@ try {
       );
       await page.screenshot({ path: join(artifacts, `${name}-home.png`), fullPage: true });
       assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+      await settled(page);
       let axe = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
         .analyze();
@@ -140,6 +147,7 @@ try {
         await page.getByRole("link", { name: "Explore the free Local app" }).getAttribute("href"),
         "/download",
       );
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({
         path: join(artifacts, `${name}-invite-required.png`),
@@ -223,6 +231,7 @@ try {
       await page.goto(`${base}/account`);
       await page.getByRole("heading", { name: "person@example.invalid" }).waitFor();
       await page.screenshot({ path: join(artifacts, `${name}-account.png`), fullPage: true });
+      await settled(page);
       axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
       assert.deepEqual(
         axe.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })),
@@ -250,6 +259,7 @@ try {
       );
       assert.equal(await page.getByRole("button", { name: "Change email" }).count(), 0);
       assert.equal(await page.getByText("No devices connected yet.", { exact: true }).count(), 0);
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({
         path: join(artifacts, `${name}-cloud-restricted.png`),
@@ -273,6 +283,7 @@ try {
         true,
       );
       assert.equal(await page.getByText("No devices connected yet.", { exact: true }).count(), 0);
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page
         .locator("#security")
@@ -310,6 +321,7 @@ try {
         await page.getByRole("link", { name: "Open auracode", exact: true }).getAttribute("href"),
         "auracode://signin",
       );
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({
         path: join(artifacts, `${name}-account-deleted.png`),
