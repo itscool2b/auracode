@@ -15,15 +15,15 @@ import {
   sessionInfo,
 } from "../../lib/chat/testing";
 import { applyEntries, emptyTranscript, renderTranscript } from "../../lib/chat/transcript";
-import { Banners, envBanner, RecoveryBannerView, storageBanner } from "./Banners";
 import { dockAgents, dockState } from "./AgentDock";
+import { Banners, envBanner, RecoveryBannerView, storageBanner } from "./Banners";
 import { ChatList, projectName, projectsOf } from "./ChatList";
-import { initials } from "./ProfileStatus";
 import { StillWorking } from "./ChatView";
 import { StopButton } from "./Composer";
 import { Header } from "./Header";
 import { downloadNote, InstallationStatus, NewChat } from "./NewChat";
 import { Pickers } from "./Pickers";
+import { initials } from "./ProfileStatus";
 import { QueueList } from "./QueueList";
 import { Transcript } from "./Transcript";
 import { type TurnActions, TurnView } from "./TurnView";
@@ -230,9 +230,9 @@ describe("the agent dock", () => {
     expect(dockState(agent("pi", { state: "checking" }), [])).toBe("checking");
     expect(dockState(claude, [chat({ status: "auth_required" })])).toBe("sign-in");
     expect(dockState(claude, [chat({ status: "running" })])).toBe("running");
-    expect(
-      dockState(claude, [chat({ status: "running" }), chat({ needs_attention: true })]),
-    ).toBe("waiting");
+    expect(dockState(claude, [chat({ status: "running" }), chat({ needs_attention: true })])).toBe(
+      "waiting",
+    );
   });
 
   it("names the profile by its initials", () => {
@@ -463,7 +463,11 @@ describe("the queue and the composer's stop button", () => {
       />,
     );
     expect(html.match(/>held</g)).toHaveLength(1);
-    expect(buttons(html).map((b) => b.label)).toEqual(["Remove", "Remove", "Send queued"]);
+    expect(buttons(html).map((b) => b.label)).toEqual([
+      "Send queued",
+      "Remove from the queue",
+      "Remove from the queue",
+    ]);
     expect(
       renderToStaticMarkup(
         <QueueList queue={[]} held={false} onRemove={noop} onSendQueued={noop} />,
@@ -476,11 +480,11 @@ describe("the queue and the composer's stop button", () => {
     const held = renderToStaticMarkup(
       <QueueList queue={unmarked} held={true} onRemove={noop} onSendQueued={noop} />,
     );
-    expect(buttons(held).map((b) => b.label)).toEqual(["Remove", "Send queued"]);
+    expect(buttons(held).map((b) => b.label)).toEqual(["Send queued", "Remove from the queue"]);
     const none = renderToStaticMarkup(
       <QueueList queue={unmarked} held={false} onRemove={noop} onSendQueued={noop} />,
     );
-    expect(buttons(none).map((b) => b.label)).toEqual(["Remove"]);
+    expect(buttons(none).map((b) => b.label)).toEqual(["Remove from the queue"]);
     // A held prompt the list does not know yet (its join is on its way) still gets the button.
     const unknown = renderToStaticMarkup(
       <QueueList queue={[]} held={true} onRemove={noop} onSendQueued={noop} />,

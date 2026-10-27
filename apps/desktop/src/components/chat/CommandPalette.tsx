@@ -203,7 +203,6 @@ export function CommandPalette({
             }
           }}
         />
-        <Keycap>Esc</Keycap>
       </div>
       <section className="palette-scopes" aria-label="Search scope">
         {scopes.map((value) => (
@@ -276,18 +275,6 @@ export function CommandPalette({
           {busy ? "Searching…" : "No matches. Try a different search."}
         </p>
       ) : null}
-      <footer>
-        <span>
-          <Keycap>↑</Keycap>
-          <Keycap>↓</Keycap> to move
-        </span>
-        <span>
-          <Keycap>Enter</Keycap> to open
-        </span>
-        <span>
-          <Keycap>Esc</Keycap> to close
-        </span>
-      </footer>
     </Modal>
   );
 }

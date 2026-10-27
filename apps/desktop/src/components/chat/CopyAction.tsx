@@ -9,7 +9,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 export function CopyAction({
   text,
   label,
-  icon = <Copy size={14} />,
+  icon = <Copy size={16} />,
 }: {
   readonly text: string;
   readonly label: string;
@@ -48,7 +48,7 @@ export function CopyAction({
         disabled={state === "copying"}
         onClick={() => void copy()}
       >
-        {state === "copied" ? <Check size={14} /> : icon}
+        {state === "copied" ? <Check size={16} /> : icon}
         <span className="sr-only" aria-live="polite">
           {state === "copied" ? "Copied" : ""}
         </span>

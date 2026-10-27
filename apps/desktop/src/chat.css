@@ -3,8 +3,8 @@
  * transcript, tool rows and their wells, diffs and terminal output, the answer's markdown, request
  * and error cards, the composer and its pickers, and New chat. The frame around it is shell.css.
  *
- * Every agent line starts on a 22px gutter: icons, chevrons and the live mark centre on x 11 and the
- * words start at x 22, so a live line handing over to the next keeps the mark and the words in place.
+ * Every agent line starts on a 24px gutter: icons, chevrons and the live mark centre on x 12 and the
+ * words start at x 24, so a live line handing over to the next keeps the mark and the words in place.
  * Nothing streamed ever moves: rows only append, and nothing animates in when text arrives.
  */
 
@@ -94,7 +94,7 @@
 
 .chat-user-expand {
   display: block;
-  margin-top: var(--g-space-6);
+  margin-top: var(--g-space-4);
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -144,7 +144,7 @@
 
 /* ---------- The agent's lines: byline, now-row, thinking (6.4) ---------- */
 
-/* Every agent line keeps its mark, icon or chevron in the 22px gutter, centred on x 11. */
+/* Every agent line keeps its mark, icon or chevron in the 24px gutter, centred on x 12. */
 .chat-gutter {
   position: absolute;
   top: 0;
@@ -224,14 +224,14 @@
 }
 
 .chat-thought > p {
-  max-width: 578px;
+  max-width: 576px;
   max-height: 280px;
   margin: var(--g-space-4) 0 var(--g-space-4) calc(var(--ui-gutter) / 2);
-  padding: var(--g-space-2) 0 var(--g-space-2) calc(var(--ui-gutter) / 2 - 1px);
+  padding: 0 0 0 calc(var(--ui-gutter) / 2 - 1px);
   overflow: auto;
   border-left: 1px solid var(--g-line);
   color: var(--g-fg-2);
-  line-height: var(--g-leading-heading);
+  line-height: var(--g-leading-ui);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   scrollbar-width: thin;
@@ -364,19 +364,19 @@
 
 /*
  * The virtualizer spaces rows 16px apart. A tool opened from a group pulls up into that gap, so
- * the group's calls read as one list on a spine (6.4): rows 2px apart, the line on x 11.
+ * the group's calls read as one list on a spine (6.4): rows 4px apart, the line on x 11.
  */
 .chat-segment[data-in-group] {
   position: relative;
-  margin-top: calc(var(--g-space-2) - var(--g-space-16));
+  margin-top: calc(var(--g-space-4) - var(--g-space-16));
 }
 
 .chat-segment[data-in-group]::before {
   content: "";
   position: absolute;
-  top: -2px;
+  top: -4px;
   bottom: 0;
-  left: 10px;
+  left: 11px;
   width: 1px;
   background-color: var(--g-line);
 }
@@ -534,6 +534,7 @@
 }
 
 .chat-terminal-expand {
+  display: block;
   margin-top: var(--g-space-8);
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
@@ -844,6 +845,11 @@
   padding: 0 var(--g-space-12);
 }
 
+/* Beside a 36px field the actions take its height, so the row shares one top and one bottom. */
+.chat-block .ui-row:has(> .g-input) > .g-button {
+  --g-button-h: 36px;
+}
+
 .chat-block[data-resolved="true"] {
   gap: var(--g-space-8);
 }
@@ -909,22 +915,112 @@
   flex-direction: column;
 }
 
+/* Options (6.7): rows on hairlines that fill under the hand, a round or square mark at the start. */
 .chat-question-option {
   display: flex;
   align-items: flex-start;
   gap: var(--g-space-12);
   min-height: 40px;
-  padding: var(--g-space-8) var(--g-space-4);
+  padding: var(--g-space-8);
   border-top: 1px solid var(--g-line);
   cursor: pointer;
+  transition: background-color var(--g-dur-micro) var(--g-ease);
 }
 
 .chat-question-option:last-child {
   border-bottom: 1px solid var(--g-line);
 }
 
+@media (hover: hover) {
+  .chat-question-option:hover {
+    background-color: var(--g-surface-3);
+  }
+}
+
+.chat-question-option:has(input:checked) {
+  background-color: var(--g-surface-3);
+}
+
 .chat-question-option input {
-  margin-top: var(--g-space-4);
+  appearance: none;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin: var(--g-space-4) 0 0;
+  border-radius: var(--g-radius-4);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-fg-4);
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-fast) var(--g-ease),
+    box-shadow var(--g-dur-fast) var(--g-ease);
+}
+
+.chat-question-option input[type="radio"] {
+  border-radius: var(--g-radius-pill);
+}
+
+.chat-question-option input:checked {
+  background-color: var(--g-primary);
+  box-shadow: none;
+}
+
+.chat-question-option input[type="radio"]:checked::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-on-light);
+}
+
+.chat-question-option input[type="checkbox"]:checked::before {
+  content: "";
+  width: 8px;
+  height: 4px;
+  border-bottom: 2px solid var(--g-on-light);
+  border-left: 2px solid var(--g-on-light);
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.chat-question-option input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* A flat request input as key and value rows (6.6): the key in fg-3, the literal in mono fg-1. */
+.chat-kv {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: var(--g-space-4) 0;
+  box-shadow:
+    inset 0 1px var(--g-line),
+    inset 0 -1px var(--g-line);
+}
+
+.chat-kv > div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--g-space-12);
+  min-height: 28px;
+  padding: var(--g-space-4) 0;
+}
+
+.chat-kv dt {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.chat-kv dd {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  overflow-wrap: anywhere;
 }
 
 .chat-question-option-copy {
@@ -1006,7 +1102,7 @@
 .chat-request-scope {
   display: flex;
   gap: var(--g-space-6);
-  margin: var(--g-space-6) var(--g-space-16) 0;
+  margin: var(--g-space-4) var(--g-space-16) 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -1094,14 +1190,30 @@
   user-select: text;
 }
 
+/*
+ * The queue (6.12): one segment over the composer, the same width and radius. "2 queued" on top,
+ * then each waiting message on a 32px row with its remove control at the end.
+ */
 .chat-queue-list {
   display: flex;
   flex-direction: column;
-  gap: var(--g-space-6);
-  padding: var(--g-space-6) var(--g-space-6) var(--g-space-6) var(--g-space-16);
-  border-radius: var(--g-radius-12);
+  padding: var(--g-space-4) var(--g-space-8) var(--g-space-8) var(--g-space-16);
+  border-radius: var(--g-radius-16);
   background-color: var(--g-surface-2);
   box-shadow: inset 0 0 0 1px var(--g-line);
+}
+
+.chat-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-8);
+  min-height: 32px;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .chat-queue {
@@ -1123,13 +1235,18 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  color: var(--g-fg-2);
+  color: var(--g-fg-1);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-queue-list > .ui-row {
-  padding: var(--g-space-4) 0;
+.chat-queue li > .g-button-icon {
+  color: var(--g-fg-3);
+}
+
+.chat-queue-note {
+  margin: var(--g-space-4) 0 0;
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -1175,7 +1292,7 @@
   align-items: center;
   gap: var(--g-space-2);
   min-height: 28px;
-  margin: 0 0 0 calc(var(--ui-gutter) - var(--g-space-8) + 1px);
+  margin: 0 0 0 calc(var(--ui-gutter) - var(--g-space-6));
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -1496,6 +1613,10 @@
   max-width: none;
   max-height: 420px;
   margin: 0;
+  /* The well's ring is the block's inset hairline; a border would put the code off the grid. */
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   padding: var(--g-space-12) var(--g-space-16);
   overflow: auto;
   color: var(--g-code-fg);
@@ -1532,6 +1653,11 @@
 
 .chat-composer:focus-within {
   box-shadow: inset 0 0 0 1px var(--g-fg-4);
+}
+
+/* Reached from the keyboard, the message box lights the pill's ring to fg-3 (an input's focus, 4.2). */
+.chat-composer:has(.g-textarea:focus-visible) {
+  box-shadow: inset 0 0 0 1px var(--g-fg-3);
 }
 
 .chat-composer .g-textarea {

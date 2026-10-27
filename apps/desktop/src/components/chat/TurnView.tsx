@@ -289,7 +289,7 @@ function Footer({
             title="Retry"
             onClick={() => onContinue({ type: "retry", turn_id: segment.turnId as string })}
           >
-            <RotateCcw size={14} />
+            <RotateCcw size={16} />
           </button>
           <button
             type="button"
@@ -298,11 +298,11 @@ function Footer({
             title="Fork into a new chat"
             onClick={() => onContinue({ type: "fork", turn_id: segment.turnId as string })}
           >
-            <GitFork size={14} />
+            <GitFork size={16} />
           </button>
         </>
       ) : null}
-      <CopyAction text={receipt} label="Copy turn receipt" icon={<ReceiptText size={14} />} />
+      <CopyAction text={receipt} label="Copy turn receipt" icon={<ReceiptText size={16} />} />
       {meta.length ? (
         <span className="chat-footer-meta" title={parts.join(" · ")}>
           {meta.join(" · ")}

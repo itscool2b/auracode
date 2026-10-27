@@ -71,7 +71,10 @@
   margin-left: auto;
 }
 
-/* A strong segmented control (4.3): the active tab is the white pill. */
+/*
+ * The tabs read like Grok's header pills: words in fg-2 on the pane, the open one on a surface-3
+ * fill. The white pill stays for the one primary action on screen.
+ */
 .context-panel-tabs {
   display: inline-flex;
   flex: 0 1 auto;
@@ -79,10 +82,7 @@
   gap: var(--g-space-2);
   min-width: 0;
   height: 32px;
-  padding: var(--g-space-2);
   box-sizing: border-box;
-  border-radius: var(--g-radius-pill);
-  background-color: var(--g-surface-3);
 }
 
 .context-panel-tabs button {
@@ -107,11 +107,12 @@
 }
 
 .context-panel-tabs button[aria-selected="true"] {
-  background-color: var(--g-primary);
-  color: var(--g-on-light);
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
 }
 
 .context-panel-tabs small {
+  color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -129,7 +130,6 @@
 
 .changes-scope {
   display: grid;
-  gap: var(--g-space-6);
   padding: var(--g-space-12) var(--g-space-12) var(--g-space-8);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);

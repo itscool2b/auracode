@@ -65,7 +65,7 @@ export function UserMessage({
             title="Edit and resend"
             onClick={onEdit}
           >
-            <Pencil size={14} />
+            <Pencil size={16} />
           </button>
         ) : null}
         <CopyAction text={item.text} label="Copy prompt" />

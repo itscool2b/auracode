@@ -118,7 +118,7 @@ export function Transcript({
     const addItem = (index: number, item: RenderedItem, grouped = false) =>
       rows.push({
         key: JSON.stringify([segment.key, item.key]),
-        estimate: item.kind === "message" ? 200 : item.kind === "user" ? 70 : 48,
+        estimate: item.kind === "message" ? 200 : item.kind === "user" ? 72 : 48,
         prompt,
         retain:
           (item.kind === "question" || item.kind === "permission") &&
@@ -206,7 +206,7 @@ export function Transcript({
     if (segment.end !== null || (segment.plan?.length ?? 0) > 0)
       rows.push({
         key: JSON.stringify([segment.key, "footer"]),
-        estimate: 50,
+        estimate: 44,
         prompt,
         content: (
           <TurnView
