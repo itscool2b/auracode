@@ -8,6 +8,14 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const origin = "http://127.0.0.1:1478";
@@ -61,6 +69,7 @@ try {
       await page.goto(url);
       await page.getByRole("heading", { name: "Finish opening your workspace" }).waitFor();
       assert.equal(await page.getByLabel("Recovery calls").textContent(), "0");
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${engine}.png`) });
       await page.getByRole("button", { name: "Restore previous settings" }).click();

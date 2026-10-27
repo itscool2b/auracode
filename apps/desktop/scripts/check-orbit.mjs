@@ -9,6 +9,14 @@ import { parseArgs } from "node:util";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 const { values } = parseArgs({
   options: { server: { type: "string" }, engines: { type: "string", default: "chromium,webkit" } },
 });
@@ -94,6 +102,7 @@ async function inspect(engine, launcher) {
           "dark",
           "the product must stay dark regardless of system appearance",
         );
+        await settled(page);
         const scan = await new AxeBuilder({ page })
           .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
           .analyze();
@@ -482,6 +491,7 @@ async function inspect(engine, launcher) {
         document.querySelector('[data-picker-value="high"]')?.getAttribute("aria-pressed") ===
         "true",
     );
+    await settled(page);
     const pickerScan = await new AxeBuilder({ page }).include(".chat-model-popover").analyze();
     assert.deepEqual(pickerScan.violations, [], "Picker accessibility");
     await page.screenshot({ path: resolve(out, `${engine}-picker-dark.png`) });
@@ -498,6 +508,7 @@ async function inspect(engine, launcher) {
     await page.getByRole("button", { name: "src/components/Sidebar.tsx", exact: true }).click();
     await page.getByRole("button", { name: "Changes", exact: true }).click();
     await page.getByRole("table", { name: "File line changes" }).waitFor();
+    await settled(page);
     const changeScan = await new AxeBuilder({ page })
       .include(".changes-panel")
       .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -536,6 +547,7 @@ async function inspect(engine, launcher) {
       }
       // The tabs change colour over 150ms; contrast is measured once they have settled.
       await page.waitForTimeout(200);
+      await settled(page);
       const scan = await new AxeBuilder({ page }).include(".changes-panel").analyze();
       assert.deepEqual(scan.violations, [], `${tab} context accessibility`);
     }
@@ -554,6 +566,7 @@ async function inspect(engine, launcher) {
     await page.keyboard.press("Control+k");
     await page.getByRole("combobox", { name: "Search and commands" }).fill("active");
     await page.getByRole("option").filter({ hasText: "Make the sidebar" }).waitFor();
+    await settled(page);
     const paletteScan = await new AxeBuilder({ page })
       .include(".command-palette")
       .withTags(["wcag2a", "wcag2aa", "wcag21aa"])

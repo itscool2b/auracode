@@ -8,6 +8,14 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const vite = resolve(dirname(require.resolve("vite/package.json")), "bin/vite.js");
@@ -77,6 +85,7 @@ try {
         await confirm.waitFor();
         assert.deepEqual(await calls(), ["local-draft", "remote-review"]);
         if (scenario === "normal") {
+          await settled(page);
           assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
           await page.screenshot({ path: resolve(out, `${engine}-review.png`) });
           await page.setViewportSize({ width: 390, height: 800 });

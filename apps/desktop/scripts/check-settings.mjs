@@ -22,6 +22,14 @@ import { checkSettingsNavigation } from "./check-settings-navigation.mjs";
 import { checkSteering } from "./check-steering.mjs";
 import { checkWorktreeSetup } from "./check-worktree-setup.mjs";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const url = process.argv[2] ?? "http://127.0.0.1:1464";
 const out = resolve(app, "../../target/settings-browser");
@@ -89,6 +97,7 @@ try {
       await page.evaluate(() => sessionStorage.removeItem("settings-fail-save"));
       await page.getByRole("button", { name: "Reload preferences" }).click();
       await page.getByRole("alert").waitFor({ state: "hidden" });
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${engine}-general.png`) });
       await page.getByRole("button", { name: "Shortcuts", exact: true }).click();
@@ -107,6 +116,7 @@ try {
           .evaluate((node) => node === document.activeElement),
         true,
       );
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.getByRole("button", { name: "About", exact: true }).click();
       await page.getByRole("button", { name: "Check for updates" }).waitFor();
@@ -138,6 +148,7 @@ try {
         ),
         ["check", "download", "install"],
       );
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${engine}-update.png`) });
       await page.keyboard.press("Escape");

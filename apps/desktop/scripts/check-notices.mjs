@@ -3,6 +3,14 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 export async function checkNotices(page, out, engine) {
   await page.getByRole("button", { name: "View", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Third-party notices" });
@@ -11,6 +19,7 @@ export async function checkNotices(page, out, engine) {
   const content = await text.textContent();
   assert.match(content, /^Third-party software notices/);
   assert.match(content, /SQLCipher/);
+  await settled(page);
   assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
   await page.screenshot({ path: resolve(out, `${engine}-notices.png`) });
   await text.focus();

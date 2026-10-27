@@ -8,6 +8,14 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const out = resolve(app, "../../target/library-browser");
 const url = "http://127.0.0.1:1465";
@@ -67,6 +75,7 @@ try {
       assert.equal((await calls()).includes("vendor-review"), false);
       await page.getByLabel("Plugin and marketplace").fill("tools@team");
       await page.screenshot({ path: resolve(out, `${engine}-vendor-form.png`) });
+      await settled(page);
       assert.deepEqual(
         (await new AxeBuilder({ page }).analyze()).violations,
         [],
@@ -85,6 +94,7 @@ try {
       await choose();
       assert.equal(await page.locator(".library-code script").count(), 0);
       await page.screenshot({ path: resolve(out, `${engine}-library.png`) });
+      await settled(page);
       assert.deepEqual(
         (await new AxeBuilder({ page }).analyze()).violations,
         [],
@@ -94,6 +104,7 @@ try {
       await page.getByRole("dialog", { name: "Review copy" }).waitFor();
       assert.equal((await calls()).includes("apply"), false);
       await page.screenshot({ path: resolve(out, `${engine}-review.png`) });
+      await settled(page);
       assert.deepEqual(
         (await new AxeBuilder({ page }).analyze()).violations,
         [],

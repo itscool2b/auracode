@@ -5,6 +5,14 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 export async function checkQuestions(browser, url, out, engine) {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 900 },
@@ -66,6 +74,7 @@ export async function checkQuestions(browser, url, out, engine) {
       element.scrollTop = element.scrollHeight;
     });
     await page.getByText("Informational update only", { exact: true }).waitFor();
+    await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
 
     await open("turn");
@@ -108,6 +117,7 @@ export async function checkQuestions(browser, url, out, engine) {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("button", { name: "Ask question", exact: true }).click();
     await question.waitFor();
+    await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     assert.equal(
       await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),

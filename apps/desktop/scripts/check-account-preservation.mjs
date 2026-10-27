@@ -4,6 +4,14 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 export async function checkAccountPreservation(page, url, out, engine) {
   await page.goto(`${url}/?preview=keep-local`);
   const review = page.getByRole("button", { name: "Review Keep as Local", exact: true });
@@ -13,6 +21,7 @@ export async function checkAccountPreservation(page, url, out, engine) {
   const apply = page.getByRole("button", { name: "Create Local copy", exact: true });
   await apply.waitFor();
   assert.equal(await apply.isDisabled(), true);
+  await settled(page);
   assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
   await page.screenshot({ path: resolve(out, `${engine}-keep-local-review.png`) });
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -60,6 +69,7 @@ export async function checkAccountPreservation(page, url, out, engine) {
   await page.goto(`${url}/?preview=keep-local`);
   await review.click();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await settled(page);
   assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
   await page.getByRole("checkbox", { name: /unencrypted/ }).check();
   await apply.scrollIntoViewIfNeeded();

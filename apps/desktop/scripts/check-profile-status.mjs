@@ -8,6 +8,14 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const origin = "http://127.0.0.1:1470";
@@ -63,6 +71,7 @@ try {
       await page.screenshot({ path: resolve(out, `${engine}-account.png`) });
       await page.evaluate(() => window.profileStatusFixture.event("work", "paused", 3));
       await page.getByRole("status").filter({ hasText: "Sync paused · 3 pending" }).waitFor();
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${engine}-paused.png`) });
       await page.getByRole("button", { name: "Open settings" }).click();
@@ -92,6 +101,7 @@ try {
           .evaluate((node) => node.scrollWidth <= node.clientWidth),
         true,
       );
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${engine}-narrow.png`) });
       assert.deepEqual(errors, []);

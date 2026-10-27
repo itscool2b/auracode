@@ -4,6 +4,14 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
+
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
 export async function checkSessionFallback(browser, url, out, engine) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   try {
@@ -25,6 +33,7 @@ export async function checkSessionFallback(browser, url, out, engine) {
       applied: 0,
     });
     assert.equal(await page.evaluate(() => window.steeringCalls.send), 0);
+    await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await page.screenshot({ path: resolve(out, `${engine}-fresh-session-review.png`) });
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
@@ -58,6 +67,7 @@ export async function checkSessionFallback(browser, url, out, engine) {
     assert.equal(await page.evaluate(() => window.steeringCalls.send), 0);
     assert.equal(await page.evaluate(() => window.sessionRecoveryCalls.starts), 0);
     assert.equal(await page.evaluate(() => window.sessionRecoveryCalls.applied), 1);
+    await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await page.screenshot({ path: resolve(out, `${engine}-continue-here.png`) });
     assert.deepEqual(errors, []);

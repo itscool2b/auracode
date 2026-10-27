@@ -5,6 +5,14 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 export async function checkSteering(browser, url, out, engine) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   try {
@@ -49,6 +57,7 @@ export async function checkSteering(browser, url, out, engine) {
       () => document.querySelector('[data-testid="composer-input"]').value === "",
     );
     assert.equal(await page.getByText("Use the existing index", { exact: true }).count(), 1);
+    await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await page.screenshot({ path: resolve(out, `${engine}-steering-accepted.png`) });
 

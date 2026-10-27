@@ -4,6 +4,14 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 export async function checkGitReview(page, url, out, engine) {
   await page.goto(`${url}/?preview=git&non-git&live`);
   const initialize = page.getByRole("button", { name: "Review Git initialization", exact: true });
@@ -19,6 +27,7 @@ export async function checkGitReview(page, url, out, engine) {
   ]);
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await initialize.click();
+  await settled(page);
   assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
   await page.screenshot({ path: resolve(out, `${engine}-git-initialize-review.png`) });
   await page.getByRole("button", { name: "Initialize reviewed folder", exact: true }).click();
@@ -63,6 +72,7 @@ export async function checkGitReview(page, url, out, engine) {
     await page.evaluate(() => window.gitFixture.calls().includes("apply-isolation")),
     false,
   );
+  await settled(page);
   assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
   await page.screenshot({ path: resolve(out, `${engine}-isolation-review.png`) });
   await page.getByRole("button", { name: "Create isolated workspace" }).click();
@@ -73,6 +83,7 @@ export async function checkGitReview(page, url, out, engine) {
     await page.evaluate(() => window.gitFixture.calls().includes("apply-relocation")),
     false,
   );
+  await settled(page);
   assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
   await page.screenshot({ path: resolve(out, `${engine}-worktree-move.png`) });
   await page.getByRole("button", { name: "Move chat to reviewed folder" }).click();
@@ -104,6 +115,7 @@ export async function checkGitReview(page, url, out, engine) {
   await page.getByRole("button", { name: "Retire and keep files" }).click();
   await page.getByRole("button", { name: "Review restoration", exact: true }).click();
   await page.getByRole("heading", { name: "Review restoration" }).waitFor();
+  await settled(page);
   assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
   await page.screenshot({ path: resolve(out, `${engine}-worktree-restore.png`) });
   await page.getByRole("button", { name: "Restore retained worktree" }).click();
@@ -117,6 +129,7 @@ export async function checkGitReview(page, url, out, engine) {
   await page.getByRole("heading", { name: "Review pull request", exact: true }).waitFor();
   await page.getByText("fixture/orbit", { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.gitFixture.calls().includes("apply-pr")), false);
+  await settled(page);
   assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
   await page.screenshot({ path: resolve(out, `${engine}-pull-request-review.png`) });
   await page.getByRole("button", { name: "Publish reviewed pull request" }).click();

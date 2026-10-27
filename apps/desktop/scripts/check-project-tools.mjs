@@ -4,10 +4,19 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 export async function checkProjectTools(page, url, out, engine) {
   await page.goto(`${url}/?preview=project-tools`);
   await page.getByRole("button", { name: "Review PowerShell terminal", exact: true }).waitFor();
   assert.deepEqual(await page.evaluate(() => window.projectToolsFixture.calls()), []);
+  await settled(page);
   assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
   await page.screenshot({ path: resolve(out, `${engine}-project-tools.png`) });
   await page.getByRole("button", { name: "Review PowerShell terminal", exact: true }).click();

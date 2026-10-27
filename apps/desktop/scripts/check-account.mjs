@@ -4,6 +4,14 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 export async function checkAccount(browser, url, out, engine) {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
@@ -42,6 +50,7 @@ export async function checkAccount(browser, url, out, engine) {
     );
     const confirm = page.getByRole("button", { name: "Confirm saved key" });
     assert.equal(await confirm.isDisabled(), true);
+    await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await page.screenshot({ path: resolve(out, `${engine}-account-recovery.png`) });
     await page.getByLabel("I saved my recovery key somewhere safe").check();
@@ -74,6 +83,7 @@ export async function checkAccount(browser, url, out, engine) {
       .filter({ hasText: "Other computer" })
       .getByText("macos · Revoked", { exact: true })
       .waitFor();
+    await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await page.screenshot({ path: resolve(out, `${engine}-account-devices.png`) });
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -99,6 +109,7 @@ export async function checkAccount(browser, url, out, engine) {
     await signOut
       .getByText("The last sync report shows 3 changes waiting to upload.", { exact: false })
       .waitFor();
+    await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await signOut.getByRole("button", { name: "Stay signed in" }).click();
     await page.getByText("This device is approved", { exact: true }).waitFor();
@@ -119,6 +130,7 @@ export async function checkAccount(browser, url, out, engine) {
         await page.getByRole("button", { name: "Send sign-in code" }).isDisabled(),
         true,
       );
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${engine}-${stage}.png`) });
     }
@@ -134,6 +146,7 @@ export async function checkAccount(browser, url, out, engine) {
       true,
     );
     assert.equal(await page.getByRole("button", { name: "Register this device" }).count(), 0);
+    await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await page.screenshot({ path: resolve(out, `${engine}-cloud-restricted.png`) });
     for (const stage of ["ready-restricted", "sync-restricted"]) {
@@ -160,6 +173,7 @@ export async function checkAccount(browser, url, out, engine) {
         ),
         1,
       );
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     }
     await page.goto(`${url}/?preview=account&stage=sync-stale&active=fixture-profile`);

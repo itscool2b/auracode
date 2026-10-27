@@ -4,6 +4,14 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 export async function checkWorktreeSetup(browser, url, out, engine) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   try {
@@ -28,6 +36,7 @@ export async function checkWorktreeSetup(browser, url, out, engine) {
       assert.deepEqual(await page.evaluate(() => window.setupCalls), ["save", "review"]);
     };
     await prepare();
+    await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await page.screenshot({ path: resolve(out, `${engine}-worktree-setup.png`) });
     await page.getByRole("button", { name: "Copy reviewed files" }).click();

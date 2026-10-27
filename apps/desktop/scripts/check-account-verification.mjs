@@ -5,6 +5,14 @@ import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 export async function checkAccountVerification(browser, desktopUrl, out, engine) {
   const root = fileURLToPath(new URL("../../web/build/client/", import.meta.url));
   const headers = await readFile(resolve(root, "_headers"), "utf8");
@@ -93,6 +101,7 @@ export async function checkAccountVerification(browser, desktopUrl, out, engine)
     await page.getByText("Verification complete.", { exact: true }).waitFor();
     assert.equal(await request.isEnabled(), true);
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
+    await settled(page);
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     assert.deepEqual(errors, []);
     await page.screenshot({ path: resolve(out, `${engine}-account-verification.png`) });
