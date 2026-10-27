@@ -4,10 +4,6 @@
  */
 
 .diagnostics-shell {
-  --aura-text-1: var(--g-fg-1);
-  --aura-text-2: var(--g-fg-2);
-  --aura-text-3: var(--g-fg-3);
-  --aura-danger: var(--g-red);
   background: var(--g-bg);
   color: var(--g-fg-1);
   font-family: var(--g-sans);
@@ -138,6 +134,12 @@
 .demo-panel-transcript {
   flex: 1;
   min-height: 0;
+}
+
+/* The stress view's ambient field fills the pane behind the controls and the stream. */
+.stress-field {
+  position: absolute;
+  inset: 0;
 }
 
 .stress-view {

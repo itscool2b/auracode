@@ -122,7 +122,7 @@ function General({
             detail="Full motion still respects reduced motion on your device."
           >
             <fieldset className="settings-segmented" disabled={!saved || busy}>
-              <legend className="settings-sr-only">Interface motion</legend>
+              <legend className="sr-only">Interface motion</legend>
               {(["full", "reduced", "off"] as const).map((value) => (
                 <label key={value}>
                   <input

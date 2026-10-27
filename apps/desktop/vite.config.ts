@@ -1,4 +1,3 @@
-import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { noticesPlugin } from "../../.github/scripts/third-party-notices.mjs";
@@ -12,10 +11,10 @@ const devHost = process.env.TAURI_DEV_HOST;
 
 /**
  * The oldest WebKit the build supports: WKWebView on macOS and WebKitGTK on Linux. Safari 16.4 is
- * Tailwind 4's own floor (cascade layers, `@property`, `color-mix()`), and it is the WebKit that
- * macOS 13.3 ships with, which is why `bundle.macOS.minimumSystemVersion` in tauri.conf.json is
- * 13.3. The two move together (build-targets.test.ts checks it): a newer target than the oldest
- * allowed macOS ships leaves that system rendering the window unstyled.
+ * the WebKit that macOS 13.3 ships with, which is why `bundle.macOS.minimumSystemVersion` in
+ * tauri.conf.json is 13.3. The two move together (build-targets.test.ts checks it): a newer target
+ * than the oldest allowed macOS ships leaves that system rendering the window unstyled. The
+ * stylesheets themselves need Safari 15.4 (cascade layers, `:has()`, dynamic viewport units).
  */
 export const WEBKIT_TARGET = "safari16.4";
 
@@ -23,7 +22,7 @@ export const WEBKIT_TARGET = "safari16.4";
 export const WEBVIEW2_TARGET = "chrome130";
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), noticesPlugin("desktop")],
+  plugins: [react(), noticesPlugin("desktop")],
   // Keep Rust's compile errors on screen instead of clearing them.
   clearScreen: false,
   server: {

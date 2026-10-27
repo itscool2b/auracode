@@ -1402,7 +1402,7 @@
   background-color: var(--ui-surface-fill);
   color: var(--ui-text-primary);
   font-family: var(--g-mono);
-  font-size: 0.9em;
+  font-size: var(--g-text-code-inline);
   font-variant-ligatures: none;
 }
 

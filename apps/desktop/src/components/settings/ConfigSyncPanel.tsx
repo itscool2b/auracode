@@ -449,7 +449,7 @@ function ConfigReview({
           <p>{item.provider ? PROVIDERS[item.provider] : "Agent configuration"}</p>
         </div>
         <fieldset className="g-segmented config-sync-choices">
-          <legend className="settings-sr-only">How to resolve this item</legend>
+          <legend className="sr-only">How to resolve this item</legend>
           {(
             [
               ["automatic", "Merge safely"],

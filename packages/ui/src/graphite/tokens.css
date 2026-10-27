@@ -111,6 +111,7 @@
   --g-tracking-display: -0.025em;
   --g-text-code: 13px;
   --g-leading-code: 20px;
+  --g-text-code-inline: 0.9em; /* inline code, relative to the sentence around it */
   --g-text-term: 12.5px;
   --g-leading-term: 18px;
   --g-text-key: 11px;

@@ -6,8 +6,8 @@
  * opacity and transform ever transition.
  *
  * The shell's stylesheets are unlayered, like Graphite's, and load after it: at equal specificity a
- * rule here wins over a Graphite primitive (the global focus ring, a keycap), while Tailwind's layers
- * and the legacy styles.css stay underneath.
+ * rule here wins over a Graphite primitive (the global focus ring, a keycap), while the reset and
+ * base layers in styles.css stay underneath.
  */
 
 /* ---------- Window and panes (6.1) ---------- */

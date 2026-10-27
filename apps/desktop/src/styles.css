@@ -1,27 +1,171 @@
-@import "tailwindcss";
-@import "@auracode/ui/tokens.css";
-
 /*
- * The app's base and the Diagnostics views' recurring looks, in Graphite (--g-* tokens from
- * ui-tokens.css). Layout utilities come from Tailwind in the components. No Tailwind-only syntax
- * (@theme, @apply), so the file stays plain CSS for Biome. The legacy --aura-* tokens stay
- * imported because the Markdown task checkboxes still read them.
+ * The app's base: a small reset, the document defaults and the Diagnostics views' recurring looks,
+ * in Graphite (--g-* tokens, loaded by ui-tokens.css). Plain CSS, no framework.
+ *
+ * Both layers sit below every unlayered stylesheet (Graphite, the shell, the screens), so a
+ * component's own class always wins over these defaults whatever its specificity.
  *
  * Glass: on macOS and Windows 11 the window can carry the OS material, so the page leaves its
- * background transparent there; `data-glass="none"` paints Graphite's black.
+ * background tinted there; `data-glass="none"` paints Graphite's black.
  */
 
-/*
- * Everything below sits in Tailwind's components layer: above its preflight (base), below its
- * utilities, so a utility class on an element can still override these defaults.
- */
-@layer components {
+@layer reset, base;
+
+/* ---------- Reset ---------- */
+
+@layer reset {
+  *,
+  ::before,
+  ::after,
+  ::backdrop,
+  ::file-selector-button {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    tab-size: 4;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: inherit;
+  }
+
+  b,
+  strong {
+    font-weight: 600;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-size: 1em;
+  }
+
+  small {
+    font-size: var(--g-text-meta);
+  }
+
+  table {
+    border-collapse: collapse;
+    border-color: inherit;
+    text-indent: 0;
+  }
+
+  hr {
+    height: 0;
+    border-top-width: 1px;
+    color: inherit;
+  }
+
+  ol,
+  ul,
+  menu {
+    list-style: none;
+  }
+
+  summary {
+    display: list-item;
+  }
+
+  img,
+  svg,
+  video,
+  canvas,
+  iframe {
+    display: block;
+    vertical-align: middle;
+  }
+
+  img,
+  video {
+    max-width: 100%;
+    height: auto;
+  }
+
+  button,
+  input,
+  select,
+  optgroup,
+  textarea,
+  ::file-selector-button {
+    font: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    border-radius: 0;
+    background-color: transparent;
+    opacity: 1;
+  }
+
+  button,
+  input:where([type="button"], [type="reset"], [type="submit"]),
+  ::file-selector-button {
+    appearance: button;
+  }
+
+  ::placeholder {
+    color: var(--g-fg-3);
+    opacity: 1;
+  }
+
+  ::-webkit-search-decoration {
+    -webkit-appearance: none;
+  }
+
+  ::-webkit-inner-spin-button,
+  ::-webkit-outer-spin-button {
+    height: auto;
+  }
+
+  progress {
+    vertical-align: baseline;
+  }
+
+  textarea {
+    resize: vertical;
+  }
+
+  /* Text fields stay editable and selectable inside the app's unselectable chrome. */
+  input,
+  textarea,
+  [contenteditable] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  [hidden]:where(:not([hidden="until-found"])) {
+    /* biome-ignore lint/complexity/noImportantStyles: Hidden stays hidden whatever display a component sets. */
+    display: none !important;
+  }
+}
+
+/* ---------- Document ---------- */
+
+@layer base {
   :root {
-    --sidebar-width: 248px;
-    --titlebar-height: 52px;
+    color-scheme: dark;
     font-family: var(--g-sans);
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: var(--g-text-ui);
+    line-height: var(--g-leading-ui);
     color: var(--g-fg-1);
     background: transparent;
     font-synthesis: none;
@@ -37,7 +181,6 @@
   }
 
   body {
-    margin: 0;
     overflow: hidden;
     background: transparent;
     /* An app, not a document: no rubber-band scrolling, no accidental selection of chrome. */
@@ -51,7 +194,7 @@
   :root[data-glass="liquid_glass"] body,
   :root[data-glass="vibrancy"] body,
   :root[data-glass="mica"] body {
-    background: var(--aura-window-tint);
+    background: var(--ui-window-tint);
   }
 
   :root[data-glass="none"] body {
@@ -68,11 +211,6 @@
     outline-offset: 2px;
   }
 
-  button {
-    font: inherit;
-    color: inherit;
-  }
-
   code,
   pre,
   kbd {
@@ -80,29 +218,42 @@
     font-variant-ligatures: none;
   }
 
+  /* Present for screen readers, absent from the layout. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
   /* ---------- Shell (Diagnostics) ---------- */
 
   .app {
     position: relative;
     display: grid;
-    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    grid-template-columns: var(--ui-sidebar-width) minmax(0, 1fr);
     height: 100%;
   }
 
   .drag-strip {
     position: absolute;
     inset: 0 0 auto;
-    height: var(--titlebar-height);
-    z-index: var(--aura-z-sticky);
+    z-index: 10;
+    height: var(--ui-titlebar-height);
   }
 
   .sidebar {
     position: relative;
-    z-index: var(--aura-z-sidebar);
+    z-index: 20;
     display: flex;
     flex-direction: column;
     gap: 4px;
-    padding: calc(var(--titlebar-height) + 4px) 12px 14px;
+    padding: calc(var(--ui-titlebar-height) + 4px) 12px 14px;
   }
 
   .wordmark {
@@ -114,9 +265,6 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
   }
 
   .sidebar-fill {
@@ -130,9 +278,7 @@
     width: 100%;
     height: 32px;
     padding: 0 8px;
-    border: 0;
     border-radius: var(--g-radius-8);
-    background: transparent;
     color: var(--g-fg-2);
     font-size: var(--g-text-ui);
     line-height: var(--g-leading-ui);
@@ -149,16 +295,6 @@
   .nav-item:hover {
     background: var(--g-surface-2);
     color: var(--g-fg-1);
-  }
-
-  .nav-item[aria-disabled="true"] {
-    cursor: default;
-  }
-
-  .nav-item .soon {
-    margin-left: auto;
-    color: var(--g-fg-3);
-    font-size: var(--g-text-meta);
   }
 
   .agent-chip {
@@ -180,11 +316,7 @@
   .agent-chip select {
     appearance: none;
     max-width: 100%;
-    padding: 0;
-    border: 0;
-    background: transparent;
     color: var(--g-fg-1);
-    font: inherit;
     font-weight: 500;
   }
 
@@ -203,10 +335,10 @@
 
   .main-scroll {
     position: relative;
-    z-index: var(--aura-z-content);
+    z-index: 1;
     height: 100%;
     overflow-y: auto;
-    padding: calc(var(--titlebar-height) + 12px) 40px 40px;
+    padding: calc(var(--ui-titlebar-height) + 12px) 40px 40px;
   }
 
   /* ---------- Type ---------- */
@@ -219,7 +351,6 @@
   }
 
   .panel-title {
-    margin: 0;
     color: var(--g-fg-1);
     font-size: var(--g-text-ui);
     line-height: var(--g-leading-ui);
@@ -232,49 +363,9 @@
 
   /* ---------- Controls ---------- */
 
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 32px;
-    padding: 0 14px;
-    border: 1px solid transparent;
-    border-radius: var(--g-radius-pill);
-    background: var(--g-surface-3);
-    color: var(--g-fg-1);
-    font-size: var(--g-text-ui);
-    font-weight: 500;
-    white-space: nowrap;
-    transition:
-      background-color var(--g-dur-fast) var(--g-ease),
-      color var(--g-dur-fast) var(--g-ease);
-  }
-
-  .btn:hover:not(:disabled) {
-    background: var(--g-surface-4);
-  }
-
-  .btn:disabled {
-    background: var(--g-surface-2);
-    color: var(--g-fg-4);
-  }
-
-  .btn-primary {
-    background: var(--g-primary);
-    color: var(--g-on-light);
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--g-primary-hover);
-  }
-
-  .btn-quiet {
-    background: transparent;
-    color: var(--g-fg-2);
-  }
-
   .field {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 10px;
     color: var(--g-fg-2);
@@ -300,24 +391,9 @@
     accent-color: var(--g-primary);
   }
 
-  .number-input {
-    height: 28px;
-    padding: 0 10px;
-    border: 1px solid var(--g-line-strong);
-    border-radius: var(--g-radius-8);
-    background: var(--g-surface-1);
-    color: var(--g-fg-1);
-    font-family: var(--g-mono);
-    font-size: var(--g-text-meta);
-  }
-
-  .number-input[aria-invalid="true"] {
-    border-color: var(--g-red);
-  }
-
   kbd {
     color: var(--g-fg-2);
-    font-size: 11px;
+    font-size: var(--g-text-key);
   }
 
   /* ---------- Transcript (Diagnostics demo) ---------- */
@@ -357,15 +433,21 @@
     align-self: flex-start;
     height: 28px;
     padding: 0 12px 0 10px;
-    border: 0;
     border-radius: var(--g-radius-8);
-    background: transparent;
     color: var(--g-fg-3);
     font-size: var(--g-text-ui);
   }
 
   .thought-pill:hover {
     background: var(--g-surface-2);
+  }
+
+  .thought-pill > svg {
+    transition: transform var(--g-dur-base) var(--g-ease);
+  }
+
+  .thought-pill[aria-expanded="true"] > svg {
+    transform: rotate(90deg);
   }
 
   /* A status square, never a glowing dot. */
@@ -421,9 +503,7 @@
     width: 100%;
     min-height: 32px;
     padding: 0 12px;
-    border: 0;
     border-radius: var(--g-radius-8);
-    background: transparent;
     color: var(--g-fg-1);
     font-size: var(--g-text-ui);
     text-align: left;
@@ -445,6 +525,14 @@
   .tool-icon {
     flex: none;
     color: var(--g-fg-3);
+  }
+
+  .tool-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .chip {
@@ -486,7 +574,7 @@
   }
 
   .spin {
-    animation: spin 0.9s linear infinite;
+    animation: spin var(--g-dur-count) linear infinite;
   }
 
   .tool-details {
@@ -497,11 +585,10 @@
     color: var(--g-code-fg);
     font-family: var(--g-mono);
     font-size: var(--g-text-meta);
-    line-height: 1.6;
+    line-height: var(--g-leading-code);
   }
 
   .tool-details pre {
-    margin: 0;
     padding: 10px 12px;
     white-space: pre;
   }
@@ -544,7 +631,6 @@
   }
 
   .plan-title {
-    margin: 0;
     color: var(--g-fg-1);
     font-size: var(--g-text-ui);
     line-height: var(--g-leading-ui);
@@ -556,8 +642,6 @@
     flex-direction: column;
     gap: 4px;
     margin: 8px 0 0;
-    padding: 0;
-    list-style: none;
   }
 
   .plan li {
@@ -610,21 +694,16 @@
     font-weight: 600;
   }
 
-  .answer p {
-    margin: 0;
-  }
-
   .answer p + p {
     margin-top: 8px;
   }
 
   .answer ul,
   .answer ol {
-    margin: 0;
     padding-left: 20px;
   }
 
-  /* Tailwind's preflight removes list markers; markdown lists need them back. */
+  /* The reset removes list markers; markdown lists need them back. */
   .answer ul {
     list-style: square;
   }
@@ -655,11 +734,10 @@
     padding: 1px 5px;
     border-radius: var(--g-radius-4);
     background: var(--g-surface-3);
-    font-size: 0.9em;
+    font-size: var(--g-text-code-inline);
   }
 
   .answer pre {
-    margin: 0;
     padding: 12px 16px;
     overflow-x: auto;
     border: 1px solid var(--g-line);
@@ -679,7 +757,6 @@
   }
 
   .answer blockquote {
-    margin: 0;
     padding-left: 12px;
     border-left: 2px solid var(--g-line-strong);
     color: var(--g-fg-2);
@@ -693,7 +770,6 @@
   }
 
   .answer table {
-    border-collapse: collapse;
     font-size: var(--g-text-ui);
     font-variant-numeric: tabular-nums;
   }
@@ -723,7 +799,6 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: 0 16px;
-    margin: 0;
     border-top: 1px solid var(--g-line);
     font-size: var(--g-text-ui);
   }
@@ -739,7 +814,6 @@
   }
 
   .facts dd {
-    margin: 0;
     min-width: 0;
     color: var(--g-fg-1);
     overflow-wrap: anywhere;
@@ -781,9 +855,6 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
   }
 
   /* A warning row (visual-language 6.8): a volt square, the words, and its one action. */
@@ -837,7 +908,6 @@
   }
 
   .fps {
-    margin: 0;
     color: var(--g-fg-3);
     font-family: var(--g-mono);
     font-size: var(--g-text-meta);
