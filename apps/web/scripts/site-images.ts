@@ -1,8 +1,10 @@
-// Build glue: write each dither field's no-JavaScript fallback image with the same renderer the
-// browser uses (renderDitherFrame), at one image pixel per cell, as a small palette PNG.
+// Build glue for the site's generated images, written as small palette PNGs: each dither field's
+// no-JavaScript fallback, drawn by the same renderer the browser uses (renderDitherFrame) at one
+// image pixel per cell, and the favicon, the pixel "a" on black (visual language 4.14).
 import { deflateSync } from "node:zlib";
 import type { Plugin } from "vite";
 import { renderDitherFrame, VOLT } from "../../../packages/ui/src/graphite/dither.ts";
+import { PIXEL_MARK_GRID } from "../../../packages/ui/src/graphite/pixels.ts";
 import { DITHER_PALETTES, GRAPHITE_COLORS } from "../../../packages/ui/src/graphite/tokens.ts";
 import { FIELD_FALLBACKS, type FieldFallback, type FieldSettings } from "../app/fields.ts";
 
@@ -89,13 +91,32 @@ export function fallbackPng(fallback: FieldFallback, field: FieldSettings): Buff
   return indexedPng(cols, rows, indices, [GRAPHITE_COLORS.bg, ...greys, GRAPHITE_COLORS.volt]);
 }
 
-/** Emits the fallback images into the build and serves them from the dev server. */
-export function ditherFallbacksPlugin(): Plugin {
-  const images = new Map(
-    FIELD_FALLBACKS.map((entry) => [`/${entry.file}`, () => fallbackPng(entry, entry.field)]),
-  );
+/** The favicon: the 6x6 glyph in fg-1 on black, padded by an eighth, on whole pixels. */
+export function faviconPng(size = 32): Buffer {
+  const cell = Math.floor((size * 0.75) / 6);
+  const offset = Math.floor((size - cell * 6) / 2);
+  const indices = new Uint8Array(size * size);
+  PIXEL_MARK_GRID.forEach((line, gy) => {
+    for (let gx = 0; gx < line.length; gx++) {
+      if (line[gx] !== "#") continue;
+      for (let dy = 0; dy < cell; dy++)
+        for (let dx = 0; dx < cell; dx++)
+          indices[(offset + gy * cell + dy) * size + offset + gx * cell + dx] = 1;
+    }
+  });
+  return indexedPng(size, size, indices, [GRAPHITE_COLORS.bg, GRAPHITE_COLORS["fg-1"]]);
+}
+
+/** Emits the generated images into the build and serves them from the dev server. */
+export function siteImagesPlugin(): Plugin {
+  const images = new Map<string, () => Buffer>([
+    ...FIELD_FALLBACKS.map(
+      (entry) => [`/${entry.file}`, () => fallbackPng(entry, entry.field)] as const,
+    ),
+    ["/favicon.png", () => faviconPng(32)],
+  ]);
   return {
-    name: "auracode-dither-fallbacks",
+    name: "auracode-site-images",
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
         const render = images.get(request.url ?? "");

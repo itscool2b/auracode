@@ -8,7 +8,7 @@
   "include": [
     "app",
     ".react-router/types",
-    "scripts/dither-fallbacks.ts",
+    "scripts/site-images.ts",
     "vite.config.ts",
     "react-router.config.ts"
   ]

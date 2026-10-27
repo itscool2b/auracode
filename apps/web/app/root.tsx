@@ -26,6 +26,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="dark" />
         <meta name="theme-color" content="#000000" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: a fixed, hashed boot script. */}
         <script dangerouslySetInnerHTML={{ __html: BOOT_SCRIPT }} />
         <Meta />

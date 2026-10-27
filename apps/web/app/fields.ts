@@ -1,6 +1,6 @@
 /**
  * Settings for the website's dither fields, shared by the components that draw them live and by the
- * build step that writes their no-JavaScript fallback images (scripts/dither-fallbacks.ts), so the
+ * build step that writes their no-JavaScript fallback images (scripts/site-images.ts), so the
  * static frame and the first live frame come from the same numbers.
  */
 
