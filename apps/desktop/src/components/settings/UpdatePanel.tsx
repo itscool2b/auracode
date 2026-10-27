@@ -86,9 +86,13 @@ export function UpdatePanel({ api }: { readonly api: UpdatesApi }) {
               {status ? UPDATE_LABEL[status.phase] : "Reading update status…"}
             </strong>
             <p>
-              {status?.version
-                ? `Version ${status.version}`
-                : "Checks run only when you request them."}
+              {status?.version ? (
+                <>
+                  Version <span className="settings-mono">{status.version}</span>
+                </>
+              ) : (
+                "Checks run only when you request them."
+              )}
             </p>
           </div>
           {status && phase !== "disabled" && phase !== "restart_required" ? (
