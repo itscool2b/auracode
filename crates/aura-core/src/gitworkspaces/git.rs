@@ -152,6 +152,90 @@ impl Git {
     }
 }
 
+/// The commit a full reference names. A missing reference or a non-commit is an error.
+pub(super) async fn resolve_commit(git: &Git, root: &Path, reference: &str) -> Result<String> {
+    let output = git
+        .output(
+            root,
+            vec![
+                "rev-parse".into(),
+                "--verify".into(),
+                "--quiet".into(),
+                format!("{reference}^{{commit}}").into(),
+            ],
+            256,
+        )
+        .await?;
+    let value = text(&output.stdout)?;
+    if output.exit.as_ref().and_then(|exit| exit.code) != Some(0) || !oid(&value) {
+        return Err(GitError::Message(
+            "The branch does not exist or has no commit.".into(),
+        ));
+    }
+    Ok(value)
+}
+
+/// One `git worktree list --porcelain` entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Registration {
+    pub(super) path: String,
+    /// The full checked-out reference, such as `refs/heads/main`.
+    pub(super) branch: Option<String>,
+    pub(super) locked: Option<String>,
+}
+
+/// Every worktree registered in the repository family, including missing ones.
+pub(super) async fn registrations(git: &Git, root: &Path) -> Result<Vec<Registration>> {
+    let output = git
+        .run(
+            root,
+            args(&["worktree", "list", "--porcelain"]),
+            1024 * 1024,
+        )
+        .await?;
+    Ok(parse_registrations(&String::from_utf8_lossy(&output)))
+}
+
+pub(super) fn parse_registrations(output: &str) -> Vec<Registration> {
+    let mut entries = Vec::new();
+    let mut current: Option<Registration> = None;
+    for line in output.lines() {
+        let line = line.trim_end_matches('\r');
+        if let Some(path) = line.strip_prefix("worktree ") {
+            entries.extend(current.take());
+            current = Some(Registration {
+                path: path.into(),
+                branch: None,
+                locked: None,
+            });
+        } else if let Some(entry) = current.as_mut() {
+            if let Some(branch) = line.strip_prefix("branch ") {
+                entry.branch = Some(branch.into());
+            } else if line == "locked" {
+                entry.locked = Some(String::new());
+            } else if let Some(reason) = line.strip_prefix("locked ") {
+                entry.locked = Some(reason.into());
+            }
+        }
+    }
+    entries.extend(current);
+    entries
+}
+
+/// Compares a Git-reported path with an app path without touching the filesystem.
+pub(super) fn same_path_text(left: &str, right: &Path) -> bool {
+    let normalize = |value: &str| {
+        let value = value.replace('\\', "/");
+        let value = value.trim_end_matches('/').to_owned();
+        if cfg!(any(windows, target_os = "macos")) {
+            value.to_lowercase()
+        } else {
+            value
+        }
+    };
+    normalize(left) == normalize(&path_argument(right).to_string_lossy())
+}
+
 pub(super) fn args(values: &[&str]) -> Vec<OsString> {
     values.iter().map(OsString::from).collect()
 }

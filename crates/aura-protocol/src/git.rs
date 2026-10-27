@@ -50,6 +50,97 @@ pub struct IsolationPreview {
     pub expires_at: Millis,
 }
 
+/// One-step request for a new chat whose folder is a new app-owned worktree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeChatInput {
+    /// The project folder the worktree is created from. It must be a repository root.
+    pub folder_id: String,
+    pub agent_id: String,
+    /// A local branch to start from. `None` starts from the source folder's current branch.
+    pub start_branch: Option<String>,
+    /// The new branch. `None` picks a unique `aura/<slug>` name. An existing branch is never reused.
+    pub branch: Option<String>,
+    /// Optional chat title. It also names an automatic branch.
+    pub title: Option<String>,
+    /// Copy the source's uncommitted working files. Only allowed from the current commit.
+    pub bring_changes: bool,
+    /// Run the source folder's saved worktree setup after creation.
+    pub run_setup: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatFolderMode {
+    Direct,
+    Worktree,
+}
+
+/// A compact summary for a chip below the composer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeChatChip {
+    pub mode: ChatFolderMode,
+    pub starting_branch: Option<String>,
+    pub branch: Option<String>,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeChatPlan {
+    pub token: String,
+    pub source: GitWorkspace,
+    pub starting_branch: String,
+    pub starting_commit: String,
+    pub branch: String,
+    /// True when the branch name was generated rather than typed.
+    pub branch_generated: bool,
+    pub path: String,
+    pub bring_changes: bool,
+    /// Local branches the starting branch can be chosen from, most recent first (bounded).
+    pub local_branches: Vec<String>,
+    /// The saved setup recipe that will run after creation, if any.
+    pub setup: Option<crate::worktree_setup::WorktreeSetupInput>,
+    pub chip: WorktreeChatChip,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum WorktreeChatPreview {
+    Worktree {
+        plan: WorktreeChatPlan,
+    },
+    /// The folder is not a Git repository. The chat works directly in the folder instead.
+    NotGitRepository {
+        folder: String,
+        message: String,
+        chip: WorktreeChatChip,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeChatResult {
+    pub chat: crate::workspace::WorkspaceChat,
+    pub worktree: ManagedWorktree,
+    /// Present when setup ran. A `command_token` starts the reviewed command in the owned
+    /// terminal (`worktree_setup_start`); the agent is then started explicitly.
+    pub setup: Option<crate::worktree_setup::WorktreeSetupResult>,
+    /// True when the agent start was requested.
+    pub started: bool,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeRecreatePreview {
+    pub token: String,
+    pub worktree: ManagedWorktree,
+    pub path: String,
+    pub branch: String,
+    pub commit: String,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum WorktreeState {
