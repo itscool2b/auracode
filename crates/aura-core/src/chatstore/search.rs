@@ -131,4 +131,159 @@ mod tests {
                 .is_empty()
         );
     }
+
+    fn index(db: &TestDb, chat: &str, message: &str, text: &str) {
+        db.conn()
+            .execute(
+                "INSERT INTO message_fts(chat_id,message_id,text) VALUES(?1,?2,?3)",
+                params![chat, message, text],
+            )
+            .expect("index");
+    }
+
+    fn project_of(db: &TestDb, chat: &str) -> String {
+        db.conn()
+            .query_row("SELECT project_id FROM chats WHERE id=?1", [chat], |row| {
+                row.get(0)
+            })
+            .expect("project")
+    }
+
+    #[test]
+    fn metadata_matches_title_project_and_agent_in_any_case() {
+        let db = TestDb::new();
+        let chat = db.chat("/work");
+        db.conn()
+            .execute(
+                "UPDATE chats SET title='Fix the Sidebar', active_agent='claude' WHERE id=?1",
+                [&chat],
+            )
+            .expect("title");
+        db.conn()
+            .execute(
+                "UPDATE projects SET name='Aurora App' WHERE id=?1",
+                [project_of(&db, &chat)],
+            )
+            .expect("project name");
+        for query in ["sidebar", "AURORA", "Claude"] {
+            let result = execute(db.conn(), query, false).expect("search");
+            assert_eq!(result.chats.len(), 1, "{query}");
+            assert_eq!(result.chats[0].id, chat, "{query}");
+            assert!(result.chats[0].snippet.is_none(), "{query}");
+        }
+        let projects = execute(db.conn(), "aurora", false)
+            .expect("projects")
+            .projects;
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "Aurora App");
+    }
+
+    #[test]
+    fn an_empty_query_lists_recent_chats_newest_first() {
+        let db = TestDb::new();
+        let older = db.chat("/older");
+        let newer = db.chat("/newer");
+        for (chat, at) in [(&older, 10), (&newer, 20)] {
+            db.conn()
+                .execute(
+                    "UPDATE chats SET updated_at=?2 WHERE id=?1",
+                    params![chat, at],
+                )
+                .expect("updated");
+        }
+        let result = execute(db.conn(), "   ", false).expect("empty");
+        let ids: Vec<&str> = result.chats.iter().map(|chat| chat.id.as_str()).collect();
+        assert_eq!(ids, [newer.as_str(), older.as_str()]);
+        assert!(!result.projects.is_empty());
+    }
+
+    #[test]
+    fn message_search_matches_prefixes_and_requires_every_word() {
+        let db = TestDb::new();
+        let chat = db.chat("/work");
+        index(&db, &chat, "m1", "The render pipeline stalls on resize");
+        for query in ["rend", "render resize", "PIPE stall"] {
+            let result = execute(db.conn(), query, false).expect("search");
+            assert_eq!(result.chats.len(), 1, "{query}");
+            assert!(result.chats[0].snippet.is_some(), "{query}");
+        }
+        assert!(
+            execute(db.conn(), "render banana", false)
+                .expect("no match")
+                .chats
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_chat_matching_both_ways_appears_once_with_its_snippet() {
+        let db = TestDb::new();
+        let chat = db.chat("/work");
+        db.conn()
+            .execute("UPDATE chats SET title='Render fixes' WHERE id=?1", [&chat])
+            .expect("title");
+        index(&db, &chat, "m1", "the render pipeline");
+        index(&db, &chat, "m2", "render again");
+        let result = execute(db.conn(), "render", false).expect("search");
+        assert_eq!(result.chats.len(), 1);
+        assert!(
+            result.chats[0]
+                .snippet
+                .as_deref()
+                .is_some_and(|snippet| snippet.contains("render"))
+        );
+    }
+
+    #[test]
+    fn chats_of_a_deleted_project_are_hidden_everywhere() {
+        let db = TestDb::new();
+        let chat = db.chat("/work");
+        db.conn()
+            .execute("UPDATE chats SET title='Render fixes' WHERE id=?1", [&chat])
+            .expect("title");
+        index(&db, &chat, "m1", "render pipeline");
+        db.conn()
+            .execute(
+                "UPDATE projects SET deleted=1 WHERE id=?1",
+                [project_of(&db, &chat)],
+            )
+            .expect("delete project");
+        let result = execute(db.conn(), "render", true).expect("search");
+        assert!(result.chats.is_empty());
+        assert!(
+            execute(db.conn(), "", true)
+                .expect("all")
+                .projects
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn huge_and_operator_heavy_queries_stay_literal_and_bounded() {
+        let db = TestDb::new();
+        let chat = db.chat("/work");
+        index(&db, &chat, "m1", "render pipeline");
+        let long = "r".repeat(10_000);
+        assert!(
+            execute(db.conn(), &long, false)
+                .expect("long")
+                .chats
+                .is_empty()
+        );
+        let many = (0..50)
+            .map(|i| format!("w{i}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            execute(db.conn(), &many, false)
+                .expect("many")
+                .chats
+                .is_empty()
+        );
+        // FTS keywords and column filters are matched as words, never as syntax.
+        for query in ["NEAR(render pipeline)", "text:render", "render OR banana"] {
+            let result = execute(db.conn(), query, false).expect(query);
+            assert!(result.chats.is_empty(), "{query}");
+        }
+    }
 }
