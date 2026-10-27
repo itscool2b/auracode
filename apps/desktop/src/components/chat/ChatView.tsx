@@ -171,6 +171,44 @@ export function ChatView({
     ],
   );
 
+  const agent = agents?.find((entry) => entry.id === state.chat?.agent_id) ?? null;
+  const autonomy = state.session?.autonomy ?? "full_auto";
+  // The pickers hold every agent, model and effort choice. Streamed text changes none of them, so
+  // the same element is reused until one of their inputs changes, and React skips the subtree.
+  const controls = useMemo(
+    () => (
+      <Pickers
+        agents={agents}
+        onChooseAgent={
+          transport.conversation
+            ? (agent_id) => setContinuation({ type: "switch_agent", agent_id })
+            : undefined
+        }
+        agent={agent}
+        lists={state.lists}
+        autonomy={autonomy}
+        status={status}
+        error={state.listsError}
+        optionsSaving={state.optionsSaving}
+        autonomySaving={state.autonomySaving}
+        onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
+        onSetOption={(optionId, value) => void store.setOption(optionId, value)}
+      />
+    ),
+    [
+      agents,
+      transport.conversation,
+      agent,
+      state.lists,
+      autonomy,
+      status,
+      state.listsError,
+      state.optionsSaving,
+      state.autonomySaving,
+      store,
+    ],
+  );
+
   if (state.chat === null) {
     return (
       <div
@@ -200,7 +238,6 @@ export function ChatView({
     );
   }
 
-  const agent = agents?.find((entry) => entry.id === state.chat?.agent_id) ?? null;
   // The session's own word, not the marks: which prompts are held is exact only per snapshot.
   const held = state.session?.queue_held === true;
   return (
@@ -378,25 +415,7 @@ export function ChatView({
                 chatId={chatId}
                 contextApi={transport.composer}
                 agentName={agent?.name ?? state.chat.agent_name}
-                controls={
-                  <Pickers
-                    agents={agents}
-                    onChooseAgent={
-                      transport.conversation
-                        ? (agent_id) => setContinuation({ type: "switch_agent", agent_id })
-                        : undefined
-                    }
-                    agent={agent}
-                    lists={state.lists}
-                    autonomy={state.session?.autonomy ?? "full_auto"}
-                    status={status}
-                    error={state.listsError}
-                    optionsSaving={state.optionsSaving}
-                    autonomySaving={state.autonomySaving}
-                    onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
-                    onSetOption={(optionId, value) => void store.setOption(optionId, value)}
-                  />
-                }
+                controls={controls}
                 status={status}
                 commands={state.lists?.commands ?? []}
                 error={state.sendError}
