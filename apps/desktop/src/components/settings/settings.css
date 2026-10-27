@@ -609,3 +609,8 @@
     padding-inline: 16px;
   }
 }
+
+/* On a raised surface the disabled pill takes one step up, so it keeps its shape. */
+:is(.settings-group, .account-card, .local-import-panel, .config-sync-empty) .g-button:disabled {
+  background-color: var(--g-surface-3);
+}

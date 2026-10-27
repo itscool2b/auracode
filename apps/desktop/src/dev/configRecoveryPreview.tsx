@@ -124,6 +124,8 @@ function Preview() {
     </>
   );
 }
+// The fixture fills the window with Graphite black, not only its column.
+document.documentElement.classList.add("g-root");
 const root = document.getElementById("root");
 const mode = new URLSearchParams(location.search).get("case") ?? "";
 if (root)

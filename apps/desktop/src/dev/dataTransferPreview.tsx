@@ -103,6 +103,8 @@ function Fixture() {
     </main>
   );
 }
+// The fixture fills the window with Graphite black, not only its column.
+document.documentElement.classList.add("g-root");
 export function mountDataTransferPreview(container: HTMLElement) {
   createRoot(container).render(<Fixture />);
 }

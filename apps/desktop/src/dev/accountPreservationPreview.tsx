@@ -44,6 +44,8 @@ const api: AccountPreservationApi = {
   },
 };
 Object.assign(window, { preservationFixture: { calls: () => [...calls] } });
+// The fixture fills the window with Graphite black, not only its column.
+document.documentElement.classList.add("g-root");
 export function mountAccountPreservationPreview(container: HTMLElement) {
   createRoot(container).render(
     <StrictMode>
