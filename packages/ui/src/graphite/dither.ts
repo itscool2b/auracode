@@ -403,9 +403,11 @@ export function renderLevels(buffers: FieldBuffers, settings: FrameSettings): Ui
 
       let base = Math.min(1, Math.max(0, (raw - low) / RAMP));
       base = terrace(base * base * (3 - 2 * base));
+      let keep = 1;
       if (clearing) {
         const cx = (x - clearing.x) / clearing.rx;
-        base *= clearingKeep(cx * cx + cy * cy);
+        keep = clearingKeep(cx * cx + cy * cy);
+        base *= keep;
       }
       let s = base;
       if (lens) {
@@ -418,7 +420,8 @@ export function renderLevels(buffers: FieldBuffers, settings: FrameSettings): Ui
           // The lens develops what lies under the black: a lower floor and more contrast.
           let lifted = Math.min(1, Math.max(0, (raw - (low - 0.16 * pull)) / RAMP));
           lifted = terrace(lifted * lifted * (3 - 2 * lifted));
-          s = Math.min(1, Math.max(0, 0.5 + (lifted - 0.5) * (1 + 0.6 * pull)));
+          // The clearing still holds under the lens, so text over it stays legible.
+          s = Math.min(1, Math.max(0, 0.5 + (lifted - 0.5) * (1 + 0.6 * pull))) * keep;
         }
       }
 

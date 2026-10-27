@@ -101,6 +101,7 @@ export function Stage() {
         palette={STAGE_FIELD.palette}
         seed={STAGE_FIELD.seed}
         clearing={clearing}
+        interactive
       />
       <noscript>
         <img className="field-fallback" src={`/${STAGE_FALLBACK.file}`} alt="" />

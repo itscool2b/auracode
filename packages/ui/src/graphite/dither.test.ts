@@ -286,6 +286,27 @@ describe("frames", () => {
     expect(lit(lensed)).toBeGreaterThanOrEqual(lit(plain));
     expect(lensed.filter((l) => l === VOLT).length).toBe(plain.filter((l) => l === VOLT).length);
   });
+
+  it("keeps a clearing dark under the lens", () => {
+    const buffers = createFieldBuffers(cols, rows, DEFAULT_SEED);
+    sampleField(buffers, createValueNoise3(DEFAULT_SEED), 4, 0);
+    const frame = renderLevels(buffers, {
+      levels: 4,
+      density: 1,
+      accent: 0,
+      progress: 0,
+      target: null,
+      texture: 0,
+      targetSparks: false,
+      lens: { x: cols / 2, y: rows / 2, radius: 20, strength: 1 },
+      clearing: { x: cols / 2, y: rows / 2, rx: 12, ry: 12 },
+    });
+    for (let y = rows / 2 - 3; y <= rows / 2 + 3; y++) {
+      for (let x = cols / 2 - 3; x <= cols / 2 + 3; x++) {
+        expect(frame[y * cols + x]).toBe(0);
+      }
+    }
+  });
 });
 
 describe("targets", () => {
