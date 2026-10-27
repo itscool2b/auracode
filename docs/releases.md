@@ -136,6 +136,11 @@ the private encrypted blob bucket or an already published version.
 - **Read-back.** Each upload is read back and compared before the next, so a failure always stops
   before `latest.json`.
 - **Staging.** Staging stages publish only under `staging/`.
+- **Limits.** Each object must fit one 300 MiB Wrangler upload, and the whole release is held in
+  memory during publication. Anything larger is refused before the first write.
+- **Bucket guard.** `AURACODE_RELEASE_BUCKET` must be `auracode-releases` or an
+  `auracode-releases-*` test bucket, so a mistyped override can never publish into the private
+  blob bucket.
 
 The website remains honestly unpublished by default through `app/release-catalog.json`. For a
 qualified build, set `AURACODE_RELEASE_STAGE` to the absolute stage directory and run

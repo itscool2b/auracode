@@ -5,7 +5,9 @@ use std::{cell::RefCell, collections::BTreeMap, fs, path::PathBuf};
 use anyhow::Result;
 use aura_release::{
     Artifact, ArtifactKind, Channel, ReleasePlan,
-    publish::{IMMUTABLE, MANIFEST, PublicObject, Transport, publication_plan, publish},
+    publish::{
+        IMMUTABLE, MANIFEST, PublicObject, Transport, publication_plan, publish, release_bucket,
+    },
 };
 use serde_json::Value;
 
@@ -221,4 +223,19 @@ fn latest_json_must_come_last() {
     let mut objects = publication_plan(&stage, &key).unwrap();
     objects.rotate_right(1);
     assert!(publish(&objects, &Bucket::default()).is_err());
+}
+
+#[test]
+fn only_release_buckets_are_publication_targets() {
+    assert_eq!(
+        release_bucket(" auracode-releases ").unwrap(),
+        "auracode-releases"
+    );
+    assert_eq!(
+        release_bucket("auracode-releases-test").unwrap(),
+        "auracode-releases-test"
+    );
+    for name in ["auracode-blobs", "auracode-releases-", "", "releases"] {
+        assert!(release_bucket(name).is_err(), "{name}");
+    }
 }

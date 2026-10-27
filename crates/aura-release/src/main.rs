@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use aura_release::publish::{Wrangler, publication_plan, publish};
+use aura_release::publish::{Wrangler, publication_plan, publish, release_bucket};
 
 fn main() -> anyhow::Result<()> {
     let args = env::args_os().skip(1).collect::<Vec<_>>();
@@ -34,8 +34,9 @@ fn main() -> anyhow::Result<()> {
             };
             let expected_key = env::var("AURACODE_UPDATER_PUBLIC_KEY")
                 .map_err(|_| anyhow::anyhow!("Set AURACODE_UPDATER_PUBLIC_KEY from the trusted release configuration before publishing a stage"))?;
-            let bucket =
-                env::var("AURACODE_RELEASE_BUCKET").unwrap_or_else(|_| "auracode-releases".into());
+            let bucket = release_bucket(
+                &env::var("AURACODE_RELEASE_BUCKET").unwrap_or_else(|_| "auracode-releases".into()),
+            )?;
             let objects = publication_plan(Path::new(stage), &expected_key)?;
             for object in &objects {
                 println!(

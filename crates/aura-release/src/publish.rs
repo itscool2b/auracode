@@ -176,6 +176,13 @@ pub fn publish(objects: &[PublicObject], transport: &impl Transport) -> Result<R
         .iter()
         .map(PublicObject::read)
         .collect::<Result<Vec<_>>>()?;
+    for (object, bytes) in objects.iter().zip(&payloads) {
+        ensure!(
+            bytes.len() <= MAX_UPLOAD,
+            "{} is larger than one 300 MiB upload; nothing was published",
+            object.key
+        );
+    }
     let mut present = Vec::new();
     for object in objects.iter().filter(|object| object.immutable()) {
         if let Some(existing) = transport.get(&object.key)? {
@@ -261,17 +268,45 @@ impl Transport for Wrangler {
             .stderr(Stdio::piped())
             .spawn()
             .with_context(|| format!("Could not start Wrangler at {}", self.script.display()))?;
-        child
+        let mut stdin = child
             .stdin
             .take()
-            .context("Wrangler's input closed early")?
-            .write_all(bytes)?;
-        let output = child.wait_with_output()?;
+            .context("Wrangler's input closed early")?;
+        // Feed stdin from its own thread while this one drains stderr, so neither pipe can fill
+        // and block the other, and an early exit still reports Wrangler's own error.
+        let (written, output) = std::thread::scope(|scope| {
+            let writer = scope.spawn(move || stdin.write_all(bytes));
+            let output = child.wait_with_output();
+            (writer.join(), output)
+        });
+        let output = output?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
         ensure!(
             output.status.success(),
             "Wrangler could not upload {target}: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
+            stderr.trim()
         );
-        Ok(())
+        match written {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(error)) => bail!("Could not stream {target} to Wrangler: {error}"),
+            Err(_) => bail!("The upload writer for {target} panicked"),
+        }
     }
+}
+
+/// Wrangler uploads one object of at most 300 MiB in a single request.
+pub const MAX_UPLOAD: usize = 300 * 1024 * 1024;
+
+/// Accepts only the dedicated public release bucket (or a `auracode-releases-` test bucket), so a
+/// mistyped override can never publish into the private encrypted blob bucket.
+pub fn release_bucket(name: &str) -> Result<String> {
+    let name = name.trim();
+    ensure!(
+        name == "auracode-releases"
+            || name
+                .strip_prefix("auracode-releases-")
+                .is_some_and(|rest| !rest.is_empty()),
+        "{name} is not a release bucket. Publication only targets auracode-releases or an auracode-releases-* test bucket."
+    );
+    Ok(name.to_owned())
 }
