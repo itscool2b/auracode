@@ -2919,3 +2919,26 @@ this while its API route is closed). Noted, not changed: the sidebar agent dock 
 harness, so native and ACP variants of one agent share a two-letter code (two CC, two CX); their
 popovers name them. The styled 404 is reached only through in-app navigation, since the Worker
 answers unknown paths with plain text.
+
+### Final CI for M2a and Graphite
+
+All runs used `encrypted_storage=true`. Each failure was a test that depended on timing, and each
+was fixed in the test without weakening what it asserts.
+
+- 40478605432 (8dd383f): the Windows WebDriver session started for the first time, confirming the
+  WebView2 switch fix, and the smoke drove the real app through a typed echo turn. Failures: the
+  smoke sent `/slow` before the session reported idle, so it was queued and then held;
+  `check-settings` saw the clicked "Shortcuts" button as focused before Settings moved focus to its
+  heading; `check-account-vault` ran axe mid colour transition.
+- 40483238023 (b8ec361): Windows Rust, including the full WebDriver smoke of the real app, passed.
+  Failures: two more axe samples mid transition on macOS (so every desktop check now audits once
+  finite animations end), and the folder-check test's 200 ms window on a busy macOS runner (now
+  500 ms).
+- 40487517832 (c17711c): lint, both Rust jobs and Windows encrypted storage passed. macOS encrypted
+  storage failed the 10,000-turn history ratio because the newest pages were timed during a busy
+  stretch; the test now interleaves the two ends and keeps each page's best time.
+- 40491964588 (1ea4d35): everything passed except one Windows selection test, which met Access is
+  denied deleting a fake executable a probe had just run; the delete now retries briefly.
+- 40495382743 (3e6821b): GitHub started no job: account payments failed or the Actions spending
+  limit was reached. The selection fix passes locally with Clippy; CI must run again on 3e6821b or
+  later once billing is resolved, before the PR opens.
