@@ -3128,3 +3128,40 @@ Verified locally on Windows: `pnpm lint`, `pnpm typecheck` and `pnpm test` (root
 of each screen at 1440x900 and 1024x700 beside its reference, with checklists, are in the ignored
 `target/design-research/sheets/app-2b-secondary-*.png`. Not done here: the hand walkthrough of
 the built app and the Windows and macOS CI run, which belong to the integration of steps 2a to 2c.
+
+### App restyle step 2b: integration (2026-10-27)
+
+Branch `app-redesign` (from `app-one-system`) merges `app-chat-shell`, `app-settings` and
+`app-secondary` in that order, then brings over the reviewed OpenCode install from
+`opencode-install` (the Rust installer as is; `opencode` joins `ONE_CLICK` in `AgentRow.tsx`).
+
+- **Conflicts:** `chat.css` keeps the shell's picker rules and drops the old New chat block, now
+  `new-chat.css`; `preview.tsx` keeps the shell's palette commands and uses `NewChatPreview`;
+  configuration sync takes the settings rows and wells from `app-settings` for the panel and the
+  review, restore and recovery dialogs from `app-secondary`, with one merged `config-sync.css`;
+  the progress log keeps all three entries.
+- **Layout:** the probe found 44 of 152 views with findings after the merges (250 off the grid, 4
+  focus, no overlap), all in New chat, settings, account, verification, config sync, Agents, the
+  Git and project tools dialogs and their fixtures. Settings, account and Agents rows are now one
+  60px row (the label 20 over its line 16, a 28px control 16px in); the strong segmented control is
+  a 36px track with its 28px segments 4px in, in settings and dialogs alike; dialogs, the Agents
+  frame and its hairlines and New chat's folder row draw their lines inset; New chat's drop snaps
+  to the grid; the verification frame shows a keyboard focus ring through the window's blur into
+  it, since a cross-origin frame never matches `:focus`. The probe now exempts only the window
+  offset of a modal dialog centred by its margins. A full run in Chromium and WebKit is clean: 152
+  of 152 views.
+- **Seams:** the settings sidebar takes the chat sidebar's geometry (the logo in the band, rows 4px
+  apart, words at x 44); the Library's views share the settings nav's spacing and divider; the
+  Library and Agents page heads stack alike. The worktree setup, keep-local, data transfer,
+  project tools and verification fixtures show their panels in their real containers.
+
+Verified locally on Windows: `pnpm lint`, `pnpm typecheck` and `pnpm test` (root scripts 22, ui
+276, desktop 5 node and 351 with 19 skipped, design lab 352, web 4); every
+`apps/desktop/scripts/check-*.mjs` in Chromium and WebKit with its axe audits clean
+(`check-notices` and `check-settings-navigation` run inside `check-settings`); `cargo clippy -p
+aura-agents --lib --tests -- -D warnings` and `cargo test -p aura-agents --lib installer`. The
+overview sheet of every preview mode is the ignored
+`target/design-research/sheets/app-2b-integrated-overview.png`. Not covered by the probe: the
+Library and setup actions fixtures, which have their own pages instead of `?preview=` routes (the
+Library still has 11 findings per view there). Not done: the hand walkthrough of the built app and
+the Windows and macOS CI run.
