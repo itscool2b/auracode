@@ -2,7 +2,7 @@
  * The chat shell's frame (docs/design/visual-language.md, sections 4 and 6.1 to 6.3, 6.15): the
  * window and its panes, the sidebar, the chat header, the shared controls, popovers, banners,
  * dialogs and the command palette. The conversation itself is in chat.css and the right panel in
- * context-panel.css. Colours come from ui-tokens.css; nothing here is translucent, and only colour,
+ * context-panel.css. Colours are Graphite tokens; nothing here is translucent, and only colour,
  * opacity and transform ever transition.
  *
  * The shell's stylesheets are unlayered, like Graphite's, and load after it: at equal specificity a
@@ -17,8 +17,8 @@
   display: grid;
   grid-template-columns: var(--ui-sidebar-width) minmax(0, 1fr);
   height: 100%;
-  background-color: var(--ui-surface-window);
-  color: var(--ui-text-primary);
+  background-color: var(--g-bg);
+  color: var(--g-fg-1);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -46,12 +46,12 @@
   margin: var(--ui-pane-inset) var(--ui-pane-inset) var(--ui-pane-inset) 0;
   overflow: hidden;
   border-radius: var(--g-radius-12);
-  background-color: var(--ui-surface-main);
-  box-shadow: 0 0 0 1px var(--ui-line);
+  background-color: var(--g-surface-1);
+  box-shadow: 0 0 0 1px var(--g-line);
 }
 
 .chat-main > .chat-drag {
-  height: var(--ui-header-height);
+  height: var(--g-app-header);
   pointer-events: none;
 }
 
@@ -102,11 +102,11 @@
     grid-column: 1;
     grid-row: 1;
     border-radius: var(--g-radius-12) var(--g-radius-12) 0 0;
-    background-color: var(--ui-surface-main);
+    background-color: var(--g-surface-1);
     box-shadow:
-      inset 1px 0 var(--ui-line),
-      inset -1px 0 var(--ui-line),
-      inset 0 1px var(--ui-line);
+      inset 1px 0 var(--g-line),
+      inset -1px 0 var(--g-line),
+      inset 0 1px var(--g-line);
   }
 
   .chat-main:has(.changes-panel) .chat-work-area {
@@ -118,18 +118,18 @@
     grid-row: 2;
     overflow: hidden;
     border-radius: 0 0 var(--g-radius-12) var(--g-radius-12);
-    background-color: var(--ui-surface-main);
+    background-color: var(--g-surface-1);
     box-shadow:
-      inset 1px 0 var(--ui-line),
-      inset -1px 0 var(--ui-line),
-      inset 0 -1px var(--ui-line);
+      inset 1px 0 var(--g-line),
+      inset -1px 0 var(--g-line),
+      inset 0 -1px var(--g-line);
   }
 }
 
 .chat-centered {
   margin: auto;
   padding: 24px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   text-align: center;
 }
 
@@ -146,8 +146,8 @@
   padding: 0 14px;
   border: 1px solid transparent;
   border-radius: var(--g-radius-pill);
-  background-color: var(--ui-surface-fill);
-  color: var(--ui-text-primary);
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -162,53 +162,53 @@
 }
 
 .ui-button:active:not(:disabled) {
-  background-color: var(--ui-surface-selected);
+  background-color: var(--g-surface-4);
   transition-duration: 0ms;
 }
 
 .ui-button:is([data-kind="primary"], .primary, .ui-button-primary) {
-  background-color: var(--ui-primary);
-  color: var(--ui-text-on-primary);
+  background-color: var(--g-primary);
+  color: var(--g-on-light);
 }
 
 .ui-button:is([data-kind="primary"], .primary, .ui-button-primary):active:not(:disabled) {
-  background-color: var(--ui-primary-active);
+  background-color: var(--g-primary-active);
 }
 
 .ui-button[data-kind="danger"] {
-  background-color: var(--ui-danger);
-  color: var(--ui-text-on-primary);
+  background-color: var(--g-red);
+  color: var(--g-on-light);
 }
 
 .ui-button[data-kind="quiet"] {
   background-color: transparent;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 @media (hover: hover) {
   .ui-button:hover:not(:disabled) {
-    background-color: var(--ui-surface-selected);
+    background-color: var(--g-surface-4);
   }
 
   .ui-button:is([data-kind="primary"], .primary, .ui-button-primary):hover:not(:disabled) {
-    background-color: var(--ui-primary-hover);
+    background-color: var(--g-primary-hover);
   }
 
   .ui-button[data-kind="danger"]:hover:not(:disabled) {
-    background-color: var(--ui-danger-hover);
+    background-color: var(--g-red-hover);
   }
 
   .ui-button[data-kind="quiet"]:hover:not(:disabled) {
-    background-color: var(--ui-surface-fill);
-    color: var(--ui-text-primary);
+    background-color: var(--g-surface-3);
+    color: var(--g-fg-1);
   }
 }
 
 /* Disabled keeps its pill as a hairline, so it still reads as a button on a raised surface. */
 .ui-button:disabled {
-  border-color: var(--ui-line);
-  background-color: var(--ui-surface-raised);
-  color: var(--ui-text-faint);
+  border-color: var(--g-line);
+  background-color: var(--g-surface-2);
+  color: var(--g-fg-4);
   cursor: not-allowed;
 }
 
@@ -223,10 +223,10 @@
   min-width: 0;
   height: 36px;
   padding: 0 12px;
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-8);
-  background-color: var(--ui-surface-main);
-  color: var(--ui-text-primary);
+  background-color: var(--g-surface-1);
+  color: var(--g-fg-1);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -255,23 +255,23 @@
 
 .ui-input::placeholder,
 .ui-textarea::placeholder {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   opacity: 1;
 }
 
 @media (hover: hover) {
   :is(.ui-input, .ui-select, .ui-textarea):hover:not(:disabled) {
-    border-color: var(--ui-text-faint);
+    border-color: var(--g-fg-4);
   }
 }
 
 :is(.ui-input, .ui-select, .ui-textarea):focus {
-  border-color: var(--ui-text-muted);
+  border-color: var(--g-fg-3);
 }
 
 :is(.ui-input, .ui-select, .ui-textarea):disabled {
-  border-color: var(--ui-line);
-  color: var(--ui-text-faint);
+  border-color: var(--g-line);
+  color: var(--g-fg-4);
   cursor: not-allowed;
 }
 
@@ -286,9 +286,9 @@
   width: 16px;
   height: 16px;
   margin: 0;
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-4);
-  background-color: var(--ui-surface-main);
+  background-color: var(--g-surface-1);
   background-position: center;
   background-repeat: no-repeat;
   appearance: none;
@@ -306,8 +306,8 @@
 
 .chat-app :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):checked,
 .chat-modal :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):checked {
-  border-color: var(--ui-primary);
-  background-color: var(--ui-primary);
+  border-color: var(--g-primary);
+  background-color: var(--g-primary);
 }
 
 .chat-app input[type="checkbox"]:not([role="switch"]):checked,
@@ -317,8 +317,8 @@
 
 .chat-app input[type="radio"]:not([role="switch"]):checked,
 .chat-modal input[type="radio"]:not([role="switch"]):checked {
-  box-shadow: inset 0 0 0 4px var(--ui-primary);
-  background-color: var(--ui-text-on-primary);
+  box-shadow: inset 0 0 0 4px var(--g-primary);
+  background-color: var(--g-on-light);
 }
 
 .chat-app :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):disabled,
@@ -331,7 +331,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 500;
@@ -345,12 +345,12 @@
 }
 
 .ui-muted {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-weight: 400;
 }
 
 .ui-error {
-  color: var(--ui-danger);
+  color: var(--g-red);
   font-weight: 400;
   overflow-wrap: anywhere;
 }
@@ -368,9 +368,9 @@
   margin: 0;
   padding: 10px 12px;
   overflow: auto;
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--g-line);
   border-radius: var(--g-radius-8);
-  background-color: var(--ui-surface-well);
+  background-color: var(--g-bg);
   color: var(--g-code-fg);
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
@@ -381,7 +381,7 @@
   overflow-wrap: anywhere;
   user-select: text;
   scrollbar-width: thin;
-  scrollbar-color: var(--ui-line-strong) transparent;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
 .chat-icon-button {
@@ -396,7 +396,7 @@
   border: 0;
   border-radius: var(--g-radius-6);
   background-color: transparent;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   cursor: pointer;
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
@@ -405,18 +405,18 @@
 
 @media (hover: hover) {
   .chat-icon-button:hover:not(:disabled) {
-    background-color: var(--ui-surface-fill);
-    color: var(--ui-text-primary);
+    background-color: var(--g-surface-3);
+    color: var(--g-fg-1);
   }
 }
 
 .chat-icon-button:active:not(:disabled) {
-  background-color: var(--ui-surface-fill);
-  color: var(--ui-text-primary);
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
 }
 
 .chat-icon-button:disabled {
-  color: var(--ui-text-faint);
+  color: var(--g-fg-4);
   cursor: not-allowed;
 }
 
@@ -459,14 +459,14 @@
   height: 32px;
   padding: 0 8px;
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   text-align: left;
   transition: color var(--g-dur-micro) var(--g-ease);
 }
 
 .chat-nav-action > svg {
   flex: none;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   transition: color var(--g-dur-micro) var(--g-ease);
 }
 
@@ -482,7 +482,7 @@
 @media (hover: hover) {
   .chat-nav-action:hover,
   .chat-nav-action:hover > svg {
-    color: var(--ui-text-primary);
+    color: var(--g-fg-1);
   }
 }
 
@@ -495,8 +495,8 @@
 /* The sidebar's shortcut keycaps rest as outlines and fill in when their row is hovered. */
 .chat-nav-action .g-keycap {
   background-color: transparent;
-  box-shadow: inset 0 0 0 1px var(--ui-line);
-  color: var(--ui-text-muted);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+  color: var(--g-fg-3);
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
     box-shadow var(--g-dur-micro) var(--g-ease),
@@ -505,9 +505,9 @@
 
 @media (hover: hover) {
   .chat-nav-action:hover .g-keycap {
-    background-color: var(--ui-surface-fill);
-    box-shadow: inset 0 0 0 1px var(--ui-line-strong);
-    color: var(--ui-text-secondary);
+    background-color: var(--g-surface-3);
+    box-shadow: inset 0 0 0 1px var(--g-line-strong);
+    color: var(--g-fg-2);
   }
 }
 
@@ -526,7 +526,7 @@
   padding: 0 12px 8px;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--ui-line-strong) transparent;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
 /* A quiet sentence-case label, only where a group needs one. Never caps, never mono. */
@@ -537,7 +537,7 @@
   height: 28px;
   margin: 0;
   padding: 0 8px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-weight: 500;
@@ -567,7 +567,7 @@
 
 @media (hover: hover) {
   .chat-dock-link:hover {
-    color: var(--ui-text-primary);
+    color: var(--g-fg-1);
   }
 }
 
@@ -578,11 +578,11 @@
 }
 
 .chat-attention .chat-section-label {
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .chat-attention .chat-section-label > span {
-  color: var(--ui-signal);
+  color: var(--g-volt);
 }
 
 .chat-attention-row {
@@ -593,7 +593,7 @@
   height: 32px;
   padding: 0 8px 0 12px;
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   text-align: left;
 }
 
@@ -605,20 +605,20 @@
 }
 
 .chat-attention-row small {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: inherit;
 }
 
 @media (hover: hover) {
   .chat-attention-row:hover {
-    background-color: var(--ui-surface-raised);
+    background-color: var(--g-surface-2);
   }
 }
 
 .chat-sidebar-empty {
   margin: 0;
   padding: 0 8px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
 }
 
 .chat-projects {
@@ -643,7 +643,7 @@
   height: 32px;
   padding: 0 36px 0 8px;
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
   text-align: left;
 }
@@ -657,7 +657,7 @@
 }
 
 .chat-project-toggle small {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -679,13 +679,13 @@
   content: "";
   width: 6px;
   height: 6px;
-  background-color: var(--ui-text-muted);
+  background-color: var(--g-fg-3);
 }
 
 .chat-project-swatch > svg {
   position: absolute;
   inset: 1px;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   opacity: 0;
   transition: transform var(--g-dur-base) var(--g-ease);
 }
@@ -729,22 +729,22 @@
   height: 32px;
   padding: 0 10px 0 30px;
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   text-align: left;
   transition: color var(--g-dur-micro) var(--g-ease);
 }
 
 @media (hover: hover) {
   .chat-row:hover {
-    color: var(--ui-text-primary);
+    color: var(--g-fg-1);
   }
 }
 
 /* The open chat is lifted one surface step with a hairline ring. */
 .chat-row[aria-current="true"] {
-  background-color: var(--ui-surface-raised);
-  box-shadow: inset 0 0 0 1px var(--ui-line-strong);
-  color: var(--ui-text-primary);
+  background-color: var(--g-surface-2);
+  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  color: var(--g-fg-1);
   font-weight: 500;
 }
 
@@ -758,7 +758,7 @@
 
 .chat-row-flag {
   flex: none;
-  color: var(--ui-danger);
+  color: var(--g-red);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-weight: 500;
@@ -770,7 +770,7 @@
   right: 4px;
   width: 24px;
   height: 24px;
-  background-color: var(--ui-surface-window);
+  background-color: var(--g-bg);
   opacity: 0;
   transition:
     opacity var(--g-dur-micro) var(--g-ease),
@@ -785,7 +785,7 @@
 
 /* On the open chat the menu button takes the lifted row's fill, so the title ends cleanly. */
 .chat-row-container:has(> .chat-row[aria-current="true"]) > .chat-row-menu {
-  background-color: var(--ui-surface-raised);
+  background-color: var(--g-surface-2);
 }
 
 .chat-row-status {
@@ -806,7 +806,7 @@
   position: absolute;
   top: 11px;
   left: 13px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   pointer-events: none;
 }
 
@@ -818,7 +818,7 @@
   gap: 6px;
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid var(--ui-line);
+  border-top: 1px solid var(--g-line);
 }
 
 .chat-agent-dock {
@@ -837,7 +837,7 @@
   height: 44px;
   min-height: 0;
   padding: 0;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-key);
   line-height: var(--g-leading-key);
@@ -883,7 +883,7 @@
   flex: none;
   align-items: center;
   gap: 8px;
-  height: var(--ui-header-height);
+  height: var(--g-app-header);
   padding: 0 10px 0 16px;
 }
 
@@ -901,7 +901,7 @@
   max-width: 420px;
   min-width: 0;
   overflow: hidden;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -911,7 +911,7 @@
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -928,7 +928,7 @@
   max-width: 280px;
   margin-right: auto;
   overflow: hidden;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -936,29 +936,29 @@
 .chat-status::before {
   content: "\00b7";
   margin-right: 8px;
-  color: var(--ui-text-faint);
+  color: var(--g-fg-4);
 }
 
 .chat-status[data-status="failed"],
 .chat-status[data-status="auth_required"] {
-  color: var(--ui-danger);
+  color: var(--g-red);
 }
 
 .chat-status[data-activity="waiting"] {
-  color: var(--ui-signal);
+  color: var(--g-volt);
   font-weight: 500;
 }
 
 .chat-header .chat-icon-button[aria-expanded="true"] {
-  background-color: var(--ui-surface-fill);
-  color: var(--ui-text-primary);
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
 }
 
 .chat-header-menu > summary {
   justify-content: center;
   width: 28px;
   padding: 0;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
 }
 
 .chat-header-menu > .chat-popover-panel {
@@ -986,7 +986,7 @@
 }
 
 .chat-session-info > span {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   overflow-wrap: anywhere;
@@ -1011,7 +1011,7 @@
   gap: 0;
   margin-top: 4px;
   padding-top: 4px;
-  border-top: 1px solid var(--ui-line);
+  border-top: 1px solid var(--g-line);
 }
 
 .chat-header-menu .chat-popover-panel > .ui-row > .ui-button {
@@ -1020,7 +1020,7 @@
   padding: 0 10px;
   border-radius: var(--g-radius-8);
   background-color: transparent;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 400;
 }
 
@@ -1029,18 +1029,18 @@
 }
 
 .chat-header-menu .chat-popover-panel > .ui-row > .ui-button[data-kind="quiet"] {
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 @media (hover: hover) {
   .chat-header-menu .chat-popover-panel > .ui-row > .ui-button:hover:not(:disabled) {
-    background-color: var(--ui-surface-selected);
-    color: var(--ui-text-primary);
+    background-color: var(--g-surface-4);
+    color: var(--g-fg-1);
   }
 }
 
 .chat-header-menu .chat-popover-panel > .ui-row > .ui-button:disabled {
-  color: var(--ui-text-faint);
+  color: var(--g-fg-4);
 }
 
 .chat-folder-context {
@@ -1066,7 +1066,7 @@
   display: grid;
   gap: 4px;
   padding: 8px 0;
-  border-bottom: 1px solid var(--ui-line);
+  border-bottom: 1px solid var(--g-line);
 }
 
 .chat-folder-context code {
@@ -1089,7 +1089,7 @@
   height: 28px;
   padding: 0 8px;
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   list-style: none;
   cursor: pointer;
   user-select: none;
@@ -1104,16 +1104,16 @@
 
 @media (hover: hover) {
   .chat-popover > summary:hover {
-    background-color: var(--ui-surface-fill);
-    color: var(--ui-text-primary);
+    background-color: var(--g-surface-3);
+    color: var(--g-fg-1);
   }
 }
 
 /* Open: the fill steps up with a strong ring (surface-4 would drop grey text under 4.5:1). */
 .chat-popover[open] > summary {
-  background-color: var(--ui-surface-fill);
-  box-shadow: inset 0 0 0 1px var(--ui-line-strong);
-  color: var(--ui-text-primary);
+  background-color: var(--g-surface-3);
+  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  color: var(--g-fg-1);
 }
 
 .chat-popover-panel {
@@ -1129,11 +1129,11 @@
   max-height: min(480px, 65vh);
   padding: 14px;
   overflow: auto;
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-12);
-  background-color: var(--ui-surface-raised);
+  background-color: var(--g-surface-2);
   box-shadow: var(--g-shadow);
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 400;
@@ -1143,7 +1143,7 @@
 
 .chat-popover-panel p {
   margin: 0;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 @keyframes chat-popover-in {
@@ -1188,9 +1188,9 @@
   gap: 12px;
   min-height: 40px;
   padding: 6px 6px 6px 12px;
-  border: 1px dashed var(--ui-line-strong);
+  border: 1px dashed var(--g-line-strong);
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .chat-banner > span {
@@ -1203,24 +1203,24 @@
   flex: none;
   width: 6px;
   height: 6px;
-  background-color: var(--ui-text-secondary);
+  background-color: var(--g-fg-2);
 }
 
 .chat-banner[data-level="warning"]::before {
-  background-color: var(--ui-signal);
+  background-color: var(--g-volt);
 }
 
 .chat-banner[data-level="error"] {
   border: 0;
   border-radius: 0 var(--g-radius-8) var(--g-radius-8) 0;
-  background-color: var(--ui-surface-well);
+  background-color: var(--g-bg);
   box-shadow:
-    inset 2px 0 var(--ui-danger),
-    inset 0 0 0 1px var(--ui-line);
+    inset 2px 0 var(--g-red),
+    inset 0 0 0 1px var(--g-line);
 }
 
 .chat-banner[data-level="error"]::before {
-  background-color: var(--ui-danger);
+  background-color: var(--g-red);
 }
 
 .chat-banner > .ui-button {
@@ -1237,17 +1237,17 @@
   margin: auto;
   padding: 24px;
   overflow: auto;
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-16);
-  background-color: var(--ui-surface-raised);
+  background-color: var(--g-surface-2);
   box-shadow: var(--g-shadow);
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 400;
   scrollbar-width: thin;
-  scrollbar-color: var(--ui-line-strong) transparent;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
 .chat-modal[open] {
@@ -1255,7 +1255,7 @@
 }
 
 .chat-modal::backdrop {
-  background-color: var(--ui-surface-scrim);
+  background-color: var(--g-scrim);
 }
 
 @keyframes chat-dialog-in {
@@ -1317,7 +1317,7 @@
   align-items: flex-start;
   gap: 8px;
   padding-top: 16px;
-  border-top: 1px solid var(--ui-line);
+  border-top: 1px solid var(--g-line);
 }
 
 .chat-dialog-section :is(p, .ui-field) {
@@ -1326,14 +1326,14 @@
 
 .chat-dialog-section p {
   margin: 0;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
 }
 
 .chat-project-folders {
   padding: 14px 16px;
   border-radius: var(--g-radius-12);
-  background-color: var(--ui-surface-main);
-  box-shadow: inset 0 0 0 1px var(--ui-line);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
 }
 
 .chat-project-folders > div {
@@ -1350,7 +1350,7 @@
 }
 
 .chat-project-folders small {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   word-break: break-all;
@@ -1368,7 +1368,7 @@
 
 .chat-color-choices legend {
   margin-bottom: 8px;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
 }
 
@@ -1376,7 +1376,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .chat-color-choices span {
@@ -1393,7 +1393,7 @@
 
 .conversation-notice {
   margin: 12px 0;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .conversation-notice p {
@@ -1430,14 +1430,14 @@
 
 .conversation-target > div > span {
   display: block;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .conversation-context {
   overflow: hidden;
   border-radius: var(--g-radius-12);
-  background-color: var(--ui-surface-main);
-  box-shadow: inset 0 0 0 1px var(--ui-line);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
 }
 
 .conversation-context h3 {
@@ -1446,8 +1446,8 @@
   height: 32px;
   margin: 0;
   padding: 0 14px;
-  border-bottom: 1px solid var(--ui-line-faint);
-  color: var(--ui-text-secondary);
+  border-bottom: 1px solid var(--g-line-faint);
+  color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-weight: 500;
@@ -1468,13 +1468,13 @@
 }
 
 .conversation-context pre + h3 {
-  border-top: 1px solid var(--ui-line);
+  border-top: 1px solid var(--g-line);
 }
 
 .conversation-context p {
   margin: 0;
   padding: 12px 14px;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .conversation-turns {
@@ -1487,7 +1487,7 @@
 
 .conversation-turns li {
   padding: 12px 0;
-  border-bottom: 1px solid var(--ui-line);
+  border-bottom: 1px solid var(--g-line);
 }
 
 .conversation-turns li > div:first-child {
@@ -1505,7 +1505,7 @@
 }
 
 .conversation-turns small {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -1526,11 +1526,11 @@
   display: grid;
   gap: 12px;
   margin-top: 16px;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .conversation-edit label {
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
 }
 
@@ -1576,8 +1576,8 @@
   gap: 12px;
   height: 56px;
   padding: 0 56px 0 20px;
-  border-bottom: 1px solid var(--ui-line);
-  color: var(--ui-text-muted);
+  border-bottom: 1px solid var(--g-line);
+  color: var(--g-fg-3);
 }
 
 .palette-input input {
@@ -1586,13 +1586,13 @@
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-size: var(--g-text-prose);
   line-height: var(--g-leading-prose);
 }
 
 .palette-input input::placeholder {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   opacity: 1;
 }
 
@@ -1603,14 +1603,14 @@
   align-items: center;
   gap: 4px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--ui-line);
+  border-bottom: 1px solid var(--g-line);
 }
 
 .palette-scopes > button {
   height: 26px;
   padding: 0 10px;
   border-radius: var(--g-radius-pill);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-weight: 500;
@@ -1621,13 +1621,13 @@
 
 @media (hover: hover) {
   .palette-scopes > button:hover {
-    color: var(--ui-text-primary);
+    color: var(--g-fg-1);
   }
 }
 
 .palette-scopes > button[aria-pressed="true"] {
-  background-color: var(--ui-primary);
-  color: var(--ui-text-on-primary);
+  background-color: var(--g-primary);
+  color: var(--g-on-light);
 }
 
 .palette-scopes label {
@@ -1635,7 +1635,7 @@
   align-items: center;
   gap: 6px;
   margin-left: auto;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -1646,7 +1646,7 @@
   padding: 6px;
   overflow: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--ui-line-strong) transparent;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
 .palette-results > [role="option"] {
@@ -1656,7 +1656,7 @@
   min-height: 48px;
   padding: 6px 12px;
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   cursor: default;
 }
 
@@ -1667,8 +1667,8 @@
 /* The highlight and a 2px rail are the focus inside the list (3.7). */
 .palette-results > [aria-selected="true"] {
   position: relative;
-  background-color: var(--ui-surface-fill);
-  color: var(--ui-text-secondary);
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-2);
 }
 
 .palette-results > [aria-selected="true"]::before {
@@ -1679,7 +1679,7 @@
   left: 0;
   width: 2px;
   border-radius: 1px;
-  background-color: var(--ui-text-primary);
+  background-color: var(--g-fg-1);
 }
 
 .palette-results > [role="option"] > span {
@@ -1690,7 +1690,7 @@
 .palette-results strong {
   display: block;
   overflow: hidden;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1699,7 +1699,7 @@
 .palette-results small {
   display: block;
   overflow: hidden;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   text-overflow: ellipsis;
@@ -1707,13 +1707,13 @@
 }
 
 .palette-results > [aria-selected="true"] small {
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .palette-notice {
   margin: 0;
   padding: 16px 20px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
 }
 
 .command-palette > footer {
@@ -1723,8 +1723,8 @@
   justify-content: flex-start;
   gap: 16px;
   padding: 10px 16px;
-  border-top: 1px solid var(--ui-line);
-  color: var(--ui-text-muted);
+  border-top: 1px solid var(--g-line);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }

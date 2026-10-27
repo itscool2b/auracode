@@ -2,7 +2,7 @@
 .chat-export-content {
   display: grid;
   gap: 16px;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .chat-export-content p {
@@ -10,7 +10,7 @@
 }
 
 .chat-export-content .settings-error {
-  color: var(--ui-danger);
+  color: var(--g-red);
 }
 
 .chat-export-actions {
@@ -25,7 +25,7 @@
   display: grid;
   gap: 8px;
   min-width: 0;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
 }
 
@@ -34,9 +34,9 @@
   width: 100%;
   min-width: 0;
   padding: 12px;
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-8);
-  background-color: var(--ui-surface-well);
+  background-color: var(--g-bg);
   color: var(--g-code-fg);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);

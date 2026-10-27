@@ -28,7 +28,7 @@
 }
 
 .project-tools-body p:not(.ui-error) {
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .project-tools-body h3 {
@@ -52,7 +52,7 @@
 
 .project-terminal-review {
   padding: 0 22px 12px;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .project-terminal-review p {

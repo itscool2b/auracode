@@ -7,7 +7,7 @@
 
 .workspace-removal-content p {
   margin: 0;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .workspace-removal-content ul {
@@ -22,12 +22,12 @@
   align-items: flex-start;
   gap: 8px;
   padding: 12px 0;
-  border-bottom: 1px solid var(--ui-line);
+  border-bottom: 1px solid var(--g-line);
   overflow-wrap: anywhere;
 }
 
 .workspace-removal-content summary {
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   cursor: pointer;
 }
 

@@ -10,12 +10,12 @@
   flex: 0 0 auto;
   flex-direction: column;
   box-sizing: border-box;
-  width: var(--changes-width, var(--ui-panel-width));
+  width: var(--changes-width, var(--g-app-panel));
   min-width: 320px;
   max-width: 560px;
   min-height: 0;
-  border-left: 1px solid var(--ui-line);
-  background-color: var(--ui-surface-main);
+  border-left: 1px solid var(--g-line);
+  background-color: var(--g-surface-1);
 }
 
 @media (min-width: 1200px) {
@@ -24,7 +24,7 @@
     grid-row: 1 / span 2;
     border-left: 0;
     border-radius: var(--g-radius-12);
-    box-shadow: 0 0 0 1px var(--ui-line);
+    box-shadow: 0 0 0 1px var(--g-line);
   }
 
   .chat-main:has(.changes-panel) .changes-resizer {
@@ -68,7 +68,7 @@
 }
 
 .changes-resizer:is(:hover, :focus-visible) {
-  background-color: var(--ui-line-strong);
+  background-color: var(--g-line-strong);
   outline: none;
 }
 
@@ -77,9 +77,9 @@
   flex: none;
   align-items: center;
   gap: 4px;
-  height: var(--ui-header-height);
+  height: var(--g-app-header);
   padding: 0 8px 0 10px;
-  border-bottom: 1px solid var(--ui-line);
+  border-bottom: 1px solid var(--g-line);
 }
 
 .changes-panel-header > .chat-icon-button:first-of-type {
@@ -97,7 +97,7 @@
   padding: 2px;
   box-sizing: border-box;
   border-radius: var(--g-radius-pill);
-  background-color: var(--ui-surface-fill);
+  background-color: var(--g-surface-3);
 }
 
 .context-panel-tabs button {
@@ -107,7 +107,7 @@
   height: 28px;
   padding: 0 12px;
   border-radius: var(--g-radius-pill);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   font-weight: 500;
   white-space: nowrap;
   transition:
@@ -117,13 +117,13 @@
 
 @media (hover: hover) {
   .context-panel-tabs button:hover {
-    color: var(--ui-text-primary);
+    color: var(--g-fg-1);
   }
 }
 
 .context-panel-tabs button[aria-selected="true"] {
-  background-color: var(--ui-primary);
-  color: var(--ui-text-on-primary);
+  background-color: var(--g-primary);
+  color: var(--g-on-light);
 }
 
 .context-panel-tabs small {
@@ -146,7 +146,7 @@
   display: grid;
   gap: 6px;
   padding: 12px 12px 8px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -161,25 +161,25 @@
   padding: 0 12px 12px;
   overflow: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--ui-line-strong) transparent;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
 .changes-empty {
   margin: 0;
   padding: 16px 4px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
 }
 
 .changes-warnings,
 .changes-warning {
   margin: 0 0 12px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
 
 .changes-warnings > summary {
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   cursor: pointer;
 }
 
@@ -205,7 +205,7 @@
 }
 
 .changes-file-list > div[data-selected="true"] {
-  background-color: var(--ui-surface-fill);
+  background-color: var(--g-surface-3);
 }
 
 .changes-file-list button {
@@ -217,7 +217,7 @@
   height: 32px;
   padding: 0 4px;
   border-radius: var(--g-radius-6);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
   line-height: var(--g-leading-code);
@@ -227,17 +227,17 @@
 
 @media (hover: hover) {
   .changes-file-list button:hover {
-    color: var(--ui-text-primary);
+    color: var(--g-fg-1);
   }
 }
 
 .changes-file-list > div[data-selected="true"] button {
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
 }
 
 .changes-file-list button > svg {
   flex: none;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
 }
 
 .changes-file-list button > span {
@@ -250,30 +250,30 @@
 
 .changes-file-list small {
   flex: none;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
 
 .changes-file-list small[data-kind="added"] {
-  color: var(--ui-success);
+  color: var(--g-green);
 }
 
 .changes-file-list small[data-kind="deleted"] {
-  color: var(--ui-danger);
+  color: var(--g-red);
 }
 
 .changes-panel :is(.chat-diff-note, .chat-diff-truncated, .chat-diff-empty) {
   margin: 0;
   padding: 6px 12px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
 
 .changes-result {
   padding: 12px 0;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .changes-result p {
@@ -293,8 +293,8 @@
   gap: 8px;
   min-height: 48px;
   padding: 8px 8px 8px 14px;
-  border-top: 1px solid var(--ui-line);
-  color: var(--ui-text-muted);
+  border-top: 1px solid var(--g-line);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -307,7 +307,7 @@
 /* The revert confirmation, inside the dialog shell. */
 .changes-confirm-copy {
   margin: 0 0 12px;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .changes-confirm-files {
@@ -317,8 +317,8 @@
   overflow: auto;
   list-style: none;
   border-radius: var(--g-radius-8);
-  background-color: var(--ui-surface-main);
-  box-shadow: inset 0 0 0 1px var(--ui-line);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
 }
 
 .changes-confirm-files li {
@@ -331,7 +331,7 @@
 }
 
 .changes-confirm-files li + li {
-  border-top: 1px solid var(--ui-line);
+  border-top: 1px solid var(--g-line);
 }
 
 .changes-confirm-files code {
@@ -340,7 +340,7 @@
 }
 
 .changes-confirm-files span {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
 }
 
 /* ---------- Files, Plan, Session ---------- */
@@ -351,13 +351,13 @@
   padding: 14px 12px 20px;
   overflow: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--ui-line-strong) transparent;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
 /* A quiet sentence-case label where two lists sit together; never caps or mono. */
 .context-group-label {
   margin: 16px 8px 6px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-weight: 500;
@@ -365,7 +365,7 @@
 
 .context-hint {
   margin: 10px 8px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -376,13 +376,13 @@
 }
 
 .context-empty strong {
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
 }
 
 .context-empty p {
   margin: 6px 0 0;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -394,15 +394,15 @@
   height: 36px;
   padding: 0 12px;
   box-sizing: border-box;
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-8);
-  background-color: var(--ui-surface-well);
-  color: var(--ui-text-muted);
+  background-color: var(--g-bg);
+  color: var(--g-fg-3);
   transition: border-color var(--g-dur-fast) var(--g-ease);
 }
 
 .context-file-search:focus-within {
-  border-color: var(--ui-text-muted);
+  border-color: var(--g-fg-3);
   outline: 2px solid var(--g-focus);
   outline-offset: 2px;
 }
@@ -418,11 +418,11 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
 }
 
 .context-file-search input::placeholder {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   opacity: 1;
 }
 
@@ -434,7 +434,7 @@
   height: 28px;
   padding: 0 8px;
   border-radius: var(--g-radius-6);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
   line-height: var(--g-leading-code);
@@ -446,13 +446,13 @@
 
 @media (hover: hover) {
   .context-file-row:hover:not(:disabled) {
-    color: var(--ui-text-primary);
+    color: var(--g-fg-1);
   }
 }
 
 .context-file-row[aria-pressed="true"] {
-  background-color: var(--ui-surface-fill);
-  color: var(--ui-text-primary);
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
 }
 
 .context-file-row:disabled {
@@ -461,7 +461,7 @@
 
 .context-file-row > svg {
   flex-shrink: 0;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
 }
 
 .context-file-row > span {
@@ -473,7 +473,7 @@
 }
 
 .context-file-row small {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -488,7 +488,7 @@
   gap: 8px;
   min-height: 32px;
   padding: 0 0 0 8px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -497,7 +497,7 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
   line-height: var(--g-leading-code);
@@ -516,8 +516,8 @@
   padding: 12px;
   overflow: auto;
   border-radius: var(--g-radius-8);
-  background-color: var(--ui-surface-well);
-  box-shadow: inset 0 0 0 1px var(--ui-line);
+  background-color: var(--g-bg);
+  box-shadow: inset 0 0 0 1px var(--g-line);
   color: var(--g-code-fg);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
@@ -526,7 +526,7 @@
   user-select: text;
   -webkit-user-select: text;
   scrollbar-width: thin;
-  scrollbar-color: var(--ui-line-strong) transparent;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
 .context-code-view pre {
@@ -541,7 +541,7 @@
 }
 
 .context-code-lines {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-variant-numeric: tabular-nums;
   text-align: right;
   user-select: none;
@@ -558,7 +558,7 @@
   align-items: baseline;
   gap: 8px;
   margin: 4px 8px 20px;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-size: var(--g-text-display);
   line-height: var(--g-text-display);
   font-weight: 500;
@@ -567,7 +567,7 @@
 }
 
 .context-plan-count span {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 400;
@@ -585,8 +585,8 @@
   align-items: flex-start;
   gap: 12px;
   padding: 10px 0;
-  border-top: 1px solid var(--ui-line);
-  color: var(--ui-text-secondary);
+  border-top: 1px solid var(--g-line);
+  color: var(--g-fg-2);
 }
 
 /* Plan nodes are squares: done is white with a black check, active a white outline. */
@@ -598,7 +598,7 @@
   width: 16px;
   height: 16px;
   margin-top: 2px;
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-4);
 }
 
@@ -607,9 +607,9 @@
 }
 
 .context-plan li[data-status="completed"] > span {
-  border-color: var(--ui-primary);
-  background-color: var(--ui-primary);
-  color: var(--ui-text-on-primary);
+  border-color: var(--g-primary);
+  background-color: var(--g-primary);
+  color: var(--g-on-light);
 }
 
 .context-plan li[data-status="completed"] > span > svg {
@@ -619,18 +619,18 @@
 }
 
 .context-plan li[data-status="in_progress"] {
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
 }
 
 .context-plan li[data-status="in_progress"] > span {
-  border-color: var(--ui-text-primary);
+  border-color: var(--g-fg-1);
 }
 
 .context-plan small {
   display: block;
   margin-top: 2px;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-weight: 400;
@@ -648,11 +648,11 @@
   gap: 8px;
   min-height: 32px;
   padding: 6px 0;
-  border-bottom: 1px solid var(--ui-line);
+  border-bottom: 1px solid var(--g-line);
 }
 
 .context-properties dt {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -663,7 +663,7 @@
   gap: 8px;
   min-width: 0;
   margin: 0;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   overflow-wrap: anywhere;
 }
 
@@ -691,13 +691,13 @@
   min-width: 0;
   padding: 14px;
   border-radius: var(--g-radius-12);
-  background-color: var(--ui-surface-raised);
-  box-shadow: inset 0 0 0 1px var(--ui-line);
+  background-color: var(--g-surface-2);
+  box-shadow: inset 0 0 0 1px var(--g-line);
 }
 
 .context-usage-tiles span {
   display: block;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -705,7 +705,7 @@
 .context-usage-tiles strong {
   display: block;
   margin-top: 8px;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-size: var(--g-text-title);
   line-height: var(--g-leading-title);
   font-weight: 500;
@@ -715,7 +715,7 @@
 
 .context-capacity {
   margin: 16px 8px;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .context-capacity label {
@@ -732,28 +732,28 @@
   overflow: hidden;
   border: 0;
   border-radius: 2px;
-  background-color: var(--ui-surface-selected);
+  background-color: var(--g-surface-4);
   appearance: none;
 }
 
 .context-capacity progress::-webkit-progress-bar {
   border-radius: 2px;
-  background-color: var(--ui-surface-selected);
+  background-color: var(--g-surface-4);
 }
 
 .context-capacity progress::-webkit-progress-value {
   border-radius: 2px;
-  background-color: var(--ui-text-secondary);
+  background-color: var(--g-fg-2);
 }
 
 .context-capacity progress::-moz-progress-bar {
   border-radius: 2px;
-  background-color: var(--ui-text-secondary);
+  background-color: var(--g-fg-2);
 }
 
 .context-capacity span {
   display: block;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-variant-numeric: tabular-nums;
