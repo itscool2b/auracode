@@ -850,7 +850,7 @@ async fn the_chat_list_never_waits_long_for_a_folder() {
         ScriptedDriver::new(vec![ready_step("b")]).0,
     ];
     let knobs = Knobs {
-        folder_check_wait: Duration::from_millis(200),
+        folder_check_wait: Duration::from_millis(500),
         ..Knobs::STANDARD
     };
     let rig = rig(drivers, WriterConfig::STANDARD, knobs);
