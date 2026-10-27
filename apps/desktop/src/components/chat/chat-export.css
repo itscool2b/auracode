@@ -1,7 +1,7 @@
 /* Export and debug bundle dialogs on the Graphite dialog shell. */
 .chat-export-content {
   display: grid;
-  gap: 16px;
+  gap: var(--g-space-16);
   color: var(--g-fg-2);
 }
 
@@ -17,13 +17,13 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 4px;
+  gap: var(--g-space-8);
+  margin-top: var(--g-space-4);
 }
 
 .debug-bundle-preview {
   display: grid;
-  gap: 8px;
+  gap: var(--g-space-8);
   min-width: 0;
   color: var(--g-fg-1);
   font-weight: 500;

@@ -1,9 +1,9 @@
 .keep-local-consent {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  margin-top: 16px;
-  padding-top: 16px;
+  gap: var(--g-space-8);
+  margin-top: var(--g-space-16);
+  padding-top: var(--g-space-16);
   border-top: 1px solid var(--g-line);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
@@ -15,6 +15,6 @@
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
-  margin: 2px 0 0;
+  margin: var(--g-space-2) 0 0;
   accent-color: var(--g-primary);
 }

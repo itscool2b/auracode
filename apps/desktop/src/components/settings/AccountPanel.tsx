@@ -786,7 +786,7 @@ export function AccountPanel({
         </p>
       ) : null}
       <button
-        className="g-button g-button-ghost account-vault-toggle"
+        className="g-button g-button-ghost g-button-28 account-vault-toggle"
         type="button"
         disabled={busy}
         onClick={() => setShowVault((value) => !value)}

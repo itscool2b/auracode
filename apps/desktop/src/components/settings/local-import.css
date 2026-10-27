@@ -1,7 +1,7 @@
 /* Bringing Local projects into an Account, and keeping a deleted Account as Local. */
 
 .local-import-panel {
-  padding: 20px;
+  padding: var(--g-space-20);
   border-radius: var(--g-radius-12);
   background-color: var(--g-surface-2);
   color: var(--g-fg-2);
@@ -10,7 +10,7 @@
 }
 
 .local-import-panel h3 {
-  margin: 0 0 4px;
+  margin: 0 0 var(--g-space-4);
   color: var(--g-fg-1);
   font-size: var(--g-text-heading);
   line-height: var(--g-leading-heading);
@@ -19,7 +19,7 @@
 
 .local-import-panel > p {
   max-width: 560px;
-  margin: 0 0 12px;
+  margin: 0 0 var(--g-space-12);
   overflow-wrap: anywhere;
 }
 
@@ -28,8 +28,8 @@
 }
 
 .local-import-notices {
-  margin: 0 0 16px;
-  padding-left: 18px;
+  margin: 0 0 var(--g-space-16);
+  padding-left: var(--g-space-20);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -41,19 +41,19 @@
 }
 
 .local-import-notices li + li {
-  margin-top: 4px;
+  margin-top: var(--g-space-4);
 }
 
 .local-import-projects {
   max-height: 320px;
-  margin: 16px 0;
+  margin: var(--g-space-16) 0;
   padding: 0;
   overflow: auto;
   border: 0;
 }
 
 .local-import-projects legend {
-  padding: 0 0 8px;
+  padding: 0 0 var(--g-space-8);
   color: var(--g-fg-1);
   font-weight: 500;
 }
@@ -61,9 +61,9 @@
 .local-import-projects label {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--g-space-12);
   min-height: 52px;
-  padding: 8px 0;
+  padding: var(--g-space-8) 0;
   border-top: 1px solid var(--g-line);
   cursor: pointer;
 }
@@ -82,7 +82,7 @@
 
 .local-import-projects span {
   display: grid;
-  gap: 2px;
+  gap: var(--g-space-2);
   min-width: 0;
 }
 
@@ -101,6 +101,6 @@
 .local-import-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 20px;
+  gap: var(--g-space-8);
+  margin-top: var(--g-space-20);
 }

@@ -2,9 +2,9 @@
 .chat-account-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--g-space-8);
   height: 44px;
-  padding: 0 4px;
+  padding: 0 var(--g-space-4);
 }
 
 .chat-account-avatar {

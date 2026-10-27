@@ -33,7 +33,7 @@
   display: flex;
   flex: none;
   align-items: center;
-  padding: 56px 32px 0 20px;
+  padding: calc(var(--ui-titlebar-height) + var(--g-space-4)) var(--g-space-32) 0 var(--g-space-20);
 }
 
 .library-heading {
@@ -41,8 +41,8 @@
   flex: none;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 24px;
-  padding: 24px 32px 20px;
+  gap: var(--g-space-24);
+  padding: var(--g-space-24) var(--g-space-32) var(--g-space-20);
 }
 
 .library-heading h1 {
@@ -56,7 +56,7 @@
 
 .library-heading h1 > span {
   display: block;
-  margin-top: 4px;
+  margin-top: var(--g-space-4);
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -68,7 +68,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--g-space-8);
 }
 
 .library-toggle[aria-pressed="true"] {
@@ -80,8 +80,8 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: 16px;
-  padding: 0 32px 16px;
+  gap: var(--g-space-16);
+  padding: 0 var(--g-space-32) var(--g-space-16);
 }
 
 .library-search {
@@ -100,7 +100,7 @@
 }
 
 .library-search .g-input {
-  padding-left: 36px;
+  padding-left: calc(var(--g-space-12) + var(--g-space-24));
 }
 
 .library-search input::-webkit-search-cancel-button {
@@ -110,7 +110,7 @@
 .library-select {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--g-space-8);
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -123,8 +123,8 @@
 
 .library-feedback {
   flex: none;
-  margin: 0 32px 12px;
-  padding: 10px 14px;
+  margin: 0 var(--g-space-32) var(--g-space-12);
+  padding: var(--g-space-12) var(--g-space-16);
   border-left: 2px solid var(--g-fg-3);
   border-radius: 0 var(--g-radius-8) var(--g-radius-8) 0;
   background-color: var(--g-surface-1);
@@ -146,7 +146,7 @@
   grid-template-columns: 208px minmax(280px, 0.9fr) minmax(360px, 1.1fr);
   gap: 1px;
   min-height: 0;
-  margin: 0 8px 8px;
+  margin: 0 var(--g-space-8) var(--g-space-8);
   overflow: hidden;
   border: 1px solid var(--g-line);
   border-radius: var(--g-radius-12);
@@ -162,19 +162,19 @@
 .library-categories {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--g-space-2);
   overflow-y: auto;
-  padding: 12px 8px;
+  padding: var(--g-space-12) var(--g-space-8);
 }
 
 .library-categories > button {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--g-space-8);
   width: 100%;
   height: 32px;
-  padding: 0 8px 0 12px;
+  padding: 0 var(--g-space-8) 0 var(--g-space-12);
   border: 0;
   border-radius: var(--g-radius-8);
   background-color: transparent;
@@ -226,8 +226,8 @@
 }
 
 .library-source-note {
-  margin: auto 12px 0;
-  padding-top: 24px;
+  margin: auto var(--g-space-12) 0;
+  padding-top: var(--g-space-24);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -239,11 +239,11 @@
 }
 
 .library-source-note p {
-  margin: 4px 0 0;
+  margin: var(--g-space-4) 0 0;
 }
 
 .library-sources {
-  margin: 12px 12px 4px;
+  margin: var(--g-space-12) var(--g-space-12) var(--g-space-4);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -256,7 +256,7 @@
 }
 
 .library-sources p {
-  margin: 10px 0 0;
+  margin: var(--g-space-8) 0 0;
   color: var(--g-fg-2);
 }
 
@@ -280,7 +280,7 @@
   align-items: center;
   justify-content: space-between;
   height: 44px;
-  padding: 0 16px;
+  padding: 0 var(--g-space-16);
   border-bottom: 1px solid var(--g-line);
   background-color: var(--g-bg);
   color: var(--g-fg-1);
@@ -313,10 +313,10 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--g-space-12);
   width: 100%;
   min-height: 60px;
-  padding: 10px 16px;
+  padding: var(--g-space-12) var(--g-space-16);
   border: 0;
   background-color: transparent;
   color: var(--g-fg-1);
@@ -372,7 +372,7 @@
 
 .library-items small {
   display: block;
-  margin-top: 2px;
+  margin-top: var(--g-space-2);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -384,7 +384,7 @@
 }
 
 .library-notices {
-  margin: 16px;
+  margin: var(--g-space-16);
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -397,19 +397,19 @@
 }
 
 .library-notices p {
-  margin: 8px 0 0;
+  margin: var(--g-space-8) 0 0;
 }
 
 /* --------------------------------------------------------------------- the preview */
 
 .library-detail {
   overflow-y: auto;
-  padding: 24px;
+  padding: var(--g-space-24);
   user-select: text;
 }
 
 .library-detail header {
-  margin-bottom: 20px;
+  margin-bottom: var(--g-space-20);
 }
 
 .library-detail h2 {
@@ -426,8 +426,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin: 4px 0 12px;
+  gap: var(--g-space-8);
+  margin: var(--g-space-4) 0 var(--g-space-12);
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -437,7 +437,7 @@
   display: inline-flex;
   align-items: center;
   height: 22px;
-  padding: 0 8px;
+  padding: 0 var(--g-space-8);
   border-radius: var(--g-radius-6);
   background-color: var(--g-surface-3);
   color: var(--g-fg-2);
@@ -448,7 +448,7 @@
 
 .library-detail header code {
   display: block;
-  margin-bottom: 12px;
+  margin-bottom: var(--g-space-12);
   color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
@@ -466,7 +466,7 @@
   align-items: center;
   justify-content: space-between;
   height: 32px;
-  padding: 0 16px;
+  padding: 0 var(--g-space-16);
   border: 1px solid var(--g-line);
   border-bottom-color: var(--g-line-faint);
   border-radius: var(--g-radius-8) var(--g-radius-8) 0 0;
@@ -485,7 +485,7 @@
 .library-code {
   max-height: 390px;
   margin: 0;
-  padding: 12px 16px;
+  padding: var(--g-space-12) var(--g-space-16);
   overflow: auto;
   border: 1px solid var(--g-line);
   border-radius: var(--g-radius-8);
@@ -507,7 +507,7 @@
 }
 
 .library-file-list {
-  margin-top: 16px;
+  margin-top: var(--g-space-16);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -520,8 +520,8 @@
 }
 
 .library-file-list ul {
-  margin: 8px 0 0;
-  padding-left: 18px;
+  margin: var(--g-space-8) 0 0;
+  padding-left: var(--g-space-20);
   list-style: square;
 }
 
@@ -533,7 +533,7 @@
 }
 
 .library-detail-note {
-  margin: 12px 0 0;
+  margin: var(--g-space-12) 0 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -543,9 +543,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 20px;
+  gap: var(--g-space-12);
+  margin-top: var(--g-space-24);
+  padding-top: var(--g-space-20);
   border-top: 1px solid var(--g-line);
 }
 
@@ -560,7 +560,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--g-space-8);
   min-width: 180px;
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
@@ -574,7 +574,7 @@
 
 .library-empty,
 .library-unselected {
-  padding: 64px 24px;
+  padding: var(--g-space-64) var(--g-space-24);
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -588,7 +588,7 @@
 
 .library-empty h2,
 .library-unselected h2 {
-  margin: 12px 0 4px;
+  margin: var(--g-space-12) 0 var(--g-space-4);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -610,7 +610,7 @@
 }
 
 .library-detail > .library-feedback {
-  margin: 0 0 16px;
+  margin: 0 0 var(--g-space-16);
 }
 
 /* ----------------------------------------------------------------- copy history */
@@ -618,7 +618,7 @@
 .library-history {
   grid-column: 2 / 4;
   overflow: auto;
-  padding: 24px 32px;
+  padding: var(--g-space-24) var(--g-space-32);
 }
 
 .library-history h2 {
@@ -630,7 +630,7 @@
 }
 
 .library-history > p {
-  margin: 4px 0 20px;
+  margin: var(--g-space-4) 0 var(--g-space-20);
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -643,9 +643,9 @@
 .library-history > ul > li {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: var(--g-space-20);
   min-height: 64px;
-  padding: 12px 0;
+  padding: var(--g-space-12) 0;
   border-bottom: 1px solid var(--g-line);
 }
 
@@ -667,7 +667,7 @@
 }
 
 .library-history span {
-  margin: 2px 0;
+  margin: var(--g-space-2) 0;
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -681,14 +681,14 @@
 }
 
 .library-history .library-empty {
-  padding: 32px 0;
+  padding: var(--g-space-32) 0;
   text-align: left;
 }
 
 /* ---------------------------------------------------------------- review dialog */
 
 .library-review > :is(p, details, ul) {
-  margin: 0 0 16px;
+  margin: 0 0 var(--g-space-16);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -701,14 +701,14 @@
 }
 
 .library-review ul {
-  padding-left: 18px;
+  padding-left: var(--g-space-20);
   list-style: square;
 }
 
 .library-review-intro {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--g-space-8);
   color: var(--g-fg-1);
 }
 
@@ -719,8 +719,8 @@
 .library-comparison {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 0 0 16px;
+  gap: var(--g-space-12);
+  margin: 0 0 var(--g-space-16);
 }
 
 .library-comparison section {
@@ -728,7 +728,7 @@
 }
 
 .library-comparison h3 {
-  margin: 0 0 8px;
+  margin: 0 0 var(--g-space-8);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -743,9 +743,9 @@
 .library-review footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-  padding-top: 16px;
+  gap: var(--g-space-8);
+  margin-top: var(--g-space-8);
+  padding-top: var(--g-space-16);
   border-top: 1px solid var(--g-line);
 }
 
@@ -758,11 +758,11 @@
 
   .library-toolbar {
     flex-wrap: wrap;
-    gap: 12px;
+    gap: var(--g-space-12);
   }
 
   .library-detail {
-    padding: 20px;
+    padding: var(--g-space-20);
   }
 }
 
@@ -806,7 +806,7 @@
 :is(.library-screen, .library-review) details > summary {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--g-space-6);
   list-style: none;
 }
 

@@ -7,6 +7,8 @@
 /* ------------------------------------------------------------------------ shell */
 
 .setup-shell {
+  /* Agent details start under the agent's name: a 24px mark and the row's 12px gap. */
+  --setup-detail-indent: calc(var(--g-space-24) + var(--g-space-12));
   position: relative;
   display: flex;
   height: 100dvh;
@@ -28,7 +30,7 @@
   box-sizing: border-box;
   width: clamp(440px, 46vw, 568px);
   height: 100dvh;
-  padding: 64px clamp(32px, 3.6vw, 64px) 40px;
+  padding: var(--g-space-64) clamp(var(--g-space-32), 3.6vw, var(--g-space-64)) var(--g-space-40);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
@@ -43,12 +45,12 @@
   flex: none;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--g-space-16);
   min-height: 28px;
 }
 
 .setup-skip {
-  margin-right: -12px;
+  margin-right: calc(var(--g-space-12) * -1);
 }
 
 .setup-body {
@@ -56,7 +58,7 @@
   flex: 1 0 auto;
   flex-direction: column;
   justify-content: center;
-  padding: 40px 0;
+  padding: var(--g-space-40) 0;
 }
 
 .setup-bottom {
@@ -101,7 +103,7 @@
 .setup-step {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--g-space-12);
   width: 100%;
   height: 32px;
   padding: 0;
@@ -177,7 +179,7 @@
 
 .setup-content {
   position: relative;
-  padding: 6px 0 32px 32px;
+  padding: var(--g-space-6) 0 var(--g-space-32) var(--g-space-32);
   animation: setup-open var(--g-dur-panel) var(--g-ease-quint) both;
 }
 
@@ -194,7 +196,7 @@
 
 /* Display 32/38 from 1392px; a narrower column steps down to 28 so each tone keeps one line. */
 .setup-heading {
-  margin: 0 0 16px;
+  margin: 0 0 var(--g-space-16);
   color: var(--g-fg-1);
   font-size: clamp(28px, 2.3vw, var(--g-text-display));
   line-height: 1.1875;
@@ -214,7 +216,7 @@
 
 .setup-lead {
   max-width: 420px;
-  margin: 0 0 12px;
+  margin: 0 0 var(--g-space-12);
   color: var(--g-fg-2);
   font-size: var(--g-text-prose);
   line-height: var(--g-leading-prose);
@@ -229,46 +231,46 @@
 }
 
 .setup-content > .setup-footnote + .setup-footnote {
-  margin-top: 8px;
+  margin-top: var(--g-space-8);
 }
 
 .setup-content > .g-button {
-  margin: 12px 0;
+  margin: var(--g-space-12) 0;
 }
 
 .setup-inline {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--g-space-12);
 }
 
 .setup-inline > .g-button {
-  margin-right: -12px;
+  margin-right: calc(var(--g-space-12) * -1);
 }
 
 .setup-demo {
-  margin-top: 16px;
+  margin-top: var(--g-space-16);
 }
 
 .setup-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-top: 32px;
+  gap: var(--g-space-8);
+  margin-top: var(--g-space-32);
 }
 
 /* The Enter keycap at the pill's end; the pill's own padding would leave it floating. */
 .setup-enter {
   display: inline-flex;
-  margin-right: -6px;
+  margin-right: calc(var(--g-space-6) * -1);
 }
 
 /* ---------------------------------------------------------------------- the roster */
 
 .setup-roster {
-  margin: 24px 0 12px;
+  margin: var(--g-space-24) 0 var(--g-space-12);
   padding: 0;
   list-style: none;
   border-top: 1px solid var(--g-line);
@@ -281,11 +283,11 @@
 .setup-agent-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--g-space-12);
   width: calc(100% + 16px);
   min-height: 48px;
-  margin: 0 -8px;
-  padding: 6px 8px;
+  margin: 0 calc(var(--g-space-8) * -1);
+  padding: var(--g-space-6) var(--g-space-8);
   border: 0;
   border-radius: var(--g-radius-8);
   background-color: transparent;
@@ -336,7 +338,7 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 8px;
+  gap: var(--g-space-8);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -359,7 +361,7 @@
 }
 
 .setup-agent-detail {
-  padding: 2px 0 20px 36px;
+  padding: var(--g-space-2) 0 var(--g-space-20) var(--setup-detail-indent);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -369,11 +371,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--g-space-12);
   width: calc(100% + 16px);
   height: 40px;
-  margin: 0 -8px;
-  padding: 0 8px 0 44px;
+  margin: 0 calc(var(--g-space-8) * -1);
+  padding: 0 var(--g-space-8) 0 calc(var(--g-space-8) + var(--setup-detail-indent));
   border: 0;
   border-radius: var(--g-radius-8);
   background-color: transparent;
@@ -403,7 +405,7 @@
 }
 
 .setup-agent-detail p {
-  margin: 0 0 8px;
+  margin: 0 0 var(--g-space-8);
   overflow-wrap: anywhere;
 }
 
@@ -421,14 +423,14 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
-  margin: 12px 0 4px;
+  gap: var(--g-space-8) var(--g-space-16);
+  margin: var(--g-space-12) 0 var(--g-space-4);
 }
 
 .setup-guide {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--g-space-4);
   color: var(--g-fg-1);
   font-weight: 500;
   text-decoration-line: underline;
@@ -459,7 +461,7 @@
 }
 
 .setup-agent-detail .setup-meta {
-  margin-top: 12px;
+  margin-top: var(--g-space-12);
 }
 
 /*
@@ -470,8 +472,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin: 12px 0 4px;
+  gap: var(--g-space-8);
+  margin: var(--g-space-12) 0 var(--g-space-4);
 }
 
 .setup-agent-detail .chat-agent-actions > :is(span, p) {
@@ -495,7 +497,7 @@
 
 .setup-motion {
   min-inline-size: 0;
-  margin: 24px 0 12px;
+  margin: var(--g-space-24) 0 var(--g-space-12);
   padding: 0;
   border: 0;
 }
@@ -503,9 +505,9 @@
 .setup-segmented {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--g-space-2);
   height: 32px;
-  padding: 2px;
+  padding: var(--g-space-2);
   border-radius: var(--g-radius-pill);
   background-color: var(--g-surface-3);
 }
@@ -531,7 +533,7 @@
   display: inline-flex;
   align-items: center;
   height: 28px;
-  padding: 0 14px;
+  padding: 0 var(--g-space-12);
   border-radius: var(--g-radius-pill);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
@@ -563,11 +565,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: var(--g-space-12);
   width: 100%;
   min-height: 120px;
-  margin: 20px 0 0;
-  padding: 16px 20px;
+  margin: var(--g-space-20) 0 0;
+  padding: var(--g-space-16) var(--g-space-20);
   border: 1px dashed var(--g-fg-4);
   border-radius: var(--g-radius-12);
   background-color: transparent;
@@ -598,7 +600,7 @@
 .setup-folder > span {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--g-space-2);
   min-width: 0;
 }
 
@@ -619,8 +621,8 @@
 .setup-field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 16px 0;
+  gap: var(--g-space-8);
+  margin: var(--g-space-16) 0;
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -630,8 +632,8 @@
 .setup-project-form {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  margin: 16px 0 0;
+  gap: var(--g-space-8);
+  margin: var(--g-space-16) 0 0;
 }
 
 .setup-project-form > .setup-field {
@@ -643,22 +645,22 @@
 .setup-project-saved {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 16px 0 0;
+  gap: var(--g-space-8);
+  margin: var(--g-space-16) 0 0;
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
 
 .setup-content > .setup-clone {
-  margin-top: 12px;
-  margin-left: -12px;
+  margin-top: var(--g-space-12);
+  margin-left: calc(var(--g-space-12) * -1);
 }
 
 /* A failed save: a well with a red edge, the reason and what to do (6.8). */
 .setup-error {
-  margin: 20px 0 0;
-  padding: 10px 14px;
+  margin: var(--g-space-20) 0 0;
+  padding: var(--g-space-12) var(--g-space-16);
   border-left: 2px solid var(--g-red);
   border-radius: 0 var(--g-radius-8) var(--g-radius-8) 0;
   background-color: var(--g-surface-1);
@@ -675,8 +677,8 @@
 .setup-error > div {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin: 8px 0 0 -12px;
+  gap: var(--g-space-4);
+  margin: var(--g-space-8) 0 0 calc(var(--g-space-12) * -1);
 }
 
 /* ---------------------------------------------- the pane: a calm field and the roster */
@@ -685,7 +687,7 @@
   position: relative;
   flex: 1;
   min-width: 0;
-  margin: 8px 8px 8px 0;
+  margin: var(--g-space-8) var(--g-space-8) var(--g-space-8) 0;
   overflow: hidden;
   border: 1px solid var(--g-line);
   border-radius: var(--g-radius-12);
@@ -706,7 +708,7 @@
   width: min(360px, calc(100% - 48px));
   max-height: calc(100% - 48px);
   overflow-y: auto;
-  padding: 18px 20px 8px;
+  padding: var(--g-space-16) var(--g-space-20) var(--g-space-8);
   border-radius: var(--g-radius-12);
   background-color: var(--g-bg);
   box-shadow: inset 0 0 0 1px var(--g-line-strong);
@@ -715,7 +717,7 @@
 }
 
 .setup-panel-lead {
-  margin: 0 0 12px;
+  margin: 0 0 var(--g-space-12);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -736,7 +738,7 @@
 .setup-panel-agent {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--g-space-8);
   height: 36px;
   border-top: 1px solid var(--g-line);
 }
@@ -782,7 +784,7 @@
 }
 
 .setup-panel-empty {
-  margin: 0 0 12px;
+  margin: 0 0 var(--g-space-12);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -804,7 +806,7 @@
 }
 
 .setup-intro[data-leaving="fast"] {
-  transition-duration: 240ms;
+  transition-duration: var(--g-dur-base);
 }
 
 .setup-intro-field {
@@ -815,7 +817,7 @@
 .setup-intro-word {
   position: absolute;
   z-index: 2;
-  padding: 0 6px;
+  padding: 0 var(--g-space-6);
   background-color: var(--g-bg);
   transform: translateX(-50%);
   white-space: nowrap;
@@ -831,7 +833,7 @@
   right: 32px;
   bottom: 32px;
   z-index: 31;
-  gap: 8px;
+  gap: var(--g-space-8);
   border-color: var(--g-line-strong);
   background-color: var(--g-bg);
   color: var(--g-fg-2);
@@ -850,24 +852,24 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--g-space-16);
   max-width: 840px;
   margin: 0 auto;
-  padding: 56px 32px 0;
+  padding: calc(var(--ui-titlebar-height) + var(--g-space-4)) var(--g-space-32) 0;
 }
 
 .agents-content {
   max-width: 840px;
   margin: 0 auto;
-  padding: 40px 40px 64px;
+  padding: var(--g-space-40) var(--g-space-40) var(--g-space-64);
 }
 
 .agents-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 32px;
+  gap: var(--g-space-24);
+  margin-bottom: var(--g-space-32);
 }
 
 .agents-heading h1 {
@@ -881,7 +883,7 @@
 
 .agents-heading h1 > span {
   display: block;
-  margin-top: 4px;
+  margin-top: var(--g-space-4);
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -899,20 +901,20 @@
 
 .agents-footnote {
   max-width: 600px;
-  margin-top: 20px;
+  margin-top: var(--g-space-20);
 }
 
 /* ----------------------------------------------------------------- clone dialog */
 
 .setup-clone-dialog p,
 .setup-clone-dialog ul {
-  margin: 12px 0;
+  margin: var(--g-space-12) 0;
   color: var(--g-fg-2);
   overflow-wrap: anywhere;
 }
 
 .setup-clone-dialog ul {
-  padding-left: 18px;
+  padding-left: var(--g-space-20);
 }
 
 .setup-clone-dialog form .setup-folder {
@@ -922,7 +924,7 @@
 }
 
 .setup-clone-dialog form > .g-button {
-  margin-top: 8px;
+  margin-top: var(--g-space-8);
 }
 
 .setup-clone-dialog .setup-footnote {
@@ -931,7 +933,7 @@
 
 .setup-clone-review,
 .setup-clone-result {
-  margin-top: 16px;
+  margin-top: var(--g-space-16);
 }
 
 .setup-clone-dialog dl {
@@ -943,7 +945,7 @@
 
 .setup-clone-dialog :is(dt, dd) {
   margin: 0;
-  padding: 10px 0;
+  padding: var(--g-space-8) 0;
   border-bottom: 1px solid var(--g-line);
 }
 
@@ -959,16 +961,16 @@
 }
 
 .setup-clone-dialog footer {
-  margin-top: 20px;
+  margin-top: var(--g-space-20);
 }
 
 .setup-clone-result > .g-button + .g-button {
-  margin-left: 8px;
+  margin-left: var(--g-space-8);
 }
 
 .setup-clone-history {
-  margin-top: 24px;
-  padding-top: 16px;
+  margin-top: var(--g-space-24);
+  padding-top: var(--g-space-16);
   border-top: 1px solid var(--g-line);
 }
 
@@ -985,22 +987,22 @@
 }
 
 .setup-clone-history li {
-  padding: 12px 0;
+  padding: var(--g-space-12) 0;
   border-bottom: 1px solid var(--g-line);
 }
 
 .setup-clone-history li > :is(p, small) {
   display: block;
-  margin: 4px 0 0;
+  margin: var(--g-space-4) 0 0;
 }
 
 /* ------------------------------------------------------- reviewed installation */
 
 .setup-install-review {
   max-height: 36vh;
-  margin: 0 0 4px;
+  margin: 0 0 var(--g-space-4);
   overflow: auto;
-  padding: 12px 0;
+  padding: var(--g-space-12) 0;
   border-top: 1px solid var(--g-line);
   border-bottom: 1px solid var(--g-line);
   color: var(--g-fg-2);
@@ -1017,14 +1019,14 @@
 .setup-install-review dl {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);
-  gap: 8px 12px;
-  margin: 12px 0;
+  gap: var(--g-space-8) var(--g-space-12);
+  margin: var(--g-space-12) 0;
 }
 
 .setup-install-review dt {
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
-  line-height: 20px;
+  line-height: var(--g-leading-ui);
 }
 
 .setup-install-review dd {
@@ -1041,7 +1043,7 @@
 
 .setup-install-review :is(ol, ul) {
   margin: 0;
-  padding-left: 20px;
+  padding-left: var(--g-space-20);
 }
 
 /* Arguments line up with the other values; notices take square bullets. */
@@ -1051,8 +1053,8 @@
 }
 
 .setup-install-review > ul {
-  margin-top: 12px;
-  padding-left: 18px;
+  margin-top: var(--g-space-12);
+  padding-left: var(--g-space-20);
   list-style: square;
 }
 
@@ -1065,7 +1067,7 @@
 details.setup-install-review > summary {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--g-space-6);
   list-style: none;
 }
 
@@ -1092,36 +1094,36 @@ details.setup-install-review[open] > summary::before {
 }
 
 .setup-install-review li + li {
-  margin-top: 4px;
+  margin-top: var(--g-space-4);
 }
 
 /* ----------------------------------------------------------- executable choice */
 
 .setup-installations {
-  margin-top: 12px;
+  margin-top: var(--g-space-12);
 }
 
 .setup-installations > .g-button {
-  margin-left: -12px;
+  margin-left: calc(var(--g-space-12) * -1);
 }
 
 .setup-installations > div {
-  margin-top: 8px;
+  margin-top: var(--g-space-8);
 }
 
 .setup-installations p {
-  margin: 0 0 8px;
+  margin: 0 0 var(--g-space-8);
 }
 
 .setup-installations fieldset {
   min-width: 0;
-  margin: 12px 0;
+  margin: var(--g-space-12) 0;
   padding: 0;
   border: 0;
 }
 
 .setup-installations legend {
-  margin-bottom: 8px;
+  margin-bottom: var(--g-space-8);
   padding: 0;
   color: var(--g-fg-1);
   font-weight: 500;
@@ -1130,8 +1132,8 @@ details.setup-install-review[open] > summary::before {
 .setup-executable {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 12px 0;
+  gap: var(--g-space-12);
+  padding: var(--g-space-12) 0;
   border-top: 1px solid var(--g-line);
   cursor: pointer;
 }
@@ -1142,7 +1144,7 @@ details.setup-install-review[open] > summary::before {
 
 .setup-executable > span {
   display: grid;
-  gap: 2px;
+  gap: var(--g-space-2);
   min-width: 0;
 }
 
@@ -1153,7 +1155,7 @@ details.setup-install-review[open] > summary::before {
 
 .setup-executable input {
   flex: none;
-  margin: 3px 0 0;
+  margin: var(--g-space-4) 0 0;
   accent-color: var(--g-fg-1);
 }
 
@@ -1175,8 +1177,8 @@ details.setup-install-review[open] > summary::before {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
-  margin-top: 16px;
+  gap: var(--g-space-8) var(--g-space-12);
+  margin-top: var(--g-space-16);
 }
 
 .setup-executable-actions > span {
@@ -1186,11 +1188,11 @@ details.setup-install-review[open] > summary::before {
 }
 
 .setup-recheck {
-  margin-left: -12px;
+  margin-left: calc(var(--g-space-12) * -1);
 }
 
 .setup-alert {
-  margin: 8px 0 0;
+  margin: var(--g-space-8) 0 0;
   color: var(--g-red);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -1199,7 +1201,7 @@ details.setup-install-review[open] > summary::before {
 
 /* Fixture pages title their single component like a settings page. */
 .setup-preview-title {
-  margin: 0 0 16px;
+  margin: 0 0 var(--g-space-16);
   color: var(--g-fg-1);
   font-size: var(--g-text-title);
   line-height: var(--g-leading-title);
@@ -1240,7 +1242,7 @@ html[data-motion="off"] * {
 
 @media (max-width: 900px) {
   .setup-column {
-    padding-inline: 32px;
+    padding-inline: var(--g-space-32);
   }
 
   .setup-panel-card {
@@ -1255,7 +1257,7 @@ html[data-motion="off"] * {
     width: 100%;
     max-width: 600px;
     margin: 0 auto;
-    padding: 56px 24px 24px;
+    padding: calc(var(--ui-titlebar-height) + var(--g-space-4)) var(--g-space-24) var(--g-space-24);
   }
 
   .setup-panel {
@@ -1263,15 +1265,15 @@ html[data-motion="off"] * {
   }
 
   .agents-bar {
-    padding-inline: 16px;
+    padding-inline: var(--g-space-16);
   }
 
   .agents-content {
-    padding: 32px 24px 48px;
+    padding: var(--g-space-32) var(--g-space-24) var(--g-space-48);
   }
 
   .agents-heading {
     flex-direction: column;
-    gap: 16px;
+    gap: var(--g-space-16);
   }
 }

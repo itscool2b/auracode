@@ -1,12 +1,12 @@
 /* The project terminal and editor dialog: the medium dialog (shell.css, `.g-dialog`). */
 .project-tools-body {
   display: grid;
-  gap: 20px;
+  gap: var(--g-space-20);
 }
 
 .project-tools-body section {
   display: grid;
-  gap: 10px;
+  gap: var(--g-space-8);
 }
 
 .project-tools-body h3,
@@ -27,7 +27,7 @@
 .project-tools-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--g-space-8);
 }
 
 .project-tools-path,
@@ -38,11 +38,11 @@
 }
 
 .project-terminal-review {
-  padding: 0 22px 12px;
+  padding: 0 var(--g-space-24) var(--g-space-12);
   color: var(--g-fg-2);
 }
 
 .project-terminal-review p {
-  margin: 6px 0;
+  margin: var(--g-space-6) 0;
   overflow-wrap: anywhere;
 }

@@ -84,7 +84,7 @@ export function ResetSyncPanel({
   if (!pending?.pending && !expanded)
     return allowReview ? (
       <button
-        className="g-button g-button-ghost account-reset-toggle"
+        className="g-button g-button-ghost g-button-28 account-reset-toggle"
         type="button"
         disabled={locked}
         onClick={() => setExpanded(true)}

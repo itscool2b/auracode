@@ -4,7 +4,7 @@
  */
 
 .terminal-sheet__header p {
-  margin: 4px 0 0;
+  margin: var(--g-space-4) 0 0;
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -13,8 +13,8 @@
 .terminal-sheet__status {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 12px 0;
+  gap: var(--g-space-8);
+  margin: var(--g-space-12) 0;
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -40,7 +40,7 @@
 }
 
 .terminal-sheet__note {
-  margin: 0 0 12px;
+  margin: 0 0 var(--g-space-12);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -50,7 +50,7 @@
   box-sizing: border-box;
   height: min(48dvh, 420px);
   min-height: 180px;
-  padding: 8px 4px 8px 12px;
+  padding: var(--g-space-8) var(--g-space-4) var(--g-space-8) var(--g-space-12);
   border: 1px solid var(--g-line);
   border-radius: var(--g-radius-8);
   background-color: var(--g-surface-1);
@@ -64,7 +64,7 @@
 
 .terminal-sheet__link {
   max-width: 100%;
-  margin: 12px 0 0;
+  margin: var(--g-space-12) 0 0;
   overflow-wrap: anywhere;
   user-select: text;
 }
@@ -79,7 +79,7 @@
 /* The hint at the start, the two actions at the end. */
 .terminal-sheet__footer {
   align-items: center;
-  margin-top: 16px;
+  margin-top: var(--g-space-16);
   padding-top: 0;
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);

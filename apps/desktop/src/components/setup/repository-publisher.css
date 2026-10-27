@@ -3,7 +3,7 @@
 .repository-publisher,
 .repository-publisher form {
   display: grid;
-  gap: 12px;
+  gap: var(--g-space-12);
   min-width: 0;
   color: var(--g-fg-2);
   font-family: var(--g-sans);
@@ -39,7 +39,7 @@
 
 .repository-publisher :is(dt, dd) {
   margin: 0;
-  padding: 8px 0;
+  padding: var(--g-space-8) 0;
   border-bottom: 1px solid var(--g-line);
 }
 
@@ -53,7 +53,7 @@
 }
 
 .repository-publisher ul {
-  padding-left: 18px;
+  padding-left: var(--g-space-20);
   list-style: square;
 }
 
@@ -62,14 +62,14 @@
 }
 
 .repository-publisher li + li {
-  margin-top: 4px;
+  margin-top: var(--g-space-4);
 }
 
 .repository-publisher footer {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--g-space-8);
 }
 
 .repository-publisher-result {
@@ -79,5 +79,5 @@
 
 .repository-publisher-close {
   justify-self: start;
-  margin-left: -12px;
+  margin-left: calc(var(--g-space-12) * -1);
 }

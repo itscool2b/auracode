@@ -10,7 +10,7 @@
   place-items: center;
   box-sizing: border-box;
   min-height: 100%;
-  padding: 72px 24px;
+  padding: var(--g-space-64) var(--g-space-24);
   overflow: auto;
 }
 
@@ -22,7 +22,7 @@
 
 .error-panel {
   display: grid;
-  gap: 24px;
+  gap: var(--g-space-24);
   width: min(100%, 600px);
 }
 
@@ -40,7 +40,7 @@
 }
 
 .error-message p {
-  margin: 8px 0 0;
+  margin: var(--g-space-8) 0 0;
   color: var(--g-fg-2);
   font-size: var(--g-text-prose);
   line-height: var(--g-leading-prose);
@@ -60,9 +60,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--g-space-12);
   height: 36px;
-  padding: 0 6px 0 16px;
+  padding: 0 var(--g-space-6) 0 var(--g-space-16);
   border-bottom: 1px solid var(--g-line-faint);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
@@ -70,8 +70,8 @@
 }
 
 .error-well .data-path {
-  gap: 12px;
-  padding: 12px 16px 16px;
+  gap: var(--g-space-12);
+  padding: var(--g-space-12) var(--g-space-16) var(--g-space-16);
 }
 
 .error-note {
