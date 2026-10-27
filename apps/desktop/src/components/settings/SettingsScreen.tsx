@@ -293,19 +293,19 @@ export function SettingsScreen({
               onClick={() => open(value)}
             >
               <Icon size={16} aria-hidden="true" />
-              <span>{label}</span>
+              <span className="settings-nav-label">{label}</span>
             </button>
           ))}
           <hr />
           <button type="button" onClick={onAgents}>
             <Bot size={16} aria-hidden="true" />
-            <span>Agents</span>
+            <span className="settings-nav-label">Agents</span>
             <ArrowUpRight size={14} aria-hidden="true" />
           </button>
           {onLibrary ? (
             <button type="button" onClick={onLibrary}>
               <LibraryBig size={16} aria-hidden="true" />
-              <span>Library</span>
+              <span className="settings-nav-label">Library</span>
               <ArrowUpRight size={14} aria-hidden="true" />
             </button>
           ) : null}

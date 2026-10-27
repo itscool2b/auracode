@@ -1129,6 +1129,21 @@ the loader), age in mono 12 fg-3. Switching agent rises the new name per word an
 once; first paint does neither. No folder: "**Claude Code** is ready." with an outline "Choose a
 folder" (⌘ O).
 
+**New chat** (before a chat exists) follows Grok's start screen: the 40px logo centred, one two-tone
+display line ("What are we working on?", then "**Claude Code** is ready in **auracode**.",
+"Looking for **Codex**." or "**Codex** needs you to sign in."), one 15/24 fg-3 hint, and one
+composer card (surface-2, radius 16, line-strong ring) anchored at 18vh so nothing above it moves.
+The card's first row holds the agents that can run here as 32px pills over native radios, each with
+its 24px round `AgentMark`: the walking loader while the agent is still detected (name in fg-3), its
+code once found (the mark settles in once over 250ms `--g-ease-out`; never on first paint or under
+reduced motion), the volt square once a sign-in check says it needs you; the selected pill is
+surface-4 with an fg-3 ring. Refresh is a ghost icon at the row's end. The second row holds the
+folder icon in the marks' column, the path in mono, the project folders, "Choose folder" (outline)
+and "Create" (the one primary). Under the card, on one 16px axis: the busy-folder well (one volt
+square and an explicit consent), the download note, errors, the selected agent's version and path
+opening its details in place, and "Other agents" with each one's reason. A later worktree chip row
+goes directly under the card.
+
 ### 6.14 Right panel
 
 Tabs as a strong segmented control (28px): "Changes 2", "Files", "Plan", "Session"; a close at right;
@@ -1158,21 +1173,31 @@ Delete), tool row (Re-run, Copy command, Copy output).
 
 ### 6.16 Settings
 
-Settings replace the pane (⌘,); the sidebar becomes the settings nav: 32px rows, 14/20 fg-2, hover
-fg-1, active fg-1 500 with the 2px rail; no group captions (separators instead). Page: a 680px
-column, 40px top padding, title `.g-text-title` with a two-tone continuation in 14/20 fg-3
-("Agents" / "Turn agents on, pick their defaults, keep them updated."). Groups: a heading 14/20 500
-outside; the group on surface-2, radius 12, rows 52px (label 14/20 500, description 12/16 fg-3,
-control at right), 1px line separators inset 16, 24px between groups; "Applies to new chats" in
-12/16 fg-3 under a group when true. Motion is a strong segmented control (Full, Reduced, Off) that
+Settings replace the pane (⌘,) and follow Grok's settings rows and X Money's grouped wells. The
+sidebar becomes the settings nav: "Back to chats", a "Settings" heading, then 32px rows of a 16px
+fg-3 icon and a 14/20 fg-2 label; hover surface-2 and fg-1; the open page is Grok's filled pill
+(surface-3, fg-1 500); a separator before the links out (Agents, Library). Page: a 680px column, a
+`.g-text-title` title and nothing under it. Groups (X Money): an optional heading 16/22 500, at
+most one short 14/20 fg-3 line, then a surface-2 well, radius 12, 12px below; 32px between groups.
+A row is a label 14/20 500 with an optional one-line description 12/16 fg-3 and at most one control
+at right (a 28px outline pill, a segmented control or a switch); anything more (a form, a key, a
+list, progress) opens under the row across both columns, starting at the label's column when the
+row leads with an icon or a 32px badge. Rows are at least 56px with 12/16 padding, on hairlines
+inset 16 on both sides. A row that only opens something is the whole row as a button with a
+chevron (X Money). Empty states are Vercel's: one 14/20 500 title and one fg-3 line centred in the
+well, and the one way forward. "Applies to new chats" in 12/16 fg-3 under a group when true. Motion is a strong segmented control (Full, Reduced, Off) that
 applies at once. Agents: a roster in a hairline grid (mark, name, version chip, binary path in mono,
 an enable switch, "Update to 0.165.0"). Permissions: default autonomy, Final confirm, tool rules
 (Allow, Ask, Deny; Deny wins) and the access log (mono 13 table: time, agent, tool, target, a white
 check or red square). Usage: per-agent rows with 32/32 tabular figures and a 1px fg-3 sparkline; a
 "Hide costs and tokens" switch masks every figure with "••••" without reflow. Account and sync
-panels (sign-in, devices, vault, export, reset, remove) follow the same groups with confirm dialogs
-for destructive steps. About: "auracode 0.1.0 (build 214)" with the version in mono, the notices
-dialog and the data path in mono.
+panels follow the same groups: Profiles; Cloud account, where each step of the sign-in flow is one
+row with its form under it, a sign-in error is one 12/16 red line under its field, the approved
+account leads with a 32px check badge and one sync line, and Sign out is a chevron row; Devices; and
+Security (secure storage, workspace restore, sync reset, removal), with confirm dialogs for
+destructive steps. Shortcuts is one keycap table. About: the 40px logo, "auracode" and the version
+in mono, then Updates (its phase, version and one next step; progress, notes and the install
+question open under it), This device, Diagnostics and Third-party notices.
 
 ### 6.17 Onboarding and the dither intro
 

@@ -19,108 +19,6 @@
   height: 52px;
 }
 
-/* ------------------------------------------------------------------------ sidebar */
-
-.settings-sidebar {
-  position: relative;
-  display: flex;
-  flex: 0 0 var(--g-app-sidebar);
-  flex-direction: column;
-  min-width: 0;
-  padding: var(--ui-titlebar-height) var(--g-space-12) var(--g-space-16);
-}
-
-.settings-back,
-.settings-sidebar nav button {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-12);
-  width: 100%;
-  height: 32px;
-  padding: 0 var(--g-space-8);
-  border: 0;
-  border-radius: var(--g-radius-8);
-  background-color: transparent;
-  color: var(--g-fg-2);
-  font-family: var(--g-sans);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color var(--g-dur-micro) var(--g-ease),
-    color var(--g-dur-micro) var(--g-ease);
-}
-
-.settings-back svg,
-.settings-sidebar nav button svg {
-  flex: none;
-  color: var(--g-fg-3);
-  transition: color var(--g-dur-micro) var(--g-ease);
-}
-
-.settings-sidebar nav button > span {
-  flex: 1;
-}
-
-.settings-sidebar h2 {
-  margin: var(--g-space-24) var(--g-space-8) var(--g-space-8);
-  color: var(--g-fg-1);
-  font-size: var(--g-text-heading);
-  line-height: var(--g-leading-heading);
-  font-weight: 600;
-}
-
-.settings-sidebar nav {
-  display: grid;
-  gap: var(--g-space-2);
-}
-
-@media (hover: hover) {
-  .settings-back:hover,
-  .settings-sidebar nav button:hover {
-    background-color: var(--g-surface-2);
-    color: var(--g-fg-1);
-  }
-
-  .settings-back:hover svg,
-  .settings-sidebar nav button:hover svg {
-    color: var(--g-fg-2);
-  }
-}
-
-.settings-back:active,
-.settings-sidebar nav button:active {
-  background-color: var(--g-surface-3);
-  transition-duration: 0ms;
-}
-
-.settings-back:focus-visible,
-.settings-sidebar nav button:focus-visible {
-  outline: 2px solid var(--g-focus);
-  outline-offset: -2px;
-}
-
-/* The open page: Grok's filled pill, ink and 500. */
-.settings-sidebar nav button[aria-current] {
-  background-color: var(--g-surface-3);
-  color: var(--g-fg-1);
-  font-weight: 500;
-}
-
-.settings-sidebar nav button[aria-current] svg {
-  color: var(--g-fg-1);
-}
-
-.settings-sidebar nav hr {
-  width: calc(100% - 16px);
-  height: 1px;
-  margin: var(--g-space-8);
-  border: 0;
-  background-color: var(--g-line);
-}
-
 /* --------------------------------------------------------------------------- pane */
 
 .settings-main {
@@ -796,6 +694,108 @@ h1 + .settings-group {
   line-height: var(--g-leading-term);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------------ sidebar */
+
+.settings-sidebar {
+  position: relative;
+  display: flex;
+  flex: 0 0 var(--g-app-sidebar);
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--ui-titlebar-height) var(--g-space-12) var(--g-space-16);
+}
+
+.settings-back,
+.settings-sidebar nav button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--g-space-8);
+  border: 0;
+  border-radius: var(--g-radius-8);
+  background-color: transparent;
+  color: var(--g-fg-2);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+.settings-back svg,
+.settings-sidebar nav button svg {
+  flex: none;
+  color: var(--g-fg-3);
+  transition: color var(--g-dur-micro) var(--g-ease);
+}
+
+.settings-nav-label {
+  flex: 1;
+}
+
+.settings-sidebar h2 {
+  margin: var(--g-space-24) var(--g-space-8) var(--g-space-8);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 600;
+}
+
+.settings-sidebar nav {
+  display: grid;
+  gap: var(--g-space-2);
+}
+
+@media (hover: hover) {
+  .settings-back:hover,
+  .settings-sidebar nav button:hover {
+    background-color: var(--g-surface-2);
+    color: var(--g-fg-1);
+  }
+
+  .settings-back:hover svg,
+  .settings-sidebar nav button:hover svg {
+    color: var(--g-fg-2);
+  }
+}
+
+.settings-back:active,
+.settings-sidebar nav button:active {
+  background-color: var(--g-surface-3);
+  transition-duration: 0ms;
+}
+
+.settings-back:focus-visible,
+.settings-sidebar nav button:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: -2px;
+}
+
+/* The open page: Grok's filled pill, ink and 500. */
+.settings-sidebar nav button[aria-current] {
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.settings-sidebar nav button[aria-current] svg {
+  color: var(--g-fg-1);
+}
+
+.settings-sidebar nav hr {
+  width: calc(100% - 16px);
+  height: 1px;
+  margin: var(--g-space-8);
+  border: 0;
+  background-color: var(--g-line);
 }
 
 /* ------------------------------------------------------------------------ narrow */
