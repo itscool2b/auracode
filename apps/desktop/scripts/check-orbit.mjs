@@ -533,6 +533,8 @@ async function inspect(engine, launcher) {
         await page.getByRole("button", { name: "Mention in message", exact: true }).click();
         await page.getByText("Added to your draft.", { exact: true }).waitFor();
       }
+      // The tabs change colour over 150ms; contrast is measured once they have settled.
+      await page.waitForTimeout(200);
       const scan = await new AxeBuilder({ page }).include(".changes-panel").analyze();
       assert.deepEqual(scan.violations, [], `${tab} context accessibility`);
     }
@@ -567,7 +569,14 @@ async function inspect(engine, launcher) {
     });
     await page.waitForTimeout(250);
     assert.ok(await page.evaluate(() => window.__orbitFrames > 0), "active marks never animate");
-    await page.locator('.o-mark[data-state="thinking"]').evaluateAll((nodes) => {
+    // Every live indicator: the thinking marks, the sidebar's running loader and the dock's mark.
+    const live =
+      '.g-agent-mark:is([data-state="thinking"], [data-state="streaming"], [data-state="tool"]), .g-loader';
+    assert.ok(
+      (await page.locator('.g-agent-mark[data-state="thinking"]').count()) > 0,
+      "the thinking preview shows no thinking mark",
+    );
+    await page.locator(live).evaluateAll((nodes) => {
       for (const node of nodes) node.style.display = "none";
     });
     await page.waitForTimeout(150);
@@ -580,7 +589,7 @@ async function inspect(engine, launcher) {
       0,
       "offscreen marks still animate",
     );
-    await page.locator('.o-mark[data-state="thinking"]').evaluateAll((nodes) => {
+    await page.locator(live).evaluateAll((nodes) => {
       for (const node of nodes) node.style.removeProperty("display");
     });
     await page.waitForTimeout(100);
