@@ -2,7 +2,6 @@ import { AGENT_BRANDS, type AgentBrandId } from "@auracode/ui";
 import { AgentMark, Keycap, StatusDot } from "@auracode/ui/graphite";
 import {
   type CSSProperties,
-  type FocusEvent,
   type PointerEvent,
   type ReactNode,
   useEffect,
@@ -311,9 +310,6 @@ export function Tiles() {
   const leave = (event: PointerEvent) => {
     if (event.pointerType === "mouse") setActive(null);
   };
-  const focusOut = (event: FocusEvent<HTMLLIElement>) => {
-    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setActive(null);
-  };
   return (
     <section className="section tiles" aria-labelledby="tiles-title">
       <div className="wrap">
@@ -330,8 +326,6 @@ export function Tiles() {
               style={{ "--i": i % 2 } as CSSProperties}
               onPointerEnter={enter(item.id)}
               onPointerLeave={leave}
-              onFocus={() => setActive(item.id)}
-              onBlur={focusOut}
             >
               <div className="tiles-tile" aria-hidden={item.interactive ? undefined : "true"}>
                 {item.tile(!reduced && active === item.id)}
