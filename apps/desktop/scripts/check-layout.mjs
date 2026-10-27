@@ -80,7 +80,20 @@ export const MODES = [
   "new-worktree#branch-error",
   "new-setup#setup",
   "git-missing#recreate",
+  // The docked terminal panel: two tabs open, opened with Ctrl+`, its shell menu, and resized.
+  "terminal-panel",
+  "settled#terminal",
+  "terminal-panel#shell-menu",
+  "terminal-panel#resized",
 ];
+
+/** Waits until the panel's shell has drawn its prompt. */
+const terminalReady = (page) =>
+  page.waitForFunction(() =>
+    document
+      .querySelector(".terminal-panel-viewport .xterm-accessibility-tree")
+      ?.textContent?.includes(">"),
+  );
 
 const openWorktree = async (page) => {
   await page.getByTestId("new-chat-worktree").locator("summary").click();
@@ -119,6 +132,19 @@ const OPENERS = {
   recreate: async (page) => {
     await page.getByRole("button", { name: "Recreate folder", exact: true }).click();
     await page.getByRole("dialog", { name: "Recreate the deleted folder?" }).waitFor();
+  },
+  terminal: async (page) => {
+    await page.keyboard.press("Control+Backquote");
+    await terminalReady(page);
+  },
+  "shell-menu": async (page) => {
+    await terminalReady(page);
+    await page.locator('.terminal-panel-shells > summary[aria-label="New terminal with"]').click();
+  },
+  resized: async (page) => {
+    await terminalReady(page);
+    await page.getByRole("separator", { name: "Resize terminal panel" }).focus();
+    for (let step = 0; step < 5; step++) await page.keyboard.press("ArrowUp");
   },
 };
 

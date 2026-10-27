@@ -1385,6 +1385,11 @@ details.setup-install-review[open] > summary::before {
   box-shadow: inset 0 1px var(--g-line);
 }
 
+/* A row's shortcut sits at its end, as keycaps (Show terminal, Ctrl `). */
+.chat-header-actions .chat-keys {
+  margin-left: auto;
+}
+
 .chat-folder-context {
   display: flex;
   flex-direction: column;

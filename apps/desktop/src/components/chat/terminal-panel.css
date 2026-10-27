@@ -1,0 +1,250 @@
+/*
+ * The docked terminal panel (docs/design/visual-language.md, 6.22): the bottom of the
+ * conversation pane behind one hairline, tabs as the right panel's quiet pills, the reviewed folder
+ * in mono, and the terminal flush on the pane in the ANSI palette. Nothing moves but colour.
+ */
+
+.terminal-panel {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: var(--terminal-panel-height);
+  min-height: 0;
+  padding: 0 var(--g-space-8) var(--g-space-8);
+  /* The hairline is inset, so the header starts on the grid. */
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+/* The top edge resizes the panel; a 2px line shows under the hand and the keyboard. */
+.terminal-panel-resizer {
+  position: absolute;
+  top: calc(var(--g-space-4) * -1);
+  right: 0;
+  left: 0;
+  z-index: 4;
+  box-sizing: border-box;
+  width: auto;
+  height: var(--g-space-8);
+  margin: 0;
+  padding: calc((var(--g-space-8) - var(--g-space-2)) / 2) 0;
+  border: 0;
+  background-clip: content-box;
+  cursor: row-resize;
+  touch-action: none;
+  transition: background-color var(--g-dur-fast) var(--g-ease);
+}
+
+.terminal-panel-resizer:is(:hover, :focus-visible) {
+  background-color: var(--g-line-strong);
+  outline: none;
+}
+
+.terminal-panel-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-4);
+  height: 36px;
+  min-width: 0;
+}
+
+/*
+ * The tabs scroll sideways when they outgrow the header. The 4px padding keeps each tab's focus
+ * ring inside the scroller (which clips), and the negative margin keeps the first pill 8px in.
+ */
+.terminal-panel-tabs {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--g-space-2);
+  box-sizing: border-box;
+  min-width: 0;
+  height: 36px;
+  margin-left: calc(var(--g-space-4) * -1);
+  padding: 0 var(--g-space-4);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* Grok's quiet pills, as the right panel's tabs: words in fg-2, the open one on a surface-3 fill. */
+.terminal-panel-tab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-6);
+  max-width: 200px;
+  height: 28px;
+  padding: 0 var(--g-space-6) 0 var(--g-space-12);
+  border: 0;
+  border-radius: var(--g-radius-pill);
+  background-color: transparent;
+  color: var(--g-fg-2);
+  font: inherit;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-fast) var(--g-ease),
+    color var(--g-dur-fast) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .terminal-panel-tab:hover {
+    color: var(--g-fg-1);
+  }
+}
+
+.terminal-panel-tab[aria-selected="true"] {
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
+}
+
+.terminal-panel-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* An ended shell reads as a still square: grey when it exited, red when it failed. */
+.terminal-panel-tab:is([data-state="finished"], [data-state="failed"])::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background-color: var(--g-fg-3);
+}
+
+.terminal-panel-tab[data-state="failed"]::before {
+  background-color: var(--g-red);
+}
+
+/* The close mark shows on the open tab and under the hand; Delete and the trash button close too. */
+.terminal-panel-tab-close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--g-radius-4);
+  color: var(--g-fg-3);
+  opacity: 0;
+  transition:
+    opacity var(--g-dur-fast) var(--g-ease),
+    color var(--g-dur-fast) var(--g-ease);
+}
+
+.terminal-panel-tab[aria-selected="true"] .terminal-panel-tab-close,
+.terminal-panel-tab:focus-visible .terminal-panel-tab-close {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .terminal-panel-tab:hover .terminal-panel-tab-close {
+    opacity: 1;
+  }
+
+  .terminal-panel-tab-close:hover {
+    background-color: var(--g-surface-4);
+    color: var(--g-fg-1);
+  }
+}
+
+.terminal-panel-rename {
+  flex: none;
+  width: 160px;
+  height: 28px;
+}
+
+.terminal-panel-shells > summary {
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+  border-radius: var(--g-radius-6);
+  color: var(--g-fg-3);
+}
+
+/* The shell menu opens upward from the panel's right-hand controls, its right edge on theirs. */
+.terminal-panel-shells > .chat-popover-panel {
+  right: 0;
+  left: auto;
+  width: 220px;
+  padding: var(--g-space-4);
+  gap: 0;
+}
+
+/* The reviewed folder: a worktree chat shows its worktree. Machine data, so mono. */
+.terminal-panel-folder {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* A little air before the controls that follow it. */
+  padding-right: var(--g-space-8);
+}
+
+.terminal-panel-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Where a shell stands when it is not simply running, as one line led by its mark. */
+.terminal-panel-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-height: 28px;
+  margin: 0;
+  padding: 0 var(--g-space-4);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.terminal-panel-status[data-outcome="failed"] {
+  color: var(--g-fg-1);
+}
+
+.terminal-panel-status[data-outcome="failed"]::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background-color: var(--g-red);
+}
+
+.terminal-panel-status > .g-button {
+  margin-left: auto;
+}
+
+.terminal-panel-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: var(--g-space-4) var(--g-space-4) 0;
+  overflow: hidden;
+  user-select: text;
+}
+
+.terminal-panel-host {
+  width: 100%;
+  height: 100%;
+}
+
+/* xterm paints its viewport black by default; the panel is surface-1 to its edge. */
+.terminal-panel-host .xterm-viewport {
+  background-color: var(--g-surface-1);
+}

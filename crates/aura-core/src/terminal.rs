@@ -16,7 +16,11 @@ use std::{
 };
 use tokio::sync::{Mutex as AsyncMutex, watch};
 
+/// Sign-in, installation, setup and vendor terminals: one per window, at most four in the app.
 const MAX_TERMINALS: usize = 4;
+/// Project shells in the docked panel are a separate pool, so a sign-in never waits on them.
+/// Each one is an owned shell process; eight keeps the app's process count bounded.
+pub const MAX_PROJECT_TERMINALS: usize = 8;
 const MAX_INPUT: usize = 16 * 1024;
 const READ_WAIT: Duration = Duration::from_secs(20);
 
@@ -28,6 +32,10 @@ pub enum TerminalError {
     AlreadyOpen,
     #[error("Close another terminal before opening one.")]
     Full,
+    #[error("Eight project terminals are open. Close one before opening another.")]
+    ProjectFull,
+    #[error("This terminal was not reserved for a project shell.")]
+    NotProject,
     #[error("A terminal read is already pending.")]
     ReadPending,
     #[error("Terminal input is limited to 16 KiB per write.")]
@@ -122,7 +130,8 @@ impl Drop for Inner {
     }
 }
 
-/// Clones share ownership; one terminal per window, at most four in this app instance.
+/// Clones share ownership. Vendor terminals: one per window, at most four in this app instance.
+/// Project shells: any number per window, at most [`MAX_PROJECT_TERMINALS`] in the app.
 #[derive(Clone, Default)]
 pub struct Terminals(Arc<Inner>);
 
@@ -163,6 +172,7 @@ impl TerminalTicket {
 
     /// An explicitly opened project shell has no setup deadline. Its folder and profile guard
     /// remains owned until confirmed process cleanup, including after page or IPC cancellation.
+    /// The slot must come from [`Terminals::reserve_project`], so the project pool stays bounded.
     pub async fn start_project(
         self,
         spawner: Arc<Spawner>,
@@ -170,7 +180,9 @@ impl TerminalTicket {
         size: PtySize,
         guard: Box<dyn Send + Sync>,
     ) -> Result<String, TerminalError> {
-        self.slot.project.store(true, Ordering::Release);
+        if !self.slot.project.load(Ordering::Acquire) {
+            return Err(TerminalError::NotProject);
+        }
         tokio::spawn(self.start_guarded_owned(spawner, spec, size, guard, None))
             .await
             .map_err(|_| TerminalError::Start("Terminal startup ended unexpectedly.".into()))?
@@ -320,17 +332,39 @@ impl Terminals {
         Some(IdleTerminalGuard(&self.0))
     }
 
+    /// A vendor, sign-in, installation or setup terminal: one per window.
     pub fn reserve(&self, owner: &str) -> Result<TerminalTicket, TerminalError> {
+        self.reserve_kind(owner, false)
+    }
+
+    /// A project shell for the docked panel: several per window, bounded across the app. Quit
+    /// preflight keeps these until the user confirms, like every project shell.
+    pub fn reserve_project(&self, owner: &str) -> Result<TerminalTicket, TerminalError> {
+        self.reserve_kind(owner, true)
+    }
+
+    fn reserve_kind(&self, owner: &str, project: bool) -> Result<TerminalTicket, TerminalError> {
         let mut slots = lock(&self.0.slots);
         if self.0.stopped.load(Ordering::Acquire) || self.0.quiescing.load(Ordering::Acquire) {
             return Err(TerminalError::Closed);
         }
-        if slots.values().any(|slot| slot.owner == owner) {
-            return Err(TerminalError::AlreadyOpen);
+        let pool: Vec<&Arc<Slot>> = slots
+            .values()
+            .filter(|slot| slot.project.load(Ordering::Acquire) == project)
+            .collect();
+        if project {
+            if pool.len() >= MAX_PROJECT_TERMINALS {
+                return Err(TerminalError::ProjectFull);
+            }
+        } else {
+            if pool.iter().any(|slot| slot.owner == owner) {
+                return Err(TerminalError::AlreadyOpen);
+            }
+            if pool.len() >= MAX_TERMINALS {
+                return Err(TerminalError::Full);
+            }
         }
-        if slots.len() >= MAX_TERMINALS {
-            return Err(TerminalError::Full);
-        }
+        drop(pool);
         let id = uuid::Uuid::now_v7().to_string();
         let (canceled, _) = watch::channel(false);
         let (cleanup, _) = watch::channel(Some(true));
@@ -343,7 +377,7 @@ impl Terminals {
             cleanup_unconfirmed: AtomicBool::new(false),
             cleanup,
             setup_timed_out: AtomicBool::new(false),
-            project: AtomicBool::new(false),
+            project: AtomicBool::new(project),
         });
         slots.insert(id.clone(), Arc::clone(&slot));
         Ok(TerminalTicket {
@@ -544,7 +578,7 @@ mod tests {
         let terminals = Terminals::default();
         let released = Arc::new(AtomicBool::new(false));
         let id = terminals
-            .reserve("main")
+            .reserve_project("main")
             .unwrap()
             .start_project(
                 Spawner::new(
@@ -843,15 +877,131 @@ mod tests {
     #[test]
     fn quit_preflight_preserves_project_slots_until_explicit_close() {
         let terminals = Terminals::default();
-        let project = terminals.reserve("project").unwrap();
-        project.slot.project.store(true, Ordering::Release);
+        let project = terminals.reserve_project("project").unwrap();
+        let second = terminals.reserve_project("project").unwrap();
         let vendor = terminals.reserve("vendor").unwrap();
         terminals.close_non_project();
         assert!(*vendor.slot.canceled.borrow());
         assert!(!*project.slot.canceled.borrow());
+        assert!(!*second.slot.canceled.borrow());
         assert!(terminals.try_quiesce_when_idle().is_none());
         terminals.close_projects();
         assert!(*project.slot.canceled.borrow());
+        assert!(*second.slot.canceled.borrow());
+        assert!(terminals.try_quiesce_when_idle().is_some());
+    }
+
+    #[test]
+    fn project_shells_share_one_bounded_pool_apart_from_vendor_terminals() {
+        let terminals = Terminals::default();
+        // Several shells in one window, and across windows, up to the app's cap.
+        let mut shells: Vec<_> = (0..MAX_PROJECT_TERMINALS - 1)
+            .map(|_| terminals.reserve_project("main").unwrap())
+            .collect();
+        shells.push(terminals.reserve_project("library").unwrap());
+        assert!(matches!(
+            terminals.reserve_project("main"),
+            Err(TerminalError::ProjectFull)
+        ));
+        // A sign-in in the same window still opens, and stays one per window.
+        let sign_in = terminals.reserve("main").unwrap();
+        assert!(matches!(
+            terminals.reserve("main"),
+            Err(TerminalError::AlreadyOpen)
+        ));
+        // Closing one shell frees exactly one place, and only for project shells.
+        let closed = shells.pop().unwrap().pending();
+        terminals.close("library", &closed).unwrap();
+        let replacement = terminals.reserve_project("main").unwrap();
+        assert!(matches!(
+            terminals.reserve_project("main"),
+            Err(TerminalError::ProjectFull)
+        ));
+        // A reload drops every terminal the window owns, in both pools.
+        terminals.drop_owner("main");
+        assert!(shells.iter().all(|ticket| *ticket.slot.canceled.borrow()));
+        assert!(*replacement.slot.canceled.borrow());
+        assert!(*sign_in.slot.canceled.borrow());
+        assert!(terminals.try_quiesce_when_idle().is_some());
+    }
+
+    #[tokio::test]
+    async fn a_vendor_reservation_cannot_start_a_project_shell() {
+        let folder = tempfile::tempdir().unwrap();
+        let terminals = Terminals::default();
+        let released = Arc::new(AtomicBool::new(false));
+        struct Guard(Arc<AtomicBool>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let result = terminals
+            .reserve("main")
+            .unwrap()
+            .start_project(
+                Spawner::new(
+                    LeftoverRegistry::disabled(),
+                    tokio::runtime::Handle::current(),
+                ),
+                local_spec(folder.path()),
+                PtySize { rows: 24, cols: 80 },
+                Box::new(Guard(released.clone())),
+            )
+            .await;
+        assert!(matches!(result, Err(TerminalError::NotProject)));
+        // Nothing launched, the folder guard is released and the refused slot is gone.
+        assert!(released.load(Ordering::Acquire));
+        assert!(terminals.try_quiesce_when_idle().is_some());
+    }
+
+    #[tokio::test]
+    async fn several_project_shells_in_one_window_clean_up_one_by_one() {
+        struct Guard(Arc<AtomicBool>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let folder = tempfile::tempdir().unwrap();
+        let terminals = Terminals::default();
+        let spawner = Spawner::new(
+            LeftoverRegistry::disabled(),
+            tokio::runtime::Handle::current(),
+        );
+        let mut shells = Vec::new();
+        for _ in 0..2 {
+            let released = Arc::new(AtomicBool::new(false));
+            let id = terminals
+                .reserve_project("main")
+                .unwrap()
+                .start_project(
+                    spawner.clone(),
+                    local_spec(folder.path()),
+                    PtySize { rows: 24, cols: 80 },
+                    Box::new(Guard(released.clone())),
+                )
+                .await
+                .unwrap();
+            read_until(&terminals, &id, "local-terminal-ready").await;
+            shells.push((id, released));
+        }
+        let (first, first_released) = &shells[0];
+        let (second, second_released) = &shells[1];
+        // Input reaches only the shell it names.
+        terminals.write("main", second, b"two\r".to_vec()).unwrap();
+        read_until(&terminals, second, "local-terminal-input:two").await;
+        let (_, first_running) = terminals.running("main", first).unwrap();
+        let (_, second_running) = terminals.running("main", second).unwrap();
+        terminals.close("main", first).unwrap();
+        released_after_cleanup(first_released, Some(&first_running)).await;
+        assert!(!second_released.load(Ordering::Acquire));
+        assert!(terminals.running("main", second).is_ok());
+        // Confirmed quit closes the rest and still waits for owned cleanup.
+        terminals.close_projects();
+        released_after_cleanup(second_released, Some(&second_running)).await;
+        assert!(first_running.control.shutdown().await.leftovers.is_empty());
+        assert!(second_running.control.shutdown().await.leftovers.is_empty());
     }
 
     #[test]

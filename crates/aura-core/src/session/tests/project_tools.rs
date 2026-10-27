@@ -93,6 +93,62 @@ async fn terminal_review_is_one_use_and_folder_ownership_allows_live_agents() {
     assert!(rig.store.shutdown(Duration::from_secs(5)).await);
 }
 
+/// The docked panel opens several shells in one chat's folder. Each holds its own folder use, so
+/// the quit question counts every shell and the folder stays protected until the last one ends.
+#[tokio::test]
+async fn several_project_terminals_in_one_folder_each_count_until_they_end() {
+    let (driver, _) = ScriptedDriver::new(vec![
+        ready_step("native-panel"),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let inner = Arc::get_mut(&mut rig.manager.inner).unwrap();
+    Arc::get_mut(&mut inner.shared).unwrap().deps.env = EnvResolver::fixed(ResolvedEnv {
+        vars: aura_process::process_env(),
+        source: EnvSource::Fallback {
+            reason: "metadata-only terminal panel fixture".into(),
+        },
+        warnings: vec![],
+        resolved_at_ms: 0,
+    });
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let mut plans = Vec::new();
+    for _ in 0..3 {
+        let review = rig.manager.project_tools_review(&chat.id).await.unwrap();
+        let shell = review.shells[0].id;
+        plans.push(
+            rig.manager
+                .prepare_project_terminal(&chat.id, &review.token, shell)
+                .await
+                .unwrap(),
+        );
+    }
+    assert_eq!(rig.manager.project_terminal_count(), 3);
+    let key = live::normalize_path(rig.folder.clone());
+    plans.pop();
+    assert_eq!(rig.manager.project_terminal_count(), 2);
+    assert!(
+        !rig.manager
+            .wait_project_terminals(Duration::from_millis(50))
+            .await
+    );
+    plans.clear();
+    assert_eq!(rig.manager.project_terminal_count(), 0);
+    assert!(
+        rig.manager
+            .wait_project_terminals(Duration::from_millis(50))
+            .await
+    );
+    rig.manager.stop(&chat.id).await.unwrap();
+    eventually("retired", || !rig.manager.shared().live.contains(&chat.id)).await;
+    assert!(rig.manager.shared().live.reserve_folder(&key));
+    rig.manager.shared().live.release_folder(&key);
+    let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+    assert!(rig.store.shutdown(Duration::from_secs(5)).await);
+}
+
 #[tokio::test]
 async fn initialization_waits_for_live_folder_ownership_and_keeps_admission_through_completion() {
     let (driver, _) = ScriptedDriver::new(vec![

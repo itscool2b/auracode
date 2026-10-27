@@ -31,6 +31,18 @@ pub async fn project_tools_review(
     Ok(state.sessions()?.project_tools_review(&chat_id).await?)
 }
 
+/// Reserves a project shell for the docked panel or the reviewed sheet. A window may hold several;
+/// the app holds at most eight. The shell itself starts only through `project_terminal_start`.
+#[tauri::command]
+#[specta::specta]
+pub fn project_terminal_reserve(
+    webview: Webview,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    current(&webview, &state)?;
+    Ok(state.terminals.reserve_project(webview.label())?.pending())
+}
+
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::too_many_arguments)]

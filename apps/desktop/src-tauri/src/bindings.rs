@@ -181,6 +181,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::project_tools::git_initialize_preview,
             crate::project_tools::git_initialize_apply,
             crate::project_tools::project_tools_review,
+            crate::project_tools::project_terminal_reserve,
             crate::project_tools::project_terminal_start,
             crate::project_tools::project_editor_open,
             crate::git_commands::managed_worktrees,

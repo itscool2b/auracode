@@ -20,6 +20,8 @@ export const projectToolsApi: ProjectToolsApi = {
   },
   terminal: (chatId, token, shell) => ({
     ...terminalTransport,
+    // Project shells have their own pool in Rust: several per window, eight in the app.
+    reserve: () => settle(commands.projectTerminalReserve()),
     start: (id, _agent, size) =>
       settle(commands.projectTerminalStart(chatId, token, shell, id, size.rows, size.cols)),
   }),

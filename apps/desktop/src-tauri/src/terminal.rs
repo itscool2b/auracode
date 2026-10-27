@@ -12,7 +12,9 @@ impl From<TerminalError> for AppError {
     fn from(error: TerminalError) -> Self {
         let code = match error {
             TerminalError::Closed => AppErrorCode::SessionNotReady,
-            TerminalError::AlreadyOpen | TerminalError::Full => AppErrorCode::TooManyStreams,
+            TerminalError::AlreadyOpen | TerminalError::Full | TerminalError::ProjectFull => {
+                AppErrorCode::TooManyStreams
+            }
             TerminalError::Start(_) | TerminalError::TimedOut => AppErrorCode::AgentUnavailable,
             _ => AppErrorCode::InvalidArgument,
         };

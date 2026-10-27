@@ -6,6 +6,7 @@ import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
 import { inTauri } from "../../lib/ipc";
+import type { TerminalPanels } from "../../lib/terminalPanel";
 import { ChangesPanel } from "./ChangesPanel";
 import { ChatAuthCard } from "./ChatAuthCard";
 import { ChatExportDialog } from "./ChatExportDialog";
@@ -20,8 +21,15 @@ import { Pickers } from "./Pickers";
 import { ProjectToolsDialog } from "./ProjectToolsDialog";
 import { QuestionCard } from "./QuestionCard";
 import { QueueList } from "./QueueList";
+import { TerminalPanel } from "./TerminalPanel";
 import { Transcript } from "./Transcript";
 import type { TurnActions } from "./TurnView";
+import { isPanelToggle } from "./terminalRuntime";
+
+const noSubscribe = () => () => {};
+/** Back to the conversation after the terminal panel hides. */
+const focusComposer = () =>
+  document.querySelector<HTMLElement>('[data-testid="composer-input"]')?.focus();
 
 /**
  * One open chat: its store joins the chat when the view mounts and detaches when it unmounts (the
@@ -37,6 +45,7 @@ export function ChatView({
   onOpenChat,
   active = true,
   onCommands,
+  terminals = null,
 }: {
   readonly chatId: string;
   readonly transport: Transport;
@@ -49,8 +58,15 @@ export function ChatView({
   readonly active?: boolean;
   /** The chat's own actions, for the command palette: the header menu's items by name. */
   readonly onCommands?: (commands: readonly PaletteCommand[]) => void;
+  /** The chat screen's docked terminals; they outlive this view, so shells survive a chat switch. */
+  readonly terminals?: TerminalPanels | null;
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport));
+  const terminalOpen = useSyncExternalStore(
+    terminals?.subscribe ?? noSubscribe,
+    () => terminals?.panel(chatId).open ?? false,
+    () => false,
+  );
   const [changesOpen, setChangesOpen] = useState(false);
   const [gitOpen, setGitOpen] = useState(false);
   const [dialog, setDialog] = useState<"tools" | "export" | "debug" | null>(null);
@@ -84,11 +100,27 @@ export function ChatView({
         setChangesOpen((open) => !open);
         return;
       }
+      // Ctrl+` (Cmd+` on macOS) shows or hides the terminal panel; with Shift it adds a terminal.
+      if (
+        terminals &&
+        isPanelToggle(event) &&
+        !event.defaultPrevented &&
+        !document.querySelector("dialog[open]")
+      ) {
+        event.preventDefault();
+        if (event.shiftKey) void terminals.newTab(chatId);
+        else {
+          const hiding = terminals.panel(chatId).open;
+          terminals.toggle(chatId);
+          if (hiding) focusComposer();
+        }
+        return;
+      }
       if (event.key === "Escape" && !event.defaultPrevented) void store.escape();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [store, active]);
+  }, [store, active, terminals, chatId]);
 
   const status = state.session?.status ?? state.chat?.status ?? "stopped";
   useEffect(() => {
@@ -178,12 +210,28 @@ export function ChatView({
             },
           ]
         : []),
+      ...(terminals
+        ? [
+            {
+              id: "chat-terminal",
+              title: terminalOpen ? "Hide terminal" : "Show terminal",
+              detail: "Shells in this chat's folder, docked under the conversation",
+              run: () => terminals.toggle(chatId),
+            },
+            {
+              id: "chat-terminal-new",
+              title: "New terminal",
+              detail: "Another shell in this chat's folder",
+              run: () => void terminals.newTab(chatId),
+            },
+          ]
+        : []),
       ...(desktop
         ? [
             {
               id: "chat-tools",
-              title: "Terminal and editor",
-              detail: "Open this project in a terminal or an editor",
+              title: "Open in editor",
+              detail: "Open this chat's folder in a detected editor",
               run: () => setDialog("tools"),
             },
           ]
@@ -249,7 +297,18 @@ export function ChatView({
           ]),
     ];
     onCommands(commands);
-  }, [onCommands, transport, changesOpen, live, resumable, store, startSession]);
+  }, [
+    onCommands,
+    transport,
+    changesOpen,
+    live,
+    resumable,
+    store,
+    startSession,
+    terminals,
+    terminalOpen,
+    chatId,
+  ]);
   useEffect(() => () => onCommands?.([]), [onCommands]);
 
   const actions = useMemo<TurnActions>(
@@ -366,6 +425,8 @@ export function ChatView({
         onHistory={transport.conversation ? () => setContinuation({ type: "history" }) : undefined}
         onGit={transport.git ? () => setGitOpen(true) : undefined}
         onTools={() => setDialog("tools")}
+        onTerminal={terminals ? () => terminals.toggle(chatId) : undefined}
+        terminalOpen={terminalOpen}
         onExport={() => setDialog("export")}
         onDebug={() => setDialog("debug")}
         changesOpen={changesOpen}
@@ -545,6 +606,9 @@ export function ChatView({
               />
             </div>
           </div>
+          {terminals ? (
+            <TerminalPanel chatId={chatId} panels={terminals} onHidden={focusComposer} />
+          ) : null}
         </div>
         {changesOpen && transport.changes ? (
           <ChangesPanel

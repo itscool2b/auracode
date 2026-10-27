@@ -51,6 +51,7 @@ import {
   statusSubscribe,
   storageStatus,
 } from "../ipc";
+import { type ProjectToolsApi, projectToolsApi } from "../projectTools";
 import { type SearchTransport, searchApi } from "../search";
 
 /**
@@ -64,6 +65,8 @@ export interface Transport {
   readonly search?: SearchTransport;
   readonly changes?: import("../changes").ChangesTransport;
   readonly composer?: ComposerTransport;
+  /** Reviewed project shells and editors for a saved chat's folder (the docked terminal panel). */
+  readonly projectTools?: ProjectToolsApi;
   agentMaintenance(agentId: string): Promise<AgentMaintenance>;
   agentAuthStatus(agentId: string): Promise<AgentAuthStatus>;
   agentUpdate(agentId: string): Promise<void>;
@@ -108,6 +111,7 @@ export const tauriTransport: Transport = {
   search: searchApi,
   changes: changesApi,
   composer: composerApi,
+  projectTools: projectToolsApi,
   agentMaintenance,
   agentAuthStatus,
   agentUpdate,
