@@ -1,6 +1,12 @@
 import { setMotionPreference } from "@auracode/ui";
-import { commands, type SetupAction } from "../bindings";
-import { settle } from "./ipc";
+import {
+  type AgentEntry,
+  type ConfigChoice,
+  commands,
+  type GeneralPreferences,
+  type SetupAction,
+} from "../bindings";
+import { agentsList, settle } from "./ipc";
 
 export const setupApi = {
   snapshot: () => settle(commands.setupSnapshot()),
@@ -8,3 +14,36 @@ export const setupApi = {
 };
 export type SetupApi = typeof setupApi;
 export { setMotionPreference };
+
+/** What Settings' General page lists: the detected agents, and the models one has reported. */
+export const generalApi = {
+  agents: (): Promise<AgentEntry[]> => agentsList(),
+  models: (agentId: string): Promise<ConfigChoice[]> => settle(commands.agentModels(agentId)),
+};
+export type GeneralApi = typeof generalApi;
+
+/**
+ * Which agent a fresh New chat selects from Settings' default: `"wait"` while detection has not
+ * said whether that agent can run, the agent once it can, and `null` when there is no default,
+ * the person already chose, or the agent cannot run here (New chat then waits for a choice).
+ */
+export function preselectAgent(
+  defaultAgent: string | null,
+  agents: readonly AgentEntry[] | null,
+  chosen: string | null,
+): string | "wait" | null {
+  if (defaultAgent === null || chosen !== null) return null;
+  const agent = agents?.find((entry) => entry.id === defaultAgent);
+  if (agents === null || agent?.availability.state === "checking") return "wait";
+  return agent?.availability.state === "ready" ? defaultAgent : null;
+}
+
+/** Rust's `GeneralPreferences::default()`: full auto, and every background service on. */
+export const DEFAULT_GENERAL: GeneralPreferences = {
+  default_agent: null,
+  default_model: null,
+  default_autonomy: "full_auto",
+  notifications: true,
+  keep_awake: true,
+  close_to_tray: true,
+};

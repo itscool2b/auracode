@@ -301,6 +301,7 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
             clones.cancel_all();
         }
         crate::native_shell::profile_changed(&app);
+        crate::general_preferences::refresh(&app);
         let _ = app.emit(PROFILE_CHANGED, &result);
         Ok(result)
     })

@@ -1197,14 +1197,18 @@ sidebar becomes the settings nav on the chat sidebar's geometry (6.2): the logo 
 most one short 14/20 fg-3 line, then a surface-2 well, radius 12, 12px below; 32px between groups.
 A row is a label 14/20 500 with an optional one-line description 12/16 fg-3 and at most one control
 at right (a 28px outline pill, a segmented control on a 36px track with its 28px choices 4px in,
-or a switch); anything more (a form, a key, a
-list, progress) opens under the row across both columns, starting at the label's column when the
-row leads with an icon or a 32px badge. Rows are at least 60px with 12/16 padding (the label 20 over its line 16, so a 28px control sits
-16px in), on hairlines
-inset 16 on both sides. A row that only opens something is the whole row as a button with a
+a 220px select at an input's 36px for a choice from a list, or a switch); anything more (a form, a
+key, a list, progress) opens under the row across both columns, starting at the label's column
+when the row leads with an icon or a 32px badge. Rows are at least 60px with 12/16 padding (the
+label 20 over its line 16, so a 28px control sits 16px in), on hairlines inset 16 on both sides. A row that only opens something is the whole row as a button with a
 chevron (X Money). Empty states are Vercel's: one 14/20 500 title and one fg-3 line centred in the
-well, and the one way forward. "Applies to new chats" in 12/16 fg-3 under a group when true. Motion is a strong segmented control (Full, Reduced, Off) that
-applies at once. Agents: a roster in a hairline grid (mark, name, version chip, binary path in mono,
+well, and the one way forward. "Applies to new chats" in 12/16 fg-3 under a group when true.
+General is three groups that save at once: New chats (Agent and Model as selects, the Model row
+only once an agent is chosen and only with a select when that agent has listed its models; and
+Autonomy as a strong segmented control, Ask, Auto-edit, Full auto, Full auto by default, with one
+line saying what the level does), While agents work (switches for Notifications, Keep awake and
+Keep running in the tray or menu bar) and App (Motion, a strong segmented control of Full, Reduced
+and Off, Welcome and setup, Data folder). Agents: a roster in a hairline grid (mark, name, version chip, binary path in mono,
 an enable switch, "Update to 0.165.0"). Permissions: default autonomy, Final confirm, tool rules
 (Allow, Ask, Deny; Deny wins) and the access log (mono 13 table: time, agent, tool, target, a white
 check or red square). Usage: per-agent rows with 32/32 tabular figures and a 1px fg-3 sparkline; a

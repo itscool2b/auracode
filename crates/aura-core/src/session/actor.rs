@@ -55,7 +55,7 @@ use super::normalize::{
 };
 use super::policy::{Decision, decide};
 use super::spawner::{ProcessBook, SessionSpawner};
-use super::{ChatState, FrameSink, SessionError, Shared, SinkGone};
+use super::{ChatState, FrameSink, SessionError, Shared, SinkGone, lock};
 use crate::chatstore::blobs::BLOB_UNSAVED;
 use crate::chatstore::rows::{ReplyHasher, turn_status};
 use crate::chatstore::{
@@ -630,9 +630,11 @@ impl ChatActor {
             );
         }
         let spec = shared.deps.detector.spec(&chat.agent_id);
+        let defaults = lock(&shared.new_chat_defaults).clone();
         let autonomy = agent_session
             .as_ref()
-            .map_or_else(Autonomy::default, |session| session.autonomy);
+            .map_or(defaults.autonomy, |session| session.autonomy);
+        let initial_model = initial_model.or_else(|| defaults.model_for(&chat.agent_id));
         let desired = initial_options(agent_session.as_ref(), initial_model);
         let store = Arc::clone(&shared.deps.store);
         let replay_check = replay_check.filter(|_| {
@@ -1337,8 +1339,10 @@ impl ChatActor {
             self.continuation = load.continuation;
             self.replay_check = load.replay_check.filter(|_| !self.continuation.as_ref().is_some_and(|value| value.force_fresh || value.native_start.fork));
             self.spec = self.shared.deps.detector.spec(&self.chat.agent_id);
-            self.autonomy = self.agent_session.as_ref().map_or_else(Autonomy::default, |session| session.autonomy);
-            self.desired = initial_options(self.agent_session.as_ref(), load.initial_model);
+            let defaults = lock(&self.shared.new_chat_defaults).clone();
+            self.autonomy = self.agent_session.as_ref().map_or(defaults.autonomy, |session| session.autonomy);
+            let initial_model = load.initial_model.or_else(|| defaults.model_for(&self.chat.agent_id));
+            self.desired = initial_options(self.agent_session.as_ref(), initial_model);
             self.autonomy_state = stopped_autonomy(self.autonomy, None);
             self.options.clear();
             self.commands.clear();
@@ -3202,6 +3206,17 @@ impl ChatActor {
                 self.schedule_flush();
             }
             DriverEvent::Options(options) => {
+                // Settings offers these as the agent's models for its default model.
+                if let Some(choices) = options.iter().find_map(|option| match &option.kind {
+                    ConfigKind::Select { choices, .. }
+                        if option.category == ConfigCategory::Model && !choices.is_empty() =>
+                    {
+                        Some(choices.clone())
+                    }
+                    _ => None,
+                }) {
+                    lock(&self.shared.reported_models).insert(self.chat.agent_id.clone(), choices);
+                }
                 self.options = options;
                 self.revision = self.revision.wrapping_add(1);
                 self.info_dirty = true;

@@ -148,6 +148,25 @@ impl fmt::Debug for ManagerDeps {
     }
 }
 
+/// Settings' defaults for new chats. Full auto unless changed; the agent's dialect still decides
+/// what a level means for it, so a vendor's restrictions are never overridden.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NewChatDefaults {
+    pub autonomy: Autonomy,
+    /// `model` applies only to chats of this agent.
+    pub agent: Option<String>,
+    pub model: Option<String>,
+}
+
+impl NewChatDefaults {
+    /// The model a never-started chat of `agent_id` starts on, unless its project names one.
+    pub(crate) fn model_for(&self, agent_id: &str) -> Option<String> {
+        self.model
+            .clone()
+            .filter(|_| self.agent.as_deref() == Some(agent_id))
+    }
+}
+
 /// How much the manager allows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ManagerLimits {
@@ -283,6 +302,10 @@ pub(crate) struct Shared {
     removals: Mutex<HashMap<String, workspace_removal::Prepared>>,
     #[cfg(feature = "account-sync")]
     preservation: Mutex<HashMap<String, preservation::Prepared>>,
+    /// Settings' defaults for chats whose agent has never started.
+    pub(crate) new_chat_defaults: Mutex<NewChatDefaults>,
+    /// The model choices each agent reported in this run, by agent id, for Settings.
+    pub(crate) reported_models: Mutex<HashMap<String, Vec<aura_protocol::session::ConfigChoice>>>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
     #[cfg(test)]
     slow_folder: Mutex<Option<(PathBuf, Duration, Arc<AtomicU64>)>>,
@@ -401,6 +424,8 @@ impl SessionManager {
                     continuations: Mutex::new(HashMap::new()),
                     project_tools: Mutex::new(HashMap::new()),
                     removals: Mutex::new(HashMap::new()),
+                    new_chat_defaults: Mutex::new(NewChatDefaults::default()),
+                    reported_models: Mutex::new(HashMap::new()),
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
                 }),
@@ -1066,6 +1091,21 @@ impl SessionManager {
                 "The protocol log could not be read safely. Check its local permissions.".into(),
             )
         })
+    }
+
+    /// What a chat whose agent has never started begins with (Settings' General page). A chat's
+    /// own saved session, and a project's default model, take precedence.
+    pub fn set_new_chat_defaults(&self, defaults: NewChatDefaults) {
+        *lock(&self.shared().new_chat_defaults) = defaults;
+    }
+
+    /// The model choices `agent_id` reported the last time one of its chats started in this run.
+    /// Empty until then: agents list their models only from a running session.
+    pub fn reported_models(&self, agent_id: &str) -> Vec<aura_protocol::session::ConfigChoice> {
+        lock(&self.shared().reported_models)
+            .get(agent_id)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Registers the webview's status channel (replacing its earlier one); returns its id.

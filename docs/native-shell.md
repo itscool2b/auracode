@@ -28,6 +28,17 @@ also hides the webview. A failed visibility operation remains retryable. Rust se
 continue independently. This enables WebView2's own hidden-content behavior rather than promising
 that every JavaScript timer is stopped. Smoke runs retain their existing rendering behavior.
 
+## Settings switches
+
+Settings' General page saves three switches with the profile's setup preferences, all on by
+default, and Rust applies them at once (`apps/desktop/src-tauri/src/general_preferences.rs`): at
+startup, after a profile switch and on every save. Notifications off skips OS notifications; the
+tray badge and counts still update. Keep awake off releases the assertion even mid-turn, and
+turning it on during work takes it. Keep running in the tray (menu bar on macOS) off makes closing
+the window take the guarded quit path described above. The same page's defaults for new chats
+(agent, model, autonomy) reach the session manager the same way; full auto remains the default and
+each agent's own restrictions still apply.
+
 ## Notifications and navigation
 
 Background attention requests, completed turns and failures produce generic notifications without

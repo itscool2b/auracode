@@ -16,8 +16,8 @@ use std::time::Duration;
 
 use aura_core::session::SessionError;
 use aura_protocol::session::{
-    AgentEntry, BlobText, ChatAttach, ChatStatusUpdate, ChatSummary, ConfigValue, EnvStatus,
-    HistoryPage, PromptAck, QueuedPrompt, SessionLists, StorageStatus,
+    AgentEntry, BlobText, ChatAttach, ChatStatusUpdate, ChatSummary, ConfigChoice, ConfigValue,
+    EnvStatus, HistoryPage, PromptAck, QueuedPrompt, SessionLists, StorageStatus,
 };
 use aura_protocol::{Autonomy, EventBatch, UiAnswer};
 use tauri::ipc::Channel;
@@ -406,6 +406,17 @@ pub async fn chat_cancel_queued(
         .sessions()?
         .cancel_queued(&chat_id, &prompt_id)
         .await?)
+}
+
+/// The models `agent_id` listed the last time one of its chats started in this run, for Settings'
+/// default model. Empty until then: agents list their models only from a running session.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_models(
+    state: State<'_, AppState>,
+    agent_id: String,
+) -> Result<Vec<ConfigChoice>, AppError> {
+    Ok(state.sessions()?.reported_models(&agent_id))
 }
 
 /// The words of a queued prompt as typed, for editing it in place.

@@ -58,6 +58,8 @@ export const MODES = [
   "keep-local",
   "git",
   "settings",
+  // General with a default agent chosen: its Model row and the agent's reported models.
+  "settings#defaults",
   "setup",
   "agents",
   "chat-options",
@@ -100,6 +102,10 @@ const OPENERS = {
     await page.getByLabel("Move to project").selectOption({ label: "Website" });
     await page.getByTestId("move-folder").selectOption("folder-site");
     await page.getByTestId("move-busy").waitFor();
+  },
+  defaults: async (page) => {
+    await page.getByLabel("Default agent").selectOption("codex");
+    await page.getByLabel("Default model").waitFor();
   },
   queued: (page) => queueTwo(page),
   "queue-edit": async (page) => {

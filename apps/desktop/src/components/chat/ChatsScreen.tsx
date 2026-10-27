@@ -1,10 +1,11 @@
 import { Logo } from "@auracode/ui/graphite";
 import { PanelLeft } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppInfo, ProjectSummary } from "../../bindings";
 import { type AppStore, NewChatDraft } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
 import { navigationTarget } from "../../lib/nativeNavigation";
+import { preselectAgent, type SetupApi, setupApi } from "../../lib/setup";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { AgentDock } from "./AgentDock";
 import { Banners } from "./Banners";
@@ -62,6 +63,7 @@ export function ChatsScreen({
   active = true,
   workspace,
   openChatRequest,
+  setup = setupApi,
 }: {
   readonly app: AppStore;
   readonly transport: Transport;
@@ -74,10 +76,30 @@ export function ChatsScreen({
   readonly active?: boolean;
   readonly workspace?: WorkspaceStore;
   readonly openChatRequest?: { id: string };
+  /** Settings' saved preferences: New chat starts with the default agent selected. */
+  readonly setup?: SetupApi;
 }) {
   const snapshot = useSyncExternalStore(app.subscribe, app.getSnapshot, app.getSnapshot);
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState(() => new NewChatDraft(transport));
+  // Settings' default agent, read again whenever the chats come back into view (from Settings).
+  const [defaultAgent, setDefaultAgent] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!active) return;
+    let live = true;
+    setup.snapshot().then(
+      (saved) => {
+        if (live) setDefaultAgent(saved.preferences.general.default_agent);
+      },
+      () => {
+        // Without saved preferences New chat simply waits for a choice.
+        if (live) setDefaultAgent(null);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [active, setup]);
   const [collapsed, setCollapsed] = useState(false);
   const organization = useSyncExternalStore(
     workspace?.subscribe ?? noSubscribe,
@@ -104,6 +126,16 @@ export function ChatsScreen({
         .map((entry) => liveById.get(entry.chat.id) ?? entry.chat)
     : snapshot.chats;
   const optionsEntry = organization.data?.chats.find((entry) => entry.chat.id === chatOptions);
+  // A fresh New chat selects the default agent once detection says it can run here; a choice the
+  // person made (the dock, a click) is never replaced.
+  const preselected = useRef(new WeakSet<NewChatDraft>());
+  useEffect(() => {
+    if (selected !== null || defaultAgent === undefined || preselected.current.has(draft)) return;
+    const agent = preselectAgent(defaultAgent, snapshot.agents, draft.getSnapshot().agentId);
+    if (agent === "wait") return;
+    preselected.current.add(draft);
+    if (agent !== null) draft.chooseAgent(agent);
+  }, [selected, draft, defaultAgent, snapshot.agents]);
   // A notification's chat opens only once the lists confirm this profile has it (docs/native-shell.md).
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
   useEffect(() => {

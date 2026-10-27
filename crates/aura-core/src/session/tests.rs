@@ -5,6 +5,7 @@ mod checkpoints;
 mod conversation;
 mod folder_context;
 mod folder_resolution;
+mod new_chat_defaults;
 mod project_tools;
 mod queue_changes;
 mod steering;
