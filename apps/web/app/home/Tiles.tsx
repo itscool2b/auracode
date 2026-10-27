@@ -180,12 +180,12 @@ function AutonomyMini({ playing }: { playing: boolean }) {
   );
 }
 
-/** A running turn with a message queued behind it. */
-function QueueMini() {
+/** A running turn with a message queued behind it; its loader runs on hover only. */
+function QueueMini({ playing }: { playing: boolean }) {
   return (
     <div className="mini mini-queue">
       <p className="mini-event">
-        <AgentMark agent="claude-code" state="thinking" size={16} />
+        <AgentMark agent="claude-code" state={playing ? "thinking" : "idle"} size={16} />
         <span className="mini-strong">Claude Code</span>
         <span className="mini-quiet">Working</span>
       </p>
@@ -291,7 +291,7 @@ const ITEMS: readonly {
     title: "Queue and steer",
     text: "Type while a turn runs. Your next message waits in a queue, or steers the turn already under way.",
     place: "pair",
-    tile: () => <QueueMini />,
+    tile: (playing) => <QueueMini playing={playing} />,
   },
   {
     id: "sessions",

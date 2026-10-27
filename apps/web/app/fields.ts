@@ -119,7 +119,7 @@ export const CLOSING_CLEARING_COMPACT: readonly FieldClearing[] = [
 export const CLOSING_FALLBACK: FieldFallback = {
   file: "images/dither-closing.png",
   width: 1120,
-  height: 480,
+  height: 476,
   clearing: CLOSING_CLEARING,
   sprites: CLOSING_CREATURES,
 };

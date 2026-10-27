@@ -823,8 +823,9 @@ hero lead.
 
 ### 5.9 Closing panel (Aside)
 
-One 1120 by 480 panel on the column (surface-1, radius 24; radius 16 and 400 tall on phones): the
-two-tone heading "Your agents." / "Your machine." centred, 40px above the primary 44 "Download".
+One 1120 by 476 panel on the column (surface-1, radius 24, 152px above and below the copy; radius
+16 and 120px on phones): the two-tone heading "Your agents." / "Your machine." centred, 40px above
+the primary 44 "Download".
 Behind it a dark, transparent field (`standard` capped by a `ceiling` of 0.55, calm behind the
 words and thinning toward the panel's top and bottom edges) with a turtle and a seal (5.4).
 
