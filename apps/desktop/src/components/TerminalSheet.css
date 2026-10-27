@@ -72,8 +72,14 @@
   padding: var(--g-space-8) var(--g-space-4) var(--g-space-8) var(--g-space-12);
   border: 1px solid var(--g-line);
   border-radius: var(--g-radius-8);
+  overflow: hidden;
   background-color: var(--g-surface-1);
   user-select: text;
+}
+
+/* xterm paints its viewport black by default; the well is surface-1 to its edge. */
+.terminal-sheet__viewport .xterm-viewport {
+  background-color: var(--g-surface-1);
 }
 
 /* Before Start the well waits small; it opens to full height once the process runs. */
