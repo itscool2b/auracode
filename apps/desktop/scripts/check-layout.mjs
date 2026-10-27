@@ -60,6 +60,8 @@ export const MODES = [
   "settings",
   "setup",
   "agents",
+  "chat-options",
+  "chat-options#busy-folder",
   // The chat shell's floating layers, opened the way a person opens them.
   "settled#picker",
   "settled#palette",
@@ -78,6 +80,11 @@ const OPENERS = {
   changes: (page) => page.getByRole("button", { name: "Changes", exact: true }).click(),
   "other-agents": (page) => page.locator('summary[aria-label$="other agents"]').click(),
   "account-menu": (page) => page.locator('summary[aria-label="Account menu"]').click(),
+  "busy-folder": async (page) => {
+    await page.getByLabel("Move to project").selectOption({ label: "Website" });
+    await page.getByTestId("move-folder").selectOption("folder-site");
+    await page.getByTestId("move-busy").waitFor();
+  },
   typed: async (page) => {
     await page.getByTestId("composer-input").click();
     await page.keyboard.type("Hi");
