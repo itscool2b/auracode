@@ -89,7 +89,7 @@ export function VendorDialog({
       />
     );
   return (
-    <Modal title="Manage integrations" onClose={onClose} className="vendor-dialog">
+    <Modal title="Manage integrations" size="md" onClose={onClose} className="vendor-dialog">
       <p className="vendor-intro">
         Install and manage personal plugins, marketplaces and Pi packages through the agent's own
         commands.

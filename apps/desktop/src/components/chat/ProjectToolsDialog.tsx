@@ -101,6 +101,7 @@ export function ProjectToolsDialog({
   return (
     <Modal
       title="Project tools"
+      size="md"
       onClose={onClose}
       className="project-tools-dialog"
       closeDisabled={busy && acting.current}

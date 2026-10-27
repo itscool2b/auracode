@@ -1,7 +1,7 @@
 /*
  * The right panel (docs/design/visual-language.md, 6.14): Changes, Files, Plan and Session behind a
- * strong segmented control. On a wide window it is its own pane 8px from the chat (shell.css sets
- * the split); narrower, it floats over the chat with the one shadow.
+ * strong segmented control. On a wide window it is its own pane 8px from the chat (the split is in
+ * shell.css, with the panes); narrower, it floats over the chat with the one shadow.
  */
 
 .changes-panel {
@@ -16,21 +16,6 @@
   min-height: 0;
   border-left: 1px solid var(--g-line);
   background-color: var(--g-surface-1);
-}
-
-@media (min-width: 1200px) {
-  .chat-main:has(.changes-panel) .changes-panel {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    border-left: 0;
-    border-radius: var(--g-radius-12);
-    box-shadow: 0 0 0 1px var(--g-line);
-  }
-
-  .chat-main:has(.changes-panel) .changes-resizer {
-    left: -8px;
-    width: 8px;
-  }
 }
 
 @media (max-width: 1199px) {
@@ -261,14 +246,6 @@
 
 .changes-file-list small[data-kind="deleted"] {
   color: var(--g-red);
-}
-
-.changes-panel :is(.chat-diff-note, .chat-diff-truncated, .chat-diff-empty) {
-  margin: 0;
-  padding: 6px 12px;
-  color: var(--g-fg-3);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
 }
 
 .changes-result {

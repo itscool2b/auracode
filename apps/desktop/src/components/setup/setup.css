@@ -904,37 +904,6 @@
 
 /* ----------------------------------------------------------------- clone dialog */
 
-.setup-clone-dialog {
-  width: min(560px, calc(100vw - 32px));
-  max-height: calc(100dvh - 48px);
-  margin: auto;
-  overflow: auto;
-}
-
-.setup-clone-dialog > header,
-.setup-clone-dialog footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.setup-clone-dialog > header {
-  margin-bottom: 8px;
-}
-
-.setup-clone-dialog > header > .g-button {
-  margin-right: -12px;
-}
-
-.setup-clone-dialog h2 {
-  margin: 0;
-  font-size: var(--g-text-title);
-  line-height: var(--g-leading-title);
-  font-weight: 500;
-  letter-spacing: var(--g-tracking-title);
-}
-
 .setup-clone-dialog p,
 .setup-clone-dialog ul {
   margin: 12px 0;
@@ -990,7 +959,6 @@
 }
 
 .setup-clone-dialog footer {
-  justify-content: flex-end;
   margin-top: 20px;
 }
 
@@ -1306,9 +1274,4 @@ html[data-motion="off"] * {
     flex-direction: column;
     gap: 16px;
   }
-}
-
-/* On a raised surface the disabled pill takes one step up, so it keeps its shape. */
-:is(.setup-clone-dialog, .setup-agent-detail) .g-button:disabled {
-  background-color: var(--g-surface-3);
 }

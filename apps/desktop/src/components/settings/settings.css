@@ -194,6 +194,15 @@
   margin-bottom: 32px;
 }
 
+.account-card + .settings-section,
+.settings-section + .account-card {
+  margin-top: 16px;
+}
+
+.account-panel > .settings-section > .g-button {
+  margin-top: 16px;
+}
+
 .settings-section > h2 {
   margin: 0 0 8px;
   color: var(--g-fg-1);
@@ -502,11 +511,11 @@
 
 /* ------------------------------------------------------------------------ notices */
 
+/* A document viewer: the large dialog at full height, the text scrolling inside it. */
 .settings-notices[open] {
   display: flex;
   flex-direction: column;
-  width: min(760px, calc(100vw - 48px));
-  height: calc(100vh - 64px);
+  height: calc(100dvh - var(--g-space-32));
 }
 
 .settings-notices-text {
@@ -595,9 +604,4 @@
   .settings-content {
     padding-inline: 16px;
   }
-}
-
-/* On a raised surface the disabled pill takes one step up, so it keeps its shape. */
-:is(.settings-group, .account-card, .local-import-panel, .config-sync-empty) .g-button:disabled {
-  background-color: var(--g-surface-3);
 }

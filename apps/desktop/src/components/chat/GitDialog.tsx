@@ -294,6 +294,7 @@ export function GitDialog({
   return (
     <Modal
       title="Git workspace"
+      size="lg"
       className="git-dialog"
       closeDisabled={busy}
       onClose={() => {

@@ -86,6 +86,7 @@ export function LocalImportPanel({
       {open && (
         <Modal
           title="Bring Local projects into this Account"
+          size="md"
           onClose={() => setOpen(false)}
           closeDisabled={busy}
         >

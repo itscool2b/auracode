@@ -84,7 +84,7 @@ try {
       assert.deepEqual(await calls(), ["list", "review:restore"]);
       await page.setViewportSize({ width: 390, height: 800 });
       assert.equal(
-        await page.locator(".chat-modal").evaluate((node) => node.scrollWidth <= node.clientWidth),
+        await page.locator(".g-dialog").evaluate((node) => node.scrollWidth <= node.clientWidth),
         true,
       );
       await page.screenshot({ path: resolve(out, `${engine}-restore-mobile.png`) });

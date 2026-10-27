@@ -1119,6 +1119,41 @@
   color: var(--g-fg-1);
 }
 
+/* Three widths: sm is the base 440, md 560, lg 760. The viewport margin is always 16px a side. */
+.g-dialog-md {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.g-dialog-lg {
+  width: min(760px, calc(100vw - 32px));
+}
+
+/* The title and the close button share the first line. */
+.g-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.g-dialog-title {
+  margin: 0;
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-title);
+}
+
+/* Soft "Cancel" first, the one primary (or the red pill) last, right-aligned. */
+.g-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .g-dialog::backdrop {
   background-color: var(--g-scrim);
 }

@@ -52,7 +52,7 @@ export function ChatActionsDialog({
         <button type="submit" className="g-button" disabled={state.busy || !title.trim()}>
           Rename chat
         </button>
-        <div className="chat-dialog-section">
+        <div className="dialog-section">
           <button
             type="button"
             className="g-button"
@@ -71,7 +71,7 @@ export function ChatActionsDialog({
           </button>
           <p>Archived chats stay saved and can be restored from the sidebar.</p>
         </div>
-        <div className="chat-dialog-section">
+        <div className="dialog-section">
           <label className="ui-field">
             Move to project
             <select

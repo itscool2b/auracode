@@ -1,6 +1,7 @@
 import { FolderOpen, GitBranch } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { DialogClose, dialogClassName } from "../chat/Modal";
 import { type CloneApi, cloneApi } from "../../lib/setup-actions/api";
 import type { CloneRecord, CloneReview } from "../../lib/setup-actions/bindings";
 
@@ -180,18 +181,18 @@ function CloneDialog({
   const content = (
     <dialog
       ref={dialog}
-      className="g-root g-dialog setup-clone-dialog"
+      className={dialogClassName("md", "setup-clone-dialog")}
       aria-labelledby={title}
       onCancel={(event) => {
         event.preventDefault();
         close();
       }}
     >
-      <header>
-        <h2 id={title}>Clone from GitHub</h2>
-        <button type="button" className="g-button g-button-ghost g-button-28" onClick={close}>
-          Close clone
-        </button>
+      <header className="g-dialog-header">
+        <h2 id={title} className="g-dialog-title">
+          Clone from GitHub
+        </h2>
+        <DialogClose label="Close clone" onClick={close} />
       </header>
       {!review && !record ? (
         <form

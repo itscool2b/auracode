@@ -40,7 +40,7 @@ export function DebugBundleDialog({
     }
   };
   return (
-    <Modal title="Copy debug bundle" onClose={onClose}>
+    <Modal title="Copy debug bundle" size="md" onClose={onClose}>
       <div className="chat-export-content">
         <p>
           Prepare a local preview of this chat’s newest saved protocol log and app version. Known

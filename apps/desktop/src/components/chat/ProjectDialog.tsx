@@ -69,7 +69,7 @@ export function ProjectDialog({
     );
   if (resolving && current) {
     return (
-      <Modal title="Folder on this device" onClose={() => setResolving(null)}>
+      <Modal title="Folder on this device" size="md" onClose={() => setResolving(null)}>
         <FolderResolver
           key={`${profileId}:${resolving}`}
           folderId={resolving}
@@ -86,7 +86,7 @@ export function ProjectDialog({
     );
   }
   return (
-    <Modal title={project ? "Project settings" : "New project"} onClose={onClose}>
+    <Modal title={project ? "Project settings" : "New project"} size="md" onClose={onClose}>
       <form
         onSubmit={(event) => {
           event.preventDefault();

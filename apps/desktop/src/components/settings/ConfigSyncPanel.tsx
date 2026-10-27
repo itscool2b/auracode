@@ -316,6 +316,7 @@ export function ConfigSyncPanel({
               ? "Recover configuration"
               : "Restore local configuration"
           }
+          size="md"
           onClose={() => setRestore(null)}
           closeDisabled={busy}
         >
@@ -439,6 +440,7 @@ function ConfigReview({
   return (
     <Modal
       title="Review configuration"
+      size="lg"
       onClose={onClose}
       closeDisabled={busy}
       className="config-sync-review"

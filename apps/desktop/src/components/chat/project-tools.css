@@ -1,20 +1,7 @@
-/* Project terminal and editor dialog on the Graphite dialog shell. */
-.project-tools-dialog {
-  width: min(600px, calc(100vw - 32px));
-  padding: 0;
-}
-
-.project-tools-dialog > header {
-  margin: 0;
-  padding: 20px 24px 16px;
-}
-
+/* The project terminal and editor dialog: the medium dialog (shell.css, `.g-dialog`). */
 .project-tools-body {
   display: grid;
   gap: 20px;
-  max-height: calc(100dvh - 160px);
-  padding: 0 24px 24px;
-  overflow: auto;
 }
 
 .project-tools-body section {

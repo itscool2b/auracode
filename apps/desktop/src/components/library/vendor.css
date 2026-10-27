@@ -1,9 +1,5 @@
 /* Managing personal plugins and packages through the agent's own command, reviewed first. */
 
-.vendor-dialog {
-  width: min(590px, calc(100vw - 32px));
-}
-
 .vendor-intro,
 .vendor-note {
   margin: 0;

@@ -439,7 +439,7 @@ export function ChangesPanel({
               {warning}
             </p>
           ))}
-          <div className="chat-dialog-actions">
+          <div className="g-dialog-actions">
             <button
               type="button"
               className="g-button"

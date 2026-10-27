@@ -539,7 +539,7 @@ function ItemDetail({
         )}
       </div>
       {plan ? (
-        <Modal title="Review copy" className="library-review" onClose={cancel}>
+        <Modal title="Review copy" size="lg" className="library-review" onClose={cancel}>
           <p className="library-review-intro">
             {item.label} <ArrowRight size={14} aria-hidden="true" />{" "}
             {sources.find((source) => source.id === plan.to_source)
@@ -671,6 +671,7 @@ function HistoryView({
       {selected ? (
         <Modal
           title="Restore original files?"
+          size="md"
           className="library-review"
           onClose={() => {
             if (!busy) setSelected(null);

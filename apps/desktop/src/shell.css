@@ -124,6 +124,20 @@
       inset -1px 0 var(--g-line),
       inset 0 -1px var(--g-line);
   }
+
+  .chat-main:has(.changes-panel) .changes-panel {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    border-left: 0;
+    border-radius: var(--g-radius-12);
+    box-shadow: 0 0 0 1px var(--g-line);
+  }
+
+  /* The panel's drag handle fills the gutter between the two panes. */
+  .chat-main:has(.changes-panel) .changes-resizer {
+    left: calc(var(--ui-pane-inset) * -1);
+    width: var(--ui-pane-inset);
+  }
 }
 
 .chat-centered {
@@ -131,6 +145,12 @@
   padding: 24px;
   color: var(--g-fg-3);
   text-align: center;
+}
+
+/* In the transcript a centred line takes more air. */
+.chat-centered.chat-marker,
+.chat-transcript .chat-centered {
+  padding: 48px 24px;
 }
 
 /* ---------- Controls (4.1, 4.2) ---------- */
@@ -145,7 +165,17 @@
   flex: none;
 }
 
-:is(.chat-modal, .g-dialog, .terminal-sheet, .chat-popover-panel, .chat-permission-dock, .chat-composer)
+:is(
+    .g-dialog,
+    .chat-popover-panel,
+    .chat-permission-dock,
+    .chat-composer,
+    .settings-group,
+    .account-card,
+    .local-import-panel,
+    .config-sync-empty,
+    .setup-agent-detail
+  )
   .g-button:disabled:not(.g-button-ghost) {
   background-color: var(--g-surface-3);
 }
@@ -164,7 +194,7 @@
  * Switches (`.g-switch`, role="switch") keep Graphite's own drawing.
  */
 .chat-app :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]),
-.chat-modal :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]) {
+.g-dialog :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]) {
   flex: none;
   box-sizing: border-box;
   width: 16px;
@@ -184,29 +214,29 @@
 
 /* Radios repeat the shared selector's weight (the :not() included) so their own rules win. */
 .chat-app input[type="radio"]:not([role="switch"]),
-.chat-modal input[type="radio"]:not([role="switch"]) {
+.g-dialog input[type="radio"]:not([role="switch"]) {
   border-radius: var(--g-radius-pill);
 }
 
 .chat-app :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):checked,
-.chat-modal :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):checked {
+.g-dialog :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):checked {
   border-color: var(--g-primary);
   background-color: var(--g-primary);
 }
 
 .chat-app input[type="checkbox"]:not([role="switch"]):checked,
-.chat-modal input[type="checkbox"]:not([role="switch"]):checked {
+.g-dialog input[type="checkbox"]:not([role="switch"]):checked {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='%23000' stroke-width='1.75'%3E%3Cpath d='m2 5.25 2 2 4-4.5'/%3E%3C/svg%3E");
 }
 
 .chat-app input[type="radio"]:not([role="switch"]):checked,
-.chat-modal input[type="radio"]:not([role="switch"]):checked {
+.g-dialog input[type="radio"]:not([role="switch"]):checked {
   box-shadow: inset 0 0 0 4px var(--g-primary);
   background-color: var(--g-on-light);
 }
 
 .chat-app :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):disabled,
-.chat-modal :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):disabled {
+.g-dialog :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
@@ -1047,82 +1077,42 @@
   background-color: var(--g-red);
 }
 
-/* ---------- Dialogs (4.6) ---------- */
+/* ---------- Dialogs (4.6, 6.19) ---------- */
 
-.chat-modal {
-  box-sizing: border-box;
-  width: min(480px, calc(100vw - 32px));
-  max-height: calc(100vh - 64px);
+/*
+ * Every dialog is Graphite's .g-dialog: sm 440 (the base), .g-dialog-md 560, .g-dialog-lg 760, a
+ * 16px viewport margin on every side, the title and close button in .g-dialog-header. Long content
+ * scrolls the whole dialog.
+ */
+.g-dialog {
+  max-height: calc(100dvh - var(--g-space-32));
   margin: auto;
-  padding: 24px;
   overflow: auto;
-  border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-16);
-  background-color: var(--g-surface-2);
-  box-shadow: var(--g-shadow);
-  color: var(--g-fg-1);
-  font-family: var(--g-sans);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 400;
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
 }
 
-.chat-modal[open] {
-  animation: chat-dialog-in var(--g-dur-panel) var(--g-ease-quint);
+/* The close glyph sits on the padding's edge; its ring still fits inside the dialog. */
+.g-dialog-header > .g-button-icon {
+  margin-right: calc(var(--g-space-6) * -1);
 }
 
-.chat-modal::backdrop {
-  background-color: var(--g-scrim);
-}
-
-@keyframes chat-dialog-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.chat-modal > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.chat-modal > header > h2 {
-  margin: 0;
-  font-size: var(--g-text-title);
-  line-height: var(--g-leading-title);
-  font-weight: 500;
-  letter-spacing: var(--g-tracking-title);
-}
-
-.chat-modal > header > .g-button-icon {
-  margin: 0 -6px 0 0;
-}
-
-.chat-modal h3 {
+.g-dialog h3 {
   margin: 0 0 8px;
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 500;
 }
 
-.chat-modal form {
+.g-dialog form {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.chat-modal footer,
-.chat-dialog-actions {
+/* Action rows; a footer's own class can still lay it out differently. */
+.g-dialog :where(footer),
+.g-dialog-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -1130,7 +1120,7 @@
   padding-top: 8px;
 }
 
-.chat-dialog-section {
+.dialog-section {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
@@ -1139,11 +1129,11 @@
   border-top: 1px solid var(--g-line);
 }
 
-.chat-dialog-section :is(p, .ui-field) {
+.dialog-section :is(p, .ui-field) {
   width: 100%;
 }
 
-.chat-dialog-section p {
+.dialog-section p {
   margin: 0;
   color: var(--g-fg-3);
 }
@@ -1206,10 +1196,6 @@
 
 /* ---------- Continuations (retry, edit, fork, switch agent) ---------- */
 
-.chat-modal.conversation-dialog {
-  width: min(640px, calc(100vw - 32px));
-}
-
 .conversation-notice {
   margin: 12px 0;
   color: var(--g-fg-2);
@@ -1221,18 +1207,6 @@
 
 .conversation-notice .g-button {
   margin-top: 12px;
-}
-
-.chat-dock > .conversation-notice {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  margin: 0;
-}
-
-.chat-dock > .conversation-notice .g-button {
-  margin-top: 0;
 }
 
 .conversation-target {
@@ -1354,10 +1328,10 @@
 
 /* ---------- Command palette (6.15) ---------- */
 
-.chat-modal.command-palette {
+/* The palette is the large dialog held near the top (y 120), its own rows in place of padding. */
+.g-dialog.command-palette {
   display: flex;
   flex-direction: column;
-  width: min(640px, calc(100vw - 32px));
   margin: min(120px, 12vh) auto auto;
   padding: 0;
   overflow: hidden;
@@ -1552,12 +1526,11 @@
 /* ---------- Reduced motion (3.8) ---------- */
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-popover-panel,
-  .chat-modal[open] {
+  .chat-popover-panel {
     animation: none;
   }
 }
 
-:root:is([data-motion="reduced"], [data-motion="off"]) :is(.chat-popover-panel, .chat-modal[open]) {
+:root:is([data-motion="reduced"], [data-motion="off"]) .chat-popover-panel {
   animation: none;
 }

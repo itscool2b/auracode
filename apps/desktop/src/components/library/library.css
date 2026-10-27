@@ -687,10 +687,6 @@
 
 /* ---------------------------------------------------------------- review dialog */
 
-.library-review {
-  width: min(900px, calc(100vw - 48px));
-}
-
 .library-review > :is(p, details, ul) {
   margin: 0 0 16px;
   color: var(--g-fg-2);

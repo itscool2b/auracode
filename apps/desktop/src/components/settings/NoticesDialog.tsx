@@ -29,7 +29,7 @@ export function NoticesDialog({
     };
   }, [load]);
   return (
-    <Modal title="Third-party notices" className="settings-notices" onClose={onClose}>
+    <Modal title="Third-party notices" size="lg" className="settings-notices" onClose={onClose}>
       {error ? (
         <p className="settings-error" role="alert">
           {error}

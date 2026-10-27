@@ -66,11 +66,6 @@
   color: var(--g-fg-3);
 }
 
-.chat-centered.chat-marker,
-.chat-transcript .chat-centered {
-  padding: 48px 24px;
-}
-
 /* ---------- Your message (6.4) ---------- */
 
 .chat-user-wrap {
@@ -660,7 +655,7 @@
   background-color: var(--g-red);
 }
 
-.chat-diff :is(.chat-diff-note, .chat-diff-truncated, .chat-diff-empty) {
+:is(.chat-diff, .changes-panel) :is(.chat-diff-note, .chat-diff-truncated, .chat-diff-empty) {
   margin: 0;
   padding: 6px 12px;
   color: var(--g-fg-3);
@@ -977,6 +972,19 @@
   max-width: calc(var(--g-app-column) + 32px);
   margin: 0 auto;
   padding: 0 16px 16px;
+}
+
+/* A continuation notice in the dock: the words and their action on one line. */
+.chat-dock > .conversation-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0;
+}
+
+.chat-dock > .conversation-notice .g-button {
+  margin-top: 0;
 }
 
 .chat-permission-dock {

@@ -47,9 +47,7 @@
   line-height: var(--g-leading-ui);
 }
 
-.account-card + .account-card,
-.account-card + .settings-section,
-.settings-section + .account-card {
+.account-card + .account-card {
   margin-top: 16px;
 }
 
@@ -127,10 +125,6 @@ form.account-card > * {
 
 .account-card form .account-actions {
   margin-top: 0;
-}
-
-.account-panel > .settings-section > .g-button {
-  margin-top: 16px;
 }
 
 /* A field: the label above in 14/20 500, help under the input in 12/16 (4.2). */
@@ -344,17 +338,13 @@ textarea.account-secret {
 
 /* ---------------------------------------------------------------- dialog contents */
 
-.account-device-dialog {
-  width: min(480px, calc(100vw - 40px));
-}
-
-:is(.account-device-dialog, .chat-modal) .account-card {
+.g-dialog .account-card {
   padding: 0;
   background-color: transparent;
 }
 
 .account-device-dialog .account-actions,
-.chat-modal .account-card > .account-actions {
+.g-dialog .account-card > .account-actions {
   justify-content: flex-end;
   margin-top: 20px;
 }

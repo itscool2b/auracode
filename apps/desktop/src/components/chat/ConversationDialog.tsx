@@ -187,6 +187,7 @@ export function ConversationDialog({
             ? "Edit prompt"
             : "Review continuation"
       }
+      size="lg"
       className="conversation-dialog"
       onClose={() => {
         if (!applying) onClose();
@@ -336,7 +337,7 @@ export function ConversationDialog({
               Clear the {queued} queued {queued === 1 ? "message" : "messages"} before continuing.
             </p>
           ) : null}
-          <div className="chat-dialog-actions">
+          <div className="g-dialog-actions">
             {live ? (
               <button
                 className="g-button"

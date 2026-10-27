@@ -2,18 +2,37 @@ import { X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 
-/** Native modal focus containment and Escape handling, shared by project and chat actions. */
+/** The dialog widths (visual-language 4.6): sm 440, md 560, lg 760. */
+export type ModalSize = "sm" | "md" | "lg";
+
+/** The classes of every dialog in the app, for the few that manage their own `<dialog>`. */
+export function dialogClassName(size: ModalSize, className = ""): string {
+  return ["g-root", "g-dialog", size === "sm" ? "" : `g-dialog-${size}`, className]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/**
+ * The one dialog shell (visual-language 4.6, 6.19): Graphite's `.g-dialog` on a native modal
+ * `<dialog>`, the title and a close button on the first line. Native focus containment and Escape
+ * handling; it portals outside the app root.
+ */
 export function Modal({
   title,
   onClose,
   children,
   className = "",
+  size = "sm",
+  closeLabel = "Close",
   closeDisabled = false,
 }: {
   readonly title: string;
   readonly onClose: () => void;
   readonly children: ReactNode;
   readonly className?: string;
+  readonly size?: ModalSize;
+  /** The close button's accessible name. */
+  readonly closeLabel?: string;
   readonly closeDisabled?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -23,11 +42,10 @@ export function Modal({
     node?.showModal();
     return () => node?.close();
   }, []);
-  // The dialog is Graphite (`.chat-modal`, shell.css) and portals outside the app root.
   return createPortal(
     <dialog
       ref={dialog}
-      className={`chat-modal ${className}`}
+      className={dialogClassName(size, className)}
       data-theme="dark"
       aria-labelledby={label}
       onKeyDown={(event) => {
@@ -38,20 +56,37 @@ export function Modal({
         if (!closeDisabled) onClose();
       }}
     >
-      <header>
-        <h2 id={label}>{title}</h2>
-        <button
-          type="button"
-          className="g-button g-button-ghost g-button-icon g-button-28"
-          aria-label="Close"
-          onClick={onClose}
-          disabled={closeDisabled}
-        >
-          <X size={18} />
-        </button>
+      <header className="g-dialog-header">
+        <h2 id={label} className="g-dialog-title">
+          {title}
+        </h2>
+        <DialogClose label={closeLabel} onClick={onClose} disabled={closeDisabled} />
       </header>
       {children}
     </dialog>,
     document.body,
+  );
+}
+
+/** The dialog's close button: a 28px ghost icon button, the same in every dialog. */
+export function DialogClose({
+  label,
+  onClick,
+  disabled = false,
+}: {
+  readonly label: string;
+  readonly onClick: () => void;
+  readonly disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className="g-button g-button-ghost g-button-icon g-button-28"
+      aria-label={label}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      <X size={16} aria-hidden="true" />
+    </button>
   );
 }

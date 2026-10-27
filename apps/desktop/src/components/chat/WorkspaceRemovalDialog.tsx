@@ -78,7 +78,11 @@ export function WorkspaceRemovalDialog({
     }
   };
   return (
-    <Modal title={target ? "Review removal" : "Removed projects and folders"} onClose={onClose}>
+    <Modal
+      title={target ? "Review removal" : "Removed projects and folders"}
+      size="md"
+      onClose={onClose}
+    >
       <div className="workspace-removal-content">
         {review ? (
           <>

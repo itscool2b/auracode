@@ -181,11 +181,6 @@ section.config-sync-empty p {
 
 /* ----------------------------------------------------------------------- review */
 
-.config-sync-review {
-  width: min(1040px, calc(100vw - 48px));
-  max-width: 1040px;
-}
-
 .config-sync-review-heading strong {
   display: block;
   color: var(--g-fg-1);

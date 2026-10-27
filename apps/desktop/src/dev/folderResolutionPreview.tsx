@@ -64,7 +64,7 @@ if (root)
       className="setup-shell g-root"
       style={{ display: "block", overflow: "auto", padding: 40 }}
     >
-      <Modal title="Folder on this device" onClose={() => {}}>
+      <Modal title="Folder on this device" size="md" onClose={() => {}}>
         <FolderResolver
           folderId="folder"
           api={api}
