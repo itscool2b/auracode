@@ -495,39 +495,6 @@
   line-height: var(--g-leading-meta);
 }
 
-.setup-agent-detail .ui-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  padding: 0 12px;
-  border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-pill);
-  background-color: transparent;
-  color: var(--g-fg-1);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background-color var(--g-dur-settle) var(--g-ease-settle),
-    border-color var(--g-dur-settle) var(--g-ease-settle);
-}
-
-@media (hover: hover) {
-  .setup-agent-detail .ui-button:hover:not(:disabled) {
-    border-color: var(--g-fg-4);
-    background-color: var(--g-surface-2);
-  }
-}
-
-.setup-agent-detail .ui-button:disabled {
-  border-color: transparent;
-  background-color: var(--g-surface-2);
-  color: var(--g-fg-4);
-  cursor: not-allowed;
-}
-
 /* ------------------------------------------------------------------- motion choice */
 
 .setup-motion {

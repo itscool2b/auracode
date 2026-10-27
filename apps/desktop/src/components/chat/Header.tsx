@@ -100,7 +100,7 @@ export function Header({
       {onChanges ? (
         <button
           type="button"
-          className="chat-icon-button"
+          className="g-button g-button-ghost g-button-icon g-button-28"
           aria-label="Changes"
           title="Changes"
           aria-expanded={changesOpen}
@@ -115,7 +115,7 @@ export function Header({
       {onGit ? (
         <button
           type="button"
-          className="chat-icon-button"
+          className="g-button g-button-ghost g-button-icon g-button-28"
           aria-label="Git workspace"
           title="Git workspace"
           onClick={(event) => {
@@ -129,7 +129,7 @@ export function Header({
       {chat && inTauri() ? (
         <button
           type="button"
-          className="chat-icon-button"
+          className="g-button g-button-ghost g-button-icon g-button-28"
           aria-label="Project tools"
           title="Terminal and editor"
           onClick={(event) => {
@@ -161,26 +161,26 @@ export function Header({
         {chat && inTauri() ? (
           <FolderContext key={chat.id} chatId={chat.id} status={status} />
         ) : null}
-        <div className="ui-row">
+        <div className="chat-header-actions">
           {chat && inTauri() ? (
             <>
-              <button type="button" className="ui-button" onClick={() => setExportOpen(true)}>
+              <button type="button" className="g-menu-item" onClick={() => setExportOpen(true)}>
                 Export chat
               </button>
-              <button type="button" className="ui-button" onClick={() => setDebugOpen(true)}>
+              <button type="button" className="g-menu-item" onClick={() => setDebugOpen(true)}>
                 Copy debug bundle
               </button>
             </>
           ) : null}
           {onHistory ? (
-            <button type="button" className="ui-button" onClick={onHistory}>
+            <button type="button" className="g-menu-item" onClick={onHistory}>
               Conversation history
             </button>
           ) : null}
           {live ? (
             <button
               type="button"
-              className="ui-button"
+              className="g-menu-item"
               data-testid="chat-stop-session"
               onClick={onStop}
               disabled={status === "stopping"}
@@ -191,8 +191,7 @@ export function Header({
             <>
               <button
                 type="button"
-                className="ui-button"
-                data-kind="primary"
+                className="g-menu-item"
                 data-testid="chat-start"
                 data-test-resume={String(resumable)}
                 onClick={() => onStart(false)}
@@ -202,7 +201,7 @@ export function Header({
               {resumable ? (
                 <button
                   type="button"
-                  className="ui-button"
+                  className="g-menu-item"
                   data-testid="chat-start-fresh"
                   onClick={() => onStart(true)}
                 >
@@ -213,8 +212,7 @@ export function Header({
           )}
           <button
             type="button"
-            className="ui-button"
-            data-kind="quiet"
+            className="g-menu-item"
             data-testid="chat-show-log"
             onClick={onShowLog}
           >

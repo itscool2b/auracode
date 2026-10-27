@@ -82,7 +82,7 @@
   border-bottom: 1px solid var(--g-line);
 }
 
-.changes-panel-header > .chat-icon-button:first-of-type {
+.changes-panel-header > .g-button-icon:first-of-type {
   margin-left: auto;
 }
 
@@ -297,11 +297,6 @@
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-}
-
-.changes-panel-footer .ui-button {
-  height: 28px;
-  padding: 0 12px;
 }
 
 /* The revert confirmation, inside the dialog shell. */
@@ -546,11 +541,6 @@
   text-align: right;
   user-select: none;
   -webkit-user-select: none;
-}
-
-.context-file-preview > .ui-button {
-  height: 28px;
-  padding: 0 12px;
 }
 
 .context-plan-count {

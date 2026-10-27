@@ -63,7 +63,7 @@ export function Banners({
       {envText !== null ? (
         <li className="chat-banner" data-level="warning">
           <span>{envText}</span>
-          <button type="button" className="ui-button" onClick={onRetryEnv}>
+          <button type="button" className="g-button g-button-28" onClick={onRetryEnv}>
             Retry
           </button>
         </li>
@@ -76,8 +76,7 @@ export function Banners({
           <span>{notice}</span>
           <button
             type="button"
-            className="ui-button"
-            data-kind="quiet"
+            className="g-button g-button-ghost g-button-28"
             onClick={() => setDismissed((current) => new Set([...current, notice]))}
           >
             Dismiss
@@ -135,8 +134,7 @@ export function RecoveryBannerView({
       </span>
       <button
         type="button"
-        className="ui-button"
-        data-kind="quiet"
+        className="g-button g-button-ghost g-button-28"
         disabled={state.status === "dismissing"}
         onClick={onDismiss}
       >

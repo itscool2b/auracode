@@ -235,7 +235,7 @@ function Files({ state, api }: { readonly state: ChatState; readonly api?: Compo
           {api ? (
             <button
               type="button"
-              className="ui-button"
+              className="g-button g-button-28"
               onClick={() => {
                 const draft = composerDraft(state.chatId, api);
                 const saved = draft.getSnapshot();

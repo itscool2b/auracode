@@ -135,85 +135,19 @@
 
 /* ---------- Controls (4.1, 4.2) ---------- */
 
-.ui-button {
-  display: inline-flex;
+/*
+ * Buttons are Graphite's .g-button everywhere (soft, primary, outline, ghost, danger; 24, 28, 32,
+ * 36; .g-button-icon for icons). Two app rules only: icons never shrink, and on a raised surface
+ * (surface-2: dialogs, popovers, the dock, the composer) a disabled pill steps up one surface so it
+ * keeps its shape.
+ */
+.g-button > svg {
   flex: none;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  box-sizing: border-box;
-  height: 32px;
-  padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: var(--g-radius-pill);
+}
+
+:is(.chat-modal, .g-dialog, .terminal-sheet, .chat-popover-panel, .chat-permission-dock, .chat-composer)
+  .g-button:disabled:not(.g-button-ghost) {
   background-color: var(--g-surface-3);
-  color: var(--g-fg-1);
-  font-family: var(--g-sans);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
-  transition:
-    background-color var(--g-dur-settle) var(--g-ease-settle),
-    border-color var(--g-dur-settle) var(--g-ease-settle),
-    color var(--g-dur-settle) var(--g-ease-settle);
-}
-
-.ui-button:active:not(:disabled) {
-  background-color: var(--g-surface-4);
-  transition-duration: 0ms;
-}
-
-.ui-button:is([data-kind="primary"], .primary, .ui-button-primary) {
-  background-color: var(--g-primary);
-  color: var(--g-on-light);
-}
-
-.ui-button:is([data-kind="primary"], .primary, .ui-button-primary):active:not(:disabled) {
-  background-color: var(--g-primary-active);
-}
-
-.ui-button[data-kind="danger"] {
-  background-color: var(--g-red);
-  color: var(--g-on-light);
-}
-
-.ui-button[data-kind="quiet"] {
-  background-color: transparent;
-  color: var(--g-fg-2);
-}
-
-@media (hover: hover) {
-  .ui-button:hover:not(:disabled) {
-    background-color: var(--g-surface-4);
-  }
-
-  .ui-button:is([data-kind="primary"], .primary, .ui-button-primary):hover:not(:disabled) {
-    background-color: var(--g-primary-hover);
-  }
-
-  .ui-button[data-kind="danger"]:hover:not(:disabled) {
-    background-color: var(--g-red-hover);
-  }
-
-  .ui-button[data-kind="quiet"]:hover:not(:disabled) {
-    background-color: var(--g-surface-3);
-    color: var(--g-fg-1);
-  }
-}
-
-/* Disabled keeps its pill as a hairline, so it still reads as a button on a raised surface. */
-.ui-button:disabled {
-  border-color: var(--g-line);
-  background-color: var(--g-surface-2);
-  color: var(--g-fg-4);
-  cursor: not-allowed;
-}
-
-.ui-button svg {
-  flex: none;
 }
 
 .ui-input,
@@ -384,42 +318,6 @@
   scrollbar-color: var(--g-line-strong) transparent;
 }
 
-.chat-icon-button {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--g-radius-6);
-  background-color: transparent;
-  color: var(--g-fg-3);
-  cursor: pointer;
-  transition:
-    background-color var(--g-dur-micro) var(--g-ease),
-    color var(--g-dur-micro) var(--g-ease);
-}
-
-@media (hover: hover) {
-  .chat-icon-button:hover:not(:disabled) {
-    background-color: var(--g-surface-3);
-    color: var(--g-fg-1);
-  }
-}
-
-.chat-icon-button:active:not(:disabled) {
-  background-color: var(--g-surface-3);
-  color: var(--g-fg-1);
-}
-
-.chat-icon-button:disabled {
-  color: var(--g-fg-4);
-  cursor: not-allowed;
-}
-
 /* ---------- Sidebar (6.2) ---------- */
 
 .chat-sidebar {
@@ -547,9 +445,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.chat-section-label > .chat-icon-button {
-  width: 24px;
-  height: 24px;
+.chat-section-label > .g-button-icon {
+  --g-button-h: 24px;
   margin-left: auto;
   margin-right: -4px;
 }
@@ -765,17 +662,22 @@
 }
 
 .chat-row-menu {
+  --g-button-h: 24px;
   position: absolute;
   top: 4px;
   right: 4px;
-  width: 24px;
-  height: 24px;
   background-color: var(--g-bg);
   opacity: 0;
   transition:
     opacity var(--g-dur-micro) var(--g-ease),
     background-color var(--g-dur-micro) var(--g-ease),
     color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .chat-row-menu:hover:not(:disabled) {
+    background-color: var(--g-surface-3);
+  }
 }
 
 .chat-project-heading:is(:hover, :focus-within) > .chat-row-menu,
@@ -949,16 +851,17 @@
   font-weight: 500;
 }
 
-.chat-header .chat-icon-button[aria-expanded="true"] {
+.chat-header .g-button-icon[aria-expanded="true"] {
   background-color: var(--g-surface-3);
   color: var(--g-fg-1);
 }
 
+/* The menu trigger matches the header's ghost icon buttons beside it. */
 .chat-header-menu > summary {
   justify-content: center;
   width: 28px;
   padding: 0;
-  color: var(--g-fg-3);
+  color: var(--g-fg-2);
 }
 
 .chat-header-menu > .chat-popover-panel {
@@ -971,8 +874,9 @@
   gap: 0;
 }
 
-.chat-header-menu .chat-popover-panel > :not(.ui-row) {
-  padding: 8px 10px;
+/* The session facts line up with the menu items' text (8px in from the panel's padding). */
+.chat-header-menu .chat-popover-panel > :not(.chat-header-actions) {
+  padding: 8px;
 }
 
 .chat-session-info {
@@ -1004,43 +908,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The header menu's actions read as menu items (4.6): 32px rows, highlight on hover. */
-.chat-header-menu .chat-popover-panel > .ui-row {
+/* The header menu's actions are menu items (4.6) under a hairline. */
+.chat-header-actions {
+  display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 0;
   margin-top: 4px;
   padding-top: 4px;
   border-top: 1px solid var(--g-line);
-}
-
-.chat-header-menu .chat-popover-panel > .ui-row > .ui-button {
-  justify-content: flex-start;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: var(--g-radius-8);
-  background-color: transparent;
-  color: var(--g-fg-1);
-  font-weight: 400;
-}
-
-.chat-header-menu .chat-popover-panel > .ui-row > .ui-button[data-kind="primary"] {
-  font-weight: 500;
-}
-
-.chat-header-menu .chat-popover-panel > .ui-row > .ui-button[data-kind="quiet"] {
-  color: var(--g-fg-2);
-}
-
-@media (hover: hover) {
-  .chat-header-menu .chat-popover-panel > .ui-row > .ui-button:hover:not(:disabled) {
-    background-color: var(--g-surface-4);
-    color: var(--g-fg-1);
-  }
-}
-
-.chat-header-menu .chat-popover-panel > .ui-row > .ui-button:disabled {
-  color: var(--g-fg-4);
 }
 
 .chat-folder-context {
@@ -1223,11 +1097,6 @@
   background-color: var(--g-red);
 }
 
-.chat-banner > .ui-button {
-  height: 28px;
-  padding: 0 12px;
-}
-
 /* ---------- Dialogs (4.6) ---------- */
 
 .chat-modal {
@@ -1285,7 +1154,7 @@
   letter-spacing: var(--g-tracking-title);
 }
 
-.chat-modal > header > .chat-icon-button {
+.chat-modal > header > .g-button-icon {
   margin: 0 -6px 0 0;
 }
 
@@ -1400,7 +1269,7 @@
   margin: 0;
 }
 
-.conversation-notice .ui-button {
+.conversation-notice .g-button {
   margin-top: 12px;
 }
 
@@ -1412,7 +1281,7 @@
   margin: 0;
 }
 
-.chat-dock > .conversation-notice .ui-button {
+.chat-dock > .conversation-notice .g-button {
   margin-top: 0;
 }
 
@@ -1517,11 +1386,6 @@
   margin-top: 10px;
 }
 
-.conversation-turn-actions .ui-button {
-  height: 28px;
-  padding: 0 12px;
-}
-
 .conversation-edit {
   display: grid;
   gap: 12px;
@@ -1565,7 +1429,7 @@
   white-space: nowrap;
 }
 
-.command-palette > header > .chat-icon-button {
+.command-palette > header > .g-button-icon {
   margin: 0;
 }
 

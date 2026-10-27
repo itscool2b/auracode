@@ -102,7 +102,7 @@
   color: var(--g-fg-2);
 }
 
-.git-notice .ui-button {
+.git-notice .g-button {
   flex-shrink: 0;
 }
 

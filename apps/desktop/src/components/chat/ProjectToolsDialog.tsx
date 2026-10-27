@@ -127,7 +127,7 @@ export function ProjectToolsDialog({
                   <button
                     key={shell.id}
                     type="button"
-                    className="ui-button"
+                    className="g-button"
                     disabled={busy}
                     onClick={() => {
                       setError(null);
@@ -156,7 +156,7 @@ export function ProjectToolsDialog({
                   <button
                     key={editor}
                     type="button"
-                    className="ui-button"
+                    className="g-button"
                     disabled={busy}
                     onClick={() => {
                       void openEditor(editor);
@@ -181,7 +181,7 @@ export function ProjectToolsDialog({
         {!busy && !review ? (
           <button
             type="button"
-            className="ui-button"
+            className="g-button"
             onClick={() => {
               setError(null);
               setNotice(null);

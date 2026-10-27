@@ -86,8 +86,7 @@ export function PermissionCard({
             <button
               key={option.option_id}
               type="button"
-              className="ui-button"
-              data-kind={option.kind === "allow_once" ? "primary" : undefined}
+              className={option.kind === "allow_once" ? "g-button g-button-primary" : "g-button"}
               data-testid="permission-option"
               data-test-option-id={option.option_id}
               data-test-option-kind={option.kind}
@@ -100,7 +99,7 @@ export function PermissionCard({
           {ask.options.length === 0 ? (
             <button
               type="button"
-              className="ui-button"
+              className="g-button"
               data-testid="permission-dismiss"
               disabled={busy}
               onClick={() => onRespond(null)}

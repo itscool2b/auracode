@@ -83,8 +83,7 @@ export function Transcript({
           <div className="ui-row">
             <button
               type="button"
-              className="ui-button"
-              data-kind="quiet"
+              className="g-button g-button-ghost"
               data-testid="load-earlier"
               disabled={state.loadingEarlier}
               onClick={() => {

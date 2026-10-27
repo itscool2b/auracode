@@ -86,7 +86,7 @@ export function ProfileStatus({
       </span>
       <button
         type="button"
-        className="chat-icon-button"
+        className="g-button g-button-ghost g-button-icon g-button-28"
         aria-label={onSettings ? "Open settings" : "Open diagnostics"}
         title={onSettings ? "Settings" : "Diagnostics"}
         onClick={(event) => {

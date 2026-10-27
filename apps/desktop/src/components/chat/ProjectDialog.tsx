@@ -79,7 +79,7 @@ export function ProjectDialog({
             await onLocated?.();
           }}
         />
-        <button className="ui-button" type="button" onClick={() => setResolving(null)}>
+        <button className="g-button" type="button" onClick={() => setResolving(null)}>
           Back to project
         </button>
       </Modal>
@@ -146,13 +146,13 @@ export function ProjectDialog({
               </span>
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 onClick={() => setRemoval({ target: { kind: "folder", id: item.id } })}
               >
                 Remove…
               </button>
               {inTauri() ? (
-                <button type="button" className="ui-button" onClick={() => setResolving(item.id)}>
+                <button type="button" className="g-button" onClick={() => setResolving(item.id)}>
                   {item.path && !item.unavailable_reason
                     ? "Change location"
                     : "Find on this device"}
@@ -163,7 +163,7 @@ export function ProjectDialog({
           {folder ? <p className="ui-mono">{folder}</p> : null}
           <button
             type="button"
-            className="ui-button"
+            className="g-button"
             disabled={picking || state.busy}
             onClick={() => void chooseFolder()}
           >
@@ -219,25 +219,24 @@ export function ProjectDialog({
         <section aria-label="Workspace removal">
           {project ? (
             <button
-              className="ui-button"
+              className="g-button"
               type="button"
               onClick={() => setRemoval({ target: { kind: "project", id: project.id } })}
             >
               Remove project…
             </button>
           ) : null}
-          <button className="ui-button" type="button" onClick={() => setRemoval({ target: null })}>
+          <button className="g-button" type="button" onClick={() => setRemoval({ target: null })}>
             Removed projects and folders
           </button>
         </section>
         <footer>
-          <button type="button" className="ui-button" onClick={onClose}>
+          <button type="button" className="g-button" onClick={onClose}>
             Cancel
           </button>
           <button
             type="submit"
-            className="ui-button"
-            data-kind="primary"
+            className="g-button g-button-primary"
             disabled={state.busy || picking || !name.trim() || (!project && !folder)}
           >
             {state.busy ? "Saving…" : project ? "Save project" : "Create project"}

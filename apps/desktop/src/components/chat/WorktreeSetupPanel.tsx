@@ -94,7 +94,7 @@ export function WorktreeSetupPanel({
     });
   return (
     <section className="git-section" aria-labelledby="worktree-setup-title">
-      <button className="ui-button" type="button" disabled={busy} onClick={onBack}>
+      <button className="g-button" type="button" disabled={busy} onClick={onBack}>
         Back to worktrees
       </button>
       <h3 id="worktree-setup-title">Setup for {branch}</h3>
@@ -165,11 +165,11 @@ export function WorktreeSetupPanel({
             path as an argument.
           </p>
           <div className="git-actions">
-            <button className="ui-button" type="submit" disabled={busy || !dirty}>
+            <button className="g-button" type="submit" disabled={busy || !dirty}>
               Save setup
             </button>
             <button
-              className="ui-button"
+              className="g-button"
               type="button"
               disabled={busy || dirty || (!input.files.length && !input.command)}
               onClick={() => void prepare(false)}
@@ -177,7 +177,7 @@ export function WorktreeSetupPanel({
               Review setup
             </button>
             <button
-              className="ui-button"
+              className="g-button"
               type="button"
               disabled={busy || dirty || !input.command}
               onClick={() => void prepare(true)}
@@ -225,7 +225,7 @@ export function WorktreeSetupPanel({
           ))}
           <div className="git-actions">
             <button
-              className="ui-button"
+              className="g-button"
               type="button"
               disabled={busy}
               onClick={() => {
@@ -236,7 +236,7 @@ export function WorktreeSetupPanel({
               Back to recipe
             </button>
             <button
-              className="ui-button ui-button-primary"
+              className="g-button g-button-primary"
               type="button"
               disabled={busy || result !== null}
               onClick={() =>
@@ -276,7 +276,7 @@ export function WorktreeSetupPanel({
           ) : null}
           {result.warning ? <p className="git-warning">{result.warning}</p> : null}
           {transport ? (
-            <button className="ui-button" type="button" onClick={() => setTerminalOpen(true)}>
+            <button className="g-button" type="button" onClick={() => setTerminalOpen(true)}>
               Open setup terminal
             </button>
           ) : null}

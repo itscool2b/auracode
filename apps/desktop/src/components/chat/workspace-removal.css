@@ -31,6 +31,6 @@
   cursor: pointer;
 }
 
-.workspace-removal-content > .ui-button {
+.workspace-removal-content > .g-button {
   align-self: flex-start;
 }

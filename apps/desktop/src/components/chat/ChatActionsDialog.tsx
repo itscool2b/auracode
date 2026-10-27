@@ -49,13 +49,13 @@ export function ChatActionsDialog({
             onChange={(event) => setTitle(event.currentTarget.value)}
           />
         </label>
-        <button type="submit" className="ui-button" disabled={state.busy || !title.trim()}>
+        <button type="submit" className="g-button" disabled={state.busy || !title.trim()}>
           Rename chat
         </button>
         <div className="chat-dialog-section">
           <button
             type="button"
-            className="ui-button"
+            className="g-button"
             disabled={state.busy}
             onClick={() => save(() => store.api.pin(chat.id, !entry.pinned))}
           >
@@ -63,7 +63,7 @@ export function ChatActionsDialog({
           </button>
           <button
             type="button"
-            className="ui-button"
+            className="g-button"
             disabled={state.busy}
             onClick={() => save(() => store.api.archive(chat.id, !entry.archived))}
           >
@@ -92,7 +92,7 @@ export function ChatActionsDialog({
               <p>Stop the session before moving this chat.</p>
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 disabled={state.busy || chat.status === "stopping"}
                 onClick={() => void store.perform(() => transport.stop(chat.id))}
               >
@@ -102,7 +102,7 @@ export function ChatActionsDialog({
           ) : null}
           <button
             type="button"
-            className="ui-button"
+            className="g-button"
             disabled={state.busy || live || projectId === entry.project_id}
             onClick={() =>
               save(() =>

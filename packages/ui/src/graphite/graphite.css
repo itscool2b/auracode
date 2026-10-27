@@ -261,6 +261,15 @@
   }
 }
 
+/* Compact: inline actions in dense rows (receipts, section labels, row menus). */
+.g-button-24 {
+  --g-button-h: 24px;
+  padding: 0 8px;
+  gap: 4px;
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
 .g-button-28 {
   --g-button-h: 28px;
   padding: 0 12px;
@@ -280,9 +289,11 @@
   line-height: 20px;
 }
 
+/* A square icon button, radius 6 (3.4); set its height with the size classes. */
 .g-button-icon {
   width: var(--g-button-h);
   padding: 0;
+  border-radius: var(--g-radius-6);
 }
 
 .g-button:where(:disabled, [aria-disabled="true"]) {
@@ -290,6 +301,11 @@
   background-color: var(--g-surface-2);
   color: var(--g-fg-4);
   cursor: not-allowed;
+}
+
+/* A ghost has no fill to grey out, so disabled only dims its label. */
+.g-button-ghost:where(:disabled, [aria-disabled="true"]) {
+  background-color: transparent;
 }
 
 /* ------------------------------------------------------------------ inputs (4.2) */

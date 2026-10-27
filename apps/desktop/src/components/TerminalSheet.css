@@ -136,8 +136,3 @@
   margin-right: auto;
   color: var(--g-fg-3);
 }
-
-/* On the raised sheet the disabled pill takes one step up, so it keeps its shape. */
-.terminal-sheet .g-button:disabled {
-  background-color: var(--g-surface-3);
-}

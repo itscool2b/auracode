@@ -35,8 +35,7 @@ export function QueueList({
               {row.held ? <span className="chat-held">held</span> : null}
               <button
                 type="button"
-                className="ui-button"
-                data-kind="quiet"
+                className="g-button g-button-ghost g-button-28"
                 data-testid="queued-remove"
                 onClick={() => onRemove(row.prompt_id)}
               >
@@ -50,7 +49,7 @@ export function QueueList({
         <div className="ui-row">
           <button
             type="button"
-            className="ui-button"
+            className="g-button g-button-28"
             data-testid="send-queued"
             onClick={onSendQueued}
           >

@@ -519,12 +519,6 @@
   flex: 0 0 auto;
 }
 
-.chat-command > .ui-row .ui-button,
-.chat-tool-well > .ui-row .ui-button {
-  height: 28px;
-  padding: 0 12px;
-}
-
 /* ---------- Terminal output (4.10) ---------- */
 
 .chat-terminal-body {
@@ -861,8 +855,10 @@
   overflow-wrap: anywhere;
 }
 
-.chat-block :is(.ui-row) .ui-button {
-  height: 28px;
+/* Cards in the transcript take 28px actions (6.8); in the dock they keep the default 32 (6.6). */
+.chat-block .ui-row .g-button {
+  --g-button-h: 28px;
+  gap: 4px;
   padding: 0 12px;
 }
 
@@ -1055,8 +1051,9 @@
   background-color: var(--g-surface-1);
 }
 
-.chat-permission-dock .chat-block .ui-row .ui-button {
-  height: 32px;
+.chat-permission-dock .chat-block .ui-row .g-button {
+  --g-button-h: 32px;
+  gap: 6px;
   padding: 0 14px;
 }
 
@@ -1142,13 +1139,6 @@
   white-space: nowrap;
 }
 
-.chat-queue .ui-button,
-.chat-queue-list > .ui-row .ui-button,
-.chat-still .ui-button {
-  height: 28px;
-  padding: 0 12px;
-}
-
 .chat-queue-list > .ui-row {
   padding: 4px 0;
   font-size: var(--g-text-meta);
@@ -1216,13 +1206,6 @@
   content: "\00b7";
   margin: 0 8px;
   color: var(--g-fg-4);
-}
-
-.chat-footer > .ui-button {
-  height: 24px;
-  padding: 0 8px;
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
 }
 
 .chat-plan {
@@ -1553,54 +1536,25 @@
   margin-left: auto;
 }
 
-.chat-composer-actions > .ui-button {
-  height: 28px;
-  padding: 0 12px;
-}
-
-/* Send: a grey disc while empty, the one white object once there is something to send. */
+/*
+ * Send and Stop: the primary icon button as a disc. Disabled it stays a grey disc one step above the
+ * composer, which is itself surface-2.
+ */
 .chat-send {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
   border-radius: var(--g-radius-pill);
-  background-color: var(--g-primary);
-  color: var(--g-on-light);
-  transition:
-    background-color var(--g-dur-settle) var(--g-ease-settle),
-    color var(--g-dur-settle) var(--g-ease-settle);
-}
-
-@media (hover: hover) {
-  .chat-send:hover:not(:disabled) {
-    background-color: var(--g-primary-hover);
-  }
-}
-
-.chat-send:active:not(:disabled) {
-  background-color: var(--g-primary-active);
-  transition-duration: 0ms;
 }
 
 .chat-send:disabled {
   background-color: var(--g-surface-3);
-  color: var(--g-fg-4);
-  cursor: not-allowed;
 }
 
 .chat-composer > .ui-error {
   margin: 0 16px 10px;
 }
 
-.chat-composer > .ui-button {
+.chat-composer-retry {
   align-self: flex-start;
-  height: 28px;
   margin: 0 8px 8px;
-  padding: 0 12px;
 }
 
 .composer-context {

@@ -82,7 +82,7 @@ function Fixture() {
         style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 32 }}
       >
         {["claude", "unsupported", "failed", "delayed"].map((id) => (
-          <button key={id} type="button" className="ui-button" onClick={() => setAgentId(id)}>
+          <button key={id} type="button" className="g-button" onClick={() => setAgentId(id)}>
             {id}
           </button>
         ))}

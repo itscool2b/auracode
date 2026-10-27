@@ -36,7 +36,7 @@ export function FolderContext({
     <div className="chat-folder-context">
       <button
         type="button"
-        className="ui-button"
+        className="g-button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >

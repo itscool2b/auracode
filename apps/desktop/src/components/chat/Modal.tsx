@@ -42,7 +42,7 @@ export function Modal({
         <h2 id={label}>{title}</h2>
         <button
           type="button"
-          className="chat-icon-button"
+          className="g-button g-button-ghost g-button-icon g-button-28"
           aria-label="Close"
           onClick={onClose}
           disabled={closeDisabled}

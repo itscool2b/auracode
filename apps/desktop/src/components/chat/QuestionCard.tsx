@@ -92,8 +92,7 @@ function Answers({
   const dismiss = (
     <button
       type="button"
-      className="ui-button"
-      data-kind="quiet"
+      className="g-button g-button-ghost"
       data-testid="question-dismiss"
       disabled={busy}
       onClick={() => onRespond(null)}
@@ -109,8 +108,7 @@ function Answers({
         <div className="ui-row">
           <button
             type="button"
-            className="ui-button"
-            data-kind="primary"
+            className="g-button g-button-primary"
             data-testid="question-yes"
             disabled={busy}
             onClick={() => onRespond({ type: "confirm", yes: true })}
@@ -119,7 +117,7 @@ function Answers({
           </button>
           <button
             type="button"
-            className="ui-button"
+            className="g-button"
             data-testid="question-no"
             disabled={busy}
             onClick={() => onRespond({ type: "confirm", yes: false })}
@@ -137,7 +135,7 @@ function Answers({
               // biome-ignore lint/suspicious/noArrayIndexKey: the answer is the choice's index.
               key={index}
               type="button"
-              className="ui-button"
+              className="g-button"
               data-testid="question-choice"
               data-test-index={index}
               disabled={busy}
@@ -172,8 +170,7 @@ function Answers({
           />
           <button
             type="submit"
-            className="ui-button"
-            data-kind="primary"
+            className="g-button g-button-primary"
             data-testid="question-submit"
             disabled={busy}
           >

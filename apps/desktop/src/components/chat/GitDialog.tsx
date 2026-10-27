@@ -309,7 +309,7 @@ export function GitDialog({
             </p>
             <button
               type="button"
-              className="ui-button"
+              className="g-button"
               disabled={busy}
               onClick={() => void run(onStop)}
             >
@@ -482,7 +482,7 @@ export function GitDialog({
             <div className="git-actions">
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 disabled={busy}
                 onClick={() => setPreview(null)}
               >
@@ -490,8 +490,7 @@ export function GitDialog({
               </button>
               <button
                 type="button"
-                className="ui-button"
-                data-kind="primary"
+                className="g-button g-button-primary"
                 disabled={blocked || conflict}
                 onClick={() => void apply()}
               >
@@ -536,7 +535,7 @@ export function GitDialog({
                 </label>
                 <button
                   type="button"
-                  className="ui-button"
+                  className="g-button"
                   disabled={blocked || !initialBranch.trim()}
                   onClick={() => void reviewInitialize()}
                 >
@@ -577,7 +576,7 @@ export function GitDialog({
                 </label>
                 <button
                   type="button"
-                  className="ui-button"
+                  className="g-button"
                   disabled={blocked || !slug.trim() || workspace.blockers.length > 0}
                   onClick={() => void reviewIsolation()}
                 >
@@ -633,14 +632,14 @@ export function GitDialog({
                 </label>
                 <div className="git-actions">
                   <button
-                    className="ui-button"
+                    className="g-button"
                     type="button"
                     disabled={busy}
                     onClick={() => setPrDraft(null)}
                   >
                     Cancel preparation
                   </button>
-                  <button className="ui-button" type="submit" disabled={blocked || !prTitle.trim()}>
+                  <button className="g-button" type="submit" disabled={blocked || !prTitle.trim()}>
                     Review pull request
                   </button>
                 </div>
@@ -670,7 +669,7 @@ export function GitDialog({
                         <div className="git-actions">
                           <button
                             type="button"
-                            className="ui-button"
+                            className="g-button"
                             disabled={blocked}
                             onClick={() => void reviewRecovery(tree, "restore")}
                           >
@@ -689,7 +688,7 @@ export function GitDialog({
                         <div className="git-actions">
                           <button
                             type="button"
-                            className="ui-button"
+                            className="g-button"
                             disabled={blocked}
                             onClick={() => void reviewRecovery(tree, "reconcile")}
                           >
@@ -700,7 +699,7 @@ export function GitDialog({
                       {tree.state === "ready" ? (
                         <div className="git-actions">
                           <button
-                            className="ui-button"
+                            className="g-button"
                             type="button"
                             disabled={blocked}
                             onClick={() => {
@@ -711,7 +710,7 @@ export function GitDialog({
                             Configure setup
                           </button>
                           <button
-                            className="ui-button"
+                            className="g-button"
                             type="button"
                             disabled={blocked || prDraft !== null}
                             onClick={() => {
@@ -726,7 +725,7 @@ export function GitDialog({
                             sameFolder(workspace.root, tree.path)) ? (
                             <button
                               type="button"
-                              className="ui-button"
+                              className="g-button"
                               disabled={blocked}
                               onClick={() =>
                                 void reviewRelocation(
@@ -742,7 +741,7 @@ export function GitDialog({
                           ) : null}
                           <button
                             type="button"
-                            className="ui-button"
+                            className="g-button"
                             disabled={blocked || !message.trim()}
                             onClick={() => void reviewAction(tree, "merge")}
                           >
@@ -750,7 +749,7 @@ export function GitDialog({
                           </button>
                           <button
                             type="button"
-                            className="ui-button"
+                            className="g-button"
                             disabled={blocked}
                             onClick={() => void reviewAction(tree, "discard")}
                           >
@@ -795,7 +794,7 @@ export function GitDialog({
         </span>
         <button
           type="button"
-          className="ui-button"
+          className="g-button"
           disabled={busy || loading}
           onClick={() => {
             setPreview(null);

@@ -224,7 +224,7 @@ export function ChatView({
             </p>
             <button
               type="button"
-              className="ui-button"
+              className="g-button"
               data-testid="chat-reattach"
               onClick={() => void store.reattach()}
             >
@@ -269,7 +269,7 @@ export function ChatView({
               </span>
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 data-testid="chat-reattach"
                 onClick={() => void store.reattach()}
               >
@@ -292,7 +292,7 @@ export function ChatView({
                 </p>
                 <button
                   type="button"
-                  className="ui-button"
+                  className="g-button"
                   onClick={() => setContinuation({ type: "continue_here" })}
                 >
                   Continue here
@@ -319,7 +319,7 @@ export function ChatView({
                 Could not verify the saved handoff. {handoffError}{" "}
                 <button
                   type="button"
-                  className="ui-button"
+                  className="g-button"
                   onClick={() => setHandoffRevision((value) => value + 1)}
                 >
                   Retry
@@ -498,7 +498,7 @@ export function StillWorking({
   return (
     <div className="chat-still" role="status" data-testid="still-working">
       <span>Still working (no output for {minutesLabel(minutes)})</span>
-      <button type="button" className="ui-button" onClick={onStop}>
+      <button type="button" className="g-button g-button-28" onClick={onStop}>
         Stop
       </button>
     </div>

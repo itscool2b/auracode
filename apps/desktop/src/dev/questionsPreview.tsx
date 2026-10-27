@@ -143,24 +143,24 @@ function Preview() {
         className="ui-row"
         style={{ position: "relative", flexShrink: 0, padding: 12 }}
       >
-        <button type="button" className="ui-button" onClick={fixture.ask}>
+        <button type="button" className="g-button" onClick={fixture.ask}>
           Ask question
         </button>
-        <button type="button" className="ui-button" onClick={fixture.resolve}>
+        <button type="button" className="g-button" onClick={fixture.resolve}>
           Resolve answer
         </button>
-        <button type="button" className="ui-button" onClick={fixture.fail}>
+        <button type="button" className="g-button" onClick={fixture.fail}>
           Fail answer
         </button>
-        <button type="button" className="ui-button" onClick={fixture.withdraw}>
+        <button type="button" className="g-button" onClick={fixture.withdraw}>
           Withdraw question
         </button>
-        <button type="button" className="ui-button" onClick={fixture.update}>
+        <button type="button" className="g-button" onClick={fixture.update}>
           Background update
         </button>
         <button
           type="button"
-          className="ui-button"
+          className="g-button"
           onClick={() => setRevision((value) => value + 1)}
         >
           Reattach chat

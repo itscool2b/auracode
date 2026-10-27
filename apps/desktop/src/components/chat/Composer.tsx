@@ -252,7 +252,7 @@ export function Composer({
           {onSteer && status === "running" ? (
             <button
               type="button"
-              className="ui-button"
+              className="g-button g-button-28"
               data-testid="composer-steer"
               disabled={sending || context.busy || blocked || empty}
               onClick={() => void send(true)}
@@ -263,8 +263,7 @@ export function Composer({
           ) : null}
           <button
             type="button"
-            className="chat-send"
-            data-kind="primary"
+            className="g-button g-button-primary g-button-icon chat-send"
             data-testid="composer-send"
             disabled={sending || context.busy || blocked || empty}
             onClick={() => void send()}
@@ -283,7 +282,11 @@ export function Composer({
         </span>
       ) : null}
       {context.saveError ? (
-        <button type="button" className="ui-button" onClick={() => void context.retrySave()}>
+        <button
+          type="button"
+          className="g-button g-button-28 chat-composer-retry"
+          onClick={() => void context.retrySave()}
+        >
           Retry draft save
         </button>
       ) : null}
@@ -305,8 +308,7 @@ export function StopButton({
     return (
       <button
         type="button"
-        className="ui-button"
-        data-kind="danger"
+        className="g-button g-button-danger g-button-28"
         data-testid="composer-force-stop"
         onClick={onForceStop}
       >
@@ -318,7 +320,7 @@ export function StopButton({
     return (
       <button
         type="button"
-        className="chat-send"
+        className="g-button g-button-primary g-button-icon chat-send"
         data-testid="composer-stop"
         onClick={onStop}
         aria-label="Stop"

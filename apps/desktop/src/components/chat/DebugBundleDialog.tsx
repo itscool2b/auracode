@@ -68,12 +68,12 @@ export function DebugBundleDialog({
           </p>
         ) : null}
         <div className="chat-export-actions">
-          <button type="button" className="ui-button" disabled={busy} onClick={onClose}>
+          <button type="button" className="g-button" disabled={busy} onClick={onClose}>
             {copied ? "Done" : "Cancel"}
           </button>
           <button
             type="button"
-            className="ui-button primary"
+            className="g-button g-button-primary"
             disabled={busy || text === ""}
             onClick={() => void run()}
           >

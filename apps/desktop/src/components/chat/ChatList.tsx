@@ -183,7 +183,7 @@ export function ChatList({
           {onNewProject ? (
             <button
               type="button"
-              className="chat-icon-button"
+              className="g-button g-button-ghost g-button-icon g-button-28"
               title="New project"
               aria-label="New project"
               onClick={onNewProject}
@@ -226,7 +226,7 @@ export function ChatList({
                 {onProjectSettings && project.project ? (
                   <button
                     type="button"
-                    className="chat-row-menu chat-icon-button"
+                    className="g-button g-button-ghost g-button-icon g-button-28 chat-row-menu"
                     aria-label={`Settings for ${project.name}`}
                     onClick={() => {
                       if (project.project) onProjectSettings(project.project);
@@ -247,7 +247,7 @@ export function ChatList({
                       {onChatOptions ? (
                         <button
                           type="button"
-                          className="chat-row-menu chat-icon-button"
+                          className="g-button g-button-ghost g-button-icon g-button-28 chat-row-menu"
                           aria-label={`Options for ${chat.title ?? "New chat"}`}
                           onClick={() => onChatOptions(chat)}
                         >

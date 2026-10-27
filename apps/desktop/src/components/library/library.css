@@ -856,8 +856,3 @@
 .library-review select {
   font-weight: 400;
 }
-
-/* On a raised surface the disabled pill takes one step up, so it keeps its shape. */
-:is(.library-review, .vendor-dialog) .g-button:disabled {
-  background-color: var(--g-surface-3);
-}
