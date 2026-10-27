@@ -2940,5 +2940,8 @@ was fixed in the test without weakening what it asserts.
 - 40491964588 (1ea4d35): everything passed except one Windows selection test, which met Access is
   denied deleting a fake executable a probe had just run; the delete now retries briefly.
 - 40495382743 (3e6821b): GitHub started no job: account payments failed or the Actions spending
-  limit was reached. The selection fix passes locally with Clippy; CI must run again on 3e6821b or
-  later once billing is resolved, before the PR opens.
+  limit was reached. The selection fix passes locally with Clippy.
+
+The owner chose to skip a further CI run to save Actions spend, and the PR opened without one. The
+only change after 40491964588 that CI has not run is the selection test's delete retry (test code
+only) plus this record. Rerun CI on the PR head before merging if the owner wants that gate closed.
