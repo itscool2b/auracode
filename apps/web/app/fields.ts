@@ -45,7 +45,7 @@ export interface FieldFallback {
 export const STAGE_FIELD: FieldSettings = {
   cell: 4,
   density: 0.4,
-  accent: 0.012,
+  accent: 0.006,
   palette: "standard",
   seed: 0x5be0cd19,
   edges: 0.5,
@@ -143,6 +143,16 @@ export const NUMERAL_FIELD: FieldSettings = {
 };
 
 export const NUMERAL_SEEDS = [0x428a2f98, 0xe9b5dba5, 0x3956c25b] as const;
+
+/**
+ * Each numeral's noise gathers in the middle of its box and thins toward the sides and top, so it
+ * never shows as a rectangle before it condenses. Clearings calm only the noise, never the figure.
+ */
+export const NUMERAL_CLEARING: readonly FieldClearing[] = [
+  { x: 0, y: 0.5, rx: 0.32, ry: 1.2 },
+  { x: 1, y: 0.5, rx: 0.32, ry: 1.2 },
+  { x: 0.5, y: 0, rx: 1.2, ry: 0.3 },
+];
 
 /** The giant footer wordmark, formed from a bright field. */
 export const FOOTER_FIELD: FieldSettings = {

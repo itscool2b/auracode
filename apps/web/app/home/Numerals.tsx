@@ -1,6 +1,6 @@
 import { DitherField, type DitherTarget } from "@auracode/ui/graphite";
 import { type CSSProperties, useRef } from "react";
-import { NUMERAL_FIELD, NUMERAL_SEEDS } from "../fields";
+import { NUMERAL_CLEARING, NUMERAL_FIELD, NUMERAL_SEEDS } from "../fields";
 import { useMedia, useReducedMotion, useScrollValue } from "../motion";
 
 const NUMBERS = [
@@ -70,6 +70,7 @@ export function Numerals() {
                     accent={NUMERAL_FIELD.accent}
                     palette={NUMERAL_FIELD.palette}
                     seed={NUMERAL_SEEDS[i] ?? NUMERAL_FIELD.seed}
+                    clearing={NUMERAL_CLEARING}
                     target={target}
                     progress={formed ? 1 : own}
                     still={formed}
