@@ -2954,3 +2954,35 @@ every commit on it is already in `main`. The merge also removed the old `main` w
 when dispatched by hand. Pushes now deploy the website through Workers Builds: `main` goes to
 `auracode.si` and to preview, and other branches go to preview. Settings and the first verified
 build are in `infra/README.md`.
+
+### Seal and turtle logo (2026-10-27)
+
+The owner's seal and turtle replaces the pixel "a" everywhere it appeared. The source raster is
+kept at `docs/design/brand/logo-source.png`. It was traced with potrace (run from a scratch folder,
+not a dependency) into one even-odd path, `LOGO_PATH`, in `packages/ui/src/graphite/logoPaths.ts`.
+`LOGO_SMALL_PATH` is a second trace with wider gaps and larger eyes for 24px and below. `Logo`
+replaces `PixelMark`, and `Wordmark` now sets the logo a quarter taller than its type.
+`PIXEL_MARK_GRID` and `pixelMarkSvg` are gone. DitherField gained a `path` target, so the
+first-launch intro now condenses into the logo.
+
+Where it landed:
+- **Desktop:** the onboarding header, the intro, the New chat welcome, the error screen and
+  Settings, plus every app icon.
+  - `scripts/app-icons.mjs` (`pnpm --filter @auracode/desktop icons`) writes the macOS and Windows
+    SVG sources and rasterizes them with the Tauri CLI.
+  - The tray now uses its own icon (`tray.png` on Windows, a `tray-template.png` template image on
+    macOS, embedded with `tauri::include_image!`), and its badges use volt for "needs you" and
+    fg-1 for "working".
+- **Website:** the nav and footer wordmarks, plus generated images.
+  - `favicon.svg`, `favicon.png` and `apple-touch-icon.png`, rasterized at build time by a small
+    even-odd rasterizer in `scripts/site-images.ts`, so no image library is needed.
+  - A 1200x630 `og.png` social card (the logo in a still dither field) with Open Graph and Twitter
+    tags.
+- **Deferred:** the chat sidebar logo moves to the sidebar redesign, because macOS's traffic
+  lights own that corner. The giant footer art moves to the website declutter.
+
+Verified locally:
+- `pnpm lint`, `pnpm typecheck` and `pnpm test` (ui 276, desktop 348 with 19 skipped, design lab
+  352), the website static tests, the notices and instructions script tests, and desktop Clippy.
+- Screenshots of the site header, the New chat welcome, the onboarding header and the intro
+  frames.

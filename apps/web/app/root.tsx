@@ -27,7 +27,15 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="dark" />
         <meta name="theme-color" content="#000000" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <meta property="og:site_name" content="auracode" />
+        <meta property="og:image" content="https://auracode.si/og.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="The auracode logo, a sea lion and a sea turtle" />
+        <meta name="twitter:card" content="summary_large_image" />
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: a fixed, hashed boot script. */}
         <script dangerouslySetInnerHTML={{ __html: BOOT_SCRIPT }} />
         <Meta />

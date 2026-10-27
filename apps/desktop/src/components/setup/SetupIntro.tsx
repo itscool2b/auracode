@@ -1,8 +1,8 @@
-import { DitherField, frameClock, PIXEL_MARK_GRID, Wordmark } from "@auracode/ui/graphite";
+import { DitherField, frameClock, LOGO_PATH, LOGO_VIEWBOX, Wordmark } from "@auracode/ui/graphite";
 import { useEffect, useState } from "react";
 
 /**
- * The field condenses in Graphite's standard greys. Once the pixel "a" has formed it lights to the
+ * The field condenses in Graphite's standard greys. Once the logo has formed it lights to the
  * bright palette, so the mark reads as ink beside the word rather than as a grey patch.
  */
 const FORMING = "standard";
@@ -45,7 +45,10 @@ function ease(x: number): number {
   return ((ay * t + by) * t + cy) * t;
 }
 
-/** Where the engine will put the grid target, so the word can sit under it on whole pixels. */
+/** The logo's height as a fraction of the window's, before the width limit. */
+const LOGO_HEIGHT = 0.3;
+
+/** Where the engine will put the logo, so the word can sit under it on whole pixels. */
 function layout(width: number, height: number) {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   let deviceCell = Math.max(1, Math.round(CELL * dpr));
@@ -57,20 +60,17 @@ function layout(width: number, height: number) {
     rows = Math.ceil((height * dpr) / deviceCell);
   }
   const cell = deviceCell / dpr;
-  // About a quarter of the shorter side, in whole field cells per glyph pixel.
-  const scale = Math.min(
-    14,
-    Math.max(4, Math.round((Math.min(width, height) * 0.26) / (6 * cell))),
-  );
-  const left = Math.floor((cols - 6 * scale) / 2) * cell;
-  const top = Math.floor((rows - 6 * scale) / 2) * cell;
-  return { scale, centre: left + 3 * scale * cell, below: top + 6 * scale * cell };
+  // Mirrors the engine's path placement: centred, the height fraction capped by the width.
+  const [vw, vh] = LOGO_VIEWBOX;
+  const scale = Math.min((rows * LOGO_HEIGHT) / vh, cols / vw);
+  const top = (rows - vh * scale) / 2;
+  return { centre: Math.round((cols / 2) * cell), below: Math.round((top + vh * scale) * cell) };
 }
 
 export type IntroMode = "pending" | "live" | "still";
 
 /**
- * The first-launch signature: a full-window dither field that condenses into the pixel "a", then
+ * The first-launch signature: a full-window dither field that condenses into the logo, then
  * "auracode" rises under it. `live` plays the dissolve; `still` shows the formed mark (later launches
  * and reduced motion); `pending` is the black window before setup has said which. The caller fades
  * it out by setting `leaving`, then unmounts it.
@@ -129,7 +129,13 @@ export function SetupIntro({
           density={0.45}
           palette={progress >= 1 ? FORMED : FORMING}
           order="radial"
-          target={{ kind: "grid", rows: PIXEL_MARK_GRID, scale: place.scale, texture: 0.1 }}
+          target={{
+            kind: "path",
+            d: LOGO_PATH,
+            viewBox: LOGO_VIEWBOX,
+            height: LOGO_HEIGHT,
+            texture: 0.1,
+          }}
           progress={progress}
           still={mode === "still"}
         />

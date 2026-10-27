@@ -8,8 +8,9 @@ import { CopyButton } from "./CopyButton";
 import { DitherField } from "./DitherField";
 import * as graphite from "./index";
 import { Keycap } from "./Keycap";
+import { Logo, Wordmark } from "./Logo";
+import { LOGO_PATH, LOGO_SMALL_PATH } from "./logoPaths";
 import { PixelLoader } from "./PixelLoader";
-import { PixelMark, Wordmark } from "./PixelMark";
 import { StatusDot } from "./StatusDot";
 
 /*
@@ -53,23 +54,25 @@ describe("server rendering", () => {
     expect(html).toContain('aria-label="auracode"');
   });
 
-  it("renders the pixel mark crisp, in currentColor, decorative unless named", () => {
-    const html = renderToString(createElement(PixelMark, { size: 16 }));
-    expect(html).toContain('shape-rendering="crispEdges"');
+  it("renders the logo in currentColor, decorative unless named, small variant at 24px and below", () => {
+    const html = renderToString(createElement(Logo, { size: 16 }));
     expect(html).toContain('fill="currentColor"');
+    expect(html).toContain('fill-rule="evenodd"');
     expect(html).toContain('aria-hidden="true"');
     expect(html).toContain('width="16"');
-    const named = renderToString(createElement(PixelMark, { size: 24, label: "auracode" }));
+    expect(html).toContain(LOGO_SMALL_PATH);
+    const named = renderToString(createElement(Logo, { size: 32, label: "auracode" }));
     expect(named).toContain('role="img"');
     expect(named).toContain('aria-label="auracode"');
+    expect(named).toContain(LOGO_PATH);
   });
 
-  it("sets the wordmark as real text after a glyph sized in whole 6px steps", () => {
+  it("sets the wordmark as real text after a logo a quarter taller than the type", () => {
     const html = renderToString(createElement(Wordmark, { size: 16 }));
     expect(html).toContain('<span class="g-wordmark-text">auracode</span>');
     expect(html).toContain("font-size:16px");
-    expect(html).toContain('width="12"');
-    expect(renderToString(createElement(Wordmark, { size: 32 }))).toContain('width="24"');
+    expect(html).toContain('width="20"');
+    expect(renderToString(createElement(Wordmark, { size: 32 }))).toContain('width="40"');
     expect(renderToString(createElement(Wordmark, { mark: false }))).not.toContain("<svg");
   });
 
@@ -118,13 +121,13 @@ describe("module surface", () => {
       "DitherField",
       "Keycap",
       "PixelLoader",
-      "PixelMark",
+      "Logo",
       "StatusDot",
       "Wordmark",
       "agentCode",
       "renderDitherFrame",
-      "pixelMarkSvg",
-      "PIXEL_MARK_GRID",
+      "logoSvg",
+      "LOGO_PATH",
       "GRAPHITE_COLORS",
       "contrastRatio",
     ]) {

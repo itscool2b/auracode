@@ -45,10 +45,25 @@ export type DitherTarget =
     }
   | {
       readonly kind: "grid";
-      /** Rows of "#" (on) and "." (off), such as PIXEL_MARK_GRID. */
+      /** Rows of "#" (on) and "." (off). */
       readonly rows: readonly string[];
       /** Field cells per grid pixel. Default: fits about 40% of the shorter side. */
       readonly scale?: number;
+      readonly texture?: number;
+    }
+  | {
+      readonly kind: "path";
+      /** One SVG path filled even-odd, such as LOGO_PATH. */
+      readonly d: string;
+      /** Width and height of the path's coordinate space. */
+      readonly viewBox: readonly [number, number];
+      /** Height of the shape as a fraction of the field's height. Default 0.6. */
+      readonly height?: number;
+      readonly align?: "start" | "center" | "end";
+      readonly anchor?: "top" | "center" | "bottom";
+      /** Space kept clear around the shape, in CSS px. Default 0. */
+      readonly inset?: number;
+      /** Live texture over the shape, 0 (flat) to 1. Default 0.2. */
       readonly texture?: number;
     };
 
@@ -260,6 +275,29 @@ export function createDitherEngine(
         return null;
       }
     };
+    if (current.kind === "path") {
+      if (typeof Path2D === "undefined") {
+        setTarget(plainKey, null, false, 0);
+        return;
+      }
+      const [vw, vh] = current.viewBox;
+      const inset = (current.inset ?? 0) / cssCell;
+      const scale = Math.min(
+        (rows * Math.min(1, Math.max(0.05, current.height ?? 0.6))) / Math.max(1, vh),
+        Math.max(1, cols - 2 * inset) / Math.max(1, vw),
+      );
+      const w = vw * scale;
+      const h = vh * scale;
+      const align = current.align ?? "center";
+      const anchor = current.anchor ?? "center";
+      const x = align === "start" ? inset : align === "end" ? cols - inset - w : (cols - w) / 2;
+      const y = anchor === "top" ? inset : anchor === "bottom" ? rows - inset - h : (rows - h) / 2;
+      ctx.setTransform(scale, 0, 0, scale, x, y);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill(new Path2D(current.d), "evenodd");
+      setTarget(plainKey, read(), true, current.texture ?? 0.2);
+      return;
+    }
     if (current.kind === "image") {
       const drawImage = (img: HTMLImageElement) => {
         if (token !== rasterToken || destroyed) return;

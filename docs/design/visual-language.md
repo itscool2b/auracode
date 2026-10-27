@@ -4,7 +4,7 @@ Status: **Graphite replaces Orbit on 2026-10-26 (owner decision).** The product 
 (desktop, onboarding and website): no light theme, no system switching, no appearance setting. One
 accent, **volt** `#CCFF33`, means look here. The signature is a **live ordered-dither field**.
 The foundation ships in `@auracode/ui/graphite` (tokens, stylesheet, `DitherField`, `AgentMark`,
-`PixelMark`, `Wordmark`, `StatusDot`, `PixelLoader`, `Keycap`, `CopyButton`); the website and the
+`Logo`, `Wordmark`, `StatusDot`, `PixelLoader`, `Keycap`, `CopyButton`); the website and the
 desktop app adopt it next. Every number here is meant to be built as written. Motion values are
 measured on the reference sites (`target/design-research/motion.md`, captured 2026-10-26); the
 few that are not are marked *provisional*.
@@ -32,8 +32,9 @@ only colour is the thing that needs you.
 1. **Type does the work.** Geist at integer weights (400, 500, 600), solid colours, two-tone
    headlines at one size. Geist Mono only for what a machine made.
 2. **Pixels are the ornament.** Everything decorative is square pixels on whole CSS pixels: the
-   dither field, the pixel "a", the 2x3 loader, the pixel check, status squares. No curves for
-   decoration, no glow, no gradient, no glass, no blur.
+   dither field, the 2x3 loader, the pixel check, status squares. No curves for decoration, no
+   glow, no gradient, no glass, no blur. The logo (4.14) is the one curved shape, and it is a
+   mark, not decoration.
 3. **One accent, one meaning.** Volt marks needs-you, live and new, the glint and rare lit pixels
    in the field. It is never a fill larger than a chip and never a button.
 4. **Structure from hairlines and value steps** (Vercel, X Money, Aside), not from cards and
@@ -565,34 +566,39 @@ Sizes in use: 14 (composer pill, event chips), 16 (header, bylines, live gutter,
 20 (onboarding roster), 24 (agent dock, library), 32 and 48 (settings, error screen), 56 (empty
 state).
 
-### 4.14 `PixelMark`, `Wordmark` and the app icon
+### 4.14 `Logo`, `Wordmark` and the app icon
 
-The auracode glyph is a lowercase "a" on a 6x6 grid (`PIXEL_MARK_GRID`):
+The logo is a sea lion and a sea turtle in silhouette, the owner's artwork
+(`docs/design/brand/logo-source.png`, replaced the pixel "a" on 2026-10-27). It was traced into one
+even-odd path in a 546 x 557 box (`LOGO_PATH`, `LOGO_VIEWBOX` in `logoPaths.ts`); the holes are the
+eyes and the gaps between the animals. It is always one solid colour: fg-1 (or fg-2 where it is
+secondary) on black, never volt, never outlined, never on a gradient.
 
-```
-.####.
-.....#
-.#####
-#....#
-#....#
-.#####
-```
+`LOGO_SMALL_PATH` is the same shape traced with wider gaps and larger eyes. `Logo` draws it at 24px
+and below, and the raster favicons use it up to 32px, because the full logo's gaps close at those
+sizes.
 
-`PixelMark` draws it in `currentColor` as one SVG path of merged runs, `shape-rendering:
-crispEdges`, cells `floor(size / 6)` and offset `floor((size - 6 * cell) / 2)`: centred on whole
-pixels at every even size (16: 2px cells, 20: 3px, 24: 4px, 32: 5px). Decorative unless `label` is
-set. Of five candidates (this rounded classic, a spurred bowl, a square seven-segment form, a 5x5,
-and one with a cursor pixel) the classic read as "a" soonest at 16px and stayed calm beside the
-wordmark; the field, not the glyph, is the loud part of the brand.
+`Logo` draws the path in `currentColor` inside a square box of `size` px, decorative unless
+`label` is set.
 
-`Wordmark`: "auracode" as real text in Geist 600, tracking -0.035em, after the glyph at `6 *
-max(2, round(0.75 * fontSize / 6))` px (12 at 16px type, 18 at 24, 24 at 32) sitting on the
-baseline like a letter, gap 0.3em, fg-1. In a nav link it names the link.
+`Wordmark`: "auracode" as real text in Geist 600, tracking -0.035em, after the logo at
+`round(1.25 * fontSize)` px (20 at 16px type, 40 at 32), centred on the text, gap 0.375em, fg-1.
+In a nav link it names the link.
 
-App icon and favicons come from `pixelMarkSvg({ size, padding, color, background, radius })`:
-default 1024px black tile, radius 22.5% (the macOS shape), glyph fg-1 at 25% padding, crisp. The
-favicon is the glyph on black at 16 and 32 with `padding: 0.125` (2px cells at 16, centred).
-Never recolour the glyph volt.
+App icons come from `apps/desktop/scripts/app-icons.mjs` (`pnpm --filter @auracode/desktop
+icons`):
+- **macOS:** the logo at 560px on a black body inset 100px in the 1024px canvas (radius 185, a
+  4px #2e2e2e ring), following the macOS grid.
+- **Windows (`icon.ico`):** the small variant at 800px on a full-bleed tile.
+- **Tray:** a 32px tile on Windows, and a 36px black template image on macOS.
+
+`logoSvg({ size, padding, color, background, radius })` writes the same tile as a standalone SVG.
+The website builds:
+- `favicon.svg`;
+- `favicon.png` (32px);
+- `apple-touch-icon.png` (180px);
+- `og.png`, a 1200 x 630 social card with the logo at half height in a still dither field that
+  thins to black around it.
 
 ### 4.15 `DitherField`
 
@@ -632,8 +638,10 @@ makes uneven cells; past 240,000 cells the cell grows. Each frame:
 - **Target**: `{ kind: "text", text, fontFamily, fontWeight 600, fontSize | "fit", tracking
   -0.06em, align, anchor, inset, texture 0.25 }`, `{ kind: "image", src, fit "cover", texture 0 }`
   (same-origin images; luminance lifted by a 0.6 gamma so dark UI keeps texture; a tainted image
-  leaves the field as noise and still reveals), or `{ kind: "grid", rows, scale }` (a pixel grid
-  such as `PIXEL_MARK_GRID`, crisp at any size). Text waits for its font to load and redraws.
+  leaves the field as noise and still reveals), `{ kind: "grid", rows, scale }` (a pixel grid,
+  crisp at any size), or `{ kind: "path", d, viewBox, height 0.6, align, anchor, inset, texture
+  0.2 }` (one even-odd SVG path such as `LOGO_PATH`, `height` a fraction of the field's height,
+  capped by its width). Text waits for its font to load and redraws.
   `texture` lets the live field shade the resolved target.
 - **Dissolve** (`progress` 0 to 1): each cell leaves the field when progress passes its threshold:
   half a per-cell random value, half a slow noise, so pixels go in ragged islands rather than as
@@ -1153,8 +1161,8 @@ dialog and the data path in mono.
 
 **First launch intro** (once, skippable with any key, about 2.4s): the window opens black; a
 full-window DitherField (`standard`, density 0.45) starts live; from 200ms to 1400ms `progress` eases
-0 to 1 (`--g-ease-out`, order "radial") into `{ kind: "grid", rows: PIXEL_MARK_GRID }`, so the field
-condenses into the pixel "a"; at 1400ms "auracode" rises under it (`Wordmark` text 32px, `.g-rise`);
+0 to 1 (`--g-ease-out`, order "radial") into `{ kind: "path", d: LOGO_PATH, height: 0.3 }`, so the
+field condenses into the logo; at 1400ms "auracode" rises under it (`Wordmark` text 32px, `.g-rise`);
 at 1800ms the field reveals (800ms) into step 1. Reduced motion: one still frame of the formed mark
 for 300ms, then step 1. Later launches skip it.
 

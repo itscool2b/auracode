@@ -15,7 +15,8 @@
     "check:settings": "node scripts/check-settings.mjs",
     "tauri": "tauri",
     "bundle": "node scripts/bundle.mjs",
-    "signing": "sh scripts/macos-signing.sh"
+    "signing": "sh scripts/macos-signing.sh",
+    "icons": "node scripts/app-icons.mjs"
   },
   "dependencies": {
     "@auracode/ui": "workspace:*",

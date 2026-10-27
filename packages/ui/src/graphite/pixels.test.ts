@@ -9,20 +9,14 @@ import {
   LOADER_STEP_MS,
   loaderFrame,
   loaderRects,
-  PIXEL_MARK_GRID,
-  pixelMarkSvg,
 } from "./pixels";
 
 const onCells = (grid: readonly string[]) =>
   grid.reduce((total, row) => total + [...row].filter((c) => c === "#").length, 0);
 
-describe("the auracode glyph", () => {
-  it("is a 6x6 grid of on and off cells", () => {
-    expect(PIXEL_MARK_GRID).toHaveLength(6);
-    for (const row of PIXEL_MARK_GRID) expect(row).toMatch(/^[#.]{6}$/);
-    expect(Object.isFrozen(PIXEL_MARK_GRID)).toBe(true);
-  });
+const SAMPLE_GRID: readonly string[] = [".####.", ".....#", ".#####", "#....#", "#....#", ".#####"];
 
+describe("pixel grids", () => {
   it("lands on whole pixels, centred, at every size the product uses", () => {
     for (const size of [12, 16, 20, 24, 32, 48, 64, 128]) {
       const { cell, offset } = fitGrid(size, 6);
@@ -37,27 +31,16 @@ describe("the auracode glyph", () => {
   });
 
   it("merges each row's run of on cells into one rectangle covering exactly those cells", () => {
-    const rects = gridRects(PIXEL_MARK_GRID, 3, 1);
+    const rects = gridRects(SAMPLE_GRID, 3, 1);
     const area = rects.reduce((total, r) => total + r.w * r.h, 0);
-    expect(area).toBe(onCells(PIXEL_MARK_GRID) * 9);
-    expect(rects.length).toBeLessThan(onCells(PIXEL_MARK_GRID));
+    expect(area).toBe(onCells(SAMPLE_GRID) * 9);
+    expect(rects.length).toBeLessThan(onCells(SAMPLE_GRID));
     for (const r of rects) {
       expect(r.x).toBeGreaterThanOrEqual(1);
       expect(r.y).toBeGreaterThanOrEqual(1);
       expect(r.x + r.w).toBeLessThanOrEqual(19);
     }
     expect(gridPath(["#"], 4, 2)).toBe("M2 2h4v4h-4z");
-  });
-
-  it("writes a standalone icon SVG for the app icon and favicons", () => {
-    const svg = pixelMarkSvg({ size: 512 });
-    expect(svg).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="512" height="512"/);
-    expect(svg).toContain('shape-rendering="crispEdges"');
-    expect(svg).toContain('fill="#000000"');
-    expect(svg).toContain('fill="#ededed"');
-    const bare = pixelMarkSvg({ size: 16, padding: 0, background: null, color: "#000000" });
-    expect(bare).not.toContain("<rect");
-    expect(bare).toContain('d="M4 2h8v2h-8z');
   });
 });
 

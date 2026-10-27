@@ -1,21 +1,8 @@
 /**
- * Pixel geometry shared by Graphite's marks: the auracode glyph, the 2x3 loader and the pixel
- * check. Every shape is laid out in whole CSS pixels inside a square box, so at 1x it lands on device
- * pixels exactly and at other ratios `shape-rendering: crispEdges` keeps it sharp.
+ * Pixel geometry shared by Graphite's marks: the 2x3 loader and the pixel check. Every shape is
+ * laid out in whole CSS pixels inside a square box, so at 1x it lands on device pixels exactly and
+ * at other ratios `shape-rendering: crispEdges` keeps it sharp.
  */
-
-/**
- * The auracode glyph: a lowercase "a" on a 6x6 grid ("#" on, "." off). Six is even, so at every
- * even size the glyph centres on whole pixels: 16 (2px cells), 20 (3px), 24 (4px), 32 (5px).
- */
-export const PIXEL_MARK_GRID: readonly string[] = Object.freeze([
-  ".####.",
-  ".....#",
-  ".#####",
-  "#....#",
-  "#....#",
-  ".#####",
-]);
 
 export interface PixelRect {
   readonly x: number;
@@ -67,38 +54,6 @@ export function gridPath(
   return gridRects(grid, cell, offsetX, offsetY)
     .map((r) => `M${r.x} ${r.y}h${r.w}v${r.h}h${-r.w}z`)
     .join("");
-}
-
-export interface PixelMarkSvgOptions {
-  /** Width and height of the icon in px. Default 1024. */
-  readonly size?: number;
-  /** Space around the glyph as a fraction of the size. Default 0.25. */
-  readonly padding?: number;
-  /** Glyph colour. Default Graphite's fg-1. */
-  readonly color?: string;
-  /** Tile colour, or null for none. Default black. */
-  readonly background?: string | null;
-  /** Tile corner radius as a fraction of the size. Default 0.225, the macOS icon shape. */
-  readonly radius?: number;
-}
-
-/** A standalone SVG document of the glyph, for app icons, favicons and social images. */
-export function pixelMarkSvg(options: PixelMarkSvgOptions = {}): string {
-  const size = Math.max(6, Math.round(options.size ?? 1024));
-  const padding = Math.min(0.45, Math.max(0, options.padding ?? 0.25));
-  const n = PIXEL_MARK_GRID.length;
-  const { cell, offset } = fitGrid(size, n, 1 - 2 * padding);
-  const background = options.background === undefined ? "#000000" : options.background;
-  const radius = Math.round(size * Math.min(0.5, Math.max(0, options.radius ?? 0.225)));
-  const tile =
-    background === null
-      ? ""
-      : `<rect width="${size}" height="${size}" rx="${radius}" fill="${background}"/>`;
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" ` +
-    `viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges">${tile}` +
-    `<path fill="${options.color ?? "#ededed"}" d="${gridPath(PIXEL_MARK_GRID, cell, offset)}"/></svg>`
-  );
 }
 
 /*

@@ -642,17 +642,17 @@
   }
 }
 
-/* ------------------------------------------------------------ PixelMark, Wordmark (4.14) */
+/* ----------------------------------------------------------------- Logo, Wordmark (4.14) */
 
-.g-pixel-mark {
+.g-logo {
   display: inline-block;
   flex: none;
 }
 
 .g-wordmark {
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.3em;
+  align-items: center;
+  gap: 0.375em;
   color: var(--g-fg-1);
   font-family: var(--g-sans);
   font-weight: 600;

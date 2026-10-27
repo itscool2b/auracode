@@ -1,4 +1,4 @@
-import { AgentMark, CopyButton } from "@auracode/ui/graphite";
+import { CopyButton, Logo } from "@auracode/ui/graphite";
 import { DataPath, Notices } from "./InfoCard";
 import "./ErrorScreen.css";
 
@@ -23,7 +23,7 @@ export function ErrorScreen({
     <main className="error-screen g-root">
       <div className="error-drag" data-tauri-drag-region="" />
       <section className="error-panel">
-        <AgentMark agent="generic" state="error" size={48} label="auracode could not start" />
+        <Logo className="error-logo" size={40} label="auracode" />
         <div className="error-message">
           <h1>{title}</h1>
           <p role="alert">{message}</p>

@@ -1,4 +1,4 @@
-import { AgentMark, PixelMark } from "@auracode/ui/graphite";
+import { AgentMark, Logo } from "@auracode/ui/graphite";
 import { useEffect, useId, useState, useSyncExternalStore } from "react";
 import type {
   AgentAuthStatus,
@@ -209,7 +209,7 @@ export function NewChat({
             label={`${selected.name}, ready for a new chat`}
           />
         ) : (
-          <PixelMark className="chat-welcome-glyph" size={36} label="auracode" />
+          <Logo className="chat-welcome-glyph" size={40} label="auracode" />
         )}
         {/* One two-tone sentence (6.13): the agent and the project in ink, the rest in grey. */}
         <h1>
