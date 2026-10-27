@@ -16,7 +16,25 @@ const workspace: GitWorkspace = {
   has_submodules: false,
   is_linked_worktree: false,
 };
-let worktrees: ManagedWorktree[] = [];
+/** `?preview=git-missing`: the chat's worktree folder was deleted by hand; its branch remains. */
+const missing = params.get("preview") === "git-missing";
+let worktrees: ManagedWorktree[] = missing
+  ? [
+      {
+        id: "worktree-one",
+        chat_id: "chat",
+        source: workspace.root,
+        path: "C:/auracode/worktrees/owned-one",
+        branch: "aura/release-readiness",
+        base_commit: workspace.head ?? "",
+        state: "missing",
+        detail:
+          "This worktree was removed outside the app. Its branch and conversation remain available.",
+        recovery: null,
+        created_at: 1,
+      },
+    ]
+  : [];
 let preview: WorktreeActionPreview | null = null;
 let sequence = 0;
 let currentFolder = workspace.root;
@@ -197,6 +215,45 @@ const api: GitWorkspaceApi = {
       created: true,
       head_commit: workspace.head ?? "",
       warning: null,
+    };
+  },
+  recreatePreview: async (_chat, id) => {
+    calls.push("review-recreate");
+    const tree = worktrees.find((entry) => entry.id === id) ?? makeWorktree();
+    const commit = "9c41e07d2b8a6f13e5c0d4b7a2f98e16c3d5b0a4";
+    return {
+      token: `recreate-${++sequence}`,
+      worktree: structuredClone(tree),
+      path: tree.path,
+      branch: tree.branch,
+      commit,
+      warnings: [
+        "Uncommitted files that were in the deleted folder are gone. Everything committed on the branch is kept.",
+        `The folder is recreated at its original app-owned path from the last commit on ${tree.branch} (${commit.slice(0, 12)}).`,
+        "Setup files such as .env are not restored. Review worktree setup again afterwards.",
+      ],
+      expires_at: Date.now() + 600_000,
+    };
+  },
+  recreateApply: async (_chat, id, token) => {
+    calls.push(`apply-recreate:${token}`);
+    if (sessionStorage.getItem("git-stale")) {
+      sessionStorage.removeItem("git-stale");
+      throw new Error("This recreate preview expired or was already used.");
+    }
+    const tree = worktrees.find((entry) => entry.id === id) ?? makeWorktree();
+    const worktree: ManagedWorktree = {
+      ...tree,
+      state: "ready",
+      detail:
+        "Recreated from its branch after the folder was removed outside the app. Uncommitted files from the removed folder could not be restored.",
+    };
+    worktrees = [worktree];
+    return {
+      worktree,
+      recovery: worktree.path,
+      commit: "9c41e07d2b8a6f13e5c0d4b7a2f98e16c3d5b0a4",
+      error: null,
     };
   },
 };
