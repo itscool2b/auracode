@@ -71,10 +71,10 @@ impl Transport for Bucket {
             }
         }))
     }
-    fn put(&self, object: &PublicObject) -> Result<()> {
+    fn put(&self, object: &PublicObject, bytes: &[u8]) -> Result<()> {
         self.objects
             .borrow_mut()
-            .insert(object.key.clone(), fs::read(&object.path)?);
+            .insert(object.key.clone(), bytes.to_vec());
         self.puts.borrow_mut().push(object.key.clone());
         Ok(())
     }
@@ -154,10 +154,10 @@ fn a_resumed_publication_skips_identical_versioned_objects() {
     let objects = publication_plan(&stage, &key).unwrap();
     let bucket = Bucket::default();
     let dmg = objects.iter().find(|o| o.key.ends_with(".dmg")).unwrap();
-    bucket
-        .objects
-        .borrow_mut()
-        .insert(dmg.key.clone(), fs::read(&dmg.path).unwrap());
+    bucket.objects.borrow_mut().insert(
+        dmg.key.clone(),
+        fs::read(stage.join("releases/0.1.0/auracode-universal.dmg")).unwrap(),
+    );
     let report = publish(&objects, &bucket).unwrap();
     assert_eq!(report.already_present, std::slice::from_ref(&dmg.key));
     assert!(!bucket.puts.borrow().contains(&dmg.key));
@@ -193,14 +193,26 @@ fn a_bad_read_back_stops_before_latest_json() {
 fn a_stage_changed_after_planning_is_refused() {
     let (_temp, stage, key) = stage(Channel::Stable);
     let objects = publication_plan(&stage, &key).unwrap();
-    fs::write(stage.join("downloads.json"), b"{}").unwrap();
+    fs::write(stage.join("releases/0.1.0/auracode-x64.exe"), b"swapped").unwrap();
     let bucket = Bucket::default();
     let error = publish(&objects, &bucket).unwrap_err().to_string();
     assert!(
         error.contains("changed after the stage was verified"),
         "{error}"
     );
-    assert!(!bucket.puts.borrow().contains(&"latest.json".to_string()));
+    // Every object is checked before the first upload, so nothing reached the bucket.
+    assert!(bucket.puts.borrow().is_empty());
+}
+
+#[test]
+fn manifests_upload_the_verified_bytes_even_if_the_stage_file_changes() {
+    let (_temp, stage, key) = stage(Channel::Stable);
+    let objects = publication_plan(&stage, &key).unwrap();
+    let verified = fs::read(stage.join("downloads.json")).unwrap();
+    fs::write(stage.join("downloads.json"), b"{}").unwrap();
+    let bucket = Bucket::default();
+    publish(&objects, &bucket).unwrap();
+    assert_eq!(bucket.objects.borrow()["downloads.json"], verified);
 }
 
 #[test]
