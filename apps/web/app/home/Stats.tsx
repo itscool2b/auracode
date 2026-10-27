@@ -7,7 +7,7 @@ const COUNT = 950;
 const ease = (t: number) => 1 - (1 - t) ** 1.6;
 
 const STATS: readonly { value: number; label: string }[] = [
-  { value: AGENT_NAMES.length, label: "agents supported by name, plus any ACP agent" },
+  { value: AGENT_NAMES.length, label: "agents supported, plus any ACP agent" },
   { value: 2, label: "platforms, Windows and macOS" },
   { value: 0, label: "accounts needed to use the app" },
 ];
@@ -59,21 +59,15 @@ export function Stats() {
   }, [reduced]);
 
   return (
-    <section className="section stats" aria-label="auracode in numbers">
-      <div className="frame">
-        <div className="section-inner">
-          <ul className="stats-row" ref={list}>
-            {STATS.map((stat) => (
-              <li key={stat.label} className="stat">
-                <span className="stat-value" data-count={stat.value}>
-                  {stat.value}
-                </span>
-                <span className="stat-label">{stat.label}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </section>
+    <ul className="stats-row" ref={list} aria-label="auracode in numbers">
+      {STATS.map((stat) => (
+        <li key={stat.label} className="stat">
+          <span className="stat-value" data-count={stat.value}>
+            {stat.value}
+          </span>
+          <span className="stat-label">{stat.label}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

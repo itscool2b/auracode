@@ -18,14 +18,18 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
             <header className="auth-head" data-reveal="">
               <h1 className="auth-title">
                 {signup ? "Your invitation." : "Sign in."}{" "}
-                <span>{signup ? "Starts here." : "Pick up where you left off."}</span>
+                <span>{signup ? "Starts here." : "With a one-time code."}</span>
               </h1>
               <p className="auth-intro">
                 <strong>
                   Cloud accounts, encrypted sync and transfers are invite-only during the private
                   preview.
                 </strong>{" "}
-                The Local desktop app is free and works offline without an account.
+                The{" "}
+                <a className="auth-inline-link" href="/download">
+                  Local desktop app
+                </a>{" "}
+                is free and works offline without an account.
               </p>
             </header>
             <section className="auth-panel" aria-labelledby="auth-panel-title">
@@ -89,11 +93,6 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
                 </>
               )}
             </section>
-            <div className="auth-links auth-after" data-reveal="">
-              <a className="text-link" href="/download">
-                Explore the Local app <Arrow />
-              </a>
-            </div>
           </div>
         </div>
       </div>

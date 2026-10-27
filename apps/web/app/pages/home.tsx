@@ -5,7 +5,6 @@ import { Closing } from "../home/Closing";
 import { Faq } from "../home/Faq";
 import { Features } from "../home/Features";
 import { Stage } from "../home/Stage";
-import { Stats } from "../home/Stats";
 import { Arrow } from "../ui";
 
 export const meta = () => [
@@ -23,7 +22,7 @@ function Agents() {
       <div className="frame">
         <div className="section-inner agents-grid">
           <h2 id="agents-title" className="agents-title" data-reveal="">
-            Bring the agents you already pay for.{" "}
+            Bring the agents you already use.{" "}
             <span>auracode runs each one through its own harness.</span>
           </h2>
           <div className="agents-names">
@@ -52,7 +51,6 @@ export default function Home() {
       <Agents />
       <Capabilities />
       <Features />
-      <Stats />
       <Faq />
       <Closing />
     </main>

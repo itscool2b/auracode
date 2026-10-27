@@ -1,5 +1,6 @@
 import { DitherField, type DitherTarget, Wordmark } from "@auracode/ui/graphite";
 import { useRef } from "react";
+import { FOOTER_FIELD } from "./fields";
 import { useReducedMotion, useScrollValue } from "./motion";
 
 const WORDMARK: DitherTarget = {
@@ -32,10 +33,11 @@ function FooterWordmark() {
       <span className="footer-mark-text">auracode</span>
       <DitherField
         className="footer-mark-field site-field"
-        cell={4}
-        density={0.42}
-        accent={0.03}
-        palette="bright"
+        cell={FOOTER_FIELD.cell}
+        density={FOOTER_FIELD.density}
+        accent={FOOTER_FIELD.accent}
+        palette={FOOTER_FIELD.palette}
+        seed={FOOTER_FIELD.seed}
         target={WORDMARK}
         progress={formed ? 1 : progress}
         order="up"

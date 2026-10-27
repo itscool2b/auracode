@@ -1,12 +1,19 @@
 import { DitherField, type DitherTarget } from "@auracode/ui/graphite";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { AGENT_NAMES } from "../agents";
-import { type FieldClearing, STAGE_CLEARING, STAGE_FALLBACK, STAGE_FIELD } from "../fields";
+import {
+  type FieldClearing,
+  FRAME_FIELD,
+  STAGE_CLEARING,
+  STAGE_FALLBACK,
+  STAGE_FIELD,
+} from "../fields";
 import { useReducedMotion, useScrollValue } from "../motion";
 import { RotatingAgent } from "./RotatingAgent";
 
-/** How far beyond the copy the field stays thinned: the copy sits in the clear core. */
-const CLEAR_REACH = 1.9;
+/** How far beyond the copy the field stays thinned, across and down: the copy sits in the core. */
+const REACH_X = 2.3;
+const REACH_Y = 2.1;
 
 /**
  * The opening stage: the live dither field fills it edge to edge and thins to black behind the
@@ -50,8 +57,8 @@ export function Stage() {
       const next = {
         x: round(((left + right) / 2 - box.left) / box.width),
         y: round(((top + bottom) / 2 - box.top) / box.height),
-        rx: round((((right - left) / 2) * CLEAR_REACH) / box.width),
-        ry: round((((bottom - top) / 2) * CLEAR_REACH) / box.height),
+        rx: round((((right - left) / 2) * REACH_X) / box.width),
+        ry: round((((bottom - top) / 2) * REACH_Y) / box.height),
       };
       setClearing((previous) =>
         previous.x === next.x &&
@@ -92,6 +99,7 @@ export function Stage() {
         density={STAGE_FIELD.density}
         accent={STAGE_FIELD.accent}
         palette={STAGE_FIELD.palette}
+        seed={STAGE_FIELD.seed}
         clearing={clearing}
       />
       <noscript>
@@ -139,10 +147,11 @@ export function Stage() {
           <span className="g-crosshair g-crosshair-br" aria-hidden="true" />
           <DitherField
             className="product-field site-field"
-            cell={STAGE_FIELD.cell}
-            density={STAGE_FIELD.density}
-            accent={STAGE_FIELD.accent}
-            palette={STAGE_FIELD.palette}
+            cell={FRAME_FIELD.cell}
+            density={FRAME_FIELD.density}
+            accent={FRAME_FIELD.accent}
+            palette={FRAME_FIELD.palette}
+            seed={FRAME_FIELD.seed}
             target={target}
             progress={reduced ? 1 : progress}
             reveal

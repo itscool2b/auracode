@@ -5,7 +5,7 @@ export const meta = () => [{ title: "Changelog · auracode" }];
 
 export default function Changelog() {
   return (
-    <Page wide title="Changelog." tone="Notes from the development preview.">
+    <Page wide title="Changelog." tone="Notes from the preview.">
       <article className="release-entry" data-reveal="">
         <div className="release-meta">
           <time dateTime="2026-10-26">26 October 2026</time>

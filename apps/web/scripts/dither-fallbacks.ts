@@ -2,7 +2,7 @@
 // browser uses (renderDitherFrame), at one image pixel per cell, as a small palette PNG.
 import { deflateSync } from "node:zlib";
 import type { Plugin } from "vite";
-import { DEFAULT_SEED, renderDitherFrame, VOLT } from "../../../packages/ui/src/graphite/dither.ts";
+import { renderDitherFrame, VOLT } from "../../../packages/ui/src/graphite/dither.ts";
 import { DITHER_PALETTES, GRAPHITE_COLORS } from "../../../packages/ui/src/graphite/tokens.ts";
 import { FIELD_FALLBACKS, type FieldFallback, type FieldSettings } from "../app/fields.ts";
 
@@ -73,7 +73,7 @@ export function fallbackPng(fallback: FieldFallback, field: FieldSettings): Buff
     cols,
     rows,
     cellPx: field.cell,
-    seed: DEFAULT_SEED,
+    seed: field.seed,
     levels: greys.length + 1,
     density: field.density,
     accent: field.accent,

@@ -1,5 +1,6 @@
 import { gridPath, Keycap } from "@auracode/ui/graphite";
 import type { CSSProperties, ReactNode } from "react";
+import { Stats } from "./Stats";
 
 /* Seven-by-seven pixel glyphs, drawn like the pixel "a": square cells on whole pixels. */
 const GLYPHS = {
@@ -83,7 +84,7 @@ export function Features() {
       <div className="frame">
         <div className="section-inner">
           <h2 id="features-title" className="section-title" data-reveal="">
-            Nothing in the middle. <span>Your agents run on your machine, with your logins.</span>
+            Nothing in the middle. <span>Your machine, your logins.</span>
           </h2>
           <div className="feature-frame">
             <span className="g-crosshair g-crosshair-tl" aria-hidden="true" />
@@ -104,6 +105,7 @@ export function Features() {
               ))}
             </div>
           </div>
+          <Stats />
         </div>
       </div>
     </section>

@@ -12,6 +12,7 @@ export function Closing() {
         density={CLOSING_FIELD.density}
         accent={CLOSING_FIELD.accent}
         palette={CLOSING_FIELD.palette}
+        seed={CLOSING_FIELD.seed}
         clearing={CLOSING_CLEARING}
       />
       <noscript>

@@ -110,7 +110,7 @@ export default function AccountPage() {
     <Page
       wide
       title="Your account."
-      tone={data ? "Your workspace, connected." : "Cloud sync, devices and export."}
+      tone={data ? "Your workspace, connected." : "Devices, sync and export."}
     >
       {inviteRequired && data ? (
         <Notice>

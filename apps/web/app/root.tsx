@@ -1,5 +1,5 @@
 import { DitherField, type DitherTarget } from "@auracode/ui/graphite";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
   isRouteErrorResponse,
   Links,
@@ -13,9 +13,10 @@ import "@auracode/ui/fonts.css";
 import "@auracode/ui/graphite.css";
 import "./site.css";
 import { BOOT_SCRIPT, Enhancements } from "./enhance";
+import { ERROR_FIELD } from "./fields";
 import { SiteFooter } from "./footer";
 import { SiteHeader } from "./header";
-import { useReducedMotion } from "./motion";
+import { bezier, useReducedMotion } from "./motion";
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
@@ -60,25 +61,48 @@ const NOT_FOUND: DitherTarget = {
   texture: 0.2,
 };
 
+/** The field condenses into "404" over 1.4s after a short beat, from the centre out. */
+function NotFoundField() {
+  const reduced = useReducedMotion();
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    if (reduced) return;
+    let frame = 0;
+    const start = performance.now() + 300;
+    const ease = bezier(0.16, 1, 0.3, 1);
+    const tick = (now: number) => {
+      const t = Math.min(1, Math.max(0, (now - start) / 1400));
+      setProgress(Math.round(ease(t) * 200) / 200);
+      if (t < 1) frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [reduced]);
+  const formed = reduced || progress >= 1;
+  return (
+    <DitherField
+      className="error-field site-field"
+      cell={ERROR_FIELD.cell}
+      density={ERROR_FIELD.density}
+      accent={ERROR_FIELD.accent}
+      palette={ERROR_FIELD.palette}
+      seed={ERROR_FIELD.seed}
+      target={NOT_FOUND}
+      progress={formed ? 1 : progress}
+      order="radial"
+      still={formed}
+    />
+  );
+}
+
 export function ErrorBoundary() {
   const error = useRouteError();
-  const reduced = useReducedMotion();
   const missing = isRouteErrorResponse(error) && error.status === 404;
   return (
     <main id="main" className="page error-page">
       <div className="frame page-frame">
         <div className="error-column">
-          {missing ? (
-            <DitherField
-              className="error-field site-field"
-              cell={4}
-              density={0.4}
-              palette="bright"
-              target={NOT_FOUND}
-              progress={1}
-              still={reduced}
-            />
-          ) : null}
+          {missing ? <NotFoundField /> : null}
           <h1 className="error-title">
             {missing ? "This page does not exist." : "This page could not load."}{" "}
             <span>{missing ? "It may have moved." : "Your local workspace is unaffected."}</span>

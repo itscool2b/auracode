@@ -472,17 +472,20 @@ canvas {
   backface-visibility: hidden;
 }
 
-/* The rotating agent name, its slot and its glint underline (x.ai, measured). */
+/*
+ * The rotating agent name, its slot and its glint underline (x.ai, measured). The slot clips
+ * sideways as its width morphs, and lets the rising letters show only 0.067em above it.
+ */
 .agent-slot {
   position: relative;
   display: inline-block;
+  clip-path: inset(-0.067em 0 -0.3em 0);
   transition: width 300ms var(--g-ease-out);
 }
 
 .agent-word {
   display: inline-block;
   white-space: nowrap;
-  clip-path: inset(-0.067em 0 -0.3em 0);
 }
 
 .agent-char {
@@ -854,10 +857,12 @@ html:not(.js) .cap-text > span {
 
 .cap-stage {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .cap-panel {
   grid-area: 1 / 1;
+  min-width: 0;
   border-radius: var(--g-radius-12);
   opacity: 0;
   visibility: hidden;
@@ -1407,9 +1412,10 @@ html:not(.js) .cap-text > span {
 
 /* ------------------------------------------------------------------- feature cells */
 
+/* The grid spans the framed column, so its outer edges are the column's own rules. */
 .feature-frame {
   position: relative;
-  margin-top: 64px;
+  margin: 72px calc(-1 * var(--inset)) 0;
 }
 
 .feature-grid {
@@ -1417,8 +1423,8 @@ html:not(.js) .cap-text > span {
 }
 
 .feature {
-  min-height: 240px;
-  padding: 36px 32px 40px;
+  min-height: 248px;
+  padding: 36px max(24px, var(--inset)) 44px;
   transition: opacity var(--g-dur-dim) var(--g-ease-smooth);
 }
 
@@ -1463,6 +1469,7 @@ html:not(.js) .cap-text > span {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
+  margin-top: 112px;
   padding: 0;
   list-style: none;
 }
@@ -1484,7 +1491,7 @@ html:not(.js) .cap-text > span {
 }
 
 .stat-label {
-  max-width: 260px;
+  max-width: 300px;
   color: var(--g-fg-2);
   font-size: 16px;
   line-height: 26px;
@@ -1503,6 +1510,15 @@ html:not(.js) .cap-text > span {
   display: grid;
   justify-items: start;
   gap: 32px;
+}
+
+/* X Money sets its FAQ heading smaller than its hero; here it shares a narrow column. */
+@media (min-width: 1024px) {
+  .faq-head .section-title {
+    font-size: 40px;
+    line-height: 44px;
+    letter-spacing: -0.03em;
+  }
 }
 
 .faq-list {
@@ -1869,8 +1885,10 @@ html:not(.js) .footer-mark-field {
   margin: -24px 0 48px;
 }
 
+/* Like the feature cells, the build grid spans the framed column and shares its rules. */
 .download-frame {
   position: relative;
+  margin-inline: calc(-1 * var(--inset));
 }
 
 .download-grid {
@@ -1961,8 +1979,8 @@ html:not(.js) .footer-mark-field {
 
 .auth-title {
   color: var(--g-fg-1);
-  font-size: 40px;
-  line-height: 44px;
+  font-size: 36px;
+  line-height: 40px;
   font-weight: 500;
   letter-spacing: -0.03em;
 }
@@ -1982,6 +2000,22 @@ html:not(.js) .footer-mark-field {
 .auth-intro strong {
   color: var(--g-fg-1);
   font-weight: 500;
+}
+
+.auth-inline-link {
+  color: var(--g-fg-2);
+  text-decoration-line: underline;
+  text-decoration-color: var(--g-fg-4);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition:
+    color var(--g-dur-fast) var(--g-ease),
+    text-decoration-color var(--g-dur-fast) var(--g-ease);
+}
+
+.auth-inline-link:hover {
+  color: var(--g-fg-1);
+  text-decoration-color: var(--g-fg-1);
 }
 
 .auth-panel {
@@ -2445,6 +2479,12 @@ html:not(.js) .footer-mark-field {
   margin-top: 24px;
 }
 
+/* On the sheet's own surface a disabled pill keeps its shape, so the decisive action stays legible. */
+.confirm-actions .g-button:disabled {
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-4);
+}
+
 @media (max-width: 639px) {
   .confirm-dialog {
     width: calc(100vw - 24px);
@@ -2714,6 +2754,7 @@ html:not(.js) .footer-mark-field {
 /* ---------------------------------------------------- the framed verification page */
 
 /* The desktop app frames /verify-device at 190px: no nav, footer or skip link. */
+html:has(.device-verification),
 body:has(.device-verification) {
   min-height: 0;
   background-color: var(--g-surface-1);
