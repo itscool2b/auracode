@@ -297,7 +297,7 @@ export function Pickers({
           </label>
           <select
             id={autonomyId}
-            className="ui-select"
+            className="g-select"
             data-testid="picker-autonomy"
             data-test-requested={lists?.autonomy.requested ?? ""}
             data-test-native-mode={lists?.autonomy.native_mode ?? ""}
@@ -421,7 +421,7 @@ function OptionPicker({
       </label>
       <select
         id={id}
-        className="ui-select"
+        className="g-select"
         data-testid="picker-option"
         data-test-option-id={option.id}
         data-test-saving={String(saving !== null)}

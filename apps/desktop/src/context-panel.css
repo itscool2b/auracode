@@ -382,43 +382,22 @@
   line-height: var(--g-leading-meta);
 }
 
+/* A search field: Graphite's input with the icon inside its left padding, as in the Library. */
 .context-file-search {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 12px;
-  box-sizing: border-box;
-  border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-bg);
-  color: var(--g-fg-3);
-  transition: border-color var(--g-dur-fast) var(--g-ease);
-}
-
-.context-file-search:focus-within {
-  border-color: var(--g-fg-3);
-  outline: 2px solid var(--g-focus);
-  outline-offset: 2px;
 }
 
 .context-file-search > svg {
-  flex: none;
-}
-
-.context-file-search input {
-  flex: 1;
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--g-fg-1);
-}
-
-.context-file-search input::placeholder {
+  position: absolute;
+  left: 12px;
   color: var(--g-fg-3);
-  opacity: 1;
+  pointer-events: none;
+}
+
+.context-file-search > .g-input {
+  padding-left: 36px;
 }
 
 .context-file-row {

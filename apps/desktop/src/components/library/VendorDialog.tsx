@@ -104,7 +104,7 @@ export function VendorDialog({
           <label>
             Agent
             <select
-              className="g-input"
+              className="g-select"
               value={provider}
               disabled={busy}
               onChange={(event) => {
@@ -125,7 +125,7 @@ export function VendorDialog({
           <label>
             Integration
             <select
-              className="g-input"
+              className="g-select"
               value={kind}
               disabled={busy || provider === "pi"}
               onChange={(event) => {
@@ -147,7 +147,7 @@ export function VendorDialog({
           <label>
             Action
             <select
-              className="g-input"
+              className="g-select"
               value={action}
               disabled={busy}
               onChange={(event) => setAction(event.currentTarget.value as VendorAction)}

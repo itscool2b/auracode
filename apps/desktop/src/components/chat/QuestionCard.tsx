@@ -161,7 +161,7 @@ function Answers({
           </label>
           <input
             id={inputId}
-            className="ui-input"
+            className="g-input"
             data-testid="question-input"
             value={text}
             placeholder={prompt.placeholder ?? ""}

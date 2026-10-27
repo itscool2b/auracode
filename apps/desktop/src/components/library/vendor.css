@@ -43,11 +43,6 @@
   font-weight: 500;
 }
 
-.vendor-dialog :is(select, input) {
-  min-width: 0;
-  font-weight: 400;
-}
-
 .vendor-dialog input {
   font-family: var(--g-mono);
   font-size: var(--g-text-code);

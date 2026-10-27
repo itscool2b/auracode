@@ -165,7 +165,7 @@ export function LibraryScreen({
         <label className="library-select">
           Source
           <select
-            className="g-input"
+            className="g-select"
             aria-label="Project configuration source"
             value={folder ?? ""}
             onChange={(event) => setFolder(event.currentTarget.value || null)}
@@ -184,7 +184,7 @@ export function LibraryScreen({
         <label className="library-select">
           Agent
           <select
-            className="g-input"
+            className="g-select"
             aria-label="Filter by agent"
             value={provider}
             onChange={(event) => setProvider(event.currentTarget.value)}
@@ -512,7 +512,7 @@ function ItemDetail({
             <label>
               Copy to
               <select
-                className="g-input"
+                className="g-select"
                 aria-label="Copy destination"
                 value={target}
                 disabled={busy || !preview}

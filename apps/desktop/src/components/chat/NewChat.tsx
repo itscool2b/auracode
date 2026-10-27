@@ -242,7 +242,7 @@ export function NewChat({
           <div className="ui-row">
             <select
               id={agentId}
-              className="ui-select"
+              className="g-select"
               data-testid="new-chat-agent"
               value={state.agentId ?? ""}
               onChange={(event) => draft.chooseAgent(event.currentTarget.value)}
@@ -346,7 +346,7 @@ export function NewChat({
           <span>Folder</span>
           {workspace && (organization.data?.projects.length ?? 0) > 0 ? (
             <select
-              className="ui-select"
+              className="g-select"
               aria-label="Project folder"
               value={folderId}
               onChange={(event) => {

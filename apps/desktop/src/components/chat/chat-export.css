@@ -29,18 +29,9 @@
   font-weight: 500;
 }
 
-.debug-bundle-preview textarea {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-bg);
-  color: var(--g-code-fg);
+/* The bundle is machine output: mono at the terminal size. */
+.debug-bundle-text {
   font-family: var(--g-mono);
-  font-size: var(--g-text-meta);
-  line-height: 18px;
-  font-weight: 400;
-  resize: vertical;
+  font-size: var(--g-text-term);
+  line-height: var(--g-leading-term);
 }

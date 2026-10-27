@@ -273,7 +273,7 @@ export function ChangesPanel({
             <label className="changes-scope">
               Compare current files with
               <select
-                className="ui-select"
+                className="g-select"
                 value={scope}
                 onChange={(event) => {
                   setScope(event.currentTarget.value);

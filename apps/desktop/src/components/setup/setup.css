@@ -13,10 +13,6 @@
   overflow: hidden;
 }
 
-.setup-shell :where(button, input, select, textarea) {
-  font-family: inherit;
-}
-
 .setup-drag {
   position: absolute;
   inset: 0 0 auto;
@@ -629,10 +625,6 @@
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 500;
-}
-
-.setup-field :where(input, select) {
-  font-weight: 400;
 }
 
 .setup-project-form {

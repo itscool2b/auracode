@@ -143,10 +143,6 @@ form.account-card > * {
   font-weight: 500;
 }
 
-.settings-field :where(input, textarea, select) {
-  font-weight: 400;
-}
-
 .account-code-input {
   max-width: 240px;
   height: 44px;
@@ -375,10 +371,6 @@ textarea.account-secret {
 .account-removal-body label:not(.account-check) {
   color: var(--g-fg-1);
   font-weight: 500;
-}
-
-.account-removal-body .g-input {
-  width: 100%;
 }
 
 .account-removal-body code {

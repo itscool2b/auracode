@@ -481,7 +481,7 @@ export function AccountPanel({
                 <label className="settings-field">
                   Recovery key
                   <textarea
-                    className="g-input account-secret"
+                    className="g-textarea account-secret"
                     readOnly
                     spellCheck={false}
                     autoComplete="off"

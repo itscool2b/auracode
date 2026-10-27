@@ -161,8 +161,9 @@ function Files({ state, api }: { readonly state: ChatState; readonly api?: Compo
   return (
     <div className="context-panel-content">
       <label className="context-file-search">
-        <Search size={14} />
+        <Search size={14} aria-hidden="true" />
         <input
+          className="g-input"
           aria-label="Find project files"
           placeholder="Find a file…"
           value={query}

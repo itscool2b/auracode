@@ -276,7 +276,7 @@ export function ConversationDialog({
           <label htmlFor="continuation-edit-text">Your prompt</label>
           <textarea
             id="continuation-edit-text"
-            className="ui-textarea"
+            className="g-textarea"
             value={text}
             onChange={(event) => setText(event.currentTarget.value)}
             rows={8}

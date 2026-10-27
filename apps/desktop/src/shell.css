@@ -150,63 +150,13 @@
   background-color: var(--g-surface-3);
 }
 
-.ui-input,
-.ui-select,
-.ui-textarea {
-  box-sizing: border-box;
-  min-width: 0;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-1);
-  color: var(--g-fg-1);
-  font-family: var(--g-sans);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 400;
-  user-select: text;
-  transition: border-color var(--g-dur-fast) var(--g-ease);
-}
-
-.ui-textarea {
-  height: auto;
-  min-height: 72px;
-  padding: 8px 12px;
-  resize: vertical;
-}
-
-/* The chevron is drawn in fg-3 (#858585); an SVG data URL cannot read a custom property. */
-.ui-select {
-  padding-right: 32px;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23858585' stroke-width='1.5'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 12px 12px;
-  text-overflow: ellipsis;
-}
-
-.ui-input::placeholder,
-.ui-textarea::placeholder {
-  color: var(--g-fg-3);
-  opacity: 1;
-}
-
-@media (hover: hover) {
-  :is(.ui-input, .ui-select, .ui-textarea):hover:not(:disabled) {
-    border-color: var(--g-fg-4);
-  }
-}
-
-:is(.ui-input, .ui-select, .ui-textarea):focus {
-  border-color: var(--g-fg-3);
-}
-
-:is(.ui-input, .ui-select, .ui-textarea):disabled {
-  border-color: var(--g-line);
-  color: var(--g-fg-4);
-  cursor: not-allowed;
+/*
+ * Fields are Graphite's .g-input, .g-select and .g-textarea. In a row beside a button, a field takes
+ * the room that is left.
+ */
+.ui-row > :is(.g-input, .g-select) {
+  flex: 1 1 200px;
+  width: auto;
 }
 
 /*

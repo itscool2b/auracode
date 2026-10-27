@@ -104,7 +104,7 @@ export function QuestionGroupForm({
               <label className="ui-field" htmlFor={`${inputId}-text`}>
                 {question.multi_select ? "Other answer (optional)" : "Or write your own answer"}
                 <input
-                  className="ui-input"
+                  className="g-input"
                   id={`${inputId}-text`}
                   value={draft.text}
                   disabled={busy}

@@ -127,7 +127,7 @@ export function WorktreeSetupPanel({
           <label className="ui-field">
             Files to copy, one relative path per line
             <textarea
-              className="ui-input git-pr-body"
+              className="g-textarea git-pr-body"
               value={files}
               disabled={busy}
               maxLength={32768}
@@ -142,7 +142,7 @@ export function WorktreeSetupPanel({
           <label className="ui-field">
             Setup program
             <input
-              className="ui-input"
+              className="g-input"
               value={program}
               disabled={busy}
               maxLength={4096}
@@ -153,7 +153,7 @@ export function WorktreeSetupPanel({
           <label className="ui-field">
             Arguments, one per line
             <textarea
-              className="ui-input git-pr-body"
+              className="g-textarea git-pr-body"
               value={args}
               disabled={busy}
               maxLength={32768}

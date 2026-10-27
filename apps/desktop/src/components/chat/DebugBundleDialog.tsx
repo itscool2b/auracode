@@ -51,6 +51,7 @@ export function DebugBundleDialog({
           <label className="debug-bundle-preview">
             Bundle preview
             <textarea
+              className="g-textarea debug-bundle-text"
               value={text}
               spellCheck={false}
               onChange={(event) => {

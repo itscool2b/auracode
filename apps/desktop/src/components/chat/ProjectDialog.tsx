@@ -110,7 +110,7 @@ export function ProjectDialog({
         <label className="ui-field">
           Project name
           <input
-            className="ui-input"
+            className="g-input"
             value={name}
             maxLength={128}
             required
@@ -180,7 +180,7 @@ export function ProjectDialog({
         <label className="ui-field">
           Default agent
           <select
-            className="ui-select"
+            className="g-select"
             value={agent}
             onChange={(event) => {
               setAgent(event.currentTarget.value);
@@ -198,7 +198,7 @@ export function ProjectDialog({
         <label className="ui-field">
           Default model ID
           <input
-            className="ui-input"
+            className="g-input"
             value={model}
             disabled={!agent}
             maxLength={256}

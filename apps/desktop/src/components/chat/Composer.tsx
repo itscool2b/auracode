@@ -146,7 +146,7 @@ export function Composer({
       <textarea
         ref={input}
         id={fieldId}
-        className="ui-textarea"
+        className="g-textarea"
         data-testid="composer-input"
         value={text}
         disabled={!context.ready}

@@ -163,7 +163,7 @@ export function ResetSyncPanel({
           <label htmlFor={`${id}-key`}>New recovery key</label>
           <textarea
             id={`${id}-key`}
-            className="g-input account-secret"
+            className="g-textarea account-secret"
             value={review.recovery_key}
             readOnly
             spellCheck={false}

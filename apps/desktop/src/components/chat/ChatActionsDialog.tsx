@@ -42,7 +42,7 @@ export function ChatActionsDialog({
         <label className="ui-field">
           Chat name
           <input
-            className="ui-input"
+            className="g-input"
             value={title}
             maxLength={512}
             required
@@ -75,7 +75,7 @@ export function ChatActionsDialog({
           <label className="ui-field">
             Move to project
             <select
-              className="ui-select"
+              className="g-select"
               value={projectId}
               onChange={(event) => setProjectId(event.currentTarget.value)}
             >

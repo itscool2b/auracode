@@ -526,7 +526,7 @@ export function GitDialog({
                 <label className="ui-field">
                   Initial branch
                   <input
-                    className="ui-input"
+                    className="g-input"
                     value={initialBranch}
                     maxLength={128}
                     disabled={busy}
@@ -553,7 +553,7 @@ export function GitDialog({
                 <label className="ui-field">
                   Branch name
                   <input
-                    className="ui-input"
+                    className="g-input"
                     value={slug}
                     maxLength={36}
                     onChange={(event) => setSlug(event.currentTarget.value)}
@@ -601,7 +601,7 @@ export function GitDialog({
                 <label className="ui-field">
                   Pull request title
                   <input
-                    className="ui-input"
+                    className="g-input"
                     value={prTitle}
                     maxLength={256}
                     required
@@ -612,7 +612,7 @@ export function GitDialog({
                 <label className="ui-field">
                   Description
                   <textarea
-                    className="ui-input git-pr-body"
+                    className="g-textarea git-pr-body"
                     value={prBody}
                     maxLength={65536}
                     disabled={busy}
@@ -622,7 +622,7 @@ export function GitDialog({
                 <label className="ui-field">
                   Base branch
                   <input
-                    className="ui-input"
+                    className="g-input"
                     placeholder="Repository default"
                     value={prBase}
                     maxLength={200}
@@ -651,7 +651,7 @@ export function GitDialog({
                 <label className="ui-field">
                   Merge message
                   <input
-                    className="ui-input"
+                    className="g-input"
                     value={message}
                     maxLength={4096}
                     disabled={busy}

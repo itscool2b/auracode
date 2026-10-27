@@ -310,9 +310,13 @@
 
 /* ------------------------------------------------------------------ inputs (4.2) */
 
-.g-input {
+/* One field style for <input class="g-input">, <select class="g-select"> and <textarea class="g-textarea">. */
+.g-input,
+.g-select,
+.g-textarea {
   box-sizing: border-box;
   width: 100%;
+  min-width: 0;
   height: 36px;
   margin: 0;
   padding: 0 12px;
@@ -323,27 +327,29 @@
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
+  font-weight: 400;
   transition: border-color var(--g-dur-fast) var(--g-ease);
 }
 
-.g-input::placeholder {
+:is(.g-input, .g-textarea)::placeholder {
   color: var(--g-fg-3);
   opacity: 1;
 }
 
-.g-input:where(:hover) {
+:is(.g-input, .g-select, .g-textarea):where(:hover) {
   border-color: var(--g-fg-4);
 }
 
-.g-input:where(:focus) {
+:is(.g-input, .g-select, .g-textarea):where(:focus) {
   border-color: var(--g-fg-3);
 }
 
-.g-input:where(:focus-visible) {
+:is(.g-input, .g-select, .g-textarea):where(:focus-visible) {
   outline: 2px solid var(--g-focus);
   outline-offset: 2px;
 }
 
+.g-textarea,
 .g-input:where(textarea) {
   height: auto;
   min-height: 72px;
@@ -351,13 +357,24 @@
   resize: vertical;
 }
 
-.g-input:where(:disabled) {
+/* The chevron is fg-3 (#858585): an SVG data URL cannot read a custom property. */
+.g-select {
+  padding-right: 32px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23858585' stroke-width='1.5'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 12px;
+  text-overflow: ellipsis;
+}
+
+:is(.g-input, .g-select, .g-textarea):where(:disabled) {
   border-color: var(--g-line);
   color: var(--g-fg-4);
   cursor: not-allowed;
 }
 
-.g-input:where([aria-invalid="true"]) {
+:is(.g-input, .g-select, .g-textarea):where([aria-invalid="true"]) {
   border-color: var(--g-red);
 }
 

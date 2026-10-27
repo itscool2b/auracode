@@ -136,7 +136,7 @@ export function ChatList({
         {searching ? (
           <input
             ref={search}
-            className="ui-input chat-sidebar-search"
+            className="g-input chat-sidebar-search"
             aria-label="Search chats"
             placeholder="Find a chat…"
             value={query}
