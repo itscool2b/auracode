@@ -1,6 +1,7 @@
 /*
- * Finding a project's folder on this device. It renders inside the project dialog, so it carries
- * its own type and uses only Graphite tokens.
+ * Finding a project's folder on this device, inside the project dialog: one sentence, the
+ * repository as a row, the code roots to search with Search as the action, then the other ways in
+ * (locate it, clone it) after one hairline. Only Graphite tokens.
  */
 
 .folder-resolver {
@@ -12,23 +13,36 @@
   line-height: var(--g-leading-ui);
 }
 
-.folder-resolver :where(h3, h4, p, ul) {
+.folder-resolver :where(h3, p, ul) {
   margin: 0;
 }
 
-.folder-resolver h3 {
-  color: var(--g-fg-1);
-  font-size: var(--g-text-heading);
-  line-height: var(--g-leading-heading);
-  font-weight: 600;
+.folder-resolver-lead {
+  margin-top: calc(var(--g-space-8) * -1);
+  color: var(--g-fg-2);
 }
 
-.folder-resolver h4 {
+.folder-resolver-lead strong {
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.folder-resolver h3 {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-2);
   margin-top: var(--g-space-8);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 500;
+}
+
+.folder-resolver h3 small {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 400;
 }
 
 .folder-resolver ul {
@@ -51,6 +65,25 @@
   min-width: 0;
 }
 
+/* The roots on hairlines, each with its Remove at the row's end. */
+.folder-resolver-roots {
+  border-top: 1px solid var(--g-line);
+}
+
+.folder-resolver ul.folder-resolver-roots {
+  gap: 0;
+}
+
+.folder-resolver-roots > li {
+  min-height: 40px;
+  border-bottom: 1px solid var(--g-line);
+}
+
+.folder-resolver-roots .setup-path {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-code);
+}
+
 .folder-resolver > section > ul {
   display: block;
   padding-left: var(--g-space-20);
@@ -68,9 +101,31 @@
 .folder-resolver footer {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--g-space-8);
   margin: 0;
+}
+
+.folder-resolver-search {
+  justify-content: space-between;
+}
+
+.folder-resolver-search > .g-button-ghost {
+  margin-left: calc(var(--g-space-12) * -1);
+}
+
+/* The other ways in: quiet, after one hairline, on the column's start. */
+.folder-resolver .folder-resolver-other {
+  justify-content: flex-start;
+  gap: var(--g-space-4);
+  margin-top: var(--g-space-8);
+  padding-top: var(--g-space-12);
+  border-top: 1px solid var(--g-line);
+}
+
+.folder-resolver-other > .g-button:first-child {
+  margin-left: calc(var(--g-space-12) * -1);
 }
 
 .folder-resolver .setup-folder {

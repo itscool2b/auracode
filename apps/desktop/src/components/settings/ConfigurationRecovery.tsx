@@ -1,3 +1,4 @@
+import { Logo } from "@auracode/ui/graphite";
 import { invoke } from "@tauri-apps/api/core";
 import { type ReactNode, useRef, useState } from "react";
 import type { AppInfo, ConfigProfileRecovery } from "../../bindings";
@@ -46,8 +47,12 @@ export function ConfigurationRecovery({
   };
   return (
     <div className="configuration-recovery g-root">
-      <div className="settings-drag" data-tauri-drag-region="" />
-      <main className="settings-content" aria-labelledby="configuration-recovery-title">
+      <div className="configuration-recovery-drag" data-tauri-drag-region="" />
+      <main
+        className="configuration-recovery-content"
+        aria-labelledby="configuration-recovery-title"
+      >
+        <Logo className="configuration-recovery-logo" size={32} />
         <header>
           <h1 id="configuration-recovery-title">
             {unavailable ? "Your settings are preserved" : "Finish opening your workspace"}
@@ -63,7 +68,7 @@ export function ConfigurationRecovery({
                 : "Verify that the selected profile's managed settings match the saved switch before continuing."}
           </p>
           {locked ? (
-            <p className="settings-footnote">
+            <p className="configuration-recovery-locked">
               Unlock the selected account below, then retry recovery.
             </p>
           ) : null}
