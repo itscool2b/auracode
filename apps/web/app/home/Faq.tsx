@@ -186,35 +186,33 @@ export function Faq() {
 
   return (
     <section className="section faq" aria-labelledby="faq-title">
-      <div className="frame">
-        <div className="section-inner faq-grid">
-          <div className="faq-head" data-reveal="">
-            <h2 id="faq-title" className="section-title">
-              Questions, answered. <span>Before you install.</span>
-            </h2>
-            <a className="g-button g-button-outline g-button-36" href="/privacy">
-              Privacy notice
-            </a>
-          </div>
-          <div className="faq-list" ref={list}>
-            <span className="faq-well" ref={well} aria-hidden="true" />
-            {QUESTIONS.map((item, i) => (
-              <details className="faq-item" key={item.question} open={i === 0}>
-                <summary>
-                  <span className="faq-question">{item.question}</span>
-                  <span className="faq-icon" aria-hidden="true">
-                    <span />
-                    <span />
-                  </span>
-                </summary>
-                <div className="faq-body">
-                  <div className="faq-answer">
-                    <p>{item.answer}</p>
-                  </div>
+      <div className="wrap faq-grid">
+        <div className="faq-head" data-reveal="">
+          <h2 id="faq-title" className="title">
+            Questions, answered. <span>Before you install.</span>
+          </h2>
+          <a className="g-button g-button-outline g-button-36" href="/privacy">
+            Privacy notice
+          </a>
+        </div>
+        <div className="faq-list" ref={list}>
+          <span className="faq-well" ref={well} aria-hidden="true" />
+          {QUESTIONS.map((item, i) => (
+            <details className="faq-item" key={item.question} open={i === 0}>
+              <summary>
+                <span className="faq-question">{item.question}</span>
+                <span className="faq-icon" aria-hidden="true">
+                  <span />
+                  <span />
+                </span>
+              </summary>
+              <div className="faq-body">
+                <div className="faq-answer">
+                  <p>{item.answer}</p>
                 </div>
-              </details>
-            ))}
-          </div>
+              </div>
+            </details>
+          ))}
         </div>
       </div>
     </section>

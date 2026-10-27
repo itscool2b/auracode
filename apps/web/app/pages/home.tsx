@@ -1,11 +1,11 @@
-import { AGENT_NAMES } from "../agents";
-import { AgentWheel } from "../home/AgentWheel";
-import { Capabilities } from "../home/Capabilities";
 import { Closing } from "../home/Closing";
 import { Faq } from "../home/Faq";
-import { Features } from "../home/Features";
+import { Film } from "../home/Film";
+import { Numerals } from "../home/Numerals";
 import { Stage } from "../home/Stage";
-import { Arrow } from "../ui";
+import { Strip } from "../home/Strip";
+import { Tiles } from "../home/Tiles";
+import { Triptych } from "../home/Triptych";
 
 export const meta = () => [
   { title: "auracode · One window for your coding agents" },
@@ -16,41 +16,15 @@ export const meta = () => [
   },
 ];
 
-function Agents() {
-  return (
-    <section className="section agents" aria-labelledby="agents-title">
-      <div className="frame">
-        <div className="section-inner agents-grid">
-          <h2 id="agents-title" className="agents-title" data-reveal="">
-            Bring the agents you already use.{" "}
-            <span>auracode runs each one through its own harness.</span>
-          </h2>
-          <div className="agents-names">
-            <AgentWheel names={AGENT_NAMES} />
-            <ul className="agent-list">
-              {AGENT_NAMES.map((name) => (
-                <li key={name}>{name}</li>
-              ))}
-            </ul>
-          </div>
-          <div className="agents-more" data-reveal="">
-            <a className="g-button g-button-outline g-button-36" href="/download">
-              Platform availability <Arrow />
-            </a>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export default function Home() {
   return (
     <main id="main" className="home">
       <Stage />
-      <Agents />
-      <Capabilities />
-      <Features />
+      <Triptych />
+      <Film />
+      <Tiles />
+      <Strip />
+      <Numerals />
       <Faq />
       <Closing />
     </main>

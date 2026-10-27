@@ -19,17 +19,6 @@ const PLATFORMS = [
   },
 ] as const;
 
-function Crosshairs() {
-  return (
-    <>
-      <span className="g-crosshair g-crosshair-tl" aria-hidden="true" />
-      <span className="g-crosshair g-crosshair-tr" aria-hidden="true" />
-      <span className="g-crosshair g-crosshair-bl" aria-hidden="true" />
-      <span className="g-crosshair g-crosshair-br" aria-hidden="true" />
-    </>
-  );
-}
-
 export default function Download() {
   const [detected, setDetected] = useState("");
   const release = catalog.release;
@@ -59,75 +48,72 @@ export default function Download() {
           ) : null}
         </div>
       ) : null}
-      <div className="download-frame" data-reveal="">
-        <Crosshairs />
-        <div className="download-grid g-hairline-grid">
-          {release
-            ? release.downloads.map((download) => (
-                <article className="download-cell" key={download.kind}>
-                  <div>
-                    <h2 className="download-name">{download.label}</h2>
-                    <p className="download-sub">{download.requirements}</p>
+      <div className="download-grid" data-reveal="">
+        {release
+          ? release.downloads.map((download) => (
+              <article className="download-cell" key={download.kind}>
+                <div>
+                  <h2 className="download-name">{download.label}</h2>
+                  <p className="download-sub">{download.requirements}</p>
+                </div>
+                <dl className="data-rows">
+                  <div className="data-row">
+                    <dt>Version</dt>
+                    <dd className="mono">{release.version}</dd>
                   </div>
-                  <dl className="data-rows">
-                    <div className="data-row">
-                      <dt>Version</dt>
-                      <dd className="mono">{release.version}</dd>
-                    </div>
-                    <div className="data-row">
-                      <dt>Package</dt>
-                      <dd className="mono">{download.file}</dd>
-                    </div>
-                    <div className="data-row">
-                      <dt>Size</dt>
-                      <dd className="mono">{(download.bytes / 1024 / 1024).toFixed(1)} MiB</dd>
-                    </div>
-                    <div className="data-row">
-                      <dt>SHA-256</dt>
-                      <dd>
-                        <code className="mono">{download.sha256}</code>
-                      </dd>
-                    </div>
-                  </dl>
-                  <div className="download-action">
-                    <a className="g-button g-button-primary g-button-44" href={download.url}>
-                      Download {download.label}
-                    </a>
+                  <div className="data-row">
+                    <dt>Package</dt>
+                    <dd className="mono">{download.file}</dd>
                   </div>
-                </article>
-              ))
-            : PLATFORMS.map((os) => (
-                <article className="download-cell" key={os.name}>
-                  <div>
-                    <h2 className="download-name">{os.name}</h2>
-                    <p className="download-sub">{os.architectures}</p>
+                  <div className="data-row">
+                    <dt>Size</dt>
+                    <dd className="mono">{(download.bytes / 1024 / 1024).toFixed(1)} MiB</dd>
                   </div>
-                  <dl className="data-rows">
-                    <div className="data-row">
-                      <dt>Requires</dt>
-                      <dd>{os.requirements}</dd>
-                    </div>
-                    <div className="data-row">
-                      <dt>Package</dt>
-                      <dd>{os.format}</dd>
-                    </div>
-                    <div className="data-row">
-                      <dt>Public version</dt>
-                      <dd>Not published</dd>
-                    </div>
-                    <div className="data-row">
-                      <dt>SHA-256</dt>
-                      <dd>Available with release</dd>
-                    </div>
-                  </dl>
-                  <div className="download-action">
-                    <button type="button" className="g-button g-button-44" disabled>
-                      Installer coming soon
-                    </button>
+                  <div className="data-row">
+                    <dt>SHA-256</dt>
+                    <dd>
+                      <code className="mono">{download.sha256}</code>
+                    </dd>
                   </div>
-                </article>
-              ))}
-        </div>
+                </dl>
+                <div className="download-action">
+                  <a className="g-button g-button-primary g-button-44" href={download.url}>
+                    Download {download.label}
+                  </a>
+                </div>
+              </article>
+            ))
+          : PLATFORMS.map((os) => (
+              <article className="download-cell" key={os.name}>
+                <div>
+                  <h2 className="download-name">{os.name}</h2>
+                  <p className="download-sub">{os.architectures}</p>
+                </div>
+                <dl className="data-rows">
+                  <div className="data-row">
+                    <dt>Requires</dt>
+                    <dd>{os.requirements}</dd>
+                  </div>
+                  <div className="data-row">
+                    <dt>Package</dt>
+                    <dd>{os.format}</dd>
+                  </div>
+                  <div className="data-row">
+                    <dt>Public version</dt>
+                    <dd>Not published</dd>
+                  </div>
+                  <div className="data-row">
+                    <dt>SHA-256</dt>
+                    <dd>Available with release</dd>
+                  </div>
+                </dl>
+                <div className="download-action">
+                  <button type="button" className="g-button g-button-44" disabled>
+                    Installer coming soon
+                  </button>
+                </div>
+              </article>
+            ))}
       </div>
       <div className="prose-sections">
         {release ? (
