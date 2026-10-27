@@ -1,9 +1,9 @@
 import { FolderOpen, GitBranch } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { DialogClose, dialogClassName } from "../chat/Modal";
 import { type CloneApi, cloneApi } from "../../lib/setup-actions/api";
 import type { CloneRecord, CloneReview } from "../../lib/setup-actions/bindings";
+import { DialogClose, dialogClassName } from "../chat/Modal";
 
 export function CloneProject({
   pickParent,

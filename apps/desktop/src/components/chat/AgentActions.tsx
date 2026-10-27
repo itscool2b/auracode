@@ -66,7 +66,12 @@ export function AgentActions({
         </button>
       ) : null}
       {maintenance?.login_available ? (
-        <button type="button" className={buttonClassName} disabled={busy} onClick={() => setSignIn(true)}>
+        <button
+          type="button"
+          className={buttonClassName}
+          disabled={busy}
+          onClick={() => setSignIn(true)}
+        >
           Sign in…
         </button>
       ) : null}

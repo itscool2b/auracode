@@ -828,5 +828,3 @@
 :is(.library-screen, .library-review) details[open] > summary::before {
   transform: rotate(90deg);
 }
-
-

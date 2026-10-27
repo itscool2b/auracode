@@ -1,13 +1,13 @@
 import type { Terminal } from "@xterm/xterm";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { DialogClose, dialogClassName } from "./chat/Modal";
 import {
   TerminalSession,
   type TerminalState,
   type TerminalTransport,
   terminalTransport,
 } from "../lib/terminal";
+import { DialogClose, dialogClassName } from "./chat/Modal";
 import "@xterm/xterm/css/xterm.css";
 import "./TerminalSheet.css";
 
