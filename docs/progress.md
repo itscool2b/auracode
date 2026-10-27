@@ -2897,3 +2897,25 @@ vault, setup actions, profile status, chat sign-in, setup) plus account reset, w
 agent installations, folder resolution and repository publication, in Chromium and WebKit. Not
 verified yet: CI, the native Tauri window, real Safari and macOS WebKit, and the owner's
 walkthrough. Playwright WebKit on Windows draws Geist lighter than macOS does.
+
+### Graphite walkthrough before the PR
+
+The owner asked for a hands-on pass over the site and the app before the PR. Website: the
+production build served locally with its CSP, driven in Chromium at 1440 and 390 with every
+request outside localhost blocked, Turnstile replaced by a synthetic widget and `/api/*` answered
+by fixtures, so nothing reached a real API and no email was sent. Checked: the hero (rotating name,
+creatures, lens), the product frame reveal, the film card (Play/Pause by keyboard), the checkpoint
+toggle, the FAQ, the closing band and footer, every route at both widths without overflow, the skip
+link and focus ring order, reduced motion, no JavaScript (the film card shows its settled turn),
+the phone menu, invited sign-in with an invite-only answer, and the signed-out account page.
+Desktop: the existing debug build against the Graphite frontend in the real WebView2 window,
+driven through accessibility and screenshots: onboarding through Motion, the main window, the
+command palette, Settings, the Library and a 960x680 window at 150% scaling. No agent prompt was
+sent.
+
+Fixed from the walkthrough: the phone menu now covers the page below the bar, and a failed account
+load shows its error and reload link without a "Loading" line that never ends (production shows
+this while its API route is closed). Noted, not changed: the sidebar agent dock shows every
+harness, so native and ACP variants of one agent share a two-letter code (two CC, two CX); their
+popovers name them. The styled 404 is reached only through in-app navigation, since the Worker
+answers unknown paths with plain text.
