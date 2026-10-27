@@ -36,12 +36,19 @@ function Stat({ added, removed }: { added: number; removed: number }) {
 export function ApprovalMini() {
   return (
     <div className="mini mini-approval">
-      <div className="mini-context mini-enter" style={row(0)}>
+      <p className="mini-user mini-enter" style={row(0)}>
+        Fix the pacing bug, then run the tests.
+      </p>
+      <div className="mini-byline mini-enter" style={row(1)}>
+        <AgentMark agent="claude-code" size={16} />
+        <span className="mini-strong">Claude Code</span>
+      </div>
+      <div className="mini-context mini-enter" style={row(2)}>
         <span className="mini-tool">Edited</span>
         <span className="mini-code">src/pacing.ts</span>
         <Stat added={12} removed={3} />
       </div>
-      <div className="mini-card mini-enter" style={row(1)}>
+      <div className="mini-card mini-enter" style={row(3)}>
         <div className="mini-card-head">
           <AgentMark agent="claude-code" state="waiting" size={16} />
           <p className="mini-ask">

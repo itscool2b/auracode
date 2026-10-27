@@ -1012,12 +1012,31 @@ html:not(.js) .cap-text > span {
   font-size: 10px;
 }
 
-/* Approval */
+/* Approval: the transcript above, the card in the composer's place (visual language 6.4, 6.6). */
+.mini-user {
+  justify-self: end;
+  max-width: 82%;
+  padding: 10px 14px;
+  border-radius: 16px 16px 4px 16px;
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.mini-byline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .mini-context {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 4px;
+  margin-bottom: 4px;
+  padding-left: 24px;
   color: var(--g-fg-2);
 }
 
