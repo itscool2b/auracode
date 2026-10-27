@@ -64,6 +64,7 @@ function Keys({ keys, mac }: { readonly keys: string; readonly mac: boolean }) {
     "⇧": "Shift",
     "↑": "Up arrow",
     "↓": "Down arrow",
+    "1–9": "1 to 9",
   };
   const caps = keys === "Esc again" ? ["Esc", "Esc"] : keys.split(" ");
   return (
@@ -264,6 +265,7 @@ export function SettingsScreen({
   const key = mac ? "⌘" : "Ctrl";
   const shortcuts = [
     ["New chat", `${key} N`],
+    ["Open chat 1 to 9 in the sidebar", `${key} 1–9`],
     ["Search chats, projects and files", `${key} K`],
     ["Open context panel", `${key} J`],
     ["Choose agent, model and effort", `${key} .`],

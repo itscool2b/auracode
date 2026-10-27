@@ -17,7 +17,7 @@ import {
 import { applyEntries, emptyTranscript, renderTranscript } from "../../lib/chat/transcript";
 import { dockAgents, dockState } from "./AgentDock";
 import { Banners, envBanner, RecoveryBannerView, storageBanner } from "./Banners";
-import { ChatList, projectName, projectsOf } from "./ChatList";
+import { ChatList, chatShortcutIndex, projectName, projectsOf, visibleChatIds } from "./ChatList";
 import { StillWorking } from "./ChatView";
 import { SendControls, StopButton } from "./Composer";
 import { Header } from "./Header";
@@ -201,6 +201,48 @@ describe("the chat list", () => {
     expect(html).toContain("folder not allowed");
     expect(html).toContain('aria-label="Waiting for your answer"');
     expect(html.match(/aria-current="true"/g)).toHaveLength(1);
+  });
+
+  it("numbers the visible chats for Ctrl+1 to Ctrl+9, skipping folded projects", () => {
+    const projects = [
+      { folder: "app", chats: [chatSummary("a1"), chatSummary("a2")] },
+      { folder: "site", chats: [chatSummary("s1")] },
+      { folder: "docs", chats: [chatSummary("d1")] },
+    ];
+    expect(visibleChatIds(projects, new Set(), false)).toEqual(["a1", "a2", "s1", "d1"]);
+    expect(visibleChatIds(projects, new Set(["site"]), false)).toEqual(["a1", "a2", "d1"]);
+    expect(visibleChatIds(projects, new Set(), true)).toEqual([]);
+    const key = (overrides: Partial<Parameters<typeof chatShortcutIndex>[0]>) =>
+      chatShortcutIndex({
+        key: "1",
+        code: "Digit1",
+        ctrlKey: true,
+        metaKey: false,
+        altKey: false,
+        isComposing: false,
+        ...overrides,
+      });
+    expect(key({})).toBe(0);
+    expect(key({ key: "9", code: "Digit9", ctrlKey: false, metaKey: true })).toBe(8);
+    // AZERTY: the 1 key without Shift types "&", and its code still says Digit1.
+    expect(key({ key: "&" })).toBe(0);
+    expect(key({ key: "0", code: "Digit0" })).toBeNull();
+    expect(key({ ctrlKey: false })).toBeNull();
+    expect(key({ altKey: true })).toBeNull();
+    expect(key({ isComposing: true })).toBeNull();
+    expect(key({ key: "k", code: "KeyK" })).toBeNull();
+  });
+
+  it("tells assistive technology the first nine chats' shortcuts", () => {
+    const chats = Array.from({ length: 10 }, (_, index) =>
+      chatSummary(`c${index}`, { folder: "/code/app", title: `Chat ${index}` }),
+    );
+    const html = renderToStaticMarkup(
+      <ChatList chats={chats} error={null} selected={null} onSelect={noop} onNewChat={noop} />,
+    );
+    expect(html).toContain('aria-keyshortcuts="Control+1 Meta+1"');
+    expect(html).toContain('aria-keyshortcuts="Control+9 Meta+9"');
+    expect(html).not.toContain("Control+10");
   });
 });
 

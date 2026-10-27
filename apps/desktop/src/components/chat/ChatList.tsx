@@ -17,6 +17,39 @@ export function projectsOf(
   return [...projects].map(([folder, list]) => ({ folder, chats: list }));
 }
 
+/**
+ * The chats the sidebar's list shows, top to bottom: each open project's chats, in the order they
+ * are drawn. Folded projects and a folded section show none. The "Needs you" rows repeat chats
+ * that are also in this list, so they are not counted twice.
+ */
+export function visibleChatIds(
+  projects: readonly { readonly folder: string; readonly chats: readonly ChatSummary[] }[],
+  folded: ReadonlySet<string>,
+  sectionFolded: boolean,
+): string[] {
+  if (sectionFolded) return [];
+  return projects.flatMap((project) =>
+    folded.has(project.folder) ? [] : project.chats.map((chat) => chat.id),
+  );
+}
+
+/**
+ * Which chat Ctrl+1 to Ctrl+9 (Cmd on macOS) opens: 0 for the first. The physical digit key
+ * counts too, for layouts whose digits need Shift. `null` for any other key or while composing.
+ */
+export function chatShortcutIndex(event: {
+  readonly key: string;
+  readonly code: string;
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+  readonly altKey: boolean;
+  readonly isComposing: boolean;
+}): number | null {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing) return null;
+  const digit = /^Digit([1-9])$/.exec(event.code)?.[1] ?? /^[1-9]$/.exec(event.key)?.[0];
+  return digit === undefined ? null : Number(digit) - 1;
+}
+
 export function projectName(folder: string): string {
   const parts = folder.split(/[\\/]/).filter((part) => part !== "");
   return parts[parts.length - 1] ?? folder;
@@ -93,11 +126,22 @@ export function ChatList({
         project: null,
       }));
   const waiting = filtered.filter((chat) => chat.needs_attention);
+  const visible = visibleChatIds(projects, folded, sectionFolded);
+  const shortcuts = useRef(visible);
+  shortcuts.current = visible;
   useEffect(() => {
     if (!active) return;
     const keys = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !(event.metaKey || event.ctrlKey) || event.altKey) return;
-      if (event.key.toLowerCase() === "k") {
+      const index = chatShortcutIndex(event);
+      if (index !== null) {
+        // Like Ctrl+J, a chat never opens behind an open dialog.
+        if (document.querySelector("dialog[open]")) return;
+        const chatId = shortcuts.current[index];
+        if (chatId === undefined) return;
+        event.preventDefault();
+        onSelect(chatId);
+      } else if (event.key.toLowerCase() === "k") {
         event.preventDefault();
         if (onSearch) onSearch();
         else setSearching(true);
@@ -108,7 +152,7 @@ export function ChatList({
     };
     window.addEventListener("keydown", keys);
     return () => window.removeEventListener("keydown", keys);
-  }, [onNewChat, onSearch, active]);
+  }, [onNewChat, onSearch, onSelect, active]);
   useEffect(() => {
     if (searching) search.current?.focus();
   }, [searching]);
@@ -267,6 +311,7 @@ export function ChatList({
                                 chat={chat}
                                 selected={chat.id === selected}
                                 onSelect={onSelect}
+                                shortcut={visible.indexOf(chat.id)}
                               />
                               {membership.get(chat.id)?.pinned ? (
                                 <Pin className="chat-pin-mark" size={10} aria-label="Pinned" />
@@ -332,10 +377,13 @@ function ChatRow({
   chat,
   selected,
   onSelect,
+  shortcut = -1,
 }: {
   readonly chat: ChatSummary;
   readonly selected: boolean;
   readonly onSelect: (chatId: string) => void;
+  /** The row's place among the visible chats: the first nine open with Ctrl+1 to Ctrl+9. */
+  readonly shortcut?: number;
 }) {
   const folder = folderStateLabel(chat.folder_state);
   const label = chat.needs_attention
@@ -354,6 +402,9 @@ function ChatRow({
       data-test-attention={String(chat.needs_attention)}
       data-test-folder-state={chat.folder_state}
       data-running={running ? "" : undefined}
+      aria-keyshortcuts={
+        shortcut >= 0 && shortcut < 9 ? `Control+${shortcut + 1} Meta+${shortcut + 1}` : undefined
+      }
       onClick={() => onSelect(chat.id)}
     >
       <span className="chat-row-title" data-testid="chat-row-title">

@@ -573,6 +573,15 @@ async function inspect(engine, launcher) {
       .analyze();
     assert.deepEqual(paletteScan.violations, [], "Command palette accessibility");
     await page.keyboard.press("Escape");
+    // Ctrl+N opens New chat and Ctrl+1 to Ctrl+9 open the sidebar's chats in their order.
+    const current = page.locator('[data-testid="chat-row"][aria-current="true"]');
+    await page.keyboard.press("Control+n");
+    await current.waitFor({ state: "detached" });
+    await page.keyboard.press("Control+9");
+    assert.equal(await current.count(), 0, "Ctrl+9 opened a chat the sidebar does not show");
+    await page.keyboard.press("Control+1");
+    await current.waitFor();
+    assert.equal(await current.getAttribute("aria-keyshortcuts"), "Control+1 Meta+1");
 
     await page.emulateMedia({ colorScheme: "dark", reducedMotion: "no-preference" });
     await page.goto(`${url}/?preview=thinking`);
