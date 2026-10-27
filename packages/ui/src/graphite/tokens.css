@@ -1,0 +1,212 @@
+/*
+ * Graphite tokens: docs/design/visual-language.md, section 3. Variables only, on :root.
+ *
+ * The product is dark only. Every text colour is a solid hex, so WebView2 and WebKit rasterise text
+ * against an opaque colour (alpha text was one cause of the old app's soft, uneven type). Alpha is
+ * used only for tints painted behind content: chips, diff rows, the scrim.
+ *
+ * Colour means five things and nothing else: volt (look here), green (passed, added), red (failed,
+ * removed), the white of the primary pill, and the grey ladder for everything else.
+ * graphite/tokens.ts mirrors the values the canvas and tests need; tokens.test.ts keeps them equal.
+ */
+
+:root {
+  /* Surfaces, back to front. Wells sit one step below their container. */
+  --g-bg: #000000;
+  --g-surface-1: #0a0a0a;
+  --g-surface-2: #111111;
+  --g-surface-3: #191919;
+  --g-surface-4: #222222;
+
+  /* Lines */
+  --g-line-faint: #141414;
+  --g-line: #1f1f1f;
+  --g-line-strong: #2e2e2e;
+
+  /* Text. fg-3 passes 4.5:1 on bg and surfaces 1 to 3; fg-4 never carries information. */
+  --g-fg-1: #ededed;
+  --g-fg-2: #a3a3a3;
+  --g-fg-3: #858585;
+  --g-fg-4: #4d4d4d;
+  --g-on-light: #000000;
+
+  /* The primary pill: the one white object on a screen. Hover settles to pure white. */
+  --g-primary: #ededed;
+  --g-primary-hover: #ffffff;
+  --g-primary-active: #d6d6d6;
+
+  /* Signal. Volt is the only accent: needs you, live, new, the glint, lit dither pixels. */
+  --g-volt: #ccff33;
+  --g-volt-tint: rgb(204 255 51 / 0.12);
+  --g-green: #3dd68c;
+  --g-green-tint: rgb(61 214 140 / 0.12);
+  --g-red: #ff5c5c;
+  --g-red-hover: #ff7a7a;
+  --g-red-tint: rgb(255 92 92 / 0.12);
+
+  /* Diffs, inside code wells only */
+  --g-diff-add-line: rgb(61 214 140 / 0.1);
+  --g-diff-add-word: rgb(61 214 140 / 0.24);
+  --g-diff-del-line: rgb(255 92 92 / 0.1);
+  --g-diff-del-word: rgb(255 92 92 / 0.24);
+  --g-diff-hunk: #111111;
+
+  /* Selection, scrim, focus */
+  --g-selection: #333333;
+  --g-scrim: rgb(0 0 0 / 0.72);
+  --g-focus: #ededed;
+
+  /* Code and terminal: hues live inside wells only, never in chrome */
+  --g-code-fg: #d4d4d4;
+  --g-code-bright: #ededed;
+  --g-code-dim: #858585;
+  --g-code-keyword: #ff8f8f;
+  --g-code-string: #8fb8ff;
+  --g-code-number: #c7a6ff;
+  --g-code-function: #ededed;
+  --g-ansi-black: #4d4d4d;
+  --g-ansi-red: #ff6b6b;
+  --g-ansi-green: #3dd68c;
+  --g-ansi-yellow: #e6cc6e;
+  --g-ansi-blue: #7aa7ff;
+  --g-ansi-magenta: #d69cff;
+  --g-ansi-cyan: #5cd6d6;
+  --g-ansi-white: #d4d4d4;
+  --g-ansi-bright-black: #858585;
+  --g-ansi-bright-red: #ff8f8f;
+  --g-ansi-bright-green: #6ee7a8;
+  --g-ansi-bright-yellow: #f2dc8c;
+  --g-ansi-bright-blue: #a3c2ff;
+  --g-ansi-bright-magenta: #e4bdff;
+  --g-ansi-bright-cyan: #8ae6e6;
+  --g-ansi-bright-white: #ededed;
+
+  /* Dither field: black plus three greys, lit pixels in volt */
+  --g-dither-1: #2e2e2e;
+  --g-dither-2: #4d4d4d;
+  --g-dither-3: #858585;
+
+  /* Type. Integer weights only: 400, 500, 600. */
+  --g-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --g-mono:
+    "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --g-weight-regular: 400;
+  --g-weight-medium: 500;
+  --g-weight-semibold: 600;
+
+  /* App scale: size / line height, tracking only where it is negative */
+  --g-text-ui: 14px;
+  --g-leading-ui: 20px;
+  --g-text-prose: 15px;
+  --g-leading-prose: 24px;
+  --g-text-meta: 12px;
+  --g-leading-meta: 16px;
+  --g-text-heading: 16px;
+  --g-leading-heading: 22px;
+  --g-text-title: 22px;
+  --g-leading-title: 28px;
+  --g-tracking-title: -0.015em;
+  --g-text-display: 32px;
+  --g-leading-display: 38px;
+  --g-tracking-display: -0.025em;
+  --g-text-code: 13px;
+  --g-leading-code: 20px;
+  --g-text-term: 12.5px;
+  --g-leading-term: 18px;
+  --g-text-key: 11px;
+  --g-leading-key: 16px;
+
+  /* Website scale */
+  --g-web-hero: clamp(48px, 7vw, 96px);
+  --g-web-hero-leading: 0.98;
+  --g-web-hero-tracking: -0.045em;
+  --g-web-h2: clamp(36px, 4.4vw, 56px);
+  --g-web-h2-leading: 1.04;
+  --g-web-h2-tracking: -0.035em;
+  --g-web-h3: 24px;
+  --g-web-h3-leading: 30px;
+  --g-web-h3-tracking: -0.02em;
+  --g-web-lead: 20px;
+  --g-web-lead-leading: 30px;
+  --g-web-body: 16px;
+  --g-web-body-leading: 26px;
+  --g-web-small: 14px;
+  --g-web-small-leading: 22px;
+  --g-web-wordmark: clamp(96px, 20vw, 280px);
+  --g-web-wordmark-tracking: -0.06em;
+
+  /* Spacing: a 4px base */
+  --g-space-2: 2px;
+  --g-space-4: 4px;
+  --g-space-6: 6px;
+  --g-space-8: 8px;
+  --g-space-12: 12px;
+  --g-space-16: 16px;
+  --g-space-20: 20px;
+  --g-space-24: 24px;
+  --g-space-32: 32px;
+  --g-space-40: 40px;
+  --g-space-48: 48px;
+  --g-space-64: 64px;
+  --g-space-80: 80px;
+  --g-space-96: 96px;
+  --g-space-128: 128px;
+  --g-space-160: 160px;
+
+  /* Radii: 0 for pixels and markers, small for content, pills for controls */
+  --g-radius-4: 4px;
+  --g-radius-6: 6px;
+  --g-radius-8: 8px;
+  --g-radius-12: 12px;
+  --g-radius-16: 16px;
+  --g-radius-pill: 999px;
+
+  /* Elevation: one soft dark shadow, for menus, popovers and modals only */
+  --g-shadow: 0 16px 48px -12px rgb(0 0 0 / 0.8), 0 4px 12px -4px rgb(0 0 0 / 0.6);
+
+  /* Layout */
+  --g-web-max: 1200px;
+  --g-web-gutter: clamp(16px, 4vw, 40px);
+  --g-app-column: 720px;
+  --g-app-sidebar: 264px;
+  --g-app-header: 44px;
+  --g-app-panel: 380px;
+
+  /* Motion. No springs, no bounce, nothing idles. Provisional: see section 3.8 of the spec. */
+  --g-ease: cubic-bezier(0.2, 0, 0, 1);
+  --g-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --g-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --g-ease-settle: cubic-bezier(0, 0.7, 0.3, 1);
+  --g-dur-micro: 100ms;
+  --g-dur-fast: 150ms;
+  --g-dur-base: 200ms;
+  --g-dur-panel: 280ms;
+  --g-dur-settle: 300ms;
+  --g-dur-reveal: 800ms;
+  --g-dur-exit: 120ms;
+  --g-dur-shimmer: 1600ms;
+  --g-dur-glint: 900ms;
+  --g-stagger: 40ms;
+}
+
+/*
+ * Reduced motion, from the OS or from the app's own setting (motion.ts writes data-motion on the
+ * html element). Movement stops; colour and opacity changes stay, because they are not motion.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --g-dur-panel: 0ms;
+    --g-dur-settle: 0ms;
+    --g-dur-reveal: 0ms;
+    --g-dur-glint: 0ms;
+    --g-stagger: 0ms;
+  }
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) {
+  --g-dur-panel: 0ms;
+  --g-dur-settle: 0ms;
+  --g-dur-reveal: 0ms;
+  --g-dur-glint: 0ms;
+  --g-stagger: 0ms;
+}

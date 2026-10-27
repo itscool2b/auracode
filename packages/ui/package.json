@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Aura design system shared by the auracode desktop app and auracode.si: tokens, fonts, glass, motion, Orb, AuraField.",
+  "description": "auracode design system shared by the desktop app and auracode.si: Graphite (tokens, primitives, DitherField, AgentMark, PixelMark), plus the legacy Aura and Orbit modules.",
   "sideEffects": [
     "*.css"
   ],
@@ -11,6 +11,9 @@
     ".": "./src/index.ts",
     "./tokens.css": "./src/tokens.css",
     "./fonts.css": "./src/fonts.css",
+    "./graphite": "./src/graphite/index.ts",
+    "./graphite.css": "./src/graphite/graphite.css",
+    "./graphite-tokens.css": "./src/graphite/tokens.css",
     "./orbit": "./src/orbit/index.ts",
     "./orbit.css": "./src/orbit/orbit.css",
     "./orbit-tokens.css": "./src/orbit/tokens.css"

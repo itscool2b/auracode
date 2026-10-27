@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 
-/** Clipboard success is announced only after the platform accepts the write. */
-export function CopyButton({
-  text,
-  label = "Copy",
-  caption = "Copy",
-}: {
+export interface CopyButtonProps {
   readonly text: string;
+  /** Accessible name of the button. Default "Copy". */
   readonly label?: string;
+  /** Visible caption at rest. Default "Copy". */
   readonly caption?: string;
-}) {
+}
+
+/**
+ * Copies `text` and says so only after the platform accepts the write; a refusal says what to do
+ * instead. Styled by the `g-copy*` classes in graphite.css. The `o-copy*` classes are kept so Orbit
+ * screens that import this through `@auracode/ui/orbit` keep their look until they move to Graphite.
+ */
+export function CopyButton({ text, label = "Copy", caption = "Copy" }: CopyButtonProps) {
   const [state, setState] = useState<"ready" | "copying" | "copied" | "failed">("ready");
   const mounted = useRef(true);
   const reset = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -33,11 +37,12 @@ export function CopyButton({
     }
   };
   return (
-    <span className="o-copy-control">
+    <span className="g-copy-control o-copy-control">
       <button
         type="button"
-        className="o-copy"
+        className="g-copy o-copy"
         aria-label={label}
+        data-state={state}
         disabled={state === "copying"}
         onClick={() => void copy()}
       >
@@ -47,21 +52,22 @@ export function CopyButton({
           viewBox="0 0 12 12"
           fill="none"
           stroke="currentColor"
+          strokeWidth="1.25"
           aria-hidden="true"
         >
           {state === "copied" ? (
-            <path d="m2 6 2.5 2.5L10 3" />
+            <path d="m2 6.5 2.5 2.5L10 3.5" strokeLinecap="square" />
           ) : (
             <>
-              <rect x="4" y="4" width="6" height="6" rx="1" />
-              <path d="M2 8V3a1 1 0 0 1 1-1h5" />
+              <rect x="4.5" y="4.5" width="5.5" height="5.5" rx="1" />
+              <path d="M2.5 7.5V3a.5.5 0 0 1 .5-.5h4.5" />
             </>
           )}
         </svg>
         <span aria-live="polite">{state === "copied" ? "Copied" : caption}</span>
       </button>
       {state === "failed" ? (
-        <span role="alert" className="o-copy-error">
+        <span role="alert" className="g-copy-error o-copy-error">
           Could not copy. Select the text and copy it instead.
         </span>
       ) : null}

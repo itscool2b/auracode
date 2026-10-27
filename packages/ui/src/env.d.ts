@@ -4,3 +4,14 @@ declare module "*.css?raw" {
   const content: string;
   export default content;
 }
+
+// The Graphite source checks (no em dashes, integer weights) read their own modules as text.
+declare module "*.ts?raw" {
+  const content: string;
+  export default content;
+}
+
+declare module "*.tsx?raw" {
+  const content: string;
+  export default content;
+}

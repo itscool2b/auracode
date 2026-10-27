@@ -1,4 +1,4 @@
-export { CopyButton } from "./CopyButton";
+export { CopyButton } from "../graphite/CopyButton";
 export { Globe, type GlobeProject, labelLines } from "./Globe";
 export * from "./geometry";
 export type { GlobeAgent, GlobeDiscovery } from "./globeTypes";

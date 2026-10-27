@@ -1,22 +1,27 @@
 # @auracode/ui
 
-The Aura design system shared by the auracode desktop app and auracode.si: tokens, bundled fonts, glass surfaces, motion presets, the live agent `Orb`, and the `AuraField` light. It ships as TypeScript source (no build step), with React 19 as a peer dependency.
+The auracode design system, shared by the desktop app and auracode.si. It ships as TypeScript source (no build step), with React 19 as a peer dependency.
+
+**Graphite** (`@auracode/ui/graphite`) is the current visual language: black, a grey ladder, one volt accent and a live ordered-dither field. The spec is `docs/design/visual-language.md`. The older **Aura** (`@auracode/ui`: Orb, AuraField, GlassPanel) and **Orbit** (`@auracode/ui/orbit`) modules stay for the Design Lab and for screens not yet moved; new work uses Graphite.
 
 ```tsx
-import "@auracode/ui/fonts.css"; // Geist, Geist Mono, Instrument Serif, bundled for offline use
-import "@auracode/ui/tokens.css"; // --aura-* custom properties, dark-first, reduced-motion aware
-import { AuraField, brandCssVariables, GlassPanel, getBrand, Orb } from "@auracode/ui";
+import "@auracode/ui/fonts.css"; // Geist and Geist Mono, bundled for offline use
+import "@auracode/ui/graphite.css"; // tokens, the opt-in .g-root base layer and the g-* primitives
+import { AgentMark, DitherField, Keycap, Wordmark } from "@auracode/ui/graphite";
 
-<main style={{ position: "relative", ...brandCssVariables(getBrand("codex")) }}>
-  <AuraField brand="codex" intensity="active" />
-  <GlassPanel elevation={2} squircle>
-    <Orb brand="codex" state="thinking" size={40} label="Codex is thinking" />
-  </GlassPanel>
+// With class="g-root" on <html>:
+<main>
+  <Wordmark size={16} />
+  <DitherField style={{ height: 640 }} interactive clearing={{ rx: 0.36, ry: 0.42, y: 0.38 }} />
+  <AgentMark agent="claude" state="thinking" size={16} />
+  <button type="button" className="g-button g-button-primary">
+    Allow once <Keycap>1</Keycap>
+  </button>
 </main>;
 ```
 
-- Set an agent's colours with `brandCssVariables()`, not by writing `--aura-accent` by hand. It also re-declares the tokens derived from the accent (`--aura-focus-ring`, `--aura-accent-soft`): a custom property resolves `var()` where it is declared, so without that they keep the default accent below the override.
-- Every live orb shares one WebGL2 context (OGL) but keeps its own canvas, so orbs stack like any element. Without WebGL2 they show a CSS poster in brand colours, and under reduced motion they hold still. To keep the shader compile off the first orb's render, call `getOrbSupport()` during boot.
-- `GlassPanel` has no `backdrop-filter` unless you set `blur`. Large surfaces sit on the native window glass; reserve blur for small overlays, and never animate it.
-- To animate an orb's size, use a CSS transform, not the `size` prop. The shared canvas reallocates whenever the largest orb changes size, and each live orb's canvas holds a frame as large as that orb, so mix huge and tiny live orbs sparingly.
+- `@auracode/ui/graphite-tokens.css` declares only the `--g-*` variables on `:root`; `@auracode/ui/graphite.css` adds the base layer (opt in with `.g-root`) and the primitives. Every primitive is one class with its states inside `:where()`, so one app class loaded later always wins.
+- `DitherField` renders on a 2D canvas at one canvas pixel per cell, scaled up pixelated. It draws from the shared frame clock at 30fps at most, only while on screen and while the page is visible, and holds one still frame under reduced motion (the OS setting or `setMotionPreference`). Give it a size. Server rendering emits the fallback image and an empty canvas; `renderDitherFrame()` renders the same deterministic frame in Node for that fallback.
+- `AgentMark` replaces `OrbitMark` with the same props. Idle, hidden, offscreen and reduced-motion marks own no animation frame.
+- `PIXEL_MARK_GRID` and `pixelMarkSvg()` are the source of the app icon and favicons.
 - Checks: `pnpm --filter @auracode/ui test`, `pnpm --filter @auracode/ui typecheck`, `pnpm exec biome check packages/ui`.

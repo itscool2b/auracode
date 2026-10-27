@@ -1,0 +1,229 @@
+import { describe, expect, it } from "vitest";
+import agentMarkSource from "./AgentMark.tsx?raw";
+import copySource from "./CopyButton.tsx?raw";
+import ditherFieldSource from "./DitherField.tsx?raw";
+import ditherSource from "./dither.ts?raw";
+import engineSource from "./ditherEngine.ts?raw";
+import graphiteCss from "./graphite.css?raw";
+import keycapSource from "./Keycap.tsx?raw";
+import loaderSource from "./PixelLoader.tsx?raw";
+import markSource from "./PixelMark.tsx?raw";
+import pixelsSource from "./pixels.ts?raw";
+import statusSource from "./StatusDot.tsx?raw";
+import {
+  contrastRatio,
+  DITHER_PALETTES,
+  GRAPHITE_COLORS,
+  GRAPHITE_DURATIONS,
+  GRAPHITE_EASINGS,
+  relativeLuminance,
+} from "./tokens";
+import tokensCss from "./tokens.css?raw";
+import tokensSource from "./tokens.ts?raw";
+
+const REDUCED = "@media (prefers-reduced-motion: reduce)";
+const [rootPart = "", reducedPart = ""] = tokensCss.split(REDUCED);
+
+function declarations(css: string): Map<string, string> {
+  const found = new Map<string, string>();
+  for (const match of css.matchAll(/(--g-[\w-]+)\s*:\s*([^;]+);/g)) {
+    found.set(match[1] ?? "", (match[2] ?? "").replace(/\s+/g, " ").trim());
+  }
+  return found;
+}
+
+const root = declarations(rootPart);
+
+function token(name: string): string {
+  const value = root.get(`--g-${name}`);
+  if (value === undefined) throw new Error(`--g-${name} is not declared in tokens.css`);
+  return value;
+}
+
+const SURFACES = ["bg", "surface-1", "surface-2", "surface-3"] as const;
+
+describe("Graphite colour tokens", () => {
+  it("declares every colour the TypeScript mirror knows, with the same value", () => {
+    for (const [name, hex] of Object.entries(GRAPHITE_COLORS)) {
+      expect(token(name).toLowerCase(), name).toBe(hex);
+    }
+  });
+
+  it("writes every text colour as a solid six-digit hex, never with alpha", () => {
+    const text = [...root.keys()].filter((name) =>
+      /^--g-(fg-\d|on-light|volt|green|red|code-|ansi-|primary)/.test(name),
+    );
+    expect(text.length).toBeGreaterThan(20);
+    for (const name of text) {
+      if (name.endsWith("-tint")) continue;
+      expect(root.get(name), name).toMatch(/^#[0-9a-f]{6}$/);
+    }
+  });
+
+  it("keeps the tertiary grey at 4.5:1 or better on the page and surfaces 1 to 3", () => {
+    for (const surface of SURFACES) {
+      const ratio = contrastRatio(GRAPHITE_COLORS["fg-3"], GRAPHITE_COLORS[surface]);
+      expect(ratio, `fg-3 on ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+    // #808080, the starting value, failed on surface-3 (4.45:1); the shipped grey keeps a margin.
+    expect(contrastRatio("#808080", GRAPHITE_COLORS["surface-3"])).toBeLessThan(4.5);
+    expect(contrastRatio(GRAPHITE_COLORS["fg-3"], GRAPHITE_COLORS["surface-3"])).toBeGreaterThan(
+      4.7,
+    );
+  });
+
+  it("keeps every other text colour readable on every surface it sits on", () => {
+    for (const surface of [...SURFACES, "surface-4"] as const) {
+      for (const fg of ["fg-1", "fg-2", "volt", "green", "red"] as const) {
+        const ratio = contrastRatio(GRAPHITE_COLORS[fg], GRAPHITE_COLORS[surface]);
+        expect(ratio, `${fg} on ${surface}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    for (const name of [...root.keys()].filter((n) => /^--g-(code|ansi)-/.test(n))) {
+      if (name === "--g-ansi-black") continue;
+      const hex = root.get(name) ?? "";
+      expect(contrastRatio(hex, GRAPHITE_COLORS["surface-1"]), name).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("gives filled controls dark labels that pass", () => {
+    const onLight = GRAPHITE_COLORS["on-light"];
+    for (const fill of [
+      "primary",
+      "primary-hover",
+      "primary-active",
+      "red",
+      "red-hover",
+    ] as const) {
+      expect(contrastRatio(onLight, GRAPHITE_COLORS[fill]), fill).toBeGreaterThanOrEqual(4.5);
+    }
+    // White on the red pill would fail, which is why the destructive label is black.
+    expect(contrastRatio("#ffffff", GRAPHITE_COLORS.red)).toBeLessThan(4.5);
+  });
+
+  it("orders the surface and text ladders", () => {
+    const lum = (name: keyof typeof GRAPHITE_COLORS) => relativeLuminance(GRAPHITE_COLORS[name]);
+    const surfaces = ["bg", "surface-1", "surface-2", "surface-3", "surface-4"] as const;
+    for (let i = 1; i < surfaces.length; i++) {
+      expect(lum(surfaces[i] ?? "bg")).toBeGreaterThan(lum(surfaces[i - 1] ?? "bg"));
+    }
+    expect(lum("fg-1")).toBeGreaterThan(lum("fg-2"));
+    expect(lum("fg-2")).toBeGreaterThan(lum("fg-3"));
+    expect(lum("fg-3")).toBeGreaterThan(lum("fg-4"));
+  });
+
+  it("builds dither palettes from greys only, darkest first", () => {
+    for (const [name, greys] of Object.entries(DITHER_PALETTES)) {
+      expect(greys.length, name).toBe(3);
+      for (let i = 0; i < greys.length; i++) {
+        const hex = greys[i] ?? "";
+        expect(hex, name).toMatch(/^#([0-9a-f]{2})\1\1$/);
+        if (i > 0)
+          expect(relativeLuminance(hex)).toBeGreaterThan(relativeLuminance(greys[i - 1] ?? ""));
+      }
+    }
+  });
+
+  it("measures contrast like WCAG", () => {
+    expect(contrastRatio("#000000", "#ffffff")).toBeCloseTo(21, 5);
+    expect(contrastRatio("#777777", "#777777")).toBe(1);
+    expect(Number.isNaN(relativeLuminance("red"))).toBe(true);
+  });
+});
+
+describe("Graphite motion tokens", () => {
+  it("mirrors the durations and easings", () => {
+    for (const [name, ms] of Object.entries(GRAPHITE_DURATIONS)) {
+      expect(token(`dur-${name}`), name).toBe(`${ms}ms`);
+    }
+    const css = (curve: readonly number[]) => `cubic-bezier(${curve.join(", ")})`;
+    expect(token("ease")).toBe(css(GRAPHITE_EASINGS.ease));
+    expect(token("ease-out")).toBe(css(GRAPHITE_EASINGS.out));
+    expect(token("ease-in")).toBe(css(GRAPHITE_EASINGS.in));
+    expect(token("ease-settle")).toBe(css(GRAPHITE_EASINGS.settle));
+  });
+
+  it("stops movement under the OS setting and under the app's own setting alike", () => {
+    const [mediaPart = "", appPart = ""] = reducedPart.split(':root:is([data-motion="reduced"]');
+    const media = declarations(mediaPart);
+    const app = declarations(appPart);
+    for (const name of ["panel", "settle", "reveal", "glint"]) {
+      expect(media.get(`--g-dur-${name}`), `media ${name}`).toBe("0ms");
+      expect(app.get(`--g-dur-${name}`), `app ${name}`).toBe("0ms");
+    }
+    expect(media.get("--g-stagger")).toBe("0ms");
+    expect(app.get("--g-stagger")).toBe("0ms");
+    // Colour changes are not motion: hover fades survive.
+    expect(media.has("--g-dur-micro")).toBe(false);
+    expect(graphiteCss).toContain(REDUCED);
+    expect(graphiteCss).toContain('[data-motion="off"]');
+  });
+});
+
+describe("Graphite stylesheet rules", () => {
+  it("imports the tokens and keeps type to integer weights 400, 500 and 600", () => {
+    expect(graphiteCss).toContain('@import "./tokens.css";');
+    for (const match of graphiteCss.matchAll(/font-weight:\s*([^;]+);/g)) {
+      expect(["400", "500", "600"]).toContain((match[1] ?? "").trim());
+    }
+    for (const match of tokensCss.matchAll(/--g-weight-[\w-]+:\s*([^;]+);/g)) {
+      expect(["400", "500", "600"]).toContain((match[1] ?? "").trim());
+    }
+  });
+
+  it("never transitions all properties and never animates layout", () => {
+    expect(graphiteCss).not.toMatch(/transition:\s*all/);
+    for (const match of graphiteCss.matchAll(/transition:([^;]+);/g)) {
+      const value = match[1] ?? "";
+      for (const property of ["width", "height", "top", "left", "margin", "padding"]) {
+        expect(value, value).not.toMatch(new RegExp(`(^|[\\s,])${property}\\s`));
+      }
+    }
+  });
+
+  it("uses no blur, glow or decorative shadow", () => {
+    expect(graphiteCss).not.toMatch(/backdrop-filter|filter:\s*blur|drop-shadow|text-shadow/);
+    const shadows = [...graphiteCss.matchAll(/box-shadow:([^;]+);/g)].map((m) => m[1]?.trim());
+    for (const shadow of shadows) {
+      expect(shadow, shadow).toMatch(/^(var\(--g-shadow\)|inset 0 0 0 1px [^,]+|none)$/);
+    }
+  });
+
+  it("keeps component rules to one class, with states inside :where()", () => {
+    const selectors = graphiteCss
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/@keyframes[^{]+\{(?:[^{}]*\{[^}]*\})*[^}]*\}/g, "")
+      .match(/(^|\})\s*([^{}@]+)\{/g);
+    expect(selectors?.length ?? 0).toBeGreaterThan(100);
+    for (const raw of selectors ?? []) {
+      const list = raw.replace(/^\}?\s*/, "").replace(/\{$/, "");
+      for (const selector of list.split(/,(?![^(]*\))/)) {
+        const bare = selector.replace(/:where\([^)]*\)/g, "").replace(/::?[\w-]+(\([^)]*\))?/g, "");
+        const classes = bare.match(/\.[\w-]+/g) ?? [];
+        // A few deliberate contextual rules (keycap on the white pill) hold two classes.
+        expect(classes.length, selector.trim()).toBeLessThanOrEqual(2);
+      }
+    }
+  });
+
+  it("contains no em dash in any Graphite source", () => {
+    const sources = {
+      agentMarkSource,
+      copySource,
+      ditherFieldSource,
+      ditherSource,
+      engineSource,
+      graphiteCss,
+      keycapSource,
+      loaderSource,
+      markSource,
+      pixelsSource,
+      statusSource,
+      tokensCss,
+      tokensSource,
+    };
+    for (const [name, text] of Object.entries(sources)) {
+      expect(text.includes("—"), name).toBe(false);
+    }
+  });
+});

@@ -1,0 +1,1191 @@
+/*
+ * Graphite: tokens, an opt-in base layer, and the shared primitives both the website and the
+ * desktop app build on. docs/design/visual-language.md is the spec; section numbers below point
+ * into it.
+ *
+ * Every rule is one class, and states sit inside :where() so they add no specificity: an app rule
+ * of one class, loaded later, always wins. Transitions name their properties (never `all`) and only
+ * colour, opacity and transform ever animate.
+ */
+
+@import "./tokens.css";
+
+/* ------------------------------------------------------------------ base layer (opt in, 3.2) */
+
+.g-root {
+  color-scheme: dark;
+  background-color: var(--g-bg);
+  color: var(--g-fg-1);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 400;
+  font-synthesis: none;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+:where(.g-root) ::selection {
+  background-color: var(--g-selection);
+  color: var(--g-fg-1);
+}
+
+:where(.g-root) :focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------------- type (3.2) */
+
+.g-text-ui {
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.g-text-prose {
+  font-size: var(--g-text-prose);
+  line-height: var(--g-leading-prose);
+}
+
+.g-text-meta {
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.g-text-heading {
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 600;
+}
+
+.g-text-title {
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-title);
+}
+
+.g-text-display {
+  font-size: var(--g-text-display);
+  line-height: var(--g-leading-display);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-display);
+  text-wrap: balance;
+}
+
+.g-text-code {
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+}
+
+.g-text-term {
+  font-family: var(--g-mono);
+  font-size: var(--g-text-term);
+  line-height: var(--g-leading-term);
+}
+
+.g-web-hero {
+  font-size: var(--g-web-hero);
+  line-height: var(--g-web-hero-leading);
+  font-weight: 500;
+  letter-spacing: var(--g-web-hero-tracking);
+  text-wrap: balance;
+}
+
+.g-web-h2 {
+  font-size: var(--g-web-h2);
+  line-height: var(--g-web-h2-leading);
+  font-weight: 500;
+  letter-spacing: var(--g-web-h2-tracking);
+  text-wrap: balance;
+}
+
+.g-web-h3 {
+  font-size: var(--g-web-h3);
+  line-height: var(--g-web-h3-leading);
+  font-weight: 500;
+  letter-spacing: var(--g-web-h3-tracking);
+}
+
+.g-web-lead {
+  font-size: var(--g-web-lead);
+  line-height: var(--g-web-lead-leading);
+  color: var(--g-fg-2);
+}
+
+.g-web-body {
+  font-size: var(--g-web-body);
+  line-height: var(--g-web-body-leading);
+}
+
+.g-web-small {
+  font-size: var(--g-web-small);
+  line-height: var(--g-web-small-leading);
+}
+
+.g-mono {
+  font-family: var(--g-mono);
+  font-variant-ligatures: none;
+}
+
+.g-tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Two tones at one size and weight: the first clause in ink, the rest in grey (X Money). */
+.g-two-tone {
+  color: var(--g-fg-1);
+}
+
+.g-two-tone > span {
+  display: block;
+  color: var(--g-fg-3);
+}
+
+/* A bold lead sentence and a grey continuation in one paragraph (Aside). */
+.g-lead-in {
+  color: var(--g-fg-3);
+}
+
+.g-lead-in > :where(strong, b) {
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.g-link {
+  color: var(--g-fg-1);
+  text-decoration-line: underline;
+  text-decoration-color: var(--g-fg-4);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--g-dur-fast) var(--g-ease);
+}
+
+.g-link:where(:hover) {
+  text-decoration-color: var(--g-fg-1);
+}
+
+/* ---------------------------------------------------------------------- buttons (4.1) */
+
+.g-button {
+  --g-button-h: 32px;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: var(--g-button-h);
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--g-dur-settle) var(--g-ease-settle),
+    border-color var(--g-dur-settle) var(--g-ease-settle),
+    color var(--g-dur-settle) var(--g-ease-settle);
+}
+
+.g-button:where(:focus-visible) {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+.g-button:where(:active) {
+  background-color: var(--g-surface-4);
+  transition-duration: 0ms;
+}
+
+.g-button-primary {
+  background-color: var(--g-primary);
+  color: var(--g-on-light);
+}
+
+.g-button-primary:where(:active) {
+  background-color: var(--g-primary-active);
+}
+
+.g-button-outline {
+  border-color: var(--g-line-strong);
+  background-color: transparent;
+}
+
+.g-button-ghost {
+  background-color: transparent;
+  color: var(--g-fg-2);
+}
+
+.g-button-danger {
+  background-color: var(--g-red);
+  color: var(--g-on-light);
+}
+
+@media (hover: hover) {
+  .g-button:where(:hover) {
+    background-color: var(--g-surface-4);
+  }
+
+  .g-button-primary:where(:hover) {
+    background-color: var(--g-primary-hover);
+  }
+
+  .g-button-outline:where(:hover) {
+    border-color: var(--g-fg-4);
+    background-color: var(--g-surface-2);
+  }
+
+  .g-button-ghost:where(:hover) {
+    background-color: var(--g-surface-3);
+    color: var(--g-fg-1);
+  }
+
+  .g-button-danger:where(:hover) {
+    background-color: var(--g-red-hover);
+  }
+}
+
+.g-button-28 {
+  --g-button-h: 28px;
+  padding: 0 12px;
+  gap: 4px;
+}
+
+.g-button-36 {
+  --g-button-h: 36px;
+  padding: 0 16px;
+}
+
+.g-button-44 {
+  --g-button-h: 44px;
+  padding: 0 20px;
+  gap: 8px;
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.g-button-icon {
+  width: var(--g-button-h);
+  padding: 0;
+}
+
+.g-button:where(:disabled, [aria-disabled="true"]) {
+  border-color: transparent;
+  background-color: var(--g-surface-2);
+  color: var(--g-fg-4);
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------------ inputs (4.2) */
+
+.g-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 36px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--g-line-strong);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-1);
+  color: var(--g-fg-1);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  transition: border-color var(--g-dur-fast) var(--g-ease);
+}
+
+.g-input::placeholder {
+  color: var(--g-fg-3);
+  opacity: 1;
+}
+
+.g-input:where(:hover) {
+  border-color: var(--g-fg-4);
+}
+
+.g-input:where(:focus) {
+  border-color: var(--g-fg-3);
+}
+
+.g-input:where(:focus-visible) {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+.g-input:where(textarea) {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 12px;
+  resize: vertical;
+}
+
+.g-input:where(:disabled) {
+  border-color: var(--g-line);
+  color: var(--g-fg-4);
+  cursor: not-allowed;
+}
+
+.g-input:where([aria-invalid="true"]) {
+  border-color: var(--g-red);
+}
+
+/* Segmented control: one white pill, or a quiet raised segment (4.3). */
+.g-segmented {
+  --g-segment-on-bg: var(--g-primary);
+  --g-segment-on-fg: var(--g-on-light);
+  --g-segment-on-ring: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 2px;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-surface-3);
+}
+
+.g-segmented-quiet {
+  --g-segment-on-bg: var(--g-surface-1);
+  --g-segment-on-fg: var(--g-fg-1);
+  --g-segment-on-ring: var(--g-line-strong);
+}
+
+.g-segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--g-radius-pill);
+  background-color: transparent;
+  color: var(--g-fg-2);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-fast) var(--g-ease),
+    color var(--g-dur-fast) var(--g-ease);
+}
+
+.g-segment:where(:hover) {
+  color: var(--g-fg-1);
+}
+
+.g-segment:where(:focus-visible) {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+.g-segment:where(
+  [aria-pressed="true"],
+  [aria-selected="true"],
+  [aria-checked="true"],
+  [data-active]
+) {
+  background-color: var(--g-segment-on-bg);
+  box-shadow: inset 0 0 0 1px var(--g-segment-on-ring);
+  color: var(--g-segment-on-fg);
+}
+
+/* Switch on a native checkbox: <input type="checkbox" role="switch" class="g-switch"> */
+.g-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 32px;
+  height: 18px;
+  margin: 0;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-surface-4);
+  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  cursor: pointer;
+  transition: background-color var(--g-dur-fast) var(--g-ease);
+}
+
+.g-switch::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--g-fg-3);
+  transition:
+    transform var(--g-dur-fast) var(--g-ease),
+    background-color var(--g-dur-fast) var(--g-ease);
+}
+
+.g-switch:where(:checked) {
+  background-color: var(--g-primary);
+  box-shadow: none;
+}
+
+.g-switch:where(:checked)::before {
+  transform: translateX(14px);
+  background-color: var(--g-on-light);
+}
+
+.g-switch:where(:focus-visible) {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+.g-switch:where(:disabled) {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------- chips and keys (4.4) */
+
+.g-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--g-radius-6);
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-2);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* "New", live counts and needs-you labels: volt on a volt tint, sentence case. */
+.g-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--g-radius-4);
+  background-color: var(--g-volt-tint);
+  color: var(--g-volt);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.g-keycap {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: var(--g-radius-4);
+  background-color: var(--g-surface-3);
+  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-key);
+  line-height: var(--g-leading-key);
+  font-weight: 500;
+  font-variant-ligatures: none;
+}
+
+.g-button-primary .g-keycap {
+  background-color: var(--g-primary-active);
+  box-shadow: none;
+  color: var(--g-surface-4);
+}
+
+/* ------------------------------------------------------------------ status (4.5) */
+
+.g-status-dot {
+  display: inline-block;
+  flex: none;
+  background-color: var(--g-fg-2);
+}
+
+.g-status-dot:where([data-tone="volt"]) {
+  background-color: var(--g-volt);
+}
+
+.g-status-dot:where([data-tone="green"]) {
+  background-color: var(--g-green);
+}
+
+.g-status-dot:where([data-tone="red"]) {
+  background-color: var(--g-red);
+}
+
+.g-loader {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+}
+
+/* Loader cells by brightness, then the head's tone. Steps flip with no tween. */
+.g-px {
+  fill: var(--g-line-strong);
+}
+
+.g-px-1 {
+  fill: var(--g-fg-4);
+}
+
+.g-px-2 {
+  fill: var(--g-fg-3);
+}
+
+.g-px-3 {
+  fill: var(--g-fg-1);
+}
+
+.g-px-volt {
+  fill: var(--g-volt);
+}
+
+.g-px-green {
+  fill: var(--g-green);
+}
+
+.g-px-red {
+  fill: var(--g-red);
+}
+
+/* -------------------------------------------------------------------- AgentMark (4.13) */
+
+.g-agent-mark {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  vertical-align: middle;
+  background-color: var(--g-surface-3);
+  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  color: var(--g-fg-2);
+  font-family: var(--g-sans);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  user-select: none;
+}
+
+.g-agent-mark:where([data-ghost]) {
+  background-color: transparent;
+  box-shadow: none;
+  outline: 1px dashed var(--g-line-strong);
+  outline-offset: -1px;
+  color: var(--g-fg-4);
+}
+
+.g-agent-mark-glyph {
+  display: block;
+  padding-top: 0.06em;
+}
+
+.g-agent-mark-state {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.g-agent-mark-waiting {
+  fill: var(--g-volt);
+}
+
+.g-agent-mark-error {
+  fill: var(--g-red);
+}
+
+/* The check draws once, a pixel at a time; the delays come from the component. */
+.g-agent-mark-check {
+  fill: var(--g-fg-1);
+  animation: g-pixel-on 40ms steps(1, end) both;
+}
+
+@keyframes g-pixel-on {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------ PixelMark, Wordmark (4.14) */
+
+.g-pixel-mark {
+  display: inline-block;
+  flex: none;
+}
+
+.g-wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3em;
+  color: var(--g-fg-1);
+  font-family: var(--g-sans);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ DitherField (4.15) */
+
+.g-dither {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.g-dither-content {
+  position: relative;
+  z-index: 0;
+}
+
+.g-dither-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  display: block;
+  pointer-events: none;
+  image-rendering: pixelated;
+  transition: opacity var(--g-dur-reveal) var(--g-ease-out);
+}
+
+.g-dither-canvas:where([data-revealed]) {
+  opacity: 0;
+}
+
+.g-dither-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.g-dither-fallback:where([data-hidden]) {
+  visibility: hidden;
+}
+
+/* Without scripts nothing would ever reveal the content, so the field stands aside. */
+@media (scripting: none) {
+  .g-dither:where([data-reveals]) > :where(.g-dither-canvas, .g-dither-fallback) {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------- copy button */
+
+.g-copy-control {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.g-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--g-radius-6);
+  background-color: transparent;
+  color: var(--g-fg-3);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+.g-copy:where(:hover) {
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
+}
+
+.g-copy:where(:focus-visible) {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+.g-copy:where([data-state="copied"]) {
+  color: var(--g-fg-1);
+}
+
+.g-copy-error {
+  color: var(--g-red);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* -------------------------------------------------------------- wells and code (4.9) */
+
+.g-well {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px 16px;
+  overflow: auto;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-1);
+  color: var(--g-code-fg);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  font-variant-ligatures: none;
+  tab-size: 2;
+}
+
+.g-well-term {
+  font-size: var(--g-text-term);
+  line-height: var(--g-leading-term);
+}
+
+.g-tok-keyword {
+  color: var(--g-code-keyword);
+}
+
+.g-tok-string {
+  color: var(--g-code-string);
+}
+
+.g-tok-number {
+  color: var(--g-code-number);
+}
+
+.g-tok-function {
+  color: var(--g-code-function);
+}
+
+.g-tok-comment {
+  color: var(--g-code-dim);
+}
+
+.g-diff-add {
+  background-color: var(--g-diff-add-line);
+}
+
+.g-diff-del {
+  background-color: var(--g-diff-del-line);
+}
+
+.g-diff-add-word {
+  border-radius: 2px;
+  background-color: var(--g-diff-add-word);
+}
+
+.g-diff-del-word {
+  border-radius: 2px;
+  background-color: var(--g-diff-del-word);
+}
+
+.g-diff-hunk {
+  background-color: var(--g-diff-hunk);
+  color: var(--g-fg-3);
+}
+
+/* Live labels: grey on grey, solid stops, one sweep per 1.6s. Static under reduced motion. */
+.g-shimmer {
+  color: var(--g-fg-2);
+  background-image: linear-gradient(
+    100deg,
+    var(--g-fg-3) 0%,
+    var(--g-fg-3) 38%,
+    var(--g-fg-1) 50%,
+    var(--g-fg-3) 62%,
+    var(--g-fg-3) 100%
+  );
+  background-size: 250% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: g-shimmer var(--g-dur-shimmer) linear infinite;
+}
+
+@keyframes g-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
+/* -------------------------------------------------------------- structure (4.10) */
+
+/* Vercel's frame: cells divided by 1px lines, not cards. Children paint the page colour. */
+.g-hairline-grid {
+  position: relative;
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--g-line);
+  background-color: var(--g-line);
+}
+
+.g-hairline-grid > * {
+  background-color: var(--g-bg);
+}
+
+/* A 13px "+" whose centre lands on a 1px line; corner classes sit on the grid's outer border. */
+.g-crosshair {
+  position: absolute;
+  z-index: 1;
+  width: 13px;
+  height: 13px;
+  pointer-events: none;
+}
+
+.g-crosshair::before,
+.g-crosshair::after {
+  content: "";
+  position: absolute;
+  background-color: var(--g-fg-4);
+}
+
+.g-crosshair::before {
+  top: 0;
+  left: 6px;
+  width: 1px;
+  height: 13px;
+}
+
+.g-crosshair::after {
+  top: 6px;
+  left: 0;
+  width: 13px;
+  height: 1px;
+}
+
+.g-crosshair-tl {
+  top: -7px;
+  left: -7px;
+}
+
+.g-crosshair-tr {
+  top: -7px;
+  right: -7px;
+}
+
+.g-crosshair-bl {
+  bottom: -7px;
+  left: -7px;
+}
+
+.g-crosshair-br {
+  right: -7px;
+  bottom: -7px;
+}
+
+/* A recessed square tile that holds miniature real UI (X Money). */
+.g-tile {
+  position: relative;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+}
+
+/* A row on a hairline. Rows contain their own layout, so a long list never relayouts as one. */
+.g-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  min-height: 44px;
+  border-bottom: 1px solid var(--g-line);
+  contain: layout style;
+}
+
+/* Accordion: the open item becomes a tinted well (X Money's FAQ). */
+.g-disclosure {
+  border-radius: var(--g-radius-12);
+  transition: background-color var(--g-dur-base) var(--g-ease);
+}
+
+.g-disclosure:where([open]) {
+  background-color: var(--g-surface-2);
+}
+
+.g-disclosure > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--g-radius-12);
+  color: var(--g-fg-1);
+  font-weight: 500;
+  list-style: none;
+  cursor: pointer;
+}
+
+.g-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.g-disclosure > summary::after {
+  content: "+";
+  flex: none;
+  width: 16px;
+  color: var(--g-fg-2);
+  font-weight: 400;
+  text-align: center;
+}
+
+.g-disclosure:where([open]) > summary::after {
+  content: "\2212";
+}
+
+.g-disclosure > summary:where(:focus-visible) {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+.g-disclosure-body {
+  padding: 0 20px 18px;
+  color: var(--g-fg-2);
+}
+
+/* ----------------------------------------------------- menus, tooltips, dialogs (4.6) */
+
+.g-menu {
+  box-sizing: border-box;
+  min-width: 200px;
+  padding: 4px;
+  border: 1px solid var(--g-line-strong);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-surface-2);
+  box-shadow: var(--g-shadow);
+  color: var(--g-fg-1);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.g-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--g-radius-8);
+  background-color: transparent;
+  color: var(--g-fg-1);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+/* The highlight is the focus indicator inside a menu, as in every native menu. */
+.g-menu-item:where(:hover, :focus-visible, [data-highlighted]) {
+  outline: none;
+  background-color: var(--g-surface-4);
+}
+
+.g-menu-item:where(:disabled, [aria-disabled="true"]) {
+  background-color: transparent;
+  color: var(--g-fg-4);
+}
+
+.g-menu-item-danger {
+  color: var(--g-red);
+}
+
+.g-menu-shortcut {
+  margin-left: auto;
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.g-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  border: 0;
+  background-color: var(--g-line);
+}
+
+.g-tooltip {
+  box-sizing: border-box;
+  max-width: 280px;
+  padding: 4px 8px;
+  border: 1px solid var(--g-line-strong);
+  border-radius: var(--g-radius-6);
+  background-color: var(--g-surface-3);
+  box-shadow: var(--g-shadow);
+  color: var(--g-fg-1);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  pointer-events: none;
+}
+
+.g-dialog {
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid var(--g-line-strong);
+  border-radius: var(--g-radius-16);
+  background-color: var(--g-surface-2);
+  box-shadow: var(--g-shadow);
+  color: var(--g-fg-1);
+}
+
+.g-dialog::backdrop {
+  background-color: var(--g-scrim);
+}
+
+.g-dialog:where([open]) {
+  animation: g-sheet-in var(--g-dur-panel) var(--g-ease-out);
+}
+
+@keyframes g-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------ entrances (3.8, 5.2) */
+
+/* The rotating word's rule, with one volt glint across it per mount. Re-key to replay. */
+.g-glint {
+  position: relative;
+  display: inline-block;
+}
+
+.g-glint::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -0.04em;
+  left: 0;
+  height: max(2px, 0.045em);
+  background-color: var(--g-line-strong);
+  background-image: linear-gradient(var(--g-volt), var(--g-volt));
+  background-repeat: no-repeat;
+  background-size: 30% 100%;
+  background-position: -45% 0;
+  animation: g-glint var(--g-dur-glint) var(--g-ease-out) both;
+}
+
+@keyframes g-glint {
+  from {
+    background-position: -45% 0;
+  }
+  to {
+    background-position: 145% 0;
+  }
+}
+
+/* Per-word rise (X Money's flip-up). Set --g-rise-index on each word for the stagger. */
+.g-rise {
+  display: inline-block;
+  transform-origin: 50% 100%;
+  animation: g-rise var(--g-dur-reveal) var(--g-ease-out) both;
+  animation-delay: calc(var(--g-rise-index, 0) * var(--g-stagger));
+}
+
+@keyframes g-rise {
+  from {
+    opacity: 0;
+    transform: perspective(600px) translateY(0.4em) rotateX(-35deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --------------------------------------------------------------- reduced motion (3.8) */
+
+@media (prefers-reduced-motion: reduce) {
+  .g-shimmer,
+  .g-glint::after,
+  .g-rise,
+  .g-agent-mark-check,
+  .g-dialog {
+    animation: none;
+  }
+
+  .g-shimmer {
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+  }
+
+  .g-glint::after {
+    background-image: none;
+  }
+
+  .g-dither-canvas {
+    transition: none;
+  }
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"])
+  :where(.g-shimmer, .g-rise, .g-agent-mark-check, .g-dialog) {
+  animation: none;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) :where(.g-shimmer) {
+  background-image: none;
+  -webkit-text-fill-color: currentColor;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) :where(.g-glint)::after {
+  animation: none;
+  background-image: none;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) :where(.g-dither-canvas) {
+  transition: none;
+}
