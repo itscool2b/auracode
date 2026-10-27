@@ -22,7 +22,19 @@ import {
   sessionInfo,
 } from "../lib/chat/testing";
 import { NewChatPreview } from "./newChatPreview";
+import type { NewChatScenario } from "./newChatWorktreeFixture";
 import { withPreviewContext } from "./previewContext";
+
+/**
+ * New chat in a project folder, with Rust's worktree review imitated: a Git folder (the default
+ * worktree), one with a saved setup, one with no commit yet, and a plain folder.
+ */
+const NEW_CHAT_SCENARIOS: Readonly<Record<string, NewChatScenario>> = {
+  "new-worktree": "worktree",
+  "new-setup": "setup",
+  "new-unavailable": "unavailable",
+  "new-plain": "plain",
+};
 
 const AGENT: AgentEntry = {
   id: "claude",
@@ -458,13 +470,17 @@ function Preview() {
     "diff",
     "recorded-thinking",
     "recorded-tools",
+    ...Object.keys(NEW_CHAT_SCENARIOS),
   ].includes(requested)
     ? requested
     : "settled";
+  const scenario = NEW_CHAT_SCENARIOS[mode] ?? null;
   const [palette, setPalette] = useState(false);
   const [chatCommands, setChatCommands] = useState<readonly PaletteCommand[]>([]);
   const [collapsed, setCollapsed] = useState(false);
-  const [selected, setSelected] = useState<string | null>(mode === "new" ? null : "preview");
+  const [selected, setSelected] = useState<string | null>(
+    mode === "new" || scenario ? null : "preview",
+  );
   const status: SessionStatus =
     mode === "thinking" ||
     mode === "streaming" ||
@@ -705,7 +721,11 @@ function Preview() {
       <main className="chat-main">
         <div className="chat-drag" />
         {selected === null ? (
-          <NewChatPreview base={AGENT} onCreated={() => setSelected("preview")} />
+          <NewChatPreview
+            base={AGENT}
+            scenario={scenario}
+            onCreated={() => setSelected("preview")}
+          />
         ) : (
           <ChatView
             onCommands={setChatCommands}

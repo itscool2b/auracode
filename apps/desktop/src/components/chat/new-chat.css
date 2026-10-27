@@ -7,10 +7,14 @@
  * the agent names and the path share the next column.
  */
 
+/*
+ * The page fills the pane below the drag band, so the worktree popover has the window's room
+ * under the card before this scroller would clip it.
+ */
 .new-chat {
   --new-chat-axis: var(--g-space-16);
   display: flex;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   flex-direction: column;
   box-sizing: border-box;
   width: 100%;
@@ -480,15 +484,400 @@
   overflow-wrap: anywhere;
 }
 
+/* ------------------------------------------------------------ the worktree chip row */
+
+/*
+ * Where the chat works, directly under the card (Codex's per-thread Local or Worktree, drawn as
+ * Grok's composer chip): one 32px ghost pill whose icon sits on the 16px axis and whose words read
+ * "Worktree from main on aura/...", the connectives in fg-3 and the branches in mono.
+ */
+.new-chat-worktree {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-space-4) var(--g-space-8);
+  min-width: 0;
+  padding: 0 var(--g-space-8);
+}
+
+.new-chat-worktree-popover {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.new-chat-worktree-popover > summary {
+  gap: var(--g-space-8);
+  max-width: 100%;
+  height: 32px;
+  padding: 0 var(--g-space-12) 0 var(--g-space-8);
+  border-radius: var(--g-radius-pill);
+  white-space: nowrap;
+}
+
+.new-chat-worktree-popover > summary > svg {
+  flex: none;
+  color: var(--g-fg-3);
+}
+
+.new-chat-worktree-mode {
+  flex: none;
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.new-chat-worktree-word {
+  flex: none;
+  color: var(--g-fg-3);
+}
+
+/* A branch name: machine data in mono, one line that ellipsizes rather than wraps. */
+.new-chat-branch {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  font-variant-ligatures: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-chat-worktree-popover .new-chat-branch {
+  max-width: 200px;
+  color: var(--g-fg-2);
+}
+
+/* A change Rust refused: one red square on the chip until it is fixed or undone. */
+.new-chat-worktree-flag {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background-color: var(--g-red);
+}
+
+/* The first review and the later ones: the loader in the icon's 16px slot, nothing moves. */
+.new-chat-worktree-checking,
+.new-chat-worktree-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-height: 32px;
+  margin: 0;
+  padding: 0 var(--g-space-8);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.new-chat-worktree-status {
+  min-width: 0;
+  color: var(--g-fg-1);
+}
+
+.new-chat-worktree-status-text {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-6);
+  min-width: 0;
+}
+
+:is(.new-chat-worktree-checking, .new-chat-worktree-status, .new-chat-worktree-pending) .g-loader {
+  flex: none;
+  margin: 0 var(--g-space-2);
+}
+
+.new-chat-worktree-pending {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+}
+
+/* A reason or a next step on its own line under the chip, on the same 16px axis. */
+.new-chat-worktree-note {
+  flex: 1 0 100%;
+  margin: 0;
+  padding: 0 var(--g-space-8);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * The popover: the picker's shell (Grok's voice popover), 400 wide under the chip, or over it when
+ * the window has no room below. Its parts stack on hairlines.
+ */
+.new-chat-worktree-popover > .chat-popover-panel {
+  left: 0;
+  width: min(400px, calc(100vw - 48px));
+  max-height: min(560px, var(--new-chat-worktree-room, 480px));
+  padding: var(--g-space-4);
+  gap: 0;
+  border-radius: var(--g-radius-16);
+}
+
+.new-chat-worktree[data-side="bottom"] .new-chat-worktree-popover > .chat-popover-panel {
+  top: calc(100% + 8px);
+  bottom: auto;
+  animation-name: new-chat-worktree-in;
+}
+
+@keyframes new-chat-worktree-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.new-chat-worktree-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.new-chat-worktree-panel > section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-4);
+  min-width: 0;
+  padding: var(--g-space-4) 0;
+}
+
+.new-chat-worktree-panel > section + section {
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+/* Worktree or Local: the strong segmented control, its two halves sharing the width. */
+.new-chat-worktree-modes {
+  display: flex;
+  min-inline-size: 0;
+  margin: var(--g-space-4) var(--g-space-4) 0;
+  border: 0;
+}
+
+.new-chat-worktree-modes > .g-segment {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.new-chat-worktree-modes > .g-segment > svg {
+  flex: none;
+}
+
+/* Scoped to the panel, so the popover's paragraph colour (fg-2) does not override them. */
+.new-chat-worktree-panel :is(.new-chat-worktree-hint, .new-chat-worktree-error) {
+  margin: 0;
+  padding: 0 var(--g-space-8);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.new-chat-worktree-panel .new-chat-worktree-modes + .new-chat-worktree-hint {
+  padding-top: var(--g-space-4);
+}
+
+.new-chat-worktree-panel .new-chat-worktree-error {
+  color: var(--g-red);
+}
+
+/*
+ * Start from and New branch as the picker's compact fields (6.10): the name in an 88px column at
+ * the left, a 32px control at the right, its one line of help or refusal under the control.
+ */
+.new-chat-worktree-panel > .new-chat-worktree-fields {
+  gap: 0;
+  padding: var(--g-space-4) 0;
+}
+
+.new-chat-worktree-field {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--g-space-4) var(--g-space-8);
+  padding: var(--g-space-4) var(--g-space-8);
+}
+
+.new-chat-worktree-field > label {
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.new-chat-worktree-field > :is(.new-chat-worktree-hint, .new-chat-worktree-error) {
+  grid-column: 2;
+  padding: 0;
+}
+
+.new-chat-worktree-name {
+  display: flex;
+  gap: var(--g-space-8);
+  min-width: 0;
+}
+
+/* Branch names are machine data: mono in both fields, on the panel's surface as the picker's. */
+.new-chat-worktree-field :is(.g-select, .g-input) {
+  height: 32px;
+  background-color: var(--g-surface-2);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  font-variant-ligatures: none;
+}
+
+.new-chat-worktree-name > .g-input {
+  flex: 1;
+}
+
+.new-chat-worktree-name > .g-button {
+  flex: none;
+}
+
+/* A switch row: the name and its one line on the left, the switch on the right. */
+.new-chat-worktree-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-12);
+  padding: var(--g-space-8);
+  border-radius: var(--g-radius-12);
+  color: var(--g-fg-1);
+  cursor: pointer;
+  transition: background-color var(--g-dur-micro) var(--g-ease);
+}
+
+.new-chat-worktree-switch-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.new-chat-worktree-switch small {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.new-chat-worktree-switch:has(> input:disabled) {
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .new-chat-worktree-switch:hover:not(:has(> input:disabled)) {
+    background-color: var(--g-surface-3);
+  }
+}
+
+/* What Create does: the new folder in mono, then each consequence Rust named, in words. */
+.new-chat-worktree-panel > .new-chat-worktree-facts {
+  gap: var(--g-space-4);
+  padding: var(--g-space-12) var(--g-space-8) var(--g-space-8);
+}
+
+.new-chat-worktree-facts p {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.new-chat-worktree-facts .new-chat-worktree-path {
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-variant-ligatures: none;
+}
+
+/* Created with notes: a calm well, the branch in mono, each note in words. Open chat is the card's. */
+.new-chat-created {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-4);
+  padding: var(--g-space-12) var(--new-chat-axis);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-surface-2);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.new-chat-created-title {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-6);
+  min-width: 0;
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.new-chat-created p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The setup command in the terminal sheet, as key and value rows on hairlines (6.19). */
+.new-chat-setup-review {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  margin: 0 0 var(--g-space-16);
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+/* The hairlines are inset shadows, so each row stays on the grid. */
+.new-chat-setup-review > :is(dt, dd) {
+  margin: 0;
+  padding: var(--g-space-8) 0;
+  box-shadow: inset 0 -1px var(--g-line);
+}
+
+.new-chat-setup-review > dt {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-ui);
+}
+
+.new-chat-setup-review > dd {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.new-chat-setup-value {
+  color: var(--g-fg-1);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-ui);
+  font-variant-ligatures: none;
+  overflow-wrap: anywhere;
+}
+
 /* ------------------------------------------------------------------ reduced motion */
 
 @media (prefers-reduced-motion: reduce) {
   .new-chat-agent[data-found] .g-agent-mark {
     animation: none;
   }
+
+  .new-chat-worktree[data-side] .new-chat-worktree-popover > .chat-popover-panel {
+    animation: none;
+  }
 }
 
 :root:is([data-motion="reduced"], [data-motion="off"]) .new-chat-agent[data-found] .g-agent-mark {
+  animation: none;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"])
+  .new-chat-worktree[data-side]
+  .new-chat-worktree-popover
+  > .chat-popover-panel {
   animation: none;
 }
 
