@@ -45,6 +45,7 @@ export function QuestionCard({
     <div
       className="chat-block"
       data-kind="question"
+      data-notify={prompt.type === "notify" ? "" : undefined}
       data-resolved={closed}
       data-testid="item"
       data-test-kind="question"

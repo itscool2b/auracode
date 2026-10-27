@@ -248,7 +248,7 @@ export function ChangesPanel({
           disabled={busy || acting}
           onClick={() => setRevision((value) => value + 1)}
         >
-          <RefreshCw size={14} />
+          <RefreshCw size={16} />
         </button>
         <button
           type="button"
@@ -271,7 +271,8 @@ export function ChangesPanel({
         ) : (
           <>
             <label className="changes-scope">
-              Compare current files with
+              {/* The choice reads on its own ("Before the latest turn"); its name is for screen readers. */}
+              <span className="sr-only">Compare current files with</span>
               <select
                 className="g-select"
                 value={scope}

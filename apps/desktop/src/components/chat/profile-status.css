@@ -1,10 +1,15 @@
-/* The account row at the foot of the sidebar (6.2): a square avatar, the profile and its sync state. */
+/*
+ * The account row at the foot of the sidebar (6.2), after Vercel's user row and Grok's avatar:
+ * round initials, the name on one line with its storage or sync state quietly under it, and a
+ * kebab that opens the menu. The avatar sits on the column's left edge (x 20).
+ */
 .chat-account-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--g-space-8);
+  gap: var(--g-space-12);
   height: 44px;
-  padding: 0 var(--g-space-4);
+  padding: 0 var(--g-space-4) 0 var(--g-space-8);
 }
 
 .chat-account-avatar {
@@ -13,9 +18,15 @@
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--g-radius-8);
+  border-radius: var(--g-radius-pill);
   background-color: var(--g-surface-3);
-  color: var(--g-fg-2);
+  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 600;
+  letter-spacing: 0;
+  user-select: none;
 }
 
 .chat-account-identity {
@@ -28,14 +39,48 @@
 .chat-account-identity strong {
   overflow: hidden;
   color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .chat-account-identity small {
+  overflow: hidden;
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sync that needs a hand reads in fg-2; volt stays for chats that wait on you. */
+.chat-account-identity small[data-tone="attention"] {
+  color: var(--g-fg-2);
+}
+
+.chat-popover.chat-account-menu > summary {
+  color: var(--g-fg-3);
+}
+
+@media (hover: hover) {
+  .chat-account-menu > summary:hover {
+    background-color: var(--g-surface-3);
+    color: var(--g-fg-1);
+  }
+}
+
+/* The menu opens upward over the row from the avatar's edge (x 20), Vercel's plain rows. */
+.chat-popover.chat-account-menu {
+  position: static;
+}
+
+.chat-account-menu > .chat-popover-panel {
+  right: auto;
+  bottom: calc(100% + 4px);
+  left: var(--g-space-8);
+  width: 220px;
+  gap: 0;
+  padding: var(--g-space-4);
 }

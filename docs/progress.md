@@ -3024,3 +3024,41 @@ Verified locally on Windows: `pnpm lint`, `pnpm typecheck` and `pnpm test` (root
 check in Chromium and WebKit with no axe violations (`check-settings` needs the website built
 first for its verification fixture). Before and after sheets of every preview mode, fixture and
 main dialog are in the ignored `target/design-research/sheets/app-2a-*.png`.
+
+### App restyle step 2b: the Grok chat shell (2026-10-27)
+
+Branch `app-chat-shell` (from `app-one-system`) rebuilds the chat shell after Grok's web app.
+
+- **Sidebar:** the seal and turtle logo at the top left (x 84 on macOS, clear of the traffic
+  lights, through `data-os`), the collapse toggle (now also ⌘\), Search and New chat with their
+  keys under the hand only, a foldable Projects section without counts, and Archived chats as a
+  quiet last line. Rows share one style and sit 4px apart.
+- **Agent dock:** one tile per usable product (native before the ACP adapter; the demo only when
+  nothing else is usable); missing and alternate variants wait behind "+N", whose rows start a
+  chat or open the Agents screen. Detecting, found, sign-in or update, working and needs-you each
+  have a look and one small motion; reduced motion holds still.
+- **Account row:** round initials, the name and its storage or sync state, and a kebab menu
+  (Settings, Agents, Diagnostics) after Vercel's user row.
+- **Header:** title and project, the status with its live mark only while it says something, and
+  two controls (Changes and the chat menu). Git workspace, Terminal and editor, history, export,
+  debug bundle, log and the session lifecycle live in the menu and, by name, in the palette.
+- **Transcript:** no byline; Grok's action row (copy, retry, fork, receipt icons and the time) in
+  place of the receipt; an even-radius prompt block with icon actions; a 24px gutter.
+- **Composer and picker:** one pill with attach, the agent chip (agent, model, autonomy ticks) and
+  one send control (Stop recedes once a message is typed; Steer and Queue share one pill). The
+  agent, model, effort and autonomy choices are one popover after Grok's voice popover.
+- **Calm treatment:** permission input as key and value rows, Graphite radios in questions, the
+  queue as one segment, quiet panel tabs and palette scopes, no palette key legend.
+- **Layout probe:** `apps/desktop/scripts/check-layout.mjs` walks every `?preview=` mode plus the
+  shell's floating layers in Chromium and WebKit at 1440x900 and 1024x700, and fails on
+  overflow, padded containers off the 4px grid, overlapping controls, focus without a visible
+  change, and text under 4.5:1. The chat surfaces are clean (100 of 100 views); findings remain in
+  New chat, settings, account, setup, Agents, Git, project tools, worktree setup, config sync,
+  data transfer and keep-local, which the parallel 2b branches own.
+
+Verified locally on Windows: `pnpm lint`, `pnpm typecheck` and `pnpm test` (root scripts 22, ui
+276, desktop 5 node and 351 with 19 skipped, design lab 352, web 4), and in Chromium and WebKit
+`check-chat`, `check-steering`, `check-questions`, `check-session-fallback`, `check-git-review`,
+`check-project-tools`, `check-profile-status` (now opening the account menu first) and
+`check-settings` (which includes settings navigation). Side-by-side sheets against the Grok and
+Vercel references are in the ignored `target/design-research/sheets/app-2b-chat-*.png`.

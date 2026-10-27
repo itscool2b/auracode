@@ -59,7 +59,11 @@ describe("the permission card", () => {
   it("permission_card_flow: one button per option, all disabled while the answer is on its way", () => {
     const open = permissionCard(permission());
     expect(open).toContain("Run npm test");
-    expect(open).toContain("&quot;command&quot;: &quot;npm test&quot;");
+    // A flat input reads as key and value rows; anything nested stays the raw text.
+    expect(open).toContain('<dt>command</dt><dd class="ui-mono">npm test</dd>');
+    expect(permissionCard(permission({ raw_input: { command: ["npm", "test"] } }))).toContain(
+      "&quot;command&quot;: [",
+    );
     expect(open).toContain("package.json:3");
     expect(buttons(open)).toEqual([
       { label: "Allow once", disabled: false },

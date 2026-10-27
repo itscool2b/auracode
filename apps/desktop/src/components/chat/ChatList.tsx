@@ -1,5 +1,5 @@
 import { PixelLoader, StatusDot } from "@auracode/ui/graphite";
-import { Archive, ChevronRight, Ellipsis, Pin, Plus, Search, SquarePen } from "lucide-react";
+import { ChevronDown, ChevronRight, Ellipsis, Pin, Plus, Search, SquarePen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ChatSummary, ProjectSummary, WorkspaceSnapshot } from "../../bindings";
 import { folderStateLabel, statusWord } from "../../lib/chat/present";
@@ -22,7 +22,10 @@ export function projectName(folder: string): string {
   return parts[parts.length - 1] ?? folder;
 }
 
-/** The sidebar's projects and chats, with live attention and folder state. */
+/**
+ * The sidebar's navigation (Grok's order): Search and New chat, the chats waiting on you, then the
+ * projects with their chats, and a quiet "Archived chats" row at the end, like Grok's "See all".
+ */
 export function ChatList({
   active = true,
   chats,
@@ -55,6 +58,7 @@ export function ChatList({
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const [sectionFolded, setSectionFolded] = useState(false);
   const search = useRef<HTMLInputElement>(null);
   const all = chats ?? [];
   const filtered = all.filter((chat) =>
@@ -108,20 +112,10 @@ export function ChatList({
   useEffect(() => {
     if (searching) search.current?.focus();
   }, [searching]);
+  const section = archived ? "Archived" : "Projects";
   return (
     <nav aria-label="Chats" className="chat-navigation" data-testid="chat-list">
       <div className="chat-nav-actions">
-        <button
-          type="button"
-          className="chat-nav-action"
-          data-testid="new-chat-button"
-          aria-keyshortcuts="Control+N Meta+N"
-          onClick={onNewChat}
-        >
-          <SquarePen size={16} />
-          <span>New chat</span>
-          <Keys keys={[commandKey(), "N"]} />
-        </button>
         <button
           type="button"
           className="chat-nav-action"
@@ -132,6 +126,17 @@ export function ChatList({
           <Search size={16} />
           <span>Search</span>
           <Keys keys={[commandKey(), "K"]} />
+        </button>
+        <button
+          type="button"
+          className="chat-nav-action"
+          data-testid="new-chat-button"
+          aria-keyshortcuts="Control+N Meta+N"
+          onClick={onNewChat}
+        >
+          <SquarePen size={16} />
+          <span>New chat</span>
+          <Keys keys={[commandKey(), "N"]} />
         </button>
         {searching ? (
           <input
@@ -160,7 +165,8 @@ export function ChatList({
         {waiting.length > 0 ? (
           <section className="chat-attention" aria-label="Needs you">
             <h2 className="chat-section-label">
-              Needs you <span>{waiting.length}</span>
+              <span className="chat-section-title">Needs you</span>
+              <span className="chat-section-count">{waiting.length}</span>
             </h2>
             {waiting.map((chat) => (
               <button
@@ -169,7 +175,9 @@ export function ChatList({
                 className="chat-attention-row"
                 onClick={() => onSelect(chat.id)}
               >
-                <StatusDot tone="volt" />
+                <span className="chat-attention-mark">
+                  <StatusDot tone="volt" />
+                </span>
                 <span>
                   {chat.title ?? "New chat"}
                   <small> · {projectName(chat.folder)}</small>
@@ -178,98 +186,146 @@ export function ChatList({
             ))}
           </section>
         ) : null}
-        <h2 className="chat-section-label">
-          {archived ? "Archived" : "Projects"} <span>{projects.length}</span>
-          {onNewProject ? (
+        <section className="chat-project-section" aria-label={section}>
+          <h2 className="chat-section-label">
             <button
               type="button"
-              className="g-button g-button-ghost g-button-icon g-button-28"
-              title="New project"
-              aria-label="New project"
-              onClick={onNewProject}
+              className="chat-section-toggle"
+              aria-expanded={!sectionFolded}
+              onClick={() => setSectionFolded((value) => !value)}
             >
-              <Plus size={13} />
+              <span className="chat-section-title">{section}</span>
+              <ChevronDown className="chat-section-chevron" size={12} aria-hidden="true" />
             </button>
-          ) : null}
-        </h2>
-        {chats !== null && all.length === 0 ? (
-          <p className="chat-sidebar-empty">Your projects and chats will appear here.</p>
-        ) : null}
-        {query && filtered.length === 0 ? (
-          <p className="chat-sidebar-empty">No chats match “{query}”.</p>
-        ) : null}
-        <ul className="chat-projects">
-          {projects.map((project) => (
-            <li key={project.folder}>
-              <div className="chat-project-heading">
-                <button
-                  type="button"
-                  className="chat-project-toggle"
-                  title={project.folder}
-                  aria-expanded={!folded.has(project.folder)}
-                  onClick={() =>
-                    setFolded((current) => {
-                      const next = new Set(current);
-                      if (next.has(project.folder)) next.delete(project.folder);
-                      else next.add(project.folder);
-                      return next;
-                    })
-                  }
-                >
-                  {/* A neutral square: project colours never reach the chrome. */}
-                  <span className="chat-project-swatch" aria-hidden="true">
-                    <ChevronRight size={12} />
-                  </span>
-                  <span>{project.name}</span>
-                  <small>{project.chats.length}</small>
-                </button>
-                {onProjectSettings && project.project ? (
-                  <button
-                    type="button"
-                    className="g-button g-button-ghost g-button-icon g-button-28 chat-row-menu"
-                    aria-label={`Settings for ${project.name}`}
-                    onClick={() => {
-                      if (project.project) onProjectSettings(project.project);
-                    }}
-                  >
-                    <Ellipsis size={14} />
-                  </button>
-                ) : null}
-              </div>
-              {!folded.has(project.folder) ? (
-                <ul className="chat-chats">
-                  {project.chats.map((chat) => (
-                    <li key={chat.id} className="chat-row-container">
-                      <ChatRow chat={chat} selected={chat.id === selected} onSelect={onSelect} />
-                      {membership.get(chat.id)?.pinned ? (
-                        <Pin className="chat-pin-mark" size={10} aria-label="Pinned" />
-                      ) : null}
-                      {onChatOptions ? (
+            {onNewProject && !archived ? (
+              <button
+                type="button"
+                className="g-button g-button-ghost g-button-icon g-button-24 chat-section-action"
+                title="New project"
+                aria-label="New project"
+                onClick={onNewProject}
+              >
+                <Plus size={14} />
+              </button>
+            ) : null}
+          </h2>
+          {sectionFolded ? null : (
+            <>
+              {chats !== null && all.length === 0 ? (
+                <p className="chat-sidebar-empty">
+                  {archived ? "No archived chats." : "Your projects and chats will appear here."}
+                </p>
+              ) : null}
+              {query && filtered.length === 0 ? (
+                <p className="chat-sidebar-empty">No chats match “{query}”.</p>
+              ) : null}
+              <ul className="chat-projects">
+                {projects.map((project) => {
+                  const open = !folded.has(project.folder);
+                  return (
+                    <li key={project.folder}>
+                      <div className="chat-project-heading">
                         <button
                           type="button"
-                          className="g-button g-button-ghost g-button-icon g-button-28 chat-row-menu"
-                          aria-label={`Options for ${chat.title ?? "New chat"}`}
-                          onClick={() => onChatOptions(chat)}
+                          className="chat-project-toggle"
+                          title={project.folder}
+                          aria-expanded={open}
+                          onClick={() =>
+                            setFolded((current) => {
+                              const next = new Set(current);
+                              if (next.has(project.folder)) next.delete(project.folder);
+                              else next.add(project.folder);
+                              return next;
+                            })
+                          }
                         >
-                          <Ellipsis size={14} />
+                          {/* A neutral square: project colours never reach the chrome. */}
+                          <span className="chat-project-swatch" aria-hidden="true">
+                            <ChevronRight size={12} />
+                          </span>
+                          <span>{project.name}</span>
+                          {open ? null : <FoldedState chats={project.chats} />}
                         </button>
+                        {onProjectSettings && project.project ? (
+                          <button
+                            type="button"
+                            className="g-button g-button-ghost g-button-icon g-button-24 chat-row-menu"
+                            aria-label={`Settings for ${project.name}`}
+                            onClick={() => {
+                              if (project.project) onProjectSettings(project.project);
+                            }}
+                          >
+                            <Ellipsis size={14} />
+                          </button>
+                        ) : null}
+                      </div>
+                      {open ? (
+                        <ul className="chat-chats">
+                          {project.chats.map((chat) => (
+                            <li key={chat.id} className="chat-row-container">
+                              <ChatRow
+                                chat={chat}
+                                selected={chat.id === selected}
+                                onSelect={onSelect}
+                              />
+                              {membership.get(chat.id)?.pinned ? (
+                                <Pin className="chat-pin-mark" size={10} aria-label="Pinned" />
+                              ) : null}
+                              {onChatOptions ? (
+                                <button
+                                  type="button"
+                                  className="g-button g-button-ghost g-button-icon g-button-24 chat-row-menu"
+                                  aria-label={`Options for ${chat.title ?? "New chat"}`}
+                                  onClick={() => onChatOptions(chat)}
+                                >
+                                  <Ellipsis size={14} />
+                                </button>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
                       ) : null}
                     </li>
-                  ))}
-                </ul>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+          {onShowArchived ? (
+            <button type="button" className="chat-see-all" onClick={onShowArchived}>
+              {archived ? "Back to projects" : "Archived chats"}
+            </button>
+          ) : null}
+        </section>
       </div>
-      {onShowArchived ? (
-        <button type="button" className="chat-nav-action" onClick={onShowArchived}>
-          <Archive size={15} />
-          <span>{archived ? "Back to projects" : "Archived chats"}</span>
-        </button>
-      ) : null}
     </nav>
   );
+}
+
+/**
+ * A folded project says what its chats are doing where its chevron sits: a volt square while one
+ * needs you, the loader while one works, a red square when one failed. Otherwise it is quiet.
+ */
+function FoldedState({ chats }: { readonly chats: readonly ChatSummary[] }) {
+  if (chats.some((chat) => chat.needs_attention))
+    return (
+      <span className="chat-project-state">
+        <StatusDot tone="volt" label="A chat needs you" />
+      </span>
+    );
+  if (chats.some((chat) => chat.status === "running" || chat.status === "starting"))
+    return (
+      <span className="chat-project-state">
+        <PixelLoader size={12} tempo="tool" label="A chat is working" />
+      </span>
+    );
+  if (chats.some((chat) => chat.status === "failed"))
+    return (
+      <span className="chat-project-state">
+        <StatusDot tone="red" label="A chat failed" />
+      </span>
+    );
+  return null;
 }
 
 function ChatRow({
@@ -297,6 +353,7 @@ function ChatRow({
       data-test-status={chat.status}
       data-test-attention={String(chat.needs_attention)}
       data-test-folder-state={chat.folder_state}
+      data-running={running ? "" : undefined}
       onClick={() => onSelect(chat.id)}
     >
       <span className="chat-row-title" data-testid="chat-row-title">

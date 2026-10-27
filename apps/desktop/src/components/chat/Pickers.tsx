@@ -1,5 +1,5 @@
 import { AgentMark } from "@auracode/ui/graphite";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { Fragment, useId } from "react";
 import type {
   AgentEntry,
@@ -10,14 +10,15 @@ import type {
   SessionStatus,
 } from "../../bindings";
 import { AUTONOMIES, autonomyLabel, orderedOptions, pendingLabel } from "../../lib/chat/present";
+import { dockAgents } from "./AgentDock";
 import { focusPickerChoice, movePickerFocus, PickerChoices } from "./PickerChoices";
-import { Popover } from "./Popover";
+import { closePopover, Popover } from "./Popover";
 
 /**
  * The autonomy level as three square ticks, 4, 6 and 8px tall (6.11): Ask fills one, Auto-edit
- * two, Full auto three. Decorative; the label beside it names the level.
+ * two, Full auto three. Decorative; the words beside it, or the control's name, say the level.
  */
-function AutonomyGlyph({ autonomy }: { readonly autonomy: Autonomy }) {
+export function AutonomyGlyph({ autonomy }: { readonly autonomy: Autonomy }) {
   const level = autonomy === "full_auto" ? 3 : autonomy === "auto_edit" ? 2 : 1;
   return (
     <svg
@@ -57,11 +58,14 @@ const AGENT_KEYS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Autonomy (always enabled: it applies when the agent starts), with its note, the agent mode in
- * effect, and the checkpoint behavior while Full auto is chosen; then one select or checkbox per
- * option the agent offers, enabled while the agent is ready or working, pending values marked. A
- * change on its way (up to 35 s) shows the value asked for, marked "saving", instead of snapping
- * back to the old one.
+ * One popover for everything the next turn runs with (Grok's voice popover): the agent and the
+ * model as rows, then effort as a segmented row and autonomy as a compact field, with the checkpoint
+ * note under it. Options are enabled while the agent is ready or working; autonomy always applies
+ * when the agent starts. A change on its way (up to 35 s) shows the value asked for, marked
+ * "saving", instead of snapping back to the old one.
+ *
+ * Keys: Ctrl or Cmd + . opens it on the current choice; up and down move within a part, left and
+ * right move between parts, Enter chooses, digits set the effort, letters jump to agents.
  */
 export function Pickers({
   lists,
@@ -100,6 +104,18 @@ export function Pickers({
       : null;
   const model = options.find((option) => option.category === "model");
   const effort = options.find((option) => option.category === "effort");
+  const others = options.filter(
+    (option) => option.category !== "model" && option.category !== "effort",
+  );
+  // The agents worth offering: one per product, plus the chat's own agent wherever it stands.
+  const offered = agents?.length
+    ? [
+        ...(agent && !dockAgents(agents).shown.some((entry) => entry.id === agent.id)
+          ? [agent]
+          : []),
+        ...dockAgents(agents).shown,
+      ]
+    : [];
   return (
     <div className="chat-pickers">
       <Popover
@@ -108,20 +124,23 @@ export function Pickers({
           agent?.name ?? "Agent",
           model && choiceLabel(model),
           effort && choiceLabel(effort),
+          `${autonomyLabel(chosen)}.`,
           "Agent and model",
         ]
           .filter(Boolean)
           .join(" ")}
+        tip={`Agent, model and autonomy (${typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent) ? "⌘" : "Ctrl"} .)`}
         shortcut="."
         className="chat-model-popover"
         trigger={
-          // A quiet text control (Aside): the agent, its model and effort, then a chevron. The
-          // agent's mark lives in the header and the picker rows; here its code would be visible
-          // text missing from the control's name.
+          // Grok's chip: who answers and with what, then how freely (the autonomy ticks). The
+          // agent's mark stays out: its code would be visible text missing from the chip's name.
           <>
             <strong>{agent?.name ?? "Agent"}</strong>{" "}
-            {model ? <span className="chat-pill-model">{choiceLabel(model)}</span> : null}{" "}
-            {effort ? <span className="chat-pill-effort">{choiceLabel(effort)}</span> : null}
+            {model ? <span className="chat-pill-model">{choiceLabel(model)}</span> : null}
+            <span className="chat-pill-autonomy">
+              <AutonomyGlyph autonomy={chosen} />
+            </span>
             <ChevronDown size={12} />
           </>
         }
@@ -129,7 +148,6 @@ export function Pickers({
         <fieldset
           className="chat-model-columns"
           aria-label="Agent, model and effort"
-          data-columns="three"
           onKeyDown={(event) => {
             if (
               event.ctrlKey ||
@@ -138,18 +156,18 @@ export function Pickers({
               event.target instanceof HTMLSelectElement
             )
               return;
-            const columns = [
+            const parts = [
               ...event.currentTarget.querySelectorAll<HTMLElement>(":scope > section"),
-            ];
-            const column = (event.target as HTMLElement).closest<HTMLElement>(
+            ].filter((part) => part.querySelector("button:not(:disabled)"));
+            const part = (event.target as HTMLElement).closest<HTMLElement>(
               ".chat-model-columns > section",
             );
-            const index = column ? columns.indexOf(column) : 0;
+            const index = part ? parts.indexOf(part) : 0;
             if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
               event.preventDefault();
               const next =
-                columns[
-                  (index + (event.key === "ArrowRight" ? 1 : -1) + columns.length) % columns.length
+                parts[
+                  (index + (event.key === "ArrowRight" ? 1 : -1) + parts.length) % parts.length
                 ];
               focusPickerChoice(next);
             } else if (
@@ -173,15 +191,15 @@ export function Pickers({
             }
           }}
         >
-          <section>
-            <h3>Agent</h3>
-            {agents?.length && onChooseAgent ? (
+          <section aria-labelledby={`${autonomyId}-agent`}>
+            <h3 id={`${autonomyId}-agent`}>Agent</h3>
+            {offered.length && onChooseAgent ? (
               <fieldset
                 className="chat-agent-choices"
                 aria-label="Agents"
                 onKeyDown={movePickerFocus}
               >
-                {agents.map((entry) => (
+                {offered.map((entry) => (
                   <button
                     key={entry.id}
                     type="button"
@@ -190,22 +208,21 @@ export function Pickers({
                     disabled={entry.availability.state !== "ready"}
                     onClick={(event) => {
                       if (entry.id !== agent?.id) {
-                        const details = event.currentTarget.closest("details");
-                        if (details) details.open = false;
+                        closePopover(event.currentTarget);
                         onChooseAgent(entry.id);
                       }
                     }}
                   >
                     <AgentMark agent={entry.id} size={16} />
-                    <span>
+                    <span className="picker-choice-copy">
                       <strong>{entry.name}</strong>
-                      <small>
-                        {entry.availability.state === "ready"
-                          ? (entry.availability.version ?? "Installed")
-                          : entry.availability.state.replaceAll("_", " ")}
-                      </small>
                     </span>
-                    {AGENT_KEYS[entry.id] ? <kbd>{AGENT_KEYS[entry.id]?.toUpperCase()}</kbd> : null}
+                    <small>
+                      {entry.availability.state === "ready"
+                        ? (entry.availability.version ?? "Installed")
+                        : entry.availability.state.replaceAll("_", " ")}
+                    </small>
+                    {entry.id === agent?.id ? <Check size={14} aria-label="Selected" /> : null}
                   </button>
                 ))}
               </fieldset>
@@ -215,12 +232,11 @@ export function Pickers({
                 {agent?.name ?? "Agent"}
               </span>
             )}
-            <p>Switching agents opens a visible context preview.</p>
           </section>
-          <section>
-            <h3>Model</h3>
+          <section aria-labelledby={`${autonomyId}-model`}>
+            <h3 id={`${autonomyId}-model`}>Model</h3>
             {!model ? (
-              <p>
+              <p className="chat-picker-empty">
                 {optionsEnabled
                   ? "This agent does not offer a model selector."
                   : "Start the session to load its models and options."}
@@ -238,100 +254,90 @@ export function Pickers({
                 />
               ))}
           </section>
-          <section>
-            <h3>Effort</h3>
-            {!effort ? (
-              <p>{optionsEnabled ? "No effort setting" : "Available after the session starts."}</p>
-            ) : null}
-            {options
-              .filter((option) => option.category === "effort")
-              .map((option) => (
-                <OptionPicker
-                  key={option.id}
-                  option={option}
-                  saving={optionsSaving.get(option.id) ?? null}
-                  enabled={optionsEnabled}
-                  onSet={onSetOption}
-                />
-              ))}
-            {options.some(
-              (option) => option.category !== "model" && option.category !== "effort",
-            ) ? (
+          <section className="chat-picker-fields" aria-labelledby={`${autonomyId}-effort`}>
+            <h3 id={`${autonomyId}-effort`} className="sr-only">
+              Effort and autonomy
+            </h3>
+            <div className="chat-picker-field">
+              <span className="chat-picker-field-label">Effort</span>
+              {effort ? null : (
+                <span className="chat-picker-empty">
+                  {optionsEnabled ? "Not offered" : "After the session starts"}
+                </span>
+              )}
+              {options
+                .filter((option) => option.category === "effort")
+                .map((option) => (
+                  <OptionPicker
+                    key={option.id}
+                    option={option}
+                    saving={optionsSaving.get(option.id) ?? null}
+                    enabled={optionsEnabled}
+                    onSet={onSetOption}
+                  />
+                ))}
+            </div>
+            <div className="chat-picker-field">
+              <label htmlFor={autonomyId} className="chat-picker-field-label">
+                Autonomy
+                {autonomySaving !== null ? <span className="ui-muted"> (saving…)</span> : null}
+              </label>
+              <span className="chat-autonomy-select">
+                <AutonomyGlyph autonomy={chosen} />
+                <select
+                  id={autonomyId}
+                  className="g-select"
+                  data-testid="picker-autonomy"
+                  data-test-requested={lists?.autonomy.requested ?? ""}
+                  data-test-native-mode={lists?.autonomy.native_mode ?? ""}
+                  data-test-saving={String(autonomySaving !== null)}
+                  value={chosen}
+                  onChange={(event) => onSetAutonomy(event.currentTarget.value as Autonomy)}
+                >
+                  {AUTONOMIES.map((value) => (
+                    <option key={value} value={value}>
+                      {autonomyLabel(value)}
+                    </option>
+                  ))}
+                </select>
+              </span>
+            </div>
+            <div className="chat-picker-note">
+              {chosen === "full_auto" ? (
+                <p>
+                  Full auto. A local checkpoint is saved before each turn. Review files in Changes.
+                </p>
+              ) : null}
+              {lists?.autonomy.note ? <p>{lists.autonomy.note}</p> : null}
+              {lists?.autonomy.native_mode ? <p>Agent mode: {lists.autonomy.native_mode}</p> : null}
+              {error !== null ? (
+                <p role="alert" className="ui-error" data-testid="picker-error">
+                  {error}
+                </p>
+              ) : null}
+            </div>
+            {others.length ? (
               <details className="chat-other-options">
                 <summary>More options</summary>
-                {options
-                  .filter((option) => option.category !== "model" && option.category !== "effort")
-                  .map((option) => (
-                    <OptionPicker
-                      key={option.id}
-                      option={option}
-                      saving={optionsSaving.get(option.id) ?? null}
-                      enabled={optionsEnabled}
-                      onSet={onSetOption}
-                    />
-                  ))}
+                {others.map((option) => (
+                  <OptionPicker
+                    key={option.id}
+                    option={option}
+                    saving={optionsSaving.get(option.id) ?? null}
+                    enabled={optionsEnabled}
+                    onSet={onSetOption}
+                  />
+                ))}
               </details>
             ) : null}
           </section>
         </fieldset>
-        <footer className="picker-key-legend">
-          ↑ ↓ move <span>← → column</span> <span>enter choose</span> <span>esc close</span>
-        </footer>
-      </Popover>
-      <Popover
-        label="Autonomy"
-        triggerLabel={`${autonomyLabel(chosen)}. Autonomy`}
-        className="chat-autonomy-popover"
-        trigger={
-          <>
-            <AutonomyGlyph autonomy={chosen} />
-            <span>{autonomyLabel(chosen)}</span>
-            <ChevronDown size={12} />
-          </>
-        }
-      >
-        <div className="ui-field">
-          <label htmlFor={autonomyId}>
-            Autonomy
-            {autonomySaving !== null ? <span className="ui-muted"> (saving…)</span> : null}
-          </label>
-          <select
-            id={autonomyId}
-            className="g-select"
-            data-testid="picker-autonomy"
-            data-test-requested={lists?.autonomy.requested ?? ""}
-            data-test-native-mode={lists?.autonomy.native_mode ?? ""}
-            data-test-saving={String(autonomySaving !== null)}
-            value={chosen}
-            onChange={(event) => onSetAutonomy(event.currentTarget.value as Autonomy)}
-          >
-            {AUTONOMIES.map((value) => (
-              <option key={value} value={value}>
-                {autonomyLabel(value)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="chat-picker-note">
-          {chosen === "full_auto" ? (
-            <div>
-              Full auto. A local checkpoint is saved before each turn. Review files in Changes.
-            </div>
-          ) : null}
-          {lists?.autonomy.note ? <div>{lists.autonomy.note}</div> : null}
-          {lists?.autonomy.native_mode ? <div>Agent mode: {lists.autonomy.native_mode}</div> : null}
-          {error !== null ? (
-            <div role="alert" className="ui-error" data-testid="picker-error">
-              {error}
-            </div>
-          ) : null}
-        </div>
       </Popover>
       {error !== null ? (
         <span
           className="chat-picker-error-dot"
           role="img"
-          aria-label="Session settings error. Open Autonomy for details."
+          aria-label="Session settings error. Open the agent and model picker for details."
         />
       ) : null}
     </div>
@@ -364,11 +370,12 @@ function OptionPicker({
   );
   if (option.kind.type === "toggle") {
     return (
-      <div className="ui-field">
+      <div className="ui-field chat-picker-toggle">
         <label htmlFor={id} title={option.description ?? undefined}>
           <input
             id={id}
             type="checkbox"
+            className="g-switch"
             data-testid="picker-option"
             data-test-option-id={option.id}
             data-test-saving={String(saving !== null)}
@@ -385,6 +392,7 @@ function OptionPicker({
   }
   const { choices, current } = option.kind;
   if (option.category === "model" || option.category === "effort") {
+    const effort = option.category === "effort";
     return (
       <div
         className="ui-field"
@@ -392,14 +400,19 @@ function OptionPicker({
         data-test-option-id={option.id}
         data-test-saving={String(saving !== null)}
         data-test-value={saving?.type === "choice" ? saving.value : current}
+        data-layout={effort ? "segments" : "rows"}
       >
-        <span className="picker-option-label">{label}</span>
+        {saving !== null || pending !== null ? (
+          <span className="picker-option-label">{label}</span>
+        ) : (
+          <span className="sr-only">{label}</span>
+        )}
         <PickerChoices
           label={option.name}
           choices={choices}
           value={saving?.type === "choice" ? saving.value : current}
           enabled={enabled}
-          effort={option.category === "effort"}
+          effort={effort}
           onChoose={(value) => onSet(option.id, { type: "choice", value })}
         />
       </div>
@@ -415,8 +428,12 @@ function OptionPicker({
         </option>
       ));
   return (
-    <div className="ui-field">
-      <label htmlFor={id} title={option.description ?? undefined}>
+    <div className="ui-field chat-picker-field">
+      <label
+        htmlFor={id}
+        className="chat-picker-field-label"
+        title={option.description ?? undefined}
+      >
         {label}
       </label>
       <select
