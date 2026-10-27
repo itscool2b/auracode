@@ -158,9 +158,12 @@ export default function AccountPage() {
           )}
         </section>
       ) : !data ? (
-        <p className="note" role="status">
-          Loading your account…
-        </p>
+        // A failed load shows only its error and the reload link above, not a load that never ends.
+        error ? null : (
+          <p className="note" role="status">
+            Loading your account…
+          </p>
+        )
       ) : (
         <div className="account">
           <nav className="account-nav" aria-label="Account sections">
