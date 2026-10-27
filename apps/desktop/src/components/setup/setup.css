@@ -105,17 +105,17 @@
     transform var(--g-dur-panel) var(--g-ease-quint);
 }
 
-.setup-progress-step[data-state="done"] > span {
+.setup-progress-step:where([data-state="done"]) > span {
   background-color: var(--g-fg-3);
 }
 
-.setup-progress-step[data-state="current"] > span {
+.setup-progress-step:where([data-state="current"]) > span {
   background-color: var(--g-fg-1);
   transform: none;
 }
 
 @media (hover: hover) {
-  .setup-progress-step:not(:disabled):hover > span {
+  .setup-progress-step:where(:not(:disabled):hover) > span {
     background-color: var(--g-fg-1);
   }
 }
@@ -547,7 +547,7 @@
   padding-left: var(--g-space-16);
 }
 
-.setup-notices li + li {
+.setup-notices :where(li + li) {
   margin-top: var(--g-space-6);
 }
 
@@ -730,7 +730,7 @@
   font-weight: 500;
 }
 
-.setup-installations legend small {
+.setup-installations :where(legend small) {
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -770,10 +770,6 @@
   cursor: not-allowed;
 }
 
-.setup-executable[data-unavailable] code {
-  color: var(--g-fg-3);
-}
-
 .setup-executable > span:first-of-type {
   display: grid;
   flex: 1;
@@ -794,6 +790,10 @@
   line-height: var(--g-leading-code);
   font-variant-ligatures: none;
   overflow-wrap: anywhere;
+}
+
+.setup-executable[data-unavailable] code {
+  color: var(--g-fg-3);
 }
 
 .setup-executable small {

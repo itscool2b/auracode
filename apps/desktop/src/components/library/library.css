@@ -239,7 +239,7 @@
   cursor: pointer;
 }
 
-.library-sources summary small {
+.library-sources :where(summary small) {
   color: var(--g-fg-3);
   font-weight: 400;
 }
@@ -249,7 +249,7 @@
   color: var(--g-fg-2);
 }
 
-.library-sources p small {
+.library-sources :where(p small) {
   display: block;
   color: var(--g-fg-3);
   overflow-wrap: anywhere;
@@ -339,7 +339,7 @@
   white-space: nowrap;
 }
 
-.library-items li small {
+.library-items :where(li small) {
   display: block;
   margin-top: var(--g-space-2);
   color: var(--g-fg-3);
@@ -393,14 +393,14 @@
   overflow-wrap: anywhere;
 }
 
-.library-detail > header p {
+.library-detail :where(header p) {
   margin: var(--g-space-2) 0 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
 
-.library-detail > header code {
+.library-detail :where(header code) {
   display: block;
   margin-top: var(--g-space-6);
   color: var(--g-fg-3);
@@ -597,7 +597,7 @@
   border-top: 1px solid var(--g-line);
 }
 
-.library-history > ul > li {
+.library-history :where(ul > li) {
   display: flex;
   align-items: center;
   gap: var(--g-space-16);
@@ -611,7 +611,7 @@
   min-width: 0;
 }
 
-.library-history li strong {
+.library-history :where(li strong) {
   display: block;
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);

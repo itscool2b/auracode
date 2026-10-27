@@ -212,14 +212,14 @@
 }
 
 /* Not signed in to an invited account: the title, one line and the way to Account. */
-section.config-sync-empty {
+.config-sync-empty {
   padding: var(--g-space-24);
   border-radius: var(--g-radius-12);
   background-color: var(--g-surface-2);
   color: var(--g-fg-2);
 }
 
-section.config-sync-empty h2 {
+.config-sync-empty h2 {
   margin: 0 0 var(--g-space-4);
   color: var(--g-fg-1);
   font-size: var(--g-text-heading);
@@ -227,7 +227,7 @@ section.config-sync-empty h2 {
   font-weight: 600;
 }
 
-section.config-sync-empty p {
+.config-sync-empty p {
   max-width: 560px;
   margin: 0 0 var(--g-space-16);
   font-size: var(--g-text-ui);

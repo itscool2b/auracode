@@ -61,7 +61,7 @@
   overflow-wrap: anywhere;
 }
 
-.folder-resolver li > .setup-path {
+.folder-resolver :where(li) > .setup-path {
   min-width: 0;
 }
 

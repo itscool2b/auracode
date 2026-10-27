@@ -465,8 +465,7 @@
 /* ------------------------------------------------------------------- detection */
 
 /* Found: the status and the version settle into place once; the green square arrives last. */
-.agent-row-status,
-.agent-row-version {
+:where(.agent-row-status, .agent-row-version) {
   animation: agent-settle var(--g-dur-row) var(--g-ease-reveal) both;
 }
 

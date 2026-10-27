@@ -30,7 +30,7 @@
   color: var(--g-fg-2);
 }
 
-.configuration-recovery-content > header h1 {
+.configuration-recovery-content :where(header > h1) {
   margin: 0;
   color: var(--g-fg-1);
   font-size: var(--g-text-title);
@@ -39,7 +39,7 @@
   letter-spacing: var(--g-tracking-title);
 }
 
-.configuration-recovery-content > header p {
+.configuration-recovery-content :where(header > p) {
   max-width: 60ch;
   margin: var(--g-space-8) 0 0;
   color: var(--g-fg-2);
