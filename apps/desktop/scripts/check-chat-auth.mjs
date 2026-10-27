@@ -8,6 +8,14 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 
+// Sheets fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const origin = "http://127.0.0.1:1471";
@@ -61,6 +69,7 @@ try {
         "vendor-display-only login",
       );
       await page.screenshot({ path: resolve(out, `${engine}-card.png`) });
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await signIn.click();
       const sheet = page.getByRole("dialog", { name: "Sign in to Claude Code" });
@@ -74,6 +83,7 @@ try {
       assert.equal((await calls()).filter((value) => value === "start:claude").length, 1);
       assert.ok(!(await calls()).includes("retry"));
       assert.ok((await calls()).includes("close"));
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${engine}-terminal.png`) });
       await page.getByRole("button", { name: "Close sign-in terminal" }).click();
@@ -111,6 +121,7 @@ try {
       await page.getByRole("button", { name: "claude", exact: true }).click();
       await signIn.waitFor();
       await page.setViewportSize({ width: 390, height: 760 });
+      await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${engine}-narrow.png`) });
       assert.equal(
