@@ -17,18 +17,22 @@ import { RotatingAgent } from "./RotatingAgent";
  * phone the copy fills the width, so the clearing reaches past both edges.
  */
 const REACH_X = 1.55;
-const REACH_X_COMPACT = 2.4;
 const REACH_Y = 1.7;
+const REACH_X_COMPACT = 3;
+const REACH_Y_COMPACT = 1.8;
 /** The second clearing keeps the product frame's top edge calm: its width and height in px. */
 const SEAM_RX = 0.625;
 const SEAM_RY = 210;
 const SEAM_DROP = 40;
+/** A third clearing fades the field out toward the stage's bottom edge, so it never ends in a cut. */
+const FOOT_RY = 220;
 
 /**
  * The opening stage: the live dither field fills it edge to edge, gathers toward the sides and
  * thins to black behind the headline, lead and buttons and along the product frame's top edge.
  * Seals and turtles swim through it. The frame's own field dissolves into the real screenshot,
- * already under way when the page opens, as the frame scrolls up.
+ * already under way when the page opens, as the frame scrolls up; on a phone, where a dithered
+ * screenshot is too small to read, the screenshot shows at once.
  */
 export function Stage() {
   const stage = useRef<HTMLDivElement>(null);
@@ -74,7 +78,7 @@ export function Stage() {
           x: round(((left + right) / 2 - box.left) / box.width),
           y: round(((top + bottom) / 2 - box.top) / box.height),
           rx: round((((right - left) / 2) * (compact ? REACH_X_COMPACT : REACH_X)) / box.width),
-          ry: round((((bottom - top) / 2) * REACH_Y) / box.height),
+          ry: round((((bottom - top) / 2) * (compact ? REACH_Y_COMPACT : REACH_Y)) / box.height),
         },
         {
           x: 0.5,
@@ -82,6 +86,7 @@ export function Stage() {
           rx: SEAM_RX,
           ry: round(SEAM_RY / box.height),
         },
+        { x: 0.5, y: 1, rx: 1, ry: round(FOOT_RY / box.height) },
       ];
       setClearing((previous) =>
         JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
@@ -172,7 +177,7 @@ export function Stage() {
             palette={FRAME_FIELD.palette}
             seed={FRAME_FIELD.seed}
             target={target}
-            progress={reduced ? 1 : progress}
+            progress={reduced || compact ? 1 : progress}
             reveal
             order="down"
           >

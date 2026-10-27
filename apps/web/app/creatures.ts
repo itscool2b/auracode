@@ -276,3 +276,9 @@ export const CLOSING_CREATURES: readonly DitherSprite[] = [
   turtle({ x: 0.12, y: 0.32, vx: 8, phase: 2 }),
   seal({ x: 0.88, y: 0.7, vx: -26, phase: 0.6, roll: { every: 22, duration: 2.4 } }),
 ];
+
+/** The closing band on a phone: two seals in the open water above and below the statement. */
+export const CLOSING_CREATURES_COMPACT: readonly DitherSprite[] = [
+  seal({ x: 0.7, y: 0.13, vx: -20, phase: 0.6, roll: { every: 22, duration: 2.4 } }),
+  seal({ x: 0.2, y: 0.88, vx: 16, phase: 2.2, bobPeriod: 3.8 }),
+];

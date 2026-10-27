@@ -62,12 +62,14 @@ export const FRAME_FIELD: FieldSettings = {
 };
 
 /**
- * The stage's two clearings at the 1440px desktop layout, used until the copy is measured: one
- * around the headline, lead and buttons, one along the product frame's top edge.
+ * The stage's clearings at the 1440px desktop layout, used until the copy is measured: one around
+ * the headline, lead and buttons, one along the product frame's top edge and one that fades the
+ * field out toward the stage's bottom edge.
  */
 export const STAGE_CLEARING: readonly FieldClearing[] = [
   { x: 0.5, y: 0.23, rx: 0.347, ry: 0.223 },
   { x: 0.5, y: 0.476, rx: 0.625, ry: 0.142 },
+  { x: 0.5, y: 1, rx: 1, ry: 0.149 },
 ];
 
 export const STAGE_FALLBACK: FieldFallback = {
@@ -88,7 +90,19 @@ export const CLOSING_FIELD: FieldSettings = {
   ceiling: 0.55,
 };
 
-export const CLOSING_CLEARING: readonly FieldClearing[] = [{ x: 0.5, y: 0.5, rx: 0.4, ry: 0.7 }];
+/** Calm behind the statement, and fading out toward the band's top and bottom edges. */
+export const CLOSING_CLEARING: readonly FieldClearing[] = [
+  { x: 0.5, y: 0.5, rx: 0.4, ry: 0.7 },
+  { x: 0.5, y: 0, rx: 1, ry: 0.2 },
+  { x: 0.5, y: 1, rx: 1, ry: 0.2 },
+];
+
+/** On a phone the statement spans the width, so the calm does too. */
+export const CLOSING_CLEARING_COMPACT: readonly FieldClearing[] = [
+  { x: 0.5, y: 0.5, rx: 0.95, ry: 0.42 },
+  { x: 0.5, y: 0, rx: 1, ry: 0.14 },
+  { x: 0.5, y: 1, rx: 1, ry: 0.14 },
+];
 
 export const CLOSING_FALLBACK: FieldFallback = {
   file: "images/dither-closing.png",

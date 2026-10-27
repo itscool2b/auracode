@@ -10,6 +10,8 @@ const NUMBERS = [
 ] as const;
 
 const PIXEL_FONT = '"Geist Pixel", ui-monospace, monospace';
+/** Geist Pixel's figures stand about 0.73em tall; the box keeps just that, so nothing sits empty above. */
+const FIGURE_HEIGHT = 0.76;
 
 /**
  * The AI in Design report's giant numerals, set in Geist Pixel and condensing out of their own
@@ -26,7 +28,7 @@ export function Numerals() {
     (rect, viewport) => (viewport - rect.top) / (viewport * 0.55),
     { step: 0.004 },
   );
-  const size = compact ? 168 : 340;
+  const size = compact ? 128 : 340;
   return (
     <section className="section numerals" aria-labelledby="numerals-title">
       <div className="wrap numerals-grid">
@@ -36,7 +38,12 @@ export function Numerals() {
         <ul
           className="numerals-list"
           ref={row}
-          style={{ "--figure": `${size}px` } as CSSProperties}
+          style={
+            {
+              "--figure": `${size}px`,
+              "--figure-h": `${Math.round(size * FIGURE_HEIGHT)}px`,
+            } as CSSProperties
+          }
         >
           {NUMBERS.map((item, i) => {
             const own = Math.min(1, Math.max(0, progress * 1.35 - i * 0.16));

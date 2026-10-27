@@ -74,7 +74,17 @@ function Replay({ t }: { t: number }) {
   return (
     <div className="film-window">
       <div className="film-transcript">
-        {t >= SENT ? <p className="mini-user film-enter">{PROMPT}</p> : null}
+        {t < SENT ? (
+          <p className="film-empty">
+            <AgentMark agent="claude-code" size={28} />
+            <span>
+              <span className="mini-strong">Claude Code</span> is ready in{" "}
+              <span className="mini-strong">auracode</span>.
+            </span>
+          </p>
+        ) : (
+          <p className="mini-user film-enter">{PROMPT}</p>
+        )}
         {t >= THINKING ? (
           <div className="mini-byline film-enter">
             <AgentMark
