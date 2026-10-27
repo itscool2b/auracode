@@ -14,6 +14,8 @@ use minisign_verify::{PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+pub mod publish;
+
 const MAX_PLAN: u64 = 64 * 1024;
 const MAX_SIGNATURE: u64 = 4096;
 const MAX_ARTIFACT: u64 = 512 * 1024 * 1024;
