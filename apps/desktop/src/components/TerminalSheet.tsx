@@ -64,21 +64,41 @@ export function TerminalSheet({
       const styles = getComputedStyle(element);
       const color = (name: string, fallback: string) =>
         styles.getPropertyValue(name).trim() || fallback;
+      // Graphite's terminal well: code text on surface-1 and the ANSI palette (visual-language 3.1).
       const term = new Terminal({
         cols: 80,
         rows: 24,
         scrollback: 1000,
-        fontSize: 13,
-        fontFamily: color("--o-mono", '"Geist Mono Variable", monospace'),
+        fontSize: 12.5,
+        lineHeight: 1.44,
+        fontFamily: color("--g-mono", '"Geist Mono Variable", monospace'),
         cursorBlink: false,
         screenReaderMode: true,
         disableStdin: true,
         logLevel: "off",
         theme: {
-          background: color("--o-pane", "#0e0e0d"),
-          foreground: color("--o-ink", "#f2f1ee"),
-          cursor: color("--o-signal", "#ff6308"),
-          selectionBackground: "#454440",
+          background: color("--g-surface-1", "#0a0a0a"),
+          foreground: color("--g-code-fg", "#d4d4d4"),
+          cursor: color("--g-fg-1", "#ededed"),
+          cursorAccent: color("--g-surface-1", "#0a0a0a"),
+          selectionBackground: color("--g-selection", "#333333"),
+          selectionForeground: color("--g-fg-1", "#ededed"),
+          black: color("--g-ansi-black", "#4d4d4d"),
+          red: color("--g-ansi-red", "#ff6b6b"),
+          green: color("--g-ansi-green", "#3dd68c"),
+          yellow: color("--g-ansi-yellow", "#e6cc6e"),
+          blue: color("--g-ansi-blue", "#7aa7ff"),
+          magenta: color("--g-ansi-magenta", "#d69cff"),
+          cyan: color("--g-ansi-cyan", "#5cd6d6"),
+          white: color("--g-ansi-white", "#d4d4d4"),
+          brightBlack: color("--g-ansi-bright-black", "#858585"),
+          brightRed: color("--g-ansi-bright-red", "#ff8f8f"),
+          brightGreen: color("--g-ansi-bright-green", "#6ee7a8"),
+          brightYellow: color("--g-ansi-bright-yellow", "#f2dc8c"),
+          brightBlue: color("--g-ansi-bright-blue", "#a3c2ff"),
+          brightMagenta: color("--g-ansi-bright-magenta", "#e4bdff"),
+          brightCyan: color("--g-ansi-bright-cyan", "#8ae6e6"),
+          brightWhite: color("--g-ansi-bright-white", "#ededed"),
         },
         linkHandler: {
           activate: (_event, uri) => {
@@ -196,13 +216,19 @@ export function TerminalSheet({
                 ? "The terminal closed without an exit status."
                 : `The ${purpose === "project" ? "project shell" : "vendor command"} exited with code ${state.exitCode}.`;
 
+  const outcome =
+    state.state === "failed" || (state.state === "finished" && state.exitCode !== 0)
+      ? "failed"
+      : state.state === "finished"
+        ? "passed"
+        : undefined;
   const content = (
     <dialog
       ref={dialog}
-      className="orbit-theme terminal-sheet"
-      data-theme="dark"
+      className="g-root terminal-sheet"
       data-purpose={purpose}
       data-state={state.state}
+      data-outcome={outcome}
       aria-labelledby={title}
       aria-describedby={description}
       onCancel={(event) => {
@@ -233,7 +259,7 @@ export function TerminalSheet({
         </div>
         <button
           type="button"
-          className="terminal-sheet__button"
+          className="g-button g-button-ghost g-button-28 terminal-sheet__close"
           onClick={close}
           aria-label={`Close ${purpose} terminal`}
         >
@@ -245,7 +271,9 @@ export function TerminalSheet({
         {status}
       </div>
       {state.state === "finished" && state.truncated ? (
-        <p role="status">Some output could not be drained before the terminal closed.</p>
+        <p role="status" className="terminal-sheet__note">
+          Some output could not be drained before the terminal closed.
+        </p>
       ) : null}
       <section
         ref={container}
@@ -266,7 +294,7 @@ export function TerminalSheet({
         <span role="status">{copyMessage}</span>
         <button
           type="button"
-          className="terminal-sheet__button"
+          className="g-button g-button-ghost"
           disabled={!ready}
           onClick={() => {
             const selected = terminal.current?.getSelection();
@@ -284,7 +312,7 @@ export function TerminalSheet({
         </button>
         <button
           type="button"
-          className="terminal-sheet__button terminal-sheet__button--primary"
+          className="g-button g-button-primary terminal-sheet__button--primary"
           disabled={!ready || state.state !== "idle"}
           onClick={() => {
             const term = terminal.current;

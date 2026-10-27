@@ -104,6 +104,7 @@ export function VendorDialog({
           <label>
             Agent
             <select
+              className="g-input"
               value={provider}
               disabled={busy}
               onChange={(event) => {
@@ -124,6 +125,7 @@ export function VendorDialog({
           <label>
             Integration
             <select
+              className="g-input"
               value={kind}
               disabled={busy || provider === "pi"}
               onChange={(event) => {
@@ -145,6 +147,7 @@ export function VendorDialog({
           <label>
             Action
             <select
+              className="g-input"
               value={action}
               disabled={busy}
               onChange={(event) => setAction(event.currentTarget.value as VendorAction)}
@@ -172,6 +175,7 @@ export function VendorDialog({
                 ? "GitHub repository"
                 : "Marketplace name"}
           <input
+            className="g-input"
             autoComplete="off"
             spellCheck={false}
             maxLength={320}
@@ -208,14 +212,10 @@ export function VendorDialog({
           </p>
         ) : null}
         <footer>
-          <button type="button" className="library-button" onClick={onClose}>
+          <button type="button" className="g-button" onClick={onClose}>
             Cancel
           </button>
-          <button
-            type="submit"
-            className="library-button vendor-primary"
-            disabled={busy || !target}
-          >
+          <button type="submit" className="g-button g-button-primary" disabled={busy || !target}>
             {busy ? "Preparing review…" : "Review command"}
           </button>
         </footer>

@@ -1,4 +1,4 @@
-import { OrbitMark } from "@auracode/ui/orbit";
+import { AgentMark } from "@auracode/ui/graphite";
 import {
   ArrowLeft,
   ArrowRight,
@@ -109,46 +109,52 @@ export function LibraryScreen({
     refresh();
   };
   return (
-    <main className="library-screen orbit-theme" data-theme="dark">
+    <main className="library-screen g-root">
+      <div className="library-drag" data-tauri-drag-region="" />
       <header className="library-topbar">
-        <button type="button" className="library-quiet" onClick={onBack}>
-          <ArrowLeft size={15} /> Back
+        <button type="button" className="g-button g-button-ghost g-button-28" onClick={onBack}>
+          <ArrowLeft size={14} aria-hidden="true" /> Back
         </button>
-        <span>Workspace / Library</span>
       </header>
       <div className="library-heading">
-        <div>
-          <h1>Library</h1>
-          <p>The instructions and tools your agents use.</p>
-        </div>
+        <h1>
+          Library
+          <span>The instructions and tools your agents use.</span>
+        </h1>
         <div className="library-heading-actions">
           <button
             type="button"
-            className="library-button"
+            className="g-button g-button-outline"
             onClick={() => setVendor({ item: null })}
           >
-            <Package size={15} /> Manage integrations
+            <Package size={14} aria-hidden="true" /> Manage integrations
           </button>
           <button
             type="button"
-            className="library-button"
+            className="g-button g-button-outline library-toggle"
             aria-pressed={history}
             onClick={() => setHistory(!history)}
           >
-            <History size={15} /> Copy history
+            <History size={14} aria-hidden="true" /> Copy history
             {receipts.some((receipt) => receipt.state === "recovery_required")
               ? " · Needs review"
               : ""}
           </button>
-          <button type="button" className="library-button" onClick={refresh} disabled={loading}>
-            <RefreshCw size={14} /> Refresh
+          <button
+            type="button"
+            className="g-button g-button-ghost"
+            onClick={refresh}
+            disabled={loading}
+          >
+            <RefreshCw size={14} aria-hidden="true" /> Refresh
           </button>
         </div>
       </div>
       <div className="library-toolbar">
         <label className="library-search">
-          <Search size={16} />
+          <Search size={16} aria-hidden="true" />
           <input
+            className="g-input"
             aria-label="Search Library"
             type="search"
             placeholder="Find a skill, instruction or tool…"
@@ -159,6 +165,7 @@ export function LibraryScreen({
         <label className="library-select">
           Source
           <select
+            className="g-input"
             aria-label="Project configuration source"
             value={folder ?? ""}
             onChange={(event) => setFolder(event.currentTarget.value || null)}
@@ -177,6 +184,7 @@ export function LibraryScreen({
         <label className="library-select">
           Agent
           <select
+            className="g-input"
             aria-label="Filter by agent"
             value={provider}
             onChange={(event) => setProvider(event.currentTarget.value)}
@@ -212,7 +220,7 @@ export function LibraryScreen({
                 setHistory(false);
               }}
             >
-              <Icon size={16} />
+              <Icon size={16} aria-hidden="true" />
               <span>{label}</span>
               <small>
                 {inventory?.items.filter((item) => value === "all" || item.item.kind === value)
@@ -256,7 +264,7 @@ export function LibraryScreen({
                 </p>
               ) : visible.length === 0 ? (
                 <div className="library-empty">
-                  <BookOpen size={25} />
+                  <BookOpen size={20} aria-hidden="true" />
                   <h2>{query ? "No matching items" : "Nothing here yet"}</h2>
                   <p>
                     {query
@@ -273,7 +281,9 @@ export function LibraryScreen({
                         aria-pressed={selected === itemKey(item)}
                         onClick={() => setSelected(itemKey(item))}
                       >
-                        <OrbitMark agent={item.provider} size={23} />
+                        <span className="library-mark" aria-hidden="true">
+                          <AgentMark agent={item.provider} size={24} />
+                        </span>
                         <span>
                           <strong>{item.label}</strong>
                           <small>
@@ -282,7 +292,7 @@ export function LibraryScreen({
                             {kindLabel(item.item.kind)}
                           </small>
                         </span>
-                        <ArrowRight size={14} />
+                        <ArrowRight size={14} aria-hidden="true" />
                       </button>
                     </li>
                   ))}
@@ -309,8 +319,8 @@ export function LibraryScreen({
               />
             ) : (
               <section className="library-detail library-unselected" aria-label="Item preview">
-                <FileText size={26} />
-                <h2>A closer look</h2>
+                <FileText size={20} aria-hidden="true" />
+                <h2>No item selected</h2>
                 <p>Select an item to inspect its contents and review a copy.</p>
               </section>
             )}
@@ -433,16 +443,20 @@ function ItemDetail({
   return (
     <section className="library-detail" aria-label="Item preview">
       <header>
-        <span className="library-kind">{kindLabel(item.item.kind)}</span>
         <h2>{item.label}</h2>
         <p>
           {LABELS[item.provider]} · {item.scope === "user" ? "Personal" : "Project"}
+          <span className="library-kind">{kindLabel(item.item.kind)}</span>
         </p>
         <code>{item.relative_path}</code>
         {(item.item.kind === "plugin" || item.item.kind === "package") &&
         item.provider !== "shared" ? (
           item.scope === "user" ? (
-            <button type="button" className="library-button" onClick={manage}>
+            <button
+              type="button"
+              className="g-button g-button-outline g-button-28"
+              onClick={manage}
+            >
               Manage with {LABELS[item.provider]}
             </button>
           ) : (
@@ -498,6 +512,7 @@ function ItemDetail({
             <label>
               Copy to
               <select
+                className="g-input"
                 aria-label="Copy destination"
                 value={target}
                 disabled={busy || !preview}
@@ -513,12 +528,12 @@ function ItemDetail({
             </label>
             <button
               type="button"
-              className="library-button library-primary"
+              className="g-button g-button-primary g-button-36"
               disabled={busy || !target || !preview}
               onClick={() => void prepare()}
             >
               {busy ? "Preparing…" : "Review copy"}
-              <ArrowRight size={14} />
+              <ArrowRight size={14} aria-hidden="true" />
             </button>
           </>
         )}
@@ -526,7 +541,7 @@ function ItemDetail({
       {plan ? (
         <Modal title="Review copy" className="library-review" onClose={cancel}>
           <p className="library-review-intro">
-            {item.label} <ArrowRight size={13} />{" "}
+            {item.label} <ArrowRight size={14} aria-hidden="true" />{" "}
             {sources.find((source) => source.id === plan.to_source)
               ? sourceLabel(
                   sources.find((source) => source.id === plan.to_source) as LibrarySourceStatus,
@@ -559,12 +574,12 @@ function ItemDetail({
             </p>
           ))}
           <footer>
-            <button type="button" className="library-button" disabled={busy} onClick={cancel}>
+            <button type="button" className="g-button" disabled={busy} onClick={cancel}>
               Cancel
             </button>
             <button
               type="button"
-              className="library-button library-primary"
+              className="g-button g-button-primary"
               disabled={busy}
               onClick={() => void apply()}
             >
@@ -643,7 +658,7 @@ function HistoryView({
               </div>
               <button
                 type="button"
-                className="library-button"
+                className="g-button g-button-outline g-button-28"
                 disabled={receipt.state === "rolled_back"}
                 onClick={() => setSelected(receipt)}
               >
@@ -680,7 +695,7 @@ function HistoryView({
           <footer>
             <button
               type="button"
-              className="library-button"
+              className="g-button"
               disabled={busy}
               onClick={() => setSelected(null)}
             >
@@ -688,7 +703,7 @@ function HistoryView({
             </button>
             <button
               type="button"
-              className="library-button library-primary"
+              className="g-button g-button-primary"
               disabled={busy}
               onClick={() => void restore()}
             >

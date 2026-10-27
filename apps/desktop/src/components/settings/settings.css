@@ -551,6 +551,35 @@
 
 /* ------------------------------------------------------------------------ narrow */
 
+/* Disclosures open with a quiet chevron rather than the platform triangle. */
+:is(.settings-shell, .locked-profile, .configuration-recovery) details > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+}
+
+:is(.settings-shell, .locked-profile, .configuration-recovery)
+  details
+  > summary::-webkit-details-marker {
+  display: none;
+}
+
+:is(.settings-shell, .locked-profile, .configuration-recovery) details > summary::before {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23858585' stroke-width='1.5'%3E%3Cpath d='m4.5 3 3 3-3 3'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+  transition: transform var(--g-dur-base) var(--g-ease);
+}
+
+:is(.settings-shell, .locked-profile, .configuration-recovery) details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
 @media (max-width: 860px) {
   .settings-sidebar {
     flex-basis: 200px;

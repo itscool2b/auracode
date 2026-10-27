@@ -1,19 +1,30 @@
+/*
+ * The terminal sheet (visual-language.md 6.19): Graphite's dialog shell, the reviewed command, the
+ * output in a terminal well, and the outcome as a white check or a red square beside its words.
+ */
+
 .terminal-sheet {
-  color-scheme: dark;
-  width: min(900px, calc(100vw - 48px));
+  box-sizing: border-box;
+  width: min(760px, calc(100vw - 48px));
   max-height: calc(100dvh - 48px);
   margin: auto;
-  padding: 20px;
+  padding: 24px;
   overflow: auto;
-  color: var(--o-ink, #f2f1ee);
-  background: var(--o-pane, #0e0e0d);
-  border: 1px solid var(--o-line-strong, rgb(242 241 238 / 0.15));
-  border-radius: var(--o-r-xl, 16px);
-  font-family: var(--o-sans, "Geist Variable", sans-serif);
+  border: 1px solid var(--g-line-strong);
+  border-radius: var(--g-radius-16);
+  background-color: var(--g-surface-2);
+  box-shadow: var(--g-shadow);
+  color: var(--g-fg-1);
 }
+
+.terminal-sheet[open] {
+  animation: g-sheet-in var(--g-dur-panel) var(--g-ease-quint);
+}
+
 .terminal-sheet::backdrop {
-  background: rgb(0 0 0 / 0.65);
+  background-color: var(--g-scrim);
 }
+
 .terminal-sheet__header,
 .terminal-sheet__footer {
   display: flex;
@@ -21,72 +32,107 @@
   justify-content: space-between;
   gap: 12px;
 }
+
 .terminal-sheet__header {
-  align-items: start;
+  align-items: flex-start;
+  margin-bottom: 16px;
 }
+
 .terminal-sheet h2 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-title);
 }
-.terminal-sheet p {
-  margin: 8px 0;
-}
-.terminal-sheet__status {
-  margin: 12px 0;
-  font-size: 13px;
-}
-.terminal-sheet__hint,
+
 .terminal-sheet__header p {
-  color: var(--o-text-2, #b0afab);
-  font-size: 12px;
+  margin: 4px 0 0;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
 }
+
+.terminal-sheet__close {
+  margin: 0 -12px 0 0;
+}
+
+.terminal-sheet__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+/* A failed or non-zero exit: a red square before the words. */
+.terminal-sheet[data-outcome="failed"] .terminal-sheet__status::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background-color: var(--g-red);
+}
+
+/* A clean exit: Graphite's white pixel check, five square cells at 2px. */
+.terminal-sheet[data-outcome="passed"] .terminal-sheet__status::before {
+  content: "";
+  flex: none;
+  width: 10px;
+  height: 8px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' shape-rendering='crispEdges' fill='%23ededed'%3E%3Cpath d='M8 0h2v2H8zM6 2h2v2H6zM0 4h2v2H0zM4 4h2v2H4zM2 6h2v2H2z'/%3E%3C/svg%3E");
+}
+
+.terminal-sheet__note {
+  margin: 0 0 12px;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
 .terminal-sheet__viewport {
+  box-sizing: border-box;
   height: min(48dvh, 420px);
   min-height: 180px;
-  padding: 8px 0;
+  padding: 8px 4px 8px 12px;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-1);
   user-select: text;
 }
-.terminal-sheet__link {
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  user-select: text;
-}
+
 .terminal-sheet:is([data-purpose="installation"], [data-purpose="setup"])[data-state="idle"]
   .terminal-sheet__viewport {
   height: 180px;
 }
+
+.terminal-sheet__link {
+  max-width: 100%;
+  margin: 12px 0 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .terminal-sheet__link a {
-  color: var(--o-signal-text, #ff7a2e);
-  text-decoration: underline;
+  color: var(--g-fg-1);
+  text-decoration-line: underline;
+  text-decoration-color: var(--g-fg-4);
+  text-underline-offset: 3px;
 }
+
 .terminal-sheet__footer {
-  margin-top: 16px;
   flex-wrap: wrap;
-  font-size: 12px;
+  margin-top: 16px;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
 }
+
 .terminal-sheet__hint {
   margin-right: auto;
-}
-.terminal-sheet__button {
-  flex-shrink: 0;
-  padding: 8px 14px;
-  border: 1px solid var(--o-line-strong, rgb(242 241 238 / 0.15));
-  border-radius: var(--o-r-pill, 9999px);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-.terminal-sheet__button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.terminal-sheet__button--primary {
-  background: var(--o-ink, #f2f1ee);
-  color: var(--o-pane, #0e0e0d);
-}
-.terminal-sheet__button:focus-visible {
-  outline: 2px solid var(--o-signal, #ff6308);
-  outline-offset: 3px;
+  color: var(--g-fg-3);
 }

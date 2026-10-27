@@ -65,6 +65,10 @@ try {
         "Opening review cannot reserve or start a process",
       );
       assert.equal(await page.evaluate(() => window.injected), undefined);
+      // The sheet's buttons settle their colours once the terminal is ready; audit that state.
+      await page.waitForFunction(() =>
+        document.getAnimations().every((animation) => !(animation instanceof CSSTransition)),
+      );
       assert.deepEqual(
         (await new AxeBuilder({ page }).analyze()).violations,
         [],
