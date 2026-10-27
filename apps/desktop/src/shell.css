@@ -1432,6 +1432,12 @@ details.setup-install-review[open] > summary::before {
   }
 }
 
+/* Pressed: one step further, at once (press never scales, 3.8). */
+.chat-popover:not(.chat-agent-popover) > summary:active {
+  background-color: var(--g-surface-4);
+  transition-duration: 0ms;
+}
+
 /* Open: the fill steps up with a strong ring (surface-4 would drop grey text under 4.5:1). */
 .chat-popover[open] > summary {
   background-color: var(--g-surface-3);

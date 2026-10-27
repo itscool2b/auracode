@@ -1302,7 +1302,7 @@
 .chat-footer-meta {
   margin-left: var(--g-space-6);
   color: var(--g-fg-3);
-  font-family: var(--g-mono);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -1530,6 +1530,8 @@
   color: var(--g-fg-1);
   font-family: var(--g-mono);
   font-size: var(--g-text-code-inline);
+  /* A 16px inline box stays inside the 24px line in every engine (WebKit grew it by half a pixel). */
+  line-height: var(--g-leading-meta);
   font-variant-ligatures: none;
 }
 

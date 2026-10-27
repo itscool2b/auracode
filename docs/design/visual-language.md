@@ -897,19 +897,22 @@ width the panel floats over the chat with the shadow.
 
 ### 6.2 Sidebar
 
-264px, 12px insets, rows 240 wide.
+264px, 12px insets, rows 240 wide, Grok's order. Every row's icon or square starts at x 20 and its
+words at x 44; rows sit 4px apart. One row style: 14/20 fg-2 at rest, a surface-2 fill and fg-1
+under the hand, surface-3 while pressed.
 
-1. Band (52px): traffic lights and a 28px sidebar toggle.
-2. Utility rows (32px, radius 8): New chat (keycaps ⌘ N) and Search (⌘ K), 14/20 fg-2 with 16px
-   fg-3 icons; hover surface-3 and fg-1.
-3. **Needs you** (only while a chat waits): a sentence-case label "Needs you" in 12/16 500 fg-2
-   with the count in volt. Rows: a 6px volt square, the title in fg-1 and " · project" in fg-3 as
-   one run (the project gives way first). Clicking opens the chat on its card. A waiting chat is
-   listed and counted only here.
-4. **Projects** (no label): project rows 32px with a 6px square in fg-3, the name 14/20 500 fg-1,
-   the chat count in mono 12 fg-3 right, a chevron on hover (rotates 90 degrees open). A folded
-   project shows its chats' state in place of the count: volt square, loader, or red square and "1
-   failed".
+1. Band (52px, drags the window): the 24px logo (fg-1) at x 20, or at x 84 on macOS, clear of the
+   traffic lights (`data-os` on the app); the 28px collapse toggle at the right (⌘\).
+2. Utility rows (32px, radius 8): Search (⌘ K) and New chat (⌘ N) with 16px fg-3 icons. Their
+   keycaps show only while the row is under the hand or the keyboard.
+3. **Needs you** (only while a chat waits): "Needs you" in 14/20 500 fg-2 with the count in volt.
+   Rows: a 6px volt square on the project squares' axis, the title in fg-1 and " · project" in fg-3
+   as one run. Clicking opens the chat on its card.
+4. **Projects**: "Projects" in 14/20 500 fg-3 with a chevron that folds the section, and New
+   project (a 24px plus) at the label's end while the section is under the hand. Project rows 32px
+   with a 6px square in fg-3, the name 14/20 500 fg-1, a chevron on hover (rotates 90 degrees
+   open). No counts. A folded project shows its chats' state at its end: volt square, loader, or
+   red square. "Archived chats" ends the list as a quiet fg-3 line (Grok's "See all").
 5. **Chat rows** (32px, text inset 32, under the project name): title 14/20 fg-2 (fg-1 500 when unread or active). Trailing
    slot: idle, the relative time in mono 12 fg-3 ("4m", "Tue"); running, the loader and elapsed
    time with the title in fg-3; needs approval, a volt square and "Needs you" 12/16 500 volt; done
@@ -919,45 +922,54 @@ width the panel floats over the chat with the shadow.
    (⌘Z); Delete asks in a dialog. ⌘⌫ archives the open chat unless the caret is in text. Arrow
    keys move a surface-4 row with the 2px rail; Enter opens. "Show 12 more" in fg-3 ends long
    lists.
-6. **Agent dock** (above the account row, after a 1px line): one 32x44 cell per known agent, a
-   24px `AgentMark` (live) with its two-letter code under it in mono 11 fg-3; missing agents as
-   ghosts; more than seven wrap. An update shows a 4px volt square at the mark's corner, except
-   while it waits. Hover tooltip: "Codex 0.164.0 · update to 0.165.0". Click opens the agent card
-   popover (280px): 32px mark, name 16/22 600, version in mono fg-3, sign-in status, binary path in
-   mono, default model and effort, "Update to 0.165.0" primary when available, "Agent settings"
-   ghost.
-7. **Account row** (44px): a 28px square avatar (surface-3, initial 12/16 600 fg-2), "Local" 14/20
-   500, "Sign in to sync" 12/16 fg-3, a 28px settings icon button.
+6. **Agent dock** (above the account row, no line): one 28px `AgentMark` tile per usable product,
+   4px apart from x 20. A product is a brand (Claude Code and its ACP adapter are one); its tile is
+   the first ready variant in catalog order, which lists native before adapters. Missing, broken and
+   alternate variants, and the scripted demo while a real agent is usable, wait behind a dashed
+   "+N" tile whose menu starts a chat with a usable variant or opens the Agents screen to install
+   one. Each state has its own look and one small motion: detecting, a dashed open tile with the
+   code in fg-3 and a 1px fg-3 line scanning it top to bottom (1400ms, linear); found, the filled
+   tile settles in once (opacity and scale 0.86 to 1, 250ms `--g-ease-out`); a sign-in or an update,
+   a 4px fg-1 square on the corner; working, the walking loader; needs you, the volt square, arriving
+   once and never pulsing. Under the hand the ring and code step up to fg over Harvey's 300ms settle.
+   Reduced motion holds every tile still. Graphite's tooltip names the agent, state and version
+   after 500ms. Click opens the agent card (296px): 32px mark, name 16/22 600, version and state in
+   mono 12 fg-3, one line about it, "New chat with Claude Code" (soft 28), "Agent settings" (ghost),
+   then the verified install's actions.
+7. **Account row** (44px, after Vercel's user row and Grok's avatar): a 28px round avatar with the
+   profile's initials (surface-3, line-strong ring, 12/16 600 fg-1), the name 14/20 500 fg-1 over its
+   storage or sync state in 12/16 fg-3, and a 28px kebab that opens a 220px menu: Settings (⌘ ,),
+   Agents, Diagnostics.
 
-Collapsed rail: 72px (⌘\), 32px icon buttons, project squares with their state, the dock as a
-column of 24px marks, the avatar. It collapses over 300ms `--g-ease-quint` by translating the
-content inside a clipped container, never by animating `width` per frame.
+Collapsed rail: 72px (⌘\ or the toggle): the toggle, then Search and New chat as 32px icon rows;
+the logo, the projects, the dock and the account row step aside until it opens again.
 
 ### 6.3 Chat header
 
-44px, padding 0 16. Left: the chat's live `AgentMark` (16), 8px, the title 14/20 500 fg-1 (truncates
-at 420), then fg-3 metadata: "auracode · " a 12px branch icon and the branch in mono 13. The title
-is a button: click (or Rename) swaps in a 28px input as wide as the title plus 12 (160 to 420), text
-selected; Enter or blur commits, Esc restores and goes no further. Right (gap 4): the diffstat chip
-(24px, radius 6, 1px line, "+59" green and the removal count red in mono 12, five 6px squares;
-hidden when nothing changed; opens Changes), the panel toggle (28px, surface-3 while open), more
-(chat menu). No border at rest; once scrolled a 1px line fades in under it (150ms).
+44px, padding 0 8 0 16, Grok's restraint: at most three controls. Left: the chat's live `AgentMark`
+(16), 8px, the title 14/20 500 fg-1 (truncates at 420), the project in fg-3, then the status only
+when it says something (working, "Waiting on you" in volt, failed or a sign-in in red); Ready and
+Stopped stay for screen readers. Right (gap 4): the Changes panel toggle (28px ghost, surface-3
+while open, ⌘ J) and the chat menu (28px). The menu (288px, plain 32px rows in groups on hairlines)
+starts with the session's facts (agent, the version that runs, its path, context and cost), then
+Git workspace, Terminal and editor, Conversation history; Export chat, Copy debug bundle, Show log;
+and the session's lifecycle last (Stop, or Resume and Start fresh). The command palette offers every
+one of them by name. No border at rest.
 
 ### 6.4 Transcript
 
 Column 720 max, centred, 24px under the header; bottom padding is the composer height plus 32.
-**The gutter**: every agent line starts on a 22px gutter; icons, chevrons, `$` and the live
-`AgentMark` (16) centre on x 11, words start at x 22, so a live line handing over to the next keeps
-the mark and the words in place.
+**The gutter**: every agent line starts on a 24px gutter; icons, chevrons, `$` and the live
+`AgentMark` (16) centre on x 12, words start at x 24, so a live line handing over to the next keeps
+the mark and the words in place, and every row lands on the 4px grid (`check-layout.mjs`).
 
-- **User message**: right-aligned block, max 82% of the column, surface-3, prose 15/24 fg-1,
-  padding 12 16, radius 16 16 4 16 (the tail points at the composer). Over 12 lines it clamps with
-  "Show all" (12/16 500 fg-2, underlined). A steer adds "Steered at 0:31" in 12/16 fg-3 under the
-  block. Attachments: 24px chips (radius 6, 1px line, surface-1, 12px icon, mono 12 fg-2) and 48px
-  image thumbnails. Hover shows edit, copy and more (24px icon buttons) to its left.
-- **Agent byline** (once per turn, 24px): the `AgentMark` (16, idle), the name 14/20 500 fg-1; on the
-  first turn and whenever they change, the model in fg-2 and the effort in fg-3 at the same size
-  ("Claude Code Opus 5.5 High"). On hover the time in mono 12 fg-3 and a more button.
+- **User message**: Grok's right-aligned block, max 82% of the column, surface-3, prose 15/24 fg-1,
+  padding 12 16, one even radius 16, no ring. Over 10 lines it clamps with "Show all" (12/16 500
+  fg-2, underlined). A steer adds its delivery state in 12/16 fg-3 under the block. Attachments:
+  24px chips and 48px image thumbnails. Hover shows edit and copy (28px icon buttons) at its left,
+  centred on the first line.
+- **No byline**: like Grok, nothing names the agent above its answer; the header's mark and the
+  composer's chip say who answers, and screen readers hear the name where the agent's part begins.
 - **Prose**: bare on the pane, 15/24 fg-1, measure 600px, paragraphs 12 apart; h1 to h3 16/22 600
   (16 above, 6 below); bullets are 4px squares in fg-3, 18px indent; numbered items in fg-3 tabular;
   an item opening with a bold run keeps the run fg-1 600 and the rest fg-2 (Grok). Links fg-1 with a
@@ -967,19 +979,19 @@ the mark and the words in place.
 - **Thinking**: collapsed, a 24px line with a 12px chevron in the gutter and "Thought for 6s" in
   14/20 fg-3 (the number tabular), or the agent's summary "Thought about the pacing math · 6s".
   Live: "Thinking" with the shimmer and " · 4s" ticking once a second, the live mark in the gutter;
-  a live thought stays open until the next item arrives, then folds. Open: 14/22 fg-2 behind a 1px
-  line spine on x 11, max 280 tall with internal scroll. Folds animate opacity and a clipped
+  a live thought stays open until the next item arrives, then folds. Open: 14/20 fg-2 behind a 1px
+  line spine on x 12, max 280 tall with internal scroll, 576 wide. Folds animate opacity and a clipped
   `transform` over 300ms `--g-ease-quint`; reduced motion, an instant fold.
 - **Tool rows** (28px): a 14px icon in fg-3 in the gutter (read file-text, edit file-pen-line,
   write file-plus, delete file-minus, search search, glob folder-search, execute square-terminal,
   fetch link, subagent git-fork, MCP plug, other wrench); the verb 14/20 fg-2, the object in mono
   13 fg-1, a result in fg-3 ("42 lines", "no matches", "19 passed"), the duration in mono 12 fg-3 at
-  right or the diffstat for edits. Hover surface-2 (radius 6) and a chevron; rows 2px apart.
+  right or the diffstat for edits. Hover surface-2 (radius 6) and a chevron; rows 4px apart.
   Running: the present progressive with the shimmer ("Reading"), the live mark in the gutter, the
   loader and elapsed time at right; a call that waited on you times from the answer. Groups: two
   or more consecutive calls fold into "Read 2 files, searched 1 pattern" with a chevron and the
   total; opened, children stack on a 1px line spine; finished turns fold every group. Opened call:
-  a well under the row (margin 4 0 8 22) with key-value rows (22px; label 12/16 fg-3 in an 88px
+  a well under the row (margin 4 0 8 24) with key-value rows (22px; label 12/16 fg-3 in an 88px
   column, value mono 13 fg-1). Denied: text struck through in fg-3 inside a 1px dashed line-strong
   outline, "Denied" at right. Failed: a red square and "Failed" (or "exit 1") in red; the well opens
   itself.
@@ -997,11 +1009,12 @@ the mark and the words in place.
   "Thinking" with the shimmer and " · 4s"; waiting, a volt mark and "Waiting on you · 0:09" in 14/20
   500 volt; stopping, "Stopping". It has the geometry of the line that replaces it; between items it
   waits 1.2s before fading in (150ms), so it never flashes.
-- **Receipt** (turn footer): 12px after the last item, the tear line, one 28px row: "Done in 48s ·
-  4.8k in · 2.1k out · $0.21" in 12/16 fg-3 tabular (dots fg-4); the files chip (24px, radius 6, 1px
-  line: file-diff icon, "2 files" fg-2, the diffstat in mono 12, five squares; opens Changes for the
-  turn); copy, retry, fork and more icon buttons (always on the last turn). More opens upward: Copy,
-  Copy as Markdown, Copy receipt; Retry, Edit and resend, Fork into new chat; then Delete.
+- **Action row** (turn footer, Grok's): one 28px row under the answer, no tear line: copy (as
+  Markdown), retry, fork and the receipt as 28px icon buttons with 16px fg-3 glyphs (surface-3 and
+  fg-1 under the hand), the first glyph on the prose's edge (x 24); then the time in 12/16 fg-3
+  tabular. A turn that ended normally says only its time; any other ending says how ("Stopped",
+  "Failed" in red). Tokens and cost wait in the time's hint and in the copied receipt. Copy turns
+  into a check once the clipboard takes the text; a refusal says what to do instead.
 - **Sticky prompt**: scrolled past its user message, the prompt pins under the header as a 32px
   one-line strip on surface-3 (radius 0 0 12 12); click scrolls to it; 220ms opacity and 8px drop.
 - **Jump to latest**: scrolled up during a stream, a 28px "Latest" pill (surface-2, 1px
@@ -1063,59 +1076,52 @@ field. Footer: the pager, "Skip" ghost, "Continue" primary (⌘ Enter). Answers 
 
 ### 6.9 Composer
 
-One object growing upward in segments. Shell: 720 wide, 16px above the pane's bottom, surface-2,
-radius 16, 1px line-strong ring; no shadow, no lit edge. Segments (36px, surface-3, 1px line
-between) stack above the input in order: blocking notice, plan, queue, handoff; at most two show,
-the rest collapse into a "+1" chip. Input: padding 12 16 6, prose 15/24, placeholder fg-3 ("Message
-Claude Code"; while running "Queue a message for Claude Code"), grows to 12 lines. Control row (32px,
-padding 0 12 8, gap 6): attach (28px, radius 8, plus icon fg-2); the agent pill (28px, radius 8,
-padding 0 8 0 6: a 14px `AgentMark`, "Claude Code" 500 fg-1, "Opus 5.5" fg-2, "High" fg-3, chevron;
-hover surface-3; open surface-4); the autonomy chip (the level glyph, "Full auto" fg-2, chevron); a
-spacer; the context meter (a 28x4 track on surface-4, fill fg-2, volt from 85%, "62%" mono 12 fg-3;
-only after the agent reports usage); send. Send: empty, a 32px surface-3 circle with an fg-4
-arrow; ready, a white circle with a black arrow; running and empty, a white circle with a black
-10px square (Stop, Esc); running with text, a split primary "Queue" (Enter) and a chevron for
-"Steer instead" (⌘ Enter). Hint line under the shell (18px, mono 12 fg-3, only while running or
-queueing, keeps its height when empty): "esc to stop · enter to queue · ⌘ enter to steer", then "esc
-again to force stop". Handoff segment: the new agent's 14px mark, "Next message goes to Codex with
-a handoff · 412 tokens" in 12/16 fg-2, "Preview" text button and a close. Drop: a 1px dashed fg-3
-outline around the shell with "Drop to attach". `@` and `/` open menus above the shell with the key
-legend "↑ ↓ to move · enter to insert · esc to close". Under 560px the pill drops model and effort;
-under 420px the autonomy chip keeps only its glyph and the meter goes.
+Grok's pill: the message on top, one row of controls under it, and never more than four controls
+besides the box. Shell: 720 wide, 16px above the pane's bottom, surface-2, radius 16, 1px
+line-strong ring (fg-4 while focused, fg-3 when the box is reached from the keyboard); no shadow.
+Segments above it in the dock: queue, handoff, notices. Input: padding 16 16 8, prose 15/24,
+placeholder fg-3 ("Message Claude Code"; while running "Queue a message for Claude Code"), grows to
+240px. Attachments and mentions sit on top inside the pill as 28px surface-3 chips. Control row
+(32px, padding 0 8 8, gap 4): attach (a 32px ghost circle whose glyph starts on the text's edge,
+x 16); the agent chip (32px ghost pill: "Claude Code" 500 fg-1, the model in fg-2, the autonomy
+ticks in fg-1, a chevron; surface-3 under the hand and while open); then at the right one send
+control. Send: empty, a 32px surface-3 disc with an fg-4 arrow; ready, the white disc. While a
+turn runs and the box is empty, the white disc is Stop (a black square, Esc). With a message
+typed, Stop steps back to a soft disc and the send control becomes one surface-3 pill holding
+"Steer" in words and Queue as the white disc (Enter); without steering, Queue alone. Cancelling:
+the red "Force stop" pill. `@` mentions a project file and `/` lists commands; both open menus above
+the shell.
 
 ### 6.10 Pickers (agent, model, effort)
 
-From the agent pill or ⌘.: 640 wide, up to 420 tall, surface-2, radius 16, padding 6, the shadow,
-three columns split by 1px line (Agent 226, Model 244, Effort 156), no column captions. Agent rows
-(44px, radius 10): 16px mark, name 14/20 500, a mono 12 fg-3 line ("2.1.310 · signed in"), a
-letter keycap (C Claude Code, X Codex, G Grok Build, U Cursor, P Pi, M oh-my-pi, O OpenCode, H
-Hermes, A Antigravity); "Sign in" and "Update" as 500 fg-1 links with a volt square; uninstalled
-agents follow a 1px line as ghosts with "Install" (copies the command, says so in a toast). Model
-rows (44px): name 500, a one-line description 12/16 fg-3, context size mono 12 fg-3, a check on the
-current one. Effort rows (36px): five 2x8 ticks (fg-1 up to the level, fg-4 after), the label, "default"
-fg-3, keycaps 1 to 5. Footer (32px, 1px line): the key legend with keycaps and, for the hovered
-effort, its consequence. Letters jump to agents, digits set effort, left and right change column,
-Enter commits all three; hovering a row dims its siblings' labels to fg-3. Opens over 200ms
-(opacity, scale 0.98, 4px). Narrow: two columns.
+One popover for everything the next turn runs with, after Grok's voice popover (an option list
+and compact fields). From the agent chip or ⌘.: 400 wide over the chip, surface-2, radius 16,
+padding 4, the shadow, its parts stacked on hairlines. "Agent" and "Model" in 14/20 500 fg-2 head
+their rows. Agent rows (36px, radius 12): the 16px mark, the name 14/20 500, the version in mono 12
+fg-3, a white check on the current one; only one usable variant per product, as in the dock.
+Model rows (44px): the name 500 over a one-line description 12/16 fg-3, a check on the current
+one. Then two compact fields, the name at the left in 14/20 fg-2 (an 88px column) and the control
+at the right: Effort as Graphite's quiet segmented control, and Autonomy as a 32px select with the
+level's ticks inside. The checkpoint note sits under them in 12/16 fg-3, and "More options" folds
+the agent's other settings. Keys: up and down move within a part, left and right between parts,
+Enter chooses, digits set the effort, letters jump to agents. Opens over 200ms (opacity, scale
+0.98, 4px).
 
 ### 6.11 Autonomy
 
 Level glyph: three 2px-wide square ticks 4, 6 and 8px tall, 2px apart; Ask fills one, Auto-edit two,
-Full auto three, in fg-1; empty ticks fg-4. Menu (300px): three 56px rows (glyph, title 500, a 12/16
-fg-3 consequence, keycap 1 to 3): "Full auto: edits files and runs commands without asking. Every
-turn is checkpointed." / "Auto-edit: edits files without asking. Asks before running commands." /
-"Ask: asks before every edit and command." The selected row takes the 1.5px fg-1 rim and a white
-check. Then a switch row "Final confirm" ("Always ask before rm, force pushes and writes outside the
-project") and the hint "⌘ ⇧ A cycles autonomy". Agents that cannot ask show the other levels
-disabled with the reason. Switching mid-chat logs "Full auto from here".
+Full auto three, in fg-1; empty ticks fg-4. The ticks ride in the composer's agent chip, so the
+level shows without a second control; the level is chosen in the picker's Autonomy field (6.10),
+with the consequence under it ("Full auto. A local checkpoint is saved before each turn.") and the
+agent's own mode when it reports one. Switching mid-chat logs "Full auto from here".
 
 ### 6.12 Queue
 
-Segment: "2 queued" 12/16 fg-2, the next message's first line 14/20 fg-2, "Edit" ghost and a close.
-A stop pauses the queue ("· paused" and "Send next"). Further messages peek as 4px surface-3 slivers
-above the shell (inset 12 per level, up to two). Opened list: numbered 36px rows (numeral mono fg-3,
-message fg-1, a target mark when it differs, a drag handle, close), reorder by drag or ⌥ arrows.
-Sending flies the row up into the transcript as the user block (300ms `--g-ease-quint`).
+One segment over the composer, its width and radius 16 (surface-2, 1px line ring): "2 queued" in
+12/16 500 fg-3 on a 32px head, then each waiting message on a 32px row (fg-1, one line) with a
+24px remove icon at its end. Held messages (after a stop, an error or a restart) add "· held" to
+the head, a "held" chip on their rows, "Send queued" (24px soft) at the head's end and one 12/16
+fg-3 line saying why they wait.
 
 ### 6.13 Empty state
 
@@ -1131,8 +1137,9 @@ folder" (⌘ O).
 
 ### 6.14 Right panel
 
-Tabs as a strong segmented control (28px): "Changes 2", "Files", "Plan", "Session"; a close at right;
-44px header. **Changes**: a scope menu ("This turn", "This chat", "Branch since main"), the diffstat
+Tabs as Grok-quiet pills (28px): words in fg-2 on the pane and the open one on a surface-3 fill, so
+white stays for the one primary action: "Changes 2" (the count in mono fg-3), "Files", "Plan",
+"Session"; refresh and close at right; 44px header. **Changes**: a scope menu ("This turn", "This chat", "Branch since main"), the diffstat
 as a hero ("+59" green and the removal count red at 32/32 500 tabular, ten 6px squares, "2 files ·
 48s · Claude Code" 12/16 fg-3), "Copy patch" (⌘ ⇧ C); file rows (32px, hairlines: icon, path in
 mono 13, counts mono 12, status letter M, A or D in mono 12 fg-3; selected surface-4); per-file
@@ -1149,10 +1156,12 @@ strip on surface-1 with 1px fg-3 ticks per tool call and fg-4 blocks for thinkin
 
 ### 6.15 Command palette and menus
 
-⌘K: the large dialog (760 wide) at y 120, surface-2, radius 16, the shadow; a 48px input (prose 15/24); scope chips
-(Chats, Projects, Files, Commands, Settings; 26px, the selected one a white pill); 36px result rows
-with keycaps right; hovering dims siblings; no match becomes "Ask Claude Code instead" (⌘ Enter);
-footer key legend. Context menus (4.6): message (Copy, Copy as Markdown, Copy receipt; Retry, Edit
+⌘K: the large dialog (760 wide) at y 120, surface-2, radius 16, the shadow; a 56px input (prose
+15/24) with the close button at its end; scope chips (All, Chats, Projects, Files, Commands; 26px,
+the selected one a surface-3 pill); 48px two-line result rows, the active one with the ↵ keycap and
+the 2px rail; no key legend. With a chat open, its header menu's actions are commands by name (Show
+changes, Git workspace, Terminal and editor, Conversation history, Export chat, Copy debug bundle,
+Show log, Stop or Resume session, Start fresh). Context menus (4.6): message (Copy, Copy as Markdown, Copy receipt; Retry, Edit
 and resend, Fork into new chat; Delete), chat row (Rename, Pin, Move to project, Archive ⌘⌫;
 Delete), tool row (Re-run, Copy command, Copy output).
 

@@ -432,7 +432,7 @@ async function walkFocus(page) {
         detail: "no outline, ring shadow, fill or border change while focused from the keyboard",
       });
   }
-  return findings;
+  return { findings, stops: visited.size };
 }
 
 async function ready() {
@@ -488,15 +488,17 @@ try {
           await page.waitForLoadState("networkidle").catch(() => {});
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(900);
-          const findings = [...(await page.evaluate(probe)), ...(await walkFocus(page))];
-          report.push({ mode, size: `${width}x${height}`, findings });
+          const found = await page.evaluate(probe);
+          const focus = await walkFocus(page);
+          const findings = [...found, ...focus.findings];
+          report.push({ mode, size: `${width}x${height}`, focusStops: focus.stops, findings });
           const counts = findings.reduce((all, { kind }) => {
             all[kind] = (all[kind] ?? 0) + 1;
             return all;
           }, {});
           totals[`${engine} ${width}x${height} ${mode}`] = counts;
           console.log(
-            `${engine} ${width}x${height} ${mode}: ${findings.length === 0 ? "clean" : JSON.stringify(counts)}`,
+            `${engine} ${width}x${height} ${mode}: ${findings.length === 0 ? "clean" : JSON.stringify(counts)} (${focus.stops} focus stops)`,
           );
         }
         await context.close();
