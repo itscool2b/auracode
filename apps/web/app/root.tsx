@@ -9,7 +9,6 @@ import {
   ScrollRestoration,
   useRouteError,
 } from "react-router";
-import "@auracode/ui/fonts.css";
 import "@auracode/ui/graphite.css";
 import "./site.css";
 import { BOOT_SCRIPT, Enhancements } from "./enhance";
