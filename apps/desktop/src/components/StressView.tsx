@@ -118,6 +118,7 @@ export function StressView({
           <label className="field">
             <input
               type="checkbox"
+              className="g-switch"
               checked={config.aura}
               onChange={(event) => onConfigChange({ ...config, aura: event.currentTarget.checked })}
             />

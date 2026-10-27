@@ -244,6 +244,7 @@ export function ConfigSyncPanel({
                 <label>
                   <input
                     type="checkbox"
+                    className="g-switch"
                     checked={item.device_only}
                     disabled={busy || loading}
                     onChange={(event) => {
