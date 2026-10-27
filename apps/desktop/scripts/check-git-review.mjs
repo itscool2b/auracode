@@ -152,6 +152,63 @@ export async function checkGitReview(page, url, out, engine) {
   );
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Open Git workspace" }).waitFor();
+  await checkWorktreeRecreate(page, url, out, engine);
+}
+
+/**
+ * A worktree folder deleted by hand: "Recreate folder" opens a confirmation that leads with what
+ * is lost and what is kept, Cancel changes nothing, a stale review is refused and reviewed again,
+ * and the next confirmation brings the folder back on its branch.
+ */
+export async function checkWorktreeRecreate(page, url, out, engine) {
+  await page.goto(`${url}/?preview=git-missing`);
+  const recreate = page.getByRole("button", { name: "Recreate folder", exact: true });
+  await recreate.waitFor();
+  await page.getByText("missing", { exact: true }).waitFor();
+  await recreate.click();
+  const dialog = page.getByRole("dialog", { name: "Recreate the deleted folder?" });
+  await dialog
+    .getByText(
+      "Uncommitted files that were in the deleted folder are gone. Everything committed on the branch is kept.",
+      { exact: true },
+    )
+    .waitFor();
+  await dialog.getByText("aura/release-readiness", { exact: true }).waitFor();
+  await dialog.getByText("9c41e07d2b8a", { exact: true }).waitFor();
+  await dialog.getByText("C:/auracode/worktrees/owned-one", { exact: true }).waitFor();
+  await settled(page);
+  assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+  await page.screenshot({ path: resolve(out, `${engine}-worktree-recreate.png`) });
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await dialog.waitFor({ state: "detached" });
+  assert.deepEqual(await page.evaluate(() => window.gitFixture.calls()), ["review-recreate"]);
+  await recreate.click();
+  await page.evaluate(() => sessionStorage.setItem("git-stale", "yes"));
+  await dialog.getByRole("button", { name: "Recreate folder", exact: true }).click();
+  await dialog.getByRole("alert").filter({ hasText: "expired or was already used" }).waitFor();
+  await page.waitForFunction(
+    () => window.gitFixture.calls().filter((call) => call === "review-recreate").length === 3,
+  );
+  await dialog.getByRole("button", { name: "Recreate folder", exact: true }).click();
+  await dialog.waitFor({ state: "detached" });
+  await page.getByRole("heading", { name: "Workspace updated", exact: true }).waitFor();
+  await page
+    .getByText(
+      "The folder is back on aura/release-readiness at its last commit. Uncommitted files from the deleted folder could not be restored.",
+      { exact: true },
+    )
+    .waitFor();
+  await page.getByText("ready", { exact: true }).waitFor();
+  assert.deepEqual(await page.evaluate(() => window.gitFixture.calls()), [
+    "review-recreate",
+    "review-recreate",
+    "apply-recreate:recreate-2",
+    "review-recreate",
+    "apply-recreate:recreate-3",
+    "refresh-chat",
+  ]);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Open Git workspace" }).waitFor();
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
@@ -164,7 +221,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       const page = await context.newPage();
       await checkGitReview(page, process.env.CHECK_URL ?? "http://localhost:1426", out, engine);
-      console.log(`${engine}: reviewed Git workspace and pull request flows passed`);
+      console.log(
+        `${engine}: reviewed Git workspace, pull request and worktree recreation flows passed`,
+      );
     } finally {
       await browser.close();
     }

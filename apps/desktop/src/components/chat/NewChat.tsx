@@ -184,6 +184,11 @@ export function NewChat({
     folderChoice.getSnapshot,
   );
   const [created, setCreated] = useState<Created>({ type: "idle" });
+  // A fresh New chat (the sidebar's, the palette's) starts over once a created chat has been shown.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Each new draft is a new New chat.
+  useEffect(() => {
+    setCreated((current) => (current.type === "done" ? { type: "idle" } : current));
+  }, [draft]);
   const openChip = useRef<(() => void) | null>(null);
   const setupExit = useRef<number | null | "closed">("closed");
   const adding = useRef<string | null>(null);

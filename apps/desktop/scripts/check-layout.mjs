@@ -60,6 +60,11 @@ export const MODES = [
   "settings",
   "setup",
   "agents",
+  // New chat in a project folder: a Git folder's worktree chip, no commit yet, a plain folder.
+  "new-worktree",
+  "new-unavailable",
+  "new-plain",
+  "git-missing",
   // The chat shell's floating layers, opened the way a person opens them.
   "settled#picker",
   "settled#palette",
@@ -68,7 +73,19 @@ export const MODES = [
   "settled#other-agents",
   "settled#account-menu",
   "thinking#typed",
+  // The worktree chip's popover, Local chosen, a refused branch name, the setup terminal after
+  // Create, and the recreate dialog for a deleted worktree folder.
+  "new-worktree#worktree",
+  "new-worktree#local",
+  "new-worktree#branch-error",
+  "new-setup#setup",
+  "git-missing#recreate",
 ];
+
+const openWorktree = async (page) => {
+  await page.getByTestId("new-chat-worktree").locator("summary").click();
+  await page.locator(".new-chat-worktree-panel").waitFor();
+};
 
 /** How each "<mode>#<view>" opens its layer before the probes run. */
 const OPENERS = {
@@ -81,6 +98,27 @@ const OPENERS = {
   typed: async (page) => {
     await page.getByTestId("composer-input").click();
     await page.keyboard.type("Hi");
+  },
+  worktree: openWorktree,
+  local: async (page) => {
+    await openWorktree(page);
+    await page.locator('[data-test-mode-choice="local"]').click();
+    await page.keyboard.press("Escape");
+  },
+  "branch-error": async (page) => {
+    await openWorktree(page);
+    await page.getByLabel("New branch", { exact: true }).fill("release/1.4");
+    await page.getByRole("button", { name: "Apply", exact: true }).click();
+    await page.locator(".new-chat-worktree-error").waitFor();
+  },
+  setup: async (page) => {
+    await page.getByTestId("new-chat-create").click();
+    await page.getByRole("button", { name: "Start setup", exact: true }).click();
+    await page.locator('.terminal-sheet[data-state="running"]').waitFor();
+  },
+  recreate: async (page) => {
+    await page.getByRole("button", { name: "Recreate folder", exact: true }).click();
+    await page.getByRole("dialog", { name: "Recreate the deleted folder?" }).waitFor();
   },
 };
 
