@@ -47,12 +47,13 @@
   background-color: var(--g-volt);
 }
 
-/* Keep on this device: a switch with its words, under the item's state. */
+/* Keep on this device: a switch with its words, under the item's state, on a 20px line. */
 .config-sync-local {
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
   width: fit-content;
+  min-height: 20px;
   margin-top: var(--g-space-12);
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
@@ -92,6 +93,15 @@
 
 .config-sync-blank > .g-button {
   margin-top: var(--g-space-16);
+}
+
+/*
+ * An item runs four lines, so Review holds the first line's centre (Vercel's list) instead of the
+ * row's middle, 8px in on the grid.
+ */
+.settings-row:has(.config-sync-local) > .g-button {
+  align-self: start;
+  margin-top: calc(var(--g-space-4) * -1);
 }
 
 .config-sync-notices {

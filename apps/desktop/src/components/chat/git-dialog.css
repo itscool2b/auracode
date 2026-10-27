@@ -25,11 +25,13 @@
   font-weight: 400;
 }
 
+/* A path is one 12/16 mono line, so the repository well stays on the 4px grid. */
 .git-path {
+  margin: 0;
   color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
-  line-height: var(--g-leading-term);
+  line-height: var(--g-leading-meta);
   overflow-wrap: anywhere;
 }
 
@@ -135,6 +137,25 @@
 
 .git-section .ui-field {
   margin-bottom: var(--g-space-12);
+}
+
+/* In a form the form's 16px gap spaces the fields; help sits 8px under its field (4.2). */
+.git-section form > .ui-field {
+  margin-bottom: 0;
+}
+
+.git-help {
+  margin: calc(var(--g-space-8) * -1) 0 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* Back out of a sub-view: a ghost link whose words sit on the column, as on the Agents page. */
+.git-back {
+  display: flex;
+  width: fit-content;
+  margin: 0 0 var(--g-space-12) calc(var(--g-space-12) * -1);
 }
 
 .git-copy-option {

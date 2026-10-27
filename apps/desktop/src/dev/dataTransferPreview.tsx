@@ -66,12 +66,15 @@ function Fixture() {
           calls.push("refresh");
         }}
       />
-      <button type="button" className="g-button" onClick={() => setOpen(true)}>
-        Export chat
-      </button>
-      <button type="button" className="g-button" onClick={() => setDebugOpen(true)}>
-        Copy debug bundle
-      </button>
+      {/* The chat menu's two actions, as one row of buttons under the transfer group. */}
+      <div className="settings-section settings-actions">
+        <button type="button" className="g-button" onClick={() => setOpen(true)}>
+          Export chat
+        </button>
+        <button type="button" className="g-button" onClick={() => setDebugOpen(true)}>
+          Copy debug bundle
+        </button>
+      </div>
       {debugOpen ? (
         <DebugBundleDialog
           chatId="saved-chat"

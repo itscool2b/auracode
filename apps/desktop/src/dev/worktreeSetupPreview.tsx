@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import type { TerminalChunk, WorktreeSetupInput } from "../bindings";
+import { Modal } from "../components/chat/Modal";
 import { WorktreeSetupPanel } from "../components/chat/WorktreeSetupPanel";
 import type { WorktreeSetupApi } from "../lib/worktreeSetup";
 import "../components/chat/git-dialog.css";
@@ -72,22 +73,21 @@ const api: WorktreeSetupApi = {
 };
 export function mountWorktreeSetupPreview(container: HTMLElement) {
   Object.assign(window, { setupCalls: calls });
+  // The panel lives in the Git workspace dialog, so the fixture shows it there.
   createRoot(container).render(
-    <main
-      className="settings-shell g-root"
-      style={{ display: "block", padding: 40, overflow: "auto" }}
-    >
-      <div style={{ maxWidth: 760, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 32, fontWeight: 500, marginBottom: 24 }}>Worktree setup</h1>
-        <h2 className="sr-only">Git workspace</h2>
-        <WorktreeSetupPanel
-          chatId="fixture-chat"
-          worktreeId="fixture-tree"
-          branch="aura/orbit"
-          api={api}
-          onBack={() => {}}
-        />
-      </div>
+    <main className="g-root">
+      <h1 className="sr-only">Worktree setup fixture</h1>
+      <Modal title="Git workspace" size="lg" className="git-dialog" onClose={() => {}}>
+        <div className="git-dialog-body">
+          <WorktreeSetupPanel
+            chatId="fixture-chat"
+            worktreeId="fixture-tree"
+            branch="aura/orbit"
+            api={api}
+            onBack={() => {}}
+          />
+        </div>
+      </Modal>
     </main>,
   );
 }

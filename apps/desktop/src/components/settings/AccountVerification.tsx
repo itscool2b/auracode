@@ -60,6 +60,32 @@ export function AccountVerification({
       callback.current("");
     };
   }, [attempt, origin]);
+  useEffect(() => {
+    // A cross-origin frame never matches :focus here, so the ring (3.7) follows the window's blur
+    // into the frame instead, and only after a key press, as :focus-visible would.
+    let keyboard = false;
+    const key = () => {
+      keyboard = true;
+    };
+    const pointer = () => {
+      keyboard = false;
+    };
+    const enter = () => {
+      if (keyboard && document.activeElement === frame.current)
+        frame.current?.setAttribute("data-focus-visible", "");
+    };
+    const leave = () => frame.current?.removeAttribute("data-focus-visible");
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("pointerdown", pointer, true);
+    window.addEventListener("blur", enter);
+    window.addEventListener("focus", leave);
+    return () => {
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("pointerdown", pointer, true);
+      window.removeEventListener("blur", enter);
+      window.removeEventListener("focus", leave);
+    };
+  }, []);
   return (
     <div className="account-verification" data-phase={phase}>
       <div className="account-verification-well">

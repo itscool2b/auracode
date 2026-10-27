@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { KeepAsLocalPanel } from "../components/settings/KeepAsLocalPanel";
 import type { AccountPreservationApi } from "../lib/accountPreservation";
 import "../components/settings/settings.css";
+import "../components/settings/account.css";
 
 const calls: string[] = [];
 const params = new URLSearchParams(location.search);
@@ -49,18 +50,32 @@ document.documentElement.classList.add("g-root");
 export function mountAccountPreservationPreview(container: HTMLElement) {
   createRoot(container).render(
     <StrictMode>
+      {/* The panel sits under the deleted account's row in Account's Cloud account well. */}
       <main className="g-root settings-content">
         <h1>Account</h1>
-        <h2 className="settings-heading">Cloud account</h2>
-        <h3 className="settings-row-label">This account was deleted</h3>
-        <KeepAsLocalPanel
-          api={api}
-          onOpen={async (id) => {
-            calls.push(`open:${id}`);
-            if (params.has("open-fails"))
-              throw new Error("Profile switching is unavailable while a terminal is open.");
-          }}
-        />
+        <section className="settings-section">
+          <h2>Cloud account</h2>
+          <div className="settings-group">
+            <div className="settings-row">
+              <div className="settings-row-text">
+                <div>
+                  <h3 className="settings-row-label">This account was deleted</h3>
+                  <p>Network sync has stopped. Its encrypted workspace stays on this computer.</p>
+                </div>
+              </div>
+              <div className="settings-span account-step">
+                <KeepAsLocalPanel
+                  api={api}
+                  onOpen={async (id) => {
+                    calls.push(`open:${id}`);
+                    if (params.has("open-fails"))
+                      throw new Error("Profile switching is unavailable while a terminal is open.");
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
     </StrictMode>,
   );

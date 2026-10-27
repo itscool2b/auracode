@@ -257,9 +257,16 @@ function probe() {
       }
       sibling = sibling.previousElementSibling;
     }
+    // A modal dialog centred in the window (4.6) takes its offset from the window's size, which the
+    // person sets, so only that axis is exempt; its own size and everything inside keep the grid.
+    // A dialog held at a set offset (the palette's) is still measured on that axis.
+    const modal = !origin && element.matches("dialog:modal");
+    const style = getComputedStyle(element);
+    const centredX = modal && style.marginLeft === style.marginRight;
+    const centredY = modal && style.marginTop === style.marginBottom;
     const problems = [];
-    if (!ownWidth && !afterWords && off(dx)) problems.push(`x ${dx.toFixed(1)}`);
-    if (off(dy)) problems.push(`y ${dy.toFixed(1)}`);
+    if (!centredX && !ownWidth && !afterWords && off(dx)) problems.push(`x ${dx.toFixed(1)}`);
+    if (!centredY && off(dy)) problems.push(`y ${dy.toFixed(1)}`);
     if (!ownWidth && off(box.width)) problems.push(`width ${box.width.toFixed(1)}`);
     if (off(box.height)) problems.push(`height ${box.height.toFixed(1)}`);
     if (problems.length)

@@ -1558,12 +1558,17 @@ details.setup-install-review[open] > summary::before {
 /*
  * Every dialog is Graphite's .g-dialog: sm 440 (the base), .g-dialog-md 560, .g-dialog-lg 760, a
  * 16px viewport margin on every side, the title and close button in .g-dialog-header. Long content
- * scrolls the whole dialog.
+ * scrolls the whole dialog. The 1px line-strong ring is inset, as the palette's is, so the content
+ * starts 24px in, on the grid.
  */
 .g-dialog {
   max-height: calc(100dvh - var(--g-space-32));
   margin: auto;
   overflow: auto;
+  border: 0;
+  box-shadow:
+    inset 0 0 0 1px var(--g-line-strong),
+    var(--g-shadow);
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
 }
@@ -1824,14 +1829,9 @@ details.setup-install-review[open] > summary::before {
 .g-dialog.command-palette {
   display: flex;
   flex-direction: column;
-  margin: min(var(--g-space-128), 12vh) auto auto;
+  margin: min(var(--g-space-128), round(down, 12vh, var(--g-space-4))) auto auto;
   padding: 0;
   overflow: hidden;
-  /* An inset ring in place of the border keeps the rows on the grid. */
-  border: 0;
-  box-shadow:
-    inset 0 0 0 1px var(--g-line-strong),
-    var(--g-shadow);
 }
 
 .command-palette > header {

@@ -265,7 +265,7 @@ fg-3, Aside). In sentences that describe an action, connective words are fg-3 an
 
 4px base: `--g-space-2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128, 160`. The desktop
 app writes every margin, padding and gap with these tokens (only 0 and 1px hairlines are literal);
-geometry that follows a layout value (the 22px transcript gutter, the 52px titlebar band, a mark's
+geometry that follows a layout value (the 24px transcript gutter, the 52px titlebar band, a mark's
 width) is written from that value. `.github/scripts/check-styles.mjs` keeps the app's stylesheets on
 the colour, space, radius, type, weight and motion tokens.
 Row heights: 24 compact, 28 tool rows and menu-dense rows, 32 menu rows, buttons and sidebar rows,
@@ -457,8 +457,8 @@ under reduced motion, where it holds step 0 (head top-left, trail below it).
   280, the shadow, keycaps for its shortcut; 500ms delay, 150ms fade.
 - **Dialog** (`.g-dialog` on a native `<dialog>`): three widths, sm 440 (the base), `.g-dialog-md`
   560 and `.g-dialog-lg` 760, each at most the viewport minus 32 (one 16px margin on every side, also
-  for its height; long content scrolls the dialog); padding 24, surface-2, 1px line-strong, radius
-  16, the shadow, scrim `rgb(0 0 0 / 0.72)`. `.g-dialog-header` holds the `.g-dialog-title` and a
+  for its height; long content scrolls the dialog); padding 24, surface-2, a 1px line-strong ring
+  drawn inset (so the content starts 24px in, on the grid), radius 16, the shadow, scrim `rgb(0 0 0 / 0.72)`. `.g-dialog-header` holds the `.g-dialog-title` and a
   28px ghost icon close button; `.g-dialog-actions` is the action row. Sm for confirmations and
   one-field forms, md for forms and lists, lg for reviews, comparisons, terminals and the palette.
   Title 22/28 500 as
@@ -1183,15 +1183,18 @@ Delete), tool row (Re-run, Copy command, Copy output).
 ### 6.16 Settings
 
 Settings replace the pane (⌘,) and follow Grok's settings rows and X Money's grouped wells. The
-sidebar becomes the settings nav: "Back to chats", a "Settings" heading, then 32px rows of a 16px
-fg-3 icon and a 14/20 fg-2 label; hover surface-2 and fg-1; the open page is Grok's filled pill
+sidebar becomes the settings nav on the chat sidebar's geometry (6.2): the logo in the top band,
+"Back to chats", a "Settings" heading on a 32px line 16px below it, then 32px rows 4px apart of a
+16px fg-3 icon at x 20 and a 14/20 fg-2 label at x 44; hover surface-2 and fg-1; the open page is Grok's filled pill
 (surface-3, fg-1 500); a separator before the links out (Agents, Library). Page: a 680px column, a
 `.g-text-title` title and nothing under it. Groups (X Money): an optional heading 16/22 500, at
 most one short 14/20 fg-3 line, then a surface-2 well, radius 12, 12px below; 32px between groups.
 A row is a label 14/20 500 with an optional one-line description 12/16 fg-3 and at most one control
-at right (a 28px outline pill, a segmented control or a switch); anything more (a form, a key, a
+at right (a 28px outline pill, a segmented control on a 36px track with its 28px choices 4px in,
+or a switch); anything more (a form, a key, a
 list, progress) opens under the row across both columns, starting at the label's column when the
-row leads with an icon or a 32px badge. Rows are at least 56px with 12/16 padding, on hairlines
+row leads with an icon or a 32px badge. Rows are at least 60px with 12/16 padding (the label 20 over its line 16, so a 28px control sits
+16px in), on hairlines
 inset 16 on both sides. A row that only opens something is the whole row as a button with a
 chevron (X Money). Empty states are Vercel's: one 14/20 500 title and one fg-3 line centred in the
 well, and the one way forward. "Applies to new chats" in 12/16 fg-3 under a group when true. Motion is a strong segmented control (Full, Reduced, Off) that
@@ -1249,7 +1252,7 @@ saved at the retired motion step resumes at First project. The one primary is "G
 
 Vercel's project list. Back to chats and Run setup again (ghosts) on the top line; "Agents" in
 `.g-text-title` with "3 of 9 installed on this computer." under it and Refresh (outline) at right.
-One frame (1px line, radius 12) of 64px rows on hairlines: a 32px `AgentMark`, the name 14/20 500
+One frame (a 1px line ring drawn over the rows, radius 12) of 60px rows on hairlines: a 32px `AgentMark`, the name 14/20 500
 over the version in mono 12/16 fg-3, the status in 12/16 (a 6px square and a word: green
 "Installed", volt "Needs sign-in", red "Unavailable", an fg-4 outline square and fg-3 "Not
 installed", fg-3 "Looking"), the date auracode last verified the integration in 12/16 fg-3

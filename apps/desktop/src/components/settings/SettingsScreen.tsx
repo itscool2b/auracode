@@ -277,9 +277,10 @@ export function SettingsScreen({
   ];
   const title = PAGES.find(([value]) => value === page)?.[1] ?? "";
   return (
-    <div className="settings-shell g-root">
+    <div className="settings-shell g-root" data-os={info.os}>
       <aside className="settings-sidebar" aria-label="Settings navigation">
         <div className="settings-drag" data-tauri-drag-region="" />
+        <Logo size={24} className="settings-logo" />
         <button type="button" className="settings-back" onClick={onBack}>
           <ArrowLeft size={16} aria-hidden="true" /> {backLabel}
         </button>

@@ -1,6 +1,8 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AccountVerification } from "../components/settings/AccountVerification";
+import "../components/settings/settings.css";
+import "../components/settings/account.css";
 
 function Preview() {
   const [token, setToken] = useState("");
@@ -8,10 +10,12 @@ function Preview() {
     <main className="settings-shell g-root" style={{ display: "block", overflow: "auto" }}>
       <div className="settings-content">
         <h1>Sign-in verification fixture</h1>
-        <AccountVerification onToken={setToken} />
-        <button type="button" className="g-button g-button-primary" disabled={!token}>
-          Request sign-in code
-        </button>
+        <div className="settings-form">
+          <AccountVerification onToken={setToken} />
+          <button type="button" className="g-button g-button-primary" disabled={!token}>
+            Request sign-in code
+          </button>
+        </div>
       </div>
     </main>
   );
