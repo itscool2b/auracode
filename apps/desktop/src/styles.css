@@ -212,22 +212,6 @@
 
   /* ---------- Type ---------- */
 
-  /* Kept for older markup; Graphite has no eyebrows, so it reads as a quiet sentence-case label. */
-  .eyebrow {
-    color: var(--g-fg-3);
-    font-size: var(--g-text-meta);
-    line-height: var(--g-leading-meta);
-    font-weight: 500;
-  }
-
-  .display {
-    color: var(--g-fg-1);
-    font-size: var(--g-text-display);
-    line-height: var(--g-leading-display);
-    font-weight: 500;
-    letter-spacing: var(--g-tracking-display);
-  }
-
   .lede {
     max-width: 560px;
     color: var(--g-fg-3);

@@ -24,13 +24,18 @@
   height: 52px;
 }
 
+/* The column scrolls as a whole, so a tall step pushes the footer down instead of clipping. */
 .setup-column {
   display: flex;
   flex: none;
   flex-direction: column;
-  width: clamp(440px, 40vw, 568px);
+  box-sizing: border-box;
+  width: clamp(440px, 46vw, 568px);
   height: 100dvh;
-  padding: 64px clamp(40px, 4.4vw, 64px) 40px;
+  padding: 64px clamp(32px, 3.6vw, 64px) 40px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
 .setup-shell[data-cinematic] .setup-column {
@@ -52,15 +57,10 @@
 
 .setup-body {
   display: flex;
-  flex: 1;
+  flex: 1 0 auto;
   flex-direction: column;
-  justify-content: safe center;
-  min-height: 0;
-  margin: 16px -8px;
-  padding: 24px 8px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--g-line-strong) transparent;
+  justify-content: center;
+  padding: 40px 0;
 }
 
 .setup-bottom {
@@ -196,11 +196,12 @@
   }
 }
 
+/* Display 32/38 from 1392px; a narrower column steps down to 28 so each tone keeps one line. */
 .setup-heading {
   margin: 0 0 16px;
   color: var(--g-fg-1);
-  font-size: var(--g-text-display);
-  line-height: var(--g-leading-display);
+  font-size: clamp(28px, 2.3vw, var(--g-text-display));
+  line-height: 1.1875;
   font-weight: 500;
   letter-spacing: var(--g-tracking-display);
   text-wrap: balance;
