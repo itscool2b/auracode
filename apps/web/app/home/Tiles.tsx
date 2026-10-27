@@ -78,7 +78,7 @@ function QueueMini() {
         </div>
         <div className="mini-shell">
           <span className="film-typed">
-            Also cover a zero frame
+            Cover the zero case
             <span className="film-caret" />
           </span>
           <span className="mini-split">

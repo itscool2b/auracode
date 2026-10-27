@@ -2811,3 +2811,36 @@ The owner paused before final verification. CI 40424725320 on 10a045c was cancel
 results, so the WebKit focus fix and the WebDriver automation fix are verified locally only (the
 WebDriver fix not at all). Build 40424751752 was left running. One final CI run, the production API
 route, live invited sign-in and device acceptance remain. No PR is open.
+
+### Website round 2: seals and turtles, no rules, rebuilt middle
+
+Owner feedback on the Graphite website: keep the hero, add seals and turtles to the moving pixel
+field, remove the split lines, replace the generic middle sections with treatments taken from the
+references, and lock the type.
+
+- `DitherField` gained opt-in sprites (small luminance grids with up to four frames, drawn into the
+  field's luminance before the Bayer threshold), `edges`, a `ceiling` and lists of clearings. All
+  are off by default and leave existing frames unchanged; 273 `@auracode/ui` tests pass, including
+  new sprite, edge, ceiling and multi-clearing tests. `renderDitherFrame` takes a painted sprite
+  overlay, so the fallback images show the creatures in their first frame.
+- A sea turtle (from above) and a harbour seal (from the side) swim through the hero stage and the
+  closing band; phones get two seals in open water. Reduced motion freezes them in place.
+- The hero keeps its layout, copy and motion. Its field gathers toward the sides, stays calm
+  behind the copy and along the product frame's top edge, and fades out before the stage ends. The
+  seam rule, crosshairs and column guides are gone; the frame keeps one hairline ring and starts
+  its dissolve further along (phones show the screenshot at once). All nine rotating names keep
+  slot, word and underline widths equal and the headline never reflows, in Chromium and WebKit at
+  1440 and 390px.
+- Between the frame and the FAQ: Harvey's grain triptych, an x.ai film card replaying one turn
+  with a keyboard Play/Pause, X Money's staggered tiles with a checkpoint toggle, one Vercel strip
+  for running several chats, and Geist Pixel numerals 9, 2 and 0 condensing out of their fields.
+  Every claim was checked against README, plan and progress; unverified shortcuts were dropped.
+- Sections are separated by space only; the remaining lines are the strip's frame, the numerals'
+  rule, spec rows and list rows. One heading size and two-tone pattern across the site.
+  `@fontsource/geist-pixel` 5.3.0 (OFL-1.1) is self-hosted; the notice catalogue changed only by
+  that record and two input digests.
+
+Verified locally: all workspace typechecks, Biome clean for `apps/web` and `packages/ui`, website
+static, browser (Chromium and WebKit, axe zero) and release tests, notices tests, Worker build and
+runtime tests. Not run: CI, deploys, the owner's hand walkthrough. Biome still reports a format
+error and warnings in `apps/desktop` files this round did not touch.
