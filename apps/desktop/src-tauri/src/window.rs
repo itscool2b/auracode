@@ -98,8 +98,8 @@ pub const MAIN_WINDOW: &str = "main";
 /// How long the page gets to report its first paint before the window is shown regardless.
 pub const READY_FALLBACK: Duration = Duration::from_secs(3);
 
-/// `--aura-base` from tokens.css, behind opaque windows (and the webview before it paints).
-pub const BASE_COLOR: Color = Color(7, 7, 10, 255);
+/// Graphite's `--g-bg` (pure black), behind opaque windows (and the webview before it paints).
+pub const BASE_COLOR: Color = Color(0, 0, 0, 255);
 
 /// What the window-state plugin restores: size, position, maximized, fullscreen. Never visibility
 /// (that would show the window before first paint) and never decorations (code owns the chrome).
