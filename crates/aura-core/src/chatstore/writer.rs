@@ -21,7 +21,6 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
@@ -86,6 +85,7 @@ impl WriterConfig {
 
 /// What the store and the writer share.
 pub(crate) struct Shared {
+    pub(crate) workspace_activity: Arc<super::workspace_activity::Activity>,
     queue: Mutex<Queue>,
     wake: Condvar,
     pub(crate) count: Arc<Semaphore>,
@@ -142,9 +142,83 @@ pub(crate) enum Work {
 
 /// A store call that waits for its answer through the FIFO.
 pub(crate) enum Request {
+    WorkspaceRemoval {
+        command: super::workspace_removal::Command,
+        reply: oneshot::Sender<Result<super::workspace_removal::Reply, StoreError>>,
+    },
+    FolderResolution {
+        command: super::folder_resolution::Command,
+        reply: oneshot::Sender<Result<super::folder_resolution::Reply, StoreError>>,
+    },
+    #[cfg(feature = "account-sync")]
+    PreserveAccount {
+        command: crate::account_preservation::Command,
+        reply: oneshot::Sender<
+            crate::account_preservation::Result<crate::account_preservation::Reply>,
+        >,
+    },
+    #[cfg(feature = "account-sync")]
+    LocalImport {
+        command: crate::local_import::Command,
+        reply:
+            oneshot::Sender<Result<crate::local_import::Reply, crate::local_import::ImportError>>,
+    },
+    Steering {
+        command: super::steering::Command,
+        reply: oneshot::Sender<Result<(), StoreError>>,
+    },
+    #[cfg(feature = "account-sync")]
+    SyncExchange {
+        command: crate::sync::exchange::Command,
+        reply: oneshot::Sender<crate::sync::Result<crate::sync::exchange::Reply>>,
+    },
+    #[cfg(feature = "account-sync")]
+    Config {
+        command: crate::sync::config::Command,
+        reply:
+            oneshot::Sender<Result<crate::sync::config::Reply, aura_config::sync::ConfigPortError>>,
+    },
+    #[cfg(feature = "account-sync")]
+    ConfigureSync {
+        context: crate::sync::SyncContext,
+        reply: oneshot::Sender<Result<(), StoreError>>,
+    },
+    Flush {
+        reply: oneshot::Sender<Result<(), StoreError>>,
+    },
+    WorktreeSetup {
+        command: super::worktree_setup::Command,
+        reply: oneshot::Sender<Result<aura_protocol::worktree_setup::WorktreeSetup, StoreError>>,
+    },
+    Search {
+        query: String,
+        include_archived: bool,
+        reply: oneshot::Sender<Result<aura_protocol::search::SearchResults, StoreError>>,
+    },
+    Conversation {
+        command: super::conversation::ConversationCommand,
+        reply: oneshot::Sender<Result<super::conversation::ConversationReply, StoreError>>,
+    },
+    Composer {
+        command: super::composer::ComposerCommand,
+        reply: oneshot::Sender<Result<super::composer::ComposerReply, StoreError>>,
+    },
+    CheckpointContext {
+        chat_id: String,
+        turn_id: Option<String>,
+        reply: oneshot::Sender<Result<(ChatRecord, Option<String>), StoreError>>,
+    },
+    Organization {
+        command: super::organization::OrganizationCommand,
+        reply: oneshot::Sender<Result<super::organization::Organization, StoreError>>,
+    },
     CreateChat {
         new: NewChat,
         reply: oneshot::Sender<Result<ChatRecord, StoreError>>,
+    },
+    ExportMarkdown {
+        chat_id: String,
+        reply: oneshot::Sender<Result<String, StoreError>>,
     },
     Chats {
         reply: oneshot::Sender<Result<Vec<ChatRecord>, StoreError>>,
@@ -167,6 +241,20 @@ pub(crate) enum Request {
 
 /// A read served from saved data, outside the FIFO, even while the writer is stalled.
 pub(crate) enum SavedRead {
+    Search {
+        query: String,
+        include_archived: bool,
+        reply: oneshot::Sender<Result<aura_protocol::search::SearchResults, StoreError>>,
+    },
+    CheckpointContext {
+        chat_id: String,
+        turn_id: Option<String>,
+        reply: oneshot::Sender<Result<(ChatRecord, Option<String>), StoreError>>,
+    },
+    Organization {
+        filter: aura_protocol::workspace::WorkspaceFilter,
+        reply: oneshot::Sender<Result<super::organization::Organization, StoreError>>,
+    },
     Chats {
         reply: oneshot::Sender<Result<Vec<ChatRecord>, StoreError>>,
     },
@@ -261,7 +349,9 @@ impl Pending {
                 self.sessions.insert(row.id.clone(), row.chat_id.clone());
                 Attribution::Chat(row.chat_id.clone())
             }
-            Op::UpdateAgentSession { id, .. } => known(&self.sessions, id),
+            Op::UpdateAgentSession { id, .. } | Op::SaveNativeIdentity { id, .. } => {
+                known(&self.sessions, id)
+            }
             Op::BeginTurn { turn, rows } => {
                 self.turns.insert(turn.id.clone(), turn.chat_id.clone());
                 ticket.min_seq = rows.iter().map(|row| row.seq).min();
@@ -401,6 +491,7 @@ pub(crate) fn op_bytes(op: &Op) -> usize {
         | Op::QueueHoldAll { .. }
         | Op::QueueReleaseAll { .. }
         | Op::ReadPage { .. }
+        | Op::SaveNativeIdentity { .. }
         | Op::Barrier(_) => SMALL,
     }
 }
@@ -408,6 +499,21 @@ pub(crate) fn op_bytes(op: &Op) -> usize {
 fn work_bytes(work: &Work) -> usize {
     match work {
         Work::Op(op) => op_bytes(op),
+        Work::Request(Request::Organization { command, .. }) => command.bytes(),
+        Work::Request(Request::WorktreeSetup { command, .. }) => command.bytes(),
+        Work::Request(Request::FolderResolution { command, .. }) => command.bytes(),
+        Work::Request(Request::WorkspaceRemoval { command, .. }) => command.bytes(),
+        Work::Request(Request::Steering { command, .. }) => command.bytes(),
+        Work::Request(Request::Composer { command, .. }) => command.bytes(),
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::Config { command, .. }) => command.bytes(),
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::SyncExchange { command, .. }) => command.bytes(),
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::LocalImport { .. }) => 64 * 1024,
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::PreserveAccount { .. }) => 64 * 1024,
+        Work::Request(Request::Search { query, .. }) => 256 + query.len(),
         Work::Request(_) => 256,
         #[cfg(test)]
         Work::Test(_) => 256,
@@ -417,7 +523,8 @@ fn work_bytes(work: &Work) -> usize {
 /// Whether the item answers someone, which ends a batch: it runs after the batch commits.
 fn ends_batch(work: &Work) -> bool {
     match work {
-        Work::Op(Op::ReadPage { .. } | Op::Barrier(_)) | Work::Request(_) => true,
+        Work::Op(Op::ReadPage { .. } | Op::SaveNativeIdentity { .. } | Op::Barrier(_))
+        | Work::Request(_) => true,
         Work::Op(_) => false,
         #[cfg(test)]
         Work::Test(_) => false,
@@ -427,6 +534,7 @@ fn ends_batch(work: &Work) -> bool {
 impl Shared {
     pub(crate) fn new(config: WriterConfig) -> Shared {
         Shared {
+            workspace_activity: Arc::default(),
             queue: Mutex::new(Queue {
                 items: VecDeque::new(),
                 saved: VecDeque::new(),
@@ -580,10 +688,32 @@ fn replace<T: PartialEq>(slot: &mut T, value: T) -> bool {
 
 fn work_name(work: &Work) -> &'static str {
     match work {
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::ConfigureSync { .. }) => "configure_sync",
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::Config { .. }) => "config_sync",
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::SyncExchange { .. }) => "sync_exchange",
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::LocalImport { .. }) => "local_import",
+        #[cfg(feature = "account-sync")]
+        Work::Request(Request::PreserveAccount { .. }) => "preserve_account",
+        Work::Request(Request::Flush { .. }) => "flush",
         Work::Op(op) => op_name(op),
         Work::Request(Request::CreateChat { .. }) => "create_chat",
+        Work::Request(Request::Organization { .. }) => "organization",
+        Work::Request(Request::WorktreeSetup { .. }) => "worktree setup",
+        Work::Request(Request::FolderResolution { .. }) => "folder resolution",
+        Work::Request(Request::WorkspaceRemoval { .. }) => "workspace removal",
+        Work::Request(Request::Steering { .. }) => "steering",
+        Work::Request(Request::Composer { .. }) => "composer",
+        Work::Request(Request::CheckpointContext { .. }) => "checkpoint_context",
+
+        Work::Request(Request::Conversation { .. }) => "conversation",
         Work::Request(Request::Chats { .. }) => "chats",
+        Work::Request(Request::Search { .. }) => "search",
         Work::Request(Request::LoadChat { .. }) => "load_chat",
+        Work::Request(Request::ExportMarkdown { .. }) => "export_markdown",
         Work::Request(Request::ReadBlob { .. }) => "read_blob",
         Work::Request(Request::Acknowledge { .. }) => "acknowledge_recovery",
         #[cfg(test)]
@@ -595,6 +725,7 @@ fn op_name(op: &Op) -> &'static str {
     match op {
         Op::InsertAgentSession(_) => "insert_agent_session",
         Op::UpdateAgentSession { .. } => "update_agent_session",
+        Op::SaveNativeIdentity { .. } => "save_native_identity",
         Op::BeginTurn { .. } => "begin_turn",
         Op::AppendEvents { .. } => "append_events",
         Op::EndTurn(_) => "end_turn",
@@ -734,12 +865,13 @@ enum Next {
 
 /// The thread that owns the store.
 pub(crate) struct Writer {
+    #[cfg(feature = "account-sync")]
+    sync: Option<crate::sync::SyncContext>,
     shared: Arc<Shared>,
     store: Option<Store>,
     owner: Option<ProfileOwner>,
     device_id: String,
-    attachments: PathBuf,
-    backups: PathBuf,
+    files: super::files::Files,
     recovered: watch::Sender<Option<RecoveryReport>>,
     mode: Mode,
     dead_letters: Option<File>,
@@ -751,17 +883,17 @@ impl Writer {
         store: Store,
         owner: ProfileOwner,
         device_id: String,
-        attachments: PathBuf,
-        backups: PathBuf,
+        files: super::files::Files,
         recovered: watch::Sender<Option<RecoveryReport>>,
     ) -> Writer {
         Writer {
+            #[cfg(feature = "account-sync")]
+            sync: None,
             shared,
             store: Some(store),
             owner: Some(owner),
             device_id,
-            attachments,
-            backups,
+            files,
             recovered,
             mode: Mode::Normal,
             dead_letters: None,
@@ -1060,8 +1192,10 @@ impl Writer {
             store,
             writes,
             &self.device_id,
-            &self.attachments,
+            &self.files.attachments,
             &self.shared.config.compact,
+            #[cfg(feature = "account-sync")]
+            self.sync.as_ref(),
         );
         #[cfg(test)]
         if result.is_ok() {
@@ -1122,6 +1256,22 @@ impl Writer {
             Work::Op(Op::Barrier(reply)) => {
                 let _ = reply.send(());
             }
+            Work::Op(Op::SaveNativeIdentity {
+                id,
+                native_id,
+                updated_at,
+                reply,
+            }) => {
+                let device = self.device_id.clone();
+                let result = if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.to_owned()))
+                } else {
+                    self.write_tx(|conn| {
+                        rows::save_native_identity(conn, &device, &id, &native_id, updated_at)
+                    })
+                };
+                let _ = reply.send(result);
+            }
             Work::Request(request) => self.answer_request(request),
             Work::Op(_) => {}
             #[cfg(test)]
@@ -1132,6 +1282,204 @@ impl Writer {
 
     fn answer_request(&mut self, request: Request) {
         match request {
+            #[cfg(feature = "account-sync")]
+            Request::PreserveAccount { command, reply } => {
+                let result = match (self.store.as_ref(), &self.mode) {
+                    (Some(store), Mode::Normal) => crate::account_preservation::execute(
+                        store,
+                        &self.files.attachments,
+                        &self.device_id,
+                        command,
+                    ),
+                    _ => Err(crate::account_preservation::PreservationError::AccountRequired),
+                };
+                let _ = reply.send(result);
+            }
+            #[cfg(feature = "account-sync")]
+            Request::LocalImport { command, reply } => {
+                let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {
+                    (Some(store), Some(context), Mode::Normal) => crate::local_import::execute(
+                        store,
+                        context,
+                        &self.files.attachments,
+                        &self.device_id,
+                        command,
+                    ),
+                    _ => Err(crate::local_import::ImportError::AccountRequired),
+                };
+                let _ = reply.send(result);
+            }
+            Request::Steering { command, reply } => {
+                let now = now_millis();
+                let result = if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| super::steering::execute(conn, now, command))
+                };
+                let _ = reply.send(result);
+            }
+            #[cfg(feature = "account-sync")]
+            Request::SyncExchange { command, reply } => {
+                let activity = Arc::clone(&self.shared.workspace_activity);
+                let mut active = activity.lock();
+                let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {
+                    (Some(store), Some(context), Mode::Normal) => {
+                        let prepared = super::workspace_activity::prepare(store.conn(), &active)
+                            .map_err(crate::sync::SyncError::from);
+                        prepared.and_then(|()| {
+                            crate::sync::exchange::execute_with_files(
+                                store,
+                                context,
+                                command,
+                                Some(&self.files.attachments),
+                            )
+                        })
+                    }
+                    _ => Err(crate::sync::SyncError::Unavailable),
+                };
+                if let Some(store) = &self.store
+                    && super::workspace_activity::refresh(store.conn(), &mut active)
+                {
+                    activity.changed();
+                }
+                let _ = reply.send(result);
+            }
+            #[cfg(feature = "account-sync")]
+            Request::Config { command, reply } => {
+                let result = match (self.store.as_mut(), self.sync.as_ref(), &self.mode) {
+                    (Some(store), Some(context), Mode::Normal) => {
+                        crate::sync::config::execute(store, context, command)
+                    }
+                    _ => Err(aura_config::sync::ConfigPortError::Unavailable),
+                };
+                let _ = reply.send(result);
+            }
+            #[cfg(feature = "account-sync")]
+            Request::ConfigureSync { context, reply } => {
+                let result = match self.store.as_mut() {
+                    Some(store) if matches!(self.mode, Mode::Normal) => context
+                        .initialize(store)
+                        .map_err(|error| StoreError::Other(error.to_string())),
+                    _ => Err(StoreError::Closed),
+                };
+                if result.is_ok() {
+                    self.sync = Some(context);
+                }
+                let _ = reply.send(result);
+            }
+            Request::Flush { reply } => {
+                let result = match self.mode {
+                    Mode::Normal if self.store.is_some() => Ok(()),
+                    Mode::Damaged => Err(StoreError::Damaged(DAMAGED.into())),
+                    _ => Err(StoreError::Closed),
+                };
+                let _ = reply.send(result);
+            }
+            Request::WorktreeSetup { command, reply } => {
+                let device = self.device_id.clone();
+                let now = now_millis();
+                let result = if command.save.is_none() {
+                    self.read(|conn| super::worktree_setup::execute(conn, &device, now, command))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| {
+                        super::worktree_setup::execute(conn, &device, now, command)
+                    })
+                };
+                let _ = reply.send(result);
+            }
+            Request::WorkspaceRemoval { command, reply } => {
+                let activity = Arc::clone(&self.shared.workspace_activity);
+                let mut active = activity.lock();
+                let device = self.device_id.clone();
+                let now = now_millis();
+                let result = if !command.writes() {
+                    self.read(|conn| super::workspace_removal::execute(conn, &device, now, command))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| {
+                        super::workspace_removal::execute(conn, &device, now, command)
+                    })
+                };
+                if let Some(store) = &self.store
+                    && super::workspace_activity::refresh(store.conn(), &mut active)
+                {
+                    activity.changed();
+                }
+                let _ = reply.send(result);
+            }
+            Request::FolderResolution { command, reply } => {
+                let device = self.device_id.clone();
+                let now = now_millis();
+                let result = if !command.writes() {
+                    self.read(|conn| super::folder_resolution::execute(conn, &device, now, command))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| {
+                        super::folder_resolution::execute(conn, &device, now, command)
+                    })
+                };
+                let _ = reply.send(result);
+            }
+            Request::Conversation { command, reply } => {
+                let device = self.device_id.clone();
+                let now = now_millis();
+                let result = if !command.writes() {
+                    self.read(|conn| super::conversation::execute(conn, &device, now, command))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| super::conversation::execute(conn, &device, now, command))
+                };
+                let _ = reply.send(result);
+            }
+            Request::Search {
+                query,
+                include_archived,
+                reply,
+            } => {
+                let _ = reply
+                    .send(self.read(|conn| super::search::execute(conn, &query, include_archived)));
+            }
+            Request::Composer { command, reply } => {
+                let dir = self.files.attachments.clone();
+                let now = now_millis();
+                let result = if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| {
+                        super::composer::execute(conn, &dir, now, command).map_err(|error| {
+                            rusqlite::Error::ToSqlConversionFailure(Box::new(error))
+                        })
+                    })
+                };
+                let _ = reply.send(result);
+            }
+            Request::CheckpointContext {
+                chat_id,
+                turn_id,
+                reply,
+            } => {
+                let device = self.device_id.clone();
+                let _ = reply.send(self.read(|conn| {
+                    rows::checkpoint_context(conn, &device, &chat_id, turn_id.as_deref())
+                }));
+            }
+            Request::Organization { command, reply } => {
+                let device = self.device_id.clone();
+                let now = now_millis();
+                let result = if command.is_read() {
+                    self.read(|conn| super::organization::execute(conn, &device, now, command))
+                } else if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| super::organization::execute(conn, &device, now, command))
+                };
+                let _ = reply.send(result);
+            }
             Request::CreateChat { new, reply } => {
                 let created = if let Mode::Damaged = self.mode {
                     Err(StoreError::Damaged(DAMAGED.to_owned()))
@@ -1147,6 +1495,9 @@ impl Writer {
             Request::LoadChat { chat_id, reply } => {
                 let _ = reply.send(self.load_chat(&chat_id));
             }
+            Request::ExportMarkdown { chat_id, reply } => {
+                let _ = reply.send(self.read(|conn| super::export::markdown(conn, &chat_id)));
+            }
             Request::ReadBlob {
                 sha256,
                 offset,
@@ -1159,7 +1510,7 @@ impl Writer {
                 let acknowledged = match &self.store {
                     Some(store) => store.acknowledge_recovery(&quarantined),
                     None => Err(CoreError::Io {
-                        path: self.backups.clone(),
+                        path: self.files.backups.clone(),
                         source: io::Error::other("auracode's database is closed"),
                     }),
                 };
@@ -1180,6 +1531,10 @@ impl Writer {
         let outcome = catch_unwind(AssertUnwindSafe(|| -> rusqlite::Result<T> {
             let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let value = write(&tx)?;
+            #[cfg(feature = "account-sync")]
+            if let Some(sync) = &self.sync {
+                crate::sync::capture::finish(&tx, sync, now_millis())?;
+            }
             tx.commit()?;
             Ok(value)
         }));
@@ -1204,12 +1559,21 @@ impl Writer {
                 return Err(StoreError::Closed);
             };
             let outcome = catch_unwind(AssertUnwindSafe(|| {
-                recover::recover(
+                recover::recover_with(
                     store.conn_mut(),
                     Scope::Chat(chat_id),
                     &device,
                     &limits,
                     now_millis(),
+                    |conn| {
+                        #[cfg(feature = "account-sync")]
+                        if let Some(sync) = &self.sync {
+                            crate::sync::capture::finish(conn, sync, now_millis())?;
+                        }
+                        #[cfg(not(feature = "account-sync"))]
+                        let _ = conn;
+                        Ok(())
+                    },
                 )
             }));
             settle(store.conn_mut());
@@ -1224,7 +1588,11 @@ impl Writer {
             }
         }
         let device = self.device_id.clone();
-        let mut load = self.read(|conn| rows::load_chat(conn, &device, chat_id, recovered))?;
+        let activity = Arc::clone(&self.shared.workspace_activity);
+        let mut load = self.read(|conn| {
+            activity.loaded(conn, chat_id)?;
+            rows::load_chat(conn, &device, chat_id, recovered)
+        })?;
         if let Some(load) = &mut load {
             // Every row queued before the actor that loads it waits for the user (decision 11):
             // recovery holds them, and when it could not (a damaged database, a chat whose recovery
@@ -1250,7 +1618,7 @@ impl Writer {
     }
 
     fn read_blob(&mut self, sha256: &str, offset: u64, len: u32) -> Result<BlobText, StoreError> {
-        match blobs::read_page(&self.attachments, sha256, offset, len) {
+        match self.files.attachments.read_page(sha256, offset, len) {
             Ok(text) => Ok(text),
             Err(blobs::ReadError::Gone) => Err(StoreError::BlobMissing(BLOB_GONE.to_owned())),
             Err(blobs::ReadError::Io(error)) => Err(StoreError::Other(error.to_string())),
@@ -1260,6 +1628,35 @@ impl Writer {
     /// Serves a read from saved data.
     fn serve_saved(&mut self, read: SavedRead) {
         match read {
+            SavedRead::Search {
+                query,
+                include_archived,
+                reply,
+            } => {
+                let _ = reply
+                    .send(self.read(|conn| super::search::execute(conn, &query, include_archived)));
+            }
+            SavedRead::CheckpointContext {
+                chat_id,
+                turn_id,
+                reply,
+            } => {
+                let device = self.device_id.clone();
+                let _ = reply.send(self.read(|conn| {
+                    rows::checkpoint_context(conn, &device, &chat_id, turn_id.as_deref())
+                }));
+            }
+            SavedRead::Organization { filter, reply } => {
+                let device = self.device_id.clone();
+                let _ = reply.send(self.read(|conn| {
+                    super::organization::execute(
+                        conn,
+                        &device,
+                        now_millis(),
+                        super::organization::OrganizationCommand::Snapshot(filter),
+                    )
+                }));
+            }
             SavedRead::Chats { reply } => {
                 let device = self.device_id.clone();
                 let _ = reply.send(self.read(|conn| rows::chats(conn, &device)));
@@ -1329,7 +1726,11 @@ impl Writer {
             return Err(paused);
         }
         let device = self.device_id.clone();
-        let load = self.read(|conn| rows::load_chat(conn, &device, chat_id, 0))?;
+        let activity = Arc::clone(&self.shared.workspace_activity);
+        let load = self.read(|conn| {
+            activity.loaded(conn, chat_id)?;
+            rows::load_chat(conn, &device, chat_id, 0)
+        })?;
         Ok(load.map(|mut load| {
             for row in &mut load.queue {
                 row.held = true;
@@ -1423,6 +1824,28 @@ impl Writer {
             return;
         }
         let at = now_millis();
+        #[cfg(feature = "account-sync")]
+        if let Some(recovery) = &self.files.recovery {
+            let written = (|| -> io::Result<()> {
+                let mut journal = super::journal::Journal::new(recovery)?;
+                for item in &items {
+                    if let Some(letter) = dead_letter(item, error, at) {
+                        serde_json::to_writer(&mut journal, &letter).map_err(io::Error::other)?;
+                        journal.write_all(b"\n")?;
+                    }
+                }
+                journal.finish()
+            })();
+            if written.is_err() {
+                // Never log the serialization error, which could contain rejected payload text.
+                tracing::error!(
+                    count = items.len(),
+                    "could not save encrypted recovery ops; some queued data was lost"
+                );
+            }
+            self.committed(&items);
+            return;
+        }
         let lines: Vec<String> = items
             .iter()
             .filter_map(|item| dead_letter_line(item, error, at))
@@ -1449,9 +1872,9 @@ impl Writer {
 
     fn dead_letter_file(&mut self) -> io::Result<&mut File> {
         if self.dead_letters.is_none() {
-            fsutil::create_private_dir_all(&self.backups).map_err(io::Error::other)?;
+            fsutil::create_private_dir_all(&self.files.backups).map_err(io::Error::other)?;
             let path = fsutil::free_path(
-                &self.backups,
+                &self.files.backups,
                 &format!("deadletter-{}", now_millis()),
                 ".jsonl",
             );
@@ -1505,8 +1928,9 @@ fn commit(
     store: &mut Store,
     writes: &[Item],
     device_id: &str,
-    attachments: &Path,
+    attachments: &super::files::Attachments,
     limits: &CompactLimits,
+    #[cfg(feature = "account-sync")] sync: Option<&crate::sync::SyncContext>,
 ) -> Result<(), Failure> {
     let conn = store.conn_mut();
     let outcome = catch_unwind(AssertUnwindSafe(|| -> Result<(), Failure> {
@@ -1516,6 +1940,10 @@ fn commit(
         let now = now_millis();
         for item in writes {
             apply(&tx, item, device_id, attachments, limits, now)?;
+        }
+        #[cfg(feature = "account-sync")]
+        if let Some(sync) = sync {
+            crate::sync::capture::finish(&tx, sync, now).map_err(classify)?;
         }
         tx.commit().map_err(classify)
     }));
@@ -1538,7 +1966,7 @@ fn apply(
     conn: &rusqlite::Connection,
     item: &Item,
     device_id: &str,
-    attachments: &Path,
+    attachments: &super::files::Attachments,
     limits: &CompactLimits,
     now: i64,
 ) -> Result<(), Failure> {
@@ -1572,8 +2000,9 @@ fn apply(
             mime,
             bytes,
         } => {
-            let size =
-                blobs::write(attachments, sha256, bytes).map_err(|error| classify_io(&error))?;
+            let size = attachments
+                .write(sha256, bytes)
+                .map_err(|error| classify_io(&error))?;
             sql(rows::insert_attachment(conn, sha256, mime, size, now))
         }
         Op::SetTitle {
@@ -1590,7 +2019,7 @@ fn apply(
         Op::QueueReleaseAll { chat_id } => {
             sql(rows::queue_hold(conn, Some(chat_id), false).map(|_| ()))
         }
-        Op::ReadPage { .. } | Op::Barrier(_) => Ok(()),
+        Op::ReadPage { .. } | Op::SaveNativeIdentity { .. } | Op::Barrier(_) => Ok(()),
     }
 }
 
@@ -1659,6 +2088,10 @@ struct DeadLetter<'a> {
 }
 
 fn dead_letter_line(item: &Item, error: &str, at: i64) -> Option<String> {
+    serde_json::to_string(&dead_letter(item, error, at)?).ok()
+}
+
+fn dead_letter<'a>(item: &'a Item, error: &'a str, at: i64) -> Option<DeadLetter<'a>> {
     let op = match &item.work {
         Work::Op(op) => match op {
             Op::InsertAgentSession(row) => DeadOp::InsertAgentSession { row },
@@ -1691,13 +2124,13 @@ fn dead_letter_line(item: &Item, error: &str, at: i64) -> Option<String> {
             Op::QueueRemove { id } => DeadOp::QueueRemove { id },
             Op::QueueHoldAll { chat_id } => DeadOp::QueueHoldAll { chat_id },
             Op::QueueReleaseAll { chat_id } => DeadOp::QueueReleaseAll { chat_id },
-            Op::ReadPage { .. } | Op::Barrier(_) => return None,
+            Op::ReadPage { .. } | Op::SaveNativeIdentity { .. } | Op::Barrier(_) => return None,
         },
         Work::Request(_) => return None,
         #[cfg(test)]
         Work::Test(TestWork::Panic) => DeadOp::TestPanic,
     };
-    serde_json::to_string(&DeadLetter { at, error, op }).ok()
+    Some(DeadLetter { at, error, op })
 }
 
 /// Why waiting for the writer's answer ended without one.
@@ -1751,6 +2184,7 @@ mod tests {
         let chat = rows::create_chat(
             store.conn(),
             &NewChat {
+                agent_host: Default::default(),
                 agent_id: "mock".into(),
                 folder: PathBuf::from("/work"),
                 device_id: "dev".into(),
@@ -1762,6 +2196,7 @@ mod tests {
             store.conn(),
             "dev",
             &QueuedRow {
+                parts: Vec::new(),
                 id: "q".into(),
                 chat_id: chat.id.clone(),
                 text: "typed before the crash".into(),
@@ -1776,8 +2211,7 @@ mod tests {
             store,
             owner,
             "dev".into(),
-            profile.attachments_dir(),
-            profile.backups_dir(),
+            super::super::files::Files::local(&profile),
             recovered,
         );
         writer.mode = Mode::Damaged;

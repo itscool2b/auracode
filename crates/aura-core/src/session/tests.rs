@@ -1,6 +1,18 @@
 //! The session manager's tests that need the crate's internals: a store whose FIFO and retry are
 //! shrunk (saving pauses within a test), a small actor outbox, and the actor's panic hook.
 
+mod checkpoints;
+mod conversation;
+mod folder_context;
+mod folder_resolution;
+mod project_tools;
+mod steering;
+#[cfg(feature = "account-sync")]
+mod sync_history;
+mod workspace;
+mod workspace_removal;
+mod worktree_guards;
+
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -49,7 +61,7 @@ fn launch() -> LaunchSpec {
 
 fn ready_step(native: &str) -> Step {
     Step::Emit(DriverEvent::Ready(ReadyInfo {
-        native_session_id: native.into(),
+        native_session_id: Some(native.into()),
         agent_name: Some("Demo".into()),
         agent_version: Some("1.0.0".into()),
         capabilities: Capabilities::default(),
@@ -78,6 +90,20 @@ fn rig(drivers: Vec<ScriptedDriver>, config: WriterConfig, knobs: Knobs) -> Rig 
 }
 
 fn rig_with(drivers: Arc<dyn DriverFactory>, config: WriterConfig, knobs: Knobs) -> Rig {
+    rig_with_spec(
+        drivers,
+        config,
+        knobs,
+        aura_agents::get("mock").expect("mock").clone(),
+    )
+}
+
+fn rig_with_spec(
+    drivers: Arc<dyn DriverFactory>,
+    config: WriterConfig,
+    knobs: Knobs,
+    spec: aura_agents::AgentSpec,
+) -> Rig {
     let dir = tempfile::tempdir().expect("tempdir");
     let profile = Profiles::new(DataRoot::at(dir.path().join("data")))
         .open_active()
@@ -89,6 +115,19 @@ fn rig_with(drivers: Arc<dyn DriverFactory>, config: WriterConfig, knobs: Knobs)
     let rt = Handle::current();
     let store = ChatStore::start_with(store, owner, &profile, "device".into(), rt.clone(), config)
         .expect("store");
+    rig_from_store(dir, profile, folder, store, drivers, knobs, spec)
+}
+
+fn rig_from_store(
+    dir: tempfile::TempDir,
+    profile: Profile,
+    folder: PathBuf,
+    store: Arc<ChatStore>,
+    drivers: Arc<dyn DriverFactory>,
+    knobs: Knobs,
+    spec: aura_agents::AgentSpec,
+) -> Rig {
+    let rt = Handle::current();
     let mut vars = EnvMap::new();
     vars.insert(EnvKey::from("PATH"), "/usr/bin".into());
     let env = EnvResolver::fixed(ResolvedEnv {
@@ -99,7 +138,6 @@ fn rig_with(drivers: Arc<dyn DriverFactory>, config: WriterConfig, knobs: Knobs)
         warnings: Vec::new(),
         resolved_at_ms: 0,
     });
-    let spec = aura_agents::get("mock").expect("mock").clone();
     let detector = Detector::fixed(vec![FixedAgent::new(
         spec,
         aura_protocol::session::Availability::Ready {
@@ -117,7 +155,9 @@ fn rig_with(drivers: Arc<dyn DriverFactory>, config: WriterConfig, knobs: Knobs)
     );
     let manager = SessionManager::with_knobs(
         ManagerDeps {
+            worktrees: None,
             store: Arc::clone(&store),
+            checkpoints: None,
             env,
             spawner: spawner.clone(),
             detector,
@@ -810,7 +850,7 @@ async fn the_chat_list_never_waits_long_for_a_folder() {
         ScriptedDriver::new(vec![ready_step("b")]).0,
     ];
     let knobs = Knobs {
-        folder_check_wait: Duration::from_millis(200),
+        folder_check_wait: Duration::from_millis(500),
         ..Knobs::STANDARD
     };
     let rig = rig(drivers, WriterConfig::STANDARD, knobs);
@@ -894,7 +934,7 @@ impl AgentDriver for DropsItsEvents {
                 commands, events, ..
             } = ctx;
             let ready = DriverEvent::Ready(ReadyInfo {
-                native_session_id: "n1".into(),
+                native_session_id: Some("n1".into()),
                 agent_name: None,
                 agent_version: None,
                 capabilities: Capabilities::default(),

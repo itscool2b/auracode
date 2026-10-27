@@ -66,7 +66,11 @@ fn main() -> ExitCode {
         return linger(args.get(2).and_then(|ms| ms.parse().ok()).unwrap_or(0));
     }
     if args.iter().any(|arg| arg == "--version") {
-        println!("Hermes Agent v0.22.5 (aura-cli fake)");
+        println!(
+            "{}",
+            std::env::var("AURA_FAKE_VERSION")
+                .unwrap_or_else(|_| "Hermes Agent v0.22.5 (aura-cli fake)".into())
+        );
         return ExitCode::SUCCESS;
     }
     if args.get(1).map(String::as_str) != Some("acp") {

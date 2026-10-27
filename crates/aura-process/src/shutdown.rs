@@ -227,13 +227,13 @@ mod unix {
     }
 
     /// Right after the waiter reaped the agent: a group that is empty now is empty for good, and
-    /// its id is free for a new process to take, so nothing may signal it again. macOS answers
-    /// `EPERM` for a group of zombies, which no signal reaches either.
+    /// its id is free for a new process to take, so nothing may signal it again. Permission errors
+    /// are inconclusive; final cleanup inspects live group members before clearing the record.
     pub(crate) fn note_reaped(pgid: u32, gone: &AtomicBool) {
         let Some(group) = pid(pgid) else {
             return;
         };
-        if matches!(killpg(group, None), Err(Errno::ESRCH | Errno::EPERM)) {
+        if matches!(killpg(group, None), Err(Errno::ESRCH)) {
             gone.store(true, Ordering::Release);
         }
     }
@@ -243,28 +243,31 @@ mod unix {
     /// that, the group is the agent's until it is seen empty, or until a new process holds that
     /// pid: the kernel hands out a pid only while no group has it as its id, so the agent's group
     /// had emptied first.
-    fn group_is_ours(state: &ControlState) -> bool {
+    fn group_is_ours(state: &ControlState) -> nix::Result<bool> {
         if state.group_gone() {
-            return false;
+            return Ok(false);
         }
         if state.exited_now().is_none() {
-            return true;
+            return Ok(true);
         }
         let Some(leader) = pid(state.pgid) else {
-            return false;
+            return Err(Errno::EINVAL);
         };
-        if getpgid(Some(leader)) == Err(Errno::ESRCH) {
-            return true;
+        match getpgid(Some(leader)) {
+            Err(Errno::ESRCH) => Ok(true),
+            Ok(_) => {
+                state.mark_group_gone();
+                Ok(false)
+            }
+            Err(error) => Err(error),
         }
-        state.mark_group_gone();
-        false
     }
 
     /// Sends `signal` (`None` only probes) to the agent's group while it is still the agent's.
     /// `ESRCH` means it is empty for good.
     fn signal_group(state: &ControlState, signal: Option<Signal>) -> nix::Result<()> {
         let group = match pid(state.pgid) {
-            Some(group) if group_is_ours(state) => group,
+            Some(group) if group_is_ours(state)? => group,
             _ => return Err(Errno::ESRCH),
         };
         let sent = killpg(group, signal);
@@ -274,26 +277,20 @@ mod unix {
         sent
     }
 
-    /// Whether the agent's group still has a live member. macOS answers `EPERM` for a group of
-    /// zombies, which counts as gone once the agent exited.
+    /// Whether cleanup is still unconfirmed. Permission/read failures never prove absence.
     fn group_alive(state: &ControlState) -> bool {
         let exited = state.exited_now().is_some();
         match signal_group(state, None) {
-            // Linux counts zombies as members until their new parent reaps them: ask /proc.
-            Ok(()) if cfg!(target_os = "linux") => {
+            // Kernels can still report a group containing only zombies: inspect its live rows.
+            Ok(()) | Err(Errno::EPERM) => {
                 let live = ptable::group_has_live_member(state.pgid);
                 if !live && exited {
                     state.mark_group_gone();
                 }
                 live
             }
-            Ok(()) => true,
-            Err(Errno::EPERM) if !exited => true,
-            Err(Errno::EPERM) => {
-                state.mark_group_gone();
-                false
-            }
-            Err(_) => false,
+            Err(Errno::ESRCH) => false,
+            Err(_) => true,
         }
     }
 
@@ -301,6 +298,13 @@ mod unix {
     /// table, however many there are).
     fn alive_escaped(escaped: &[EscapedProc]) -> Vec<EscapedProc> {
         ptable::still_running(escaped.iter().map(|proc| (proc.pid, &proc.start)))
+            .into_iter()
+            .map(|(pid, start)| EscapedProc { pid, start })
+            .collect()
+    }
+
+    fn unconfirmed_escaped(escaped: &[EscapedProc]) -> Vec<EscapedProc> {
+        ptable::not_confirmed_gone(escaped.iter().map(|proc| (proc.pid, &proc.start)))
             .into_iter()
             .map(|(pid, start)| EscapedProc { pid, start })
             .collect()
@@ -458,7 +462,12 @@ mod unix {
                 None => wait_exit(state, Duration::ZERO).await,
             };
         }
-        // 7. Unregister and report.
+        // The agent can end on its own, or from an earlier kill, after the first read above.
+        // The later steps then find nothing to signal and never read the exit again.
+        exit = exit.or_else(|| state.exited_now());
+        // 7. Remove recovery metadata only after cleanup is confirmed. A failed process-table
+        // read or a surviving descendant must remain recoverable after this instance exits.
+        state.retain_registry.store(true, Ordering::Release);
         let registry = state.registry.clone();
         let agent = state.pid;
         let escaped = tree.escaped.clone();
@@ -466,30 +475,25 @@ mod unix {
         let leftovers = state
             .rt
             .spawn_blocking(move || {
-                registry.unregister(agent);
-                let mut leftovers: Vec<u32> = alive_escaped(&escaped)
-                    .iter()
-                    .map(|proc| proc.pid)
-                    .collect();
+                let alive = unconfirmed_escaped(&escaped);
+                let mut leftovers: Vec<u32> = alive.iter().map(|proc| proc.pid).collect();
                 if group_alive(&group) {
                     // Who is left in the group, if the table can say.
-                    let members = ptable::tree_of(group.pid, group.pgid)
-                        .map(|table| {
-                            table
-                                .iter()
-                                .filter(|info| info.pgid == group.pgid)
-                                .map(|info| info.pid)
-                                .collect::<Vec<u32>>()
-                        })
-                        .unwrap_or_default();
+                    let members = ptable::checked_group_members(group.pgid)
+                        // The group was still alive but could not be enumerated. Report its
+                        // identity as unconfirmed, rather than claiming an empty cleanup.
+                        .unwrap_or_else(|_| vec![group.pid]);
                     leftovers.extend(members);
                 }
                 leftovers.sort_unstable();
                 leftovers.dedup();
+                let complete = leftovers.is_empty() && group.exited_now().is_some();
+                registry.finish_shutdown(agent, alive, complete);
+                group.retain_registry.store(!complete, Ordering::Release);
                 leftovers
             })
             .await
-            .unwrap_or_default();
+            .unwrap_or_else(|_| vec![state.pid]);
         ShutdownReport {
             exit,
             steps,
@@ -587,7 +591,7 @@ mod unix {
                     let mut escaped =
                         classify(&table, worker.pid, worker.pgid, &worker.daemons).escaped;
                     let earlier = lock(&worker.escaped).clone();
-                    for proc in alive_escaped(&earlier) {
+                    for proc in unconfirmed_escaped(&earlier) {
                         if !escaped.iter().any(|known| known.pid == proc.pid) {
                             escaped.push(proc);
                         }
@@ -738,7 +742,7 @@ mod unix {
             let pid = sleeper.0.id();
             let (state, exit) = state_for(pid);
             assert!(
-                group_is_ours(&state),
+                group_is_ours(&state).expect("ownership"),
                 "not reaped: nothing else can have its id"
             );
             assert_eq!(signal_group(&state, None), Ok(()));
@@ -746,7 +750,7 @@ mod unix {
             // The waiter published the agent's exit, so it was reaped, yet a process holds its
             // pid: the agent's group had emptied first, and nothing signals this one.
             exit.send_replace(Some(crate::control::ExitInfo::unknown()));
-            assert!(!group_is_ours(&state));
+            assert!(!group_is_ours(&state).expect("ownership"));
             assert!(state.group_gone());
             assert_eq!(
                 signal_group(&state, Some(Signal::SIGKILL)),
@@ -764,10 +768,10 @@ mod unix {
             // empty, and from then on it is gone for good.
             let (state, exit) = state_for(pid);
             exit.send_replace(Some(crate::control::ExitInfo::unknown()));
-            assert!(group_is_ours(&state));
+            assert!(group_is_ours(&state).expect("ownership"));
             assert!(!group_alive(&state));
             assert!(state.group_gone());
-            assert!(!group_is_ours(&state));
+            assert!(!group_is_ours(&state).expect("ownership"));
         }
     }
 }

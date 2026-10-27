@@ -1,0 +1,90 @@
+# Default bindings are local-only. Production requires explicit --env production and its secrets.
+# Required secret CLOUD_ACCOUNT_ALLOWLIST is a nonempty JSON array of reviewed email addresses.
+# Keep membership in each environment's secret store, never in this file. No billing is enabled.
+name = "auracode-api-local"
+main = "build/index.js"
+compatibility_date = "2026-10-26"
+workers_dev = false
+preview_urls = false
+
+[build]
+command = "worker-build --release"
+
+[vars]
+APP_ORIGIN = "https://localhost:8787"
+EMAIL_FROM = "signin@auracode.si"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "auracode-local"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "../../infra/migrations"
+
+[[r2_buckets]]
+binding = "BLOBS"
+bucket_name = "auracode-local-blobs"
+
+[[send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["signin@auracode.si"]
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[observability]
+enabled = false
+
+[env.production]
+name = "auracode-api"
+account_id = "5feb14f2fe605875bcf1472f348cb7ed"
+routes = [{ pattern = "auracode.si/api/*", zone_name = "auracode.si" }]
+
+[env.production.vars]
+APP_ORIGIN = "https://auracode.si"
+EMAIL_FROM = "signin@auracode.si"
+TURNSTILE_SITE_KEY = "0x4AAAAAAFnCekg62MEAwe_j"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "auracode"
+database_id = "b5b9de26-4714-4475-aacc-9f599a7c2eb2"
+migrations_dir = "../../infra/migrations"
+
+[[env.production.r2_buckets]]
+binding = "BLOBS"
+bucket_name = "auracode-blobs"
+
+[[env.production.send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["signin@auracode.si"]
+
+[env.production.triggers]
+crons = ["*/5 * * * *"]
+
+# Isolated acceptance environment with separate secrets and a separate Turnstile widget.
+[env.preview]
+name = "auracode-api-preview"
+account_id = "5feb14f2fe605875bcf1472f348cb7ed"
+routes = [{ pattern = "preview.auracode.si/api/*", zone_name = "auracode.si" }]
+
+[env.preview.vars]
+APP_ORIGIN = "https://preview.auracode.si"
+EMAIL_FROM = "signin@auracode.si"
+TURNSTILE_SITE_KEY = "0x4AAAAAAFmu9KbL2voFn5QY"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "auracode-preview"
+database_id = "11d6fa29-5c39-49c5-a85b-1ecc7645dbd5"
+migrations_dir = "../../infra/migrations"
+
+[[env.preview.r2_buckets]]
+binding = "BLOBS"
+bucket_name = "auracode-preview-blobs"
+
+[[env.preview.send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["signin@auracode.si"]
+
+[env.preview.triggers]
+crons = ["*/5 * * * *"]

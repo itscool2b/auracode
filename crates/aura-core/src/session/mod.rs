@@ -12,12 +12,40 @@
 //! chat reads `Stopped`.
 
 mod actor;
+mod agent_installations;
+mod changes;
+mod cloning;
+mod composer;
+mod config_library;
+mod config_vendor;
+mod conversation;
+mod folder_resolution;
+mod gitworkspaces;
+mod installer;
 mod live;
+#[cfg(feature = "account-sync")]
+mod local_import;
+mod login;
 mod normalize;
 mod policy;
+#[cfg(feature = "account-sync")]
+mod preservation;
+mod project_tools;
+mod repository_publication;
+mod search;
 mod spawner;
+#[cfg(feature = "account-sync")]
+mod sync_history;
 #[cfg(test)]
 mod tests;
+mod workspace;
+mod workspace_folders;
+mod workspace_removal;
+mod worktree_setup;
+
+pub use config_library::LibraryRoots;
+pub use config_vendor::{PreparedVendor, VendorLaunch};
+pub use worktree_setup::WorktreeSetupLaunch;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -63,10 +91,38 @@ const BLOB_WAIT: Duration = Duration::from_secs(5);
 
 /// Permission denied, as `create_chat` reports it.
 const FOLDER_NOT_ALLOWED: &str = "auracode isn't allowed to open this folder. Allow it in System Settings > Privacy & Security > Files and Folders, then try again.";
+
+/// An update admission barrier. Dropping it before shutdown lets the user continue normally.
+/// It does not close storage, so editor drafts can still be flushed while it is held.
+pub struct IdleSessionGuard<'a> {
+    live: &'a LiveAgents,
+}
+
+impl Drop for IdleSessionGuard<'_> {
+    fn drop(&mut self) {
+        self.live.resume_admission();
+    }
+}
+
+/// Keeps new agent starts, Git mutations and vendor/configuration maintenance out of a quit flow.
+/// Existing owners finish normally. Cancellation reopens admission before permanent shutdown.
+pub struct OwnedWorkDrain<'a> {
+    live: &'a LiveAgents,
+}
+
+impl Drop for OwnedWorkDrain<'_> {
+    fn drop(&mut self) {
+        self.live.end_owned_drain();
+    }
+}
+
 /// Everything the manager runs on. Every constructor that spawns tasks takes `rt`, because Tauri's
 /// `setup` hook and run-event callbacks run outside any Tokio context.
 pub struct ManagerDeps {
+    pub worktrees: Option<Arc<crate::gitworkspaces::GitWorkspaces>>,
     pub store: Arc<ChatStore>,
+    /// Production enables checkpoints; deterministic driver-only test rigs may omit the service.
+    pub checkpoints: Option<Arc<crate::checkpoints::Checkpoints>>,
     pub env: Arc<EnvResolver>,
     /// `aura_process::Spawner`, or `FakeSpawner` in tests.
     pub spawner: Arc<dyn ProcessSpawner>,
@@ -220,6 +276,13 @@ pub(crate) struct Shared {
     shutting_down: AtomicBool,
     /// The chat list's folder checks, by folder.
     folders: Mutex<HashMap<PathBuf, FolderCheck>>,
+    /// Serializes busy-folder preflight and project chat creation/moves.
+    organization: tokio::sync::Mutex<()>,
+    continuations: Mutex<HashMap<String, conversation::PreparedContinuation>>,
+    project_tools: Mutex<HashMap<String, project_tools::PreparedTools>>,
+    removals: Mutex<HashMap<String, workspace_removal::Prepared>>,
+    #[cfg(feature = "account-sync")]
+    preservation: Mutex<HashMap<String, preservation::Prepared>>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
     #[cfg(test)]
     slow_folder: Mutex<Option<(PathBuf, Duration, Arc<AtomicU64>)>>,
@@ -332,6 +395,12 @@ impl SessionManager {
                     subscriptions: Mutex::new(HashMap::new()),
                     shutting_down: AtomicBool::new(false),
                     folders: Mutex::new(HashMap::new()),
+                    organization: tokio::sync::Mutex::new(()),
+                    #[cfg(feature = "account-sync")]
+                    preservation: Mutex::new(HashMap::new()),
+                    continuations: Mutex::new(HashMap::new()),
+                    project_tools: Mutex::new(HashMap::new()),
+                    removals: Mutex::new(HashMap::new()),
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
                 }),
@@ -421,6 +490,51 @@ impl SessionManager {
     /// results (`agents_refresh`).
     pub async fn agents(&self, refresh: bool) -> Vec<AgentEntry> {
         self.deps().detector.detect_all(refresh).await
+    }
+
+    pub async fn agent_maintenance(
+        &self,
+        agent_id: &str,
+    ) -> aura_protocol::agents::AgentMaintenance {
+        self.deps().detector.maintenance(agent_id).await
+    }
+
+    pub async fn agent_auth_status(
+        &self,
+        agent_id: &str,
+    ) -> aura_protocol::agents::AgentAuthStatus {
+        self.deps().detector.auth_status(agent_id).await
+    }
+
+    /// Only an explicit user action invokes the vendor's updater. The detector revalidates the
+    /// binary/channel, serializes aliases and verifies the resulting installation.
+    pub async fn update_agent(&self, agent_id: &str) -> Result<(), SessionError> {
+        if self.shared().is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
+        let manager = self.clone();
+        let agent_id = agent_id.to_owned();
+        // Closing an IPC caller must not release update admission while its vendor installer runs.
+        self.deps()
+            .rt
+            .spawn(async move {
+                let _guard = manager
+                    .shared()
+                    .live
+                    .try_maintenance()
+                    .ok_or(SessionError::ShuttingDown)?;
+                if manager.shared().is_shutting_down() {
+                    return Err(SessionError::ShuttingDown);
+                }
+                manager
+                    .deps()
+                    .detector
+                    .update(&agent_id)
+                    .await
+                    .map_err(|error| SessionError::AgentUnavailable(error.to_string()))
+            })
+            .await
+            .map_err(|_| SessionError::Internal("The vendor update task failed.".into()))?
     }
 
     /// The env agents start with: how it was resolved, and the names the scrub removes.
@@ -526,6 +640,7 @@ impl SessionManager {
             .detector
             .spec(&record.agent_id)
             .map_or_else(|| record.agent_id.clone(), |spec| spec.name.to_owned());
+        let agent_name = aura_agents::hosts::display_name(&agent_name, &record.agent_host);
         // The list never reads a folder (that is what a macOS privacy prompt guards), so a refusal
         // is the one the last start met; whether the folder exists is current, or what the last
         // start found when the check did not answer.
@@ -541,6 +656,7 @@ impl SessionManager {
                 .and_then(|state| state.title.clone())
                 .or(record.title),
             agent_id: record.agent_id,
+            agent_host: record.agent_host,
             agent_name,
             folder: record.folder.to_string_lossy().into_owned(),
             folder_state,
@@ -561,8 +677,25 @@ impl SessionManager {
         agent_id: &str,
         folder: &Path,
     ) -> Result<ChatSummary, SessionError> {
+        self.create_chat_on_host(agent_id, aura_protocol::agents::AgentHost::Native, folder)
+            .await
+    }
+
+    /// Creates a chat on the explicitly selected host. The folder is this device's local path;
+    /// a qualified host bridge must translate it before the driver or Linux process receives it.
+    pub async fn create_chat_on_host(
+        &self,
+        agent_id: &str,
+        agent_host: aura_protocol::agents::AgentHost,
+        folder: &Path,
+    ) -> Result<ChatSummary, SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
+        }
+        if let aura_process::HostAvailability::Unavailable { reason } =
+            aura_agents::hosts::execution(&agent_host).availability()
+        {
+            return Err(SessionError::AgentUnavailable(reason));
         }
         let detector = &self.deps().detector;
         if detector.spec(agent_id).is_none() {
@@ -586,6 +719,7 @@ impl SessionManager {
             .map_err(|_| SessionError::Internal("checking the folder failed".into()))?;
         checked?;
         let new = NewChat {
+            agent_host,
             agent_id: agent_id.to_owned(),
             folder: folder.to_path_buf(),
             device_id: self.deps().device_id.clone(),
@@ -720,6 +854,7 @@ impl SessionManager {
         }
         self.ask(chat_id, |reply| ChatMsg::Send {
             text: text.clone(),
+            parts: vec![aura_protocol::PromptPart::Text { text: text.clone() }],
             reply,
         })
         .await
@@ -874,6 +1009,18 @@ impl SessionManager {
         self.deps().logs.chat_dir(chat_id)
     }
 
+    /// Explicit, bounded diagnostics for a saved chat in this profile only.
+    pub async fn debug_bundle(&self, chat_id: &str) -> Result<String, SessionError> {
+        if !self.chats().await?.iter().any(|chat| chat.id == chat_id) {
+            return Err(SessionError::ChatNotFound(chat_id.to_owned()));
+        }
+        self.deps().logs.debug_bundle(chat_id).await.map_err(|_| {
+            SessionError::StorageUnavailable(
+                "The protocol log could not be read safely. Check its local permissions.".into(),
+            )
+        })
+    }
+
     /// Registers the webview's status channel (replacing its earlier one); returns its id.
     pub fn status_subscribe(&self, sink: Arc<dyn StatusSink>) -> String {
         let id = crate::ids::new_id();
@@ -894,6 +1041,53 @@ impl SessionManager {
             || lock(&self.inner.actors)
                 .values()
                 .any(|entry| !entry.book.is_empty())
+    }
+
+    /// Refuses live/starting/stopping agents and owned folder mutations, then atomically blocks
+    /// their admission. Parked queued prompts remain persisted for the next app launch.
+    pub fn try_quiesce_when_idle(&self) -> Option<IdleSessionGuard<'_>> {
+        if self.shared().is_shutting_down() || !self.shared().live.try_quiesce() {
+            return None;
+        }
+        Some(IdleSessionGuard {
+            live: &self.shared().live,
+        })
+    }
+
+    /// A normal quit must acquire this gate before waiting, then retain it through store closure.
+    pub fn try_drain_owned_work(&self) -> Option<OwnedWorkDrain<'_>> {
+        self.shared()
+            .live
+            .begin_owned_drain()
+            .then(|| OwnedWorkDrain {
+                live: &self.shared().live,
+            })
+    }
+
+    /// Never cancels a Git mutation or vendor updater. The caller keeps the app open on timeout.
+    pub async fn wait_owned_work(&self, deadline: Duration) -> bool {
+        tokio::time::timeout(deadline, async {
+            while self.shared().live.owned_work_count() != 0 {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .is_ok()
+    }
+
+    /// General shells require explicit quit confirmation instead of the protected mutation drain.
+    pub fn project_terminal_count(&self) -> usize {
+        self.shared().live.project_terminal_count()
+    }
+
+    pub async fn wait_project_terminals(&self, deadline: Duration) -> bool {
+        tokio::time::timeout(deadline, async {
+            while self.project_terminal_count() != 0 {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .is_ok()
     }
 
     /// Stops every live agent gracefully within `deadline`, then kills what is left. No new starts
@@ -1121,6 +1315,8 @@ pub struct ShutdownSummary {
 /// the UI shows.
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {
+    #[error("{0}")]
+    Organization(String),
     #[error("There is no chat with id {0}.")]
     ChatNotFound(String),
     #[error("auracode doesn't know an agent called \"{0}\".")]

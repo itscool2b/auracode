@@ -4,6 +4,7 @@ import { CommandError } from "../ipc";
 import {
   AppStore,
   agentChoice,
+  CATALOG_POLL_MS,
   DETECTION_POLL_MS,
   NewChatDraft,
   STATUS_RESUBSCRIBE_MS,
@@ -21,6 +22,8 @@ function agent(id: string, availability: AgentEntry["availability"]): AgentEntry
     launch: id,
     needs_download: false,
     last_verified: "",
+    installation: null,
+    latest_release: null,
   };
 }
 
@@ -303,6 +306,8 @@ describe("the app store", () => {
     expect(store.getSnapshot().agents?.[0]?.availability.state).toBe("ready");
     await vi.advanceTimersByTimeAsync(10 * DETECTION_POLL_MS);
     expect(fake.callsOf("agentsList")).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(CATALOG_POLL_MS);
+    expect(fake.callsOf("agentsList")).toHaveLength(3);
     const refreshing = store.refreshAgents();
     expect(store.getSnapshot().agentsRefreshing).toBe(true);
     await refreshing;
@@ -349,6 +354,54 @@ describe("choosing an agent", () => {
 });
 
 describe("the New chat draft", () => {
+  it("runs auth and updates only after explicit actions, and refuses unsupported updates", async () => {
+    const fake = new FakeTransport({
+      agentMaintenance: () =>
+        Promise.resolve({ auth_status: true, login_available: true, update_unavailable: null }),
+      agentAuthStatus: () => Promise.resolve({ state: "credentials_present" }),
+    });
+    const draft = new NewChatDraft(fake);
+    draft.chooseAgent("claude");
+    await settled();
+    expect(fake.methods()).toEqual(["agentMaintenance"]);
+    await draft.checkAuth();
+    expect(draft.getSnapshot().auth).toEqual({ state: "credentials_present" });
+    expect(await draft.updateAgent()).toBe(true);
+    expect(fake.callsOf("agentUpdate")).toEqual([["claude"]]);
+    fake.handlers.agentMaintenance = () =>
+      Promise.resolve({
+        auth_status: true,
+        login_available: true,
+        update_unavailable: "Managed by Editor.",
+      });
+    draft.chooseAgent("codex");
+    await settled();
+    expect(await draft.updateAgent()).toBe(false);
+    expect(fake.callsOf("agentUpdate")).toHaveLength(1);
+  });
+
+  it("does not show a delayed auth response on another agent", async () => {
+    let finish: ((value: { state: "sign_in_required" }) => void) | undefined;
+    const fake = new FakeTransport({
+      agentMaintenance: () =>
+        Promise.resolve({ auth_status: true, login_available: true, update_unavailable: null }),
+      agentAuthStatus: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    });
+    const draft = new NewChatDraft(fake);
+    draft.chooseAgent("claude");
+    await settled();
+    const pending = draft.checkAuth();
+    draft.chooseAgent("codex");
+    finish?.({ state: "sign_in_required" });
+    await pending;
+    await settled();
+    expect(draft.getSnapshot().agentId).toBe("codex");
+    expect(draft.getSnapshot().auth).toBeNull();
+    expect(draft.getSnapshot().maintenanceBusy).toBeNull();
+  });
   it("picker_cancel: cancelling the folder picker changes nothing", async () => {
     let answer: string | null = "/Users/me/code/app";
     const fake = new FakeTransport({ pickFolder: () => Promise.resolve(answer) });

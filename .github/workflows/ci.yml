@@ -1,131 +1,84 @@
-# Continuous integration: lint, typecheck and tests for the TypeScript packages; fmt, clippy and
-# tests for the Rust workspace; the generated-bindings check; the M0 spikes and the check of their
-# docs; and smoke runs of the real app in WebKitGTK and WebView2: the stream check, and the chat
-# screens against the demo agent.
-#
-# What runs when. The repo is private, so runner minutes come out of the Free plan's 2,000 included
-# minutes a month, billed with multipliers (Linux 1x, Windows 2x, macOS 10x).
-# - Pull requests: Linux and Windows.
-# - Pushes to milestone branches (m0-scaffold, m1a-core-acp, ...): Linux and Windows. This is how a
-#   branch gets its Windows and Linux results before its pull request exists, since a PR is opened
-#   only once the work is finished and tested, and Windows cannot be tested locally. Once the branch
-#   has an open pull request, its pushes skip (the `plan` job checks) as long as GitHub can merge
-#   the PR: the PR's run covers them. GitHub runs no `pull_request` workflow while a PR has a
-#   merge conflict, so until that is resolved the pushes run here, or they would get no results.
-# - Pushes to main and manual runs: Linux, Windows and macOS.
-# - Mondays, for breakage that arrives without a commit (a new Rust stable with new clippy lints, a
-#   WebKitGTK or runner image update): the rust job on Linux, and only clippy on Windows, the check
-#   such breakage hits first; the rest of the Windows job would more than double the run's price.
-#   The lint and powershell jobs skip it: their checks rarely break without a commit, and the next
-#   push runs them anyway.
-# macOS never runs per PR, per branch push or on the schedule: the developer verifies macOS locally
-# before opening each PR, so those runs would mostly repeat that check at ten times the price.
-#
-# Cost in included minutes. Each job is rounded up to whole minutes, then multiplied. Warm means a
-# usable Rust cache; cold means none: after a new Rust stable or lockfile change, after a week with
-# no run, and for pull requests until main has saved one (they can read only main's). The ceiling
-# is every job running to its timeout. Per job: plan 1, lint 4-6, powershell 2-4, rust on Linux
-# 10-30, on Windows 40-100 (clippy alone 10-25), on macOS 40-110. Per event, warm to cold:
-# - milestone-branch push: 60-140 (ceiling 265)
-# - pull request, when opened and on each push to it: 55-140 (ceiling 260)
-# - main push or manual run: 100-250 (ceiling 660)
-# - weekly run: 20-55 (ceiling 225). An idle month is four or five of these plus Build's nightly
-#   plan job (about 30): about 120-270 in all, the top only if every weekly run starts cold.
-#
-# Runner labels name their OS version (ubuntu-24.04, windows-2025, macos-26); lint-workflows.sh
-# rejects the -latest labels. GitHub moves a -latest label to a new OS over weeks, during which the
-# same commit can land on either image, and the Rust cache key does not name the image, so each
-# image would restore the other's build. Move a label on purpose, when GitHub deprecates its image.
-#
-# Manual runs (Actions > CI > Run workflow, or `gh workflow run ci.yml --ref <branch>`) work only once
-# this file is on the default branch: GitHub ignores workflow_dispatch for a workflow that exists
-# only on other branches. Branch pushes have no such limit, which is why they are the pre-PR path.
+# Deliberate integration and final verification only. Routine commits and pushes run no CI.
+# The active product targets are Windows and macOS. Linux/WSL are deferred.
+# Use the supported Intel macOS pool after arm64 runner acquisition failed in final CI.
 name: CI
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-      # Milestone branches: an `m`, a digit, anything after (m0-scaffold, m6-website).
-      - "m[0-9]*"
   workflow_dispatch:
-  schedule:
-    # The weekly run; see the top of this file. Minute 17 avoids the top of the hour, when GitHub's
-    # scheduler is busiest and delays or drops runs. Jobs tell it apart by `github.event_name`.
-    - cron: "17 6 * * 1"
+    inputs:
+      refresh_bindings:
+        description: Generate bindings on macOS before frontend checks and publish parity artifacts
+        type: boolean
+        default: false
+        required: false
+      encrypted_storage:
+        description: Verify SQLCipher and account sync on both platforms (enable for final verification)
+        type: boolean
+        default: false
+        required: false
 
 permissions:
   contents: read
 
 concurrency:
-  # Pull requests and milestone-branch pushes share a group per ref, so a newer commit cancels the
-  # run it makes obsolete. Every other run (main pushes, schedules, manual runs) gets a group of its
-  # own: GitHub keeps one pending run per group and cancels the others even without
-  # cancel-in-progress, so a shared group would drop the middle one of three queued main runs.
-  group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main')) && github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
-  # Ride out transient network failures instead of failing a 20 minute job on one bad request.
   CARGO_NET_RETRY: 10
   RUSTUP_MAX_RETRIES: 10
   RUST_BACKTRACE: 1
 
 defaults:
   run:
-    # One shell on every runner (Git Bash on Windows), so scripts and `--` arguments behave the
-    # same everywhere. PowerShell would be the Windows default.
     shell: bash
 
 jobs:
-  # Pushes to milestone branches only: skip the whole run when an open pull request from the branch
-  # gets a run of its own for this commit, as it does unless the pull request has a merge conflict
-  # (.github/scripts/check-open-pr.sh). On every other event this job is skipped, and the jobs that
-  # need it still run because their conditions start with `!cancelled()`.
-  plan:
-    name: plan
-    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read # check out the script
-      pull-requests: read # find the branch's open pull request and whether GitHub can merge it
-    outputs:
-      covered_by_pr: ${{ steps.pr.outputs.covered }}
-    steps:
-      - name: Check out the CI scripts
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          sparse-checkout: .github/scripts
-
-      - name: Look for an open pull request whose run covers this push
-        id: pr
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ github.ref_name }}
-        run: bash .github/scripts/check-open-pr.sh
-
-  lint:
-    name: lint
-    needs: plan
-    # Not on the weekly run; see the top of this file.
-    if: ${{ !cancelled() && github.event_name != 'schedule' && needs.plan.result != 'failure' && needs.plan.outputs.covered_by_pr != 'true' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    # Setup steps stop the job on failure. The checks after them carry `!cancelled()` so a failing
-    # check does not hide the others (one run reports every problem), and they wait for
-    # `steps.ready`, the last setup step, so they never run on a half-built environment.
+  bindings:
+    name: bootstrap bindings (macOS)
+    if: inputs.refresh_bindings
+    runs-on: macos-26-intel
+    timeout-minutes: 35
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      # v6.1.0 added pnpm 12 support (the floating v6 tag still pointed at v6.0.10 when this was
-      # pinned). No `version` input, so the version comes from `packageManager` in package.json.
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-on-failure: true
+      - name: Export exact bindings
+        run: bash .github/scripts/export-bindings.sh refresh "$RUNNER_TEMP/bindings-bootstrap"
+      - name: Publish exact generated bindings
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bindings-bootstrap-${{ github.sha }}
+          path: ${{ runner.temp }}/bindings-bootstrap/bindings.ts
+          if-no-files-found: error
+          retention-days: 7
+  lint:
+    name: lint
+    needs: bindings
+    if: ${{ !cancelled() && (needs.bindings.result == 'success' || needs.bindings.result == 'skipped') }}
+    runs-on: macos-26-intel
+    timeout-minutes: 60
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Use generated bindings for this explicit refresh run
+        if: inputs.refresh_bindings
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bindings-bootstrap-${{ github.sha }}
+          path: apps/desktop/src
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
@@ -137,12 +90,6 @@ jobs:
 
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
-
-      # rust-toolchain.toml selects the stable channel with clippy and rustfmt, and this installs
-      # exactly that up front (the runner image's preinstalled stable lags behind). rustup still
-      # applies the file to every cargo call, so if it is ever pinned to a version, rustup installs
-      # that version on its own; change `toolchain` to match to skip the extra download. Pinned to
-      # a commit, the action can no longer read the toolchain from its ref name, hence `toolchain`.
       - name: Set up Rust
         id: ready
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
@@ -162,21 +109,129 @@ jobs:
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: pnpm test
 
+      - name: Build and verify the Rust API and static website runtimes
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        timeout-minutes: 20
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo install worker-build --version 0.8.7 --locked
+          pnpm --filter @auracode/api worker:build
+          pnpm --filter @auracode/api worker:test
+          pnpm --filter @auracode/web-worker worker:build
+          pnpm --filter @auracode/web-worker worker:test
+
+      - name: Install browser test engines
+        id: browsers
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: pnpm --filter @auracode/desktop exec playwright install --with-deps chromium webkit
+
+      - name: Check Orbit in Chromium and WebKit
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
+        run: pnpm --filter @auracode/desktop check:orbit
+
+      - name: Check settings and explicit update controls
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 15
+        run: pnpm --filter @auracode/desktop check:settings
+
+      - name: Check Library, account vault and configuration recovery
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
+        run: |
+          pnpm --filter @auracode/desktop exec node scripts/check-library.mjs
+          pnpm --filter @auracode/desktop exec node scripts/check-config-recovery.mjs
+          pnpm --filter @auracode/desktop exec node scripts/check-account-vault.mjs
+          pnpm --filter @auracode/desktop exec node scripts/check-account-reset.mjs
+          pnpm --filter @auracode/desktop exec node scripts/check-folder-resolution.mjs
+          pnpm --filter @auracode/desktop exec node scripts/check-repository-publication.mjs
+          pnpm --filter @auracode/desktop exec node scripts/check-workspace-removal.mjs
+          pnpm --filter @auracode/desktop exec node scripts/check-agent-installations.mjs
+
+      - name: Check explicit installer and clone actions
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: pnpm --filter @auracode/desktop exec node scripts/check-setup-actions.mjs
+
+      - name: Check active profile and cached sync status
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: pnpm --filter @auracode/desktop exec node scripts/check-profile-status.mjs
+
+      - name: Check explicit chat sign-in recovery
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: pnpm --filter @auracode/desktop exec node scripts/check-chat-auth.mjs
+
+      - name: Check website accounts and verified release downloads
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
+        run: |
+          pnpm --filter @auracode/web test:release
+          pnpm --filter @auracode/web test:browser
+
+      - name: Keep account, Library and website browser evidence
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: account-library-web-browser
+          path: |
+            target/library-browser
+            target/config-recovery-browser
+            target/account-vault-browser
+            target/account-reset-browser
+            target/folder-resolution-browser
+            target/repository-publication-browser
+            target/workspace-removal-browser
+            target/agent-installations-browser
+            target/setup-actions-browser
+            target/profile-status-browser
+            target/chat-auth-browser
+            target/web-checks
+            target/release-preview-*/*.png
+          retention-days: 7
+
+      - name: Keep Orbit browser evidence
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: orbit-browser
+          path: target/orbit-browser
+          retention-days: 7
+
+      - name: Keep settings and Git review evidence
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: settings-browser
+          path: target/settings-browser
+          retention-days: 7
+
+      - name: Check setup in Chromium and WebKit
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
+        run: pnpm --filter @auracode/desktop check:setup
+      - name: Keep setup browser evidence
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: setup-browser
+          path: target/setup-browser
+          retention-days: 7
+
       - name: Check Rust formatting
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: cargo fmt --all --check
-
-      # The spike docs against the code, lockfiles and generated bindings they cite
-      # (docs/spikes/doc-check). It only reads the checkout, so nothing has to be built first.
       - name: Check the spike docs
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: cargo test --manifest-path docs/spikes/doc-check/Cargo.toml --locked
-
-      # Every action pinned to a commit, every runner label naming an OS version, and every
-      # schedule comparison naming a scheduled cron.
       - name: Check the workflows
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bash .github/scripts/lint-workflows.sh
+
+      - name: Install ShellCheck if needed
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: command -v shellcheck >/dev/null || brew install shellcheck
 
       - name: Check the CI scripts (ShellCheck)
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
@@ -184,22 +239,15 @@ jobs:
 
       - name: Test the CI scripts
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
-        run: bash .github/scripts/test.sh
-
-  # The render-power spike's Windows suite (docs/spikes/render-power) is plain PowerShell that has
-  # to run under both Windows PowerShell 5.1, which every Windows PC has, and PowerShell 7. Its unit
-  # tests need no build, so they get a job of their own: no Rust failure, setup step or timeout can
-  # skip them, and they report within minutes.
+        run: |
+          node --test .github/scripts/acceptance-gates.test.mjs .github/scripts/webdriver-smoke.test.mjs
+          bash .github/scripts/test.sh
+          bash .github/scripts/test-export-bindings.sh
   powershell:
     name: powershell (windows-2025)
-    needs: plan
-    # Not on the weekly run; see the top of this file.
-    if: ${{ !cancelled() && github.event_name != 'schedule' && needs.plan.result != 'failure' && needs.plan.outputs.covered_by_pr != 'true' }}
     runs-on: windows-2025
     timeout-minutes: 10
     steps:
-      # The scripts reach the PC as raw downloads from GitHub, with the repository's LF line
-      # endings, so test those bytes rather than Git for Windows' CRLF conversion of them.
       - name: Keep LF line endings
         run: git config --global core.autocrlf false
 
@@ -208,9 +256,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: docs/spikes/render-power
-
-      # `-File`, so the script's own exit code (1 when a test fails) fails the step.
+          sparse-checkout: |
+            docs/spikes/render-power
+            .github/scripts
       - name: Test the render-power suite (Windows PowerShell 5.1)
         run: powershell -NoProfile -ExecutionPolicy Bypass -File docs/spikes/render-power/test-render-power.ps1
 
@@ -218,32 +266,23 @@ jobs:
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: pwsh -NoProfile -File docs/spikes/render-power/test-render-power.ps1
 
+      - name: Test WebDriver provisioning without network or native executables
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        shell: pwsh
+        run: ./.github/scripts/test-prepare-webdriver.ps1
+
   rust:
     name: rust (${{ matrix.os }})
-    needs: plan
-    if: ${{ !cancelled() && needs.plan.result != 'failure' && needs.plan.outputs.covered_by_pr != 'true' }}
     strategy:
-      # Let Linux finish when Windows fails (and the reverse): the developer cannot reproduce
-      # Windows locally, so every result from a run is worth having.
       fail-fast: false
       matrix:
         os:
-          - ubuntu-24.04
+          - macos-26-intel
           - windows-2025
     runs-on: ${{ matrix.os }}
-    # A cold Windows run (two vCPUs for private repos) compiles the workspace for clippy, for the
-    # tests and for the smoke build; 75 minutes leaves room for that.
     timeout-minutes: 75
-    # Shared with rust-macos through a YAML anchor, so the two jobs cannot drift apart. Steps
-    # branch on `runner.os`, never on `matrix`, because rust-macos has no matrix. Same setup and
-    # check pattern as the lint job.
-    steps: &rust_steps
+    steps:
       - name: Keep LF line endings (Windows)
-        # Git for Windows checks text files out with CRLF by default. Byte-comparing tests, the
-        # bindings check and the bash scripts in .github/scripts would then break on differences
-        # that do not exist in the repository. (This comment sits inside the step because zizmor
-        # 1.31 crashes on a comment placed between an anchor and the first item of the anchored
-        # list.)
         if: runner.os == 'Windows'
         run: git config --global core.autocrlf false
 
@@ -251,32 +290,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      # Tauri v2's Linux prerequisites (https://v2.tauri.app/start/prerequisites/#linux), plus Xvfb
-      # for the smoke run's display.
-      - name: Install Tauri system dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get -o Acquire::Retries=3 update
-          sudo apt-get -o Acquire::Retries=3 install -y \
-            libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev \
-            libayatana-appindicator3-dev librsvg2-dev xvfb
-
-      # See the note on this step in the lint job.
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: stable
           components: clippy, rustfmt
-
-      # Pushes (main and milestone branches) and main's weekly and manual runs write the cache;
-      # before a branch's first merge, main has none to offer it. Pull requests restore main's
-      # entries but never save their own, so PR runs cannot evict main's from the repository's
-      # 10 GB quota. The weekly run's Windows leg only reads: it runs clippy alone, and rust-cache
-      # never rewrites an entry it restored exactly, so a clippy-only save would leave every later
-      # Windows run with the same key rebuilding the tests, the spike and the smoke build. Saving
-      # after a failure keeps the dependency cache current when a new toolchain breaks the build.
-      # The last setup step, so the checks below wait for it.
+      - name: Select native Windows Perl for vendored OpenSSL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/scripts/select-native-perl.ps1
       - name: Cache Rust build
         id: ready
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -285,58 +307,31 @@ jobs:
             . -> target
             docs/spikes/windows-spawn -> target
             docs/spikes/claude-control -> target
-          save-if: ${{ (github.ref == 'refs/heads/main' || github.event_name == 'push') && (github.event_name != 'schedule' || runner.os != 'Windows') }}
           cache-on-failure: true
-
-      # `--locked` fails the run when Cargo.lock is stale instead of silently re-resolving it.
-      # Nothing up to the smoke steps needs the frontend: without the custom-protocol feature (only
-      # `tauri build` turns it on), `generate_context!` embeds no assets while devUrl is set.
       - name: Clippy
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
-
-      # The weekly run's Windows leg ends here, after clippy; see the top of this file. Every check
-      # below waits for this step rather than for `steps.ready`, so that leg skips them all, while
-      # on every other run a failed clippy still hides nothing.
-      - name: Continue after clippy (not on the weekly Windows run)
+      - name: Continue with remaining checks
         id: full
-        if: ${{ !cancelled() && steps.ready.outcome == 'success' && (github.event_name != 'schedule' || runner.os != 'Windows') }}
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: echo "Running the remaining checks on $RUNNER_OS."
-
-      # `--no-fail-fast`: cargo otherwise stops at the first failing test binary, hiding failures in
-      # the remaining crates (the expensive kind to discover one push at a time on Windows).
       - name: Test
         if: ${{ !cancelled() && steps.full.outcome == 'success' }}
         run: cargo test --workspace --locked --no-fail-fast
-
-      # Regenerates apps/desktop/src/bindings.ts and fails if the committed file differs. Running
-      # on every OS also catches commands that only exist behind a `#[cfg]`, which would make the
-      # shared TypeScript file depend on the platform that generated it.
       - name: Check generated TypeScript bindings
+        id: bindings
         if: ${{ !cancelled() && steps.full.outcome == 'success' }}
-        run: |
-          log="$(mktemp)"
-          cargo test --locked -p auracode-desktop export_bindings -- --color never | tee "$log"
-          # A renamed, ignored or deleted test would otherwise turn this check into a silent no-op.
-          if ! grep -Eq '^test [^ ]*export_bindings[^ ]* \.\.\. ok' "$log"; then
-            echo "::error::No passing test matching 'export_bindings' ran in auracode-desktop, so bindings.ts was not regenerated."
-            exit 1
-          fi
-          # `git diff` ignores untracked files, so a never-committed bindings.ts would pass it.
-          if ! git ls-files --error-unmatch apps/desktop/src/bindings.ts > /dev/null; then
-            echo "::error file=apps/desktop/src/bindings.ts::bindings.ts is not committed. Run 'cargo test -p auracode-desktop export_bindings' and commit it."
-            exit 1
-          fi
-          if ! git diff --exit-code -- apps/desktop/src/bindings.ts; then
-            echo "::error file=apps/desktop/src/bindings.ts::bindings.ts is out of date. Run 'cargo test -p auracode-desktop export_bindings' and commit the result."
-            exit 1
-          fi
-
-      # The Windows spawning spike, on Windows and Linux. Its integration tests run from a staged
-      # folder (.github/scripts/stage-spawn-spike.sh), the same folder Windows uploads so the
-      # manual checklist in docs/spikes/windows-spawn.md runs on a PC without Rust. The C runtime is
-      # linked statically on Windows, so those executables do not need the Visual C++
-      # Redistributable on that PC.
+        env:
+          BINDINGS_MODE: ${{ inputs.refresh_bindings && 'refresh' || 'check' }}
+        run: bash .github/scripts/export-bindings.sh "$BINDINGS_MODE" "$RUNNER_TEMP/bindings-$RUNNER_OS"
+      - name: Publish independently generated bindings
+        if: ${{ !cancelled() && steps.bindings.outputs.generated == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bindings-${{ runner.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/bindings-${{ runner.os }}/bindings.ts
+          if-no-files-found: error
+          retention-days: 7
       - name: Build the Windows spawning spike
         id: spawn-build
         if: ${{ !cancelled() && steps.full.outcome == 'success' && runner.os != 'macOS' }}
@@ -359,10 +354,6 @@ jobs:
         run: >-
           bash .github/scripts/stage-spawn-spike.sh "$RUNNER_TEMP/windows-spawn-build.jsonl"
           "$RUNNER_TEMP/windows-spawn-spike"
-
-      # From the staged folder, where the helpers are no longer at their build paths, so this also
-      # proves the artifact works on its own. The step timeout caps a hung child process, which
-      # would otherwise burn the whole job timeout at the Windows 2x rate.
       - name: Test the Windows spawning spike (integration tests)
         if: ${{ !cancelled() && steps.spawn-stage.outcome == 'success' }}
         timeout-minutes: 20
@@ -370,9 +361,6 @@ jobs:
         env:
           TEST_EXE: ${{ steps.spawn-stage.outputs.test_exe }}
         run: '"$TEST_EXE"'
-
-      # Uploaded even when the tests failed: a failure is exactly when the manual check on a real
-      # PC matters most.
       - name: Upload the Windows spawning spike (Windows)
         if: ${{ !cancelled() && steps.spawn-stage.outcome == 'success' && runner.os == 'Windows' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -381,30 +369,16 @@ jobs:
           path: ${{ runner.temp }}/windows-spawn-spike
           if-no-files-found: error
           retention-days: 7
-          # A re-run of the job uploads again under the same name.
           overwrite: true
-
-      # Compile only, never run: running it would drive a real Claude Code session, which needs
-      # the CLI, an account and quota, none of which belong in CI.
       - name: Build the Claude control spike (compile only)
         if: ${{ !cancelled() && steps.full.outcome == 'success' }}
         run: cargo build --manifest-path docs/spikes/claude-control/Cargo.toml --locked
-
-      # Its unit tests do run: the test harness, never the spike's `main`. They feed the framing,
-      # protocol and redaction code canned input and stand /bin/sh in for claude, so they need
-      # neither the CLI nor the network. Linux only: the logic is the same everywhere, and the
-      # process tests are Unix-only.
       - name: Test the Claude control spike (unit tests)
-        if: ${{ !cancelled() && steps.full.outcome == 'success' && runner.os == 'Linux' }}
+        if: ${{ !cancelled() && steps.full.outcome == 'success' }}
         run: cargo test --manifest-path docs/spikes/claude-control/Cargo.toml --locked
-
-      # The smoke runs, on Windows and Linux: the app with its frontend embedded drives a real
-      # webview (WebView2; WebKitGTK under Xvfb) through the typed commands and channels and reports
-      # the result (.github/scripts/run-smoke.sh). They have their own JS setup down here, so a
-      # TypeScript error (the lint job reports those) cannot skip the Rust checks above.
       - name: Set up pnpm (smoke)
         id: pnpm
-        if: ${{ !cancelled() && steps.full.outcome == 'success' && runner.os != 'macOS' }}
+        if: ${{ !cancelled() && steps.bindings.outcome == 'success' }}
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node.js (smoke)
@@ -419,65 +393,126 @@ jobs:
         id: js
         if: ${{ !cancelled() && steps.node.outcome == 'success' }}
         run: pnpm install --frozen-lockfile
-
-      # A debug build without bundles. `tauri build` runs the frontend build (beforeBuildCommand)
-      # and turns on the custom-protocol feature that embeds it; most dependencies are already
-      # compiled for the tests.
       - name: Build the app with its frontend embedded (smoke)
         id: smoke-build
         if: ${{ !cancelled() && steps.js.outcome == 'success' }}
         timeout-minutes: 30
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
         run: pnpm --filter @auracode/desktop tauri build --debug --no-bundle
-
-      # The stream check: a demo turn, a cancelled turn and a stress burst. Xvfb has no GPU and no
-      # DRM device for WebKitGTK's DMA-BUF renderer, so the variable keeps WebKitGTK on its
-      # shared-memory path instead of relying on its detection. The screen fits the window's
-      # default size. The app's own watchdog ends a stuck run after 120 s.
       - name: Smoke test the app (streams)
         if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' }}
         timeout-minutes: 5
-        env:
-          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
         run: |
-          if [ "$RUNNER_OS" = Linux ]; then
-            xvfb-run -a -s "-screen 0 1920x1080x24" bash .github/scripts/run-smoke.sh target/debug/auracode stream
-          else
-            bash .github/scripts/run-smoke.sh target/debug/auracode.exe stream
-          fi
-
-      # The chat screens against the demo agent (apps/desktop/src/lib/smokeChat.ts), in two launches
-      # on one data folder with the quit flow between them: every check is printed. It runs after a
-      # failed stream check too. The app's watchdogs end a stuck launch after 300 s and 120 s, so
-      # the timeout covers both with room for startup. CI never sets AURACODE_SMOKE_AGENT, which
-      # runs a real agent; run-smoke.sh refuses it here anyway.
+          binary=target/debug/auracode
+          if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
+          bash .github/scripts/run-smoke.sh "$binary" stream
       - name: Smoke test the chat UI
         if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' }}
         timeout-minutes: 10
-        env:
-          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
         run: |
-          if [ "$RUNNER_OS" = Linux ]; then
-            xvfb-run -a -s "-screen 0 1920x1080x24" bash .github/scripts/run-smoke.sh target/debug/auracode chat
-          else
-            bash .github/scripts/run-smoke.sh target/debug/auracode.exe chat
-          fi
-
-      # A cancelled job (superseded by a newer push, or out of time) stops half-built. rust-cache's
-      # post step saves when the job succeeded or when CACHE_ON_FAILURE, which it exports from
-      # `cache-on-failure`, is true, so it would save that half-built target. Later runs with the
-      # same key would restore it, rebuild the rest and never save the whole, since rust-cache does
-      # not rewrite an entry it matched exactly. Turning the variable off skips that save.
+          binary=target/debug/auracode
+          if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
+          bash .github/scripts/run-smoke.sh "$binary" chat
+      - name: Install pinned external WebDriver bridge (Windows)
+        id: webdriver-tools
+        if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' && runner.os == 'Windows' }}
+        timeout-minutes: 10
+        run: cargo install tauri-driver --version 2.1.0 --locked --root "$RUNNER_TEMP/webdriver-tools"
+      - name: Prepare matching Microsoft Edge Driver (Windows)
+        id: webdriver-native
+        if: ${{ !cancelled() && steps.webdriver-tools.outcome == 'success' }}
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./.github/scripts/prepare-webdriver.ps1 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'webdriver-native')
+      - name: External WebDriver smoke of the real Windows app
+        if: ${{ !cancelled() && steps.webdriver-native.outcome == 'success' }}
+        timeout-minutes: 8
+        env:
+          NATIVE_DRIVER: ${{ steps.webdriver-native.outputs.native_driver }}
+          EXPECTED_WEBVIEW_VERSION: ${{ steps.webdriver-native.outputs.webview_version }}
+        run: >-
+          node .github/scripts/webdriver-smoke.mjs "$GITHUB_WORKSPACE/target/debug/auracode.exe"
+          "$RUNNER_TEMP/webdriver-tools/bin/tauri-driver.exe" "$NATIVE_DRIVER"
+          "$RUNNER_TEMP/webdriver-evidence"
+      - name: Keep external Windows WebDriver evidence
+        if: ${{ !cancelled() && steps.webdriver-tools.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-webdriver-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/webdriver-evidence
+            ${{ runner.temp }}/webdriver-native/versions.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Keep native smoke evidence
+        if: ${{ !cancelled() && steps.smoke-build.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-smoke-${{ runner.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/auracode-smoke*.stdout
+          if-no-files-found: warn
+          retention-days: 7
       - name: Keep a cancelled build out of the cache
         if: cancelled()
         run: echo "CACHE_ON_FAILURE=false" >> "$GITHUB_ENV"
-
-  rust-macos:
-    name: rust (macos-26)
-    # Main pushes and manual runs only: see the top of this file. Never skipped as a duplicate,
-    # since the `plan` job only runs for milestone-branch pushes, which this job ignores.
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
-    runs-on: macos-26
-    # A cold run (clippy, then the tests' full build) takes about 15 minutes on the macOS runner
-    # (3 cores). 40 leaves room for a slow one and caps a hung run at 400 included minutes.
-    timeout-minutes: 40
-    steps: *rust_steps
+  encrypted-storage:
+    name: encrypted storage (${{ matrix.os }})
+    if: inputs.encrypted_storage
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26-intel, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+          components: clippy
+      - name: Select native Windows Perl for vendored OpenSSL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/scripts/select-native-perl.ps1
+      - name: Cache encrypted build
+        id: ready
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: encrypted-storage
+          cache-on-failure: true
+      - name: Test SQLCipher and sync client
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: cargo test -p aura-sync --features sqlcipher --lib --locked
+      - name: Test encrypted core, files, checkpoints and sync ledger
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: cargo test -p aura-core --features account-sync --lib --locked
+      - name: Clippy sync client with SQLCipher
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: cargo clippy -p aura-sync --features sqlcipher --all-targets --locked -- -D warnings
+      - name: Clippy core with account sync
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: cargo clippy -p aura-core --features account-sync --all-targets --locked -- -D warnings
+  bindings-parity:
+    name: generated binding parity
+    needs: [bindings, rust]
+    if: ${{ !cancelled() && inputs.refresh_bindings && needs.bindings.result == 'success' }}
+    runs-on: macos-26-intel
+    timeout-minutes: 5
+    steps:
+      - name: Read macOS bootstrap bindings
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bindings-bootstrap-${{ github.sha }}
+          path: bootstrap
+      - name: Read independently generated Windows bindings
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bindings-Windows-${{ github.sha }}
+          path: windows
+      - name: Compare exact output across platforms
+        run: cmp bootstrap/bindings.ts windows/bindings.ts

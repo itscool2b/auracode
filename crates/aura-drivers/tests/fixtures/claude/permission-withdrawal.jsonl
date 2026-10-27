@@ -1,0 +1,22 @@
+{"d":"note","note":{"text":"Synthetic native Claude fixture: permission-withdrawal. No paid calls or personal data."}}
+{"d":"note","note":{"start":{"agent_id":"claude","dialect":"claude","resume":null,"native_session_id":"<SESSION_1>","autonomy":"ask","desired":{},"spawn_id":"019a0000-0000-7000-8000-00000000aaaa"}}}
+{"d":"out","msg":{"type":"control_request","request_id":"recorded-init","request":{"subtype":"initialize","hooks":null}}}
+{"d":"in","msg":{"type":"control_response","response":{"subtype":"success","request_id":"recorded-init","response":{"claude_code_version":"2.1.310","current_permission_mode":"default","session_state":"idle","model":"haiku","models":[{"value":"haiku","displayName":"Haiku","supportedEffortLevels":["low","medium","high"]}],"commands":[{"name":"usage","description":"Show usage","builtin":true}]}}}}
+{"d":"out","msg":{"request":{"subtype":"get_context_usage","detail":"summary"},"request_id":"recorded-context-1","type":"control_request"}}
+{"d":"out","msg":{"request":{"subtype":"get_usage","skip_behaviors":true},"request_id":"recorded-usage-1","type":"control_request"}}
+{"d":"in","msg":{"response":{"response":{},"request_id":"recorded-context-1","subtype":"success"},"type":"control_response"}}
+{"d":"in","msg":{"response":{"response":{},"request_id":"recorded-usage-1","subtype":"success"},"type":"control_response"}}
+{"d":"cmd","cmd":{"type":"prompt","turn_id":"T1","parts":[{"type":"text","text":"hello"}]}}
+{"d":"out","msg":{"type":"user","message":{"role":"user","content":"hello"},"parent_tool_use_id":null,"session_id":"<SESSION_1>","uuid":"recorded-first"}}
+{"d":"in","msg":{"type":"system","subtype":"session_state_changed","state":"running"}}
+{"d":"in","msg":{"type":"result","subtype":"success","user_message_uuid":"recorded-first","usage":{"input_tokens":3,"output_tokens":4}}}
+{"d":"out","msg":{"request":{"subtype":"get_context_usage","detail":"summary"},"request_id":"recorded-context-2","type":"control_request"}}
+{"d":"out","msg":{"request":{"subtype":"get_usage","skip_behaviors":true},"request_id":"recorded-usage-2","type":"control_request"}}
+{"d":"in","msg":{"response":{"response":{},"request_id":"recorded-context-2","subtype":"success"},"type":"control_response"}}
+{"d":"in","msg":{"response":{"response":{},"request_id":"recorded-usage-2","subtype":"success"},"type":"control_response"}}
+{"d":"in","msg":{"type":"system","subtype":"session_state_changed","state":"requires_action"}}
+{"d":"in","msg":{"type":"control_request","request_id":"permission-1","request":{"subtype":"can_use_tool","tool_name":"Bash","description":"Write a local test file","input":{"command":"touch example.txt","request_id":"recorded-init","uuid":"recorded-first"}}}}
+{"d":"in","msg":{"type":"control_cancel_request","request_id":"permission-1"}}
+{"d":"cmd","cmd":{"type":"respond_permission","request_id":"permission-1","option_id":"allow"}}
+{"d":"in","msg":{"type":"system","subtype":"session_state_changed","state":"idle"}}
+{"d":"cmd","cmd":{"type":"shutdown"}}

@@ -1,8 +1,21 @@
 # auracode: implementation plan
 
+## Current authority
+The owner revised the architecture on 2026-10-26: Rust owns backend logic, all application cloud
+infrastructure lives on Cloudflare, and the root `AGENTS.md` and `CLAUDE.md` stay byte-identical.
+Graphite (2026-10-26) supersedes Orbit, which superseded the original Aura visuals.
+`docs/progress.md` records implementation status and `infra/README.md` records provisioned resources. Historical machine facts below are not current discovery.
+The owner narrowed the current release to Windows and macOS and deferred Linux/WSL. CI is now
+reserved for a few deliberate integration checkpoints and the final verification, with failure
+fixes rerun as needed. Visual implementation must be checked against the exact original Mobbin
+and official-site references, including SpaceXAI/Grok Bot, X Money, Harvey and Aside.
+The product is dark only, as explicitly directed on 2026-10-26. No light mode, system theme
+switching or appearance selector ships in the app, onboarding or website. Retained historical design
+studies do not change these product requirements.
+
 ## Context
 The user runs many coding agents (Claude Code, Codex, Antigravity, Pi / oh-my-pi, Cursor, Grok Build,
-OpenCode, Hermes...) and hates toggling between apps. auracode is one desktop app (macOS, Windows, Linux)
+OpenCode, Hermes...) and hates toggling between apps. auracode is one desktop app (macOS and Windows)
 with a ChatGPT-style interface: projects on the left, chats inside projects, any installed agent driving a
 chat through its real harness (headless, rendered in our UI, never a terminal). The base app needs no login.
 A website at auracode.si lets people create an account and download the app; the same account signs into
@@ -11,15 +24,18 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
 
 ## Decisions (user-confirmed unless marked)
 - **Stack:** Tauri v2. Everything that isn't UI is Rust (agent processes + protocols, detection, updates,
-  git, storage, search, sync, crypto); UIs are React + TypeScript; the small web API is TypeScript.
+  git, storage, search, sync, crypto); UIs are React + TypeScript. The cloud API is Rust on
+  Cloudflare Workers via workers-rs and WebAssembly. Non-Rust backend exceptions need a documented
+  platform constraint; platform configuration and SQL stay in their native formats.
 - **Agents:** one generic ACP client (most agents) plus native Rust drivers for Claude Code, Codex, Pi.
-- **Platforms:** macOS, Windows, Linux; agents auto-detected wherever it runs, including WSL on Windows.
+- **Platforms:** macOS and Windows; agents auto-detected on the native host. Linux and WSL are deferred.
 - **Default autonomy: Full auto**, with per-turn checkpoints, isolation, and a visible badge as safety net.
-- **Data:** local SQLite per profile on each device (works offline, no login). Cloud split:
-  - **Neon** = the database (Postgres) + Neon Auth (users, email codes, JWTs).
-  - **Cloudflare** = DNS, the website and API (Workers), downloads and encrypted blobs (R2), bot protection
-    (Turnstile), inbound mail forwarding (Email Routing).
-  - **Resend** = outgoing email (sign-in codes) from `@auracode.si`.
+- **Data:** local SQLite per profile, offline with no login. Cloudflare D1 stores accounts, sessions,
+  devices and encrypted sync envelopes. R2 stores releases and encrypted blobs. Cloudflare Workers
+  host the Rust API and website; Turnstile protects signup; Cloudflare Email Service sends codes.
+  No Neon, Neon Auth, Hyperdrive, or Resend dependency.
+- **Location:** D1 uses US jurisdiction; no promise of a specific state or city.
+
 - **Website:** landing page, downloads (auto-detected OS), sign up / sign in, account page (devices, export,
   delete), legal pages. Same accounts as the app.
 - **Accounts:** passwordless email code, on the site and in the app; seamless account switching in the app.
@@ -27,11 +43,11 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
 - **Domain:** stays registered at Namecheap; nameservers moved to Cloudflare on Day 1. The auracode.si
   zone uses `asa.ns.cloudflare.com` + `rohin.ns.cloudflare.com` (the pair all the user's Cloudflare zones
   share) and has been active since 2026-10-24 09:03 UTC.
-- **(My recommendation, user may veto) End-to-end encrypted sync.** Chats contain code and secrets. Cost:
+- **End-to-end encrypted sync.** Chats contain code and secrets. Cost:
   a new machine is approved from a signed-in one or uses a recovery key.
 - **Trust:** never read, store, or proxy agent credentials; auracode never injects hidden prompts.
 
-## Machine facts (verified 2026-10-24)
+## Historical machine facts (verified 2026-10-24 on the Mac)
 - macOS 26.6.2 arm64, rustc/cargo 1.99, Node 26.0.0, npm 11.12, git 2.54, gh 2.92 logged in as itscool2b
   (ssh, repo scope), Homebrew 6, pnpm 12.15 (Homebrew, installed for M0). No bun. Global git user.name
   is NOT set (email is).
@@ -54,95 +70,62 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
 3. No hidden instructions. The only thing auracode adds to a prompt is the visible handoff block when you
    switch agents or devices. (The "let the agent chill" philosophy.)
 4. Local-first; cloud only for accounts and sync.
-5. Every animation means something: the orb and the aura are live state, not decoration.
+5. Every animation means something: agent marks and live labels show real state, not decoration.
 
 ## UX spec: app
-**Design language "Aura".** The active agent's colour radiates softly behind the glass as a slow light
-field; thinking intensifies it, waiting-for-approval turns it amber, switching agents cross-fades it.
-Dark-first, near-black base, three glass elevations, hairline gradient borders, squircle corners
-(generated `clip-path`, since WebKit lacks `corner-shape`); grain and specular highlights are Design Lab
-options. Spring motion (Motion only; it also drives timelines). Messages fade/rise in per block. Honours
-reduced motion. Fonts bundled (OFL): Geist (UI), Instrument Serif (hero moments), Geist Mono (code).
+The **Graphite** specification in [visual-language.md](design/visual-language.md) defines every
+surface, token, type size, state, animation, and accessibility requirement. Its references are the
+owner's Mobbin and live-site set (SpaceXAI, X Money, Harvey, Aside, Vercel, and the AI in Design
+Report 2026 as the bar for uniqueness), adapted to the live protocol.
 
-**Layout.** Frameless translucent window: Liquid Glass on macOS 26+, vibrancy on older macOS, Mica on
-Windows 11 (dark fallback on Windows 10), tuned CSS translucency on Linux. Sidebar (collapsible to icon
-rail): wordmark, New chat, search, Projects (expand to chats; each row has a live mini-orb: running / needs
-approval / done-unseen / error), agent dock with update badges, account menu, settings. Main: centred 760px
-transcript + floating glass composer. Right panel (toggle): Changes, Files, Plan, Session info.
+- Dark-only, pure black canvas, Geist and Geist Mono at integer weights, solid panes, hairline
+  divisions. Volt lime means look here, green success/addition, red failure/deletion; white and
+  greys carry other states. No space imagery, gradients, glow, glass, serif, italic, agent colors,
+  accent picker, or eyebrow labels.
+- Panes paint opaque; no native material shows through the interface.
+- Collapsible project/chat sidebar, Needs you inbox, agent dock, account menu, main transcript,
+  composer, and a right panel for Changes, Files, Plan, and Session information.
+- Agent marks (monochrome tiles with a pixel loader, needs-you square, done check) show state.
+  Only live marks animate; pause offscreen and when inactive; reduced motion is static. No WebGL.
+- Raised user blocks, plain agent prose, collapsible thinking/tool rows, diffs, terminal output,
+  and receipts with duration, usage, cost when known, and changed files. Virtualize large histories.
+- Permission/question cards occupy the composer when needed, with keyboard answers and visible
+  request scope. Never offer an unsupported permission choice or auto-answer an always-ask request.
+- Auto-growing composer with attachments, file mentions, slash commands, queue/steer, and unified
+  agent/model/effort controls. Esc interrupts; the second Esc force-stops. Keep text being read stable.
+- Full auto is the default, with a visible badge. Honor agent policy restrictions. Claude falls back
+  to acceptEdits with a notice when bypass is unavailable; Codex applies policy per turn. Pi's
+  inability to ask is explicit. Never turn a generic automatic approval into a persistent rule.
+- Titles come from the agent or first user line, never a hidden title-generation prompt.
 
-**Chat.** User messages in subtle right bubbles; agent output full width under an agent glyph with an
-agent + model tag. Thinking as a collapsible "Thought for 12s" pill. Tool calls grouped ("Read 3 files",
-"Edited App.tsx +12 -3", "Ran npm test") expanding to diffs, ANSI output, search results; long output capped
-in the UI with the rest loaded from disk. Inline permission cards (outside Full auto) with shortcuts and an OS
-notification when unfocused. Sticky plan checklist above the composer. Turn footer: duration, tokens, cost
-if known, files-changed chip. Every message: copy, edit-and-resend, retry, fork into a new chat. Titles come
-from the agent when it provides one, else the first line (never a hidden title prompt).
-
-**Composer.** Auto-growing input; `+` attach (images, files), `@` file mentions (fuzzy, git-aware), `/`
-slash commands (agent-advertised + /switch /model /new). One pill "Claude Code · Opus · High" opens agent >
-model > effort; autonomy toggle; Send/Stop. Typing during a turn queues (or steers where supported); Esc
-interrupts, a second Esc force-stops.
-
-**Autonomy.** Full auto (default) / Auto-edit / Ask. Full auto = Claude `bypassPermissions` (falls back to
-`acceptEdits` with a notice if the user's settings forbid bypass); Codex `approvalPolicy: never` +
-`danger-full-access` (Auto-edit = `on-request` + `workspace-write`); agy/ACP bypass modes where advertised,
-otherwise auracode auto-answers permission requests; Pi/oh-my-pi never ask anyway. A "Full auto" badge sits
-on the composer and orb rim; switching into an agent that can't ask (Pi) shows a notice.
-
-**Thinking orbs.** One shared WebGL2 context draws every visible orb; each orb keeps its own canvas
-(frames handed over as ImageBitmaps where the browser can, copied otherwise) so orbs stack like any
-element (a single full-window canvas would sit above or below the whole UI). Shader in the
-style of the MIT ElevenLabs orb / Paper Shaders (soft ovals, flow warp, ring noise, colour ramp) with
-per-agent palette and motion signature, morphing into the agent's logo via a committed SDF atlas (msdfgen)
-and `mix(orbSDF + noise, logoSDF, t)` plus curl-noise warp. Polished first for Claude (terracotta spark),
-Codex (monochrome liquid, cursor-blink core), Pi (precise orbit, pi glyph), Antigravity (blue-violet star,
-upward drift); then Cursor, Grok, OpenCode, oh-my-pi, Hermes; a neutral aurora + monogram for anything else.
-States: idle, thinking, streaming, tool, waiting, error, done. Idle 20-30fps, DPR <= 2, paused offscreen,
-recovers from WebGL context loss; static poster fallback without WebGL2. CSS mini-orbs in the sidebar.
-Official logos are fine for a private build; swap to inspired glyphs before public release (trademarks).
-
-**Boot cinematic.** ~2s, skippable, short on warm launches, skipped when opened from a notification or link,
-off with reduced motion. Window created hidden and shown after first paint; shaders compile during the dark
-opening; plays from cached detection and reconciles live (never waits on the shell). Darkness, particles
-converge, orb ignites, a light sweep reveals the wordmark (placeholder SVG slot for the user's logo),
-detected agents ignite as orbiting orbs and dock into the sidebar as the glass UI resolves.
-
-**Onboarding (showpiece; every step skippable; under a minute; keyboard-driven; resumable; re-runnable):**
-1. Boot flows into a welcome line with the breathing orb and "Get started".
-2. Discovery: the orb splits into one orb per agent as results stream in, each igniting in brand colour
-   with version and sign-in status; known-but-missing agents appear as ghost orbs with Install. No agents
-   at all: install suggestions plus a "Try the demo" chat driven by the scripted mock agent.
-3. Account (switched on in M6): "Sync across your machines": email then 6-digit code, or "Skip, use
-   auracode locally". First device: recovery-key card (copy / save / confirm). Additional device: "Approve
-   on your Mac" (matching short code on both screens) or "Use recovery key", then "Restoring your
-   workspace": projects and chats fly into the sidebar, and a config summary ("Claude Code: +3 skills, +1
-   plugin") asks once before applying.
-4. Make it yours: accent + motion level (Cinematic / Subtle / Minimal), previewed live.
-5. First project: drop a folder, pick one, or clone from GitHub (searchable via `gh`); the orb flies into
-   the composer with a starter suggestion.
+**Boot and onboarding.** A skippable 1.6 to 2 second dither-to-mark intro, shortened on warm launch and
+skipped for links, notifications, and reduced motion. Show the hidden window after first paint;
+use cached detection and reconcile without blocking startup. Onboarding is keyboard-driven,
+resumable, re-runnable, and entirely skippable: welcome, discovery, account, motion preference,
+first project by folder/drop/gh clone. No agents means installation suggestions and a demo chat.
+The account step stays disabled until M6; encrypted device approval/recovery and restore activate
+with M7. No screen promises sync before it works.
 
 ## UX spec: website (auracode.si)
-Same Aura design language and `packages/ui` components (the orb is the hero), fast and static where possible.
-- `/` landing: cinematic orb hero, "every agent, one aura", agent logo row, glass feature sections, primary
-  Download button for the visitor's OS, secondary "Create account".
-- `/download`: OS-detected primary button plus every platform (macOS universal DMG, Windows x64 + arm64
-  installers, Linux AppImage + deb), version, release notes, SHA-256 checksums, install notes (Gatekeeper /
-  SmartScreen steps while builds are unsigned), system requirements.
-- `/signup`, `/signin`: email then 6-digit code, Turnstile against bots, resend cooldown.
-- `/account`: email, devices (name, platform, last seen, revoke), sync storage used, "sign out everywhere",
-  data export, delete account (confirmed by a fresh email code).
-- After signup: "Download auracode" plus "Open auracode" (`auracode://signin?email=...` opens the app on
-  its sign-in step with the email prefilled; shown next to Download since the site can't know if it's
-  installed).
-- `/privacy`, `/terms`, `/changelog`. `.si` is an EU domain and accounts hold emails, so GDPR basics apply:
-  privacy policy listing subprocessors (Neon, Cloudflare, Resend), export, deletion (draft for the user to
-  review; not legal advice).
-- Works without WebGL (poster image) and with reduced motion; download page works without JavaScript.
+Share Graphite tokens, components and typography with the app. React/TypeScript renders interfaces;
+prerender public pages and serve static assets through Cloudflare. Rust owns API behavior.
+
+- /: dither field, rotating agent name in "One window for [Claude Code].", OS-aware Download and
+  invited sign-in. Hosted accounts stay invite-only, so the site never offers account creation.
+- /download: every OS/architecture, version, notes, SHA-256 checksums, requirements and unsigned-build
+  installation instructions. Works without JavaScript; always permits a different OS choice.
+- /signup and /signin: email, six-digit code, resend cooldown, Turnstile, clear expiry/delivery errors.
+- /account: devices and revocation, storage, sign out everywhere, export, verified email change,
+  and account deletion after a fresh code.
+- /privacy, /terms, /changelog: accurate processor, retention, export and deletion information.
+  Legal copy needs review before public release; a domain suffix alone does not establish jurisdiction.
+- The auracode://signin link prefills email only, never tokens. Display Download beside Open auracode.
+- Reduced motion, keyboard access, and a static dither fallback without JavaScript are required.
 
 ## Projects, chats, agent switching
 - **Project** = name + colour + 1..n folders + optional default agent/model. Folders have a portable
   identity (git remote URL + default branch, or "local-only on <device>") separate from the device-local
-  path, which is what lets projects sync across macOS/Windows/Linux.
+  path, which is what lets projects sync across macOS and Windows.
 - **Chat** = one primary folder; extra folders become add-dirs only where the agent supports them, and the
   chat header shows exactly which folders it can reach.
 - **Isolation (M4):** "Direct" vs "Isolated" (git worktree on a new branch `aura/<slug>`). Until M4, a second
@@ -179,15 +162,17 @@ auracode/                        Cargo workspace + pnpm workspace
     desktop/src-tauri/           Tauri shell: thin commands/channels over aura-core, window glass, plugins
     desktop/src/                 React UI
     web/                         (M6) auracode.si: React Router 7 on Cloudflare Workers
-  services/api/                  (M6) Cloudflare Worker (TypeScript): accounts, devices, sync, webhooks
-  packages/ui/                   TS design system shared by app + site: tokens, glass, motion, Orb, Aura
+  services/api/                  (M6) Rust Cloudflare Worker: accounts, devices, sync, email delivery
+  packages/ui/                   TS Graphite design system shared by app + site: tokens, marks, motion
   packages/api-types/            TS types generated from aura-protocol (shared by app, site, API)
-  infra/                         wrangler configs, SQL migrations for Neon, release scripts
+  infra/                         Wrangler configs, SQL migrations for D1, release scripts
 ```
 - **Processes.** One Tauri process runs aura-core on tokio (`panic = "unwind"` in release; panics contained
   per task). aura-core doesn't depend on Tauri, so a headless daemon can reuse it later for remote access.
-- **Shell.** Tauri 2.12.x: `transparent` + `windowEffects` `liquidGlassRegular` (vibrancy fallback), `mica`
-  (never `acrylic`/`blur`). Overlay titlebar + `trafficLightPosition` on macOS; Windows titlebar decided by
+- **Shell.** Tauri 2.12.x: the window keeps its platform material plan (vibrancy on macOS, Mica on
+  Windows 11, opaque elsewhere), but Graphite paints every surface opaque black, so no material
+  shows through. Overlay titlebar + `trafficLightPosition`
+  on macOS; Windows titlebar decided by
   an M0 spike (custom controls lose Snap Layouts, so native caption buttons are the default). Plugins:
   single-instance, deep-link (`auracode://`), notification, window-state, updater, dialog, opener.
 - **Crates (exact versions pinned at M0):** tokio 1.54, serde, `serde_json` with `preserve_order` (agents'
@@ -204,21 +189,23 @@ auracode/                        Cargo workspace + pnpm workspace
   restyled), Zustand, react-virtuoso + use-stick-to-bottom (no layout animations inside the virtual list),
   Streamdown 2.7 (sanitized, own reduced-motion handling), Shiki 4 in a worker (finished code blocks only,
   throttled while streaming), @pierre/diffs, xterm.js 6 + WebGL (login terminal), OGL, Lucide, Floating UI.
-- **Web stack.** React Router 7 (framework mode) on Cloudflare Workers, Tailwind, Motion, `packages/ui`,
-  Turnstile. Marketing pages prerendered; auth/account routes server-rendered.
+- **Web stack.** React + TypeScript, Tailwind, Motion, `packages/ui`, Turnstile. Public pages
+  prerendered, account screens call the Rust API. Any framework server glue handles rendering only.
 - **Cloud layout.**
-  - `auracode.si` + `www` (redirect): the `web` Worker. It reverse-proxies `/api/auth/*` to Neon Auth so
-    auth cookies are first-party on auracode.si (no third-party-cookie or Safari ITP problems), and forwards
-    `/api/v1/*` to the `api` Worker over a service binding (one origin for site and API).
-  - `api` Worker (TypeScript): verifies Neon Auth JWTs (EdDSA, JWKS, small clock leeway), devices, sync
-    endpoints, presigned R2 URLs, the Neon Auth OTP webhook (signature-checked) that sends branded codes via
-    Resend, rate limits. Talks to Neon Postgres through Hyperdrive.
-  - R2: `auracode-releases` (public at `download.auracode.si`: installers, `latest.json`, checksums) and
-    `auracode-blobs` (private, encrypted attachments).
-  - Neon: one project, Postgres schema migrated from `infra/`, Neon Auth (Email OTP + JWT plugin, trusted
-    domain `https://auracode.si`, branded emails via webhook).
-- **Engines.** WKWebView (Safari 26/27) on macOS, WebView2 on Windows, WebKitGTK on Linux. Large glass is
-  native; CSS `backdrop-filter` only on small overlays and never animated; idle GPU power measured in M0.
+  - auracode.si and www (redirect): Cloudflare-hosted website assets. /api/v1/* reaches the Rust API
+    Worker by service binding or a same-origin Worker route; no separate cross-origin login service.
+  - Rust API: email-code auth, sessions, devices, sync, scoped blob access, quotas and rate limits.
+    Use Workers bindings for D1, R2, Turnstile verification and Cloudflare Email Service delivery.
+    Minimal JS binding glue is permitted if workers-rs lacks a platform API; business logic stays Rust.
+  - D1 auracode: US jurisdiction, read replication disabled for the initial authentication path.
+    Check session and device revocation authoritatively, never through an eventually consistent cache.
+  - R2 auracode-releases: published installers, manifests, checksums; auracode-blobs: private ciphertext.
+    Development uses local/emulated or separately named resources, never production test data.
+  - Structured diagnostics omit codes, tokens, credentials, account emails and plaintext sync data.
+
+- **Engines.** WKWebView (Safari 26/27) on macOS, WebView2 on Windows, WebKitGTK on Linux. Graphite
+  paints every surface opaque and uses no `backdrop-filter`. Repeat the M0 idle-power measurements
+  after migrating production surfaces to Graphite.
 - **Catalog vs drivers.** The catalog is data (per agent: binaries + known dirs per OS, version command,
   channel rules, latest-version source, vendor update command, auth-status command, launch spec, config dir,
   brand, last-verified version). Drivers are per protocol: ACP, Claude stream-json, Codex app-server, Pi RPC
@@ -251,9 +238,9 @@ auracode/                        Cargo workspace + pnpm workspace
 | Claude Code | Native: own Rust control loop over stream-json; user's `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio`, always with `--permission-mode`, with `--session-id=<uuid>` (new session) or `--resume=<id>`, and with `--allow-dangerously-skip-permissions` where the user's settings allow bypass | Contract and fixtures in the [M0 spike](spikes/claude-control.md) (2.1.310). Own lenient serde types; `claude-codes` crate and the official Python Agent SDK are references, diffed each release. Control: `initialize`, `interrupt`, `set_model`, `set_permission_mode`, `apply_flag_settings` (effort), `get_usage`, `get_context_usage`, `list_models`, `rewind_files`; we answer `can_use_tool`; fork via `--fork-session` (with our `--session-id`) or resume-at. `--permission-mode` is never left out: without it every spawn, resumes included, takes `permissions.defaultMode` from the user's settings, which can be `auto`. `--session-id` gives a new session's native id before its first turn. `bypassPermissions` can be switched on mid-chat only in a process launched with `--allow-dangerously-skip-permissions`. Resume works after a cwd change (the transcript keeps appending under the original folder's project dir), and `--fork-session` with `--session-id` writes the fork under the new folder's. The user's own hooks run inside these sessions (`SessionStart` context, `PermissionRequest` hooks that can answer or delay a prompt), so a tool call may never reach us as `can_use_tool`; principle 3 still holds, since auracode itself adds nothing. `rate_limit_event` feeds the limits meter. Unknown messages logged, never fatal; capabilities from `system/init`; compatibility smoke per new version. Day-one fallback (M1a): ACP via the `claude-agent-acp` npm adapter, installed once per version into `<data root>/adapters` with `npm ci --omit=optional --ignore-scripts` from a lockfile committed for that version, launched as `node <entry>` from there, with the user's `claude` forced through `CLAUDE_CODE_EXECUTABLE`; never `npx` in the chat folder. |
 | Codex | Native: `codex app-server --listen stdio://`, own process | Own serde subset with `#[serde(other)]`, tested against the JSON Schema from `codex app-server generate-json-schema` per supported version. `thread/start/resume/fork/list`, `turn/start` (model, effort, cwd, approvalPolicy, sandboxPolicy, images, mentions), `turn/steer`, `turn/interrupt`, `turn/diff/updated`, approvals, `model/list`, `account/rateLimits/read`, plugin/skill/config APIs (reused by Library + Sync). Never the shared daemon (opt-in later). Day-one fallback (M1a): the `codex-acp` npm adapter, installed and launched like Claude's, with the user's `codex` forced through `CODEX_PATH`. |
 | Pi | Native RPC `pi --mode rpc` | `prompt`/`steer`/`follow_up`/`abort`, `set_model`, `get_available_models`, `set_thinking_level`, `fork`, `get_session_stats`, `extension_ui_request` (rendered as confirm/select/input). Turn ends on `agent_settled`; split on LF only. |
-| Antigravity | ACP via Google's `agy_acp_server` (registry `antigravity-acp`) | Fallback `agy -p --input-format stream-json --output-format stream-json` (text only, no approvals, interrupt = kill). |
+| Antigravity | ACP via Google's `agy_acp_server` (registry `antigravity-acp`) | Fallback `agy --input-format stream-json --output-format stream-json`, with visible prompts on stdin (text only, no approvals, interrupt = kill). The persistent input mode drops `-p` prompts. |
 | oh-my-pi | ACP `omp acp` | Never set `PI_CODING_AGENT_DIR` globally. |
-| Cursor | ACP `agent acp` | Dialect: answer `cursor/ask_question` / `cursor/create_plan`; model switch = restart with `--model`. Never detect by the name `agent`. |
+| Cursor | ACP through the vendor-named `cursor-agent acp` | Dialect: deferred `cursor/ask_question` / `cursor/create_plan` and activity notifications. Use advertised model/config controls; model switching by restart still needs pinned vendor qualification. Never detect by the name `agent`. |
 | Grok Build | ACP `grok agent stdio` | Fallback `grok -p --output-format streaming-json`. |
 | Hermes | ACP `hermes acp` | A viewer of its gateway daemon, where turns run: cancel before kill, with time for the cancel to land. Dialect: legacy `modes` (`default`, `accept_edits`, `dont_ask`) and `models` lists, the untyped `session/set_model`, mode changes only while idle; Full auto = `dont_ask` plus auto-answers for command approvals. Not in the registry; hard-coded. |
 | OpenCode | ACP `opencode acp` | Detect V1 (1.19.x) vs V2 (2.1.x). |
@@ -341,8 +328,8 @@ consumer-grade polish. MIT/Apache code may be read for reference; never AGPL (To
   `.env`, an install command), merge blocked while a Direct chat runs in the target.
 - **Tooling:** rustfmt and clippy for Rust (`-D warnings` in CI; no `dbg!`, no `unwrap()` or `expect()`
   outside tests). No `unsafe` except SAFETY-commented calls into Windows APIs that std does not wrap, each
-  item opting out of the denied `unsafe_code` lint on its own; in the app that is only aura-core's
-  `fsutil::win_acl`, which makes the profiles folder private to the user (M1a adds no `unsafe` module).
+  item opting out of the denied `unsafe_code` lint on its own. The app uses these narrow helpers for
+  private profile ACLs and invariant Windows path casing in native-session ownership checks.
   Biome alone lints and formats TypeScript, CSS, JSON, and YAML: one fast tool and one config instead of
   ESLint + Prettier. It does not format Markdown (its formatter re-pads hand-wrapped tables) and leaves
   `pnpm-lock.yaml` to pnpm. pnpm settings live in `pnpm-workspace.yaml` (pnpm 12 ignores them in
@@ -356,7 +343,7 @@ signed out or token expired mid-turn (sign-in sheet, then resume); rate limit or
 time, one click hands the chat to another agent); version too old (update required) or untested-new (badge,
 lenient parsing); crash mid-turn (error card with stderr tail + "Restart and resume"); silent for minutes
 (soft "still working" with Interrupt, never auto-killed); folder-trust prompts that need a TTY (handled via
-flags/config or surfaced in the UI); model removed upstream (fall back to default with a notice); proxies
+flags/config or surfaced in the UI); model removed upstream (qualified fallback or explicit recovery with a notice); proxies
 (`HTTPS_PROXY` passed through).
 **Sessions + streaming.** Huge transcripts (virtualized, paged from SQLite); huge or binary or invalid-UTF-8
 output (capped, lossy decode, raw on disk); oversized or unsupported images (resized/converted, per-agent
@@ -373,7 +360,7 @@ setup); clone failures (auth, network, disk) with clear retry; Windows long path
 collisions, CRLF; reverting a checkpoint after files changed outside the agent (diff + confirm, never a
 silent clobber).
 **Accounts.** Wrong or expired code, too many attempts (clear message, resend cooldown); email not arriving
-(resend, spam hint, delivery status from Resend); bot signups (Turnstile on the site; per-IP and per-email
+(resend, spam hint, delivery status from Cloudflare Email Service); bot signups (Turnstile on the site; per-IP and per-email
 rate limits in the proxy, also covering in-app requests); same flow for new and returning emails; session
 expired or device revoked from the site (app drops to signed-out, local data intact and encrypted); offline
 (sign-in waits, app fully usable locally); sign-out with unsynced changes (warns with a count); switching
@@ -393,8 +380,8 @@ problem; all platforms always listed); unsigned builds (clear Gatekeeper/SmartSc
 signing is set up); "Open auracode" when not installed (Download sits next to it); cookies or JS disabled
 (download page still works); update signature mismatch (refused); interrupted download (retry); update while
 chats run (waits for idle); WebView2 missing on Windows (installer bootstraps it); Windows 10 (no Mica:
-fallback theme); Linux without a keyring (encrypted file fallback with a warning), Wayland transparency
-quirks, AppImage needing FUSE (deb alternative).
+fallback theme). Linux, Wayland, AppImage and Debian package qualification are deferred. Explicit
+passphrase storage remains available for supported-platform secure-store recovery.
 **Onboarding.** No agents found (install suggestions + demo chat); slow detection (cached/skeleton orbs that
 reconcile); everything skipped (lands in a usable app); quit halfway (resumes where it left off); no WebGL2
 or reduced motion (static, still beautiful); tiny windows and multiple monitors (responsive, minimum size).
@@ -408,9 +395,9 @@ to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The z
 **Foundation (the app)**
 - **M0 Scaffold + spikes.** Private repo, pnpm (Homebrew), Cargo + pnpm workspaces, fmt/clippy/Biome,
   Tauri app with the glass window, typed command + Channel round trip, profile layout + SQLite schema,
-  stable self-signed signing identity (created locally with the user's OK), CI on macOS/Windows/
-  Ubuntu (fmt, clippy, tests, typecheck, lint, and a smoke run of the real app; installer builds only on
-  main pushes, nightly, on demand, and milestone-branch pushes that ask for them). Spikes:
+  stable self-signed signing identity (created locally with the user's OK), batched CI on macOS/Windows
+  (fmt, clippy, tests, typecheck, lint, and a smoke run of the real app; installer builds only when
+  explicitly dispatched for qualification). Spikes:
   worst-case render (animated aura + orbs + fast stream) on WebKit and WebView2 with idle power; Windows
   spawning (hidden console, git child); Claude control round trip incl. resume after a cwd change; Windows
   titlebar.
@@ -432,10 +419,11 @@ to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The z
 - **M1d Pi + the rest.** With the user's OK, install pi, oh-my-pi, OpenCode, Cursor CLI, Grok Build via their
   official installers (Cursor/Grok need the user's sign-in), then Pi native driver and the ACP dialects
   (Antigravity, Cursor, Grok, oh-my-pi, OpenCode) + agy/grok fallbacks.
-- **M1e Catalog.** Detection on macOS/Windows/Linux + WSL, channels, versions, vendor updates,
+- **M1e Catalog.** Detection on macOS/Windows, channels, versions, vendor updates,
   last-verified badges, auth status. Done when `aura-cli smoke <agent>` passes for every installed agent.
-- **M2a Design system + transcript.** Chosen direction: tokens, fonts, glass, motion, Orb + Aura,
-  transcript components, against fixtures.
+- **M2a Design system + transcript.** Dark-only Graphite tokens, fonts, state-driven agent marks,
+  transcript components and accessibility against live protocol fixtures. Retire legacy shader/serif
+  dependencies only when no retained Design Lab direction uses them.
 - **M2b App shell with real agents.** Sidebar, projects, chats, persistence, titles, edit/retry/fork,
   checkpoints + Changes panel + revert, agent switching with handoff, busy-folder warning, notifications,
   keep-awake, tray, quit guard. Open decision (Windows): wry never marks WebView2 invisible when the
@@ -452,39 +440,58 @@ to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The z
   Agents page (install, update, sign-in sheet, verified badges).
 - **M4 Parallel work.** Worktrees per the rules above, merge/PR/discard, concurrent chats polish,
   multi-folder handling, open in editor/terminal, general terminal panel.
-- **M5 Packaging + releases.** DMG (universal) / NSIS (x64, arm64) / AppImage + deb; `tauri-plugin-updater`
-  (Tauri signing key generated and backed up; losing it ends updates); CI on tag builds every platform,
-  uploads installers + `latest.json` + checksums to R2 (`download.auracode.si`, on the zone active since
-  Day 1); app updates wait for idle. Distributed binaries are built with `--remap-path-prefix` (a local
-  release build embeds about 500 build-machine paths, from panic locations in dependencies). Windows/Linux
-  artifacts come from CI every milestone so the user can test.
+- **M5 Packaging + releases.** DMG (universal) / NSIS (x64, arm64); `tauri-plugin-updater`
+  (Tauri signing key generated and backed up; losing it ends updates). Deliberately dispatched CI builds
+  acceptance artifacts. Qualified signed installers, `latest.json` and checksums are prepared and verified
+  before publication to R2 (`download.auracode.si`); a tag alone does not authorize publication.
+  App updates wait for idle. Distributed binaries use `--remap-path-prefix` to remove build-machine
+  paths. Signing, installation and old-build update qualification follow `docs/releases.md`.
 
 **Then (order is the user's call)**
-- **M6 Website + accounts.** Resend domain, Neon project (region chosen with the user) + Neon Auth, R2
-  buckets, Hyperdrive, `web` + `api` Workers, Turnstile; the site (landing, download, sign up/in, account,
-  legal); in-app email-code sign-in, onboarding account step on, device registry, "Open auracode" deep link,
-  devices revocable from the site.
+- **M6 Website + accounts.** Rust API on Cloudflare Workers, D1 account/session schema, Cloudflare
+  Email Service domain setup, Turnstile, private R2 blobs, site and same-origin API routing. Build
+  landing, download, email-code auth, account and legal pages; desktop sign-in and device registry.
+  The initial D1/R2 resources already exist; provisioned IDs live in infra/README.md.
+
 - **M7 Workspace sync.** E2E keys, device approval + recovery key, account profiles + seamless switching,
   projects + chats sync, "Continue here".
 - **M8 Config Library.** Skills, MCP servers, plugins, instructions for Claude/Codex/Pi; copy across agents.
 - **M9 Config sync** for Claude Code, Codex, Pi.
 - **Suggested:** Arena (one prompt, N agents, separate worktrees, compare diffs); relay ("Codex reviews what
   Claude wrote"); import past CLI sessions; live remote view from phone/web; dictation; usage dashboard;
-  browser-based app sign-in and GitHub sign-in (Neon Auth OAuth Provider, PKCE + loopback).
+  browser-based app sign-in and GitHub sign-in (PKCE + loopback, if added later).
 
 ## Sync design (M6-M9)
-**Accounts.** In-app sign-in: email, then code; Rust calls Neon Auth through `https://auracode.si/api/auth`
-(`send-verification-otp` type `sign-in`, then `sign-in/email-otp`), keeps the opaque session token in the
-OS keychain, and exchanges it for 15-minute JWTs (`/token`) for the API. The site uses the same endpoints
-with first-party cookies. Branded codes: Neon Auth's OTP webhook hits the `api` Worker, which sends through
-Resend from `auth@auracode.si`.
+**Accounts.** The Rust API owns passwordless six-digit email-code auth, through /api/v1/auth.
+Use OS/runtime cryptographic randomness and reviewed crypto libraries, never custom cryptography.
+Store HMAC-protected code verifiers, a challenge identifier, expiry and bounded attempt counters;
+consume codes atomically. Initial defaults: ten-minute code expiry, five attempts per challenge,
+60-second resend cooldown, and bounded per-email and per-IP send/verify rates. A resend invalidates
+older challenges; generic responses avoid account enumeration. Turnstile protects initiation,
+including the desktop flow through its verification UI. Never log codes or email addresses.
 
-**Data (Neon Postgres).** `devices` (user, name, platform, public key, last seen, revoked), `records`
+Deliver through Cloudflare Email Service, with explicit delivery failures and retry handling;
+never create an authenticated session before verification succeeds. Use 32-byte random opaque
+session tokens stored only as hashes in D1, with a 30-day absolute expiry and rotation on fresh
+sign-in. Browser sessions use Secure, HttpOnly, SameSite cookies, CSRF protection and Origin checks.
+Desktop sessions use a separate token stored in the OS keychain. Every authenticated request
+checks expiry, account and session status; sync also checks its bound device. Revocation takes
+effect on the next request. Device registration binds to the session rather than trusting a caller's
+arbitrary device ID. Deep links carry no credentials. Fresh verification protects account deletion.
+
+On sign-out or revoked credentials, retain encrypted local data and halt network sync. Account
+deletions revoke all sessions before scheduled data cleanup. Keychain-unavailable systems use an
+explicit passphrase-encrypted local store, not a plaintext fallback.
+
+**Data (Cloudflare D1).** `devices` (user, name, platform, public key, last seen, revoked), `records`
 (user, collection, id, hlc, device_id, deleted, ciphertext, nonce, key_version, server_seq), `chat_chunks`
 (append-only, one per compacted turn), `user_keys` (wrapped keys, KDF params), `quotas`. Push = idempotent
 upserts accepted only when the incoming clock is newer (records) or the expected ETag matches (config
 blobs); pull = "changes since server_seq". Sync on focus, after each turn, and every 60s. The server never
-merges anything. Every query is scoped by the JWT's `sub`.
+merges anything. Every query is scoped by the server-validated session account. Use SQLite-compatible migrations,
+prepared statements, bounded batches, conditional writes and monotonic server sequence numbers.
+Port the merge contract, not PostgreSQL-specific SQL. Add users, auth_challenges and sessions for
+the Rust-owned authentication service.
 
 **Encryption (recommended):** one random account key; records sealed with XChaCha20-Poly1305 and AAD =
 account|collection|id|version. New devices get the key sealed to their X25519 key after approval on a
@@ -540,11 +547,12 @@ Settings Sync's model).
   named after its milestone (`m0-scaffold`, `m1a-core-acp`, ..., `m6-website`), merged through one PR when
   finished and tested. No drafts, review fixes pushed to the same PR, no co-author or generated-by lines.
   PRs via the GitHub MCP, falling back to `gh` (logged in as itscool2b).
-- Deploys are separate even though the repo is shared: CI path filters run only what changed; the website
-  and API deploy to Cloudflare on merge to `main` (preview deploys on PRs); the app releases only when a
-  version tag (`v0.1.0`) is pushed, which builds every platform and publishes to `download.auracode.si`.
-- Cloud changes (zone, DNS records, Neon project, Workers, R2, Resend domain) are confirmed with the user
-  before each one runs; secrets live in Wrangler/Cloudflare secrets and GitHub Actions secrets, never in git.
+- Deploys are separate even though the repo is shared. Batch source validation before the final
+  Windows/macOS CI checkpoint. Use isolated Cloudflare preview resources for web and API acceptance.
+  A merge or version tag does not publish an unqualified desktop release; follow `docs/releases.md`.
+- Cloud changes stay within the owner's authorized scope. The auracode database/storage creation and
+  exact mijonion-media deletion were authorized on 2026-10-26; do not request that permission again.
+  New consequential actions outside that scope are confirmed before execution; secrets live in Wrangler/Cloudflare secrets and GitHub Actions secrets, never in git.
 
 ## Verification
 - **Rust tests:** replay of recorded raw streams (Claude, Codex, Pi, ACP) into expected AuraEvents; Codex
@@ -558,11 +566,12 @@ Settings Sync's model).
 - **App UI:** Vitest for logic; Playwright on the Vite build with mocked Tauri IPC in Chromium and WebKit for
   flows (onboarding, project, chat, stream, approve, diff, interrupt, restart, switch agent, sign in, switch
   account); DOM screenshot baselines with orb canvases masked; one full-app WebDriver smoke on Windows.
-- **Web + API:** Worker unit tests with Vitest's Workers pool (auth proxy, JWT checks, rate limits, webhook
-  signatures, sync conflicts, quota); Playwright against a preview deploy (signup, signin, account, delete,
+- **Web + API:** Rust unit tests plus Worker/Wasm integration tests against local D1/R2 bindings
+  (single-use OTP, concurrent verification, session/device revocation, CSRF, rate limits, delivery
+  failures, cross-account access, sync conflicts, quota); Playwright against a preview deploy (signup, signin, account, delete,
   download links per OS, no-JS download page); a release dry run that publishes to a staging R2 prefix and
   updates an old build through `latest.json`.
 - **Manual:** I run the real app on this Mac with every installed agent and review screenshots for polish;
   the user tests Windows builds as they land. Budgets: 60fps while streaming and scrolling, near-zero idle
   CPU with orbs paused, warm launch interactive in under 300ms, landing page LCP under 2s.
-- **CI:** macOS, Windows (with a WSL distro for detection tests), Ubuntu.
+- **CI:** macOS and Windows, at deliberate integration checkpoints and final verification only.

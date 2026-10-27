@@ -107,6 +107,20 @@ export function answerLabel(answer: UiAnswer, prompt: UiPrompt): string {
         : `Choice ${answer.index + 1}`;
     case "input":
       return answer.text;
+    case "questions":
+      return answer.answers
+        .map((item) => {
+          const question =
+            prompt.type === "questions"
+              ? prompt.questions.find((question) => question.id === item.question_id)
+              : undefined;
+          const values = item.selected.map(
+            (index) => question?.options[index]?.label ?? `Choice ${index + 1}`,
+          );
+          if (item.text !== null) values.push(item.text);
+          return `${question?.question || question?.header || item.question_id}: ${values.join(", ")}`;
+        })
+        .join("; ");
   }
 }
 
@@ -124,7 +138,7 @@ export function questionResolutionLabel(resolution: QuestionResolution, prompt: 
 export interface ErrorActions {
   /** Start the agent again (`chat_start`), continuing its session. */
   readonly retry: boolean;
-  /** Start a new native session (`chat_start` with `fresh`): when continuing the old one failed. */
+  /** Review a visible handoff into a fresh native session when continuing the old one failed. */
   readonly startFresh: boolean;
 }
 

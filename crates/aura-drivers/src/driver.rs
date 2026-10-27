@@ -8,7 +8,7 @@
 //!
 //! Contract every driver keeps:
 //!
-//! 1. Before [`DriverEvent::Ready`], only `Status`, `Options`, `Commands`, `Title`, `Autonomy`,
+//! 1. Before [`DriverEvent::Ready`], only `Status`, `RunState`, `Options`, `Commands`, `Title`, `Autonomy`,
 //!    `AuthRequired`, `Event` with a `Notice` or `UsageUpdated` (untagged), and untagged `Permission`
 //!    and `UiRequest` (an agent may ask during setup). A fatal start problem ends `run` with
 //!    [`DriverExit::StartFailed`] (after `AuthRequired` when that is the cause).
@@ -29,6 +29,9 @@
 //! 8. An event read after the driver processed `Prompt(t)` and before that prompt's reply is tagged
 //!    `t`; every other event is untagged, including updates the agent sends after its reply and
 //!    requests from background work.
+//! 9. A driver with work that outlives a prompt emits `RunState` before `Ready` and on every run
+//!    state change. Its `TurnEnded` finishes the prompt only; `RunState { idle: true }` permits
+//!    another prompt. Drivers that omit `RunState` retain the turn-based readiness contract.
 //!
 //! Error text crosses raw: a driver holds no session redactor, so it puts stderr tails and the
 //! agent's error text into [`DriverError`] and [`DriverExit::Crashed`] unredacted, and never writes
@@ -90,9 +93,37 @@ impl fmt::Debug for DriverContext {
     }
 }
 
+/// Native startup choices. Drivers that do not support these keep the defaults.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NativeStartOptions {
+    /// An explicit new transcript UUID, used by deterministic replay. Fresh starts otherwise
+    /// allocate their own UUID, independently of the chat id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_session_id: Option<String>,
+    /// Continue `SessionSetup::resume` into a new transcript, preserving the source.
+    #[serde(skip_serializing_if = "is_false")]
+    pub fork: bool,
+    /// Resume through this native user message UUID. Requires a resume source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resume_at: Option<String>,
+    /// Explicitly enable the native SDK's file checkpointing.
+    #[serde(skip_serializing_if = "is_false")]
+    pub file_checkpointing: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
+}
+
 /// How the session wants the agent started.
 #[derive(Debug, Clone)]
 pub struct SessionSetup {
+    /// Private, app-owned blob directory. Never an arbitrary source file or agent credential path.
+    pub attachment_dir: Option<PathBuf>,
+    /// Account profiles resolve encrypted bytes in memory. An installed reader is authoritative:
+    /// errors never fall back to opening plaintext files in attachment_dir.
+    pub attachment_reader: Option<Arc<dyn crate::attachments::AttachmentReader>>,
     pub chat_id: String,
     pub agent_id: String,
     pub dialect: String,
@@ -100,12 +131,13 @@ pub struct SessionSetup {
     pub folder: PathBuf,
     /// The folder as the agent sees it (the ACP `cwd`); in M1a, `folder` as given.
     pub agent_folder: String,
-    /// Empty in M1a (M4).
+    /// Explicit device-local project folders, populated only for a supported native transport.
     pub add_dirs: Vec<PathBuf>,
     pub launch: LaunchSpec,
     pub env: Arc<ResolvedEnv>,
     /// The native session to continue.
     pub resume: Option<String>,
+    pub native_start: NativeStartOptions,
     pub autonomy: Autonomy,
     /// The user's explicit choices, by option id, re-applied when the agent starts.
     pub desired: BTreeMap<String, ConfigValue>,
@@ -120,14 +152,18 @@ impl SessionSetup {
     /// `{"agent_id":"hermes","dialect":"hermes","resume":null,"autonomy":"full_auto","desired":{},
     /// "spawn_id":"019a..."}`
     pub fn start_note(&self, spawn_id: &str) -> serde_json::Value {
-        serde_json::json!({
+        let mut note = serde_json::json!({
             "agent_id": self.agent_id,
             "dialect": self.dialect,
             "resume": self.resume,
             "autonomy": self.autonomy,
             "desired": self.desired,
             "spawn_id": spawn_id,
-        })
+        });
+        if self.native_start != NativeStartOptions::default() {
+            note["native_start"] = serde_json::json!(self.native_start);
+        }
+        note
     }
 }
 
@@ -176,6 +212,27 @@ pub struct StopPlan {
     pub process: ShutdownPlan,
 }
 
+/// Native file checkpoint results. A preview does not modify files. A real rewind can skip
+/// paths for link safety; callers must report those skips rather than promise a complete restore.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRewindResult {
+    #[serde(default)]
+    pub files_changed: Vec<String>,
+    pub insertions: Option<u64>,
+    pub deletions: Option<u64>,
+    pub skipped_links: Option<u64>,
+}
+
+/// Native delivery acknowledgement. An uncertain response must never be retried automatically.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum SteerResult {
+    Accepted,
+    Rejected { message: String },
+    Unconfirmed { message: String },
+}
+
 /// What the session actor asks of a driver.
 #[derive(Debug)]
 pub enum DriverCommand {
@@ -185,6 +242,13 @@ pub enum DriverCommand {
     Prompt {
         turn: TurnRef,
         parts: Vec<PromptPart>,
+    },
+    /// Explicit user input for exactly this running turn. Never queue it for a later turn.
+    Steer {
+        turn_id: String,
+        message_id: String,
+        parts: Vec<PromptPart>,
+        reply: oneshot::Sender<SteerResult>,
     },
     /// Soft interrupt; idempotent; the turn still ends with `TurnEnded`.
     Interrupt,
@@ -206,6 +270,13 @@ pub enum DriverCommand {
         autonomy: Autonomy,
         reply: oneshot::Sender<Result<AutonomyState, DriverError>>,
     },
+    /// Rewind native file checkpoints only. Conversation history is unchanged. Must be explicitly
+    /// enabled at startup, and runs only while idle with no outstanding approvals or mutations.
+    RewindFiles {
+        user_message_id: String,
+        dry_run: bool,
+        reply: oneshot::Sender<Result<FileRewindResult, DriverError>>,
+    },
     /// Graceful end: interrupt a running turn, wait `cancel_grace` for its reply, close stdin, run
     /// the shutdown chain.
     Shutdown { plan: StopPlan },
@@ -216,9 +287,17 @@ pub enum DriverCommand {
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum DriverEvent {
     Status(DriverStatus),
+    /// Authoritative run state, including background work. Emitting this opts the session into
+    /// waiting for idle separately from `TurnEnded`; emit the initial state before `Ready`.
+    RunState {
+        idle: bool,
+    },
     Ready(ReadyInfo),
+    /// After Ready, resolves a resume path to the authoritative native transcript id. The actor
+    /// must claim and save it before sending another prompt. It does not start a new session row.
+    NativeSessionId(String),
     /// Transcript events, tagged with their turn (rule 8). Never `TurnStarted`, `TurnEnded`,
-    /// `UserMessageDelta`, `SessionUpdated`, `PromptLifecycle`, `PermissionRequested`,
+    /// `UserMessageDelta`, `SteeringStatus`, `SessionUpdated`, `PromptLifecycle`, `PermissionRequested`,
     /// `PermissionResolved`, `UiRequest` or `UiResolved`: the actor emits those.
     Event {
         turn: Option<String>,
@@ -297,7 +376,9 @@ pub enum DriverStatus {
 /// The agent is up and its session open.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReadyInfo {
-    pub native_session_id: String,
+    /// None when the vendor creates its transcript only on the first visible prompt. The driver
+    /// reports NativeSessionId after the vendor confirms it, never a fabricated resume target.
+    pub native_session_id: Option<String>,
     pub agent_name: Option<String>,
     pub agent_version: Option<String>,
     pub capabilities: Capabilities,
@@ -458,6 +539,11 @@ pub enum LoggedCommand {
         turn_id: String,
         parts: Vec<PromptPart>,
     },
+    Steer {
+        turn_id: String,
+        message_id: String,
+        parts: Vec<PromptPart>,
+    },
     Interrupt,
     RespondPermission {
         request_id: String,
@@ -475,6 +561,10 @@ pub enum LoggedCommand {
     SetAutonomy {
         autonomy: Autonomy,
     },
+    RewindFiles {
+        user_message_id: String,
+        dry_run: bool,
+    },
     Shutdown,
 }
 
@@ -483,6 +573,16 @@ impl From<&DriverCommand> for LoggedCommand {
         match command {
             DriverCommand::Prompt { turn, parts } => LoggedCommand::Prompt {
                 turn_id: turn.turn_id.clone(),
+                parts: parts.clone(),
+            },
+            DriverCommand::Steer {
+                turn_id,
+                message_id,
+                parts,
+                ..
+            } => LoggedCommand::Steer {
+                turn_id: turn_id.clone(),
+                message_id: message_id.clone(),
                 parts: parts.clone(),
             },
             DriverCommand::Interrupt => LoggedCommand::Interrupt,
@@ -508,6 +608,14 @@ impl From<&DriverCommand> for LoggedCommand {
             },
             DriverCommand::SetAutonomy { autonomy, .. } => LoggedCommand::SetAutonomy {
                 autonomy: *autonomy,
+            },
+            DriverCommand::RewindFiles {
+                user_message_id,
+                dry_run,
+                ..
+            } => LoggedCommand::RewindFiles {
+                user_message_id: user_message_id.clone(),
+                dry_run: *dry_run,
             },
             DriverCommand::Shutdown { .. } => LoggedCommand::Shutdown,
         }
@@ -718,7 +826,7 @@ mod tests {
             DriverEvent::Title(None),
             DriverEvent::Status(DriverStatus::Opening),
             DriverEvent::Ready(ReadyInfo {
-                native_session_id: "s".into(),
+                native_session_id: Some("s".into()),
                 agent_name: Some("Hermes".into()),
                 agent_version: None,
                 capabilities: Capabilities::default(),
@@ -758,7 +866,9 @@ mod tests {
     fn the_start_note_names_the_setup_but_never_the_env() {
         let mut vars = EnvMap::new();
         vars.insert("ANTHROPIC_API_KEY".into(), "sk-ant-secret".into());
-        let setup = SessionSetup {
+        let mut setup = SessionSetup {
+            attachment_dir: None,
+            attachment_reader: None,
             chat_id: "c".into(),
             agent_id: "hermes".into(),
             dialect: "hermes".into(),
@@ -783,6 +893,7 @@ mod tests {
                 resolved_at_ms: 0,
             }),
             resume: None,
+            native_start: NativeStartOptions::default(),
             autonomy: Autonomy::FullAuto,
             desired: BTreeMap::new(),
             timings: DriverTimings::STANDARD,
@@ -794,5 +905,17 @@ mod tests {
             r#"{"agent_id":"hermes","dialect":"hermes","resume":null,"autonomy":"full_auto","desired":{},"spawn_id":"019a"}"#
         );
         assert!(!format!("{setup:?}").contains("sk-ant-secret"));
+        setup.native_start.fork = true;
+        setup.native_start.resume_at = Some("019a0000-0000-7000-8000-000000000009".into());
+        let note = setup.start_note("019a");
+        assert_eq!(
+            note["native_start"],
+            serde_json::json!({"fork":true,"resume_at":"019a0000-0000-7000-8000-000000000009"})
+        );
+        assert_eq!(
+            serde_json::from_value::<NativeStartOptions>(note["native_start"].clone())
+                .expect("native options round trip"),
+            setup.native_start
+        );
     }
 }

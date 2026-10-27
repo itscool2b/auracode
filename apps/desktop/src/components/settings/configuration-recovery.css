@@ -1,0 +1,63 @@
+/*
+ * An interrupted profile switch replaces the app: a calm title, aura-core's own words, and the one
+ * action that finishes or restores the switch.
+ */
+
+.configuration-recovery {
+  position: relative;
+  min-height: 100%;
+  overflow: auto;
+}
+
+.configuration-recovery .settings-content {
+  padding-top: clamp(72px, 16vh, 160px);
+}
+
+.configuration-recovery header > p,
+.configuration-recovery-action > p {
+  max-width: 60ch;
+}
+
+.configuration-recovery header > p {
+  margin-top: 8px;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-prose);
+  line-height: var(--g-leading-prose);
+}
+
+.configuration-recovery-action {
+  padding-top: 20px;
+  border-top: 1px solid var(--g-line);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.configuration-recovery-action > p {
+  margin: 0 0 16px;
+}
+
+.configuration-recovery-action > .g-button {
+  margin-bottom: 16px;
+}
+
+.configuration-recovery-action [role="status"] {
+  margin: 0 0 12px;
+}
+
+.configuration-recovery details {
+  margin-top: 32px;
+  color: var(--g-fg-2);
+}
+
+.configuration-recovery summary {
+  color: var(--g-fg-1);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .configuration-recovery .settings-content {
+    padding-inline: 24px;
+  }
+}

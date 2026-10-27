@@ -1,5 +1,4 @@
-import { easings } from "@auracode/ui";
-import { motion } from "motion/react";
+import { CopyButton } from "@auracode/ui/graphite";
 import { Fragment, memo, type ReactNode, useMemo, useRef } from "react";
 import {
   type Block,
@@ -12,9 +11,10 @@ import {
 } from "../lib/markdown";
 
 /**
- * Streamed markdown, rendered block by block. Each block fades and rises in once when it first
- * appears (never per character); finished blocks are memoized, so a new frame only re-renders the
- * block that is still growing. Everything is React elements: agent text cannot inject HTML.
+ * Streamed markdown, rendered block by block. Text only ever appends: a block appears where it will
+ * stay, with no entrance, so lines already read never move while the answer streams. Finished
+ * blocks are memoized, so a new frame only re-renders the block that is still growing. Everything
+ * is React elements: agent text cannot inject HTML.
  */
 export function Answer({ text }: { readonly text: string }) {
   const cache = useRef<SplitCache>(EMPTY_SPLIT);
@@ -34,19 +34,15 @@ export function Answer({ text }: { readonly text: string }) {
   );
 }
 
-const ENTER = { opacity: 0, y: 6 } as const;
-const SHOWN = { opacity: 1, y: 0 } as const;
-const ENTER_TRANSITION = { duration: 0.38, ease: easings.out } as const;
-
 const MarkdownBlock = memo(function MarkdownBlock({ source }: { readonly source: string }) {
   const blocks = useMemo(() => parseBlock(source), [source]);
   return (
-    <motion.div className="md-block" initial={ENTER} animate={SHOWN} transition={ENTER_TRANSITION}>
+    <div className="md-block">
       {blocks.map((block, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: a block's parts are positional and re-derived from its text.
         <BlockView key={index} block={block} />
       ))}
-    </motion.div>
+    </div>
   );
 });
 
@@ -70,10 +66,15 @@ function BlockView({ block }: { readonly block: Block }) {
       );
     case "code":
       return (
-        <pre {...mark} aria-busy={!block.closed}>
-          {block.lang !== "" ? <span className="code-lang">{block.lang}</span> : null}
-          <code>{block.code}</code>
-        </pre>
+        <div className="code-block">
+          <div className="code-header">
+            <span className="code-lang">{block.lang || "Code"}</span>
+            <CopyButton text={block.code} label="Copy code" />
+          </div>
+          <pre {...mark} aria-busy={!block.closed}>
+            <code>{block.code}</code>
+          </pre>
+        </div>
       );
     case "list": {
       const items = block.items.map((item, index) => (
@@ -134,33 +135,33 @@ function BlockView({ block }: { readonly block: Block }) {
   }
 }
 
+/** A task's box, as Graphite draws a check: white with a black check when done, an outline when not. */
 function TaskBox({ checked }: { readonly checked: boolean }) {
   return (
     <svg
-      width={13}
-      height={13}
-      viewBox="0 0 13 13"
+      width={14}
+      height={14}
+      viewBox="0 0 14 14"
       role="img"
       aria-label={checked ? "Done" : "Not done"}
-      style={{ display: "inline-block", marginRight: 8, verticalAlign: -1 }}
+      style={{ display: "inline-block", marginRight: 8, verticalAlign: -2 }}
     >
       <rect
         x={0.5}
         y={0.5}
-        width={12}
-        height={12}
-        rx={3}
-        fill={checked ? "var(--aura-accent)" : "none"}
-        stroke={checked ? "var(--aura-accent)" : "var(--aura-border-3)"}
+        width={13}
+        height={13}
+        rx={3.5}
+        fill={checked ? "var(--g-primary)" : "none"}
+        stroke={checked ? "var(--g-primary)" : "var(--g-line-strong)"}
       />
       {checked ? (
         <path
-          d="m3.4 6.7 2 2 4.2-4.4"
+          d="m3.75 7.25 2.25 2.25 4.25-4.75"
           fill="none"
-          stroke="var(--aura-text-on-accent)"
-          strokeWidth={1.6}
-          strokeLinecap="round"
-          strokeLinejoin="round"
+          stroke="var(--g-on-light)"
+          strokeWidth={1.75}
+          strokeLinecap="square"
         />
       ) : null}
     </svg>

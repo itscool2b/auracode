@@ -30,6 +30,8 @@ pub struct Invocation {
 pub enum Command {
     Help,
     Agents,
+    AgentAuth(String),
+    AgentUpdate(String),
     Probe(ProbeArgs),
     Smoke(SmokeArgs),
     Fixture(FixtureArgs),
@@ -154,6 +156,8 @@ temporary profile, with a fresh temporary git repository as the chat folder.
 
 Usage:
   aura-cli [--data-dir <dir>] agents
+  aura-cli [--data-dir <dir>] agent-auth <agent>
+  aura-cli [--data-dir <dir>] agent-update <agent>
   aura-cli [--data-dir <dir>] probe <agent> [--env NAME=VALUE]... [--folder <dir>]
   aura-cli [--data-dir <dir>] smoke <agent> --scenario <names> --spend
            [--model <id>] [--effort <id>]
@@ -164,6 +168,8 @@ Usage:
 Commands:
   agents    The environment agents start with, the variable names the scrub removes, and whether
             each agent can start here.
+  agent-auth    Check local authentication using the vendor's own command.
+  agent-update  Explicitly run the vendor update for the detected installation channel.
   probe     Starts the agent and runs the free probe steps of the M1a spec (10.2): install,
             initialize, the session's options and commands, option and autonomy changes, a cancel
             while idle, closing stdin, a resume, and an interrupted start. Sends no prompt.
@@ -171,7 +177,7 @@ Commands:
             at the first failure. Refused without --spend.
   fixture   Curates a protocol log into a replay fixture: placeholders, the redaction scan, a
             replay check, and a checklist for the review.
-  replay    Replays a fixture through the real ACP driver and compares the result with its golden
+  replay    Replays a fixture through its real agent driver and compares the result with its golden
             (<fixture>.events.json); --update writes the golden instead.
 
 Options:
@@ -239,7 +245,9 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Invocation, Usa
         valued: parts.valued,
     };
     let data_dir = match name.as_str() {
-        "agents" | "probe" | "smoke" => options.path("--data-dir")?,
+        "agents" | "agent-auth" | "agent-update" | "probe" | "smoke" => {
+            options.path("--data-dir")?
+        }
         _ => None,
     };
     let command = match name.as_str() {
@@ -251,6 +259,15 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Invocation, Usa
             options.allow(&["--data-dir"], &[])?;
             no_more(&rest)?;
             Command::Agents
+        }
+        "agent-auth" | "agent-update" => {
+            options.allow(&["--data-dir"], &[])?;
+            let id = agent_id(one(rest, "this command needs an agent id")?)?;
+            if name == "agent-auth" {
+                Command::AgentAuth(id)
+            } else {
+                Command::AgentUpdate(id)
+            }
         }
         "probe" => {
             options.allow(&["--data-dir", "--env", "--folder"], &[])?;
@@ -610,6 +627,14 @@ mod tests {
     #[test]
     fn every_command_parses_in_its_documented_form() {
         assert_eq!(parsed(&["agents"]).command, Command::Agents);
+        assert_eq!(
+            parsed(&["agent-auth", "codex"]).command,
+            Command::AgentAuth("codex".into())
+        );
+        assert_eq!(
+            parsed(&["agent-update", "claude"]).command,
+            Command::AgentUpdate("claude".into())
+        );
         assert_eq!(
             parsed(&[
                 "probe",

@@ -1,5 +1,7 @@
 import type {
+  AgentAuthStatus,
   AgentEntry,
+  AgentMaintenance,
   ChatStatusUpdate,
   ChatSummary,
   EnvStatus,
@@ -39,6 +41,8 @@ export const STORAGE_POLL_MS = 5000;
 export const STORAGE_ALERT_POLL_MS = 2000;
 /** The env and the agents are polled this often while they are still being worked out. */
 export const DETECTION_POLL_MS = 1000;
+/** Release metadata arrives independently of initial installation detection. */
+export const CATALOG_POLL_MS = 60_000;
 /** A status channel that ended is subscribed again after this long. */
 export const STATUS_RESUBSCRIBE_MS = 1000;
 
@@ -245,9 +249,12 @@ export class AppStore {
     } catch {
       // Agents stay as they were; the next poll or Refresh tries again.
     }
-    if (this.#state.agents?.some((agent) => agent.availability.state === "checking")) {
-      this.#later(run, DETECTION_POLL_MS, () => void this.#pollAgents(run));
-    }
+    const checking = this.#state.agents?.some((agent) => agent.availability.state === "checking");
+    this.#later(
+      run,
+      checking ? DETECTION_POLL_MS : CATALOG_POLL_MS,
+      () => void this.#pollAgents(run),
+    );
   }
 
   /** "Refresh agents": the env again and every probe (15 s at most). */
@@ -310,18 +317,29 @@ export interface NewChatState {
   readonly picking: boolean;
   readonly creating: boolean;
   readonly error: string | null;
+  readonly maintenance: AgentMaintenance | null;
+  readonly maintenanceBusy: "checking" | "auth" | "update" | null;
+  readonly auth: AgentAuthStatus | null;
+  readonly maintenanceMessage: string | null;
+  readonly maintenanceError: string | null;
 }
 
 /** The New chat screen: an agent, a folder from the picker, and Create. */
 export class NewChatDraft {
   readonly #transport: Transport;
   readonly #listeners = new Set<() => void>();
+  #selection = 0;
   #state: NewChatState = {
     agentId: null,
     folder: null,
     picking: false,
     creating: false,
     error: null,
+    maintenance: null,
+    maintenanceBusy: null,
+    auth: null,
+    maintenanceMessage: null,
+    maintenanceError: null,
   };
 
   constructor(transport: Transport) {
@@ -338,7 +356,77 @@ export class NewChatDraft {
   readonly getSnapshot = (): NewChatState => this.#state;
 
   chooseAgent(agentId: string): void {
-    this.#set({ ...this.#state, agentId, error: null });
+    const selection = ++this.#selection;
+    this.#set({
+      ...this.#state,
+      agentId,
+      error: null,
+      maintenance: null,
+      maintenanceBusy: "checking",
+      auth: null,
+      maintenanceMessage: null,
+      maintenanceError: null,
+    });
+    void this.#transport
+      .agentMaintenance(agentId)
+      .then((maintenance) => {
+        if (selection === this.#selection)
+          this.#set({ ...this.#state, maintenance, maintenanceBusy: null });
+      })
+      .catch((error) => {
+        if (selection === this.#selection)
+          this.#set({
+            ...this.#state,
+            maintenanceError: errorMessage(error),
+            maintenanceBusy: null,
+          });
+      });
+  }
+
+  async checkAuth(): Promise<void> {
+    const { agentId, maintenance, maintenanceBusy } = this.#state;
+    if (agentId === null || !maintenance?.auth_status || maintenanceBusy !== null) return;
+    const selection = this.#selection;
+    this.#set({ ...this.#state, maintenanceBusy: "auth", maintenanceError: null });
+    try {
+      const auth = await this.#transport.agentAuthStatus(agentId);
+      if (selection === this.#selection) this.#set({ ...this.#state, auth, maintenanceBusy: null });
+    } catch (error) {
+      if (selection === this.#selection)
+        this.#set({ ...this.#state, maintenanceError: errorMessage(error), maintenanceBusy: null });
+    }
+  }
+
+  async updateAgent(): Promise<boolean> {
+    const { agentId, maintenance, maintenanceBusy } = this.#state;
+    if (
+      agentId === null ||
+      maintenance?.update_unavailable !== null ||
+      maintenanceBusy !== null ||
+      this.#state.creating
+    )
+      return false;
+    const selection = this.#selection;
+    this.#set({
+      ...this.#state,
+      maintenanceBusy: "update",
+      maintenanceMessage: null,
+      maintenanceError: null,
+    });
+    try {
+      await this.#transport.agentUpdate(agentId);
+      if (selection === this.#selection)
+        this.#set({
+          ...this.#state,
+          maintenanceMessage: "Update complete. The installed version was checked again.",
+          maintenanceBusy: null,
+        });
+      return true;
+    } catch (error) {
+      if (selection === this.#selection)
+        this.#set({ ...this.#state, maintenanceError: errorMessage(error), maintenanceBusy: null });
+      return false;
+    }
   }
 
   /** The system folder picker; cancelling it changes nothing. */
@@ -361,7 +449,8 @@ export class NewChatDraft {
   /** Creates the chat (which starts its agent). Answers it, or `null` with the error shown. */
   async create(): Promise<ChatSummary | null> {
     const { agentId, folder, creating } = this.#state;
-    if (agentId === null || folder === null || creating) return null;
+    if (agentId === null || folder === null || creating || this.#state.maintenanceBusy === "update")
+      return null;
     this.#set({ ...this.#state, creating: true, error: null });
     try {
       const chat = await this.#transport.chatCreate(agentId, folder);

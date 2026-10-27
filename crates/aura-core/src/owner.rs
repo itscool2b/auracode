@@ -28,7 +28,7 @@ const OWNER_LOCK: &str = "owner.lock";
 pub struct ProfileOwner {
     path: PathBuf,
     /// The locked file; `None` where the filesystem cannot lock. Dropping it releases the lock.
-    _file: Option<File>,
+    _file: Option<aura_process::locked_file::LockedFile>,
 }
 
 impl ProfileOwner {
@@ -40,7 +40,7 @@ impl ProfileOwner {
         match file.try_lock() {
             Ok(()) => Ok(ProfileOwner {
                 path,
-                _file: Some(file),
+                _file: Some(aura_process::locked_file::LockedFile::new(file)),
             }),
             Err(TryLockError::WouldBlock) => Err(CoreError::ProfileInUse {
                 path: profile.dir.clone(),

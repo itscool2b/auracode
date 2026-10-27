@@ -21,6 +21,7 @@ replay = ["testing", "aura-process/testing", "tokio/test-util"]
 [dependencies]
 aura-process.workspace = true
 aura-protocol.workspace = true
+base64 = "0.23.1"
 futures.workspace = true
 regex.workspace = true
 serde.workspace = true
@@ -28,6 +29,7 @@ serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+time = { version = "0.3.55", default-features = false, features = ["parsing"] }
 tokio-util = "0.7.20"
 tracing.workspace = true
 # Grapheme boundaries, so a split delta never cuts an emoji sequence or an accent off its letter.
@@ -35,11 +37,14 @@ unicode-segmentation = "1.13.3"
 uuid.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 # The ACP schema, for the conformance tests only: auracode has no runtime dependency on the SDK.
 agent-client-protocol-schema = { version = "=1.12.0", features = ["unstable"] }
 aura-process = { workspace = true, features = ["testing"] }
 # `schema_for!`, to list every `sessionUpdate` tag the schema defines.
 schemars = "1.2.3"
+# Validate native fixtures against the CLI-generated schema without network or file resolution.
+jsonschema = { version = "0.60.1", default-features = false }
 # Paused time makes the pacing and cancellation tests deterministic.
 tokio = { workspace = true, features = ["test-util"] }
 

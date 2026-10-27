@@ -772,7 +772,11 @@ mod tests {
     #[test]
     fn a_smoke_agent_runs_the_minimal_chat_with_that_agent() {
         let folder = absolute("agent chat");
-        for (given, id) in [("claude-acp", "claude-acp"), (" hermes ", "hermes")] {
+        for (given, id) in [
+            ("claude", "claude"),
+            ("claude-acp", "claude-acp"),
+            (" hermes ", "hermes"),
+        ] {
             assert_eq!(
                 plan("chat", Some(&folder), Some(given), false),
                 Some(Ok(SmokePlan {
@@ -791,7 +795,14 @@ mod tests {
             plan("chat", Some(&folder), Some("gpt-cli"), false),
             Some(Err(setup_error(
                 Some(SmokeScenario::Agent),
-                "AURACODE_SMOKE_AGENT=\"gpt-cli\" is not an agent auracode knows (hermes, claude-acp, codex-acp, mock)."
+                &format!(
+                    "AURACODE_SMOKE_AGENT=\"gpt-cli\" is not an agent auracode knows ({}).",
+                    aura_agents::catalog()
+                        .iter()
+                        .map(|spec| spec.id)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             )))
         );
         for value in ["1", "chat-reopen"] {

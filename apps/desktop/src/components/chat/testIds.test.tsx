@@ -104,6 +104,8 @@ describe("the automation attributes of the chat screens", () => {
         launch: "built in",
         needs_download: false,
         last_verified: "",
+        installation: null,
+        latest_release: null,
       },
     ]);
     expect(marked(after, "new-chat-folder")).toEqual([{ tag: "span", folder: "/work/app" }]);
@@ -231,7 +233,7 @@ describe("the automation attributes of the chat screens", () => {
       { tag: "select", requested: "ask", "native-mode": "ask", saving: "false" },
     ]);
     expect(marked(html, "picker-option")).toEqual([
-      { tag: "select", "option-id": "model", saving: "false" },
+      { tag: "div", "option-id": "model", saving: "false", value: "a" },
       { tag: "input", "option-id": "fast", saving: "true" },
     ]);
   });
@@ -271,10 +273,20 @@ describe("the automation attributes of the chat screens", () => {
         tag: "section",
         kind: "turn",
         "turn-id": "t1",
+        "segment-key": "turn:t1",
+        prompt: "Do it",
         "stop-reason": "interrupted",
         recovered: "true",
       },
-      { tag: "section", kind: "outside", "turn-id": "", "stop-reason": "", recovered: "false" },
+      {
+        tag: "section",
+        kind: "outside",
+        "turn-id": "",
+        "segment-key": segments[1]?.key,
+        prompt: "",
+        "stop-reason": "",
+        recovered: "false",
+      },
     ]);
     expect(marked(html, "item")).toEqual([
       { tag: "div", kind: "user" },

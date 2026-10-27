@@ -12,7 +12,14 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 /// The methods that open a session: their `params.cwd` is the chat folder.
-pub const OPEN_METHODS: [&str; 3] = ["session/new", "session/load", "session/resume"];
+pub const OPEN_METHODS: [&str; 6] = [
+    "session/new",
+    "session/load",
+    "session/resume",
+    "thread/start",
+    "thread/resume",
+    "thread/fork",
+];
 
 /// The current log files in a chat's log folder, oldest spawn first: logs are named after UUIDv7
 /// spawn ids, which sort by time. Rotated parts are left out ([`read`] reads them with their log).
@@ -108,7 +115,7 @@ pub fn t(record: &Value) -> Option<i64> {
     record.get("t").and_then(Value::as_i64)
 }
 
-/// The JSON-RPC message of an `out` or `in` record.
+/// The protocol message of an `out` or `in` record (ACP JSON-RPC or Claude stream-json).
 pub fn message(record: &Value) -> Option<&Value> {
     record.get("msg")
 }
@@ -129,12 +136,43 @@ pub fn notes<'a>(records: &'a [Value], kind: &'a str) -> impl Iterator<Item = &'
         .filter_map(move |record| record.get("note")?.get(kind))
 }
 
-/// The first request the driver sent with this method.
+/// An ACP request/notification method or a native Claude control subtype.
+pub fn request_method(message: &Value) -> Option<&str> {
+    if let Some(method) = message.get("method").and_then(Value::as_str) {
+        Some(method)
+    } else if message["type"] == "control_request" && message["request_id"].is_string() {
+        message.pointer("/request/subtype").and_then(Value::as_str)
+    } else if message["id"].is_string()
+        && matches!(
+            message["type"].as_str(),
+            Some(
+                "prompt"
+                    | "abort"
+                    | "clear_queue"
+                    | "get_state"
+                    | "get_available_models"
+                    | "get_available_thinking_levels"
+                    | "get_session_stats"
+                    | "get_commands"
+                    | "set_model"
+                    | "set_thinking_level"
+            )
+        )
+    {
+        message["type"].as_str()
+    } else {
+        None
+    }
+}
+
+/// The first request the driver sent with this method or native control subtype.
 pub fn request<'a>(records: &'a [Value], method: &str) -> Option<&'a Value> {
     records.iter().find(|record| {
         direction(record) == Some("out")
             && message(record).is_some_and(|msg| {
-                msg.get("method").and_then(Value::as_str) == Some(method) && msg.get("id").is_some()
+                request_method(msg) == Some(method)
+                    && (msg.get("id").is_some()
+                        || (msg["type"] == "control_request" && msg["request_id"].is_string()))
             })
     })
 }
@@ -145,9 +183,18 @@ pub fn reply<'a>(records: &'a [Value], id: &Value) -> Option<&'a Value> {
     records.iter().find(|record| {
         direction(record) == Some("in")
             && message(record).is_some_and(|msg| {
-                msg.get("id") == Some(id)
+                (msg.get("id") == Some(id)
                     && msg.get("method").is_none()
-                    && (msg.get("result").is_some() || msg.get("error").is_some())
+                    && (msg.get("result").is_some() || msg.get("error").is_some()))
+                    || (msg["type"] == "control_response"
+                        && msg.pointer("/response/request_id") == Some(id)
+                        && matches!(
+                            msg.pointer("/response/subtype").and_then(Value::as_str),
+                            Some("success" | "error")
+                        ))
+                    || (msg["type"] == "response"
+                        && msg.get("id") == Some(id)
+                        && msg["success"].is_boolean())
             })
     })
 }
@@ -155,7 +202,8 @@ pub fn reply<'a>(records: &'a [Value], id: &Value) -> Option<&'a Value> {
 /// A request with this method and its reply, when both are in the log.
 pub fn exchange<'a>(records: &'a [Value], method: &str) -> Option<(&'a Value, &'a Value)> {
     let sent = request(records, method)?;
-    let id = message(sent)?.get("id")?;
+    let request = message(sent)?;
+    let id = request.get("id").or_else(|| request.get("request_id"))?;
     Some((sent, reply(records, id)?))
 }
 
@@ -172,9 +220,18 @@ pub fn first_open(records: &[Value]) -> Option<&Value> {
 
 /// The chat folder as the agent got it: the first session open's `cwd`.
 pub fn session_cwd(records: &[Value]) -> Option<&str> {
-    message(first_open(records)?)?
-        .pointer("/params/cwd")
+    first_open(records)
+        .and_then(message)
+        .and_then(|msg| msg.pointer("/params/cwd"))
         .and_then(Value::as_str)
+        .or_else(|| {
+            // Native Claude opens its session through launch arguments, in the process cwd.
+            let start = note(records, "start")?;
+            (matches!(start["agent_id"].as_str(), Some("claude" | "pi"))
+                || matches!(start["dialect"].as_str(), Some("claude" | "pi")))
+            .then(|| note(records, "spawn")?.get("cwd")?.as_str())
+            .flatten()
+        })
 }
 
 /// The `session/update` notifications the agent sent with this `sessionUpdate` tag.
@@ -199,10 +256,36 @@ pub fn requests_of<'a>(
     records.iter().filter(move |record| {
         direction(record) == Some("out")
             && message(record)
-                .and_then(|msg| msg.get("method"))
-                .and_then(Value::as_str)
+                .and_then(request_method)
                 .is_some_and(|method| methods.contains(&method))
     })
+}
+
+/// Incoming native system events with this subtype.
+pub fn native_events<'a>(
+    records: &'a [Value],
+    subtype: &'a str,
+) -> impl Iterator<Item = &'a Value> + 'a {
+    records.iter().filter(move |record| {
+        direction(record) == Some("in")
+            && message(record)
+                .is_some_and(|msg| msg["type"] == "system" && msg["subtype"] == subtype)
+    })
+}
+
+/// Evidence that a run sent or attempted a prompt, including native Claude user frames.
+pub fn has_prompt(records: &[Value]) -> bool {
+    commands(records).any(|command| command["type"] == "prompt")
+        || records.iter().any(|record| {
+            direction(record) == Some("out")
+                && message(record).is_some_and(|msg| {
+                    msg["type"] == "user"
+                        || matches!(
+                            msg["method"].as_str(),
+                            Some("session/prompt" | "turn/start" | "turn/steer")
+                        )
+                })
+        })
 }
 
 /// The `cmd` records, in order.
@@ -298,6 +381,57 @@ mod tests {
         assert!(mentions(&records, "HOSTILE"));
         assert!(!mentions(&records, "nowhere"));
         assert_eq!(session_cwd(&records), None);
+    }
+
+    #[test]
+    fn native_controls_match_nested_reply_ids_without_matching_agent_requests() {
+        let records = records(&[
+            json!({"d":"out","msg":{"type":"control_request","request_id":"init","request":{"subtype":"initialize"}}}),
+            json!({"d":"in","msg":{"type":"control_request","request_id":"init","request":{"subtype":"can_use_tool"}}}),
+            json!({"d":"in","msg":{"type":"control_response","response":{"subtype":"success","request_id":"other","response":{}}}}),
+            json!({"d":"in","msg":{"type":"control_response","response":{"subtype":"success","request_id":"init","response":{"claude_code_version":"2.1.310"}}}}),
+            json!({"d":"out","msg":{"type":"control_request","request_id":"mode","request":{"subtype":"set_permission_mode","mode":"default"}}}),
+            json!({"d":"in","msg":{"type":"control_response","response":{"subtype":"error","request_id":"mode","error":"policy"}}}),
+            json!({"d":"in","msg":{"type":"system","subtype":"commands_changed","commands":[]}}),
+            json!({"d":"out","msg":{"type":"system","subtype":"commands_changed","commands":[]}}),
+            json!({"d":"note","note":{"start":{"agent_id":"claude","dialect":"claude"}}}),
+            json!({"d":"note","note":{"spawn":{"cwd":"/work/project"}}}),
+        ]);
+        let (_, initialized) = exchange(&records, "initialize").expect("native initialize");
+        assert_eq!(
+            message(initialized).expect("message")["response"]["response"]["claude_code_version"],
+            "2.1.310"
+        );
+        let (_, refused) = exchange(&records, "set_permission_mode").expect("native error");
+        assert_eq!(
+            message(refused).expect("message")["response"]["error"],
+            "policy"
+        );
+        assert_eq!(requests_of(&records, &["set_permission_mode"]).count(), 1);
+        assert_eq!(native_events(&records, "commands_changed").count(), 1);
+        assert_eq!(session_cwd(&records), Some("/work/project"));
+        assert!(!has_prompt(&records));
+    }
+
+    #[test]
+    fn notifications_still_count_as_cancels_and_both_prompt_protocols_are_detected() {
+        let cancel = vec![json!({"d":"out","msg":{"method":"session/cancel","params":{}}})];
+        assert_eq!(requests_of(&cancel, &["session/cancel"]).count(), 1);
+        assert!(
+            request(&cancel, "session/cancel").is_none(),
+            "a notification has no correlated reply"
+        );
+        assert!(!has_prompt(&cancel));
+        for prompt in [
+            json!({"d":"out","msg":{"method":"session/prompt","id":1,"params":{}}}),
+            json!({"d":"out","msg":{"type":"user","message":{"role":"user","content":"/usage"}}}),
+            json!({"d":"cmd","cmd":{"type":"prompt","parts":[]}}),
+        ] {
+            assert!(has_prompt(&[prompt]));
+        }
+        assert!(!has_prompt(&[
+            json!({"d":"in","msg":{"type":"user","message":{"content":[]}}})
+        ]));
     }
 
     #[test]

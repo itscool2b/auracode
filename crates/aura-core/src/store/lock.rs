@@ -18,6 +18,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use aura_process::locked_file::LockedFile;
+
 use crate::error::{CoreError, InUseReason, Result};
 use crate::fsutil;
 
@@ -35,11 +37,16 @@ pub(super) enum Hold {
     Unavailable,
 }
 
+/// Locks are released explicitly, so a child forked during a spawn elsewhere in this process
+/// cannot keep a finished open or a closed store looking active to the next open here.
 #[derive(Debug)]
 pub(super) struct OpenLock {
-    file: Option<File>,
+    file: Option<LockedFile>,
     hold: Hold,
 }
+
+/// The shared hold an open store keeps for its whole life.
+pub(super) type StoreHold = LockedFile;
 
 /// `<db>.lock`
 pub(super) fn lock_path(db_path: &Path) -> PathBuf {
@@ -78,7 +85,7 @@ impl OpenLock {
 
     fn held(file: File, hold: Hold) -> OpenLock {
         OpenLock {
-            file: Some(file),
+            file: Some(LockedFile::new(file)),
             hold,
         }
     }
@@ -110,7 +117,7 @@ impl OpenLock {
     /// may slip in between; it then finds a healthy, migrated database and leaves it alone. Returns
     /// `None` when there is nothing to keep (no locking here) or the shared hold can't be had, in
     /// which case the store still works, just without protection from repairs by others.
-    pub(super) fn into_store_hold(self, timeout: Duration) -> Option<File> {
+    pub(super) fn into_store_hold(self, timeout: Duration) -> Option<StoreHold> {
         let file = self.file?;
         match self.hold {
             Hold::Shared => Some(file),
@@ -224,5 +231,31 @@ mod tests {
         let (hold, waited) = waiter.join().expect("thread").expect("second");
         assert_eq!(hold, Hold::Exclusive);
         assert!(waited >= Duration::from_millis(100), "{waited:?}");
+    }
+
+    /// A child forked by another thread holds a copy of the lock descriptor until its exec.
+    /// `try_clone` duplicates the descriptor the same way, onto the same open file description.
+    #[test]
+    fn an_inherited_descriptor_does_not_keep_a_closed_store_locked() {
+        let (_dir, db) = db();
+        let opening = OpenLock::acquire(&db, Duration::from_millis(100)).expect("first");
+        let inherited = opening
+            .file
+            .as_ref()
+            .expect("lock file")
+            .try_clone()
+            .expect("dup");
+        let kept = opening
+            .into_store_hold(Duration::from_millis(100))
+            .expect("a shared hold for the store");
+        let child = kept.try_clone().expect("dup");
+        drop(kept);
+        let next = OpenLock::acquire(&db, Duration::from_millis(100)).expect("next");
+        assert_eq!(
+            next.hold(),
+            Hold::Exclusive,
+            "a closed store may migrate its database"
+        );
+        drop((inherited, child));
     }
 }

@@ -18,7 +18,9 @@ import {
   firstDifference,
   one,
   pressEnter,
+  readFullTranscript,
   readTranscript,
+  revealTranscriptItem,
   type SegmentShape,
   type SegmentView,
   StepError,
@@ -366,7 +368,7 @@ function turnOf(prompt: string): SegmentView | null {
 }
 
 async function waitTurnEnded(prompt: string, timeoutMs?: number): Promise<SegmentView> {
-  return waitFor(
+  await waitFor(
     `the turn for "${prompt}" to end`,
     () => {
       const found = turnOf(prompt);
@@ -374,6 +376,13 @@ async function waitTurnEnded(prompt: string, timeoutMs?: number): Promise<Segmen
     },
     timeoutMs,
   );
+  const turns = (await readFullTranscript()).filter(
+    (segment) => segment.kind === "turn" && segment.prompt === prompt,
+  );
+  const ended = turns.at(-1);
+  if (!ended)
+    throw new StepError(`the completed turn for "${prompt}" is absent after scrolling its history`);
+  return ended;
 }
 
 /** The turn's agent messages, joined. */
@@ -479,6 +488,14 @@ async function waitAttention(chatId: string, want: boolean): Promise<void> {
 
 /** Chooses `value` in a select and waits until the page took it. */
 async function choose(select: HTMLElement | null, what: string, value: string): Promise<void> {
+  const row = select?.querySelector<HTMLButtonElement>(
+    `button[data-picker-value="${CSS.escape(value)}"]`,
+  );
+  if (row) {
+    await waitFor(`${what} to be enabled`, () => !row.disabled);
+    click(row, what);
+    return;
+  }
   if (!(select instanceof HTMLSelectElement)) throw new StepError(`${what} is not on the page`);
   await waitFor(`${what} to be enabled`, () => !select.disabled);
   if (![...select.options].some((option) => option.value === value)) {
@@ -492,13 +509,13 @@ function pickerOption(id: string): HTMLElement | null {
 }
 
 /** The transcript as lines, to compare with a script. */
-function transcriptLines(): string[] {
-  return readTranscript().map(describeSegment);
+async function transcriptLines(): Promise<string[]> {
+  return (await readFullTranscript()).map(describeSegment);
 }
 
-function expectTranscript(want: readonly SegmentShape[]): string {
+async function expectTranscript(want: readonly SegmentShape[]): Promise<string> {
   const expected = want.map(describeSegment);
-  const difference = firstDifference(expected, transcriptLines());
+  const difference = firstDifference(expected, await transcriptLines());
   if (difference !== null) throw new StepError(difference);
   return `${expected.length} segments as the script says`;
 }
@@ -693,7 +710,7 @@ async function chatScenario(
     await waitFor(
       "the Model picker to keep Mock Smart",
       () =>
-        (pickerOption("model") as HTMLSelectElement | null)?.value === "mock-smart" &&
+        attr(pickerOption("model"), "value") === "mock-smart" &&
         attr(pickerOption("model"), "saving") === "false",
     );
     return "the Model picker kept mock-smart once the agent answered";
@@ -1013,18 +1030,24 @@ function toolOutput(prompt: string): HTMLElement | null {
 
 /** Pages in `/big`'s whole output with Load full output; returns how many characters show. */
 async function loadFullOutput(prompt: string): Promise<number> {
+  const tool = await revealTranscriptItem(prompt, "tool");
+  const disclosure = one("tool-output", tool);
+  if (disclosure instanceof HTMLDetailsElement && !disclosure.open)
+    click(disclosure.querySelector("summary"), "the tool output");
   const content = toolOutput(prompt);
   if (content === null) throw new StepError(`the turn for "${prompt}" shows no tool output`);
   if (attr(content, "truncated") !== "true") throw new StepError("the big output arrived whole");
   const cut = text(one("tool-text", content)).length;
   if (cut >= BIG_OUTPUT_CHARS) throw new StepError(`the cut output shows ${cut} characters`);
   click(one("load-full-output", content), "Load full output");
-  return waitFor(`all ${BIG_OUTPUT_CHARS} characters of the big output`, () => {
+  const length = await waitFor(`all ${BIG_OUTPUT_CHARS} characters of the big output`, () => {
     const shown = toolOutput(prompt);
     if (shown === null) return null;
     const length = text(one("tool-text", shown)).length;
     return length === BIG_OUTPUT_CHARS && one("load-full-output", shown) === null ? length : null;
   });
+  one("jump-latest")?.click();
+  return length;
 }
 
 // ---------- chat_reopen: the same data folder after the quit ----------
@@ -1070,8 +1093,8 @@ async function reopenScenario(
   });
 
   await checks.run("reopen-history", async () => {
-    await waitFor("the stored history", () => readTranscript().length >= CHAT_TRANSCRIPT.length);
-    return `the stored history renders ${expectTranscript([...CHAT_TRANSCRIPT, SEGMENTS.atQuit])}`;
+    await waitFor("the stored history", () => readTranscript().length > 0);
+    return `the stored history renders ${await expectTranscript([...CHAT_TRANSCRIPT, SEGMENTS.atQuit])}`;
   });
 
   await checks.run("reopen-interrupted", async () => {

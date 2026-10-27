@@ -1,4 +1,4 @@
-//! Every fixture under `tests/fixtures/acp` replays to its golden, keeps the driver contract, and
+//! Every fixture under `tests/fixtures` replays to its golden, keeps the driver contract, and
 //! holds no personal data. `AURA_UPDATE_GOLDEN=1` rewrites the goldens.
 #![cfg(feature = "replay")]
 
@@ -15,7 +15,7 @@ mod replay {
     use serde_json::Value;
 
     fn fixture_root() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/acp")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
     }
 
     /// Every `.jsonl` fixture, sorted.
@@ -73,7 +73,14 @@ mod replay {
         if readies > 1 {
             violations.push(format!("{readies} Ready events"));
         }
-        if (readies == 0) != (exit_type == "start_failed") {
+        let cancelled_start = readies == 0
+            && exit_type == "closed"
+            && prompts.is_empty()
+            && fixture
+                .records
+                .iter()
+                .any(|record| matches!(record, FixtureRecord::Cmd(LoggedCommand::Shutdown)));
+        if (readies == 0) != (exit_type == "start_failed" || cancelled_start) {
             violations.push(format!("{readies} Ready events and the exit {exit_type}"));
         }
 
@@ -84,6 +91,7 @@ mod replay {
         for event in before_ready {
             let allowed = match event {
                 DriverEvent::Status(_)
+                | DriverEvent::RunState { .. }
                 | DriverEvent::Options(_)
                 | DriverEvent::Commands(_)
                 | DriverEvent::Title(_)
@@ -154,6 +162,288 @@ mod replay {
                 violations.push(format!("no TurnEnded for {turn_id}"));
             }
         }
+        if fixture
+            .start()
+            .is_some_and(|start| start["agent_id"] == "claude")
+        {
+            violations.extend(native_contract_violations(fixture, &events, report));
+        }
+        if fixture
+            .start()
+            .is_some_and(|start| start["agent_id"] == "codex")
+        {
+            if fixture.name == "approval-available-decisions" {
+                for event in &events {
+                    if let DriverEvent::Permission { request, .. } = event
+                        && request
+                            .options
+                            .iter()
+                            .map(|option| option.option_id.as_str())
+                            .collect::<Vec<_>>()
+                            != ["accept", "cancel"]
+                    {
+                        violations.push("Codex approval offered an unadvertised decision".into());
+                    }
+                }
+            }
+            if fixture.name == "recorded-basic" {
+                let text: String = events
+                    .iter()
+                    .filter_map(|event| match event {
+                        DriverEvent::Event {
+                            event: AuraEvent::MessageDelta { text, .. },
+                            ..
+                        } => Some(text.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                if text != "ok" || !events.iter().any(|event| matches!(event, DriverEvent::TurnEnded { usage: Some(usage), .. } if usage.scope == aura_protocol::UsageScope::Turn && usage.input_tokens == 25745 && usage.output_tokens == 5)) {
+                    violations.push("recorded Codex basic content or native turn usage changed".into());
+                }
+            }
+        }
+        violations
+    }
+
+    fn native_contract_violations(
+        fixture: &Fixture,
+        events: &[DriverEvent],
+        report: &ReplayReport,
+    ) -> Vec<String> {
+        use aura_protocol::StopReason;
+        let mut violations = Vec::new();
+        if !events
+            .iter()
+            .take_while(|event| !matches!(event, DriverEvent::Ready(_)))
+            .any(|event| matches!(event, DriverEvent::RunState { .. }))
+        {
+            violations.push("native driver did not opt in to run state before Ready".into());
+        }
+        let ended = |turn: &str, reason| {
+            events.iter().any(|event| matches!(event, DriverEvent::TurnEnded { turn_id, stop_reason, .. } if turn_id == turn && *stop_reason == reason))
+        };
+        let stale_model = events.iter().any(|event| matches!(event,
+            DriverEvent::Options(options) if options.iter().any(|option| matches!(
+                &option.kind, aura_protocol::session::ConfigKind::Select { current, .. } if current == "late-model"
+            ))
+        ));
+        match fixture.name.as_str() {
+            "telemetry-merge" | "telemetry-coalesced" => {
+                if fixture.name == "telemetry-coalesced" && events.iter().any(|event| matches!(event, DriverEvent::Event { event: AuraEvent::UsageUpdated(usage), .. } if usage.context_used == Some(100))) {
+                    violations.push("stale pending context reply was emitted after the result requested a refresh".into());
+                }
+                let usage = events.iter().rev().find_map(|event| match event {
+                    DriverEvent::Event { event: AuraEvent::UsageUpdated(usage), .. } => Some(usage),
+                    _ => None,
+                });
+                if !usage.is_some_and(|usage| usage.context_used == Some(250) && usage.context_size == Some(1000) && usage.cost.as_ref().is_some_and(|cost| cost.amount == 0.03)) {
+                    violations.push("telemetry refresh lost result spend or context occupancy".into());
+                }
+                let limits = events.iter().rev().find_map(|event| match event {
+                    DriverEvent::Event { event: AuraEvent::LimitsUpdated { windows }, .. } => Some(windows),
+                    _ => None,
+                });
+                if !limits.is_some_and(|windows| windows.iter().any(|window| window.used_percent == 25.0 && window.resets_at == Some(1792834799749))) {
+                    violations.push("control telemetry quota percentages or reset times were translated incorrectly".into());
+                }
+                if !events.iter().any(|event| matches!(event, DriverEvent::TurnEnded { usage: Some(usage), .. } if usage.input_tokens == 3 && usage.output_tokens == 4 && usage.cache_read_tokens == Some(2))) {
+                    violations.push("control telemetry replaced the result's per-turn token counters".into());
+                }
+            }
+            "basic" if !events.iter().any(|event| matches!(event, DriverEvent::Event { event: AuraEvent::MessageDelta { text, .. }, .. } if text == "hello back")) => violations.push("native assistant content was not replayed".into()),
+            "result-before-idle" => {
+                if !ended("TOO-EARLY", StopReason::Error) || !ended("T2", StopReason::EndTurn) {
+                    violations.push("native result incorrectly made another prompt dispatchable before idle".into());
+                }
+            }
+            "permission-withdrawal" => {
+                let permission = events.iter().position(|event| matches!(event, DriverEvent::Permission { turn: None, request } if request.request_id == "permission-1"));
+                let withdrawal = events.iter().position(|event| matches!(event, DriverEvent::PermissionWithdrawn { request_id } if request_id == "permission-1"));
+                if !matches!((permission, withdrawal), (Some(request), Some(withdrawn)) if request < withdrawn) {
+                    violations.push("background permission did not remain untagged and withdraw".into());
+                }
+            }
+            "interrupt" if !ended("T1", StopReason::Cancelled) => violations.push("native interruption did not end as cancelled".into()),
+            "bad-late-controls" if report.replies.len() != 2 || report.replies.iter().any(|reply| reply.pointer("/reply/ok").is_none()) || stale_model => {
+                violations.push("late control reply affected the next setting request".into());
+            }
+            _ => {}
+        }
+        if fixture.name.starts_with("recorded-") {
+            violations.extend(recorded_native_violations(fixture, events));
+        }
+        violations
+    }
+
+    fn recorded_native_violations(fixture: &Fixture, events: &[DriverEvent]) -> Vec<String> {
+        use aura_protocol::{StopReason, ToolStatus, session::ConfigKind};
+        let mut violations = Vec::new();
+        let endings: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                DriverEvent::TurnEnded {
+                    stop_reason, usage, ..
+                } => Some((stop_reason, usage)),
+                _ => None,
+            })
+            .collect();
+        let expected_turns = if fixture.name == "recorded-permission" {
+            2
+        } else {
+            1
+        };
+        let expected_reason = if fixture.name == "recorded-interrupt" {
+            StopReason::Cancelled
+        } else {
+            StopReason::EndTurn
+        };
+        if endings.len() != expected_turns
+            || endings
+                .iter()
+                .any(|(reason, _)| **reason != expected_reason)
+        {
+            violations.push(
+                "recorded prompts did not end exactly once with their recorded outcome".into(),
+            );
+        }
+        let text: String = events
+            .iter()
+            .filter_map(|event| match event {
+                DriverEvent::Event {
+                    event: AuraEvent::MessageDelta { text, .. },
+                    ..
+                } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        let committed: String = fixture
+            .records
+            .iter()
+            .filter_map(|record| match record {
+                FixtureRecord::In(message)
+                    if message["type"] == "assistant"
+                        && message["parent_tool_use_id"].is_null() =>
+                {
+                    message
+                        .pointer("/message/content")
+                        .and_then(Value::as_array)
+                }
+                _ => None,
+            })
+            .flatten()
+            .filter(|block| block["type"] == "text")
+            .filter_map(|block| block["text"].as_str())
+            .collect();
+        if fixture.name != "recorded-interrupt" && text != committed {
+            violations.push(
+                "streamed and committed assistant text duplicated or lost recorded content".into(),
+            );
+        }
+        if events.iter().any(|event| matches!(event, DriverEvent::Options(options) if options.iter().any(|option|
+            matches!(&option.kind, ConfigKind::Select { current, choices } if !choices.iter().any(|choice| choice.value == *current))))) {
+            violations.push("recorded native metadata advertised a current value outside its choices".into());
+        }
+        let tools: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                DriverEvent::Event {
+                    event: AuraEvent::ToolCall(call),
+                    ..
+                } => Some(call),
+                _ => None,
+            })
+            .collect();
+        let tool_finished = |index: usize, status| {
+            tools.get(index).is_some_and(|tool| {
+                events.iter().any(|event| {
+                    matches!(event, DriverEvent::Event { event: AuraEvent::ToolUpdate(update), .. }
+                if update.tool_call_id == tool.tool_call_id && update.status == Some(status))
+                })
+            })
+        };
+        match fixture.name.as_str() {
+            "recorded-basic" if text != "ok" => violations.push("basic response changed".into()),
+            "recorded-permission" => {
+                let decisions: Vec<_> = fixture
+                    .records
+                    .iter()
+                    .filter_map(|record| match record {
+                        FixtureRecord::Out(message) if message["type"] == "control_response" => {
+                            message
+                                .pointer("/response/response/behavior")
+                                .and_then(Value::as_str)
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                let permissions = events
+                    .iter()
+                    .filter(|event| matches!(event, DriverEvent::Permission { .. }))
+                    .count();
+                if decisions != ["deny", "allow"]
+                    || permissions != 2
+                    || tools.len() != 2
+                    || tools[0].tool_name.as_deref() != Some("Bash")
+                    || tools[1].tool_name.as_deref() != Some("Write")
+                    || !tool_finished(0, ToolStatus::Failed)
+                    || !tool_finished(1, ToolStatus::Completed)
+                {
+                    violations.push(
+                        "recorded deny then allow did not preserve both tool lifecycles".into(),
+                    );
+                }
+            }
+            "recorded-interrupt" | "recorded-after-interrupt" if text != "1" => {
+                violations
+                    .push("recorded interrupt partial text or next-turn memory changed".into());
+            }
+            "recorded-full-auto" => {
+                if events
+                    .iter()
+                    .any(|event| matches!(event, DriverEvent::Permission { .. }))
+                    || tools.len() != 1
+                    || tools[0].tool_name.as_deref() != Some("Write")
+                    || !tool_finished(0, ToolStatus::Completed)
+                {
+                    violations.push("native bypassPermissions no longer completed its recorded Write without a callback".into());
+                }
+            }
+            "recorded-resume"
+                if text != "aura-perm.txt\naura-auto.txt"
+                    || !fixture
+                        .start()
+                        .is_some_and(|start| start["resume"].is_string()) =>
+            {
+                violations
+                    .push("recorded resume did not preserve the saved file-name response".into());
+            }
+            "recorded-thinking" => {
+                let thoughts: Vec<_> = events
+                    .iter()
+                    .filter_map(|event| match event {
+                        DriverEvent::Event {
+                            event: AuraEvent::ThoughtDelta { thought_id, text },
+                            ..
+                        } => Some((thought_id, text)),
+                        _ => None,
+                    })
+                    .collect();
+                let completion = thoughts.first().is_some_and(|(id, _)| events.iter().any(|event|
+                    matches!(event, DriverEvent::Event { event: AuraEvent::ThoughtCompleted { thought_id, .. }, .. } if thought_id == *id)));
+                if thoughts.len() != 1
+                    || thoughts.iter().any(|(_, text)| !text.is_empty())
+                    || !completion
+                    || !endings.iter().any(|(_, usage)| {
+                        usage
+                            .as_ref()
+                            .is_some_and(|usage| usage.reasoning_tokens == Some(302))
+                    })
+                {
+                    violations.push("withheld reasoning must retain one empty completed thought and the recorded 302 reasoning tokens".into());
+                }
+            }
+            _ => {}
+        }
         violations
     }
 
@@ -206,6 +496,38 @@ mod replay {
 
     #[test]
     fn every_spec_scenario_has_a_fixture() {
+        let native_names: BTreeSet<String> = fixtures()
+            .iter()
+            .filter(|path| {
+                path.parent()
+                    .is_some_and(|parent| parent.ends_with("claude"))
+            })
+            .filter_map(|path| {
+                path.file_stem()
+                    .map(|stem| stem.to_string_lossy().into_owned())
+            })
+            .collect();
+        for scenario in [
+            "basic",
+            "result-before-idle",
+            "permission-withdrawal",
+            "interrupt",
+            "bad-late-controls",
+            "telemetry-merge",
+            "telemetry-coalesced",
+            "recorded-basic",
+            "recorded-permission",
+            "recorded-interrupt",
+            "recorded-after-interrupt",
+            "recorded-full-auto",
+            "recorded-resume",
+            "recorded-thinking",
+        ] {
+            assert!(
+                native_names.contains(scenario),
+                "no native Claude fixture for {scenario}"
+            );
+        }
         let names: BTreeSet<String> = fixtures()
             .iter()
             .filter_map(|path| {

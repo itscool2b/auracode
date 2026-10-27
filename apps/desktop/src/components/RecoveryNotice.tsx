@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { type DismissState, dismiss, SHOWN } from "../lib/dismiss";
 import { acknowledgeRecovery } from "../lib/ipc";
-import { WarningIcon } from "./icons";
 
 /**
  * What the Dismiss button does: asks the shell to acknowledge the repair (the command takes no
@@ -56,19 +55,19 @@ export function RecoveryNoticeView({
   const busy = state.status === "dismissing";
   return (
     <li className="notice">
-      <WarningIcon />
-      <div className="flex min-w-0 flex-col items-start gap-1">
-        <span className="wrap-anywhere">{message}</span>
+      <span className="notice-mark" aria-hidden="true" />
+      <div className="notice-body">
+        <span className="notice-text">{message}</span>
         <button
           type="button"
-          className="btn btn-quiet -ml-3 h-6 px-3 text-xs"
+          className="g-button g-button-ghost g-button-28 notice-action"
           disabled={busy}
           onClick={onDismiss}
         >
           {busy ? "Dismissing…" : "Dismiss"}
         </button>
         {state.status === "shown" && state.problem !== null ? (
-          <span role="alert" className="wrap-anywhere text-xs text-(--aura-danger)">
+          <span role="alert" className="notice-problem">
             {state.problem}
           </span>
         ) : null}

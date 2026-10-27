@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/desktop/src-tauri"]
+members = ["crates/*", "apps/desktop/src-tauri", "apps/api", "apps/web-worker"]
 # Spikes are throwaway experiments with their own Cargo projects.
 exclude = ["docs/spikes"]
 
@@ -24,6 +24,8 @@ aura-process = { path = "crates/aura-process" }
 aura-agents = { path = "crates/aura-agents" }
 aura-core = { path = "crates/aura-core" }
 aura-drivers = { path = "crates/aura-drivers" }
+aura-sync = { path = "crates/aura-sync" }
+aura-config = { path = "crates/aura-config" }
 
 # async + errors + logging
 # `signal`: the desktop's quit flow listens for SIGTERM, SIGINT and SIGHUP.
@@ -34,6 +36,7 @@ thiserror = "2.0.21"
 anyhow = "1.0.104"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["native-tls", "system-proxy"] }
 
 # data
 serde = { version = "1.0.229", features = ["derive"] }
@@ -59,7 +62,8 @@ tauri = { version = "2.12.5", features = [] }
 tauri-build = { version = "2.7.4", features = [] }
 tauri-plugin-opener = "2.7.2"
 tauri-plugin-window-state = "2.5.0"
-tauri-plugin-single-instance = "2.5.4"
+tauri-plugin-single-instance = { version = "2.5.4", features = ["deep-link"] }
+tauri-plugin-deep-link = "=2.6.2"
 # The folder picker and the quit question, called from Rust only (the webview gets no permission).
 tauri-plugin-dialog = "=2.8.3"
 

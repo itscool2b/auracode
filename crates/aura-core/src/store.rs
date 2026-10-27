@@ -1,7 +1,8 @@
 //! The per-profile SQLite store.
 //!
-//! [`Store::open`] is the only way in. Whatever is on disk, it returns either a working, fully
-//! migrated database or an error, and it never destroys data:
+//! [`Store::open`] handles Local profiles. Account profiles require the feature-gated explicit keyed
+//! open and never enter plaintext recovery. Whatever is on disk, an open returns either a working,
+//! fully migrated database or an error, and it never destroys data:
 //!
 //! 1. Opening is coordinated across processes through `<db>.lock` (see `store/lock.rs`): one
 //!    opener at a time holds it exclusively while it probes, repairs, and migrates, and every open
@@ -42,11 +43,12 @@
 //! 7. All pending migrations run in one `BEGIN IMMEDIATE` transaction with foreign keys off and a
 //!    `foreign_key_check` before commit; any failure rolls everything back, `user_version` included.
 
+mod encrypted;
 mod lock;
 mod recovery;
 mod salvage;
 
-use std::fs::{self, File};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -57,14 +59,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, InUseReason, Result};
 use crate::fsutil::{self, PARTIAL_SUFFIX, SQLITE_SIDECARS};
-use crate::profile::Profile;
+use crate::profile::{Profile, ProfileKind};
 use crate::time::now_millis;
 
 use lock::OpenLock;
 use recovery::Recovery;
 
 /// The schema version this build reads and writes; equals the number of migrations.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 13;
 
 /// Pre-migration backups kept per database. Enough to step back through several upgrades without
 /// letting a long-lived install fill the disk with copies.
@@ -84,6 +86,17 @@ const DEFAULT_DB_NAME: &str = "aura.db";
 static MIGRATIONS: [M<'static>; SCHEMA_VERSION as usize] = [
     M::up(include_str!("../migrations/0001_initial.sql")).foreign_key_check(),
     M::up(include_str!("../migrations/0002_sessions.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0003_agent_hosts.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0004_composer.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0005_drafts.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0006_continuations.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0007_sync.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0008_worktree_setup.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0009_config_sync.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0010_steering.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0011_sync_projection.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0012_transcript_sync.sql")).foreign_key_check(),
+    M::up(include_str!("../migrations/0013_local_import.sql")).foreign_key_check(),
 ];
 
 fn migrations() -> &'static [M<'static>] {
@@ -163,18 +176,53 @@ pub struct Store {
     conn: Connection,
     path: PathBuf,
     backups_dir: PathBuf,
+    #[cfg(feature = "account-sync")]
+    key: Option<std::sync::Arc<aura_sync::crypto::DatabaseKey>>,
     /// The shared hold on `<db>.lock`, released when the store drops, which tells other processes
     /// the database is in use (see `store/lock.rs`). Declared after `conn` because fields drop in
     /// declaration order: the connection must finish closing (and checkpointing) before another
     /// process may repair or migrate the file.
-    _lock: Option<File>,
+    _lock: Option<lock::StoreHold>,
 }
 
 impl Store {
     /// Opens (creating, migrating, or repairing as needed) the profile's `aura.db`, with backups in
     /// the profile's `backups/` directory.
     pub fn open(profile: &Profile) -> Result<(Store, StoreInfo)> {
+        if profile.meta.kind == ProfileKind::Account {
+            return Err(CoreError::ProfileLocked {
+                path: profile.db_path(),
+            });
+        }
         Store::open_at(&profile.db_path(), &profile.backups_dir())
+    }
+
+    /// Explicit account-only open. A retained key protects every connection and migration backup.
+    /// Locked or damaged encrypted files never enter plaintext automatic recovery.
+    #[cfg(feature = "account-sync")]
+    pub fn open_encrypted(
+        profile: &Profile,
+        key: std::sync::Arc<aura_sync::crypto::DatabaseKey>,
+    ) -> Result<(Store, StoreInfo)> {
+        if profile.meta.kind != ProfileKind::Account {
+            return Err(CoreError::ProfileEncryptionMismatch);
+        }
+        encrypted::check_profile_layout(profile)?;
+        encrypted::open(
+            &profile.db_path(),
+            &profile.backups_dir(),
+            key,
+            migrations(),
+        )
+    }
+
+    /// Uses the same key as this store. Call on a blocking worker because it reads all data pages.
+    pub fn check_integrity(&self) -> Result<Integrity> {
+        #[cfg(feature = "account-sync")]
+        if let Some(key) = &self.key {
+            return encrypted::check_integrity(&self.path, key);
+        }
+        check_integrity(&self.path)
     }
 
     /// [`Store::open`] for an explicit database path and backups directory. `backups_dir` should be on
@@ -190,6 +238,11 @@ impl Store {
 
     pub fn conn(&self) -> &Connection {
         &self.conn
+    }
+
+    #[cfg(feature = "account-sync")]
+    pub(crate) fn is_encrypted(&self) -> bool {
+        self.key.is_some()
     }
 
     /// Mutable access, for `Connection::transaction`.
@@ -208,10 +261,14 @@ impl Store {
     /// Call with an error a query on this store returned. When it means the file is damaged
     /// (SQLITE_CORRUPT or SQLITE_NOTADB), that is recorded next to the database, so the next open
     /// repairs it, and this returns true. Any other error is the caller's to handle; this returns
-    /// false.
+    /// false. Encrypted damage returns an error without scheduling plaintext recovery.
     pub fn note_query_error(&self, error: &rusqlite::Error) -> Result<bool> {
         if !is_damage(error) {
             return Ok(false);
+        }
+        #[cfg(feature = "account-sync")]
+        if self.key.is_some() {
+            return Err(encrypted::unavailable(&self.path));
         }
         recovery::mark_damaged(&self.path, &error.to_string())?;
         Ok(true)
@@ -233,6 +290,7 @@ pub fn check_integrity(db_path: &Path) -> Result<Integrity> {
 }
 
 fn check_integrity_with(db_path: &Path, supported: u32) -> Result<Integrity> {
+    encrypted::require_plain(db_path)?;
     let conn = Connection::open_with_flags(
         db_path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -303,6 +361,7 @@ fn open_inner(
     busy_timeout: Duration,
     locking: Locking,
 ) -> Result<(Store, StoreInfo)> {
+    encrypted::require_plain(db_path)?;
     let supported = u32::try_from(migrations.len()).map_err(|_| {
         CoreError::Migration(format!(
             "{} migrations is more than SQLite can track",
@@ -315,6 +374,8 @@ fn open_inner(
         #[cfg(test)]
         Locking::Off => None,
     };
+    // A keyed opener may have created its marker while this process waited for the open lock.
+    encrypted::require_plain(db_path)?;
     let ctx = Ctx {
         db_path,
         backups_dir,
@@ -322,6 +383,8 @@ fn open_inner(
         supported,
         busy_timeout,
         may_change: lock.as_ref().is_none_or(OpenLock::may_change),
+        #[cfg(feature = "account-sync")]
+        key: None,
     };
     let (conn, info) = open_locked(&ctx)?;
     let hold = lock.and_then(|lock| lock.into_store_hold(busy_timeout));
@@ -330,6 +393,8 @@ fn open_inner(
             conn,
             path: db_path.to_path_buf(),
             backups_dir: backups_dir.to_path_buf(),
+            #[cfg(feature = "account-sync")]
+            key: None,
             _lock: hold,
         },
         info,
@@ -346,6 +411,8 @@ struct Ctx<'a, 'm> {
     /// This open holds the lock exclusively (or locking doesn't work here), so it may repair and
     /// migrate. False when another auracode process has the database open.
     may_change: bool,
+    #[cfg(feature = "account-sync")]
+    key: Option<&'a aura_sync::crypto::DatabaseKey>,
 }
 
 /// Why a step of an open failed: damage, which a repair can fix, or anything else.
@@ -768,8 +835,23 @@ fn backup_database(
     let base = format!("{db_name}.v{from}-{}", now_millis());
     let target = fsutil::free_path(ctx.backups_dir, &base, BACKUP_SUFFIX);
     let partial = fsutil::with_suffix(&target, PARTIAL_SUFFIX);
-    if let Err(source) = conn.backup(rusqlite::MAIN_DB, &partial, None) {
+    let backup = {
+        #[cfg(feature = "account-sync")]
+        if let Some(key) = ctx.key {
+            encrypted::backup(conn, &partial, key)
+        } else {
+            conn.backup(rusqlite::MAIN_DB, &partial, None)
+                .map_err(CoreError::from)
+        }
+        #[cfg(not(feature = "account-sync"))]
+        conn.backup(rusqlite::MAIN_DB, &partial, None)
+            .map_err(CoreError::from)
+    };
+    if let Err(error) = backup {
         remove_with_sidecars(&partial);
+        let CoreError::Sqlite(source) = error else {
+            return Err(error.into());
+        };
         if is_damage(&source) {
             return Err(Failure::Damage(source.to_string()));
         }
@@ -904,7 +986,7 @@ mod tests {
     use super::*;
     use std::collections::{BTreeSet, HashSet};
 
-    const TABLES: [&str; 11] = [
+    const TABLES: [&str; 22] = [
         "settings",
         "projects",
         "project_folders",
@@ -916,6 +998,17 @@ mod tests {
         "attachments",
         "agent_cache",
         "queued_prompts",
+        "worktree_setup",
+        "sync_config_device",
+        "sync_blobs",
+        "sync_blob_refs",
+        "steering_inputs",
+        "sync_projection",
+        "sync_turns",
+        "sync_turn_parts",
+        "sync_turn_files",
+        "sync_turn_fragments",
+        "local_imports",
     ];
 
     /// The current schema version as SQLite reports it.
@@ -1291,7 +1384,10 @@ mod tests {
                 checked += 1;
             }
         }
-        assert_eq!(checked, 10, "every foreign key in the schema was checked");
+        assert_eq!(
+            checked, 19,
+            "every foreign key in the listed tables was checked"
+        );
     }
 
     #[test]
@@ -1444,16 +1540,17 @@ mod tests {
     #[test]
     fn check_integrity_leaves_newer_data_alone() {
         let p = paths();
+        let future_version = SCHEMA_VERSION + 1;
         {
             let (store, _) = open(&p);
             store
                 .conn()
-                .pragma_update(None, "user_version", 7)
+                .pragma_update(None, "user_version", future_version)
                 .expect("bump");
         }
         assert!(matches!(
             check_integrity(&p.db),
-            Err(CoreError::SchemaTooNew { found: 7, .. })
+            Err(CoreError::SchemaTooNew { found, .. }) if found == future_version
         ));
         assert!(!recovery::damage_marker(&p.db).exists());
     }
@@ -1982,6 +2079,7 @@ mod tests {
     #[test]
     fn a_newer_schema_this_sqlite_cannot_parse_is_refused_not_quarantined() {
         let p = paths();
+        let future_version = SCHEMA_VERSION + 1;
         {
             let (store, _) = open(&p);
             let conn = store.conn();
@@ -1993,8 +2091,10 @@ mod tests {
                 [],
             )
             .expect("future schema row");
-            conn.execute_batch("PRAGMA writable_schema = OFF; PRAGMA user_version = 7;")
-                .expect("bump");
+            conn.execute_batch(&format!(
+                "PRAGMA writable_schema = OFF; PRAGMA user_version = {future_version};"
+            ))
+            .expect("bump");
         }
         let before = fs::read(&p.db).expect("read");
         let result = Store::open_at(&p.db, &p.backups);
@@ -2002,9 +2102,9 @@ mod tests {
             matches!(
                 result,
                 Err(CoreError::SchemaTooNew {
-                    found: 7,
+                    found,
                     supported: SCHEMA_VERSION
-                })
+                }) if found == future_version
             ),
             "{:?}",
             result.map(|(_, i)| i)
@@ -2212,11 +2312,11 @@ mod tests {
         assert!(!old_columns.contains("archived"));
     }
 
-    /// Migration 0002 on a v1 database with data in every table it touches: a backup first, every
+    /// Migrations on a v1 database with data in every table they touch: a backup first, every
     /// row kept, the new columns `NULL`, the new table and indexes in place, and the foreign key
     /// check clean.
     #[test]
-    fn upgrading_a_populated_v1_database_to_v2_keeps_every_row() {
+    fn upgrading_a_populated_v1_database_keeps_every_row() {
         let p = paths();
         {
             let (store, info) = open_with(&p.db, &p.backups, &migrations()[..1]).expect("v1");
@@ -2245,13 +2345,13 @@ mod tests {
         let (store, info) = Store::open_at(&p.db, &p.backups).expect("upgrade");
         let OpenOutcome::Migrated {
             from: 1,
-            to: 2,
+            to: SCHEMA_VERSION,
             backup: Some(backup),
         } = &info.outcome
         else {
             panic!("expected a migration from v1, got {:?}", info.outcome);
         };
-        assert_eq!(info.schema_version, 2);
+        assert_eq!(info.schema_version, SCHEMA_VERSION);
         let old = Connection::open(backup).expect("backup");
         assert_eq!(read_user_version(&old).expect("version"), 1);
         assert_eq!(count(&old, "events"), 2, "the backup holds the v1 data");
@@ -2269,6 +2369,20 @@ mod tests {
             assert_eq!(count(conn, table), 1, "{table}");
         }
         assert_eq!(count(conn, "events"), 2);
+        let host: String = conn
+            .query_row("SELECT agent_host FROM chats WHERE id = 'c1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(host, r#"{"type":"native"}"#);
+        let host: String = conn
+            .query_row(
+                "SELECT host FROM agent_sessions WHERE id = 'a1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(host, r#"{"type":"native"}"#);
         let (native, model, config): (String, String, Option<String>) = conn
             .query_row(
                 "SELECT native_session_id, model, config_json FROM agent_sessions WHERE id = 'a1'",
@@ -2332,6 +2446,49 @@ mod tests {
 
         let (_, again) = open(&p);
         assert_eq!(again.outcome, OpenOutcome::Opened, "migrated once");
+    }
+
+    #[test]
+    fn host_migration_backs_up_v2_and_preserves_native_chats() {
+        let p = paths();
+        {
+            let (store, _) = open_with(&p.db, &p.backups, &migrations()[..2]).unwrap();
+            store.conn().execute_batch(
+                "INSERT INTO projects (id, name, created_at, updated_at, device_id) VALUES ('p', 'Work', 1, 1, 'dev');
+                 INSERT INTO chats (id, project_id, active_agent, title, created_at, updated_at, device_id) VALUES ('c', 'p', 'codex', 'Keep this chat', 1, 2, 'dev');"
+            ).unwrap();
+        }
+        let (store, info) = Store::open_at(&p.db, &p.backups).unwrap();
+        let OpenOutcome::Migrated {
+            from: 2,
+            to: SCHEMA_VERSION,
+            backup: Some(backup),
+        } = info.outcome
+        else {
+            panic!("expected a backed-up host migration");
+        };
+        let original = Connection::open(backup).unwrap();
+        assert_eq!(read_user_version(&original).unwrap(), 2);
+        assert_eq!(count(&original, "chats"), 1);
+        assert!(
+            !names(&original, "SELECT name FROM pragma_table_info('chats')").contains("agent_host")
+        );
+        let preserved: (String, String, String) = store
+            .conn()
+            .query_row(
+                "SELECT active_agent, title, agent_host FROM chats WHERE id = 'c'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            preserved,
+            (
+                "codex".into(),
+                "Keep this chat".into(),
+                r#"{"type":"native"}"#.into()
+            )
+        );
     }
 
     #[test]

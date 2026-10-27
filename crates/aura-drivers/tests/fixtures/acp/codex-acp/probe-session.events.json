@@ -415,7 +415,7 @@
           "usage": true,
           "limits": false,
           "slash_commands": true,
-          "add_dirs": true,
+          "add_dirs": false,
           "autonomy_levels": [
             "full_auto",
             "auto_edit",

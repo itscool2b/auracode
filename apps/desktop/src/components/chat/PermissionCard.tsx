@@ -56,15 +56,18 @@ export function PermissionCard({
         <span className="chat-block-title" data-testid="permission-title">
           {ask.title}
         </span>
-        {ask.kind !== null ? (
-          <span className="chat-block-tag">{ask.kind.replace("_", " ")}</span>
-        ) : null}
       </div>
       {raw !== null ? <pre className="ui-pre">{raw}</pre> : null}
       <Locations locations={ask.locations} />
       {ask.content.map((content, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: a request's content is positional.
-        <ToolContentView key={index} content={content} blobs={blobs} onLoadBlob={onLoadBlob} />
+        <ToolContentView
+          // biome-ignore lint/suspicious/noArrayIndexKey: a request's content is positional.
+          key={index}
+          content={content}
+          disclosureKey={`permission:${ask.request_id}:${index}`}
+          blobs={blobs}
+          onLoadBlob={onLoadBlob}
+        />
       ))}
       {ask.truncated ? (
         <EventDetails truncation={ask.truncated} blobs={blobs} onLoadBlob={onLoadBlob} />

@@ -11,6 +11,67 @@ export const commands = {
 	 *  mode, notices, and the fatal startup error if there was one. Never fails.
 	 */
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
+	signInLinkPending: () => __TAURI_INVOKE<SignInLink | null>("sign_in_link_pending"),
+	signInLinkAcknowledge: (id: string) => __TAURI_INVOKE<void>("sign_in_link_acknowledge", { id }),
+	accountConfig: () => typedError<AccountConfiguration, AccountFailure>(__TAURI_INVOKE("account_config")),
+	accountStatus: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_status")),
+	/**
+	 *  Read the published runtime only. The sidebar must never initialize a vault, authenticate or
+	 *  start network work just to identify its workspace. The profile and engine share one snapshot.
+	 */
+	accountSyncStatus: () => __TAURI_INVOKE<[string, AccountSyncStatus] | null>("account_sync_status"),
+	accountVaultStatus: () => typedError<AccountVaultStatus, AccountFailure>(__TAURI_INVOKE("account_vault_status")),
+	accountVaultUnlock: (passphrase: string, create: boolean) => typedError<AccountVaultStatus, AccountFailure>(__TAURI_INVOKE("account_vault_unlock", { passphrase, create })),
+	accountResetStatus: () => typedError<AccountResetStatus, AccountFailure>(__TAURI_INVOKE("account_reset_status")),
+	accountResetReview: () => typedError<AccountResetReview, AccountFailure>(__TAURI_INVOKE("account_reset_review")),
+	accountResetConfirm: (reviewId: string, confirmation: string, retained: boolean) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_confirm", { reviewId, confirmation, retained })),
+	accountRebindProfile: (profileId: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_rebind_profile", { profileId })),
+	accountRemoveCandidates: () => typedError<AccountRemovalCandidate[], AccountFailure>(__TAURI_INVOKE("account_remove_candidates")),
+	accountRemovePreview: (profileId: string) => typedError<AccountRemovalReview, AccountFailure>(__TAURI_INVOKE("account_remove_preview", { profileId })),
+	accountRemoveApply: (token: string, confirmation: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_remove_apply", { token, confirmation })),
+	accountRemoveCancel: (token: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_remove_cancel", { token })),
+	accountResetRetry: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_retry")),
+	accountResetCancel: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_reset_cancel")),
+	accountRequestCode: (email: string, turnstileToken: string) => typedError<SignInChallenge, AccountFailure>(__TAURI_INVOKE("account_request_code", { email, turnstileToken })),
+	accountVerifyCode: (challengeId: string, code: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_verify_code", { challengeId, code })),
+	accountRefresh: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_refresh")),
+	accountRegisterDevice: (name: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_register_device", { name })),
+	accountPrepareRecovery: () => typedError<RecoverySetup, AccountFailure>(__TAURI_INVOKE("account_prepare_recovery")),
+	accountCancelSetup: () => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_cancel_setup")),
+	accountConfirmRecovery: (setupId: string, retained: boolean) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_confirm_recovery", { setupId, retained })),
+	accountRecover: (recoveryKey: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_recover", { recoveryKey })),
+	accountConfirmFingerprint: (fingerprint: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_confirm_fingerprint", { fingerprint })),
+	accountDevices: () => typedError<AccountDevice[], AccountFailure>(__TAURI_INVOKE("account_devices")),
+	accountApproveDevice: (deviceId: string, verificationCode: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_approve_device", { deviceId, verificationCode })),
+	accountRevokeDevice: (deviceId: string) => typedError<AccountStatus, AccountFailure>(__TAURI_INVOKE("account_revoke_device", { deviceId })),
+	accountSignOut: () => typedError<AccountSignOut, AccountFailure>(__TAURI_INVOKE("account_sign_out")),
+	profilesList: () => typedError<ProfileMeta[], AppError>(__TAURI_INVOKE("profiles_list")),
+	accountActivate: () => typedError<AppInfo, AppError>(__TAURI_INVOKE("account_activate")),
+	profileActivate: (profileId: string) => typedError<AppInfo, AppError>(__TAURI_INVOKE("profile_activate", { profileId })),
+	configProfileRecover: () => typedError<AppInfo, AppError>(__TAURI_INVOKE("config_profile_recover")),
+	appUpdateStatus: () => __TAURI_INVOKE<UpdateStatus>("app_update_status"),
+	appUpdateCheck: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_check")),
+	appUpdateDownload: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_download")),
+	appUpdateInstall: () => typedError<UpdateStatus, UpdateError>(__TAURI_INVOKE("app_update_install")),
+	setupSnapshot: () => typedError<SetupSnapshot, AppError>(__TAURI_INVOKE("setup_snapshot")),
+	setupApply: (revision: number, action: SetupAction) => typedError<SetupSnapshot, AppError>(__TAURI_INVOKE("setup_apply", { revision, action })),
+	librarySnapshot: (folderId: string | null) => typedError<LibraryInventory, AppError>(__TAURI_INVOKE("library_snapshot", { folderId })),
+	configVendorReview: (request: VendorRequest) => typedError<VendorReview, AppError>(__TAURI_INVOKE("config_vendor_review", { request })),
+	configVendorCancel: (token: string) => __TAURI_INVOKE<void>("config_vendor_cancel", { token }),
+	configVendorStart: (token: string, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("config_vendor_start", { token, terminalId, rows, cols })),
+	configSyncInventory: (after: string | null) => typedError<ConfigSyncInventory, AppError>(__TAURI_INVOKE("config_sync_inventory", { after })),
+	configSyncPreview: (id: string, choice: ConfigSyncChoice) => typedError<ConfigSyncPreview, AppError>(__TAURI_INVOKE("config_sync_preview", { id, choice })),
+	configSyncCancel: (token: string) => __TAURI_INVOKE<void>("config_sync_cancel", { token }),
+	configSyncApply: (token: string) => typedError<ConfigSyncOutcome, AppError>(__TAURI_INVOKE("config_sync_apply", { token })),
+	configSyncDeviceOnly: (id: string, deviceOnly: boolean) => typedError<null, AppError>(__TAURI_INVOKE("config_sync_device_only", { id, deviceOnly })),
+	configSyncHistory: () => typedError<ConfigSyncReceipt[], AppError>(__TAURI_INVOKE("config_sync_history")),
+	configSyncRollback: (id: string) => typedError<ConfigSyncOutcome, AppError>(__TAURI_INVOKE("config_sync_rollback", { id })),
+	libraryCopyHistory: (folderId: string | null) => typedError<LibraryCopyReceipt[], AppError>(__TAURI_INVOKE("library_copy_history", { folderId })),
+	libraryItemPreview: (folderId: string | null, item: LibraryItemRef, revision: string) => typedError<LibraryItemPreview, AppError>(__TAURI_INVOKE("library_item_preview", { folderId, item, revision })),
+	libraryCopyPreview: (folderId: string | null, item: LibraryItemRef, revision: string, toSource: string) => typedError<LibraryCopyPreview, AppError>(__TAURI_INVOKE("library_copy_preview", { folderId, item, revision, toSource })),
+	libraryCopyCancel: (id: string) => __TAURI_INVOKE<void>("library_copy_cancel", { id }),
+	libraryCopyApply: (id: string) => typedError<LibraryCopyResult, AppError>(__TAURI_INVOKE("library_copy_apply", { id })),
+	libraryCopyRollback: (folderId: string | null, sourceId: string, id: string) => typedError<LibraryCopyResult, AppError>(__TAURI_INVOKE("library_copy_rollback", { folderId, sourceId, id })),
 	/**
 	 *  Starts a scripted mock-agent turn and streams its frames over `channel` (one `EventBatch` at
 	 *  most every 16 ms, each under 8 KiB). Returns the session id the frames carry, for
@@ -56,6 +117,42 @@ export const commands = {
 	 *  probe has not ended by then keep their last known availability.
 	 */
 	agentsRefresh: () => __TAURI_INVOKE<AgentEntry[]>("agents_refresh"),
+	agentInstallations: (agentId: string) => typedError<AgentInstallations, AppError>(__TAURI_INVOKE("agent_installations", { agentId })),
+	agentSelectInstallation: (agentId: string, path: string | null) => typedError<AgentInstallations, AppError>(__TAURI_INVOKE("agent_select_installation", { agentId, path })),
+	/**  Reviewed capabilities for the detected install, without running authentication or updates. */
+	agentMaintenance: (agentId: string) => typedError<AgentMaintenance, AppError>(__TAURI_INVOKE("agent_maintenance", { agentId })),
+	/**  Ask the vendor CLI for local auth status, retaining no account details or raw output. */
+	agentAuthStatus: (agentId: string) => typedError<AgentAuthStatus, AppError>(__TAURI_INVOKE("agent_auth_status", { agentId })),
+	/**  Explicit update action. No updates run as part of detection or release checks. */
+	agentUpdate: (agentId: string) => typedError<null, AppError>(__TAURI_INVOKE("agent_update", { agentId })),
+	terminalReserve: () => typedError<string, AppError>(__TAURI_INVOKE("terminal_reserve")),
+	agentLoginStart: (terminalId: string, agentId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_login_start", { terminalId, agentId, rows, cols })),
+	agentInstallReview: (agentId: string) => typedError<AgentInstallReview, AppError>(__TAURI_INVOKE("agent_install_review", { agentId })),
+	agentInstallStart: (terminalId: string, agentId: string, revision: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_install_start", { terminalId, agentId, revision, rows, cols })),
+	cloneReview: (input: CloneInput) => typedError<CloneReview, AppError>(__TAURI_INVOKE("clone_review", { input })),
+	cloneCancelReview: (id: string) => __TAURI_INVOKE<void>("clone_cancel_review", { id }),
+	cloneStart: (id: string) => typedError<CloneRecord, AppError>(__TAURI_INVOKE("clone_start", { id })),
+	cloneCancel: (id: string) => __TAURI_INVOKE<void>("clone_cancel", { id }),
+	cloneStatus: (id: string) => typedError<CloneRecord, AppError>(__TAURI_INVOKE("clone_status", { id })),
+	cloneHistory: (parent: string) => typedError<CloneRecord[], AppError>(__TAURI_INVOKE("clone_history", { parent })),
+	localImportPreview: () => typedError<LocalImportPreview, AppError>(__TAURI_INVOKE("local_import_preview")),
+	chatExportMarkdown: (chatId: string) => typedError<string | null, AppError>(__TAURI_INVOKE("chat_export_markdown", { chatId })),
+	chatDebugBundle: (chatId: string) => typedError<string, AppError>(__TAURI_INVOKE("chat_debug_bundle", { chatId })),
+	localImportApply: (selected: LocalImportSelection[]) => typedError<LocalImportResult, AppError>(__TAURI_INVOKE("local_import_apply", { selected })),
+	folderCodeRoots: () => typedError<string[], AppError>(__TAURI_INVOKE("folder_code_roots")),
+	folderSetCodeRoots: (roots: string[]) => typedError<string[], AppError>(__TAURI_INVOKE("folder_set_code_roots", { roots })),
+	folderResolution: (folderId: string, search: boolean) => typedError<FolderResolution, AppError>(__TAURI_INVOKE("folder_resolution", { folderId, search })),
+	folderLocateReview: (folderId: string, path: string) => typedError<FolderLocationReview, AppError>(__TAURI_INVOKE("folder_locate_review", { folderId, path })),
+	folderLocateApply: (review: FolderLocationReview) => typedError<ProjectFolder, AppError>(__TAURI_INVOKE("folder_locate_apply", { review })),
+	accountKeepLocalPreview: () => typedError<KeepLocalPreview, AppError>(__TAURI_INVOKE("account_keep_local_preview")),
+	accountKeepLocalApply: (token: string) => typedError<KeepLocalResult, AppError>(__TAURI_INVOKE("account_keep_local_apply", { token })),
+	repositoryPublicationReview: (folderId: string, input: RepositoryPublicationInput) => typedError<RepositoryPublicationReview, AppError>(__TAURI_INVOKE("repository_publication_review", { folderId, input })),
+	repositoryPublicationDraft: (folderId: string) => typedError<RepositoryPublicationDraft | null, AppError>(__TAURI_INVOKE("repository_publication_draft", { folderId })),
+	repositoryPublicationApply: (folderId: string, token: string) => typedError<RepositoryPublicationResult, AppError>(__TAURI_INVOKE("repository_publication_apply", { folderId, token })),
+	terminalRead: (terminalId: string) => typedError<TerminalChunk, AppError>(__TAURI_INVOKE("terminal_read", { terminalId })),
+	terminalWrite: (terminalId: string, bytes: number[]) => typedError<null, AppError>(__TAURI_INVOKE("terminal_write", { terminalId, bytes })),
+	terminalResize: (terminalId: string, rows: number, cols: number) => typedError<null, AppError>(__TAURI_INVOKE("terminal_resize", { terminalId, rows, cols })),
+	terminalClose: (terminalId: string) => typedError<null, AppError>(__TAURI_INVOKE("terminal_close", { terminalId })),
 	/**
 	 *  The environment agents start with: resolving, resolved (and how), or a fallback, with the
 	 *  names of the variables no agent inherits. Never waits.
@@ -69,13 +166,73 @@ export const commands = {
 	 *  (`AURACODE_SMOKE_FOLDER`) at once: automation cannot click through a system dialog.
 	 */
 	pickFolder: () => typedError<string | null, AppError>(__TAURI_INVOKE("pick_folder")),
+	workspaceSearch: (query: string, includeArchived: boolean) => typedError<SearchResults, AppError>(__TAURI_INVOKE("workspace_search", { query, includeArchived })),
+	conversationTurns: (chatId: string, beforeOrdinal: number | null) => typedError<ConversationTurns, AppError>(__TAURI_INVOKE("conversation_turns", { chatId, beforeOrdinal })),
+	conversationPending: (chatId: string) => typedError<PendingHandoff | null, AppError>(__TAURI_INVOKE("conversation_pending", { chatId })),
+	conversationEditable: (chatId: string, turnId: string) => typedError<EditablePrompt, AppError>(__TAURI_INVOKE("conversation_editable", { chatId, turnId })),
+	continuationPreview: (chatId: string, action: ContinuationAction) => typedError<ContinuationPreview, AppError>(__TAURI_INVOKE("continuation_preview", { chatId, action })),
+	continuationApply: (chatId: string, token: string) => typedError<ContinuationResult, AppError>(__TAURI_INVOKE("continuation_apply", { chatId, token })),
+	composerPick: (chatId: string) => typedError<ComposerAttachment | null, AppError>(__TAURI_INVOKE("composer_pick", { chatId })),
+	composerImport: (chatId: string, path: string) => typedError<ComposerAttachment, AppError>(__TAURI_INVOKE("composer_import", { chatId, path })),
+	composerPaste: (chatId: string, bytes: number[]) => typedError<ComposerAttachment, AppError>(__TAURI_INVOKE("composer_paste", { chatId, bytes })),
+	composerMentions: (chatId: string, query: string) => typedError<FileMention[], AppError>(__TAURI_INVOKE("composer_mentions", { chatId, query })),
+	projectFilePreview: (chatId: string, path: string) => typedError<ProjectFilePreview, AppError>(__TAURI_INVOKE("project_file_preview", { chatId, path })),
+	composerSend: (chatId: string, input: ComposerInput) => typedError<PromptAck, AppError>(__TAURI_INVOKE("composer_send", { chatId, input })),
+	composerSteer: (chatId: string, expectedTurnId: string, input: ComposerInput) => typedError<SteeringAck, AppError>(__TAURI_INVOKE("composer_steer", { chatId, expectedTurnId, input })),
+	composerDraft: (chatId: string) => typedError<ComposerDraft, AppError>(__TAURI_INVOKE("composer_draft", { chatId })),
+	composerSaveDraft: (chatId: string, input: ComposerInput) => typedError<null, AppError>(__TAURI_INVOKE("composer_save_draft", { chatId, input })),
+	chatChanges: (chatId: string, turnId: string | null) => typedError<ChangesSnapshot, AppError>(__TAURI_INVOKE("chat_changes", { chatId, turnId })),
+	chatChangeDiff: (chatId: string, checkpointId: string, path: string) => typedError<ChangeDiff, AppError>(__TAURI_INVOKE("chat_change_diff", { chatId, checkpointId, path })),
+	checkpointRevertPreview: (chatId: string, checkpointId: string, paths: string[]) => typedError<RevertPreview, AppError>(__TAURI_INVOKE("checkpoint_revert_preview", { chatId, checkpointId, paths })),
+	checkpointRevert: (chatId: string, token: string) => typedError<RevertResult, AppError>(__TAURI_INVOKE("checkpoint_revert", { chatId, token })),
+	worktreeSetup: (chatId: string) => typedError<WorktreeSetup, AppError>(__TAURI_INVOKE("worktree_setup", { chatId })),
+	worktreeSetupSave: (chatId: string, input: WorktreeSetupInput) => typedError<WorktreeSetup, AppError>(__TAURI_INVOKE("worktree_setup_save", { chatId, input })),
+	worktreeSetupPreview: (chatId: string, worktreeId: string) => typedError<WorktreeSetupPreview, AppError>(__TAURI_INVOKE("worktree_setup_preview", { chatId, worktreeId })),
+	worktreeSetupCommandPreview: (chatId: string, worktreeId: string) => typedError<WorktreeSetupPreview, AppError>(__TAURI_INVOKE("worktree_setup_command_preview", { chatId, worktreeId })),
+	worktreeSetupApply: (chatId: string, token: string) => typedError<WorktreeSetupResult, AppError>(__TAURI_INVOKE("worktree_setup_apply", { chatId, token })),
+	worktreeSetupStart: (chatId: string, token: string, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("worktree_setup_start", { chatId, token, terminalId, rows, cols })),
+	gitWorkspace: (chatId: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_workspace", { chatId })),
+	gitInitializePreview: (chatId: string, initialBranch: string) => typedError<GitInitializePreview, AppError>(__TAURI_INVOKE("git_initialize_preview", { chatId, initialBranch })),
+	gitInitializeApply: (chatId: string, token: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_initialize_apply", { chatId, token })),
+	projectToolsReview: (chatId: string) => typedError<ProjectToolsReview, AppError>(__TAURI_INVOKE("project_tools_review", { chatId })),
+	projectTerminalStart: (chatId: string, token: string, shell: ProjectShell, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("project_terminal_start", { chatId, token, shell, terminalId, rows, cols })),
+	projectEditorOpen: (chatId: string, token: string, editor: ProjectEditor) => typedError<null, AppError>(__TAURI_INVOKE("project_editor_open", { chatId, token, editor })),
+	managedWorktrees: (chatId: string) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("managed_worktrees", { chatId })),
+	isolationPreview: (chatId: string, input: IsolationInput) => typedError<IsolationPreview, AppError>(__TAURI_INVOKE("isolation_preview", { chatId, input })),
+	isolationApply: (chatId: string, token: string) => typedError<IsolationResult, AppError>(__TAURI_INVOKE("isolation_apply", { chatId, token })),
+	worktreeActionPreview: (chatId: string, worktreeId: string, action: WorktreeAction) => typedError<WorktreeActionPreview, AppError>(__TAURI_INVOKE("worktree_action_preview", { chatId, worktreeId, action })),
+	worktreeActionApply: (chatId: string, token: string) => typedError<WorktreeActionResult, AppError>(__TAURI_INVOKE("worktree_action_apply", { chatId, token })),
+	worktreeRecoveryPreview: (chatId: string, worktreeId: string, action: WorktreeRecoveryAction) => typedError<WorktreeRecoveryPreview, AppError>(__TAURI_INVOKE("worktree_recovery_preview", { chatId, worktreeId, action })),
+	worktreeRecoveryApply: (chatId: string, worktreeId: string, token: string) => typedError<WorktreeActionResult, AppError>(__TAURI_INVOKE("worktree_recovery_apply", { chatId, worktreeId, token })),
+	worktreeRelocationPreview: (chatId: string, worktreeId: string, destination: WorktreeDestination) => typedError<WorktreeRelocationPreview, AppError>(__TAURI_INVOKE("worktree_relocation_preview", { chatId, worktreeId, destination })),
+	worktreeRelocationApply: (chatId: string, token: string) => typedError<ContinuationResult, AppError>(__TAURI_INVOKE("worktree_relocation_apply", { chatId, token })),
+	worktreePrPreview: (chatId: string, worktreeId: string, input: PullRequestInput) => typedError<PullRequestPreview, AppError>(__TAURI_INVOKE("worktree_pr_preview", { chatId, worktreeId, input })),
+	worktreePrApply: (chatId: string, token: string) => typedError<PullRequestResult, AppError>(__TAURI_INVOKE("worktree_pr_apply", { chatId, token })),
 	/**  Every chat, newest activity first. */
 	chatsList: () => typedError<ChatSummary[], AppError>(__TAURI_INVOKE("chats_list")),
+	workspaceSnapshot: (filter: WorkspaceFilter) => typedError<WorkspaceSnapshot, AppError>(__TAURI_INVOKE("workspace_snapshot", { filter })),
+	workspaceRemoved: () => typedError<RemovedWorkspace[], AppError>(__TAURI_INVOKE("workspace_removed")),
+	workspaceRemovalPreview: (target: WorkspaceRemovalTarget, action: WorkspaceRemovalAction) => typedError<WorkspaceRemovalPreview, AppError>(__TAURI_INVOKE("workspace_removal_preview", { target, action })),
+	workspaceRemovalApply: (token: string) => typedError<null, AppError>(__TAURI_INVOKE("workspace_removal_apply", { token })),
+	projectCreate: (request: ProjectCreate) => typedError<ProjectSummary, AppError>(__TAURI_INVOKE("project_create", { request })),
+	projectUpdate: (projectId: string, input: ProjectInput) => typedError<ProjectSummary, AppError>(__TAURI_INVOKE("project_update", { projectId, input })),
+	projectAddFolder: (projectId: string, path: string) => typedError<ProjectFolder, AppError>(__TAURI_INVOKE("project_add_folder", { projectId, path })),
+	chatRename: (chatId: string, title: string) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_rename", { chatId, title })),
+	chatPin: (chatId: string, pinned: boolean) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_pin", { chatId, pinned })),
+	chatArchive: (chatId: string, archived: boolean) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_archive", { chatId, archived })),
+	chatMove: (chatId: string, request: ChatMove) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_move", { chatId, request })),
+	chatCreatePreview: (folderId: string) => typedError<ChatCreatePreview, AppError>(__TAURI_INVOKE("chat_create_preview", { folderId })),
+	chatProjectCreate: (request: ProjectChatCreate) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_project_create", { request })),
 	/**
 	 *  Creates a chat with `agent_id` in `folder` (an absolute path) and starts its agent. Creating a
 	 *  chat whose agent `needs_download` is the consent to download its adapter.
 	 */
 	chatCreate: (agentId: string, folder: string) => typedError<ChatSummary, AppError>(__TAURI_INVOKE("chat_create", { agentId, folder })),
+	/**
+	 *  Creates a chat on an explicitly selected execution host. Unsupported hosts are refused before
+	 *  writing the chat or starting any native process.
+	 */
+	chatCreateOnHost: (agentId: string, agentHost: AgentHost, folder: string) => typedError<ChatSummary, AppError>(__TAURI_INVOKE("chat_create_on_host", { agentId, agentHost, folder })),
 	/**
 	 *  Opens a view of a chat: the snapshot and the newest history page, consistent with the frames
 	 *  `channel` carries from `next_seq` on. Opening a chat never starts its agent. A webview has one
@@ -94,6 +251,8 @@ export const commands = {
 	 *  session's `revision` changes.
 	 */
 	chatLists: (chatId: string) => typedError<SessionLists, AppError>(__TAURI_INVOKE("chat_lists", { chatId })),
+	/**  Exact device-local folders supplied to a live driver, or a preflight for its next start. */
+	chatFolderContext: (chatId: string) => typedError<ChatFolderContext, AppError>(__TAURI_INVOKE("chat_folder_context", { chatId })),
 	/**
 	 *  Sends `text` as typed, or queues it behind the running turn (or the start). A stopped chat starts
 	 *  its agent.
@@ -140,6 +299,11 @@ export const commands = {
 	statusSubscribe: (channel: Channel<ChatStatusUpdate>) => typedError<string, AppError>(__TAURI_INVOKE("status_subscribe", { channel })),
 	/**  Whether the profile database is saving, paused (with how much is unsaved), or failed. */
 	storageStatus: () => __TAURI_INVOKE<StorageStatus>("storage_status"),
+	/**
+	 *  Drain-on-read makes notification navigation survive a suspended or reloaded webview. The UI
+	 *  calls this on startup, focus, and `auracode-open-chat` and selects the returned local chat ID.
+	 */
+	shellTakeNavigation: () => __TAURI_INVOKE<string | null>("shell_take_navigation"),
 };
 
 /* Constants */
@@ -150,6 +314,101 @@ export const SMOKE_CHAT_CHECKS = ["chats-screen","pick-folder","create-chat","pi
 export const SMOKE_CHAT_REOPEN_CHECKS = ["reopen-list","reopen-no-start","reopen-history","reopen-interrupted","reopen-held","reopen-blob","reopen-resume","reopen-send-queued"] as const;
 
 /* Types */
+export type AccountAccess = "signed_out" | "verification_required" | "needs_device" | "needs_first_key" | "pending_approval" | "verify_account_key" | "ready" | "expired" | "denied" | "invite_required" | "deleted";
+
+export type AccountConfiguration = {
+	service_origin: string,
+	verification_url: string,
+};
+
+export type AccountDevice = {
+	id: string,
+	name: string,
+	platform: string,
+	verification_code: string,
+	current: boolean,
+	created_at: number,
+	last_seen: number,
+	approved_at: number | null,
+	revoked_at: number | null,
+};
+
+export type AccountFailure = {
+	code: AccountFailureCode,
+	message: string,
+	retry_after_seconds: number | null,
+};
+
+export type AccountFailureCode = "invalid_input" | "invalid_state" | "offline" | "timed_out" | "unauthorized" | "deleted" | "forbidden" | "invite_required" | "invalid_code" | "conflict" | "quota" | "rate_limited" | "delivery_failed" | "unavailable" | "not_found" | "protocol" | "secure_storage" | "local_storage" | "key_mismatch";
+
+export type AccountRemovalCandidate = {
+	profile_id: string,
+	display_name: string,
+	pending: boolean,
+};
+
+export type AccountRemovalReview = {
+	token: string,
+	profile_id: string,
+	display_name: string,
+	other_profiles: number,
+	pending_changes: number | null,
+	resuming: boolean,
+};
+
+export type AccountResetReview = {
+	id: string,
+	key_version: number,
+	records: number,
+	blobs: number,
+	other_devices: number,
+	recovery_key: string,
+};
+
+export type AccountResetStatus = {
+	pending: boolean,
+	committed: boolean,
+};
+
+export type AccountSignOut = {
+	status: AccountStatus,
+	/**  False means the local session is removed, but remote revocation could not be confirmed. */
+	server_revoked: boolean,
+};
+
+export type AccountStatus = {
+	access: AccountAccess,
+	account_id: string | null,
+	device_id: string | null,
+	/**  An opaque local profile, available only after a locally trusted key exists. */
+	profile_id: string | null,
+	local_key_available: boolean,
+	/**  Computed from this device's own public key, never trusted from the server. */
+	approval_code: string | null,
+	/**  Compare this with the trusted approving device before confirming a new remote key. */
+	fingerprint: string | null,
+	sync: AccountSyncStatus,
+};
+
+export type AccountSyncState = "inactive" | "idle" | "syncing" | "offline" | "paused" | "error";
+
+export type AccountSyncStatus = {
+	state: AccountSyncState,
+	pending_changes: number | null,
+	last_sync_at: number | null,
+	message: string | null,
+};
+
+export type AccountVaultMode = "native" | "passphrase_locked" | "passphrase_unlocked" | "restart_required";
+
+export type AccountVaultStatus = {
+	mode: AccountVaultMode,
+	can_create: boolean,
+};
+
+/**  The vendor's own local authentication check. This does not promise a successful paid request. */
+export type AgentAuthStatus = { state: "credentials_present" } | { state: "sign_in_required" } | { state: "unknown"; reason: string } | { state: "unsupported" };
+
 /**  An agent auracode can start, as the New chat screen shows it. */
 export type AgentEntry = {
 	id: string,
@@ -161,6 +420,67 @@ export type AgentEntry = {
 	/**  The first start downloads the agent's adapter. */
 	needs_download: boolean,
 	last_verified: string,
+	/**  Present only after a successful version probe of the user's installation. */
+	installation?: AgentInstallation | null,
+	latest_release?: LatestRelease | null,
+};
+
+/**  Where the user's agent runs. Unknown future hosts must never fall back to a local launch. */
+export type AgentHost = { type: "native" } | { type: "wsl"; distro: string } | { type: "unsupported" };
+
+export type AgentInstallReview = {
+	agent_id: string,
+	package: string,
+	version: string,
+	program: string,
+	arguments: string[],
+	working_directory: string,
+	revision: string,
+	timeout_seconds: number,
+	notices: string[],
+};
+
+/**  A successful version probe of one installation. `launch_path` remains the stable user entry. */
+export type AgentInstallation = {
+	agent_id: string,
+	provider: string,
+	host: AgentHost,
+	launch_path: string,
+	resolved_path: string | null,
+	version: string,
+	channel: InstallChannel,
+	verification: VersionVerification,
+};
+
+/**  One executable in discovery order. Failed version probes remain visible and cannot be selected. */
+export type AgentInstallationCandidate = {
+	path: string,
+	availability: Availability,
+	installation: AgentInstallation | null,
+	selected: boolean,
+	source: string,
+};
+
+/**  Device-local executable preference. Paths never become portable chat or account metadata. */
+export type AgentInstallations = {
+	agent_id: string,
+	/**  None follows the environment override, then PATH order. An explicit missing path stays selected. */
+	preferred_path: string | null,
+	candidates: AgentInstallationCandidate[],
+	truncated: boolean,
+	notice: string | null,
+};
+
+/**  Actions this exact detected installation can perform through reviewed vendor commands. */
+export type AgentMaintenance = {
+	auth_status: boolean,
+	/**  A reviewed interactive vendor login command can run in the explicit terminal sheet. */
+	login_available: boolean,
+	/**
+	 *  `None` enables the explicit update action. Otherwise this explains the owning channel or
+	 *  missing helper; the UI must not offer an update for that installation.
+	 */
+	update_unavailable: string | null,
 };
 
 /**  A command failure, serialized as `{ code, message }`. */
@@ -243,6 +563,12 @@ export type AppInfo = {
 	device: DeviceIdentity | null,
 	/**  The active profile; `null` when startup failed before opening it. */
 	profile: ProfileMeta | null,
+	/**  The selected Account profile is waiting for its app-owned local key. */
+	profile_locked: boolean,
+	/**  Profile commands are temporarily unavailable while a reviewed switch is prepared. */
+	profile_switching: boolean,
+	/**  Managed configuration is blocked until this explicit recovery is confirmed. */
+	config_profile_recovery: ConfigProfileRecovery | null,
 	/**  The profile database; `null` when startup failed before opening it. */
 	db: DbInfo | null,
 	/**  The native material behind the window. `none` means the UI must paint an opaque background. */
@@ -271,7 +597,7 @@ export type AuraEvent =
 /**  Ended by recovery at startup: auracode quit or crashed while the turn ran. */
 recovered: boolean }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; request_id?: never; state?: never; text?: never; thought_id?: never; windows?: never } | 
 /**  The user's prompt text, as sent. The session actor emits it; drivers never do. */
-({ type: "user_message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_completed"; message_id: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_delta"; thought_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_completed"; thought_id: string; duration_ms: number | null }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; turn_id?: never; usage?: never; windows?: never } | {
+({ type: "user_message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "steering_status"; message_id: string; state: SteeringState; detail: string | null }) & { answer?: never; by?: never; decision?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_completed"; message_id: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_delta"; thought_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_completed"; thought_id: string; duration_ms: number | null }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; turn_id?: never; usage?: never; windows?: never } | {
 	type: "tool_call",
 } & ToolCall | {
 	type: "tool_update",
@@ -367,6 +693,30 @@ export type Capabilities = {
 	autonomy_levels: Autonomy[],
 };
 
+export type ChangeDiff = {
+	path: string,
+	before: string | null,
+	after: string | null,
+	binary: boolean,
+	truncated: boolean,
+};
+
+export type ChangeKind = "added" | "modified" | "deleted";
+
+export type ChangedFile = {
+	path: string,
+	kind: ChangeKind,
+	before_bytes: number | null,
+	after_bytes: number | null,
+	binary: boolean,
+};
+
+export type ChangesSnapshot = {
+	checkpoint: CheckpointSummary | null,
+	files: ChangedFile[],
+	unavailable_reason: string | null,
+};
+
 /**
  *  What `chat_attach` returns: the snapshot and the newest history page, consistent with the frames
  *  the subscription carries from `next_seq` on.
@@ -376,6 +726,40 @@ export type ChatAttach = {
 	next_seq: number,
 	snapshot: ChatSnapshot,
 	history: HistoryPage,
+};
+
+export type ChatCreatePreview = {
+	folder: ProjectFolder,
+	/**  Sessions holding this canonical folder, including preparation and shutdown. */
+	busy_chats: ChatSummary[],
+};
+
+/**  Device-local launch context. This is never part of a stored transcript or sync record. */
+export type ChatFolderContext = {
+	primary: string,
+	additional: string[],
+	notices: string[],
+	/**  True once these exact folders have been passed to the current driver generation. */
+	active: boolean,
+	supports_additional: boolean,
+};
+
+export type ChatMove = {
+	project_id: string,
+	/**
+	 *  Must belong to the destination project. `None` preserves the current primary path by
+	 *  attaching a matching folder to that project, never by moving files on disk.
+	 */
+	folder_id: string | null,
+	allow_busy_folder: boolean,
+};
+
+export type ChatSearchHit = {
+	id: string,
+	title: string,
+	project: string,
+	snippet: string | null,
+	archived: boolean,
 };
 
 /**  Everything about a chat that is not in its history. */
@@ -406,6 +790,7 @@ export type ChatSummary = {
 	id: string,
 	title: string | null,
 	agent_id: string,
+	agent_host?: AgentHost,
 	agent_name: string,
 	folder: string,
 	folder_state: FolderState,
@@ -414,6 +799,61 @@ export type ChatSummary = {
 	needs_attention: boolean,
 	created_at: number,
 	updated_at: number,
+};
+
+export type CheckpointSummary = {
+	id: string,
+	turn_id: string,
+	created_at: number,
+	file_count: number,
+	total_bytes: number,
+	/**  Exclusions and limits are visible. Excluded paths are never removed by a revert. */
+	warnings: string[],
+};
+
+export type CloneInput = {
+	remote: string,
+	parent: string,
+	name: string,
+};
+
+export type CloneRecord = {
+	id: string,
+	remote: string,
+	parent: string,
+	destination: string,
+	journal: string,
+	state: CloneState,
+	detail: string,
+};
+
+export type CloneReview = {
+	id: string,
+	remote: string,
+	parent: string,
+	destination: string,
+	notices: string[],
+};
+
+export type CloneState = "running" | "ready" | "canceled" | "failed" | "interrupted" | "cleanup_pending";
+
+export type ComposerAttachment = {
+	id: string,
+	name: string,
+	mime: string,
+	bytes: number,
+	image: boolean,
+};
+
+export type ComposerDraft = {
+	input: ComposerInput,
+	files: ComposerAttachment[],
+};
+
+export type ComposerInput = {
+	text: string,
+	attachments: string[],
+	mentions: string[],
 };
 
 /**  What an option controls, which decides where the UI shows it. */
@@ -429,6 +869,8 @@ export type ConfigChoice = {
 
 export type ConfigKind = { type: "select"; current: string; choices: ConfigChoice[] } | { type: "toggle"; current: boolean };
 
+export type ConfigOperation = "in_sync" | "apply" | "publish" | "merge" | "conflict" | "wait";
+
 /**  One session option the agent offers (or the driver synthesized from its legacy lists). */
 export type ConfigOption = {
 	/**  Opaque to the UI; the driver maps it back to the wire. */
@@ -441,8 +883,115 @@ export type ConfigOption = {
 	pending: ConfigValue | null,
 };
 
+export type ConfigProfileRecovery = {
+	transaction: string | null,
+	owner_profile: string | null,
+	from_profile: string | null,
+	to_profile: string | null,
+	phase: ConfigProfileRecoveryPhase,
+	detail: string,
+};
+
+export type ConfigProfileRecoveryPhase = "restore_previous" | "finish_switch" | "unavailable";
+
+export type ConfigReceiptStatus = "applied" | "recovery_required" | "rolled_back";
+
+export type ConfigScope = "portable" | "windows" | "macos";
+
+export type ConfigSyncChoice = "automatic" | "keep_local" | "use_remote";
+
+export type ConfigSyncInventory = {
+	items: ConfigSyncItem[],
+	next_cursor: string | null,
+	notices: string[],
+};
+
+export type ConfigSyncItem = {
+	id: string,
+	label: string,
+	provider: LibraryProvider | null,
+	scope: ConfigScope | null,
+	operation: ConfigOperation,
+	first_link: boolean,
+	device_only: boolean,
+	skipped: boolean,
+	detail: string | null,
+};
+
+export type ConfigSyncOutcome = {
+	item_id: string,
+	receipt_id: string | null,
+	completed: boolean,
+	message: string,
+};
+
+export type ConfigSyncPreview = {
+	token: string,
+	item: ConfigSyncItem,
+	choice: ConfigSyncChoice,
+	base: string | null,
+	local: string | null,
+	remote: string | null,
+	result: string | null,
+	conflicts: string[],
+	deletes_item: boolean,
+	can_apply: boolean,
+	warnings: string[],
+};
+
+export type ConfigSyncReceipt = {
+	id: string,
+	item_id: string,
+	label: string,
+	provider: LibraryProvider,
+	status: ConfigReceiptStatus,
+};
+
 /**  A value for a [`ConfigOption`]: a choice for a select, a flag for a toggle. */
 export type ConfigValue = { type: "choice"; value: string } | { type: "toggle"; value: boolean };
+
+export type ContinuationAction = { type: "fresh_session" } | { type: "continue_here" } | { type: "switch_agent"; agent_id: string } | { type: "retry"; turn_id: string } | { type: "edit"; turn_id: string; text: string } | { type: "fork"; turn_id: string };
+
+export type ContinuationPreview = {
+	token: string,
+	source_chat_id: string,
+	agent_id: string,
+	creates_chat: boolean,
+	resumes_native: boolean,
+	uses_native_fork: boolean,
+	/**  Exact bounded context shown before confirmation and included in the next visible prompt. */
+	handoff: string,
+	/**
+	 *  Retry/edit prompt, including the visible labels/text for retained attachments and mentions.
+	 *  Switch/fork waits for the next user prompt and therefore has no prompt here.
+	 */
+	prompt: string | null,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type ContinuationResult = {
+	chat_id: string,
+	prompt: PromptAck | null,
+};
+
+export type ConversationTurn = {
+	turn_id: string,
+	ordinal: number,
+	agent_id: string,
+	status: string,
+	prompt_preview: string,
+	started_at: number,
+};
+
+export type ConversationTurns = {
+	/**  Newest first, up to 50 turns. The full source transcript remains unchanged. */
+	turns: ConversationTurn[],
+	before_ordinal: number | null,
+	has_more: boolean,
+	/**  New remote history requires a reviewed visible handoff before a local agent can continue. */
+	can_continue_here?: boolean,
+};
 
 export type Cost = {
 	amount: number | null,
@@ -478,6 +1027,13 @@ export type DeviceIdentity = {
 	created_at: number,
 };
 
+export type EditablePrompt = {
+	turn_id: string,
+	/**  Original free text only. Existing attachment and mention context is retained on edit. */
+	text: string,
+	has_context: boolean,
+};
+
 export type EnvState = { state: "resolving" } | { state: "ready"; source: string; took_ms: number; vars: number } | { state: "fallback"; reason: string };
 
 /**  The environment agents start with, as the banner shows it. */
@@ -509,10 +1065,57 @@ export type EventBatch = {
 	events: AuraEvent[],
 };
 
+export type FileMention = {
+	path: string,
+	directory: boolean,
+};
+
+export type FolderKind = "local" | "git";
+
+export type FolderLocationReview = {
+	folder_id: string,
+	path: string,
+	revision: string,
+	notices: string[],
+};
+
+export type FolderResolution = {
+	folder: ProjectFolder,
+	roots: string[],
+	matches: string[],
+	truncated: boolean,
+	notices: string[],
+};
+
 /**  Whether a chat's folder can be used on this machine. */
 export type FolderState = "ok" | "missing" | 
 /**  The OS refused access (macOS privacy). */
 "not_allowed";
+
+export type GitFileState = {
+	path: string,
+	index: string,
+	worktree: string,
+	original_path: string | null,
+};
+
+export type GitInitializePreview = {
+	token: string,
+	folder: string,
+	initial_branch: string,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type GitWorkspace = {
+	root: string,
+	branch: string | null,
+	head: string | null,
+	files: GitFileState[],
+	blockers: string[],
+	has_submodules: boolean,
+	is_linked_worktree: boolean,
+};
 
 /**
  *  The material the window got, reported to the UI in `app_info`. `none` tells the UI to paint
@@ -546,11 +1149,139 @@ export type HistoryPage = {
 	skipped: number,
 };
 
+/**  How the installed binary is managed. Unknown and bundled installations cannot be updated here. */
+export type InstallChannel = { type: "vendor_standalone" } | { type: "npm"; package: string } | { type: "homebrew"; formula: string } | { type: "bundled"; application: string } | { type: "unknown" };
+
+export type IsolationInput = {
+	slug: string,
+	bring_changes: boolean,
+};
+
+export type IsolationPreview = {
+	token: string,
+	source: GitWorkspace,
+	branch: string,
+	path: string,
+	bring_changes: boolean,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type IsolationResult = {
+	worktree: ManagedWorktree,
+	warning: string | null,
+};
+
+export type KeepLocalPreview = {
+	token: string,
+	projects: number,
+	chats: number,
+	turns: number,
+	notices: string[],
+};
+
+export type KeepLocalResult = {
+	profile_id: string,
+	display_name: string,
+	projects: number,
+	chats: number,
+	turns: number,
+	missing_attachments: number,
+};
+
+/**  Public release metadata. Stale cached data remains visible during offline use. */
+export type LatestRelease = {
+	version: string | null,
+	source: string,
+	checked_at: number | null,
+	stale: boolean,
+};
+
 /**
  *  What the UI should open into. Smoke mode wins over the stress view, since it is the one that
  *  exits by itself and a CI job is waiting on it.
  */
 export type LaunchMode = { type: "normal" } | { type: "smoke"; plan: SmokePlan } | { type: "stress"; config: StressConfig };
+
+export type LibraryCopyFile = {
+	path: string,
+	before_revision: string | null,
+	after_revision: string,
+	bytes: number,
+};
+
+export type LibraryCopyPreview = {
+	id: string,
+	from: LibraryItemRef,
+	to_source: string,
+	files: LibraryCopyFile[],
+	before_text: string | null,
+	after_text: string,
+	notices: string[],
+};
+
+export type LibraryCopyReceipt = {
+	id: string,
+	source_id: string,
+	kind: LibraryItemKind,
+	files: string[],
+	state: LibraryCopyState,
+};
+
+export type LibraryCopyResult = {
+	id: string,
+	source_id: string,
+	applied: string[],
+	recovery_required: boolean,
+	message: string | null,
+};
+
+export type LibraryCopyState = "complete" | "recovery_required" | "rolled_back";
+
+export type LibraryInventory = {
+	sources: LibrarySourceStatus[],
+	items: LibraryItem[],
+	notices: string[],
+};
+
+export type LibraryItem = {
+	item: LibraryItemRef,
+	provider: LibraryProvider,
+	scope: LibraryScope,
+	label: string,
+	relative_path: string,
+	revision: string,
+	bytes: number,
+	copy_blocked: string | null,
+};
+
+export type LibraryItemKind = "skill" | "instructions" | "mcp_server" | "plugin" | "package";
+
+export type LibraryItemPreview = {
+	item: LibraryItem,
+	text: string,
+	files: string[],
+	notices: string[],
+};
+
+export type LibraryItemRef = {
+	source_id: string,
+	kind: LibraryItemKind,
+	/**  A logical key, never a caller-selected filesystem path. */
+	key: string,
+};
+
+export type LibraryProvider = "claude" | "codex" | "pi" | "shared";
+
+export type LibraryScope = "user" | "project";
+
+export type LibrarySourceStatus = {
+	id: string,
+	provider: LibraryProvider,
+	scope: LibraryScope,
+	available: boolean,
+	message: string | null,
+};
 
 /**  One account rate-limit window (Claude's five-hour/weekly windows, Codex's primary/secondary). */
 export type LimitWindow = {
@@ -558,6 +1289,50 @@ export type LimitWindow = {
 	used_percent: number | null,
 	resets_at: number | null,
 };
+
+export type LocalImportPreview = {
+	projects: LocalImportProject[],
+	notices: string[],
+};
+
+export type LocalImportProject = {
+	project_id: string,
+	name: string,
+	folders: number,
+	chats: number,
+	turns: number,
+	revision: string,
+	already_imported: boolean,
+};
+
+export type LocalImportResult = {
+	project_ids: string[],
+	chats: number,
+	turns: number,
+	missing_attachments: number,
+};
+
+export type LocalImportSelection = {
+	project_id: string,
+	revision: string,
+};
+
+export type ManagedWorktree = {
+	id: string,
+	chat_id: string,
+	source: string,
+	path: string,
+	branch: string,
+	base_commit: string,
+	state: WorktreeState,
+	detail: string | null,
+	recovery?: WorktreeRecovery | null,
+	created_at: number,
+};
+
+export type MotionPreference = 
+/**  Full motion still honors the operating system's reduced-motion setting. */
+"full" | "reduced" | "off";
 
 export type NoticeLevel = "info" | "warning" | "error";
 
@@ -578,6 +1353,12 @@ export type OpenOutcome =
 { type: "recovered_from_corruption"; quarantined: string; salvage: Salvage };
 
 export type PauseReason = "disk_full" | "busy";
+
+export type PendingHandoff = {
+	agent_id: string,
+	handoff: string,
+	uses_native_fork: boolean,
+};
 
 export type PermissionDecision = { type: "selected"; option_id: string } | { type: "cancelled" };
 
@@ -633,6 +1414,81 @@ export type ProfileMeta = {
 	created_at: number,
 };
 
+export type ProjectChatCreate = {
+	agent_id: string,
+	folder_id: string,
+	/**  Explicit acknowledgment of the busy-folder warning. The server rechecks before creation. */
+	allow_busy_folder: boolean,
+};
+
+export type ProjectCreate = {
+	project: ProjectInput,
+	folder: string,
+};
+
+export type ProjectEditor = "cursor" | "vs_code" | "vs_code_insiders";
+
+export type ProjectFilePreview = {
+	path: string,
+	bytes: number,
+	text: string | null,
+	truncated: boolean,
+};
+
+export type ProjectFolder = {
+	id: string,
+	project_id: string,
+	display_name: string,
+	/**  This device's path only. An unavailable device mapping is never borrowed from another. */
+	path: string | null,
+	folder_state: FolderState,
+	unavailable_reason: string | null,
+	kind: FolderKind,
+	git_remote_url: string | null,
+	git_default_branch: string | null,
+};
+
+/**  Complete editable project values. `None` clears an optional field on update. */
+export type ProjectInput = {
+	name: string,
+	color: string | null,
+	default_agent: string | null,
+	default_model: string | null,
+};
+
+export type ProjectSearchHit = {
+	id: string,
+	name: string,
+};
+
+export type ProjectShell = "power_shell" | "command_prompt" | "zsh" | "bash";
+
+export type ProjectShellChoice = {
+	id: ProjectShell,
+	label: string,
+	program: string,
+	args: string[],
+};
+
+export type ProjectSummary = {
+	id: string,
+	name: string,
+	color: string | null,
+	default_agent: string | null,
+	default_model: string | null,
+	folders: ProjectFolder[],
+	created_at: number,
+	updated_at: number,
+};
+
+export type ProjectToolsReview = {
+	token: string,
+	folder: string,
+	shells: ProjectShellChoice[],
+	editors: ProjectEditor[],
+	expires_at: number,
+};
+
 /**  What `chat_send` did with the prompt: sent at once, or queued behind a turn or a start. */
 export type PromptAck = {
 	prompt_id: string,
@@ -642,6 +1498,36 @@ export type PromptAck = {
 /**  What happened to a queued prompt. */
 export type PromptState = "queued" | "started" | "completed" | "cancelled" | "failed";
 
+export type PullRequestInput = {
+	title: string,
+	body: string,
+	base_branch: string | null,
+};
+
+export type PullRequestPreview = {
+	token: string,
+	worktree_id: string,
+	repository: string,
+	repository_url: string,
+	head_branch: string,
+	head_commit: string,
+	base_branch: string,
+	title: string,
+	body: string,
+	will_push: boolean,
+	existing_url: string | null,
+	diff_stat: string,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type PullRequestResult = {
+	url: string,
+	created: boolean,
+	head_commit: string,
+	warning: string | null,
+};
+
 export type QueuedPrompt = {
 	prompt_id: string,
 	/**  The prompt's first 256 characters. */
@@ -650,6 +1536,62 @@ export type QueuedPrompt = {
 	held: boolean,
 	created_at: number,
 };
+
+/**
+ *  The recovery key is intentionally shown only in response to an explicit setup action. Keep it
+ *  in transient UI memory, never diagnostics, analytics, URLs or frontend persistence.
+ */
+export type RecoverySetup = {
+	id: string,
+	recovery_key: string,
+};
+
+export type RemovedWorkspace = {
+	target: WorkspaceRemovalTarget,
+	name: string,
+	project_name: string,
+	chat_count: number,
+	removed_at: number,
+	/**  A folder in a removed project is restored after its project is restored. */
+	restore_unavailable: string | null,
+};
+
+export type RepositoryPublicationDraft = {
+	input: RepositoryPublicationInput,
+	unfinished: boolean,
+};
+
+export type RepositoryPublicationInput = {
+	/**  Empty selects the currently authenticated GitHub user during the explicit review. */
+	owner: string,
+	name: string,
+};
+
+export type RepositoryPublicationResult = {
+	folder_id: string,
+	url: string,
+	repository: string,
+	head_commit: string,
+	state: RepositoryPublicationState,
+	detail: string,
+};
+
+export type RepositoryPublicationReview = {
+	token: string,
+	folder_id: string,
+	path: string,
+	repository: string,
+	url: string,
+	branch: string,
+	head_commit: string,
+	private: boolean,
+	recovering: boolean,
+	will_create: boolean,
+	will_push: boolean,
+	notices: string[],
+};
+
+export type RepositoryPublicationState = "complete" | "needs_review";
 
 /**  Who answered a permission request or a question. */
 export type ResolvedBy = "user" | 
@@ -661,6 +1603,22 @@ export type ResolvedBy = "user" |
 "turn" | 
 /**  Recovery, or the agent's process ended. */
 "system" | "other";
+
+export type RevertPreview = {
+	token: string,
+	checkpoint_id: string,
+	files: ChangedFile[],
+	expires_at: number,
+	warnings: string[],
+};
+
+export type RevertResult = {
+	applied: string[],
+	/**  A partial failure is explicit; the caller must not report full success. */
+	error: string | null,
+	/**  Original files are preserved here whenever a revert replaces or removes them. */
+	recovery_paths: string[],
+};
 
 /**  How much of a damaged database made it into the database that replaced it. */
 export type Salvage = 
@@ -680,6 +1638,11 @@ export type Salvage =
 { type: "partial"; tables: string[] } | 
 /**  Nothing could be read, so the new database started out empty. */
 { type: "nothing" };
+
+export type SearchResults = {
+	chats: ChatSearchHit[],
+	projects: ProjectSearchHit[],
+};
 
 /**  Live header state of a chat. Never stored; coalesced to at most one per frame. */
 export type SessionInfo = {
@@ -731,6 +1694,46 @@ export type SessionStatus =
 "failed" | 
 /**  The agent needs its own sign-in; never a live process. */
 "auth_required";
+
+export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" };
+
+export type SetupCommand = {
+	program: string,
+	args: string[],
+};
+
+export type SetupFile = {
+	path: string,
+	bytes: number,
+};
+
+export type SetupPreferences = {
+	revision: number,
+	step: SetupStep,
+	motion: MotionPreference,
+	completed: boolean,
+	first_project_id: string | null,
+};
+
+export type SetupSnapshot = {
+	preferences: SetupPreferences,
+	/**  Stable for this process, even when React remounts or the webview reloads. */
+	cold_start: boolean,
+	notice: string | null,
+};
+
+export type SetupStep = "welcome" | "agents" | "account" | "motion" | "project";
+
+export type SignInChallenge = {
+	id: string,
+	expires_in: number,
+	resend_after: number,
+};
+
+export type SignInLink = {
+	id: string,
+	email: string | null,
+};
 
 export type SlashCommand = {
 	name: string,
@@ -793,6 +1796,15 @@ export type SmokeScenario =
  */
 "agent";
 
+export type SteeringAck = {
+	message_id: string,
+	state: SteeringState,
+	detail: string | null,
+};
+
+/**  Pending after a crash or a closed turn is unconfirmed, never proof of delivery. */
+export type SteeringState = "pending" | "accepted" | "rejected" | "unconfirmed";
+
 /**  Why a turn ended. */
 export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | 
 /**  The agent confirmed a cancel. */
@@ -835,6 +1847,14 @@ export type StressConfig = {
 	rate: number,
 	aura: boolean,
 	seconds: number,
+};
+
+/**  One bounded pull. An empty nonterminal chunk means only that the read wait elapsed. */
+export type TerminalChunk = {
+	bytes: number[],
+	done: boolean,
+	exit_code: number | null,
+	truncated: boolean,
 };
 
 /**  Token accounting for a turn, when the agent reports it. */
@@ -909,17 +1929,64 @@ export type Truncation = {
 };
 
 /**  The answer to a [`UiRequest`], matching its [`UiPrompt`] (`Notify` takes none). */
-export type UiAnswer = { type: "confirm"; yes: boolean } | { type: "select"; index: number } | { type: "input"; text: string };
+export type UiAnswer = { type: "confirm"; yes: boolean } | { type: "select"; index: number } | { type: "input"; text: string } | { type: "questions"; answers: UiQuestionAnswer[] };
 
-export type UiPrompt = { type: "confirm"; message: string } | { type: "select"; message: string; options: string[] } | { type: "input"; message: string; placeholder: string | null } | { type: "notify"; message: string };
+export type UiPrompt = { type: "confirm"; message: string } | { type: "select"; message: string; options: string[] } | { type: "input"; message: string; placeholder: string | null } | { type: "questions"; message: string; questions: UiQuestion[] } | { type: "notify"; message: string };
 
 /**
- *  An agent asks the UI for input that isn't a tool permission (Pi extension UI, Cursor questions,
- *  ACP elicitation). Never auto-answered.
+ *  One question in a grouped prompt. The driver keeps the original native question and maps it by
+ *  `id`, so display normalization never changes the key sent back to the agent.
+ */
+export type UiQuestion = {
+	/**  Stable within the request and unique among its questions. */
+	id: string,
+	header: string,
+	question: string,
+	options: UiQuestionOption[],
+	multi_select: boolean,
+	allow_free_text: boolean,
+};
+
+/**
+ *  One answer per question. A single-select question accepts one option or free text; a
+ *  multi-select question accepts multiple options and optional free text. Nothing is preselected.
+ */
+export type UiQuestionAnswer = {
+	question_id: string,
+	/**  Distinct indices into the question's options, in their displayed order. */
+	selected: number[],
+	/**  Nonblank when present, and accepted only when the question allows free text. */
+	text: string | null,
+};
+
+export type UiQuestionOption = {
+	label: string,
+	description: string,
+};
+
+/**
+ *  An agent asks the UI for input that isn't a tool permission (Claude or Cursor questions,
+ *  Pi extension UI, ACP elicitation). Never auto-answered.
  */
 export type UiRequest = {
 	request_id: string,
 	prompt: UiPrompt,
+};
+
+export type UpdateError = {
+	message: string,
+};
+
+export type UpdatePhase = "disabled" | "idle" | "checking" | "available" | "downloading" | "ready" | "waiting_for_idle" | "installing" | "restart_required" | "failed";
+
+export type UpdateStatus = {
+	channel: string,
+	phase: UpdatePhase,
+	version: string | null,
+	notes: string | null,
+	downloaded_bytes: number,
+	total_bytes: number | null,
+	message: string | null,
 };
 
 /**  Context-window and spend information for the session. */
@@ -938,6 +2005,146 @@ export type UsageScope =
 "session";
 
 export type Value = null | boolean | number | string | Value[] | { [key in string]: Value };
+
+export type VendorAction = "install" | "update" | "remove" | "enable" | "disable";
+
+export type VendorKind = "plugin" | "marketplace" | "package";
+
+export type VendorProvider = "claude" | "codex" | "pi";
+
+export type VendorRequest = {
+	provider: VendorProvider,
+	kind: VendorKind,
+	action: VendorAction,
+	target: string,
+	/**  An optional Library item revision, checked against personal configuration only. */
+	item_revision: string | null,
+};
+
+export type VendorReview = {
+	token: string,
+	request: VendorRequest,
+	program: string,
+	arguments: string[],
+	working_directory: string,
+	config_directory: string,
+	revision: string,
+	timeout_seconds: number,
+	notices: string[],
+};
+
+/**  Evidence about this exact installed version, independent of whether its binary can start. */
+export type VersionVerification = { state: "verified"; version: string; scope: string } | { state: "untested"; last_verified: string | null } | { state: "unknown" };
+
+export type WorkspaceChat = {
+	chat: ChatSummary,
+	project_id: string,
+	folder_id: string | null,
+	pinned: boolean,
+	archived: boolean,
+};
+
+export type WorkspaceFilter = {
+	/**  Archived chats are excluded unless the caller explicitly asks to include them. */
+	include_archived: boolean,
+	/**  Filters chats only; projects remain available as move destinations. */
+	project_id: string | null,
+};
+
+export type WorkspaceRemovalAction = "remove" | "restore";
+
+export type WorkspaceRemovalPreview = {
+	token: string,
+	target: WorkspaceRemovalTarget,
+	action: WorkspaceRemovalAction,
+	name: string,
+	chat_count: number,
+	folders: string[],
+	notices: string[],
+};
+
+export type WorkspaceRemovalTarget = { kind: "project"; id: string } | { kind: "folder"; id: string };
+
+export type WorkspaceSnapshot = {
+	projects: ProjectSummary[],
+	chats: WorkspaceChat[],
+};
+
+export type WorktreeAction = { type: "merge"; message: string } | { type: "discard" };
+
+export type WorktreeActionPreview = {
+	token: string,
+	worktree: ManagedWorktree,
+	action: WorktreeAction,
+	target: GitWorkspace | null,
+	changes: string,
+	conflicts: string[],
+	warnings: string[],
+	expires_at: number,
+};
+
+export type WorktreeActionResult = {
+	worktree: ManagedWorktree,
+	recovery: string,
+	commit: string | null,
+	error: string | null,
+};
+
+export type WorktreeDestination = "isolated" | "direct";
+
+export type WorktreeRecovery = { type: "create" } | { type: "retire" } | { type: "restore" } | { type: "merge"; branch: string; before_ref: string; prepared_ref: string; before_commit: string; prepared_commit: string };
+
+export type WorktreeRecoveryAction = "reconcile" | "restore";
+
+export type WorktreeRecoveryPreview = {
+	token: string,
+	worktree: ManagedWorktree,
+	action: WorktreeRecoveryAction,
+	folder: GitWorkspace,
+	target: GitWorkspace | null,
+	destination: string,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type WorktreeRelocationPreview = {
+	token: string,
+	worktree: ManagedWorktree,
+	from: string,
+	to: string,
+	handoff: string,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type WorktreeSetup = {
+	source: string,
+	input: WorktreeSetupInput,
+};
+
+export type WorktreeSetupInput = {
+	files: string[],
+	command: SetupCommand | null,
+};
+
+export type WorktreeSetupPreview = {
+	token: string,
+	worktree_id: string,
+	source: string,
+	destination: string,
+	files: SetupFile[],
+	command: SetupCommand | null,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type WorktreeSetupResult = {
+	copied: string[],
+	command_token: string | null,
+	warning: string | null,
+};
+
+export type WorktreeState = "creating" | "ready" | "merging" | "retiring" | "restoring" | "recovery_required" | "missing" | "retired" | string;
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

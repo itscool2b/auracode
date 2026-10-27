@@ -1,0 +1,12 @@
+{
+  "device_public_key": "zo060cy2M-x7cMF4FKXHbs0CloUFDTRHRboFhw5YfVk",
+  "approval_code": "484647",
+  "device_envelope": {
+    "algorithm": "x25519-hkdf-sha256-xchacha20poly1305-v1",
+    "ciphertext": "0nWCvg7CzqRD3syGfQbg3cCbap5ydIVYWhlRceL0Ka-_HR54mDZqejU6hkRqHDE2",
+    "nonce": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "ephemeral_public_key": "Xf7dO2vUf2-ijuFdlp1bsOpTd01Ii9r53xxuASSz7yI"
+  },
+  "recovery_proof": "0SI7yD9xZ15ixEwPTO4Q6iOBZO3SnHJv01dX2ebBS64",
+  "recovery_verifier": "yt564Ia-OQuul5PkO2LNn5m-tvHTIxMOd_6dsPYx5gU"
+}

@@ -93,6 +93,8 @@ pub(crate) struct RegistryFile {
 struct FileState {
     body: FileBody,
     closed: bool,
+    /// Only failed shutdown records survive an otherwise clean instance close.
+    retain_at_close: std::collections::HashSet<u32>,
 }
 
 impl LeftoverRegistry {
@@ -150,7 +152,8 @@ impl LeftoverRegistry {
         self.handle().unregister(pid);
     }
 
-    /// Deletes this instance's file, at a clean exit. Later changes write nothing.
+    /// Closes this instance's file. Failed shutdown records survive for recovery; otherwise the
+    /// file is deleted. Later changes write nothing.
     pub fn close(&self) -> io::Result<()> {
         match &self.file {
             Some(file) => file.close(),
@@ -175,6 +178,24 @@ impl LeftoverRegistry {
 pub(crate) struct RegistryHandle(Option<Arc<RegistryFile>>);
 
 impl RegistryHandle {
+    /// Shutdown owns the decision: an unconfirmed cleanup retains exact escaped identities for
+    /// the next instance instead of converting a failed kill into lost recovery metadata.
+    #[cfg(unix)]
+    pub(crate) fn finish_shutdown(&self, pid: u32, escaped: Vec<EscapedProc>, complete: bool) {
+        if complete {
+            self.unregister(pid);
+        } else if let Some(file) = &self.0 {
+            let mut state = lock(&file.state);
+            if state.closed {
+                return;
+            }
+            if let Some(entry) = state.body.entries.iter_mut().find(|entry| entry.pid == pid) {
+                entry.escaped = escaped;
+                state.retain_at_close.insert(pid);
+                file.write_or_warn(&state.body);
+            }
+        }
+    }
     /// Whether changes are recorded at all (not a disabled registry).
     #[cfg(unix)]
     pub(crate) fn is_enabled(&self) -> bool {
@@ -220,6 +241,7 @@ impl RegistryFile {
                     entries: Vec::new(),
                 },
                 closed: false,
+                retain_at_close: Default::default(),
             }),
             heartbeat: Mutex::new(None),
         });
@@ -236,6 +258,7 @@ impl RegistryFile {
             return Err(io::Error::other("the leftover registry is closed"));
         }
         state.body.entries.retain(|known| known.pid != entry.pid);
+        state.retain_at_close.remove(&entry.pid);
         state.body.entries.push(entry);
         self.write(&state.body)
     }
@@ -262,6 +285,7 @@ impl RegistryFile {
         }
         let before = state.body.entries.len();
         state.body.entries.retain(|entry| entry.pid != pid);
+        state.retain_at_close.remove(&pid);
         if state.body.entries.len() != before {
             self.write_or_warn(&state.body);
         }
@@ -282,7 +306,14 @@ impl RegistryFile {
         }
         let mut state = lock(&self.state);
         state.closed = true;
-        state.body.entries.clear();
+        let retained = state.retain_at_close.clone();
+        state
+            .body
+            .entries
+            .retain(|entry| retained.contains(&entry.pid));
+        if !state.body.entries.is_empty() {
+            return self.write(&state.body);
+        }
         match std::fs::remove_file(&self.path) {
             Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
             _ => Ok(()),
@@ -442,6 +473,52 @@ mod tests {
             serde_json::from_str::<LeftoverEntry>(&text).expect("deserialize"),
             entry
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unconfirmed_shutdown_keeps_recovery_identities_until_cleanup_succeeds() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let registry =
+            LeftoverRegistry::open(&dir.path().join("run"), Handle::current()).expect("open");
+        let path = registry.path().expect("registry path").to_path_buf();
+        registry.register(entry(5001)).expect("register");
+        let escaped = vec![EscapedProc {
+            pid: 5120,
+            start: StartTime::MacLstart("Sat Oct 24 09:04:00 2026".into()),
+        }];
+        registry
+            .handle()
+            .finish_shutdown(5001, escaped.clone(), false);
+        let stored = body(&path);
+        assert_eq!(stored.entries.len(), 1);
+        assert_eq!(stored.entries[0].escaped, escaped);
+        registry.handle().finish_shutdown(5001, Vec::new(), true);
+        assert!(body(&path).entries.is_empty());
+        registry.close().expect("close");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn failed_shutdown_survives_an_otherwise_clean_registry_close() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let registry =
+            LeftoverRegistry::open(&dir.path().join("run"), Handle::current()).expect("open");
+        let path = registry.path().expect("registry path").to_path_buf();
+        registry.register(entry(5001)).expect("failed process");
+        registry.register(entry(5002)).expect("clean process");
+        let escaped = vec![EscapedProc {
+            pid: 5120,
+            start: StartTime::MacLstart("same process".into()),
+        }];
+        registry
+            .handle()
+            .finish_shutdown(5001, escaped.clone(), false);
+        registry.close().expect("close");
+        let stored = body(&path);
+        assert_eq!(stored.entries.len(), 1);
+        assert_eq!(stored.entries[0].pid, 5001);
+        assert_eq!(stored.entries[0].escaped, escaped);
     }
 
     #[cfg(unix)]

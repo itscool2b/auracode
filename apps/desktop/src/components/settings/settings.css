@@ -1,0 +1,616 @@
+/*
+ * Settings in Graphite (docs/design/visual-language.md, 6.16): the sidebar becomes the settings
+ * nav, the page is a surface-1 pane with a 680px column, and every group is a surface-2 panel of
+ * rows on inset hairlines (X Money). Only --g-* tokens.
+ */
+
+.settings-shell {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.settings-shell :where(button, input, select, textarea) {
+  font-family: inherit;
+}
+
+.settings-drag {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 52px;
+}
+
+/* ------------------------------------------------------------------------ sidebar */
+
+.settings-sidebar {
+  position: relative;
+  display: flex;
+  flex: 0 0 var(--g-app-sidebar);
+  flex-direction: column;
+  min-width: 0;
+  padding: 52px 12px 16px;
+}
+
+.settings-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--g-radius-8);
+  background-color: transparent;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+.settings-back svg {
+  flex: none;
+  color: var(--g-fg-3);
+}
+
+.settings-sidebar h2 {
+  margin: 28px 12px 8px;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 600;
+}
+
+.settings-sidebar nav {
+  display: grid;
+  gap: 2px;
+}
+
+.settings-sidebar nav button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px 0 12px;
+  border: 0;
+  border-radius: var(--g-radius-8);
+  background-color: transparent;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+.settings-sidebar nav button svg {
+  flex: none;
+  color: var(--g-fg-3);
+}
+
+@media (hover: hover) {
+  .settings-back:hover,
+  .settings-sidebar nav button:hover {
+    background-color: var(--g-surface-2);
+    color: var(--g-fg-1);
+  }
+}
+
+/* The active page: ink, 500 and a 2px rail on the row's left edge. */
+.settings-sidebar nav button[aria-current] {
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.settings-sidebar nav button[aria-current]::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 2px;
+  background-color: var(--g-fg-1);
+}
+
+.settings-sidebar nav hr {
+  width: calc(100% - 24px);
+  height: 1px;
+  margin: 8px 12px;
+  border: 0;
+  background-color: var(--g-line);
+}
+
+.settings-identity {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding: 16px 12px 0;
+}
+
+.settings-identity > span:last-child {
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* --------------------------------------------------------------------------- pane */
+
+.settings-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  margin: 8px 8px 8px 0;
+  overflow: auto;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-surface-1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
+}
+
+.settings-main > .settings-drag {
+  height: 32px;
+}
+
+.settings-content {
+  box-sizing: border-box;
+  width: min(100%, 760px);
+  margin-inline: auto;
+  padding: 48px 40px 64px;
+}
+
+.settings-content > header {
+  margin-bottom: 32px;
+}
+
+.settings-content h1 {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-title);
+}
+
+.settings-content h1:focus {
+  outline: none;
+}
+
+.settings-content :where(header) > p {
+  margin: 4px 0 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+/* ------------------------------------------------------------- groups and rows */
+
+.settings-section {
+  margin-bottom: 32px;
+}
+
+.settings-section > h2 {
+  margin: 0 0 8px;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.settings-group {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-surface-2);
+}
+
+.settings-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 56px;
+  padding: 10px 16px;
+}
+
+/* Separators sit on hairlines inset to the text start. */
+.settings-row + .settings-row::before,
+.settings-shortcuts > div + div::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 16px;
+  height: 1px;
+  background-color: var(--g-line);
+}
+
+.settings-row > div {
+  min-width: 0;
+}
+
+.settings-row strong {
+  display: block;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.settings-row p {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.settings-row > .g-button {
+  flex-shrink: 0;
+}
+
+.settings-mono {
+  font-family: var(--g-mono);
+  font-variant-ligatures: none;
+}
+
+.settings-path {
+  margin: 0;
+  padding: 0 16px 14px;
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.settings-note,
+.settings-footnote {
+  margin: 8px 0 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.settings-note {
+  margin: 0;
+  padding: 0 16px 14px;
+}
+
+/* A strong segmented control on native radios: one white pill marks the choice (4.3). */
+.settings-segmented {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-surface-3);
+}
+
+.settings-segmented label {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.settings-segmented input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.settings-segmented:disabled input {
+  cursor: default;
+}
+
+.settings-segmented span {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--g-radius-pill);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+  pointer-events: none;
+  transition:
+    background-color var(--g-dur-fast) var(--g-ease),
+    color var(--g-dur-fast) var(--g-ease);
+}
+
+.settings-segmented label:hover input:not(:checked) + span {
+  color: var(--g-fg-1);
+}
+
+.settings-segmented input:checked + span {
+  background-color: var(--g-primary);
+  color: var(--g-on-light);
+}
+
+.settings-segmented input:focus-visible + span {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------- shortcuts */
+
+.settings-shortcuts {
+  margin: 0;
+}
+
+.settings-shortcuts > div {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  padding: 8px 16px;
+}
+
+.settings-shortcuts dt {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.settings-shortcuts dd {
+  margin: 0;
+}
+
+.settings-keys {
+  display: inline-flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------------ updates */
+
+.settings-download {
+  display: grid;
+  gap: 8px;
+  padding: 0 16px 14px;
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-download progress {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 2px;
+  background-color: var(--g-surface-4);
+  color: var(--g-fg-1);
+}
+
+.settings-download progress::-webkit-progress-bar {
+  background-color: var(--g-surface-4);
+}
+
+.settings-download progress::-webkit-progress-value {
+  background-color: var(--g-fg-1);
+}
+
+.settings-download progress::-moz-progress-bar {
+  background-color: var(--g-fg-1);
+}
+
+.settings-notes {
+  padding: 0 16px 14px;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.settings-notes summary {
+  color: var(--g-fg-1);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.settings-notes p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings-confirm {
+  position: relative;
+  padding: 14px 16px 16px;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.settings-confirm::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 16px;
+  height: 1px;
+  background-color: var(--g-line);
+}
+
+.settings-confirm strong {
+  font-weight: 500;
+}
+
+.settings-confirm p {
+  margin: 4px 0 12px;
+  color: var(--g-fg-2);
+}
+
+.settings-confirm > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ------------------------------------------------------------------------ errors */
+
+/* A failed step: a well with a red edge, the reason, and what to do (6.8). */
+.settings-error {
+  margin: 16px 0;
+  padding: 10px 14px;
+  border-left: 2px solid var(--g-red);
+  border-radius: 0 var(--g-radius-8) var(--g-radius-8) 0;
+  background-color: var(--g-surface-2);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.settings-error p {
+  margin: 0;
+}
+
+.settings-alert {
+  margin: 8px 0 0;
+  color: var(--g-red);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.settings-error > .g-button {
+  margin-top: 8px;
+}
+
+.settings-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------------ notices */
+
+.settings-notices[open] {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 48px));
+  height: calc(100vh - 64px);
+}
+
+.settings-notices-text {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-bg);
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
+}
+
+.settings-notices-text:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+.settings-notices pre {
+  margin: 0;
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------------ narrow */
+
+/* Disclosures open with a quiet chevron rather than the platform triangle. */
+:is(.settings-shell, .locked-profile, .configuration-recovery) details > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+}
+
+:is(.settings-shell, .locked-profile, .configuration-recovery)
+  details
+  > summary::-webkit-details-marker {
+  display: none;
+}
+
+:is(.settings-shell, .locked-profile, .configuration-recovery) details > summary::before {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23858585' stroke-width='1.5'%3E%3Cpath d='m4.5 3 3 3-3 3'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+  transition: transform var(--g-dur-base) var(--g-ease);
+}
+
+:is(.settings-shell, .locked-profile, .configuration-recovery) details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+@media (max-width: 860px) {
+  .settings-sidebar {
+    flex-basis: 200px;
+  }
+
+  .settings-content {
+    padding: 40px 24px 48px;
+  }
+
+  .settings-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .settings-sidebar {
+    flex-basis: 148px;
+    padding-inline: 8px;
+  }
+
+  .settings-sidebar h2 {
+    margin-inline: 8px;
+  }
+
+  .settings-content {
+    padding-inline: 16px;
+  }
+}
+
+/* On a raised surface the disabled pill takes one step up, so it keeps its shape. */
+:is(.settings-group, .account-card, .local-import-panel, .config-sync-empty) .g-button:disabled {
+  background-color: var(--g-surface-3);
+}

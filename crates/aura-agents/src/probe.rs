@@ -22,6 +22,7 @@ pub(crate) const BUILT_IN: &str = "built in";
 /// One detection's result, with the programs a launch needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Detection {
+    pub(crate) installation: Option<aura_protocol::agents::AgentInstallation>,
     pub(crate) availability: Availability,
     /// An npm adapter that is not installed yet.
     pub(crate) needs_download: bool,
@@ -34,6 +35,8 @@ pub(crate) struct Detection {
 pub(crate) struct Located {
     /// The agent's binary, or the user's own CLI behind an adapter.
     pub(crate) program: PathBuf,
+    /// Fixed package entry arguments, preceding protocol and session arguments.
+    pub(crate) prefix_args: Vec<OsString>,
     /// An adapter's `node`.
     pub(crate) node: Option<PathBuf>,
 }
@@ -41,6 +44,7 @@ pub(crate) struct Located {
 impl Detection {
     pub(crate) fn missing(reason: String) -> Detection {
         Detection {
+            installation: None,
             availability: Availability::Missing { reason },
             needs_download: false,
             located: None,
@@ -49,6 +53,7 @@ impl Detection {
 
     fn broken(reason: String) -> Detection {
         Detection {
+            installation: None,
             availability: Availability::Broken { reason },
             needs_download: false,
             located: None,
@@ -56,16 +61,16 @@ impl Detection {
     }
 }
 
-/// Where an adapter's user binary is.
+/// Where the user's CLI is, for direct launches and adapters.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UserBinaryLookup {
     Found(PathBuf),
-    /// Windows: only an npm shim (`.cmd`, `.bat`, `.ps1`), which the adapters cannot spawn.
+    /// Windows: only a shell shim (`.cmd`, `.bat`, `.ps1`), which a direct CLI launch cannot spawn.
     ShimOnly(PathBuf),
     NotFound,
 }
 
-/// The adapter's variable when it names an executable file (a `.exe` under Windows rules), else the
+/// The binary's variable when it names an executable file (a `.exe` under Windows rules), else the
 /// binary on `PATH`: any executable file on Unix, only `<program>.exe` under Windows rules, where a
 /// shim alone is reported as such. `windows` picks the rules, so both are tested on every OS.
 pub(crate) fn locate_user_binary(
@@ -104,7 +109,7 @@ pub(crate) fn locate_user_binary(
 }
 
 /// Under Windows rules a program is a `.exe` file; on Unix, a file with an execute bit.
-fn runnable(path: &Path, windows: bool) -> bool {
+pub(crate) fn runnable(path: &Path, windows: bool) -> bool {
     if windows {
         return path.is_file()
             && path
@@ -124,7 +129,7 @@ fn runnable(path: &Path, windows: bool) -> bool {
 }
 
 /// `PATH` split the Windows way (`;`, quotes trimmed), absolute entries only.
-fn windows_path_dirs(vars: &EnvMap) -> Vec<PathBuf> {
+pub(crate) fn windows_path_dirs(vars: &EnvMap) -> Vec<PathBuf> {
     let Some(path) = vars.get(&EnvKey::from("PATH")) else {
         return Vec::new();
     };
@@ -178,6 +183,25 @@ pub(crate) fn missing_user_binary(binary: &UserBinary, lookup: &UserBinaryLookup
     }
 }
 
+/// Why a direct native driver cannot start the user's CLI.
+fn missing_native_binary(binary: &UserBinary, lookup: &UserBinaryLookup) -> String {
+    match lookup {
+        UserBinaryLookup::ShimOnly(shim) => format!(
+            "auracode can't run the {shim} shell shim as native {label} on Windows. Install the standalone {label}, or set {env} to a {program}.exe.",
+            shim = shim.file_name().map_or_else(
+                || shim.display().to_string(),
+                |name| name.to_string_lossy().into_owned()
+            ),
+            label = binary.label,
+            env = binary.env,
+            program = binary.program,
+        ),
+        UserBinaryLookup::NotFound | UserBinaryLookup::Found(_) => {
+            format!("{} was not found on your PATH.", binary.program)
+        }
+    }
+}
+
 /// The folder probes of binaries run in: `$HOME`, else the temp folder.
 fn home(env: &ResolvedEnv) -> PathBuf {
     env.vars
@@ -200,6 +224,17 @@ async fn probe(
     args: &[&str],
     cwd: &Path,
 ) -> Result<String, String> {
+    probe_with_prefix(registry, env, program, &[], args, cwd).await
+}
+
+async fn probe_with_prefix(
+    registry: &LeftoverRegistry,
+    env: &Arc<ResolvedEnv>,
+    program: &Path,
+    prefix: &[OsString],
+    args: &[&str],
+    cwd: &Path,
+) -> Result<String, String> {
     let name = command_name(program);
     let command = std::iter::once(name.as_str())
         .chain(args.iter().copied())
@@ -209,7 +244,11 @@ async fn probe(
         registry,
         HelperSpec {
             program: program.to_path_buf(),
-            args: args.iter().map(OsString::from).collect(),
+            args: prefix
+                .iter()
+                .cloned()
+                .chain(args.iter().map(OsString::from))
+                .collect(),
             cwd: cwd.to_path_buf(),
             env: HelperEnv::Resolved(Arc::clone(env)),
             set: Vec::new(),
@@ -255,6 +294,17 @@ async fn probe(
     Ok(stdout)
 }
 
+async fn launch_command(
+    id: &str,
+    path: &Path,
+    env: &EnvMap,
+) -> Result<(PathBuf, Vec<OsString>), String> {
+    let (id, path, env) = (id.to_owned(), path.to_owned(), env.clone());
+    tokio::task::spawn_blocking(move || crate::npm_entry::command(&id, &path, &env))
+        .await
+        .map_err(|_| "The agent package could not be inspected.".to_owned())?
+}
+
 /// The program as a user types it in messages: its file name, without the `.exe` Windows adds.
 fn command_name(program: &Path) -> String {
     let exe = cfg!(windows)
@@ -272,15 +322,48 @@ fn command_name(program: &Path) -> String {
     )
 }
 
-/// Detects one agent with `env`.
-pub(crate) async fn detect(
+/// A reviewed candidate is probed directly, without rewriting PATH or its helper resolution.
+pub(crate) async fn detect_at(
     spec: &AgentSpec,
     env: &Arc<ResolvedEnv>,
     registry: &LeftoverRegistry,
     adapters_dir: &Path,
+    candidate: Option<&Path>,
+) -> Detection {
+    if let Some(path) = candidate
+        && (!path.is_absolute() || !path.is_file())
+    {
+        return Detection::missing("The selected executable is no longer available. Choose another installation or use the default.".into());
+    }
+    let mut detected = detect_inner(spec, env, registry, adapters_dir, candidate).await;
+    if let Availability::Ready {
+        version: Some(version),
+        path,
+    } = &detected.availability
+    {
+        let agent_id = spec.id.to_owned();
+        let version = version.clone();
+        let path = path.clone();
+        detected.installation = tokio::task::spawn_blocking(move || {
+            crate::installation::native(&agent_id, &version, &path)
+        })
+        .await
+        .ok()
+        .flatten();
+    }
+    detected
+}
+
+async fn detect_inner(
+    spec: &AgentSpec,
+    env: &Arc<ResolvedEnv>,
+    registry: &LeftoverRegistry,
+    adapters_dir: &Path,
+    candidate: Option<&Path>,
 ) -> Detection {
     match &spec.recipe {
         Recipe::Builtin => Detection {
+            installation: None,
             availability: Availability::Ready {
                 version: None,
                 path: BUILT_IN.into(),
@@ -294,10 +377,26 @@ pub(crate) async fn detect(
             min_version,
             ..
         } => {
-            let Some(path) = find_program(program, &env.vars) else {
+            let Some(path) = candidate
+                .map(Path::to_owned)
+                .or_else(|| find_program(program, &env.vars))
+            else {
                 return Detection::missing(format!("{program} was not found on your PATH."));
             };
-            let printed = match probe(registry, env, &path, version_args, &home(env)).await {
+            let (program, prefix_args) = match launch_command(spec.id, &path, &env.vars).await {
+                Ok(command) => command,
+                Err(reason) => return Detection::broken(reason),
+            };
+            let printed = match probe_with_prefix(
+                registry,
+                env,
+                &program,
+                &prefix_args,
+                version_args,
+                &home(env),
+            )
+            .await
+            {
                 Ok(printed) => printed,
                 Err(reason) => return Detection::broken(reason),
             };
@@ -327,13 +426,114 @@ pub(crate) async fn detect(
                 |version| format!("{} {version}", spec.name),
             );
             Detection {
+                installation: None,
                 availability: Availability::Ready {
                     version: (!shown.is_empty()).then_some(shown),
                     path: path.display().to_string(),
                 },
                 needs_download: false,
                 located: Some(Located {
+                    program,
+                    prefix_args,
+                    node: None,
+                }),
+            }
+        }
+        Recipe::NativeBinary { user_binary, .. } => {
+            let path = match candidate
+                .map(|path| UserBinaryLookup::Found(path.to_owned()))
+                .unwrap_or_else(|| locate_user_binary(user_binary, &env.vars, cfg!(windows)))
+            {
+                UserBinaryLookup::Found(path) => path,
+                lookup => return Detection::missing(missing_native_binary(user_binary, &lookup)),
+            };
+            if !runnable(&path, cfg!(windows)) {
+                return Detection::broken(
+                    "This native driver requires an executable, not a shell shim.".into(),
+                );
+            }
+            let printed =
+                match probe(registry, env, &path, user_binary.version_args, &home(env)).await {
+                    Ok(printed) => printed,
+                    Err(reason) => return Detection::broken(reason),
+                };
+            let version = parse_version(&printed);
+            if !version
+                .as_deref()
+                .is_some_and(|found| version_at_least(found, user_binary.min_version))
+            {
+                return Detection::broken(format!(
+                    "auracode needs {} {} or newer (found {}).",
+                    user_binary.label,
+                    user_binary.min_version,
+                    version.as_deref().unwrap_or("an unknown version")
+                ));
+            }
+            Detection {
+                installation: None,
+                availability: Availability::Ready {
+                    version: Some(format!(
+                        "{} {}",
+                        user_binary.label,
+                        version.as_deref().unwrap_or_default()
+                    )),
+                    path: path.display().to_string(),
+                },
+                needs_download: false,
+                located: Some(Located {
                     program: path,
+                    prefix_args: Vec::new(),
+                    node: None,
+                }),
+            }
+        }
+        Recipe::QualifiedBinary {
+            program,
+            version_args,
+            min_version,
+            major,
+            ..
+        } => {
+            let Some(path) = candidate
+                .map(Path::to_owned)
+                .or_else(|| find_program(program, &env.vars))
+            else {
+                return Detection::missing(format!(
+                    "{program} was not found on your PATH. Install the official {} distribution first.",
+                    spec.name
+                ));
+            };
+            let (program, prefix_args) = match launch_command(spec.id, &path, &env.vars).await {
+                Ok(command) => command,
+                Err(reason) => return Detection::broken(reason),
+            };
+            let printed = match probe_with_prefix(
+                registry,
+                env,
+                &program,
+                &prefix_args,
+                version_args,
+                &home(env),
+            )
+            .await
+            {
+                Ok(printed) => printed,
+                Err(reason) => return Detection::broken(reason),
+            };
+            let version = match qualified_version(&printed, min_version, *major) {
+                Ok(version) => version,
+                Err(reason) => return Detection::broken(format!("{}: {reason}", spec.name)),
+            };
+            Detection {
+                installation: None,
+                availability: Availability::Ready {
+                    version: Some(format!("{} {version} (unverified)", spec.name)),
+                    path: path.display().to_string(),
+                },
+                needs_download: false,
+                located: Some(Located {
+                    program,
+                    prefix_args,
                     node: None,
                 }),
             }
@@ -371,10 +571,18 @@ pub(crate) async fn detect(
                     node_version.as_deref().unwrap_or("an unknown version"),
                 ));
             }
-            let user = match locate_user_binary(user_binary, &env.vars, cfg!(windows)) {
+            let user = match candidate
+                .map(|path| UserBinaryLookup::Found(path.to_owned()))
+                .unwrap_or_else(|| locate_user_binary(user_binary, &env.vars, cfg!(windows)))
+            {
                 UserBinaryLookup::Found(path) => path,
                 lookup => return Detection::missing(missing_user_binary(user_binary, &lookup)),
             };
+            if !runnable(&user, cfg!(windows)) {
+                return Detection::broken(
+                    "This adapter requires an executable, not a shell shim.".into(),
+                );
+            }
             let printed =
                 match probe(registry, env, &user, user_binary.version_args, &probe_dir).await {
                     Ok(printed) => printed,
@@ -399,6 +607,7 @@ pub(crate) async fn detect(
                 );
             }
             Detection {
+                installation: None,
                 availability: Availability::Ready {
                     version: Some(format!(
                         "{} {} via {bin} {version}",
@@ -410,11 +619,34 @@ pub(crate) async fn detect(
                 needs_download: !installed,
                 located: Some(Located {
                     program: user,
+                    prefix_args: Vec::new(),
                     node: Some(node),
                 }),
             }
         }
     }
+}
+
+/// Protocol baselines are deliberately separate for OpenCode's incompatible major lines.
+fn qualified_version(printed: &str, floor: &str, major: Option<u64>) -> Result<String, String> {
+    let version = parse_version(printed)
+        .ok_or_else(|| "the version command did not identify a supported version".to_owned())?;
+    let found_major = version
+        .split('.')
+        .next()
+        .and_then(|value| value.parse::<u64>().ok());
+    if major.is_some() && major != found_major {
+        return Err(format!(
+            "this catalog entry requires the {}.x release line; found {version}",
+            major.unwrap_or_default()
+        ));
+    }
+    if !version_at_least(&version, floor) {
+        return Err(format!(
+            "requires the {floor} protocol baseline or newer; found {version}"
+        ));
+    }
+    Ok(version)
 }
 
 #[cfg(test)]
@@ -464,6 +696,10 @@ mod tests {
         assert_eq!(
             missing_user_binary(&binary, &lookup),
             "Claude Code is installed through npm here, and the adapter can't run its claude.cmd shim on Windows. Install the standalone Claude Code, or set CLAUDE_CODE_EXECUTABLE to a claude.exe."
+        );
+        assert_eq!(
+            missing_native_binary(&binary, &lookup),
+            "auracode can't run the claude.cmd shell shim as native Claude Code on Windows. Install the standalone Claude Code, or set CLAUDE_CODE_EXECUTABLE to a claude.exe."
         );
 
         // A .exe elsewhere on PATH is used, even after the shim's folder.

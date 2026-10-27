@@ -41,6 +41,22 @@ pub enum Recipe {
         version_args: &'static [&'static str],
         min_version: Option<&'static str>,
     },
+    /// A vendor-named executable with a protocol baseline and an optional major line boundary.
+    /// In particular, Cursor never probes an unrelated executable named `agent`.
+    QualifiedBinary {
+        program: &'static str,
+        args: &'static [&'static str],
+        version_args: &'static [&'static str],
+        min_version: &'static str,
+        major: Option<u64>,
+    },
+    /// The user's CLI directly, with an explicit executable override and a required version.
+    /// Windows shell shims are rejected; no adapter or package installation is involved.
+    NativeBinary {
+        user_binary: UserBinary,
+        /// Protocol transport flags. Session, model and permission flags belong to the driver.
+        args: &'static [&'static str],
+    },
     /// An npm adapter installed once per version into `<data root>/adapters`, launched as
     /// `node <entry>` from its own folder, driving the user's own CLI.
     NpmAdapter {
@@ -55,13 +71,13 @@ pub enum Recipe {
     Builtin,
 }
 
-/// The user's own CLI that an adapter must drive, passed through `env` (always set).
+/// The user's own CLI, run directly or by an adapter. An adapter always sets `env` to its path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UserBinary {
     /// "Claude Code", for messages.
     pub label: &'static str,
     pub program: &'static str,
-    /// `CLAUDE_CODE_EXECUTABLE`, `CODEX_PATH`.
+    /// Executable override: `CLAUDE_CODE_EXECUTABLE`, `CODEX_PATH`.
     pub env: &'static str,
     pub version_args: &'static [&'static str],
     pub min_version: &'static str,
@@ -104,6 +120,40 @@ fn build_catalog() -> Vec<AgentSpec> {
             last_verified: "Hermes 0.22.5",
         },
         AgentSpec {
+            id: "claude",
+            name: "Claude Code",
+            description: "Your Claude Code, driven directly through its native control protocol.",
+            kind: DriverKind::Claude,
+            dialect: "claude",
+            recipe: Recipe::NativeBinary {
+                user_binary: UserBinary {
+                    label: "Claude Code",
+                    program: "claude",
+                    env: "CLAUDE_CODE_EXECUTABLE",
+                    version_args: &["--version"],
+                    min_version: "2.1.310",
+                },
+                args: &[
+                    "-p",
+                    "--input-format",
+                    "stream-json",
+                    "--output-format",
+                    "stream-json",
+                    "--verbose",
+                    "--include-partial-messages",
+                    "--permission-prompt-tool",
+                    "stdio",
+                ],
+            },
+            startup_timeout: START_TIMEOUT,
+            turns_survive_process: false,
+            daemons: vec![DaemonMatch {
+                program: Some("claude".into()),
+                args_in_order: vec!["daemon".into(), "run".into()],
+            }],
+            last_verified: "Claude Code 2.1.310 (macOS)",
+        },
+        AgentSpec {
             id: "claude-acp",
             name: "Claude Code (ACP)",
             description: "Your Claude Code, driven through the claude-agent-acp adapter.",
@@ -132,6 +182,30 @@ fn build_catalog() -> Vec<AgentSpec> {
             last_verified: "adapter 0.95.0 with Claude Code 2.1.310",
         },
         AgentSpec {
+            id: "codex",
+            name: "Codex",
+            description: "Your Codex CLI, driven directly through its native app-server.",
+            kind: DriverKind::Codex,
+            dialect: "codex",
+            recipe: Recipe::NativeBinary {
+                user_binary: UserBinary {
+                    label: "Codex",
+                    program: "codex",
+                    env: "CODEX_PATH",
+                    version_args: &["--version"],
+                    min_version: "0.162.1",
+                },
+                args: &["app-server", "--listen", "stdio://"],
+            },
+            startup_timeout: START_TIMEOUT,
+            turns_survive_process: false,
+            daemons: vec![DaemonMatch {
+                program: Some("codex".into()),
+                args_in_order: vec!["app-server".into(), "daemon".into()],
+            }],
+            last_verified: "Codex 0.162.1 free controls and fixtures (Windows); prompted verification pending",
+        },
+        AgentSpec {
             id: "codex-acp",
             name: "Codex (ACP)",
             description: "Your Codex CLI, driven through the codex-acp adapter.",
@@ -155,6 +229,135 @@ fn build_catalog() -> Vec<AgentSpec> {
             daemons: Vec::new(),
             last_verified: "adapter 2.2.2 with Codex 0.164.0",
         },
+        acp_binary(
+            "antigravity",
+            "Antigravity",
+            "Google's separate ACP server. Install its complete official distribution and add it to PATH.",
+            "antigravity",
+            if cfg!(windows) {
+                "agy_acp_server"
+            } else {
+                "agy_acp_server.par"
+            },
+            if cfg!(target_os = "linux") {
+                &["--uid="]
+            } else {
+                &[]
+            },
+            "1.4.3",
+            Some(1),
+        ),
+        acp_binary(
+            "cursor",
+            "Cursor",
+            "Cursor CLI through ACP. Sign in using your own cursor-agent login.",
+            "cursor",
+            "cursor-agent",
+            &["acp"],
+            "2026.10.22",
+            None,
+        ),
+        acp_binary(
+            "grok",
+            "Grok Build",
+            "Your Grok Build CLI through its ACP server.",
+            "grok",
+            "grok",
+            &["agent", "stdio"],
+            "1.0.70",
+            Some(1),
+        ),
+        acp_binary(
+            "omp",
+            "oh-my-pi",
+            "oh-my-pi through ACP, with explicit extension dialogs and plan approval.",
+            "omp",
+            "omp",
+            &["acp"],
+            "18.12.6",
+            Some(18),
+        ),
+        acp_binary(
+            "opencode",
+            "OpenCode V1",
+            "OpenCode 1.x through ACP; qualified separately from V2.",
+            "opencode",
+            "opencode",
+            &["acp"],
+            "1.19.4",
+            Some(1),
+        ),
+        acp_binary(
+            "opencode-v2",
+            "OpenCode V2",
+            "OpenCode 2.x through ACP; qualified separately from V1.",
+            "opencode-v2",
+            "opencode",
+            &["acp"],
+            "2.1.4",
+            Some(2),
+        ),
+        AgentSpec {
+            id: "agy-stream",
+            name: "Antigravity (text fallback)",
+            description: "Restricted text transport. No interactive approvals; Stop ends the owned process.",
+            kind: DriverKind::Headless,
+            dialect: "agy-stream",
+            recipe: Recipe::QualifiedBinary {
+                program: "agy",
+                args: &[
+                    "--input-format",
+                    "stream-json",
+                    "--output-format",
+                    "stream-json",
+                ],
+                version_args: &["--version"],
+                min_version: "1.4.7",
+                major: Some(1),
+            },
+            startup_timeout: START_TIMEOUT,
+            turns_survive_process: false,
+            daemons: Vec::new(),
+            last_verified: "Unverified: documented stream contract only",
+        },
+        AgentSpec {
+            id: "grok-stream",
+            name: "Grok Build (text fallback)",
+            description: "One owned process per visible prompt. No interactive approvals; Stop ends the process.",
+            kind: DriverKind::Headless,
+            dialect: "grok-stream",
+            recipe: Recipe::NativeBinary {
+                user_binary: UserBinary {
+                    label: "Grok Build",
+                    program: "grok",
+                    env: "GROK_EXECUTABLE",
+                    version_args: &["--version"],
+                    min_version: "1.0.70",
+                },
+                args: &["--output-format", "streaming-json"],
+            },
+            startup_timeout: START_TIMEOUT,
+            turns_survive_process: false,
+            daemons: Vec::new(),
+            last_verified: "Unverified: pinned source contract only",
+        },
+        AgentSpec {
+            id: "pi",
+            name: "Pi",
+            description: "Your Pi agent, driven directly through its native RPC protocol.",
+            kind: DriverKind::Pi,
+            dialect: "pi",
+            recipe: Recipe::Binary {
+                program: "pi",
+                args: &[],
+                version_args: &["--version"],
+                min_version: Some("1.0.2"),
+            },
+            startup_timeout: START_TIMEOUT,
+            turns_survive_process: false,
+            daemons: Vec::new(),
+            last_verified: "Pi 1.0.2 protocol (real-agent acceptance pending)",
+        },
         AgentSpec {
             id: "mock",
             name: "Demo agent (scripted, no AI)",
@@ -168,6 +371,40 @@ fn build_catalog() -> Vec<AgentSpec> {
             last_verified: "auracode",
         },
     ]
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one declarative row per catalog entry"
+)]
+fn acp_binary(
+    id: &'static str,
+    name: &'static str,
+    description: &'static str,
+    dialect: &'static str,
+    program: &'static str,
+    args: &'static [&'static str],
+    min_version: &'static str,
+    major: Option<u64>,
+) -> AgentSpec {
+    AgentSpec {
+        id,
+        name,
+        description,
+        kind: DriverKind::Acp,
+        dialect,
+        recipe: Recipe::QualifiedBinary {
+            program,
+            args,
+            version_args: &["--version"],
+            min_version,
+            major,
+        },
+        startup_timeout: START_TIMEOUT,
+        turns_survive_process: false,
+        daemons: Vec::new(),
+        last_verified: "Unverified: documentation and synthetic protocol tests only",
+    }
 }
 
 /// The first `x.y.z` in `text` (a leading `v` is allowed and dropped): `"Claude Code 2.1.310"` gives
@@ -231,9 +468,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_catalog_lists_the_m1a_agents_once_each() {
+    fn the_catalog_lists_native_claude_before_its_compatibility_adapter() {
         let ids: Vec<&str> = catalog().iter().map(|spec| spec.id).collect();
-        assert_eq!(ids, ["hermes", "claude-acp", "codex-acp", "mock"]);
+        assert_eq!(
+            ids,
+            [
+                "hermes",
+                "claude",
+                "claude-acp",
+                "codex",
+                "codex-acp",
+                "antigravity",
+                "cursor",
+                "grok",
+                "omp",
+                "opencode",
+                "opencode-v2",
+                "agy-stream",
+                "grok-stream",
+                "pi",
+                "mock"
+            ]
+        );
         assert_eq!(ids.iter().collect::<HashSet<_>>().len(), ids.len());
         assert_eq!(get("codex-acp").map(|spec| spec.name), Some("Codex (ACP)"));
         assert!(get("agent").is_none());
@@ -256,6 +512,23 @@ mod tests {
                 program: "hermes",
                 args: ["acp"],
                 min_version: None,
+                ..
+            }
+        ));
+
+        let native = get("claude").expect("native Claude");
+        assert_eq!(native.kind, DriverKind::Claude);
+        assert_eq!(native.dialect, "claude");
+        assert!(!native.turns_survive_process);
+        assert!(matches!(
+            native.recipe,
+            Recipe::NativeBinary {
+                user_binary: UserBinary {
+                    program: "claude",
+                    env: "CLAUDE_CODE_EXECUTABLE",
+                    min_version: "2.1.310",
+                    ..
+                },
                 ..
             }
         ));

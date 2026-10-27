@@ -18,6 +18,9 @@ use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+mod steering;
+#[cfg(feature = "account-sync")]
+mod sync_history;
 
 use aura_agents::{AgentSpec, LaunchError, Recipe};
 use aura_drivers::batch::{FrameBatcher, TurnTag};
@@ -46,6 +49,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::{AbortHandle, JoinError, JoinHandle};
 use tokio::time::Instant;
 
+use super::live::NativeSessionScope;
 use super::normalize::{
     MESSAGE_BYTES, Normalizer, OpenCard, cap_chars, cap_escaped, suffix_escaped,
 };
@@ -81,6 +85,63 @@ const ANSWERED_REMEMBERED: usize = 64;
 
 /// A message for a chat's actor. Every reply is a oneshot.
 pub(crate) enum ChatMsg {
+    FolderContext {
+        reply: oneshot::Sender<
+            Result<
+                (
+                    ChatRecord,
+                    Option<aura_protocol::workspace::ChatFolderContext>,
+                ),
+                SessionError,
+            >,
+        >,
+    },
+    #[cfg(feature = "account-sync")]
+    ImportSync {
+        reply: oneshot::Sender<Result<bool, SessionError>>,
+    },
+    ReserveWorkspace {
+        id: String,
+        restoring: bool,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    ReserveGit {
+        id: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    ReleaseGit {
+        id: String,
+    },
+    FolderLocated {
+        reservation: String,
+        record: ChatRecord,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    Conversation {
+        command: crate::chatstore::conversation::ConversationCommand,
+        reply: oneshot::Sender<
+            Result<crate::chatstore::conversation::ConversationReply, SessionError>,
+        >,
+    },
+    Continue {
+        apply: Box<crate::chatstore::conversation::ApplyContinuation>,
+        prompt: Option<(String, Vec<PromptPart>)>,
+        reply:
+            oneshot::Sender<Result<aura_protocol::conversation::ContinuationResult, SessionError>>,
+    },
+    CheckpointContext {
+        turn_id: Option<String>,
+        reply: oneshot::Sender<Result<(ChatRecord, Option<String>), SessionError>>,
+    },
+    Revert {
+        token: String,
+        guard: Arc<super::changes::FolderMutation>,
+        reply: oneshot::Sender<Result<aura_protocol::changes::RevertResult, SessionError>>,
+    },
+    Organize {
+        command: crate::chatstore::organization::OrganizationCommand,
+        reply: oneshot::Sender<Result<crate::chatstore::organization::Organization, SessionError>>,
+    },
     Attach {
         sink: Arc<dyn FrameSink>,
         subscription_id: String,
@@ -102,7 +163,14 @@ pub(crate) enum ChatMsg {
     },
     Send {
         text: String,
+        parts: Vec<PromptPart>,
         reply: oneshot::Sender<Result<PromptAck, SessionError>>,
+    },
+    Steer {
+        expected_turn_id: String,
+        text: String,
+        parts: Vec<PromptPart>,
+        reply: oneshot::Sender<Result<aura_protocol::composer::SteeringAck, SessionError>>,
     },
     CancelQueued {
         prompt_id: String,
@@ -166,10 +234,24 @@ impl ChatMsg {
     /// Answers the message with `error` (a chat that does not exist, a store that is gone).
     fn refuse(self, error: SessionError) {
         match self {
+            #[cfg(feature = "account-sync")]
+            ChatMsg::ImportSync { reply } => drop(reply.send(Err(error))),
+            ChatMsg::ReserveWorkspace { reply, .. } | ChatMsg::ReserveGit { reply, .. } => {
+                drop(reply.send(Err(error)))
+            }
+            ChatMsg::ReleaseGit { .. } => {}
+            ChatMsg::FolderLocated { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::Conversation { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::Continue { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::CheckpointContext { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::Revert { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::Organize { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Attach { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::History { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::Lists { reply } => drop(reply.send(Err(error))),
+            ChatMsg::FolderContext { reply } => drop(reply.send(Err(error))),
             ChatMsg::Send { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::Steer { reply, .. } => drop(reply.send(Err(error))),
             ChatMsg::SetOption { reply, .. } | ChatMsg::SetAutonomy { reply, .. } => {
                 drop(reply.send(Err(error)));
             }
@@ -245,6 +327,7 @@ struct Subscriber {
 
 /// The turn in flight.
 struct OpenTurn {
+    parts: Vec<PromptPart>,
     id: String,
     tag: Arc<str>,
     prompt_id: String,
@@ -268,6 +351,7 @@ enum Stop {
 
 /// The current driver.
 struct LiveDriver {
+    folder_context: aura_protocol::workspace::ChatFolderContext,
     generation: u64,
     commands: mpsc::UnboundedSender<DriverCommand>,
     /// `None` once the driver dropped its sender.
@@ -277,6 +361,10 @@ struct LiveDriver {
     /// Aborts the driver's task, wherever its join handle went.
     abort: AbortHandle,
     ready: bool,
+    /// `None` keeps the original turn-based contract. Otherwise only an idle report permits
+    /// another prompt, even after the current prompt's result has arrived.
+    run_idle: Option<bool>,
+    native_scope: NativeSessionScope,
     stop: Stop,
     spawn_id: Option<String>,
 }
@@ -290,6 +378,8 @@ struct Preparing {
 
 /// What a preparation produces.
 struct Prepared {
+    folder_context: aura_protocol::workspace::ChatFolderContext,
+    folder_key: PathBuf,
     launch: LaunchSpec,
     env: Arc<ResolvedEnv>,
 }
@@ -314,8 +404,59 @@ enum PageFor {
     },
 }
 
+struct NativeIdentitySave {
+    generation: u64,
+    native_id: String,
+    row_id: String,
+    previous_id: Option<String>,
+}
+
 /// What an `in_flight` future completes.
 enum Done {
+    #[cfg(feature = "account-sync")]
+    SyncImported {
+        result: Result<Option<crate::sync::transcript::Imported>, SessionError>,
+        reply: oneshot::Sender<Result<bool, SessionError>>,
+    },
+    Steering(Box<steering::Completion>),
+    Conversation {
+        result: Result<crate::chatstore::conversation::ConversationReply, SessionError>,
+        reply: oneshot::Sender<
+            Result<crate::chatstore::conversation::ConversationReply, SessionError>,
+        >,
+    },
+    Continued {
+        result: Result<Box<ChatLoad>, SessionError>,
+        prompt: Option<(String, Vec<PromptPart>)>,
+        reply:
+            oneshot::Sender<Result<aura_protocol::conversation::ContinuationResult, SessionError>>,
+    },
+    CheckpointContext {
+        result: Result<(ChatRecord, Option<String>), SessionError>,
+        reply: oneshot::Sender<Result<(ChatRecord, Option<String>), SessionError>>,
+    },
+    Reverted {
+        result: Result<aura_protocol::changes::RevertResult, SessionError>,
+        reply: oneshot::Sender<Result<aura_protocol::changes::RevertResult, SessionError>>,
+    },
+    Checkpointed {
+        generation: u64,
+        prompt: Prompt,
+        turn_id: String,
+        result: Result<
+            crate::checkpoints::Result<aura_protocol::changes::CheckpointSummary>,
+            JoinError,
+        >,
+    },
+    Organized {
+        result: Result<crate::chatstore::organization::Organization, SessionError>,
+        reply: oneshot::Sender<Result<crate::chatstore::organization::Organization, SessionError>>,
+    },
+    NativeIdentitySaved {
+        generation: u64,
+        native_id: String,
+        result: Result<Result<(), StoreError>, WaitError>,
+    },
     Prepared {
         generation: u64,
         result: Result<Result<Prepared, StartFailure>, JoinError>,
@@ -353,6 +494,7 @@ enum Done {
 
 /// A prompt about to be sent.
 struct Prompt {
+    parts: Vec<PromptPart>,
     id: String,
     text: String,
     created_at: Millis,
@@ -380,6 +522,7 @@ pub(crate) struct ChatActor {
     turn: Option<OpenTurn>,
     /// The turn row of the turn whose `TurnStarted` is not flushed yet.
     begun: Option<TurnRow>,
+    workspace_turn: Option<crate::chatstore::workspace_activity::Turn>,
     ordinal: u32,
     outbox: VecDeque<Op>,
     outbox_bytes: usize,
@@ -387,6 +530,12 @@ pub(crate) struct ChatActor {
     preparing: Option<Preparing>,
     progress: Option<mpsc::UnboundedReceiver<String>>,
     in_flight: FuturesUnordered<BoxFuture<'static, Done>>,
+    organizing: bool,
+    #[cfg(feature = "account-sync")]
+    sync_importing: bool,
+    steering_pending: bool,
+    git_reservation: Option<String>,
+    checkpointing: Option<(String, AbortHandle)>,
     generation: u64,
     /// Generations force-stopped or crashed whose processes or task still wind down, with how many
     /// FORCE chains and joins each still waits for. They keep the chat's live slot and native
@@ -395,6 +544,8 @@ pub(crate) struct ChatActor {
     /// How many generations retire, for the preparation of a start to wait on.
     winding_down: watch::Sender<usize>,
     agent_session: Option<AgentSessionRow>,
+    continuation: Option<crate::chatstore::conversation::PendingContinuation>,
+    remote_history: bool,
     autonomy: Autonomy,
     autonomy_state: AutonomyState,
     desired: BTreeMap<String, ConfigValue>,
@@ -404,6 +555,8 @@ pub(crate) struct ChatActor {
     agent_name: Option<String>,
     agent_version: Option<String>,
     native_session_id: Option<String>,
+    /// The row save outlives a driver generation, so stop/restart cannot bypass persistence.
+    native_identity_pending: Option<NativeIdentitySave>,
     usage: Option<UsageInfo>,
     limits: Option<Vec<LimitWindow>>,
     last_error: Option<ErrorInfo>,
@@ -437,6 +590,9 @@ impl ChatActor {
         load: ChatLoad,
     ) -> ChatActor {
         let ChatLoad {
+            initial_model,
+            remote_history,
+            continuation,
             chat,
             next_seq,
             next_turn_ordinal,
@@ -456,13 +612,18 @@ impl ChatActor {
         let autonomy = agent_session
             .as_ref()
             .map_or_else(Autonomy::default, |session| session.autonomy);
-        let desired = agent_session
-            .as_ref()
-            .and_then(|session| session.config_json.as_deref())
-            .and_then(|json| serde_json::from_str(json).ok())
-            .unwrap_or_default();
+        let desired = initial_options(agent_session.as_ref(), initial_model);
         let store = Arc::clone(&shared.deps.store);
+        let replay_check = replay_check.filter(|_| {
+            !continuation
+                .as_ref()
+                .is_some_and(|value| value.force_fresh || value.native_start.fork)
+        });
         ChatActor {
+            #[cfg(feature = "account-sync")]
+            sync_importing: false,
+            remote_history,
+            continuation,
             batcher: FrameBatcher::new(chat_id.clone()).starting_at(next_seq),
             batched_bytes: 0,
             chat_id,
@@ -478,6 +639,7 @@ impl ChatActor {
             queue,
             turn: None,
             begun: None,
+            workspace_turn: None,
             ordinal: next_turn_ordinal.saturating_sub(1),
             outbox: VecDeque::new(),
             outbox_bytes: 0,
@@ -485,6 +647,10 @@ impl ChatActor {
             preparing: None,
             progress: None,
             in_flight: FuturesUnordered::new(),
+            organizing: false,
+            steering_pending: false,
+            git_reservation: None,
+            checkpointing: None,
             generation: 0,
             retiring: Vec::new(),
             winding_down: watch::Sender::new(0),
@@ -498,6 +664,7 @@ impl ChatActor {
             agent_name: None,
             agent_version: None,
             native_session_id: None,
+            native_identity_pending: None,
             usage: None,
             limits: None,
             last_error: None,
@@ -523,6 +690,7 @@ impl ChatActor {
 
     async fn run(mut self, mut mailbox: mpsc::UnboundedReceiver<ChatMsg>) {
         self.publish();
+        let mut workspace_changes = self.store.workspace_changes();
         loop {
             // A flush that is due runs before anything else is read: a timer set for "now" only
             // fires on a later tick of a busy runtime, and the outbox bound must see the flush.
@@ -535,6 +703,14 @@ impl ChatActor {
             let head = self.outbox.front().map(op_bytes);
             tokio::select! {
                 biased;
+                changed = workspace_changes.changed() => {
+                    if changed.is_err() { break; }
+                    if self.require_workspace().is_err() {
+                        self.hold_queue();
+                        self.stop();
+                        self.set_detail(Some("This project or folder was removed. Restore it from Removed projects and folders to continue.".into()));
+                    }
+                },
                 msg = mailbox.recv() => match msg {
                     Some(msg) => self.on_msg(msg),
                     None => break,
@@ -560,12 +736,62 @@ impl ChatActor {
                     None => self.progress = None,
                 },
             }
+            let workspace_busy = self.turn.is_some()
+                || self.checkpointing.is_some()
+                || self.preparing.is_some()
+                || matches!(
+                    self.status,
+                    SessionStatus::Starting
+                        | SessionStatus::Running
+                        | SessionStatus::Cancelling
+                        | SessionStatus::Stopping
+                );
+            if !workspace_busy {
+                self.workspace_turn = None;
+            } else if self.workspace_turn.is_none() {
+                self.workspace_turn = self.store.begin_workspace_turn(&self.chat_id);
+            }
             self.update_idle();
             self.finish_shutdown();
         }
         // The manager is gone: dropping the driver's command sender closes it (a shutdown with no
         // grace), and the recorded processes die with their last handles.
         self.book.kill_all();
+    }
+
+    fn reserve_workspace(
+        &mut self,
+        id: String,
+        restoring: bool,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    ) {
+        let result = if self.organizing
+            || self.steering_pending
+            || self.driver.is_some()
+            || self.preparing.is_some()
+            || !self.retiring.is_empty()
+            || self.checkpointing.is_some()
+            || self.turn.is_some()
+            || (!restoring && !self.queue.is_empty())
+            || self.pending_start.is_some()
+            || self.native_identity_pending.is_some()
+            || self.quitting
+            || self.shared.is_shutting_down()
+        {
+            Err(SessionError::Organization("Stop affected chats and clear their queued prompts before changing this workspace.".into()))
+        } else if self.store.is_paused() {
+            Err(SessionError::StorageUnavailable(
+                "Wait for saving to resume before changing this workspace.".into(),
+            ))
+        } else {
+            self.organizing = true;
+            self.git_reservation = Some(id.clone());
+            Ok(())
+        };
+        if reply.send(result).is_err() && self.git_reservation.as_deref() == Some(&id) {
+            self.git_reservation = None;
+            self.organizing = false;
+        }
     }
 
     fn reading_events(&self) -> bool {
@@ -589,7 +815,104 @@ impl ChatActor {
     // ---- IPC messages -------------------------------------------------------------------------
 
     fn on_msg(&mut self, msg: ChatMsg) {
+        #[cfg(feature = "account-sync")]
+        if self.sync_importing {
+            match msg {
+                ChatMsg::Shutdown { reply, .. } => {
+                    self.quitting = true;
+                    self.shutdown_reply = Some(reply);
+                    return;
+                }
+                ChatMsg::Detach { .. } | ChatMsg::DropOwner { .. } => {}
+                _ => {
+                    msg.refuse(SessionError::SessionNotReady);
+                    return;
+                }
+            }
+        }
         match msg {
+            #[cfg(feature = "account-sync")]
+            ChatMsg::ImportSync { reply } => self.import_sync(reply),
+            ChatMsg::ReserveGit { id, reply } => self.reserve_workspace(id, false, reply),
+            ChatMsg::ReserveWorkspace {
+                id,
+                restoring,
+                reply,
+            } => self.reserve_workspace(id, restoring, reply),
+            ChatMsg::ReleaseGit { id } => {
+                if self.git_reservation.as_deref() == Some(&id) {
+                    self.git_reservation = None;
+                    self.organizing = false;
+                }
+            }
+            ChatMsg::FolderLocated {
+                reservation,
+                record,
+                reply,
+            } => {
+                if self.git_reservation.as_deref() != Some(&reservation)
+                    || record.id != self.chat_id
+                {
+                    let _ = reply.send(Err(SessionError::Organization(
+                        "Folder ownership changed. Reopen this chat before starting it.".into(),
+                    )));
+                } else {
+                    self.chat.folder = record.folder;
+                    self.chat.folder_id = record.folder_id;
+                    self.folder_state = FolderState::Ok;
+                    self.info_dirty = true;
+                    self.schedule_flush();
+                    self.publish();
+                    let _ = reply.send(Ok(()));
+                }
+            }
+            ChatMsg::Conversation { command, reply } => self.conversation_read(command, reply),
+            ChatMsg::Continue {
+                apply,
+                prompt,
+                reply,
+            } => self.continue_chat(apply, prompt, reply),
+            ChatMsg::CheckpointContext { turn_id, reply } => {
+                self.flush();
+                let barrier = if self.store.is_paused() {
+                    None
+                } else {
+                    let (saved, barrier) = oneshot::channel();
+                    self.queue_op(Op::Barrier(saved));
+                    Some(barrier)
+                };
+                let store = Arc::clone(&self.store);
+                let rt = self.shared.deps.rt.clone();
+                let chat_id = self.chat_id.clone();
+                self.in_flight.push(
+                    async move {
+                        let result = async {
+                            if let Some(barrier) = barrier {
+                                await_reply(&rt, barrier, Duration::from_secs(5))
+                                    .await
+                                    .map_err(|_| {
+                                        SessionError::StorageUnavailable(
+                                            "Checkpoint history is still saving. Try again.".into(),
+                                        )
+                                    })?;
+                            }
+                            store
+                                .checkpoint_context(&chat_id, turn_id)
+                                .await
+                                .map_err(|error| storage_error(&error))
+                        }
+                        .await;
+                        Done::CheckpointContext { result, reply }
+                    }
+                    .boxed(),
+                );
+            }
+            ChatMsg::Revert {
+                token,
+                guard,
+                reply,
+            } => self.revert(token, guard, reply),
+            ChatMsg::Organize { command, reply } => self.organize(command, reply),
             ChatMsg::Attach {
                 sink,
                 subscription_id,
@@ -622,17 +945,31 @@ impl ChatActor {
                 self.read_page(before_seq, max_bytes, PageFor::History { reply });
             }
             ChatMsg::Lists { reply } => drop(reply.send(Ok(self.lists()))),
-            ChatMsg::Send { text, reply } => {
-                let ack = self.send(text);
+            ChatMsg::FolderContext { reply } => drop(
+                reply.send(Ok((
+                    self.chat.clone(),
+                    self.driver
+                        .as_ref()
+                        .map(|driver| driver.folder_context.clone()),
+                ))),
+            ),
+            ChatMsg::Send { text, parts, reply } => {
+                let ack = self.send(text, parts);
                 drop(reply.send(ack));
             }
+            ChatMsg::Steer {
+                expected_turn_id,
+                text,
+                parts,
+                reply,
+            } => self.steer(expected_turn_id, text, parts, reply),
             ChatMsg::CancelQueued { prompt_id, reply } => {
                 let result = self.cancel_queued(&prompt_id);
                 drop(reply.send(result));
             }
             ChatMsg::ResumeQueue { reply } => {
-                self.resume_queue();
-                drop(reply.send(Ok(())));
+                let result = self.require_workspace().map(|()| self.resume_queue());
+                drop(reply.send(result));
             }
             ChatMsg::Interrupt { reply } => {
                 self.interrupt();
@@ -823,6 +1160,271 @@ impl ChatActor {
             .min()
     }
 
+    fn conversation_read(
+        &mut self,
+        command: crate::chatstore::conversation::ConversationCommand,
+        reply: oneshot::Sender<
+            Result<crate::chatstore::conversation::ConversationReply, SessionError>,
+        >,
+    ) {
+        if command.writes() || self.store.is_paused() {
+            let _ = reply.send(Err(SessionError::StorageUnavailable(
+                "Wait for saving to resume before reviewing a continuation.".into(),
+            )));
+            return;
+        }
+        self.flush();
+        let (saved, barrier) = oneshot::channel();
+        self.queue_op(Op::Barrier(saved));
+        let store = Arc::clone(&self.store);
+        let rt = self.shared.deps.rt.clone();
+        self.in_flight.push(
+            async move {
+                let result = match await_reply(&rt, barrier, Duration::from_secs(5)).await {
+                    Ok(()) => store
+                        .conversation(command)
+                        .await
+                        .map_err(|error| storage_error(&error)),
+                    Err(_) => Err(SessionError::StorageUnavailable(
+                        "The conversation is still saving. Try again.".into(),
+                    )),
+                };
+                Done::Conversation { result, reply }
+            }
+            .boxed(),
+        );
+    }
+
+    fn continue_chat(
+        &mut self,
+        apply: Box<crate::chatstore::conversation::ApplyContinuation>,
+        prompt: Option<(String, Vec<PromptPart>)>,
+        reply: oneshot::Sender<
+            Result<aura_protocol::conversation::ContinuationResult, SessionError>,
+        >,
+    ) {
+        if let Err(error) = self.require_workspace() {
+            let _ = reply.send(Err(error));
+            return;
+        }
+        if self.organizing
+            || self.steering_pending
+            || self.driver.is_some()
+            || self.preparing.is_some()
+            || !self.retiring.is_empty()
+            || self.checkpointing.is_some()
+            || self.turn.is_some()
+            || !self.queue.is_empty()
+            || self.pending_start.is_some()
+            || self.native_identity_pending.is_some()
+            || self.quitting
+            || self.shared.is_shutting_down()
+        {
+            let _ = reply.send(Err(SessionError::Organization(
+                "Stop the chat and clear queued prompts before continuing from history.".into(),
+            )));
+            return;
+        }
+        if self.store.is_paused() {
+            let _ = reply.send(Err(SessionError::StorageUnavailable(
+                "Wait for saving to resume before changing the conversation.".into(),
+            )));
+            return;
+        }
+        self.organizing = true;
+        self.flush();
+        let (saved, barrier) = oneshot::channel();
+        self.queue_op(Op::Barrier(saved));
+        let store = Arc::clone(&self.store);
+        let rt = self.shared.deps.rt.clone();
+        self.in_flight.push(
+            async move {
+                let result = async {
+                    await_reply(&rt, barrier, Duration::from_secs(5))
+                        .await
+                        .map_err(|_| {
+                            SessionError::StorageUnavailable(
+                                "The conversation is still saving. Try again.".into(),
+                            )
+                        })?;
+                    let result = store
+                        .conversation(crate::chatstore::conversation::ConversationCommand::Apply(
+                            apply,
+                        ))
+                        .await
+                        .map_err(|error| storage_error(&error))?;
+                    let crate::chatstore::conversation::ConversationReply::Applied(load) = result
+                    else {
+                        return Err(SessionError::Internal(
+                            "The continuation result was invalid.".into(),
+                        ));
+                    };
+                    Ok(load)
+                }
+                .await;
+                Done::Continued {
+                    result,
+                    prompt,
+                    reply,
+                }
+            }
+            .boxed(),
+        );
+    }
+
+    fn continued(
+        &mut self,
+        result: Result<Box<ChatLoad>, SessionError>,
+        prompt: Option<(String, Vec<PromptPart>)>,
+        reply: oneshot::Sender<
+            Result<aura_protocol::conversation::ContinuationResult, SessionError>,
+        >,
+    ) {
+        self.organizing = false;
+        let result = result.and_then(|load| {
+            let id = load.chat.id.clone();
+            if id != self.chat_id {
+                self.push(AuraEvent::Notice { level: NoticeLevel::Info, message: format!("Created a fork linked to this conversation: {id}. This source conversation is unchanged.") }, None);
+                self.flush();
+                return Ok(aura_protocol::conversation::ContinuationResult { chat_id: id, prompt: None });
+            }
+            self.chat = load.chat;
+            self.remote_history = load.remote_history;
+            self.agent_session = load.agent_session;
+            self.continuation = load.continuation;
+            self.replay_check = load.replay_check.filter(|_| !self.continuation.as_ref().is_some_and(|value| value.force_fresh || value.native_start.fork));
+            self.spec = self.shared.deps.detector.spec(&self.chat.agent_id);
+            self.autonomy = self.agent_session.as_ref().map_or_else(Autonomy::default, |session| session.autonomy);
+            self.desired = initial_options(self.agent_session.as_ref(), load.initial_model);
+            self.autonomy_state = stopped_autonomy(self.autonomy, None);
+            self.options.clear();
+            self.commands.clear();
+            self.capabilities = None;
+            self.native_session_id = None;
+            self.agent_name = None;
+            self.agent_version = None;
+            self.usage = None;
+            self.limits = None;
+            self.last_error = None;
+            self.auth = None;
+            self.conflict = false;
+            self.set_status(SessionStatus::Stopped, Some("Continuation saved. The next prompt includes its visible handoff.".into()));
+            self.push(AuraEvent::Notice { level: NoticeLevel::Info, message: format!("Continuing with {}. Earlier messages remain intact; the reviewed context will appear in the next user prompt.",self.chat.agent_id) }, None);
+            self.flush();
+            let ack = prompt.map(|(text,parts)| self.send(text,parts)).transpose()?;
+            Ok(aura_protocol::conversation::ContinuationResult { chat_id: id, prompt: ack })
+        });
+        let _ = reply.send(result);
+    }
+
+    fn revert(
+        &mut self,
+        token: String,
+        guard: Arc<super::changes::FolderMutation>,
+        reply: oneshot::Sender<Result<aura_protocol::changes::RevertResult, SessionError>>,
+    ) {
+        if self.organizing
+            || self.steering_pending
+            || self.driver.is_some()
+            || self.preparing.is_some()
+            || !self.retiring.is_empty()
+            || self.checkpointing.is_some()
+            || self.turn.is_some()
+            || !self.queue.is_empty()
+            || self.quitting
+            || self.shared.is_shutting_down()
+        {
+            let _ = reply.send(Err(SessionError::Organization(
+                "Stop the chat and clear queued prompts before reverting files.".into(),
+            )));
+            return;
+        }
+        let Some(service) = self.shared.deps.checkpoints.clone() else {
+            let _ = reply.send(Err(SessionError::Organization(
+                "Checkpoints are unavailable in this runtime.".into(),
+            )));
+            return;
+        };
+        let Some(folder_id) = self.chat.folder_id.clone() else {
+            let _ = reply.send(Err(SessionError::Organization(
+                "Locate this chat's folder before reverting files.".into(),
+            )));
+            return;
+        };
+        self.organizing = true;
+        let chat_id = self.chat_id.clone();
+        let folder = self.chat.folder.clone();
+        self.in_flight.push(
+            async move {
+                let result = service
+                    .revert_guarded(&chat_id, &folder_id, &folder, &token, guard)
+                    .await
+                    .map_err(super::changes::checkpoint_error);
+                Done::Reverted { result, reply }
+            }
+            .boxed(),
+        );
+    }
+
+    fn organize(
+        &mut self,
+        command: crate::chatstore::organization::OrganizationCommand,
+        reply: oneshot::Sender<Result<crate::chatstore::organization::Organization, SessionError>>,
+    ) {
+        use crate::chatstore::organization::OrganizationCommand;
+        let moving = matches!(command, OrganizationCommand::MoveChat { .. });
+        if self.organizing || self.quitting || self.shared.is_shutting_down() {
+            let _ = reply.send(Err(SessionError::Organization(
+                "Wait for the current chat change to finish.".into(),
+            )));
+            return;
+        }
+        if moving
+            && (self.steering_pending
+                || self.driver.is_some()
+                || self.preparing.is_some()
+                || !self.retiring.is_empty()
+                || self.turn.is_some()
+                || !self.queue.is_empty()
+                || self.native_identity_pending.is_some()
+                || self.pending_start.is_some())
+        {
+            let _ = reply.send(Err(SessionError::Organization(
+                "Stop the chat and clear queued prompts before moving it.".into(),
+            )));
+            return;
+        }
+        if self.store.is_paused() {
+            let _ = reply.send(Err(SessionError::StorageUnavailable(
+                "Wait for chat saving to resume before changing this chat.".into(),
+            )));
+            return;
+        }
+        self.organizing = true;
+        self.flush();
+        let (saved, barrier) = oneshot::channel();
+        self.queue_op(Op::Barrier(saved));
+        let store = Arc::clone(&self.store);
+        let rt = self.shared.deps.rt.clone();
+        self.in_flight.push(
+            async move {
+                // A timeout before enqueueing the mutation is safe. Once queued, only the actual
+                // transaction result unlocks the actor, so a delayed folder move cannot race start.
+                let result = match await_reply(&rt, barrier, Duration::from_secs(5)).await {
+                    Ok(()) => store
+                        .organize(command)
+                        .await
+                        .map_err(|error| storage_error(&error)),
+                    Err(_) => Err(SessionError::StorageUnavailable(
+                        "Earlier chat changes have not finished saving.".into(),
+                    )),
+                };
+                Done::Organized { result, reply }
+            }
+            .boxed(),
+        );
+    }
+
     fn lists(&self) -> SessionLists {
         SessionLists {
             revision: self.revision,
@@ -833,19 +1435,44 @@ impl ChatActor {
         }
     }
 
-    fn send(&mut self, text: String) -> Result<PromptAck, SessionError> {
+    fn send(&mut self, text: String, parts: Vec<PromptPart>) -> Result<PromptAck, SessionError> {
+        self.require_workspace()?;
+        self.require_remote_handoff()?;
+        if self.organizing {
+            return Err(SessionError::Organization(
+                "Wait for the chat change to finish.".into(),
+            ));
+        }
         if self.quitting || self.shared.is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
         if text.trim().is_empty() {
             return Err(SessionError::PromptEmpty);
         }
+        if parts
+            .iter()
+            .any(|part| matches!(part, PromptPart::Image { .. }))
+            && self
+                .capabilities
+                .as_ref()
+                .is_some_and(|capabilities| !capabilities.images)
+        {
+            return Err(SessionError::OptionInvalid(
+                "This agent does not support images. Remove the image or choose another agent."
+                    .into(),
+            ));
+        }
         let limit = self.shared.deps.limits.max_prompt_bytes;
-        if text.len() > limit {
-            return Err(SessionError::PromptTooLarge {
-                bytes: text.len(),
-                limit,
+        let bytes = text.len()
+            + self.continuation.as_ref().map_or(0, |value| {
+                if value.handoff.is_empty() {
+                    0
+                } else {
+                    value.handoff.len() + 32
+                }
             });
+        if bytes > limit {
+            return Err(SessionError::PromptTooLarge { bytes, limit });
         }
         if self.batcher.next_seq() > SEQ_LIMIT {
             return Err(SessionError::Internal(
@@ -855,15 +1482,13 @@ impl ChatActor {
         let prompt_id = new_id();
         let now = now_millis();
         if self.can_dispatch() {
-            self.dispatch(Prompt {
+            let queued = self.dispatch(Prompt {
                 id: prompt_id.clone(),
+                parts,
                 text,
                 created_at: now,
             });
-            return Ok(PromptAck {
-                prompt_id,
-                queued: false,
-            });
+            return Ok(PromptAck { prompt_id, queued });
         }
         let max_queue = self.shared.deps.limits.max_queue;
         if self.queue.len() >= max_queue {
@@ -871,6 +1496,7 @@ impl ChatActor {
         }
         let row = QueuedRow {
             id: prompt_id.clone(),
+            parts,
             chat_id: self.chat_id.clone(),
             text,
             held: false,
@@ -903,10 +1529,19 @@ impl ChatActor {
 
     /// `Ready` with no turn: a prompt goes out now.
     fn can_dispatch(&self) -> bool {
-        self.status == SessionStatus::Ready
+        !self.organizing
+            && !self.steering_pending
+            && self.checkpointing.is_none()
+            && self.status == SessionStatus::Ready
             && self.turn.is_none()
+            && self.native_identity_pending.is_none()
             && self.driver.as_ref().is_some_and(|driver| {
-                driver.ready && driver.stop == Stop::None && driver.events.is_some()
+                driver.ready
+                    && driver.stop == Stop::None
+                    && driver.events.is_some()
+                    && driver
+                        .run_idle
+                        .is_none_or(|idle| idle && !self.normalizer.has_open_requests())
             })
     }
 
@@ -931,7 +1566,18 @@ impl ChatActor {
         Ok(())
     }
 
+    fn require_workspace(&self) -> Result<(), SessionError> {
+        if self.store.workspace_available(&self.chat_id) {
+            Ok(())
+        } else {
+            Err(SessionError::Organization("This project or folder was removed. Restore it from Removed projects and folders before continuing this chat.".into()))
+        }
+    }
+
     fn resume_queue(&mut self) {
+        if self.require_workspace().is_err() {
+            return;
+        }
         for row in &mut self.queue {
             row.held = false;
         }
@@ -965,6 +1611,9 @@ impl ChatActor {
     }
 
     fn dispatch_next(&mut self) {
+        if self.require_workspace().is_err() {
+            return;
+        }
         if !self.can_dispatch() {
             return;
         }
@@ -974,6 +1623,13 @@ impl ChatActor {
         let row = self.queue.remove(index);
         self.dispatch(Prompt {
             id: row.id,
+            parts: if row.parts.is_empty() {
+                vec![PromptPart::Text {
+                    text: row.text.clone(),
+                }]
+            } else {
+                row.parts
+            },
             text: row.text,
             created_at: row.created_at,
         });
@@ -981,17 +1637,134 @@ impl ChatActor {
 
     /// Starts a turn for `prompt`: the turn's first rows go out in one `BeginTurn` (which removes
     /// the queued row), then the prompt goes to the driver.
-    fn dispatch(&mut self, prompt: Prompt) {
-        let Some(driver) = &self.driver else {
+    fn dispatch(&mut self, prompt: Prompt) -> bool {
+        self.workspace_turn = None;
+        let Some(admission) = self.store.begin_workspace_turn(&self.chat_id) else {
+            let row = QueuedRow {
+                id: prompt.id.clone(),
+                chat_id: self.chat_id.clone(),
+                text: prompt.text,
+                parts: prompt.parts,
+                held: true,
+                created_at: prompt.created_at,
+            };
+            let preview = cap_chars(row.text.clone(), PREVIEW_CHARS);
+            let prompt_id = row.id.clone();
+            self.queue.push(row.clone());
+            self.queue_op(Op::QueuePut(row));
+            self.push(
+                AuraEvent::PromptLifecycle {
+                    prompt_id,
+                    state: PromptState::Queued,
+                    preview: Some(preview),
+                },
+                None,
+            );
+            self.info_dirty = true;
+            self.set_detail(Some("This workspace was removed. Restore it from Removed projects and folders before resuming this saved prompt.".into()));
+            self.flush();
+            return true;
+        };
+        self.workspace_turn = Some(admission);
+        let turn_id = new_id();
+        let Some(checkpoints) = self.shared.deps.checkpoints.clone() else {
+            self.dispatch_prepared(prompt, turn_id, None);
+            return false;
+        };
+        let row = QueuedRow {
+            id: prompt.id.clone(),
+            chat_id: self.chat_id.clone(),
+            text: prompt.text.clone(),
+            parts: prompt.parts.clone(),
+            held: false,
+            created_at: prompt.created_at,
+        };
+        self.queue.push(row.clone());
+        self.queue_op(Op::QueuePut(row));
+        self.push(
+            AuraEvent::PromptLifecycle {
+                prompt_id: prompt.id.clone(),
+                state: PromptState::Queued,
+                preview: Some(cap_chars(prompt.text.clone(), PREVIEW_CHARS)),
+            },
+            None,
+        );
+        let chat_id = self.chat_id.clone();
+        let folder = self.chat.folder.clone();
+        let folder_id = self.chat.folder_id.clone();
+        let captured_turn = turn_id.clone();
+        let task = self.shared.deps.rt.spawn(async move {
+            let folder_id = folder_id.ok_or_else(|| {
+                crate::checkpoints::CheckpointError::Message(
+                    "Locate this chat's folder before saving a checkpoint.".into(),
+                )
+            })?;
+            checkpoints
+                .capture(&chat_id, &folder_id, &folder, &captured_turn)
+                .await
+        });
+        self.checkpointing = Some((prompt.id.clone(), task.abort_handle()));
+        let generation = self.generation;
+        self.in_flight.push(
+            async move {
+                Done::Checkpointed {
+                    generation,
+                    prompt,
+                    turn_id,
+                    result: task.await,
+                }
+            }
+            .boxed(),
+        );
+        self.set_status(
+            SessionStatus::Running,
+            Some("Saving checkpoint before sending the prompt".into()),
+        );
+        self.flush();
+        true
+    }
+
+    fn dispatch_prepared(
+        &mut self,
+        mut prompt: Prompt,
+        turn_id: String,
+        checkpoint_ref: Option<String>,
+    ) {
+        if self.driver.is_none() {
+            return;
+        }
+        let continuation_prefix = if let Some(continuation) = &mut self.continuation
+            && !continuation.handoff.is_empty()
+        {
+            let handoff = std::mem::take(&mut continuation.handoff);
+            let prefix = format!("{handoff}\n\nCurrent user prompt\n");
+            prompt.text = format!("{prefix}{}", prompt.text);
+            prompt.parts.insert(
+                0,
+                PromptPart::Text {
+                    text: prefix.clone(),
+                },
+            );
+            Some(prefix)
+        } else {
+            None
+        };
+        let Some(driver) = &mut self.driver else {
             return;
         };
         let commands = driver.commands.clone();
+        if driver.run_idle.is_some() {
+            driver.run_idle = Some(false);
+        }
         self.queue.retain(|row| row.id != prompt.id);
+        self.remote_history = false;
         self.ordinal = self.ordinal.saturating_add(1);
-        let turn_id = new_id();
         let tag: Arc<str> = Arc::from(turn_id.as_str());
         let started_at = now_millis();
         self.begun = Some(TurnRow {
+            continuation_prefix,
+            checkpoint_ref,
+            parts: prompt.parts.clone(),
             id: turn_id.clone(),
             chat_id: self.chat_id.clone(),
             agent_session_id: self
@@ -1004,6 +1777,7 @@ impl ChatActor {
             started_at,
         });
         self.turn = Some(OpenTurn {
+            parts: prompt.parts.clone(),
             id: turn_id.clone(),
             tag: Arc::clone(&tag),
             prompt_id: prompt.id.clone(),
@@ -1055,11 +1829,14 @@ impl ChatActor {
         self.last_activity = Instant::now();
         let _ = commands.send(DriverCommand::Prompt {
             turn: TurnRef { turn_id },
-            parts: vec![PromptPart::Text { text: prompt.text }],
+            parts: prompt.parts,
         });
     }
 
     fn set_title(&mut self, title: String, source: TitleSource) {
+        if self.chat.title_source == Some(TitleSource::Manual) && source != TitleSource::Manual {
+            return;
+        }
         if self.chat.title.as_deref() == Some(title.as_str()) {
             return;
         }
@@ -1075,26 +1852,52 @@ impl ChatActor {
         self.publish();
     }
 
+    fn cancel_checkpoint(&mut self) {
+        if let Some((_, abort)) = &self.checkpointing {
+            abort.abort();
+        }
+    }
+
     fn interrupt(&mut self) {
+        if self.checkpointing.is_some() {
+            self.cancel_checkpoint();
+            self.hold_queue();
+            if self
+                .driver
+                .as_ref()
+                .is_none_or(|driver| driver.run_idle != Some(false))
+                && !self.normalizer.has_open_requests()
+            {
+                self.set_status(
+                    SessionStatus::Ready,
+                    Some("Prompt held before it reached the agent".into()),
+                );
+                return;
+            }
+        }
         match self.status {
             SessionStatus::Running => {
-                let Some(turn) = &mut self.turn else {
-                    return;
-                };
-                turn.interrupt_requested = true;
-                let turn_id = turn.id.clone();
-                let tag = Arc::clone(&turn.tag);
+                let turn = self.turn.as_mut().map(|turn| {
+                    turn.interrupt_requested = true;
+                    (turn.id.clone(), Arc::clone(&turn.tag))
+                });
                 self.hold_queue();
                 self.send_command(DriverCommand::Interrupt);
-                for event in self
-                    .normalizer
-                    .resolve_turn_requests(&turn_id, ResolvedBy::Turn)
-                {
-                    self.push_normalized(event, Some(Arc::clone(&tag)));
+                if let Some((turn_id, tag)) = &turn {
+                    for event in self
+                        .normalizer
+                        .resolve_turn_requests(turn_id, ResolvedBy::Turn)
+                    {
+                        self.push_normalized(event, Some(Arc::clone(tag)));
+                    }
                 }
                 self.set_status(
                     SessionStatus::Cancelling,
-                    Some("Stopping the turn; press Esc again to force stop".into()),
+                    Some(if turn.is_some() {
+                        "Stopping the turn; press Esc again to force stop".into()
+                    } else {
+                        "Stopping background work; press Esc again to force stop".into()
+                    }),
                 );
                 self.refresh_attention();
             }
@@ -1104,6 +1907,7 @@ impl ChatActor {
     }
 
     fn force_stop(&mut self) {
+        self.cancel_checkpoint();
         if !matches!(
             self.status,
             SessionStatus::Running
@@ -1240,6 +2044,7 @@ impl ChatActor {
     }
 
     fn stop(&mut self) {
+        self.cancel_checkpoint();
         // Every Stop holds what is queued until now, one that repeats a stop in progress included: a
         // prompt typed while the agent stops is not held, and would start it again once it stopped.
         self.hold_queue();
@@ -1303,13 +2108,50 @@ impl ChatActor {
     }
 
     fn agent_label(&self) -> String {
-        self.spec
+        let name = self
+            .spec
             .as_ref()
-            .map_or_else(|| self.chat.agent_id.clone(), |spec| spec.name.to_owned())
+            .map_or_else(|| self.chat.agent_id.clone(), |spec| spec.name.to_owned());
+        aura_agents::hosts::display_name(&name, &self.chat.agent_host)
+    }
+
+    fn require_remote_handoff(&self) -> Result<(), SessionError> {
+        if self.remote_history
+            && !self
+                .continuation
+                .as_ref()
+                .is_some_and(|value| !value.handoff.is_empty())
+        {
+            return Err(SessionError::Organization("Review Continue here before sending to an agent. This device has new remote history that its saved native session has not seen.".into()));
+        }
+        Ok(())
     }
 
     /// Starts the agent. `explicit` (`chat_start`): a full slot is an error; otherwise a card.
     fn start(&mut self, fresh: bool, explicit: bool) -> Result<(), SessionError> {
+        self.require_workspace()?;
+        if self.shared.deps.store.config_recovery_pending() {
+            return Err(SessionError::Organization(
+                "Recover the interrupted profile configuration switch before starting agents."
+                    .into(),
+            ));
+        }
+        self.require_remote_handoff()?;
+        if self.steering_pending {
+            return Err(SessionError::OptionInvalid(
+                "Wait for steering delivery to finish before restarting.".into(),
+            ));
+        }
+        let fresh = fresh
+            || self
+                .continuation
+                .as_ref()
+                .is_some_and(|value| value.force_fresh);
+        if self.organizing {
+            return Err(SessionError::Organization(
+                "Wait for the chat change to finish.".into(),
+            ));
+        }
         if self.quitting || self.shared.is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
@@ -1348,13 +2190,35 @@ impl ChatActor {
             self.start_failed(ErrorKind::AgentUnavailable, reason, None, false);
             return Ok(());
         };
+        if !fresh
+            && self
+                .agent_session
+                .as_ref()
+                .is_some_and(|session| session.host != self.chat.agent_host)
+        {
+            self.start_failed(ErrorKind::AgentUnavailable, "The saved session belongs to a different execution host. Start a fresh session to use this host.".into(), None, false);
+            return Ok(());
+        }
         if !self.shared.live.acquire(&self.chat_id) {
+            if self.shared.live.quiescing() {
+                return Err(SessionError::ShuttingDown);
+            }
             let error = SessionError::TooManyAgents(self.shared.live.max());
             if explicit {
                 return Err(error);
             }
             self.start_failed(ErrorKind::SpawnFailed, error.to_string(), None, false);
             return Ok(());
+        }
+        if self.workspace_turn.is_none() {
+            self.workspace_turn = self.store.begin_workspace_turn(&self.chat_id);
+            if self.workspace_turn.is_none() {
+                self.shared.live.release(&self.chat_id);
+                return Err(SessionError::Organization(
+                    "The workspace was removed while starting. Restore it before continuing."
+                        .into(),
+                ));
+            }
         }
         self.generation += 1;
         let generation = self.generation;
@@ -1363,11 +2227,15 @@ impl ChatActor {
         self.auth = None;
         let (progress, details) = mpsc::unbounded_channel();
         self.progress = Some(details);
-        let folder = self.chat.folder.clone();
         let winding_down = self.winding_down.subscribe();
         let deps = &self.shared.deps;
         let task = deps.rt.spawn(prepare(
-            folder,
+            super::workspace_folders::LaunchFolders {
+                chat: self.chat.clone(),
+                store: Arc::clone(&deps.store),
+                worktrees: deps.worktrees.clone(),
+            },
+            self.chat.agent_host.clone(),
             spec.clone(),
             Arc::clone(&deps.detector),
             Arc::clone(&deps.env),
@@ -1428,6 +2296,21 @@ impl ChatActor {
                 self.start_failed(failure.kind, failure.message, None, false);
             }
             Ok(Ok(prepared)) => {
+                if !self.shared.live.set_folders(
+                    &self.chat_id,
+                    std::iter::once(prepared.folder_key.clone())
+                        .chain(
+                            prepared
+                                .folder_context
+                                .additional
+                                .iter()
+                                .map(|path| super::live::normalize_path(PathBuf::from(path))),
+                        )
+                        .collect(),
+                ) {
+                    self.start_failed(ErrorKind::AgentUnavailable, "This folder is being reverted. Wait for the file operation to finish before starting the agent.".into(), None, false);
+                    return;
+                }
                 self.folder_state = FolderState::Ok;
                 self.spawn_driver(prepared, preparing.fresh);
             }
@@ -1438,15 +2321,38 @@ impl ChatActor {
         let Some(spec) = self.spec.clone() else {
             return;
         };
-        let resume = if fresh {
+        let native_start = self
+            .continuation
+            .as_ref()
+            .map(|value| value.native_start.clone())
+            .unwrap_or_default();
+        let resume = if let Some(source) = self
+            .continuation
+            .as_ref()
+            .and_then(|value| value.resume_source.clone())
+        {
+            Some(source)
+        } else if fresh {
             None
         } else {
             self.agent_session
                 .as_ref()
                 .and_then(|session| session.native_session_id.clone())
         };
-        if let Some(id) = &resume
-            && !self.shared.live.claim(spec.id, id, &self.chat_id)
+        let native_scope = NativeSessionScope::local(
+            spec.id,
+            &self.shared.deps.device_id,
+            &prepared.env,
+            &prepared.launch,
+            &self.chat.folder,
+        );
+        let claim_id = if native_start.fork {
+            native_start.new_session_id.as_ref()
+        } else {
+            resume.as_ref()
+        };
+        if let Some(id) = claim_id
+            && !self.shared.live.claim(&native_scope, id, &self.chat_id)
         {
             let message =
                 SessionError::Internal("this session is already open in another chat".into())
@@ -1458,23 +2364,37 @@ impl ChatActor {
         let deps = &self.shared.deps;
         let (commands, command_rx) = mpsc::unbounded_channel();
         let (events, event_rx) = event_channel();
-        let spawner = Arc::new(SessionSpawner::new(
-            Arc::clone(&deps.spawner),
-            deps.logs.clone(),
-            self.chat_id.clone(),
-            Arc::clone(&self.book),
-            generation,
-        ));
+        let spawner = Arc::new(
+            SessionSpawner::new(
+                aura_process::HostSpawner::new(
+                    Arc::clone(&deps.spawner),
+                    aura_agents::hosts::execution(&self.chat.agent_host),
+                ),
+                deps.logs.clone(),
+                self.chat_id.clone(),
+                Arc::clone(&self.book),
+                generation,
+            )
+            .with_protocol_logging(!deps.store.encrypted()),
+        );
         let setup = SessionSetup {
+            attachment_dir: Some(deps.store.attachment_dir().to_path_buf()),
+            attachment_reader: deps.store.attachment_reader(),
             chat_id: self.chat_id.clone(),
             agent_id: spec.id.to_owned(),
             dialect: spec.dialect.to_owned(),
             folder: self.chat.folder.clone(),
             agent_folder: self.chat.folder.to_string_lossy().into_owned(),
-            add_dirs: Vec::new(),
+            add_dirs: prepared
+                .folder_context
+                .additional
+                .iter()
+                .map(PathBuf::from)
+                .collect(),
             launch: prepared.launch,
             env: prepared.env,
             resume: resume.clone(),
+            native_start,
             autonomy: self.autonomy,
             desired: self.desired.clone(),
             timings: DriverTimings::STANDARD,
@@ -1488,12 +2408,18 @@ impl ChatActor {
             setup,
         }));
         self.driver = Some(LiveDriver {
+            folder_context: aura_protocol::workspace::ChatFolderContext {
+                active: true,
+                ..prepared.folder_context
+            },
             generation,
             commands,
             events: Some(event_rx),
             abort: join.abort_handle(),
             join: Some(join),
             ready: false,
+            run_idle: None,
+            native_scope,
             stop: Stop::None,
             spawn_id: None,
         });
@@ -1552,6 +2478,7 @@ impl ChatActor {
             tag.as_deref(),
         );
         self.refresh_attention();
+        self.refresh_run_status();
         Ok(())
     }
 
@@ -1587,6 +2514,7 @@ impl ChatActor {
             tag.as_deref(),
         );
         self.refresh_attention();
+        self.refresh_run_status();
         Ok(())
     }
 
@@ -1681,6 +2609,7 @@ impl ChatActor {
             self.queue_op(Op::UpdateAgentSession {
                 id,
                 patch: AgentSessionPatch {
+                    capabilities: None,
                     native_session_id: None,
                     model: None,
                     effort: None,
@@ -1730,6 +2659,7 @@ impl ChatActor {
     }
 
     fn shutdown(&mut self, plan: StopPlan, reply: oneshot::Sender<()>) {
+        self.cancel_checkpoint();
         self.quitting = true;
         self.pending_start = None;
         if let Some(preparing) = self.preparing.take() {
@@ -1768,6 +2698,9 @@ impl ChatActor {
     /// Replies to a quit once the driver ended and everything was handed to the store.
     fn finish_shutdown(&mut self) {
         if self.shutdown_reply.is_none()
+            || self.steering_pending
+            || self.organizing
+            || self.checkpointing.is_some()
             || self.driver.is_some()
             || self.preparing.is_some()
             || !self.outbox.is_empty()
@@ -1789,6 +2722,190 @@ impl ChatActor {
 
     fn on_done(&mut self, done: Done) {
         match done {
+            #[cfg(feature = "account-sync")]
+            Done::SyncImported { result, reply } => self.sync_imported(result, reply),
+            Done::Steering(completion) => self.steering_done(*completion),
+            Done::Conversation { result, reply } => {
+                drop(reply.send(result));
+            }
+            Done::Continued {
+                result,
+                prompt,
+                reply,
+            } => self.continued(result, prompt, reply),
+            Done::CheckpointContext { result, reply } => {
+                drop(reply.send(result));
+            }
+            Done::Reverted { result, reply } => {
+                self.organizing = false;
+                if let Ok(report) = &result {
+                    self.push(
+                        AuraEvent::Notice {
+                            level: if report.error.is_some() {
+                                NoticeLevel::Warning
+                            } else {
+                                NoticeLevel::Info
+                            },
+                            message: format!(
+                                "Reverted {} file(s). {}",
+                                report.applied.len(),
+                                report
+                                    .error
+                                    .as_deref()
+                                    .unwrap_or("Original files were retained for recovery.")
+                            ),
+                        },
+                        None,
+                    );
+                    self.flush();
+                }
+                let _ = reply.send(result);
+            }
+            Done::Checkpointed {
+                generation,
+                prompt,
+                turn_id,
+                result,
+            } => {
+                if !self
+                    .checkpointing
+                    .as_ref()
+                    .is_some_and(|(id, _)| *id == prompt.id)
+                {
+                    return;
+                }
+                self.checkpointing = None;
+                if generation != self.generation {
+                    return;
+                }
+                if self
+                    .driver
+                    .as_ref()
+                    .is_some_and(|driver| driver.ready && driver.stop == Stop::None)
+                    && self.turn.is_none()
+                {
+                    let idle = self
+                        .driver
+                        .as_ref()
+                        .and_then(|driver| driver.run_idle)
+                        .is_none_or(|idle| idle && !self.normalizer.has_open_requests());
+                    self.set_status(
+                        if idle {
+                            SessionStatus::Ready
+                        } else {
+                            SessionStatus::Running
+                        },
+                        None,
+                    );
+                }
+                match result {
+                    Ok(Ok(checkpoint)) => {
+                        if self.can_dispatch()
+                            && self
+                                .queue
+                                .iter()
+                                .any(|row| row.id == prompt.id && !row.held)
+                        {
+                            if !checkpoint.warnings.is_empty() {
+                                self.push(
+                                    AuraEvent::Notice {
+                                        level: NoticeLevel::Warning,
+                                        message: format!(
+                                            "Checkpoint saved with exclusions: {}",
+                                            checkpoint.warnings.join("; ")
+                                        ),
+                                    },
+                                    None,
+                                );
+                            }
+                            self.dispatch_prepared(prompt, turn_id, Some(checkpoint.id));
+                        }
+                    }
+                    Err(error) if error.is_cancelled() => {}
+                    failed => {
+                        self.hold_queue();
+                        let message = match failed {
+                            Ok(Err(error)) => error.to_string(),
+                            _ => "Saving the checkpoint stopped unexpectedly.".into(),
+                        };
+                        self.push(
+                            AuraEvent::Notice {
+                                level: NoticeLevel::Error,
+                                message: format!(
+                                    "The prompt was held before reaching the agent: {message}"
+                                ),
+                            },
+                            None,
+                        );
+                        self.set_detail(Some(
+                            "Checkpoint failed; resolve the problem and resume queued prompts"
+                                .into(),
+                        ));
+                    }
+                }
+                self.dispatch_next();
+            }
+            Done::Organized { result, reply } => {
+                self.organizing = false;
+                if let Ok(organization) = &result
+                    && let Some(record) = organization
+                        .chats
+                        .iter()
+                        .find(|record| record.chat.id == self.chat_id)
+                {
+                    self.chat.folder = record.chat.folder.clone();
+                    self.chat.folder_id = record.chat.folder_id.clone();
+                    // A live automatic title can arrive while the transaction is in flight.
+                    // Only the manual title is authoritative over that newer live state.
+                    if record.chat.title_source == Some(TitleSource::Manual) {
+                        self.chat.title = record.chat.title.clone();
+                        self.chat.title_source = record.chat.title_source;
+                    }
+                    self.chat.updated_at = self.chat.updated_at.max(record.chat.updated_at);
+                    self.info_dirty = true;
+                    self.schedule_flush();
+                    self.publish();
+                }
+                let _ = reply.send(result);
+                self.dispatch_next();
+            }
+            Done::NativeIdentitySaved {
+                generation,
+                native_id,
+                result,
+            } => {
+                let current = self
+                    .native_identity_pending
+                    .as_ref()
+                    .is_some_and(|pending| {
+                        pending.generation == generation && pending.native_id == native_id
+                    });
+                if current && let Some(pending) = self.native_identity_pending.take() {
+                    if matches!(result, Ok(Ok(()))) {
+                        self.refresh_run_status();
+                        self.dispatch_next();
+                    } else {
+                        if let Some(session) = &mut self.agent_session
+                            && session.id == pending.row_id
+                        {
+                            session.native_session_id = pending.previous_id.clone();
+                        }
+                        if self.native_session_id.as_ref() == Some(&native_id) {
+                            self.native_session_id = pending.previous_id.clone();
+                        }
+                        if let Some(check) = &mut self.replay_check
+                            && check.native_session_id == native_id
+                        {
+                            if let Some(previous) = pending.previous_id {
+                                check.native_session_id = previous;
+                            } else {
+                                self.replay_check = None;
+                            }
+                        }
+                        self.reject_native_identity(ErrorKind::Storage, "The native session id could not be saved. Restart the session after saving is available.".into());
+                    }
+                }
+            }
             Done::Prepared { generation, result } => self.on_prepared(generation, result),
             Done::Page { purpose, result } => self.on_page(purpose, result),
             Done::OptionReply {
@@ -1885,6 +3002,7 @@ impl ChatActor {
         self.queue_op(Op::UpdateAgentSession {
             id,
             patch: AgentSessionPatch {
+                capabilities: None,
                 native_session_id: None,
                 model: None,
                 effort: None,
@@ -1901,8 +3019,17 @@ impl ChatActor {
         self.last_activity = Instant::now();
         match event {
             DriverEvent::Status(status) => self.on_driver_status(status),
+            DriverEvent::RunState { idle } => {
+                if let Some(driver) = &mut self.driver {
+                    driver.run_idle = Some(idle);
+                }
+            }
             DriverEvent::Ready(info) => self.on_ready(info),
+            DriverEvent::NativeSessionId(native_id) => self.on_native_session_id(native_id),
             DriverEvent::Event { turn, event } => {
+                if matches!(event, AuraEvent::SteeringStatus { .. }) {
+                    return;
+                }
                 let tag = self.open_tag(turn.as_deref());
                 match &event {
                     AuraEvent::MessageDelta { text, .. } => {
@@ -1952,6 +3079,125 @@ impl ChatActor {
                 }
             }
             DriverEvent::AuthRequired(prompt) => self.auth = Some(prompt),
+        }
+        self.refresh_run_status();
+    }
+
+    fn on_native_session_id(&mut self, native_id: String) {
+        let Some(driver) = &mut self.driver else {
+            return;
+        };
+        if !driver.ready
+            || driver.stop != Stop::None
+            || self.native_session_id.as_ref() == Some(&native_id)
+        {
+            return;
+        }
+        if native_id.is_empty() || native_id.chars().count() > 96 {
+            self.reject_native_identity(
+                ErrorKind::ProtocolError,
+                "The agent reported an invalid native session id.".into(),
+            );
+            return;
+        }
+        if !self
+            .shared
+            .live
+            .claim(&driver.native_scope, &native_id, &self.chat_id)
+        {
+            self.reject_native_identity(
+                ErrorKind::Internal,
+                SessionError::Internal("this session is already open in another chat".into())
+                    .to_string(),
+            );
+            return;
+        }
+        let generation = driver.generation;
+        let Some(session) = &mut self.agent_session else {
+            self.reject_native_identity(
+                ErrorKind::Internal,
+                "The native session has no saved session row.".into(),
+            );
+            return;
+        };
+        let now = now_millis();
+        self.native_identity_pending = Some(NativeIdentitySave {
+            generation,
+            native_id: native_id.clone(),
+            row_id: session.id.clone(),
+            previous_id: session.native_session_id.clone(),
+        });
+        session.native_session_id = Some(native_id.clone());
+        session.updated_at = now;
+        let row_id = session.id.clone();
+        self.native_session_id = Some(native_id.clone());
+        self.replay_check
+            .get_or_insert_with(|| ReplayCheck {
+                native_session_id: native_id.clone(),
+                turns: 0,
+                last_reply_sha256: None,
+            })
+            .native_session_id = native_id.clone();
+        let (saved, acknowledgement) = oneshot::channel();
+        self.queue_op(Op::SaveNativeIdentity {
+            id: row_id,
+            native_id: native_id.clone(),
+            updated_at: now,
+            reply: saved,
+        });
+        self.in_flight.push(
+            async move {
+                Done::NativeIdentitySaved {
+                    generation,
+                    native_id,
+                    // A timed-out write may still commit later. Keep the gate until the
+                    // writer acknowledges its result, even across driver stop/restart.
+                    result: acknowledgement.await.map_err(|_| WaitError::Gone),
+                }
+            }
+            .boxed(),
+        );
+        self.revision = self.revision.wrapping_add(1);
+        self.info_dirty = true;
+        self.schedule_flush();
+    }
+
+    fn reject_native_identity(&mut self, kind: ErrorKind, message: String) {
+        self.hold_queue();
+        self.graceful_stop(
+            StopPlan {
+                cancel_grace: Duration::ZERO,
+                process: ShutdownPlan::STANDARD,
+            },
+            false,
+        );
+        self.conflict = true;
+        if let Some(turn_id) = self.turn.as_ref().map(|turn| turn.id.clone()) {
+            self.on_turn_ended(
+                &turn_id,
+                StopReason::Error,
+                None,
+                Some(DriverError {
+                    kind,
+                    message,
+                    detail: None,
+                }),
+            );
+        } else {
+            self.last_error = Some(ErrorInfo {
+                kind,
+                message: message.clone(),
+                detail: None,
+            });
+            self.push(
+                AuraEvent::Error {
+                    kind,
+                    message,
+                    detail: None,
+                    recoverable: true,
+                },
+                None,
+            );
         }
     }
 
@@ -2003,11 +3249,12 @@ impl ChatActor {
         if driver.ready || driver.stop != Stop::None {
             return;
         }
-        if !self
-            .shared
-            .live
-            .claim(spec.id, &info.native_session_id, &self.chat_id)
-        {
+        if info.native_session_id.as_ref().is_some_and(|native_id| {
+            !self
+                .shared
+                .live
+                .claim(&driver.native_scope, native_id, &self.chat_id)
+        }) {
             // Two processes on one native session would interleave one transcript.
             let message =
                 SessionError::Internal("this session is already open in another chat".into())
@@ -2037,11 +3284,36 @@ impl ChatActor {
             return;
         }
         driver.ready = true;
+        if let Some(continuation) = &mut self.continuation {
+            continuation.force_fresh = false;
+            continuation.resume_source = None;
+            continuation.native_start = Default::default();
+        }
         driver.spawn_id = Some(info.spawn_id.clone());
         let now = now_millis();
-        let same_session = self.agent_session.as_ref().is_some_and(|session| {
-            session.native_session_id.as_deref() == Some(info.native_session_id.as_str())
-        });
+        let same_session = self
+            .agent_session
+            .as_ref()
+            .is_some_and(|session| session.native_session_id == info.native_session_id);
+        // Codex can apply a user-approved startup model recovery. Persist only the effective
+        // choices reported before this successful Ready, never the attempted failed override.
+        if spec.kind == aura_protocol::DriverKind::Codex {
+            for option in &self.options {
+                if matches!(
+                    option.category,
+                    ConfigCategory::Model | ConfigCategory::Effort
+                ) && let ConfigKind::Select { current, .. } = &option.kind
+                    && !current.is_empty()
+                {
+                    self.desired.insert(
+                        option.id.clone(),
+                        ConfigValue::Choice {
+                            value: current.clone(),
+                        },
+                    );
+                }
+            }
+        }
         let config_json = serde_json::to_string(&self.desired).ok();
         let (model, effort) = (
             self.option_value(ConfigCategory::Model),
@@ -2052,10 +3324,12 @@ impl ChatActor {
                 session.updated_at = now;
                 session.autonomy = self.autonomy;
                 session.config_json = config_json.clone();
+                session.capabilities = Some(info.capabilities.clone());
                 let id = session.id.clone();
                 self.queue_op(Op::UpdateAgentSession {
                     id,
                     patch: AgentSessionPatch {
+                        capabilities: Some(info.capabilities.clone()),
                         native_session_id: None,
                         model,
                         effort,
@@ -2067,10 +3341,12 @@ impl ChatActor {
             }
             _ => {
                 let row = AgentSessionRow {
+                    capabilities: Some(info.capabilities.clone()),
+                    host: self.chat.agent_host.clone(),
                     id: new_id(),
                     chat_id: self.chat_id.clone(),
                     agent_id: spec.id.to_owned(),
-                    native_session_id: Some(info.native_session_id.clone()),
+                    native_session_id: info.native_session_id.clone(),
                     model,
                     effort,
                     autonomy: self.autonomy,
@@ -2095,23 +3371,35 @@ impl ChatActor {
             );
         }
         self.compare_replay(&info);
-        if self
-            .replay_check
-            .as_ref()
-            .is_none_or(|check| check.native_session_id != info.native_session_id)
-        {
-            self.replay_check = Some(ReplayCheck {
-                native_session_id: info.native_session_id.clone(),
-                turns: 0,
-                last_reply_sha256: None,
-            });
+        match info.native_session_id.as_ref() {
+            Some(native_id)
+                if self
+                    .replay_check
+                    .as_ref()
+                    .is_none_or(|check| &check.native_session_id != native_id) =>
+            {
+                self.replay_check = Some(ReplayCheck {
+                    native_session_id: native_id.clone(),
+                    turns: 0,
+                    last_reply_sha256: None,
+                });
+            }
+            None => self.replay_check = None,
+            _ => {}
         }
-        self.native_session_id = Some(info.native_session_id);
+        self.native_session_id = info.native_session_id;
         self.agent_name = info.agent_name;
         self.agent_version = info.agent_version;
         self.capabilities = Some(info.capabilities);
         self.revision = self.revision.wrapping_add(1);
-        self.set_status(SessionStatus::Ready, None);
+        if self
+            .driver
+            .as_ref()
+            .is_some_and(|driver| driver.run_idle.is_none())
+        {
+            self.set_status(SessionStatus::Ready, None);
+        }
+        self.refresh_run_status();
         self.dispatch_next();
     }
 
@@ -2124,7 +3412,7 @@ impl ChatActor {
         let Some(check) = &self.replay_check else {
             return;
         };
-        if check.native_session_id != info.native_session_id {
+        if Some(check.native_session_id.as_str()) != info.native_session_id.as_deref() {
             return;
         }
         let Some(reply) = &summary.last_reply else {
@@ -2262,6 +3550,7 @@ impl ChatActor {
             // The prompt goes back into the queue, held, keeping its place; the process stops.
             let row = QueuedRow {
                 id: turn.prompt_id.clone(),
+                parts: turn.parts.clone(),
                 chat_id: self.chat_id.clone(),
                 text: turn.text.clone(),
                 held: true,
@@ -2294,7 +3583,14 @@ impl ChatActor {
         if stop_reason == StopReason::Error && !turn.interrupt_requested {
             self.hold_queue();
         }
-        self.set_status(SessionStatus::Ready, None);
+        if !self
+            .driver
+            .as_ref()
+            .is_some_and(|driver| driver.run_idle.is_some())
+        {
+            self.set_status(SessionStatus::Ready, None);
+        }
+        self.refresh_run_status();
         self.dispatch_next();
     }
 
@@ -2507,7 +3803,11 @@ impl ChatActor {
     /// Gives the chat's live slot and native sessions back once nothing of it runs: no driver, no
     /// start preparation, and no retired generation whose processes or task still wind down.
     fn release_if_idle(&self) {
-        if self.driver.is_none() && self.preparing.is_none() && self.retiring.is_empty() {
+        if !self.steering_pending
+            && self.driver.is_none()
+            && self.preparing.is_none()
+            && self.retiring.is_empty()
+        {
             self.shared.live.release(&self.chat_id);
         }
     }
@@ -2949,10 +4249,14 @@ impl ChatActor {
                             chat_id: self.chat_id.clone(),
                             at: now,
                         });
-                        self.queue_op(Op::CompactTurn {
-                            chat_id: self.chat_id.clone(),
-                            turn_id,
-                        });
+                        // A late steering acknowledgement still belongs to this turn. Seal its
+                        // history only after that attempt's final visible outcome has been saved.
+                        if !self.steering_pending {
+                            self.queue_op(Op::CompactTurn {
+                                chat_id: self.chat_id.clone(),
+                                turn_id,
+                            });
+                        }
                     }
                     _ => match &mut begin {
                         Some((_, turn_rows)) => turn_rows.push(row),
@@ -3018,6 +4322,36 @@ impl ChatActor {
         }
     }
 
+    /// An opted-in driver's prompt can finish while its background work is still running.
+    fn refresh_run_status(&mut self) {
+        if self.checkpointing.is_some() {
+            return;
+        }
+        let Some(driver) = &self.driver else {
+            return;
+        };
+        let Some(idle) = driver.run_idle else {
+            return;
+        };
+        if !driver.ready || driver.stop != Stop::None || self.turn.is_some() {
+            return;
+        }
+        if idle && !self.normalizer.has_open_requests() {
+            if self.status != SessionStatus::Ready {
+                self.set_status(SessionStatus::Ready, None);
+            }
+            self.dispatch_next();
+        } else if !matches!(
+            self.status,
+            SessionStatus::Cancelling | SessionStatus::Running
+        ) {
+            self.set_status(
+                SessionStatus::Running,
+                Some("Agent work is still running".into()),
+            );
+        }
+    }
+
     fn publish(&self) {
         self.shared.publish(
             &self.chat_id,
@@ -3052,6 +4386,7 @@ impl ChatActor {
             id: self.chat_id.clone(),
             title: self.chat.title.clone(),
             agent_id: self.chat.agent_id.clone(),
+            agent_host: self.chat.agent_host.clone(),
             agent_name: self.agent_label(),
             folder: self.chat.folder.to_string_lossy().into_owned(),
             folder_state: self.folder_state,
@@ -3120,6 +4455,28 @@ impl ChatActor {
     }
 }
 
+impl Drop for ChatActor {
+    fn drop(&mut self) {
+        self.cancel_checkpoint();
+    }
+}
+
+fn initial_options(
+    session: Option<&AgentSessionRow>,
+    initial_model: Option<String>,
+) -> BTreeMap<String, ConfigValue> {
+    let mut desired: BTreeMap<String, ConfigValue> = session
+        .and_then(|session| session.config_json.as_deref())
+        .and_then(|json| serde_json::from_str(json).ok())
+        .unwrap_or_default();
+    if session.is_none()
+        && let Some(value) = initial_model
+    {
+        desired.insert("model".into(), ConfigValue::Choice { value });
+    }
+    desired
+}
+
 /// The autonomy state while no agent runs (nothing is auto-answered).
 fn stopped_autonomy(autonomy: Autonomy, note: Option<&str>) -> AutonomyState {
     AutonomyState {
@@ -3180,6 +4537,39 @@ fn fits(prompt: &UiPrompt, answer: &UiAnswer) -> bool {
         (UiPrompt::Select { options, .. }, UiAnswer::Select { index }) => {
             (*index as usize) < options.len()
         }
+        (UiPrompt::Questions { questions, .. }, UiAnswer::Questions { answers }) => {
+            !questions.is_empty()
+                && questions.len() == answers.len()
+                && questions.iter().enumerate().all(|(index, question)| {
+                    !question.id.is_empty()
+                        && !questions[..index]
+                            .iter()
+                            .any(|other| other.id == question.id)
+                        && answers
+                            .iter()
+                            .filter(|answer| answer.question_id == question.id)
+                            .count()
+                            == 1
+                        && answers
+                            .iter()
+                            .find(|answer| answer.question_id == question.id)
+                            .is_some_and(|answer| {
+                                let text = answer.text.as_ref();
+                                let choices = answer.selected.len() + usize::from(text.is_some());
+                                choices > 0
+                                    && (question.multi_select || choices == 1)
+                                    && text.is_none_or(|text| {
+                                        question.allow_free_text && !text.trim().is_empty()
+                                    })
+                                    && answer.selected.iter().enumerate().all(
+                                        |(index, selected)| {
+                                            (*selected as usize) < question.options.len()
+                                                && !answer.selected[..index].contains(selected)
+                                        },
+                                    )
+                            })
+                })
+        }
         _ => false,
     }
 }
@@ -3189,6 +4579,7 @@ fn prompt_message(prompt: &UiPrompt) -> &str {
         UiPrompt::Confirm { message }
         | UiPrompt::Select { message, .. }
         | UiPrompt::Input { message, .. }
+        | UiPrompt::Questions { message, .. }
         | UiPrompt::Notify { message } => message,
     }
 }
@@ -3287,16 +4678,34 @@ async fn next_progress(progress: &mut Option<mpsc::UnboundedReceiver<String>>) -
 /// once no earlier generation of the chat winds down: a process still being killed holds its native
 /// session, which this start may resume.
 async fn prepare(
-    folder: PathBuf,
+    context: super::workspace_folders::LaunchFolders,
+    agent_host: aura_protocol::agents::AgentHost,
     spec: AgentSpec,
     detector: Arc<aura_agents::Detector>,
     env: Arc<aura_process::EnvResolver>,
     progress: mpsc::UnboundedSender<String>,
     mut winding_down: watch::Receiver<usize>,
 ) -> Result<Prepared, StartFailure> {
+    let folder = context.chat.folder.clone();
     // The actor holds the sender for as long as this task can matter.
     let _ = winding_down.wait_for(|retiring| *retiring == 0).await;
-    check_folder(folder).await?;
+    if let aura_process::HostAvailability::Unavailable { reason } =
+        aura_agents::hosts::execution(&agent_host).availability()
+    {
+        return Err(StartFailure {
+            kind: ErrorKind::AgentUnavailable,
+            message: reason,
+            folder: None,
+        });
+    }
+    check_folder(folder.clone()).await?;
+    let folder_key = tokio::task::spawn_blocking(move || super::live::normalize_path(folder))
+        .await
+        .map_err(|_| StartFailure {
+            kind: ErrorKind::Internal,
+            message: "Resolving the folder failed.".into(),
+            folder: None,
+        })?;
     match detector.detect(&spec).await {
         Availability::Missing { reason } | Availability::Broken { reason } => {
             return Err(StartFailure {
@@ -3324,7 +4733,23 @@ async fn prepare(
         })?;
     let _ = progress.send("Reading your shell environment".into());
     let env = env.get().await;
-    Ok(Prepared { launch, env })
+    let folder_context = super::workspace_folders::resolve(
+        context,
+        super::workspace_folders::supported(Some(&spec), &agent_host),
+    )
+    .await
+    .map_err(|_| StartFailure {
+        kind: ErrorKind::Storage,
+        message: "Additional project folders could not be read. Retry before starting the agent."
+            .into(),
+        folder: None,
+    })?;
+    Ok(Prepared {
+        folder_context,
+        launch,
+        env,
+        folder_key,
+    })
 }
 
 /// Missing or not a folder: `FolderMissing`; refused by the OS (macOS privacy, no read
@@ -3348,5 +4773,71 @@ async fn check_folder(folder: PathBuf) -> Result<(), StartFailure> {
             ),
             folder: Some(FolderState::NotAllowed),
         }),
+    }
+}
+
+#[cfg(test)]
+mod question_validation_tests {
+    use super::fits;
+    use aura_protocol::{UiAnswer, UiPrompt, UiQuestion, UiQuestionAnswer};
+
+    #[test]
+    fn empty_or_ambiguous_question_ids_never_accept_an_answer() {
+        let question = UiQuestion {
+            id: "q1".into(),
+            header: "Header".into(),
+            question: "What next?".into(),
+            options: Vec::new(),
+            multi_select: false,
+            allow_free_text: true,
+        };
+        let answer = UiQuestionAnswer {
+            question_id: "q1".into(),
+            selected: Vec::new(),
+            text: Some("Continue".into()),
+        };
+        assert!(fits(
+            &UiPrompt::Questions {
+                message: String::new(),
+                questions: vec![question.clone()]
+            },
+            &UiAnswer::Questions {
+                answers: vec![answer.clone()]
+            }
+        ));
+        assert!(!fits(
+            &UiPrompt::Questions {
+                message: String::new(),
+                questions: Vec::new()
+            },
+            &UiAnswer::Questions {
+                answers: Vec::new()
+            }
+        ));
+        assert!(!fits(
+            &UiPrompt::Questions {
+                message: String::new(),
+                questions: vec![question.clone(), question.clone()]
+            },
+            &UiAnswer::Questions {
+                answers: vec![answer.clone(), answer]
+            }
+        ));
+        assert!(!fits(
+            &UiPrompt::Questions {
+                message: String::new(),
+                questions: vec![UiQuestion {
+                    id: String::new(),
+                    ..question
+                }]
+            },
+            &UiAnswer::Questions {
+                answers: vec![UiQuestionAnswer {
+                    question_id: String::new(),
+                    selected: Vec::new(),
+                    text: Some("Continue".into())
+                }]
+            }
+        ));
     }
 }

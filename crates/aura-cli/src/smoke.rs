@@ -167,6 +167,7 @@ pub async fn run(
         spec,
         last_number: None,
         prompts: Vec::new(),
+        queued: Vec::new(),
         native: None,
         logs: Vec::new(),
     };
@@ -187,6 +188,8 @@ struct Smoke<'a> {
     last_number: Option<u64>,
     /// The prompt ids this run started, in order.
     prompts: Vec<String>,
+    /// Prompts this smoke owns that were queued, including the interrupt sentinel.
+    queued: Vec<String>,
     /// The native session the last start opened.
     native: Option<String>,
     /// Each scenario's protocol logs.
@@ -239,6 +242,7 @@ impl Smoke<'_> {
             let failures = self.report.failures();
             self.scenario(scenario).await;
             let stopped = matches!(self.chat.stop(self.timings.stop).await, Ok(true));
+            self.cancel_owned_queue().await;
             for log in self
                 .chat
                 .logs()
@@ -429,6 +433,28 @@ impl Smoke<'_> {
     }
 
     async fn scenario(&mut self, scenario: Scenario) {
+        if scenario == Scenario::Permission {
+            match self.chat.lists().await {
+                Ok(lists)
+                    if lists.capabilities.as_ref().is_some_and(|capabilities| {
+                        !capabilities.permissions
+                            || !capabilities.autonomy_levels.contains(&Autonomy::Ask)
+                    }) =>
+                {
+                    self.report.skip(
+                        scenario.name(),
+                        "The agent does not offer an enforceable Ask permission mode; no permission prompts were sent.",
+                    );
+                    return;
+                }
+                Err(error) => {
+                    self.report
+                        .fail(scenario.name(), format!("capabilities: {error}"));
+                    return;
+                }
+                _ => {}
+            }
+        }
         let autonomy = if scenario == Scenario::Permission {
             Autonomy::Ask
         } else {
@@ -489,10 +515,10 @@ impl Smoke<'_> {
                 return None;
             }
         };
+        // A native result can precede run-idle. Keep tracking an accepted prompt while the
+        // session manager waits for that idle report, rather than abandoning queued work.
         if ack.queued {
-            self.report
-                .fail(step, "the prompt was queued instead of sent");
-            return None;
+            self.queued.push(ack.prompt_id.clone());
         }
         self.prompts.push(ack.prompt_id.clone());
         let Some(turn_id) = self
@@ -501,6 +527,7 @@ impl Smoke<'_> {
             .await
         else {
             self.report.fail(step, "the prompt's turn never started");
+            let _ = self.headless.manager.force_stop(&self.chat.chat_id).await;
             return None;
         };
         let mut cards = 0;
@@ -708,6 +735,9 @@ impl Smoke<'_> {
                 return;
             }
         };
+        if ack.queued {
+            self.queued.push(ack.prompt_id.clone());
+        }
         self.prompts.push(ack.prompt_id.clone());
         let Some(turn_id) = self
             .chat
@@ -715,6 +745,7 @@ impl Smoke<'_> {
             .await
         else {
             self.report.fail(step, "the prompt's turn never started");
+            let _ = self.headless.manager.force_stop(&self.chat.chat_id).await;
             return;
         };
         let Some(begun) = self.chat.first_delta(&turn_id, self.timings.turn).await else {
@@ -736,6 +767,9 @@ impl Smoke<'_> {
                 return;
             }
         };
+        if queued.queued {
+            self.queued.push(queued.prompt_id.clone());
+        }
         if let Err(error) = self.headless.manager.interrupt(&self.chat.chat_id).await {
             self.report
                 .fail(step, format!("the interrupt failed: {error}"));
@@ -979,21 +1013,58 @@ impl Smoke<'_> {
                 .wait_status(SessionStatus::Stopped, self.timings.stop)
                 .await;
         }
+        self.cancel_owned_queue().await;
         if self.logs.is_empty() {
             if self.demo {
                 self.report.note("The demo agent writes no protocol log.");
             }
             return;
         }
+        if self.spec.kind == DriverKind::Headless {
+            let mut lines =
+                vec!["Protocol logs (text fallback replay is not supported yet):".to_owned()];
+            lines.extend(
+                self.logs
+                    .iter()
+                    .map(|(log, name)| format!("  {name}: {}", log.display())),
+            );
+            self.report.note(lines.join("\n"));
+            return;
+        }
         let mut lines = vec!["Protocol logs, and the fixture each can become:".to_owned()];
+        let fixture_folder = if matches!(
+            self.spec.kind,
+            DriverKind::Claude | DriverKind::Codex | DriverKind::Pi
+        ) {
+            self.spec.id.to_owned()
+        } else {
+            format!("acp/{}", self.spec.id)
+        };
         for (log, name) in &self.logs {
             lines.push(format!(
-                "  aura-cli fixture {} --scenario {name} --out crates/aura-drivers/tests/fixtures/acp/{}/{name}.jsonl",
-                log.display(),
-                self.spec.id
+                "  aura-cli fixture {} --scenario {name} --out crates/aura-drivers/tests/fixtures/{fixture_folder}/{name}.jsonl",
+                log.display()
             ));
         }
         self.report.note(lines.join("\n"));
+    }
+
+    /// Called after stop has held the queue, so a timed-out smoke cannot run later on restart.
+    async fn cancel_owned_queue(&mut self) {
+        for prompt_id in std::mem::take(&mut self.queued) {
+            if let Err(error) = self
+                .headless
+                .manager
+                .cancel_queued(&self.chat.chat_id, &prompt_id)
+                .await
+                && !matches!(error, aura_core::session::SessionError::RequestNotPending)
+            {
+                self.report.fail(
+                    "end",
+                    format!("removing queued smoke prompt failed: {error}"),
+                );
+            }
+        }
     }
 }
 
@@ -1023,7 +1094,13 @@ impl Answer {
 /// session-scope ones (Hermes), the session total on a spawn's first turn and deltas after it
 /// (spec 5.5.4).
 pub fn expected_scope(spec: &AgentSpec, first_of_spawn: bool) -> UsageScope {
-    if spec.kind == DriverKind::Mock {
+    if spec.kind == DriverKind::Headless && spec.dialect == "grok-stream" {
+        return UsageScope::Turn;
+    }
+    if matches!(
+        spec.kind,
+        DriverKind::Mock | DriverKind::Claude | DriverKind::Codex | DriverKind::Pi
+    ) {
         return UsageScope::Turn;
     }
     match dialect_for(spec.dialect).prompt_usage_scope() {
@@ -1088,6 +1165,9 @@ mod tests {
 
     #[test]
     fn usage_scopes_follow_the_dialect() {
+        let claude = aura_agents::get("claude").expect("native Claude");
+        assert_eq!(expected_scope(claude, true), UsageScope::Turn);
+        assert_eq!(expected_scope(claude, false), UsageScope::Turn);
         let hermes = aura_agents::get("hermes").expect("hermes").clone();
         assert_eq!(expected_scope(&hermes, true), UsageScope::Session);
         assert_eq!(expected_scope(&hermes, false), UsageScope::Turn);
@@ -1095,6 +1175,16 @@ mod tests {
         assert_eq!(expected_scope(&codex, true), UsageScope::Turn);
         let mock = aura_agents::get("mock").expect("mock").clone();
         assert_eq!(expected_scope(&mock, true), UsageScope::Turn);
+        for first in [true, false] {
+            assert_eq!(
+                expected_scope(aura_agents::get("grok-stream").unwrap(), first),
+                UsageScope::Turn
+            );
+        }
+        assert_eq!(
+            expected_scope(aura_agents::get("agy-stream").unwrap(), true),
+            UsageScope::Session
+        );
     }
 
     #[test]

@@ -3,10 +3,11 @@ import type { UiAnswer } from "../../bindings";
 import type { RequestState } from "../../lib/chat/chatStore";
 import { questionResolutionLabel } from "../../lib/chat/present";
 import type { QuestionItem } from "../../lib/chat/transcript";
+import { QuestionGroup } from "./QuestionGroup";
 
 /**
  * An answer as `data-test-answer` carries it: `confirm:yes`, `confirm:no`, `select:<index>`,
- * `input:<text>`, or `dismissed` for none.
+ * `input:<text>`, `questions:<JSON answers>`, or `dismissed` for none.
  */
 export function answerMark(answer: UiAnswer | null): string {
   if (answer === null) return "dismissed";
@@ -17,6 +18,8 @@ export function answerMark(answer: UiAnswer | null): string {
       return `select:${answer.index}`;
     case "input":
       return `input:${answer.text}`;
+    case "questions":
+      return `questions:${JSON.stringify(answer.answers)}`;
   }
 }
 
@@ -54,7 +57,6 @@ export function QuestionCard({
         <span className="chat-block-title" data-testid="question-prompt">
           {prompt.message}
         </span>
-        <span className="chat-block-tag">Question</span>
       </div>
       {item.resolution !== null ? (
         <p className="chat-resolution" data-testid="question-resolution">
@@ -65,7 +67,7 @@ export function QuestionCard({
           This question is no longer waiting for an answer.
         </p>
       ) : prompt.type === "notify" ? null : (
-        <Answers prompt={prompt} busy={busy} onRespond={onRespond} />
+        <Answers key={item.request.request_id} prompt={prompt} busy={busy} onRespond={onRespond} />
       )}
       {request?.error ? (
         <span role="alert" className="ui-error" data-testid="question-error">
@@ -100,6 +102,8 @@ function Answers({
     </button>
   );
   switch (prompt.type) {
+    case "questions":
+      return <QuestionGroup questions={prompt.questions} busy={busy} onRespond={onRespond} />;
     case "confirm":
       return (
         <div className="ui-row">

@@ -1,6 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { noticesPlugin } from "../../.github/scripts/third-party-notices.mjs";
 
 // The Tauri CLI sets these when it runs the dev server (beforeDevCommand) or a build
 // (beforeBuildCommand). A plain `vite build` (CI's frontend step) sees neither.
@@ -22,7 +23,7 @@ export const WEBKIT_TARGET = "safari16.4";
 export const WEBVIEW2_TARGET = "chrome130";
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), noticesPlugin("desktop")],
   // Keep Rust's compile errors on screen instead of clearing them.
   clearScreen: false,
   server: {

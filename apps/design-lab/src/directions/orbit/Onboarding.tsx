@@ -158,45 +158,6 @@ function RosterRow({ agent }: { readonly agent: DiscoveredAgent }) {
   );
 }
 
-/** A preview tile for a theme: a miniature of the window (Claude's appearance tiles). */
-function ThemeTile({
-  theme,
-  label,
-  selected,
-  onSelect,
-}: {
-  readonly theme: "system" | LabTheme;
-  readonly label: string;
-  readonly selected: boolean;
-  readonly onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      className="o-theme-tile"
-      data-selected={selected ? "" : undefined}
-      onClick={onSelect}
-    >
-      <span className="o-theme-mini" data-theme-tile={theme} aria-hidden="true">
-        <span className="o-theme-mini-pane">
-          <span className="o-theme-mini-line" />
-          <span className="o-theme-mini-line" data-short="" />
-          <span className="o-theme-mini-block" />
-        </span>
-      </span>
-      <span className="o-t-meta o-w-strong o-theme-label">
-        {selected ? (
-          <span className="o-filled-check" aria-hidden="true">
-            <Check size={9} strokeWidth={3} />
-          </span>
-        ) : null}
-        {label}
-      </span>
-    </button>
-  );
-}
-
 /** The night panel's size, measured, so the globe lays out for the room it has. */
 function usePanelSize(ref: { readonly current: HTMLElement | null }) {
   const [size, setSize] = useState({ width: 864, height: 884 });
@@ -224,7 +185,6 @@ function usePanelSize(ref: { readonly current: HTMLElement | null }) {
 export function Onboarding({
   discovery,
   player,
-  theme,
 }: {
   readonly discovery: DiscoveryModel;
   readonly player: Player;
@@ -235,8 +195,6 @@ export function Onboarding({
   const nightRef = useRef<HTMLDivElement>(null);
   const size = usePanelSize(nightRef);
   const [step, setStep] = useState(0);
-  const [email, setEmail] = useState("");
-  const [themeChoice, setThemeChoice] = useState<"system" | LabTheme>(theme);
   const [motionChoice, setMotionChoice] = useState<Motion>(reduced ? "reduced" : "full");
   const [project, setProject] = useState<GlobeProject | null>(null);
   const counts = discoveryCounts(discovery);
@@ -270,7 +228,11 @@ export function Onboarding({
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== "Enter" || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.target instanceof HTMLButtonElement) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest("button, input, select, textarea, a")
+      )
+        return;
       event.preventDefault();
       advanceRef.current();
     };
@@ -298,16 +260,14 @@ export function Onboarding({
       if (counts.missing > 0) parts.push(`${counts.missing} to install`);
       return parts.join(", ");
     }
-    if (index === 1) return email.trim() ? `Sync on for ${email.trim()}` : "Local only, no account";
-    const themeName =
-      themeChoice === "system" ? "System" : themeChoice === "light" ? "Light" : "Dark";
+    if (index === 1) return "Local only, no account";
     const motionName =
       motionChoice === "full"
         ? "full motion"
         : motionChoice === "reduced"
           ? "reduced motion"
           : "no motion";
-    return `${themeName} theme · ${motionName}`;
+    return `Dark appearance · ${motionName}`;
   };
 
   const actions = (primary: string, skip: ReactNode) => (
@@ -355,67 +315,17 @@ export function Onboarding({
         return (
           <>
             <Headline first="Sync across your machines." second="Or keep auracode local." />
-            <label className="o-field">
-              <span className="o-t-meta o-w-strong o-c1">Email</span>
-              <input
-                className="o-input-box o-t-ui"
-                type="email"
-                value={email}
-                placeholder="you@example.com"
-                autoComplete="off"
-                spellCheck={false}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-              <span className="o-t-meta o-c3">
-                A 6-digit code signs you in. No password, and agents keep their own keys.
-              </span>
-            </label>
-            {actions(
-              email.trim() ? "Send code" : "Continue",
-              <button
-                type="button"
-                className="o-btn o-btn-ghost"
-                onClick={() => {
-                  setEmail("");
-                  setStep(step + 1);
-                }}
-              >
-                Skip, use auracode locally
-              </button>,
-            )}
+            <p className="o-t-ui o-c2">
+              Your projects and chats work offline. Account sign-in is unavailable in this design
+              preview.
+            </p>
+            {actions("Continue locally", null)}
           </>
         );
       case 2:
         return (
           <>
             <Headline first="Make it yours." second="Change it later in Settings." />
-            <p className="o-onb-label o-t-caps o-c3">Appearance</p>
-            <div className="o-theme-tiles">
-              {(
-                [
-                  ["system", "System"],
-                  ["light", "Light"],
-                  ["dark", "Dark"],
-                ] as const
-              ).map(([value, label]) => (
-                <ThemeTile
-                  key={value}
-                  theme={value}
-                  label={label}
-                  selected={themeChoice === value}
-                  onSelect={() => {
-                    setThemeChoice(value);
-                    const next =
-                      value === "system"
-                        ? window.matchMedia?.("(prefers-color-scheme: light)").matches
-                          ? "light"
-                          : "dark"
-                        : value;
-                    setLabParam("theme", next === "dark" ? null : next);
-                  }}
-                />
-              ))}
-            </div>
             <p className="o-onb-label o-t-caps o-c3">Motion</p>
             <div className="o-seg-strong">
               {(
@@ -508,7 +418,7 @@ export function Onboarding({
   };
 
   return (
-    <div className="o-onboarding">
+    <div className="o-onboarding orbit-theme" data-theme="dark">
       <div className="o-onb-column">
         <div className="o-onb-top">
           <span className="o-wordmark">auracode</span>
@@ -585,7 +495,7 @@ export function Onboarding({
           />
         </div>
         <p className="o-night-caption o-t-title">
-          <span className="o-night-c1">Agents run on this Mac.</span>
+          <span className="o-night-c1">Agents run on this device.</span>
           <span className="o-night-c2">auracode never sees their keys.</span>
         </p>
       </div>

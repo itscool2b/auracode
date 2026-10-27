@@ -1,0 +1,78 @@
+/*
+ * Startup failure replaces the app (visual-language.md 6.21): a black window, a centred 600px
+ * column, the agent mark in its error state, a calm title over aura-core's own words, and the data
+ * folder in a well that can be copied. Nothing here moves.
+ */
+
+.error-screen {
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 72px 24px;
+  overflow: auto;
+}
+
+.error-drag {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 52px;
+}
+
+.error-panel {
+  display: grid;
+  gap: 24px;
+  width: min(100%, 600px);
+}
+
+.error-message h1 {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-title);
+}
+
+.error-message p {
+  margin: 8px 0 0;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-prose);
+  line-height: var(--g-leading-prose);
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.error-well {
+  overflow: hidden;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-1);
+}
+
+.error-well-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 36px;
+  padding: 0 6px 0 16px;
+  border-bottom: 1px solid var(--g-line-faint);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.error-well .data-path {
+  gap: 12px;
+  padding: 12px 16px 16px;
+}
+
+.error-note {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}

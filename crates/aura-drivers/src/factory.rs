@@ -23,6 +23,10 @@ impl DriverFactory for StandardDriverFactory {
     fn create(&self, kind: DriverKind) -> Box<dyn AgentDriver> {
         match kind {
             DriverKind::Acp => Box::new(AcpDriver::new()),
+            DriverKind::Claude => Box::new(crate::claude::ClaudeDriver::new()),
+            DriverKind::Codex => Box::new(crate::codex::CodexDriver::new()),
+            DriverKind::Headless => Box::new(crate::headless::HeadlessDriver),
+            DriverKind::Pi => Box::new(crate::pi::PiDriver::new()),
             DriverKind::Mock => Box::new(MockDriver::new(MockBehavior::default())),
         }
     }
@@ -59,6 +63,8 @@ mod tests {
 
     fn setup(dialect: &str) -> SessionSetup {
         SessionSetup {
+            attachment_dir: None,
+            attachment_reader: None,
             chat_id: "chat".into(),
             agent_id: dialect.into(),
             dialect: dialect.into(),
@@ -83,6 +89,7 @@ mod tests {
                 resolved_at_ms: 0,
             }),
             resume: None,
+            native_start: Default::default(),
             autonomy: Autonomy::FullAuto,
             desired: BTreeMap::new(),
             timings: DriverTimings::STANDARD,

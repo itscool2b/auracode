@@ -67,6 +67,21 @@ describe("StickToBottom", () => {
     expect(scroller.distance).toBe(0);
   });
 
+  it("keeps its pin through virtual layout corrections, but never restores a released pin", () => {
+    scroller.scrollTop -= 300;
+    stick.acknowledgeAdjustment();
+    commit(scroller, stick);
+    expect(stick.pinned).toBe(true);
+    expect(scroller.distance).toBe(0);
+    stick.release();
+    scroller.scrollTop -= 300;
+    stick.acknowledgeAdjustment();
+    const reading = scroller.scrollTop;
+    commit(scroller, stick);
+    expect(stick.pinned).toBe(false);
+    expect(scroller.scrollTop).toBe(reading);
+  });
+
   it("keeps small upward wheel steps between 60 Hz commits (Chromium's event order)", () => {
     // Forty 8 px trackpad steps, each one under the old 32 px "still at the bottom" threshold.
     const start = scroller.scrollTop;

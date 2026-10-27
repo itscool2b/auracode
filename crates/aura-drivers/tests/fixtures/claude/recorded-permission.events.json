@@ -1,0 +1,1638 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": true
+      }
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": "bypassPermissions",
+        "auto_answer": {
+          "type": "never"
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "haiku",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default (recommended)",
+                "description": "Opus 5.5 · Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "opus",
+                "name": "Opus 5.5",
+                "description": "For complex work and everyday tasks",
+                "group": null
+              },
+              {
+                "value": "fable",
+                "name": "Fable 5.1",
+                "description": "For your toughest challenges",
+                "group": null
+              },
+              {
+                "value": "sonnet",
+                "name": "Sonnet 5.5",
+                "description": "Most efficient for simpler tasks",
+                "group": null
+              },
+              {
+                "value": "haiku",
+                "name": "Haiku 5.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-haiku-4-5-20251001",
+                "name": "Haiku 4.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-5",
+                "name": "Sonnet 5",
+                "description": "Efficient for routine tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-5",
+                "name": "Opus 5",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-fable-5",
+                "name": "Fable 5",
+                "description": "Most capable for your hardest and longest-running tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-8",
+                "name": "Opus 4.8",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-7",
+                "name": "Opus 4.7",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-6",
+                "name": "Opus 4.6",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-4-6",
+                "name": "Sonnet 4.6",
+                "description": "Efficient for routine tasks",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": null,
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "low",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "low",
+                "name": "low",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "medium",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "high",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "xhigh",
+                "name": "xhigh",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "max",
+                "name": "max",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "commands",
+      "data": [
+        {
+          "name": "clear",
+          "description": "Start a new session with empty context; previous session stays on disk (resumable with /resume)",
+          "input_hint": "[name]"
+        },
+        {
+          "name": "compact",
+          "description": "Free up context by summarizing the conversation so far",
+          "input_hint": "<optional custom summarization instructions>"
+        },
+        {
+          "name": "context",
+          "description": "Show current context usage",
+          "input_hint": null
+        },
+        {
+          "name": "model",
+          "description": "Set the AI model for Claude Code",
+          "input_hint": "<model>"
+        },
+        {
+          "name": "usage",
+          "description": "Show session cost, plan usage, and what's contributing to your limits",
+          "input_hint": null
+        }
+      ]
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "019a0000-0000-7000-8000-000000000001",
+        "agent_name": "Claude Code",
+        "agent_version": "2.1.310",
+        "capabilities": {
+          "images": true,
+          "steer": false,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": true,
+          "set_effort": true,
+          "permissions": true,
+          "plans": false,
+          "usage": true,
+          "limits": true,
+          "slash_commands": true,
+          "add_dirs": true,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "resumed"
+        },
+        "spawn_id": "01a176ab-a34b-73b2-a097-1781a15ce4f7",
+        "replay": null
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "usage_updated",
+          "context_used": null,
+          "context_size": null,
+          "cost": {
+            "amount": 0.005044590000000001,
+            "currency": "USD"
+          }
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "limits_updated",
+          "windows": [
+            {
+              "label": "5 hours",
+              "used_percent": 0.0,
+              "resets_at": null
+            },
+            {
+              "label": "7 days",
+              "used_percent": 100.0,
+              "resets_at": null
+            },
+            {
+              "label": "7 days (Fable)",
+              "used_percent": 0.0,
+              "resets_at": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "ask",
+        "native_mode": "default",
+        "auto_answer": {
+          "type": "never"
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "usage_updated",
+          "context_used": 42294,
+          "context_size": 1000000,
+          "cost": {
+            "amount": 0.005044590000000001,
+            "currency": "USD"
+          }
+        }
+      }
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "haiku",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default (recommended)",
+                "description": "Opus 5.5 · Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "opus",
+                "name": "Opus 5.5",
+                "description": "For complex work and everyday tasks",
+                "group": null
+              },
+              {
+                "value": "fable",
+                "name": "Fable 5.1",
+                "description": "For your toughest challenges",
+                "group": null
+              },
+              {
+                "value": "sonnet",
+                "name": "Sonnet 5.5",
+                "description": "Most efficient for simpler tasks",
+                "group": null
+              },
+              {
+                "value": "haiku",
+                "name": "Haiku 5.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-haiku-4-5-20251001",
+                "name": "Haiku 4.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-5",
+                "name": "Sonnet 5",
+                "description": "Efficient for routine tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-5",
+                "name": "Opus 5",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-fable-5",
+                "name": "Fable 5",
+                "description": "Most capable for your hardest and longest-running tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-8",
+                "name": "Opus 4.8",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-7",
+                "name": "Opus 4.7",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-6",
+                "name": "Opus 4.6",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-4-6",
+                "name": "Sonnet 4.6",
+                "description": "Efficient for routine tasks",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": null,
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "low",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "low",
+                "name": "low",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "medium",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "high",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "xhigh",
+                "name": "xhigh",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "max",
+                "name": "max",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_call",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "kind": "execute",
+          "title": "Bash",
+          "status": "in_progress",
+          "locations": [],
+          "raw_input": {},
+          "tool_name": "Bash",
+          "content": [],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "{\"command\": \"tou",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "{\"command\": \"touch aura-perm.tx",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "{\"command\": \"touch aura-perm.txt && ls -la aura",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "{\"command\": \"touch aura-perm.txt && ls -la aura-perm.txt",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "{\"command\": \"touch aura-perm.txt && ls -la aura-perm.txt\", \"description\": \"Create",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "{\"command\": \"touch aura-perm.txt && ls -la aura-perm.txt\", \"description\": \"Create emp",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "{\"command\": \"touch aura-perm.txt && ls -la aura-perm.txt\", \"description\": \"Create empty a",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "{\"command\": \"touch aura-perm.txt && ls -la aura-perm.txt\", \"description\": \"Create empty aura-perm.txt in",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "{\"command\": \"touch aura-perm.txt && ls -la aura-perm.txt\", \"description\": \"Create empty aura-perm.txt in current folder",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": {
+            "command": "touch aura-perm.txt && ls -la aura-perm.txt",
+            "description": "Create empty aura-perm.txt in current folder"
+          },
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": null,
+          "title": "Create empty aura-perm.txt in current folder",
+          "kind": "execute",
+          "locations": [],
+          "raw_input": {
+            "command": "touch aura-perm.txt && ls -la aura-perm.txt",
+            "description": "Create empty aura-perm.txt in current folder"
+          },
+          "tool_name": "Bash",
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "limits_updated",
+          "windows": [
+            {
+              "label": "5 hours",
+              "used_percent": 0.0,
+              "resets_at": 1793010000000
+            },
+            {
+              "label": "7 days",
+              "used_percent": 100.0,
+              "resets_at": 1793358000000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "permission",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "request": {
+          "request_id": "072873c5-94ff-4267-9cd2-7e72b63c470c",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "title": "Create empty aura-perm.txt in current folder",
+          "kind": null,
+          "raw_input": {
+            "command": "touch aura-perm.txt && ls -la aura-perm.txt",
+            "description": "Create empty aura-perm.txt in current folder"
+          },
+          "content": [],
+          "locations": [],
+          "options": [
+            {
+              "option_id": "allow",
+              "kind": "allow_once",
+              "label": "Allow once"
+            },
+            {
+              "option_id": "deny",
+              "kind": "reject_once",
+              "label": "Deny"
+            },
+            {
+              "option_id": "always:0",
+              "kind": "allow_always",
+              "label": "Always allow this rule"
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_018uoc4qdXyqMmdv3rRbHZM3",
+          "status": "failed",
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": null,
+          "tool_name": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "The user declined this request.",
+              "truncated": null
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "thought_delta",
+          "thought_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b0",
+          "text": ""
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "thought_completed",
+          "thought_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b0",
+          "duration_ms": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": "I cou"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": "ldn't create `aura-"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": "perm.txt`. The"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " sh"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": "ell command"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " to"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " create it was declined, so the"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " file do"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": "esn't exist y"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": "et. I haven't tried"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " another"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " way to create it, since that would"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " work"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " around your"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " decision. If"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " you want the"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " file created"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": ", appro"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": "ve the"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " command"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " or"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " t"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": "ell me to"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " use"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": " the Write tool inst"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1",
+          "text": "ead."
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "message_completed",
+          "message_id": "msg_011CgQHvo8B6BUPVVZ5aPmAG.b1"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "event": {
+          "type": "usage_updated",
+          "context_used": 42294,
+          "context_size": 1000000,
+          "cost": {
+            "amount": 0.01324084,
+            "currency": "USD"
+          }
+        }
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "01a176ab-ad10-70f2-ad8b-b8501f45f87d",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 4,
+          "output_tokens": 462,
+          "cache_read_tokens": 72850,
+          "cache_write_tokens": 38620,
+          "reasoning_tokens": 269,
+          "scope": "turn"
+        },
+        "error": null
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": true
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "usage_updated",
+          "context_used": 59084,
+          "context_size": 1000000,
+          "cost": {
+            "amount": 0.01324084,
+            "currency": "USD"
+          }
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "limits_updated",
+          "windows": [
+            {
+              "label": "5 hours",
+              "used_percent": 0.0,
+              "resets_at": null
+            },
+            {
+              "label": "7 days",
+              "used_percent": 100.0,
+              "resets_at": null
+            },
+            {
+              "label": "7 days (Fable)",
+              "used_percent": 0.0,
+              "resets_at": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "thought_delta",
+          "thought_id": "msg_011CgQHw74S5BhRMpz3PMjSE.b0",
+          "text": ""
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "thought_completed",
+          "thought_id": "msg_011CgQHw74S5BhRMpz3PMjSE.b0",
+          "duration_ms": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_call",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "kind": "edit",
+          "title": "Write",
+          "status": "in_progress",
+          "locations": [],
+          "raw_input": {},
+          "tool_name": "Write",
+          "content": [],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "{\"file_path\":\"<CW",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": "{\"file_path\":\"<CWD>\\\\aura-perm.txt",
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": {
+            "file_path": "<CWD>\\aura-perm.txt",
+            "content": ""
+          },
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": {
+            "file_path": "<CWD>\\aura-perm.txt",
+            "content": ""
+          },
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": {
+            "file_path": "<CWD>\\aura-perm.txt",
+            "content": ""
+          },
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": {
+            "file_path": "<CWD>\\aura-perm.txt",
+            "content": ""
+          },
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": {
+            "file_path": "<CWD>\\aura-perm.txt",
+            "content": ""
+          },
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": {
+            "file_path": "<CWD>\\aura-perm.txt",
+            "content": ""
+          },
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": {
+            "file_path": "<CWD>\\aura-perm.txt",
+            "content": ""
+          },
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": null,
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": {
+            "file_path": "<CWD>\\aura-perm.txt",
+            "content": ""
+          },
+          "tool_name": null,
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": null,
+          "title": "Write",
+          "kind": "edit",
+          "locations": [
+            {
+              "path": "<CWD>\\aura-perm.txt",
+              "line": null
+            }
+          ],
+          "raw_input": {
+            "file_path": "<CWD>\\aura-perm.txt",
+            "content": ""
+          },
+          "tool_name": "Write",
+          "content": null,
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "permission",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "request": {
+          "request_id": "c87b1baf-c174-406f-a665-778a889a3e76",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "title": "aura-perm.txt",
+          "kind": null,
+          "raw_input": {
+            "file_path": "<CWD>\\aura-perm.txt",
+            "content": ""
+          },
+          "content": [],
+          "locations": [],
+          "options": [
+            {
+              "option_id": "allow",
+              "kind": "allow_once",
+              "label": "Allow once"
+            },
+            {
+              "option_id": "deny",
+              "kind": "reject_once",
+              "label": "Deny"
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "tool_update",
+          "tool_call_id": "toolu_017ohCmA85cLbibKjwBLTY5x",
+          "status": "completed",
+          "title": null,
+          "kind": null,
+          "locations": null,
+          "raw_input": null,
+          "tool_name": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "File created successfully at: <CWD>\\aura-perm.txt (file state is current in your context — no need to Read it back)",
+              "truncated": null
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHwJXzYQCUC1EhSyvhZ.b0",
+          "text": "done"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "message_completed",
+          "message_id": "msg_011CgQHwJXzYQCUC1EhSyvhZ.b0"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "event": {
+          "type": "usage_updated",
+          "context_used": 59084,
+          "context_size": 1000000,
+          "cost": {
+            "amount": 0.01464735,
+            "currency": "USD"
+          }
+        }
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "01a176ab-c8f6-73e6-b497-e6fe8940e60e",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 4,
+          "output_tokens": 258,
+          "cache_read_tokens": 118361,
+          "cache_write_tokens": 748,
+          "reasoning_tokens": 136,
+          "scope": "turn"
+        },
+        "error": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": true
+      }
+    }
+  ],
+  "replies": [
+    {
+      "set_autonomy": "ask",
+      "reply": {
+        "ok": {
+          "requested": "ask",
+          "native_mode": "default",
+          "auto_answer": {
+            "type": "never"
+          },
+          "note": null
+        }
+      }
+    }
+  ],
+  "exit": {
+    "type": "closed"
+  }
+}

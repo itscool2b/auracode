@@ -1,9 +1,25 @@
-import { useMemo } from "react";
+import { AgentMark, CopyButton, StatusDot } from "@auracode/ui/graphite";
+import {
+  ArrowRightLeft,
+  Brain,
+  ChevronRight,
+  FileMinus,
+  FilePenLine,
+  FileText,
+  Link,
+  Search,
+  SlidersHorizontal,
+  SquareTerminal,
+  Wrench,
+} from "lucide-react";
+import { useState } from "react";
 import type { ToolContent, ToolLocation, Truncation } from "../../bindings";
 import type { BlobState } from "../../lib/chat/chatStore";
 import type { ToolDisplayStatus, ToolItem } from "../../lib/chat/transcript";
-import { diffLines } from "../../lib/diff";
 import { formatCount } from "../../lib/format";
+import { DiffBlock } from "./DiffBlock";
+import { useDisclosure } from "./DisclosureMemory";
+import { TerminalOutput } from "./TerminalOutput";
 
 /** What a block needs to page a truncated output in through `chat_blob`. */
 export interface BlobProps {
@@ -19,49 +35,190 @@ const STATUS_LABEL: Record<ToolDisplayStatus, string> = {
   stopped: "Stopped",
 };
 
+const TOOL_ICON = {
+  read: FileText,
+  edit: FilePenLine,
+  delete: FileMinus,
+  move: ArrowRightLeft,
+  search: Search,
+  execute: SquareTerminal,
+  think: Brain,
+  fetch: Link,
+  switch_mode: SlidersHorizontal,
+  other: Wrench,
+} as const;
+
+/** Words an agent leads a tool title with; what follows is the object the call acts on. */
+const VERBS = new Set([
+  "add",
+  "apply",
+  "build",
+  "call",
+  "check",
+  "copy",
+  "create",
+  "delete",
+  "download",
+  "edit",
+  "execute",
+  "fetch",
+  "find",
+  "fix",
+  "glob",
+  "grep",
+  "inspect",
+  "install",
+  "list",
+  "load",
+  "move",
+  "open",
+  "patch",
+  "read",
+  "remove",
+  "rename",
+  "replace",
+  "run",
+  "save",
+  "search",
+  "switch",
+  "test",
+  "update",
+  "upload",
+  "use",
+  "view",
+  "write",
+]);
+
+/** A shell command as agents title it: it starts like a program or a path, never like a sentence. */
+const COMMAND = /^[a-z./~][^\s]*\s/;
+
+/**
+ * How a tool row reads (6.4): the verb in sans, then the object, in mono when it is one token (a
+ * path, a pattern, an identifier) or a shell command ("Read" `Sidebar.tsx`, "Ran" `pnpm test`). A
+ * command titled by itself gets the verb of its state. Display only: the full title stays the
+ * row's tooltip.
+ */
+export function toolLabel(
+  title: string,
+  kind: ToolItem["toolKind"],
+  display: ToolDisplayStatus,
+): { readonly verb: string | null; readonly object: string; readonly literal: boolean } {
+  const text = title.trim();
+  const unwrap = (value: string) => value.replace(/^`([^`]+)`$/, "$1");
+  // "write_file: aura-perm.txt": a tool's own name and its argument.
+  const named = /^([a-z][\w.-]*):\s+(\S.*)$/.exec(text);
+  if (named?.[1] && named[2]) return { verb: named[1], object: unwrap(named[2]), literal: true };
+  const space = text.indexOf(" ");
+  const first = space > 0 ? text.slice(0, space) : "";
+  if (/^[A-Z][a-z]+$/.test(first) && VERBS.has(first.toLowerCase())) {
+    const object = unwrap(text.slice(space + 1).trim());
+    const isLiteral = !/\s/.test(object) || (kind === "execute" && /^[a-z./~]/.test(object));
+    return { verb: first, object, literal: isLiteral };
+  }
+  if (kind === "execute" && COMMAND.test(text)) {
+    const verb = display === "pending" ? "Run" : display === "in_progress" ? "Running" : "Ran";
+    return { verb, object: unwrap(text), literal: true };
+  }
+  return { verb: null, object: text, literal: false };
+}
+
 /** A tool call: title, kind, status and locations, with its output below. */
 export function ToolBlock({
   tool,
   display,
   blobs,
   onLoadBlob,
-}: { readonly tool: ToolItem; readonly display: ToolDisplayStatus } & BlobProps) {
+  agentId = "generic",
+}: {
+  readonly tool: ToolItem;
+  readonly display: ToolDisplayStatus;
+  readonly agentId?: string;
+} & BlobProps) {
+  const running = display === "pending" || display === "in_progress";
+  const Icon = TOOL_ICON[tool.toolKind];
+  const [expanded, setExpanded] = useDisclosure(tool.key, display, running || display === "failed");
+  const [outputFocused, setOutputFocused] = useState(false);
+  const open = expanded || outputFocused;
+  const title = tool.title || tool.toolName || "Tool";
+  const label = toolLabel(title, tool.toolKind, display);
   return (
     <div
-      className="chat-block"
+      className="chat-tool"
       data-kind="tool"
       data-testid="item"
       data-test-kind="tool"
       data-test-tool-kind={tool.toolKind}
       data-test-status={display}
+      onFocusCapture={(event) =>
+        setOutputFocused((event.target as Element).closest("summary") === null)
+      }
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOutputFocused(false);
+      }}
     >
-      <div className="chat-block-head">
-        <span className="chat-block-title">{tool.title || tool.toolName || "Tool"}</span>
-        <span className="chat-block-tag">{tool.toolKind.replace("_", " ")}</span>
-        <span className="chat-tool-status" data-status={display}>
-          {STATUS_LABEL[display]}
-        </span>
-      </div>
-      <Locations locations={tool.locations} />
-      {tool.content.length > 0 ? (
-        <details data-testid="tool-output">
-          <summary className="ui-muted">Output</summary>
-          <div className="chat-segment">
-            {tool.content.map((content, index) => (
-              <ToolContentView
-                // biome-ignore lint/suspicious/noArrayIndexKey: an update replaces content as a whole.
-                key={index}
-                content={content}
-                blobs={blobs}
-                onLoadBlob={onLoadBlob}
+      <details
+        data-testid="tool-output"
+        open={open}
+        onToggle={(event) => {
+          if (event.currentTarget.open !== open) setExpanded(event.currentTarget.open);
+        }}
+      >
+        <summary className="chat-tool-head" title={title}>
+          <span className="chat-gutter">
+            {running ? (
+              <AgentMark
+                agent={agentId}
+                state="tool"
+                size={16}
+                label={`Running ${tool.title || tool.toolName || "tool"}`}
               />
-            ))}
-          </div>
-        </details>
-      ) : null}
-      {tool.truncated ? (
-        <EventDetails truncation={tool.truncated} blobs={blobs} onLoadBlob={onLoadBlob} />
-      ) : null}
+            ) : display === "failed" ? (
+              <StatusDot tone="red" />
+            ) : display === "stopped" ? (
+              <StatusDot tone="neutral" />
+            ) : (
+              <Icon className="chat-tool-icon" size={14} strokeWidth={1.5} aria-hidden="true" />
+            )}
+          </span>
+          <span className="chat-tool-label">
+            {label.verb ? (
+              <>
+                <span className="chat-tool-verb">{label.verb}</span>{" "}
+              </>
+            ) : null}
+            <span className="chat-tool-object" data-literal={label.literal ? "" : undefined}>
+              {label.object}
+            </span>
+          </span>
+          <span className="chat-tool-status" data-status={display}>
+            {STATUS_LABEL[display]}
+          </span>
+          <ChevronRight className="chat-tool-chevron" size={12} aria-hidden="true" />
+        </summary>
+        <div className="chat-tool-well">
+          <Locations locations={tool.locations} />
+          {tool.content.length > 0 ? (
+            <div className="chat-segment">
+              {tool.content.map((content, index) => (
+                <ToolContentView
+                  // biome-ignore lint/suspicious/noArrayIndexKey: an update replaces content as a whole.
+                  key={index}
+                  content={content}
+                  disclosureKey={`${tool.key}:${index}`}
+                  running={running}
+                  blobs={blobs}
+                  onLoadBlob={onLoadBlob}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="ui-muted">{running ? "Waiting for output…" : "No output reported."}</p>
+          )}
+          {tool.truncated ? (
+            <EventDetails truncation={tool.truncated} blobs={blobs} onLoadBlob={onLoadBlob} />
+          ) : null}
+        </div>
+      </details>
     </div>
   );
 }
@@ -126,9 +283,15 @@ function unkeptBytes(truncation: Truncation | null, blob: BlobState | undefined)
 /** One entry of a tool's (or a card's) content: text, a diff, or terminal output. */
 export function ToolContentView({
   content,
+  disclosureKey = "output",
+  running = false,
   blobs,
   onLoadBlob,
-}: { readonly content: ToolContent } & BlobProps) {
+}: {
+  readonly content: ToolContent;
+  readonly disclosureKey?: string;
+  readonly running?: boolean;
+} & BlobProps) {
   const blob = content.truncated?.blob ? blobs.get(content.truncated.blob) : undefined;
   switch (content.type) {
     case "text": {
@@ -143,6 +306,13 @@ export function ToolContentView({
           <pre className="ui-pre" data-testid="tool-text">
             {blob?.text || content.text}
           </pre>
+          <div className="chat-output-actions">
+            <CopyButton
+              text={blob?.text || content.text}
+              label="Copy output"
+              caption="Copy output"
+            />
+          </div>
           {unkept > 0 ? (
             <p className="chat-marker">
               The remaining {formatCount(unkept)} bytes weren't kept: an output keeps its first 64
@@ -155,6 +325,10 @@ export function ToolContentView({
     }
     case "terminal": {
       const { head, between, tail } = terminalParts(content.output, content.truncated, blob);
+      const visible =
+        head === null || between === 0
+          ? (head ?? "") + tail
+          : `${head}\n[${between} bytes omitted]\n${tail}`;
       return (
         <div
           className="chat-command"
@@ -162,22 +336,27 @@ export function ToolContentView({
           data-test-type="terminal"
           data-test-truncated={String(content.truncated !== null)}
         >
-          {head === null || between === 0 ? (
-            <pre className="ui-pre">{(head ?? "") + tail}</pre>
-          ) : (
-            <>
-              <pre className="ui-pre">{head}</pre>
-              <p className="chat-marker">
-                {blob?.eof
-                  ? `${formatCount(between)} bytes in between weren't kept (an output keeps its first 64 MiB). The end of the output:`
-                  : `${formatCount(between)} bytes not loaded yet. The end of the output:`}
-              </p>
-              <pre className="ui-pre">{tail}</pre>
-            </>
-          )}
+          <TerminalOutput text={visible} running={running} disclosureKey={disclosureKey}>
+            {head === null || between === 0 ? (
+              <pre className="ui-pre">{(head ?? "") + tail}</pre>
+            ) : (
+              <>
+                <pre className="ui-pre">{head}</pre>
+                <p className="chat-marker">
+                  {blob?.eof
+                    ? `${formatCount(between)} bytes in between weren't kept (an output keeps its first 64 MiB). The end of the output:`
+                    : `${formatCount(between)} bytes not loaded yet. The end of the output:`}
+                </p>
+                <pre className="ui-pre">{tail}</pre>
+              </>
+            )}
+          </TerminalOutput>
           {content.exit_code !== null ? (
             <span className="ui-muted ui-mono">exit {content.exit_code}</span>
           ) : null}
+          <div className="chat-output-actions">
+            <CopyButton text={visible} label="Copy output" caption="Copy output" />
+          </div>
           <FullOutput truncation={content.truncated} blob={blob} onLoadBlob={onLoadBlob} />
         </div>
       );
@@ -191,6 +370,7 @@ export function ToolContentView({
           data-test-truncated={String(content.truncated !== null)}
         >
           <DiffView
+            disclosureKey={disclosureKey}
             path={content.path}
             oldText={content.old_text}
             newText={content.new_text}
@@ -206,19 +386,30 @@ export function ToolContentView({
 function fullDiff(blob: BlobState | undefined): { old: string | null; new: string } | null {
   if (!blob?.eof) return null;
   try {
-    const parsed = JSON.parse(blob.text) as { old_text?: string | null; new_text?: string };
-    return { old: parsed.old_text ?? null, new: parsed.new_text ?? "" };
+    const parsed: unknown = JSON.parse(blob.text);
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      !("new_text" in parsed) ||
+      typeof parsed.new_text !== "string"
+    )
+      return null;
+    const old = "old_text" in parsed ? parsed.old_text : null;
+    if (old !== null && typeof old !== "string") return null;
+    return { old, new: parsed.new_text };
   } catch {
     return null;
   }
 }
 
 function DiffView({
+  disclosureKey,
   path,
   oldText,
   newText,
   blob,
 }: {
+  readonly disclosureKey: string;
   readonly path: string;
   readonly oldText: string | null;
   readonly newText: string;
@@ -227,22 +418,7 @@ function DiffView({
   const loaded = fullDiff(blob);
   const before = loaded ? loaded.old : oldText;
   const after = loaded ? loaded.new : newText;
-  const diff = useMemo(() => diffLines(before, after), [before, after]);
-  return (
-    <pre className="ui-pre">
-      <span className="ui-muted">{path}</span>
-      {"\n"}
-      {diff.lines.map((line, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: diff lines are positional.
-        <span key={index} className="chat-diff-line" data-op={line.op} data-test-op={line.op}>
-          {line.op === "add" ? "+ " : line.op === "remove" ? "- " : "  "}
-          {line.text}
-          {"\n"}
-        </span>
-      ))}
-      {diff.truncated ? "[too large to diff line by line]" : null}
-    </pre>
-  );
+  return <DiffBlock path={path} oldText={before} newText={after} disclosureKey={disclosureKey} />;
 }
 
 /**

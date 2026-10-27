@@ -3,7 +3,7 @@
 //! background integrity check, running demo streams, and the launch switches.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use aura_core::device::DeviceIdentity;
@@ -40,6 +40,12 @@ pub struct AppInfo {
     pub device: Option<DeviceIdentity>,
     /// The active profile; `null` when startup failed before opening it.
     pub profile: Option<ProfileMeta>,
+    /// The selected Account profile is waiting for its app-owned local key.
+    pub profile_locked: bool,
+    /// Profile commands are temporarily unavailable while a reviewed switch is prepared.
+    pub profile_switching: bool,
+    /// Managed configuration is blocked until this explicit recovery is confirmed.
+    pub config_profile_recovery: Option<crate::profile_config::ConfigProfileRecovery>,
     /// The profile database; `null` when startup failed before opening it.
     pub db: Option<DbInfo>,
     /// The native material behind the window. `none` means the UI must paint an opaque background.
@@ -59,19 +65,26 @@ pub struct AppInfo {
 
 /// State managed by Tauri for the whole app.
 pub struct AppState {
-    info: AppInfo,
+    /// Lazy app-owned credential access. Local startup never opens an account vault.
+    pub accounts: crate::accounts::AccountService,
+    pub(crate) runtime: Mutex<ProfileRuntime>,
+    pub(crate) transition: Arc<tokio::sync::Mutex<()>>,
+    access: Arc<ProfileAccess>,
     /// The data root as a path (`info.data_dir` is its display string): the one folder the page
     /// may reveal, through `reveal_data_dir`.
     data_dir: Option<PathBuf>,
     /// The chat store (which owns the profile database and its owner lock) and the session
     /// manager on top of it. `None` when startup failed before they could start.
-    chats: Option<ChatRuntime>,
     /// The repair whose notice is still shown, until `acknowledge_recovery` succeeds.
     recovery: Mutex<Option<Recovery>>,
     /// Where quitting stands; shared with the quit and signal tasks.
     pub quit: Arc<Quit>,
     /// Each webview's current page, for the sinks of its channels.
     pub pages: Arc<Pages>,
+    pub catalog_refresh: Arc<crate::catalog_refresh::RefreshGate>,
+    /// Unlogged terminal sessions, owned by the window that explicitly opened them.
+    pub terminals: aura_core::terminal::Terminals,
+    /// Lazily loaded setup preferences, available only while this process owns the profile.
     /// The background check after a session that did not close the database. Started once the
     /// window is shown, closed at exit before the store.
     pub integrity: IntegrityCheck,
@@ -81,6 +94,63 @@ pub struct AppState {
     pub window_shown: Arc<ShowOnce>,
     /// Set by the first smoke report (or the watchdog); later ones are ignored.
     pub smoke_reported: Arc<AtomicBool>,
+}
+
+pub(crate) struct ProfileRuntime {
+    pub info: AppInfo,
+    pub chats: Option<Arc<ChatRuntime>>,
+    pub onboarding: Option<Arc<crate::onboarding::SetupService>>,
+}
+
+#[derive(Default)]
+struct ProfileAccess {
+    active: AtomicUsize,
+    changed: tokio::sync::Notify,
+    generation: AtomicU64,
+}
+/// A cached operation is valid only for the profile generation that admitted it. This carries no
+/// account identity or key. A lease, rather than this token alone, prevents an in-flight switch.
+#[derive(Clone)]
+pub struct ProfileGeneration {
+    access: Arc<ProfileAccess>,
+    generation: u64,
+}
+impl ProfileGeneration {
+    pub fn is_current(&self) -> bool {
+        self.access.generation.load(Ordering::Acquire) == self.generation
+    }
+}
+/// Keeps commands admitted to the old profile visible to a switch until their await completes.
+/// Do not clone the underlying service into a detached task; use its own reviewed task ownership.
+pub struct ProfileLease<T> {
+    value: T,
+    access: Arc<ProfileAccess>,
+    generation: u64,
+}
+impl<T> ProfileLease<T> {
+    pub fn generation(&self) -> ProfileGeneration {
+        ProfileGeneration {
+            access: self.access.clone(),
+            generation: self.generation,
+        }
+    }
+}
+impl<T> std::fmt::Debug for ProfileLease<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ProfileLease(..)")
+    }
+}
+impl<T> std::ops::Deref for ProfileLease<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.value
+    }
+}
+impl<T> Drop for ProfileLease<T> {
+    fn drop(&mut self) {
+        self.access.active.fetch_sub(1, Ordering::AcqRel);
+        self.access.changed.notify_one();
+    }
 }
 
 impl AppState {
@@ -94,8 +164,15 @@ impl AppState {
         launch: LaunchOptions,
         app_version: String,
     ) -> AppState {
+        let onboarding = chats
+            .as_ref()
+            .and(booted.profile_dir.clone())
+            .map(|dir| Arc::new(crate::onboarding::SetupService::new(dir)));
         let mut notices = booted.notices;
         notices.extend(launch.notices());
+        if crate::updater::staging() {
+            notices.push(format!("Staging build {app_version}. Updates use the staging release channel. This build is for release qualification."));
+        }
         let info = AppInfo {
             app_version,
             tauri_version: tauri::VERSION.to_string(),
@@ -107,6 +184,14 @@ impl AppState {
                 .as_ref()
                 .map(|dir| dir.display().to_string()),
             device: booted.device,
+            profile_locked: booted
+                .profile
+                .as_ref()
+                .is_some_and(|meta| meta.kind == aura_core::profile::ProfileKind::Account)
+                && chats.is_none()
+                && booted.fatal.is_none(),
+            profile_switching: false,
+            config_profile_recovery: None,
             profile: booted.profile,
             db: booted.db,
             glass,
@@ -117,12 +202,20 @@ impl AppState {
             fatal: booted.fatal,
         };
         AppState {
-            info,
+            accounts: crate::accounts::AccountService::new(booted.data_dir.clone()),
+            runtime: Mutex::new(ProfileRuntime {
+                info,
+                chats: chats.map(Arc::new),
+                onboarding,
+            }),
+            transition: Arc::new(tokio::sync::Mutex::new(())),
+            access: Arc::default(),
             data_dir: booted.data_dir,
-            chats,
             recovery: Mutex::new(booted.recovery),
             quit: Arc::default(),
             pages: Arc::default(),
+            catalog_refresh: Arc::default(),
+            terminals: Default::default(),
             integrity: IntegrityCheck::new(booted.integrity_check),
             demos: DemoSessions::default(),
             launch,
@@ -135,8 +228,15 @@ impl AppState {
     /// since read live: notices that arrived after startup (the sweep's), and the repair notice,
     /// which goes once dismissed (a reloaded page must not show it again).
     pub fn app_info(&self) -> AppInfo {
-        let mut info = self.info.clone();
-        if let Some(chats) = &self.chats {
+        let runtime = lock(&self.runtime);
+        let mut info = runtime.info.clone();
+        info.config_profile_recovery = self.data_dir.as_ref().and_then(|root| {
+            crate::profile_config::status(
+                root,
+                info.profile.as_ref().map(|profile| profile.id.as_str()),
+            )
+        });
+        if let Some(chats) = &runtime.chats {
             info.notices
                 .extend(lock(&chats.late_notices).iter().cloned());
         }
@@ -153,22 +253,119 @@ impl AppState {
     }
 
     /// The chat store and the session manager, when startup got that far.
-    pub fn chats(&self) -> Option<&ChatRuntime> {
-        self.chats.as_ref()
+    pub fn chats(&self) -> Option<Arc<ChatRuntime>> {
+        lock(&self.runtime).chats.clone()
     }
 
     /// The session manager every chat command wraps. Without one (startup failed, and the UI
     /// shows its error screen) a command answers `storage_unavailable`.
-    pub fn sessions(&self) -> Result<&SessionManager, AppError> {
-        self.chats
+    pub fn sessions(&self) -> Result<ProfileLease<SessionManager>, AppError> {
+        let runtime = lock(&self.runtime);
+        self.check_profile_access(&runtime)?;
+        let manager = runtime
+            .chats
             .as_ref()
-            .map(|chats| &chats.manager)
+            .map(|chats| chats.manager.clone())
             .ok_or_else(|| {
                 SessionError::StorageUnavailable(
-                    "auracode could not open your data when it started".into(),
+                    "Unlock or select a profile before opening chats.".into(),
                 )
-                .into()
-            })
+            })?;
+        Ok(self.lease(manager))
+    }
+
+    pub fn onboarding(
+        &self,
+    ) -> Result<ProfileLease<Arc<crate::onboarding::SetupService>>, AppError> {
+        let runtime = lock(&self.runtime);
+        self.check_profile_access(&runtime)?;
+        let service = runtime.onboarding.clone().ok_or_else(|| {
+            AppError::new(
+                AppErrorCode::StorageUnavailable,
+                "Unlock or select a profile before changing setup.",
+            )
+        })?;
+        Ok(self.lease(service))
+    }
+    pub fn account_config(
+        &self,
+    ) -> Result<ProfileLease<Arc<crate::account_config::AccountConfigServices>>, AppError> {
+        if self.quit.is_quitting() {
+            return Err(AppError::new(
+                AppErrorCode::ShuttingDown,
+                "auracode is closing.",
+            ));
+        }
+        let runtime = lock(&self.runtime);
+        self.check_profile_access(&runtime)?;
+        let service = runtime
+            .chats
+            .as_ref()
+            .and_then(|chats| chats.account_config.clone())
+            .ok_or_else(|| {
+                AppError::new(
+                    AppErrorCode::StorageUnavailable,
+                    "Open an unlocked Account profile to sync configuration.",
+                )
+            })?;
+        Ok(self.lease(service))
+    }
+    fn check_profile_access(&self, runtime: &ProfileRuntime) -> Result<(), AppError> {
+        if self.data_dir.as_ref().is_some_and(|root| {
+            crate::profile_config::status(
+                root,
+                runtime
+                    .info
+                    .profile
+                    .as_ref()
+                    .map(|profile| profile.id.as_str()),
+            )
+            .is_some()
+        }) {
+            Err(crate::profile_config::error())
+        } else if runtime.info.profile_switching {
+            Err(AppError::new(
+                AppErrorCode::StorageUnavailable,
+                "Wait for the profile switch to finish.",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+    fn lease<T>(&self, value: T) -> ProfileLease<T> {
+        self.access.active.fetch_add(1, Ordering::AcqRel);
+        ProfileLease {
+            value,
+            access: self.access.clone(),
+            generation: self.access.generation.load(Ordering::Acquire),
+        }
+    }
+    pub(crate) async fn wait_profile_commands(&self) {
+        loop {
+            let changed = self.access.changed.notified();
+            if self.access.active.load(Ordering::Acquire) == 0 {
+                return;
+            }
+            changed.await;
+        }
+    }
+    pub(crate) fn install_profile(
+        &self,
+        booted: Booted,
+        chats: Arc<ChatRuntime>,
+        onboarding: Arc<crate::onboarding::SetupService>,
+    ) {
+        let mut runtime = lock(&self.runtime);
+        self.access.generation.fetch_add(1, Ordering::AcqRel);
+        runtime.info.profile = booted.profile;
+        runtime.info.db = booted.db;
+        runtime.info.profile_locked = false;
+        runtime.info.fatal = None;
+        runtime.info.notices = booted.notices;
+        runtime.info.notices.extend(self.launch.notices());
+        runtime.chats = Some(chats);
+        runtime.onboarding = Some(onboarding);
+        *lock(&self.recovery) = booted.recovery;
     }
 
     /// Dismisses the repair notice for good: aura-core removes the repair's record (keeping the
@@ -180,7 +377,7 @@ impl AppState {
         let Some(pending) = lock(&self.recovery).clone() else {
             return Ok(());
         };
-        let Some(chats) = &self.chats else {
+        let Some(chats) = self.chats() else {
             return Err(AppError::new(
                 AppErrorCode::AcknowledgeFailed,
                 "Could not dismiss the notice: the database is closed.",
@@ -220,11 +417,12 @@ impl AppState {
     /// connection folds SQLite's write-ahead log back into the file; a log left behind tells the
     /// next launch this one did not end cleanly.
     pub fn at_exit(&self) {
+        self.terminals.stop_all();
         if self.integrity.close() {
             tracing::info!("the integrity check is still running; it ends with the process");
         }
-        if let Some(chats) = &self.chats {
-            sessions::exit_last_resort(&self.quit, chats);
+        if let Some(chats) = self.chats() {
+            sessions::exit_last_resort(&self.quit, &chats);
         }
         self.demos.cancel_all();
     }

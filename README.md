@@ -2,10 +2,10 @@
 
 One beautiful home for all your coding agents.
 
-auracode is a desktop app for macOS, Windows, and Linux that drives the coding agents you already use
+auracode is a desktop app for macOS and Windows that drives the coding agents you already use
 (Claude Code, Codex, Pi, Antigravity, Cursor, Grok Build, OpenCode, Hermes, and any ACP-compatible agent)
-through their real harnesses, rendered in one fast, glassy chat interface. Projects on the left, chats inside
-projects, switch agents and models mid-chat, run several at once.
+through their real harnesses, rendered in one dark-only Graphite chat interface. Projects on the left, chats
+inside projects, switch agents and models mid-chat, run several at once.
 
 - No login needed for the app. Agents are detected automatically, with their versions, sign-in status, and
   available updates.
@@ -14,11 +14,32 @@ projects, switch agents and models mid-chat, run several at once.
 
 ## Status
 
-Early development. The full plan, decisions, and milestones live in [docs/plan.md](docs/plan.md).
+The integrated product is in development and final acceptance is pending. The full plan and decisions
+live in [docs/plan.md](docs/plan.md); [docs/progress.md](docs/progress.md) records implementation and
+verification evidence. Windows and macOS are the current targets. Linux and WSL are deferred.
+
+Backend and cloud services are Rust-first. The selected cloud architecture is Rust Workers, D1, R2
+and Cloudflare Email Service. The website is published at [auracode.si](https://auracode.si) and its
+isolated preview;
+the Rust API is available only in preview. Production API resources are prepared, but public API
+routing remains closed and accounts and downloads are not enabled. Real email/device acceptance
+remains pending. Production account storage remains empty.
+React/TypeScript handles interfaces. Optional local AGENTS.md and CLAUDE.md files are ignored by
+Git. When present, the lint gate requires both files to be identical; a clean checkout needs neither.
+Public installer signing is deferred at the owner's request. The repository remains private while
+the open-source license and publication audit are being discussed. No license change is implied.
+
+Current source includes native agent drivers, the dark Graphite workspace, onboarding, project and Git
+controls, configuration Library, encrypted account sync, local import and readable export. Account
+recovery, explicit passphrase storage, reset sync, device removal and portable folder resolution are
+implemented with focused verification. Final integrated and native acceptance remain pending. The
+milestone notes below describe the earlier merged foundation, not the current branch's full
+implementation. Release requirements and the deliberate final verification batch are in
+[docs/releases.md](docs/releases.md).
 
 ### M0: scaffold and spikes
 
-Built and pushed on the `m0-scaffold` branch, not merged yet.
+Merged into main.
 
 Done:
 
@@ -53,12 +74,13 @@ Pending, each waiting on the repository owner:
 
 ### M1a: sessions, processes, the ACP client and the bare chat UI
 
-Built on the `m1a-core-acp` branch from [its spec](docs/design/m1a.md): agent processes and their
+Merged into main from the `m1a-core-acp` branch, following [its spec](docs/design/m1a.md): agent processes and their
 environment, the session manager and its store, the ACP driver, the chat commands and channels, a bare
 chat UI styled through tokens, and `aura-cli`. Verified against real agents on this Mac (spec 10.6):
 Hermes, Claude Code through claude-agent-acp and Codex through codex-acp each pass the free probes, the
-six paid scenarios and a chat through the UI, with recorded fixtures replayed in CI. The visual
-language the UI moves to next is [Orbit](docs/design/visual-language.md), prototyped in the Design Lab.
+six paid scenarios and a chat through the UI, with recorded fixtures replayed in CI. That M1a
+milestone prototyped the Orbit language in the Design Lab; the current language is
+[Graphite](docs/design/visual-language.md), which replaced Orbit on 2026-10-26.
 
 ## Layout
 
@@ -71,22 +93,22 @@ crates/aura-drivers/    the driver contract, frame batching, the scripted mock a
 crates/aura-cli/        dev CLI: probes and smoke-tests agents headlessly, records and replays fixtures
 apps/desktop/           Tauri v2 app: Rust shell in src-tauri/, React UI in src/
 apps/design-lab/        M1a Design Lab: visual directions rendered from a recorded chat (see its README)
-packages/ui/            Aura design system: tokens, fonts, glass, motion, Orb, AuraField
+packages/ui/            shared design system: Graphite tokens, components and marks (Orbit kept for the lab)
 docs/                   plan and spike write-ups; spike code sits next to its write-up in docs/spikes/,
                         and docs/spikes/doc-check/ tests the write-ups against the code they cite
 .github/workflows/      CI checks and unsigned desktop bundles
 .github/scripts/        the scripts those workflows run (smoke run, spike staging, checks) and their tests
 ```
 
-Planned, not created yet:
+Cloud application components (resource inventory already exists in infra/README.md):
 
 ```
 crates/aura-sync/       M6, M7, M9  API client, merge engines, end-to-end encryption
 crates/aura-config/     M8          per-agent config adapters for the Config Library
 apps/web/               M6          auracode.si (React Router 7 on Cloudflare Workers)
-services/api/           M6          account and sync API (Cloudflare Workers, Neon Postgres)
+services/api/           M6          Rust account and sync API (Cloudflare Workers, D1)
 packages/api-types/     M6          TypeScript types generated from aura-protocol for the app, site, API
-infra/                  M5, M6      release scripts, Wrangler configs, Neon migrations
+infra/                  M5, M6      release scripts, Wrangler configs, D1 migrations
 ```
 
 ## Development
@@ -104,15 +126,8 @@ infra/                  M5, M6      release scripts, Wrangler configs, Neon migr
   `pnpm-workspace.yaml`.
 - **Tauri's system dependencies** ([details](https://v2.tauri.app/start/prerequisites/)):
   - macOS: Xcode Command Line Tools (`xcode-select --install`).
-  - Windows: Microsoft C++ Build Tools ("Desktop development with C++") and the MSVC Rust toolchain
-    (rustup's default on Windows). WebView2 is preinstalled on Windows 10 (version 1803 and later) and
-    Windows 11.
-  - Linux (Debian, Ubuntu): the same packages CI installs:
-
-    ```sh
-    sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev \
-      libayatana-appindicator3-dev librsvg2-dev
-    ```
+  - Windows: Microsoft C++ Build Tools ("Desktop development with C++"), the MSVC Rust toolchain
+    (rustup's default on Windows), and WebView2. The installer bootstraps a missing WebView2 runtime.
 
 ### Run
 
@@ -157,8 +172,9 @@ while the app runs on it. `aura-cli help` lists every option; `RUST_LOG` shows i
 
 ### Checks
 
-CI runs these on Linux and Windows for every pull request and every push to a milestone branch, and adds
-macOS for `main` (see below). To run them locally, from the repository root:
+CI runs only when deliberately dispatched for an integration checkpoint or final verification. The
+active matrix is Windows and macOS. Routine commits and pushes do not trigger CI. To run focused
+checks locally, from the repository root:
 
 ```sh
 pnpm check                      # pnpm lint, pnpm typecheck, pnpm test (Vitest)
@@ -182,18 +198,11 @@ pnpm --filter @auracode/desktop tauri build --debug --no-bundle
 bash .github/scripts/run-smoke.sh target/debug/auracode
 ```
 
-`.github/workflows/ci.yml` runs all of these (the doc check in the lint job, the
-frontend build inside the smoke build), plus the render-power suite's tests, on Windows under both
-Windows PowerShell 5.1 and PowerShell 7. Pull requests and pushes to milestone branches (`m0-scaffold`,
-...) run on Linux and Windows. A branch's pushes skip while its open pull request is one GitHub can
-merge, since the pull request's runs cover them; during a merge conflict GitHub runs no pull request
-workflow, so the pushes run CI themselves. Pushes to `main` and manual runs add macOS. A weekly run on Mondays repeats the rust
-job on Linux and clippy on Windows; macOS never runs on a schedule. Biome, the typecheck, Vitest,
-`cargo fmt`, the doc check, the CI script checks, and the claude-control unit tests run on Linux only,
-and the spawning spike and the smoke runs skip macOS.
-`.github/workflows/build.yml` builds unsigned installers for pushes to `main`, nightly when nothing
-has built `main`'s newest commit yet (one nightly try per commit), on demand, and for milestone-branch
-pushes whose newest commit message contains `[bundle]` (Windows and Linux only).
+`.github/workflows/ci.yml` includes Rust and native smoke checks on Windows/macOS, the Windows
+PowerShell suites, frontend tests, compiled Rust Worker tests, and Chromium/WebKit browser gates.
+Enable encrypted-storage verification for the final run. `.github/workflows/build.yml` is an
+explicit unsigned Windows/macOS installer qualification workflow. Neither a commit message nor a
+tag publishes a release. Signing, hardware acceptance and distribution follow [docs/releases.md](docs/releases.md).
 
 - Biome is the only linter and formatter outside Rust (there is no ESLint or Prettier): `pnpm lint`
   checks, `pnpm format` rewrites. It covers TypeScript, CSS, JSON, and YAML. It does not format Markdown

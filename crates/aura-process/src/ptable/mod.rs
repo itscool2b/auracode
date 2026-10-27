@@ -14,7 +14,7 @@ mod macos;
 
 #[cfg(unix)]
 use std::collections::HashSet;
-#[cfg(unix)]
+#[cfg(any(unix, test))]
 use std::io;
 
 use serde::{Deserialize, Serialize};
@@ -207,18 +207,78 @@ where
     }
 }
 
+/// Final confirmation retains unreadable identities, which never authorize a signal.
+#[cfg(unix)]
+pub(crate) fn not_confirmed_gone<'a>(
+    processes: impl IntoIterator<Item = (u32, &'a StartTime)>,
+) -> Vec<(u32, StartTime)> {
+    retain_unconfirmed(processes, |pid| {
+        #[cfg(target_os = "linux")]
+        {
+            linux::checked_running_start(pid)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            macos::checked_running_start(pid)
+        }
+    })
+}
+
+#[cfg(any(unix, test))]
+fn retain_unconfirmed<'a>(
+    processes: impl IntoIterator<Item = (u32, &'a StartTime)>,
+    mut observe: impl FnMut(u32) -> io::Result<Option<StartTime>>,
+) -> Vec<(u32, StartTime)> {
+    processes
+        .into_iter()
+        .filter_map(|(pid, expected)| {
+            let retain = match observe(pid) {
+                Ok(None) => false,
+                Ok(Some(found)) => *expected == StartTime::Unknown || found == *expected,
+                Err(_) => true,
+            };
+            retain.then(|| (pid, expected.clone()))
+        })
+        .collect()
+}
+
+/// A missing row is conclusive only when the kernel also reports no such pid.
+#[cfg(unix)]
+pub(super) fn confirm_absent(pid: u32) -> io::Result<Option<StartTime>> {
+    let raw = i32::try_from(pid)
+        .ok()
+        .filter(|pid| *pid > 0)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid process id"))?;
+    match nix::sys::signal::kill(nix::unistd::Pid::from_raw(raw), None) {
+        Err(nix::errno::Errno::ESRCH) => Ok(None),
+        _ => Err(io::Error::other("process identity could not be confirmed")),
+    }
+}
+
+/// An unreadable process table is an error, never an empty group.
+#[cfg(unix)]
+pub(crate) fn checked_group_members(pgid: u32) -> io::Result<Vec<u32>> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::checked_group_members(pgid)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        macos::checked_group_members(pgid)
+    }
+}
+
 /// Whether a process that is not a zombie is in group `pgid` (Linux, from `/proc`; elsewhere a
 /// group probe answers this).
 #[cfg(unix)]
 pub(crate) fn group_has_live_member(pgid: u32) -> bool {
     #[cfg(target_os = "linux")]
     {
-        linux::group_has_live_member(pgid)
+        linux::checked_group_members(pgid).map_or(true, |members| !members.is_empty())
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = pgid;
-        true
+        macos::checked_group_members(pgid).map_or(true, |members| !members.is_empty())
     }
 }
 
@@ -279,6 +339,24 @@ pub(crate) fn start_epoch(start: &StartTime) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_identity_reads_remain_recoverable_but_recycled_pids_do_not() {
+        let known = StartTime::MacLstart("old".into());
+        let retained = retain_unconfirmed(
+            [(1, &known), (2, &known), (3, &known), (4, &known)],
+            |pid| match pid {
+                1 => Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "unreadable",
+                )),
+                2 => Ok(None),
+                3 => Ok(Some(StartTime::MacLstart("replacement".into()))),
+                _ => Ok(Some(known.clone())),
+            },
+        );
+        assert_eq!(retained, [(1, known.clone()), (4, known)]);
+    }
 
     fn proc(pid: u32, ppid: u32, pgid: u32, argv: &[&str]) -> ProcInfo {
         ProcInfo {

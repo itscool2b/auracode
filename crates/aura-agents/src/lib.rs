@@ -8,17 +8,26 @@
 //!   first time ([`Detector::prepare_launch`]). Other crates' tests use [`Detector::fixed`], whose
 //!   [`FixedAgent`]s answer as given.
 //!
-//! M1a knows Hermes, the Claude and Codex ACP adapters, and the built-in demo agent. Detection never
-//! installs and never runs an adapter; the install is its own step, with its own timeout and the
-//! user's consent (creating the chat after the download note).
+//! The catalog includes native Claude, Hermes, the Claude and Codex ACP adapters, and the demo agent.
+//! Detection never installs or runs an adapter. Installation has its own timeout and the user's
+//! consent (creating the chat after the download note).
 //!
 //! [`Availability`]: aura_protocol::session::Availability
 
+mod candidates;
 pub mod catalog;
+pub mod config_vendor;
 mod detect;
+pub mod hosts;
 mod install;
+pub mod installation;
+pub mod installer;
 mod launch;
+pub mod maintenance;
+mod npm_entry;
+mod preferences;
 mod probe;
+pub mod releases;
 mod shared;
 
 use std::time::Duration;

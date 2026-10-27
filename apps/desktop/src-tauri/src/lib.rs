@@ -17,21 +17,52 @@
 //! store commits and closes, and the registry file goes; then the app exits with the code it was
 //! asked for. `RunEvent::Exit` is the synchronous last resort ([`state::AppState::at_exit`]).
 
+pub mod account_config;
+pub mod account_preservation_commands;
+mod account_removal;
+pub mod account_sync;
+pub mod accounts;
+pub mod agent_installation_commands;
 pub mod bindings;
 pub mod boot;
+pub mod catalog_refresh;
+pub mod changes_commands;
+pub mod chat_export;
+pub mod clone_commands;
 pub mod commands;
+pub mod composer_commands;
+pub mod config_library;
+pub mod config_sync;
+pub mod config_vendor;
+pub mod conversation_commands;
+pub mod deep_links;
 pub mod demo;
 pub mod error;
+pub mod folder_resolution_commands;
+pub mod git_commands;
 pub mod glass;
 pub mod integrity;
 pub mod launch;
+pub mod local_import_commands;
+pub mod native_shell;
+pub mod onboarding;
 pub mod os;
+pub mod profile_commands;
+pub mod profile_config;
+pub mod project_tools;
+pub mod repository_publication_commands;
 pub mod reveal;
+pub mod search_commands;
 pub mod sessions;
 pub mod smoke;
 pub mod state;
 mod sync;
+pub mod terminal;
+pub mod updater;
 pub mod window;
+pub mod workspace_commands;
+pub mod workspace_removal_commands;
+pub mod worktree_setup_commands;
 
 #[cfg(test)]
 mod config_checks;
@@ -87,6 +118,10 @@ pub fn run() {
             .menu(macos::app_menu)
             .on_menu_event(macos::on_menu_event);
     }
+    #[cfg(any(windows, target_os = "macos"))]
+    {
+        builder = builder.plugin(tauri_plugin_notification::init());
+    }
     let app = builder
         .plugin(
             tauri_plugin_window_state::Builder::new()
@@ -94,9 +129,13 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_deep_link::init())
+        .manage(deep_links::SignInLinks::default())
         // The folder picker and the quit question, called from Rust only: the page has no dialog
         // permission (capabilities/default.json).
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::Updates::default())
         .on_page_load(on_page_load)
         .invoke_handler(commands.invoke_handler())
         .setup(move |app| {
@@ -122,6 +161,8 @@ pub fn run() {
 /// screen (`boot`), and a window that cannot be created at all is logged and ends the app with
 /// [`STARTUP_FAILED`].
 fn setup(app: &mut tauri::App, launch: LaunchOptions) {
+    // Product appearance is always dark, including native menus and macOS materials.
+    app.set_theme(Some(tauri::Theme::Dark));
     if let Some(Err(error)) = &launch.smoke {
         // Automation is waiting for a result: say why no scenario runs, and with
         // AURACODE_SMOKE_EXIT end here, before any data opens or any agent starts.
@@ -159,11 +200,26 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     // Tauri's setup hook runs outside any Tokio context, so everything that spawns gets the handle.
     let rt = tauri::async_runtime::handle().inner().clone();
     let chats = sessions::start_chats(&mut booted, &version, &rt, sessions::Outside::real);
+    let accept_sign_in_links = launch.single_instance();
     let state = AppState::new(booted, chats, &os, glass, launch, version);
     let shown = Arc::clone(&state.window_shown);
     let reported = Arc::clone(&state.smoke_reported);
     let quit = Arc::clone(&state.quit);
     app.manage(state);
+    #[cfg(windows)]
+    app.manage(window::WebviewVisibility::default());
+    app.manage(Arc::new(config_library::LibraryService::default()));
+    app.manage(Arc::new(config_vendor::VendorService::default()));
+    app.manage(Arc::new(config_sync::ConfigSyncService::default()));
+    app.manage(Arc::new(aura_core::cloning::Clones::default()));
+    native_shell::setup(app.handle());
+    if accept_sign_in_links {
+        deep_links::setup(app.handle());
+    }
+    let account_app = app.handle().clone();
+    rt.spawn(async move {
+        profile_commands::restore_selected(account_app);
+    });
 
     #[cfg(unix)]
     {
@@ -245,6 +301,13 @@ fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
     };
     let chats = state.chats();
     sessions::page_load(&state.pages, webview.label(), payload.event(), |owner| {
+        state.terminals.drop_owner(owner);
+        if let Some(vendor) = webview.try_state::<Arc<config_vendor::VendorService>>() {
+            vendor.drop_owner(owner);
+        }
+        if let Some(clones) = webview.try_state::<Arc<aura_core::cloning::Clones>>() {
+            clones.drop_owner(owner);
+        }
         if let Some(chats) = chats {
             chats.manager.drop_owner(owner);
         }
@@ -253,14 +316,36 @@ fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
 
 fn on_event(app: &tauri::AppHandle, event: RunEvent) {
     match event {
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen {
+            has_visible_windows: false,
+            ..
+        } => window::focus_main(app),
         RunEvent::ExitRequested { code, api, .. } => on_exit_requested(app, code, &api),
-        // Closing the window quits (M1a has no tray), through the quit flow while the window
-        // still exists, so keeping auracode open can show it again.
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::Focused(true),
+            ..
+        } if label == window::MAIN_WINDOW => {
+            window::sync_webview_visibility(app);
+            account_sync::trigger(app);
+            catalog_refresh::on_focus(app);
+        }
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::Resized(_) | WindowEvent::Focused(_),
+            ..
+        } if label == window::MAIN_WINDOW => window::sync_webview_visibility(app),
+        // Closing retains sessions in the tray. If tray setup failed, use the safe quit path.
         RunEvent::WindowEvent {
             label,
             event: WindowEvent::CloseRequested { api, .. },
             ..
         } if label == window::MAIN_WINDOW => {
+            if native_shell::close_to_tray(app) {
+                api.prevent_close();
+                return;
+            }
             if let Some(state) = app.try_state::<AppState>()
                 && state.chats().is_some()
                 && !state.quit.is_done()
@@ -270,6 +355,12 @@ fn on_event(app: &tauri::AppHandle, event: RunEvent) {
             }
         }
         RunEvent::Exit => {
+            if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
+                clones.cancel_all();
+            }
+            if let Some(shell) = app.try_state::<Arc<native_shell::NativeShell>>() {
+                shell.shutdown();
+            }
             if let Some(state) = app.try_state::<AppState>() {
                 state.at_exit();
             }
@@ -284,7 +375,7 @@ fn on_exit_requested(app: &tauri::AppHandle, code: Option<i32>, api: &tauri::Exi
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    if state.chats().is_none() {
+    if state.chats().is_none() && !state.app_info().profile_switching {
         // Startup failed before the chats started: there is nothing to stop.
         return;
     }
@@ -293,6 +384,10 @@ fn on_exit_requested(app: &tauri::AppHandle, code: Option<i32>, api: &tauri::Exi
         ExitRequest::Wait => api.prevent_exit(),
         ExitRequest::StartQuit => {
             api.prevent_exit();
+            state.terminals.close_non_project();
+            if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
+                clones.cancel_all();
+            }
             // The last window closing asks without a code; that is a normal quit.
             let code = code.unwrap_or(0);
             let app = app.clone();
@@ -317,9 +412,18 @@ async fn quit(app: tauri::AppHandle, code: i32) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
+    let _transition = state.transition.lock().await;
     if let Some(chats) = state.chats() {
-        let host = AppQuitHost { app: &app, chats };
+        let host = AppQuitHost {
+            app: &app,
+            chats: &chats,
+        };
         sessions::run_quit(&state.quit, &host, code).await;
+    } else {
+        // A pending unlock stopped before publishing a runtime. The transition is finished and
+        // there is no owned store left to drain.
+        state.quit.abandon();
+        app.exit(code);
     }
 }
 

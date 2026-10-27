@@ -1,0 +1,61 @@
+/* Project terminal and editor dialog on the Graphite dialog shell. */
+.project-tools-dialog {
+  width: min(600px, calc(100vw - 32px));
+  padding: 0;
+}
+
+.project-tools-dialog > header {
+  margin: 0;
+  padding: 20px 24px 16px;
+}
+
+.project-tools-body {
+  display: grid;
+  gap: 20px;
+  max-height: calc(100dvh - 160px);
+  padding: 0 24px 24px;
+  overflow: auto;
+}
+
+.project-tools-body section {
+  display: grid;
+  gap: 10px;
+}
+
+.project-tools-body h3,
+.project-tools-body p {
+  margin: 0;
+}
+
+.project-tools-body p:not(.ui-error) {
+  color: var(--ui-text-secondary);
+}
+
+.project-tools-body h3 {
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.project-tools-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-tools-path,
+.project-terminal-review code {
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  overflow-wrap: anywhere;
+}
+
+.project-terminal-review {
+  padding: 0 22px 12px;
+  color: var(--ui-text-secondary);
+}
+
+.project-terminal-review p {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}

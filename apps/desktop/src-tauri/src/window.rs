@@ -20,6 +20,77 @@ use tauri_plugin_window_state::StateFlags;
 use crate::error::{AppError, AppErrorCode};
 use crate::glass::GlassPlan;
 use crate::state::AppState;
+#[cfg(any(windows, test))]
+use crate::sync::lock;
+
+/// Last successful WebView2 visibility change. Window visibility alone does not update the
+/// controller's IsVisible flag. Failed transitions remain retryable on the next native event.
+#[derive(Default)]
+#[cfg(any(windows, test))]
+pub struct WebviewVisibility(std::sync::Mutex<Option<bool>>);
+
+#[cfg(any(windows, test))]
+impl WebviewVisibility {
+    fn apply<E>(&self, visible: bool, set: impl FnOnce(bool) -> Result<(), E>) -> Result<(), E> {
+        let mut current = lock(&self.0);
+        if *current != Some(visible) {
+            set(visible)?;
+            *current = Some(visible);
+        }
+        Ok(())
+    }
+}
+
+/// Keep native window controls and the taskbar alive while hiding only the rendering webview.
+/// Session actors, persistence and notifications run in Rust and do not depend on webview timers.
+pub fn sync_webview_visibility(app: &AppHandle) {
+    #[cfg(windows)]
+    {
+        let Some(state) = app.try_state::<AppState>() else {
+            return;
+        };
+        if state.launch.is_smoke() || !state.window_shown.is_claimed() {
+            return;
+        }
+        let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
+            return;
+        };
+        let visible = match (window.is_visible(), window.is_minimized()) {
+            (Ok(visible), Ok(minimized)) => visible && !minimized,
+            _ => return,
+        };
+        set_webview_visible(app, visible);
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
+pub fn set_webview_visible(app: &AppHandle, visible: bool) {
+    #[cfg(windows)]
+    {
+        if app
+            .try_state::<AppState>()
+            .is_some_and(|state| state.launch.is_smoke())
+        {
+            return;
+        }
+        let (Some(window), Some(state)) = (
+            app.get_webview_window(MAIN_WINDOW),
+            app.try_state::<WebviewVisibility>(),
+        ) else {
+            return;
+        };
+        let view: &tauri::Webview = window.as_ref();
+        if let Err(error) = state.apply(
+            visible,
+            |visible| if visible { view.show() } else { view.hide() },
+        ) {
+            tracing::warn!(%error, visible, "could not update webview visibility");
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = (app, visible);
+}
 
 /// Label of the one window M0 has.
 pub const MAIN_WINDOW: &str = "main";
@@ -27,8 +98,8 @@ pub const MAIN_WINDOW: &str = "main";
 /// How long the page gets to report its first paint before the window is shown regardless.
 pub const READY_FALLBACK: Duration = Duration::from_secs(3);
 
-/// `--aura-base` from tokens.css, behind opaque windows (and the webview before it paints).
-pub const BASE_COLOR: Color = Color(7, 7, 10, 255);
+/// Graphite's `--g-bg` (pure black), behind opaque windows (and the webview before it paints).
+pub const BASE_COLOR: Color = Color(0, 0, 0, 255);
 
 /// What the window-state plugin restores: size, position, maximized, fullscreen. Never visibility
 /// (that would show the window before first paint) and never decorations (code owns the chrome).
@@ -87,10 +158,14 @@ pub fn create_main(
     let handle = app.handle().clone();
 
     let mut builder = WebviewWindowBuilder::from_config(app.handle(), &config)?
+        .theme(Some(tauri::Theme::Dark))
         .visible(false)
         .transparent(plan.transparent)
         .on_navigation(move |url| {
-            let allowed = is_app_url(url, origin, dev_url.as_ref());
+            // Wry sends child-frame navigations through this callback on macOS. These exact
+            // verification documents stay remote: they receive no native command capabilities.
+            let allowed = is_app_url(url, origin, dev_url.as_ref())
+                || (cfg!(target_os = "macos") && is_verification_document(url));
             if !allowed {
                 leave_for_browser(&handle, url);
             }
@@ -130,7 +205,36 @@ pub fn create_main(
         builder = builder.no_redirection_bitmap(plan.transparent);
     }
 
+    #[cfg(all(windows, debug_assertions))]
+    if let Some(arguments) = automation_browser_args() {
+        builder = builder.additional_browser_args(&arguments);
+    }
+
     Ok(builder.build()?)
+}
+
+/// The switches wry gives every WebView2 environment unless the app sets its own.
+#[cfg(all(windows, debug_assertions))]
+const WRY_BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required";
+
+/// Edge WebDriver enables remote debugging through `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`, but
+/// WebView2 ignores that variable once an app passes its own arguments, and wry always does. Only
+/// debug builds launched for WebDriver automation keep wry's switches and add the driver's, so the
+/// external Windows gate can attach. Release builds never read the variable.
+#[cfg(all(windows, debug_assertions))]
+fn automation_browser_args() -> Option<String> {
+    automation_args(
+        std::env::var("TAURI_WEBVIEW_AUTOMATION").ok().as_deref(),
+        std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS")
+            .ok()
+            .as_deref(),
+    )
+}
+
+#[cfg(all(windows, debug_assertions))]
+fn automation_args(automation: Option<&str>, driver: Option<&str>) -> Option<String> {
+    let driver = driver.map(str::trim).filter(|args| !args.is_empty())?;
+    (automation == Some("true")).then(|| format!("{WRY_BROWSER_ARGS} {driver}"))
 }
 
 /// Shows and focuses the main window the first time it is called (later calls do nothing, so a
@@ -178,6 +282,7 @@ pub fn show_and_focus(app: &AppHandle) -> Result<(), AppError> {
     let unavailable =
         |error: tauri::Error| AppError::new(AppErrorCode::WindowUnavailable, error.to_string());
     window.show().map_err(unavailable)?;
+    set_webview_visible(app, true);
     // On screen now, even if focusing fails below.
     if let Some(state) = app.try_state::<AppState>() {
         state.integrity.window_shown();
@@ -265,6 +370,24 @@ fn same_origin(a: &Url, b: &Url) -> bool {
         && a.port_or_known_default() == b.port_or_known_default()
 }
 
+fn is_verification_document(url: &Url) -> bool {
+    if url.scheme() != "https"
+        || url.port_or_known_default() != Some(443)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+    {
+        return false;
+    }
+    match url.host_str() {
+        Some("auracode.si" | "preview.auracode.si") => {
+            url.path() == "/verify-device" && url.query().is_none()
+        }
+        Some("challenges.cloudflare.com") => url.path().starts_with("/cdn-cgi/challenge-platform/"),
+        _ => false,
+    }
+}
+
 /// A blocked navigation to the web opens in the browser instead; anything else (`file:`, custom
 /// schemes) is only logged.
 fn leave_for_browser(app: &AppHandle, url: &Url) {
@@ -280,11 +403,72 @@ fn leave_for_browser(app: &AppHandle, url: &Url) {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(all(windows, debug_assertions))]
+    #[test]
+    fn only_webdriver_automation_adds_the_drivers_switches_to_wrys_own() {
+        use super::{WRY_BROWSER_ARGS, automation_args};
+        let driver = Some("--remote-debugging-port=0 --enable-automation");
+        assert_eq!(
+            automation_args(Some("true"), driver).as_deref(),
+            Some(
+                format!("{WRY_BROWSER_ARGS} --remote-debugging-port=0 --enable-automation")
+                    .as_str()
+            )
+        );
+        assert_eq!(automation_args(None, driver), None);
+        assert_eq!(automation_args(Some("1"), driver), None);
+        assert_eq!(automation_args(Some("true"), None), None);
+        assert_eq!(automation_args(Some("true"), Some("   ")), None);
+    }
+
+    #[test]
+    fn webview_visibility_retries_failed_changes_and_restores_after_minimize() {
+        let state = super::WebviewVisibility::default();
+        assert!(state.apply(false, |_| Err::<(), _>("failed")).is_err());
+        let mut changes = Vec::new();
+        for visible in [false, false, true, true, false, true] {
+            state
+                .apply(visible, |value| {
+                    changes.push(value);
+                    Ok::<(), ()>(())
+                })
+                .expect("visibility");
+        }
+        assert_eq!(changes, [false, true, false, true]);
+    }
+
     use super::*;
     use std::sync::atomic::AtomicUsize;
 
     fn url(text: &str) -> Url {
         Url::parse(text).expect("url")
+    }
+
+    #[test]
+    fn verification_documents_never_expand_the_trusted_app_origin() {
+        for page in [
+            "https://auracode.si/verify-device",
+            "https://preview.auracode.si/verify-device",
+            "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/turnstile/frame",
+        ] {
+            let page = url(page);
+            assert!(is_verification_document(&page));
+            for origin in ALL {
+                assert!(!is_app_url(&page, origin, None));
+            }
+        }
+        for page in [
+            "http://auracode.si/verify-device",
+            "https://auracode.si:444/verify-device",
+            "https://auracode.si/verify-device?token=anything",
+            "https://auracode.si/verify-device/other",
+            "https://user@auracode.si/verify-device",
+            "https://auracode.si/account",
+            "https://auracode.si.evil.invalid/verify-device",
+            "https://challenges.cloudflare.com/anything-else",
+        ] {
+            assert!(!is_verification_document(&url(page)), "{page}");
+        }
     }
 
     #[test]

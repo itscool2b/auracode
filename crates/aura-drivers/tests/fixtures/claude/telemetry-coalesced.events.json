@@ -1,0 +1,179 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": true
+      }
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "ask",
+        "native_mode": "default",
+        "auto_answer": {
+          "type": "never"
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "haiku",
+            "choices": [
+              {
+                "value": "haiku",
+                "name": "haiku",
+                "description": "Current model reported by Claude.",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "commands",
+      "data": []
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "019a0000-0000-7000-8000-000000000001",
+        "agent_name": "Claude Code",
+        "agent_version": "2.1.310",
+        "capabilities": {
+          "images": true,
+          "steer": false,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": true,
+          "set_effort": true,
+          "permissions": true,
+          "plans": false,
+          "usage": true,
+          "limits": true,
+          "slash_commands": true,
+          "add_dirs": true,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "new"
+        },
+        "spawn_id": "019a0000-0000-7000-8000-00000000aaaa",
+        "replay": null
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "T1",
+        "event": {
+          "type": "usage_updated",
+          "context_used": null,
+          "context_size": null,
+          "cost": {
+            "amount": 0.03,
+            "currency": "USD"
+          }
+        }
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "T1",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 3,
+          "output_tokens": 4,
+          "cache_read_tokens": 2,
+          "cache_write_tokens": null,
+          "reasoning_tokens": null,
+          "scope": "turn"
+        },
+        "error": null
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "limits_updated",
+          "windows": [
+            {
+              "label": "5 hours",
+              "used_percent": 25.0,
+              "resets_at": 1792834799749
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "usage_updated",
+          "context_used": 250,
+          "context_size": 1000,
+          "cost": {
+            "amount": 0.03,
+            "currency": "USD"
+          }
+        }
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": true
+      }
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    }
+  ],
+  "replies": [],
+  "exit": {
+    "type": "closed"
+  }
+}

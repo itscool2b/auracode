@@ -1,0 +1,77 @@
+.o-globe {
+  display: block;
+}
+
+/* SpaceXAI's calm globe on black: a solid sphere one value step up, a faint rim, a sparse grid. */
+.o-globe-body {
+  fill: #0c0c0c;
+  stroke: rgb(255 255 255 / 0.1);
+  stroke-width: 1px;
+}
+
+.o-globe-grid path {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.07);
+  stroke-width: 1px;
+}
+
+.o-globe-orbit {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.2);
+  stroke-width: 1px;
+}
+
+.o-globe-orbit[data-missing] {
+  stroke: rgb(255 255 255 / 0.18);
+  stroke-dasharray: 3 4;
+}
+
+.o-globe-sat {
+  fill: rgb(255 255 255 / 0.94);
+}
+
+.o-globe-sat[data-tone="signal"] {
+  fill: #ff6308;
+}
+
+.o-globe-sat[data-tone="hollow"] {
+  fill: #000;
+  stroke: rgb(255 255 255 / 0.4);
+  stroke-width: 1px;
+}
+
+.o-globe-plate {
+  fill: #000;
+}
+
+.o-globe-text {
+  font-family: var(--o-mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  fill: rgb(255 255 255 / 0.82);
+}
+
+.o-globe-text[data-tone="data"] {
+  fill: rgb(255 255 255 / 0.5);
+}
+
+.o-globe-text[data-tone="path"] {
+  fill: rgb(255 255 255 / 0.36);
+}
+
+.o-globe-text[data-tone="signal"] {
+  fill: #ff7a2e;
+}
+
+.o-globe-marker {
+  fill: #fff;
+}
+
+/* A project's arcs to its agents, lifted off the surface, drawn in 60ms apart. */
+.o-globe-arc {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.5);
+  stroke-width: 1px;
+  stroke-dasharray: 1;
+  animation: o-orbit-draw 600ms var(--o-ease-out) both;
+}

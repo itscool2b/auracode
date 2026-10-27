@@ -105,7 +105,12 @@ impl Watch {
                 .position(|seen| seen.chat_id == chat_id)
                 .unwrap_or(state.events.len());
             state.events.splice(first_live..first_live, page);
-            state.set_info(chat_id, attach.snapshot.session.clone(), now);
+            state.attach_info(
+                chat_id,
+                attach.next_seq,
+                attach.snapshot.session.clone(),
+                now,
+            );
         }
         self.changed.notify_waiters();
         Ok(attach)
@@ -163,6 +168,22 @@ impl Watch {
 }
 
 impl WatchState {
+    /// A live header can arrive while the attach's saved history page is being read. The
+    /// snapshot describes the subscription boundary, so preserve a header at or after it.
+    fn attach_info(&mut self, chat_id: &str, next_seq: u32, snapshot: SessionInfo, at: Instant) {
+        let later = self.events.iter().rev().find_map(|seen| {
+            if seen.chat_id == chat_id
+                && seen.frame > 0
+                && seen.seq >= next_seq
+                && let AuraEvent::SessionUpdated(info) = &seen.event
+            {
+                return Some(info.clone());
+            }
+            None
+        });
+        self.set_info(chat_id, later.unwrap_or(snapshot), at);
+    }
+
     fn set_info(&mut self, chat_id: &str, info: SessionInfo, at: Instant) {
         let previous = self.infos.get(chat_id).map(|known| known.detail.clone());
         if previous.as_ref() != Some(&info.detail) {
@@ -408,6 +429,45 @@ mod tests {
             }],
             truncated: None,
         }
+    }
+
+    #[test]
+    fn attach_snapshot_does_not_replace_a_newer_live_ready_header() {
+        let watch = Watch::default();
+        let ready = SessionInfo {
+            status: SessionStatus::Ready,
+            native_session_id: Some("native-session".into()),
+            ..SessionInfo::default()
+        };
+        frame(&watch, 10, vec![AuraEvent::SessionUpdated(ready.clone())]);
+        watch.state().attach_info(
+            "c",
+            10,
+            SessionInfo {
+                status: SessionStatus::Starting,
+                ..SessionInfo::default()
+            },
+            Instant::now(),
+        );
+        assert_eq!(watch.with(|state| state.info("c").cloned()), Some(ready));
+    }
+
+    #[test]
+    fn a_new_attach_snapshot_replaces_headers_before_its_boundary() {
+        let watch = Watch::default();
+        frame(
+            &watch,
+            10,
+            vec![AuraEvent::SessionUpdated(SessionInfo {
+                status: SessionStatus::Ready,
+                ..SessionInfo::default()
+            })],
+        );
+        let stopped = SessionInfo::default();
+        watch
+            .state()
+            .attach_info("c", 11, stopped.clone(), Instant::now());
+        assert_eq!(watch.with(|state| state.info("c").cloned()), Some(stopped));
     }
 
     #[test]

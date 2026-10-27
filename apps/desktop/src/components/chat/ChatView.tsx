@@ -1,13 +1,19 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import type { AgentEntry, ChatSummary, StorageStatus } from "../../bindings";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import type { AgentEntry, ChatSummary, PendingHandoff, StorageStatus } from "../../bindings";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
-import { AuthCard } from "./AuthCard";
+import { errorMessage } from "../../lib/errors";
+import { ChangesPanel } from "./ChangesPanel";
+import { ChatAuthCard } from "./ChatAuthCard";
 import { Composer } from "./Composer";
+import { ConversationDialog, type ConversationIntent } from "./ConversationDialog";
+import { GitDialog } from "./GitDialog";
 import { Header } from "./Header";
+import { PermissionCard } from "./PermissionCard";
 import { Pickers } from "./Pickers";
+import { QuestionCard } from "./QuestionCard";
 import { QueueList } from "./QueueList";
 import { Transcript } from "./Transcript";
 import type { TurnActions } from "./TurnView";
@@ -23,6 +29,8 @@ export function ChatView({
   listed,
   storage,
   agents,
+  onOpenChat,
+  active = true,
 }: {
   readonly chatId: string;
   readonly transport: Transport;
@@ -31,8 +39,18 @@ export function ChatView({
   /** The polled storage status: a failed join retries, and an unsaved gap joins again, on change. */
   readonly storage: StorageStatus | null;
   readonly agents: readonly AgentEntry[] | null;
+  readonly onOpenChat?: (id: string) => void;
+  readonly active?: boolean;
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport));
+  const [changesOpen, setChangesOpen] = useState(false);
+  const [gitOpen, setGitOpen] = useState(false);
+  const [continuation, setContinuation] = useState<ConversationIntent | null>(null);
+  const [handoff, setHandoff] = useState<PendingHandoff | null>(null);
+  const [canContinueHere, setCanContinueHere] = useState(false);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [handoffLoaded, setHandoffLoaded] = useState(!transport.conversation);
+  const [handoffRevision, setHandoffRevision] = useState(0);
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
   useEffect(() => {
@@ -45,18 +63,86 @@ export function ChatView({
   }, [store, storage]);
 
   useEffect(() => {
+    if (!active) return;
     const onKeyDown = (event: KeyboardEvent): void => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "j" &&
+        !event.defaultPrevented &&
+        !document.querySelector("dialog[open]")
+      ) {
+        event.preventDefault();
+        setChangesOpen((open) => !open);
+        return;
+      }
       if (event.key === "Escape" && !event.defaultPrevented) void store.escape();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [store]);
+  }, [store, active]);
 
   const status = state.session?.status ?? state.chat?.status ?? "stopped";
+  useEffect(() => {
+    void status;
+    void handoffRevision;
+    if (!transport.conversation || state.phase !== "live") return;
+    let stale = false;
+    setHandoffLoaded(false);
+    void Promise.all([
+      transport.conversation.pending(chatId),
+      transport.conversation.turns(chatId, null),
+    ])
+      .then(([value, history]) => {
+        if (!stale) {
+          setHandoff(value);
+          setCanContinueHere(history.can_continue_here === true && value === null);
+          setHandoffError(null);
+          setHandoffLoaded(true);
+        }
+      })
+      .catch((error) => {
+        if (!stale) setHandoffError(errorMessage(error));
+      });
+    return () => {
+      stale = true;
+    };
+  }, [transport.conversation, state.phase, chatId, status, handoffRevision]);
   const live = hasProcess(status);
   const resumable =
     (state.session?.native_session_id ?? null) !== null || hasTurns(state.transcript);
   const newestError = lastErrorKey(state.transcript);
+  const pendingRequests = useMemo(
+    () =>
+      live
+        ? [...state.transcript.items.values()].filter(
+            (item) =>
+              (item.kind === "permission" ||
+                (item.kind === "question" && item.request.prompt.type !== "notify")) &&
+              item.resolution === null &&
+              state.requests.get(item.request.request_id)?.gone !== true,
+          )
+        : [],
+    [state.transcript.items, state.requests, live],
+  );
+  const dockedRequests = useMemo(
+    () =>
+      new Set(
+        pendingRequests.flatMap((item) =>
+          item.kind === "permission" || item.kind === "question" ? [item.request.request_id] : [],
+        ),
+      ),
+    [pendingRequests],
+  );
+
+  const startSession = useCallback(
+    (fresh: boolean) => {
+      if (fresh && transport.conversation) setContinuation({ type: "fresh_session" });
+      else if (canContinueHere && transport.conversation)
+        setContinuation({ type: "continue_here" });
+      else void store.start(fresh);
+    },
+    [store, transport.conversation, canContinueHere],
+  );
 
   const actions = useMemo<TurnActions>(
     () => ({
@@ -68,11 +154,59 @@ export function ChatView({
       onRespondUi: (requestId, answer) => void store.respondUi(requestId, answer),
       errorActions: (key, kind) =>
         errorActions(kind, { newest: key === newestError, live, resumable }),
-      onStart: (fresh) => void store.start(fresh),
+      onStart: startSession,
       onShowLog: () => void store.revealLog(),
       canResume: !live,
+      onContinue: transport.conversation ? (intent) => setContinuation(intent) : undefined,
     }),
-    [store, state.blobs, state.requests, newestError, live, resumable],
+    [
+      store,
+      state.blobs,
+      state.requests,
+      newestError,
+      live,
+      resumable,
+      transport.conversation,
+      startSession,
+    ],
+  );
+
+  const agent = agents?.find((entry) => entry.id === state.chat?.agent_id) ?? null;
+  const autonomy = state.session?.autonomy ?? "full_auto";
+  // The pickers hold every agent, model and effort choice. Streamed text changes none of them, so
+  // the same element is reused until one of their inputs changes, and React skips the subtree.
+  const controls = useMemo(
+    () => (
+      <Pickers
+        agents={agents}
+        onChooseAgent={
+          transport.conversation
+            ? (agent_id) => setContinuation({ type: "switch_agent", agent_id })
+            : undefined
+        }
+        agent={agent}
+        lists={state.lists}
+        autonomy={autonomy}
+        status={status}
+        error={state.listsError}
+        optionsSaving={state.optionsSaving}
+        autonomySaving={state.autonomySaving}
+        onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
+        onSetOption={(optionId, value) => void store.setOption(optionId, value)}
+      />
+    ),
+    [
+      agents,
+      transport.conversation,
+      agent,
+      state.lists,
+      autonomy,
+      status,
+      state.listsError,
+      state.optionsSaving,
+      state.autonomySaving,
+      store,
+    ],
   );
 
   if (state.chat === null) {
@@ -104,7 +238,6 @@ export function ChatView({
     );
   }
 
-  const agent = agents?.find((entry) => entry.id === state.chat?.agent_id) ?? null;
   // The session's own word, not the marks: which prompts are held is exact only per snapshot.
   const held = state.session?.queue_held === true;
   return (
@@ -119,66 +252,237 @@ export function ChatView({
         listed={listed}
         agent={agent}
         resumable={resumable}
-        onStart={(fresh) => void store.start(fresh)}
+        onStart={startSession}
         onStop={() => void store.stop()}
         onShowLog={() => void store.revealLog()}
+        onHistory={transport.conversation ? () => setContinuation({ type: "history" }) : undefined}
+        onGit={transport.git ? () => setGitOpen(true) : undefined}
+        changesOpen={changesOpen}
+        onChanges={transport.changes ? () => setChangesOpen((open) => !open) : undefined}
       />
-      <Pickers
-        lists={state.lists}
-        autonomy={state.session?.autonomy ?? "full_auto"}
-        status={status}
-        error={state.listsError}
-        optionsSaving={state.optionsSaving}
-        autonomySaving={state.autonomySaving}
-        onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
-        onSetOption={(optionId, value) => void store.setOption(optionId, value)}
-      />
-      {state.phase === "failed" ? (
-        <div className="chat-banner" data-level="error">
-          <span role="alert" data-testid="chat-attach-error">
-            {state.attachError}
-          </span>
-          <button
-            type="button"
-            className="ui-button"
-            data-testid="chat-reattach"
-            onClick={() => void store.reattach()}
-          >
-            Retry
-          </button>
+      <div className="chat-work-area">
+        <div className="chat-conversation">
+          {state.phase === "failed" ? (
+            <div className="chat-banner" data-level="error">
+              <span role="alert" data-testid="chat-attach-error">
+                {state.attachError}
+              </span>
+              <button
+                type="button"
+                className="ui-button"
+                data-testid="chat-reattach"
+                onClick={() => void store.reattach()}
+              >
+                Retry
+              </button>
+            </div>
+          ) : null}
+          <Transcript
+            dockedRequests={dockedRequests}
+            state={state}
+            live={live}
+            actions={actions}
+            onLoadEarlier={() => void store.loadEarlier()}
+          />
+          <div className="chat-dock">
+            {canContinueHere ? (
+              <div className="conversation-notice" role="status">
+                <p>
+                  New history arrived from another device. Review the context before continuing.
+                </p>
+                <button
+                  type="button"
+                  className="ui-button"
+                  onClick={() => setContinuation({ type: "continue_here" })}
+                >
+                  Continue here
+                </button>
+              </div>
+            ) : null}
+            {handoff ? (
+              <details className="chat-handoff">
+                <summary>
+                  Next message includes a handoff to{" "}
+                  {agents?.find((agent) => agent.id === handoff.agent_id)?.name ?? handoff.agent_id}
+                  <span>Preview</span>
+                </summary>
+                <pre>
+                  {handoff.handoff ||
+                    (handoff.uses_native_fork
+                      ? "Continue from the saved native fork. No extra context will be added."
+                      : "No extra context will be added.")}
+                </pre>
+              </details>
+            ) : null}
+            {handoffError ? (
+              <p className="conversation-notice" role="alert">
+                Could not verify the saved handoff. {handoffError}{" "}
+                <button
+                  type="button"
+                  className="ui-button"
+                  onClick={() => setHandoffRevision((value) => value + 1)}
+                >
+                  Retry
+                </button>
+              </p>
+            ) : null}
+            {state.auth !== null ? (
+              <ChatAuthCard
+                key={state.chat.agent_id}
+                auth={state.auth}
+                agentId={state.chat.agent_id}
+                agentName={agent?.name ?? state.chat.agent_name}
+                transport={transport}
+                onRetry={() => void (held ? store.resumeQueue() : store.start(false))}
+              />
+            ) : null}
+            {state.stillWorkingMinutes !== null ? (
+              <StillWorking
+                minutes={state.stillWorkingMinutes}
+                onStop={() => void store.interrupt()}
+              />
+            ) : null}
+            <QueueList
+              queue={state.queue}
+              held={held}
+              onRemove={(promptId) => void store.cancelQueued(promptId)}
+              onSendQueued={() => void store.resumeQueue()}
+            />
+            {pendingRequests.length > 0 ? (
+              <section className="chat-permission-dock" aria-label="Waiting for your response">
+                <div className="chat-permission-label">
+                  Needs your response
+                  {pendingRequests.length > 1 ? ` · ${pendingRequests.length} requests` : ""}
+                </div>
+                {pendingRequests.map((item) => {
+                  if (item.kind !== "permission" && item.kind !== "question") return null;
+                  const segment = state.transcript.segments.find((entry) =>
+                    entry.itemKeys.includes(item.key),
+                  );
+                  const user = segment?.itemKeys
+                    .map((key) => state.transcript.items.get(key))
+                    .find((entry) => entry?.kind === "user");
+                  return (
+                    <div
+                      key={item.key}
+                      data-test-segment-key={segment?.key}
+                      data-test-kind={segment?.turnId ? "turn" : "outside"}
+                      data-test-turn-id={segment?.turnId ?? ""}
+                      data-test-prompt={user?.kind === "user" ? user.text : ""}
+                      data-test-stop-reason={segment?.end?.stopReason ?? ""}
+                      data-test-recovered={String(segment?.end?.recovered ?? false)}
+                    >
+                      <p className="chat-request-scope">
+                        {segment?.turnId ? "Turn request" : "Session request"}
+                        {user?.kind === "user" ? (
+                          <span className="chat-request-prompt" title={user.text}>
+                            {user.text.slice(0, 160)}
+                          </span>
+                        ) : null}
+                      </p>
+                      {item.kind === "question" ? (
+                        <QuestionCard
+                          item={item}
+                          request={state.requests.get(item.request.request_id)}
+                          onRespond={(answer) =>
+                            void store.respondUi(item.request.request_id, answer)
+                          }
+                        />
+                      ) : (
+                        <PermissionCard
+                          item={item}
+                          request={state.requests.get(item.request.request_id)}
+                          onRespond={(optionId) =>
+                            void store.respondPermission(item.request.request_id, optionId)
+                          }
+                          blobs={state.blobs}
+                          onLoadBlob={(sha256) => void store.loadBlob(sha256)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </section>
+            ) : null}
+            <div className="chat-compose-slot" hidden={pendingRequests.length > 0}>
+              <Composer
+                blocked={
+                  !handoffLoaded ||
+                  canContinueHere ||
+                  handoffError !== null ||
+                  state.steeringPending
+                }
+                chatId={chatId}
+                contextApi={transport.composer}
+                agentName={agent?.name ?? state.chat.agent_name}
+                controls={controls}
+                status={status}
+                commands={state.lists?.commands ?? []}
+                error={state.sendError}
+                onSend={(text, context) => store.send(text, context)}
+                onSteer={
+                  state.phase === "live" &&
+                  status === "running" &&
+                  state.lists?.capabilities?.steer &&
+                  transport.composer?.steer &&
+                  state.openTurnId
+                    ? (text, context) => store.steer(state.openTurnId as string, text, context)
+                    : undefined
+                }
+                onStop={() => void store.interrupt()}
+                onForceStop={() => void store.forceStop()}
+              />
+            </div>
+          </div>
         </div>
-      ) : null}
-      <Transcript
-        state={state}
-        live={live}
-        actions={actions}
-        onLoadEarlier={() => void store.loadEarlier()}
-      />
-      <div className="chat-dock">
-        {state.auth !== null ? (
-          <AuthCard
-            auth={state.auth}
-            onRetry={() => void (held ? store.resumeQueue() : store.start(false))}
+        {changesOpen && transport.changes ? (
+          <ChangesPanel
+            state={state}
+            composer={transport.composer}
+            agent={agent}
+            chatId={chatId}
+            api={transport.changes}
+            status={status}
+            transcript={state.transcript}
+            onClose={() => setChangesOpen(false)}
+            onStop={() => void store.stop()}
           />
         ) : null}
-        {state.stillWorkingMinutes !== null ? (
-          <StillWorking minutes={state.stillWorkingMinutes} onStop={() => void store.interrupt()} />
-        ) : null}
-        <QueueList
-          queue={state.queue}
-          held={held}
-          onRemove={(promptId) => void store.cancelQueued(promptId)}
-          onSendQueued={() => void store.resumeQueue()}
-        />
-        <Composer
-          status={status}
-          commands={state.lists?.commands ?? []}
-          error={state.sendError}
-          onSend={(text) => store.send(text)}
-          onStop={() => void store.interrupt()}
-          onForceStop={() => void store.forceStop()}
-        />
       </div>
+      {continuation && transport.conversation ? (
+        <ConversationDialog
+          chatId={chatId}
+          api={transport.conversation}
+          initial={continuation}
+          agents={agents}
+          status={status}
+          queued={state.queue.length}
+          onStop={() => void store.stop()}
+          onClose={() => setContinuation(null)}
+          onApplied={async (id) => {
+            if (id === chatId) {
+              await store.reattach();
+              setHandoffRevision((value) => value + 1);
+            }
+            onOpenChat?.(id);
+          }}
+        />
+      ) : null}
+      {gitOpen && transport.git ? (
+        <GitDialog
+          chatId={chatId}
+          title={state.chat?.title ?? "work"}
+          api={transport.git}
+          live={live}
+          onStop={() => store.stop()}
+          onClose={() => setGitOpen(false)}
+          onChanged={() => {
+            void store.reattach();
+            setHandoffRevision((value) => value + 1);
+            onOpenChat?.(chatId);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

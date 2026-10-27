@@ -117,6 +117,7 @@ impl Machine {
                 .map(|(name, value)| ((*name).into(), (*value).into()))
                 .collect(),
             app_version: "0.1.0".into(),
+            checkpoints: false,
         })
         .await
         .expect("the headless runtime starts")

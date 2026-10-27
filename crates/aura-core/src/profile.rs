@@ -6,7 +6,7 @@
 //!
 //! ```text
 //! profile.json     ProfileMeta; written last when creating, so its presence means "complete"
-//! aura.db          the SQLite store (crate::store)
+//! aura.db          Local SQLite store (accounts use aura.encrypted.db)
 //! attachments/     content-addressed files referenced from chats
 //! checkpoints/     shadow git repos for per-turn snapshots
 //! logs/            raw protocol logs per session
@@ -37,7 +37,8 @@ use crate::time::now_millis;
 pub const LOCAL_PROFILE_ID: &str = "local";
 
 const PROFILE_FILE: &str = "profile.json";
-const DB_FILE: &str = "aura.db";
+pub(crate) const DB_FILE: &str = "aura.db";
+const ENCRYPTED_DB_FILE: &str = "aura.encrypted.db";
 const ATTACHMENTS_DIR: &str = "attachments";
 const CHECKPOINTS_DIR: &str = "checkpoints";
 const LOGS_DIR: &str = "logs";
@@ -80,9 +81,13 @@ pub struct Profile {
 }
 
 impl Profile {
-    /// `<dir>/aura.db`
+    /// Local uses `aura.db`; accounts use `aura.encrypted.db` so pre-encryption builds cannot
+    /// mistake ciphertext for a corrupt plaintext database and move or replace it.
     pub fn db_path(&self) -> PathBuf {
-        self.dir.join(DB_FILE)
+        self.dir.join(match self.meta.kind {
+            ProfileKind::Local => DB_FILE,
+            ProfileKind::Account => ENCRYPTED_DB_FILE,
+        })
     }
 
     /// `<dir>/attachments`

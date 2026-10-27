@@ -1,0 +1,41 @@
+/* The account row at the foot of the sidebar (6.2): a square avatar, the profile and its sync state. */
+.chat-account-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 4px;
+}
+
+.chat-account-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--g-radius-8);
+  background-color: var(--ui-surface-fill);
+  color: var(--ui-text-secondary);
+}
+
+.chat-account-identity {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-account-identity strong {
+  overflow: hidden;
+  color: var(--ui-text-primary);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-account-identity small {
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}

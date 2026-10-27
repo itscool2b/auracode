@@ -1,0 +1,760 @@
+/*
+ * The right panel (docs/design/visual-language.md, 6.14): Changes, Files, Plan and Session behind a
+ * strong segmented control. On a wide window it is its own pane 8px from the chat (shell.css sets
+ * the split); narrower, it floats over the chat with the one shadow.
+ */
+
+.changes-panel {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: var(--changes-width, var(--ui-panel-width));
+  min-width: 320px;
+  max-width: 560px;
+  min-height: 0;
+  border-left: 1px solid var(--ui-line);
+  background-color: var(--ui-surface-main);
+}
+
+@media (min-width: 1200px) {
+  .chat-main:has(.changes-panel) .changes-panel {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    border-left: 0;
+    border-radius: var(--g-radius-12);
+    box-shadow: 0 0 0 1px var(--ui-line);
+  }
+
+  .chat-main:has(.changes-panel) .changes-resizer {
+    left: -8px;
+    width: 8px;
+  }
+}
+
+@media (max-width: 1199px) {
+  .changes-panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    z-index: 25;
+    width: min(100%, 420px);
+    max-width: 100%;
+    box-shadow: var(--g-shadow);
+  }
+
+  .changes-resizer {
+    display: none;
+  }
+}
+
+/* The drag handle sits in the gutter; a 2px line shows on hover and focus. */
+.changes-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  z-index: 4;
+  box-sizing: border-box;
+  width: 8px;
+  height: auto;
+  margin: 0;
+  padding: 0 3px;
+  border: 0;
+  background-clip: content-box;
+  cursor: col-resize;
+  touch-action: none;
+  transition: background-color var(--g-dur-fast) var(--g-ease);
+}
+
+.changes-resizer:is(:hover, :focus-visible) {
+  background-color: var(--ui-line-strong);
+  outline: none;
+}
+
+.changes-panel-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: var(--ui-header-height);
+  padding: 0 8px 0 10px;
+  border-bottom: 1px solid var(--ui-line);
+}
+
+.changes-panel-header > .chat-icon-button:first-of-type {
+  margin-left: auto;
+}
+
+/* A strong segmented control (4.3): the active tab is the white pill. */
+.context-panel-tabs {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 32px;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--ui-surface-fill);
+}
+
+.context-panel-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--g-radius-pill);
+  color: var(--ui-text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background-color var(--g-dur-fast) var(--g-ease),
+    color var(--g-dur-fast) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .context-panel-tabs button:hover {
+    color: var(--ui-text-primary);
+  }
+}
+
+.context-panel-tabs button[aria-selected="true"] {
+  background-color: var(--ui-primary);
+  color: var(--ui-text-on-primary);
+}
+
+.context-panel-tabs small {
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.context-tab-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ---------- Changes ---------- */
+
+.changes-scope {
+  display: grid;
+  gap: 6px;
+  padding: 12px 12px 8px;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.changes-scope select {
+  width: 100%;
+}
+
+.changes-panel-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 0 12px 12px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-line-strong) transparent;
+}
+
+.changes-empty {
+  margin: 0;
+  padding: 16px 4px;
+  color: var(--ui-text-muted);
+}
+
+.changes-warnings,
+.changes-warning {
+  margin: 0 0 12px;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.changes-warnings > summary {
+  color: var(--ui-text-secondary);
+  cursor: pointer;
+}
+
+.changes-warnings p {
+  margin: 6px 0 0;
+}
+
+.changes-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 0 12px;
+}
+
+.changes-file-list > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 4px 0 8px;
+  border-radius: var(--g-radius-8);
+  transition: background-color var(--g-dur-micro) var(--g-ease);
+}
+
+.changes-file-list > div[data-selected="true"] {
+  background-color: var(--ui-surface-fill);
+}
+
+.changes-file-list button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 4px;
+  border-radius: var(--g-radius-6);
+  color: var(--ui-text-secondary);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  text-align: left;
+  transition: color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .changes-file-list button:hover {
+    color: var(--ui-text-primary);
+  }
+}
+
+.changes-file-list > div[data-selected="true"] button {
+  color: var(--ui-text-primary);
+}
+
+.changes-file-list button > svg {
+  flex: none;
+  color: var(--ui-text-muted);
+}
+
+.changes-file-list button > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.changes-file-list small {
+  flex: none;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.changes-file-list small[data-kind="added"] {
+  color: var(--ui-success);
+}
+
+.changes-file-list small[data-kind="deleted"] {
+  color: var(--ui-danger);
+}
+
+.changes-panel :is(.chat-diff-note, .chat-diff-truncated, .chat-diff-empty) {
+  margin: 0;
+  padding: 6px 12px;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.changes-result {
+  padding: 12px 0;
+  color: var(--ui-text-secondary);
+}
+
+.changes-result p {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+
+.changes-result summary {
+  cursor: pointer;
+}
+
+.changes-panel-footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 48px;
+  padding: 8px 8px 8px 14px;
+  border-top: 1px solid var(--ui-line);
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.changes-panel-footer .ui-button {
+  height: 28px;
+  padding: 0 12px;
+}
+
+/* The revert confirmation, inside the dialog shell. */
+.changes-confirm-copy {
+  margin: 0 0 12px;
+  color: var(--ui-text-secondary);
+}
+
+.changes-confirm-files {
+  max-height: 240px;
+  margin: 0 0 16px;
+  padding: 4px 12px;
+  overflow: auto;
+  list-style: none;
+  border-radius: var(--g-radius-8);
+  background-color: var(--ui-surface-main);
+  box-shadow: inset 0 0 0 1px var(--ui-line);
+}
+
+.changes-confirm-files li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.changes-confirm-files li + li {
+  border-top: 1px solid var(--ui-line);
+}
+
+.changes-confirm-files code {
+  font-family: var(--g-mono);
+  overflow-wrap: anywhere;
+}
+
+.changes-confirm-files span {
+  color: var(--ui-text-muted);
+}
+
+/* ---------- Files, Plan, Session ---------- */
+
+.context-panel-content {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 12px 20px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-line-strong) transparent;
+}
+
+/* A quiet sentence-case label where two lists sit together; never caps or mono. */
+.context-group-label {
+  margin: 16px 8px 6px;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 500;
+}
+
+.context-hint {
+  margin: 10px 8px;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.context-empty {
+  padding: 48px 16px;
+  text-align: center;
+}
+
+.context-empty strong {
+  color: var(--ui-text-primary);
+  font-weight: 500;
+}
+
+.context-empty p {
+  margin: 6px 0 0;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.context-file-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--g-radius-8);
+  background-color: var(--ui-surface-well);
+  color: var(--ui-text-muted);
+  transition: border-color var(--g-dur-fast) var(--g-ease);
+}
+
+.context-file-search:focus-within {
+  border-color: var(--ui-text-muted);
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+.context-file-search > svg {
+  flex: none;
+}
+
+.context-file-search input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ui-text-primary);
+}
+
+.context-file-search input::placeholder {
+  color: var(--ui-text-muted);
+  opacity: 1;
+}
+
+.context-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--g-radius-6);
+  color: var(--ui-text-secondary);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  text-align: left;
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .context-file-row:hover:not(:disabled) {
+    color: var(--ui-text-primary);
+  }
+}
+
+.context-file-row[aria-pressed="true"] {
+  background-color: var(--ui-surface-fill);
+  color: var(--ui-text-primary);
+}
+
+.context-file-row:disabled {
+  cursor: not-allowed;
+}
+
+.context-file-row > svg {
+  flex-shrink: 0;
+  color: var(--ui-text-muted);
+}
+
+.context-file-row > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-file-row small {
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.context-file-preview {
+  margin-top: 20px;
+}
+
+.context-file-preview > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 0 0 8px;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.context-file-preview > header > strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ui-text-primary);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-file-preview > header > span {
+  font-variant-numeric: tabular-nums;
+}
+
+.context-code-view {
+  max-height: 440px;
+  margin: 4px 0 14px;
+  padding: 12px;
+  overflow: auto;
+  border-radius: var(--g-radius-8);
+  background-color: var(--ui-surface-well);
+  box-shadow: inset 0 0 0 1px var(--ui-line);
+  color: var(--g-code-fg);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: 20px;
+  font-variant-ligatures: none;
+  user-select: text;
+  -webkit-user-select: text;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-line-strong) transparent;
+}
+
+.context-code-view pre {
+  display: flex;
+  gap: 14px;
+  margin: 0;
+  font: inherit;
+}
+
+.context-code-view code {
+  font: inherit;
+}
+
+.context-code-lines {
+  color: var(--ui-text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.context-file-preview > .ui-button {
+  height: 28px;
+  padding: 0 12px;
+}
+
+.context-plan-count {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 4px 8px 20px;
+  color: var(--ui-text-primary);
+  font-size: var(--g-text-display);
+  line-height: var(--g-text-display);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.context-plan-count span {
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.context-plan {
+  margin: 0;
+  padding: 0 8px;
+  list-style: none;
+}
+
+.context-plan li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--ui-line);
+  color: var(--ui-text-secondary);
+}
+
+/* Plan nodes are squares: done is white with a black check, active a white outline. */
+.context-plan li > span {
+  display: grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--g-radius-4);
+}
+
+.context-plan li > span > svg {
+  display: none;
+}
+
+.context-plan li[data-status="completed"] > span {
+  border-color: var(--ui-primary);
+  background-color: var(--ui-primary);
+  color: var(--ui-text-on-primary);
+}
+
+.context-plan li[data-status="completed"] > span > svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.context-plan li[data-status="in_progress"] {
+  color: var(--ui-text-primary);
+  font-weight: 500;
+}
+
+.context-plan li[data-status="in_progress"] > span {
+  border-color: var(--ui-text-primary);
+}
+
+.context-plan small {
+  display: block;
+  margin-top: 2px;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 400;
+}
+
+.context-properties {
+  margin: 0 0 20px;
+  padding: 0 8px;
+}
+
+.context-properties > div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--ui-line);
+}
+
+.context-properties dt {
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.context-properties dd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  color: var(--ui-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.context-session-id {
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.context-session-id > :is(button, .g-copy-control) {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.context-usage-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 8px 16px;
+}
+
+.context-usage-tiles > div {
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--g-radius-12);
+  background-color: var(--ui-surface-raised);
+  box-shadow: inset 0 0 0 1px var(--ui-line);
+}
+
+.context-usage-tiles span {
+  display: block;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.context-usage-tiles strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--ui-text-primary);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-title);
+  font-variant-numeric: tabular-nums;
+}
+
+.context-capacity {
+  margin: 16px 8px;
+  color: var(--ui-text-secondary);
+}
+
+.context-capacity label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.context-capacity progress {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin: 8px 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 2px;
+  background-color: var(--ui-surface-selected);
+  appearance: none;
+}
+
+.context-capacity progress::-webkit-progress-bar {
+  border-radius: 2px;
+  background-color: var(--ui-surface-selected);
+}
+
+.context-capacity progress::-webkit-progress-value {
+  border-radius: 2px;
+  background-color: var(--ui-text-secondary);
+}
+
+.context-capacity progress::-moz-progress-bar {
+  border-radius: 2px;
+  background-color: var(--ui-text-secondary);
+}
+
+.context-capacity span {
+  display: block;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+}

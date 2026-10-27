@@ -82,6 +82,8 @@ pub struct HeadlessConfig {
     pub set_env: Vec<(OsString, OsString)>,
     /// What the agents see as the client's version.
     pub app_version: String,
+    /// Save before-turn checkpoints. Production enables this; isolated protocol fixtures may opt out.
+    pub checkpoints: bool,
 }
 
 /// A running headless session manager and what ending it needs.
@@ -125,6 +127,7 @@ impl Headless {
             env,
             set_env,
             app_version,
+            checkpoints,
         } = config;
 
         // The profile, as the app's boot opens it: the owner lock before the store.
@@ -179,6 +182,20 @@ impl Headless {
             rt.clone(),
         );
         let manager = SessionManager::new(ManagerDeps {
+            worktrees: checkpoints.then(|| {
+                aura_core::gitworkspaces::GitWorkspaces::new(
+                    &profile,
+                    Arc::clone(&env),
+                    Arc::clone(&registry),
+                )
+            }),
+            checkpoints: checkpoints.then(|| {
+                aura_core::checkpoints::Checkpoints::new(
+                    &profile,
+                    Arc::clone(&env),
+                    Arc::clone(&registry),
+                )
+            }),
             store: Arc::clone(&store),
             env: Arc::clone(&env),
             spawner,

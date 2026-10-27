@@ -71,6 +71,8 @@ export interface ChatState {
   readonly attachError: string | null;
   readonly chat: ChatSummary | null;
   readonly session: SessionInfo | null;
+  readonly openTurnId: string | null;
+  readonly steeringPending: boolean;
   readonly queue: readonly QueuedPrompt[];
   readonly usage: UsageInfo | null;
   readonly limits: readonly LimitWindow[] | null;
@@ -80,6 +82,8 @@ export interface ChatState {
   readonly transcript: Transcript;
   readonly hasMore: boolean;
   readonly loadingEarlier: boolean;
+  /** Advances only when an older page arrives, independently of live output. */
+  readonly historyRevision: number;
   readonly earlierError: string | null;
   /** Rows that did not parse (written by a newer build), across the loaded pages. */
   readonly skipped: number;
@@ -122,6 +126,8 @@ function initialState(chatId: string): ChatState {
     attachError: null,
     chat: null,
     session: null,
+    openTurnId: null,
+    steeringPending: false,
     queue: [],
     usage: null,
     limits: null,
@@ -131,6 +137,7 @@ function initialState(chatId: string): ChatState {
     transcript: emptyTranscript(),
     hasMore: false,
     loadingEarlier: false,
+    historyRevision: 0,
     earlierError: null,
     skipped: 0,
     unsavedFrom: null,
@@ -374,6 +381,7 @@ export class ChatStore {
       attachError: null,
       chat: snapshot.chat,
       session: snapshot.session,
+      openTurnId: snapshot.open_turn_id,
       queue: snapshot.queue,
       usage: snapshot.usage,
       limits: snapshot.limits,
@@ -445,6 +453,10 @@ export class ChatStore {
   /** The live state a frame's events change: the header, the queue, usage and limits. */
   #applyLive(state: ChatState, event: AuraEvent): ChatState {
     switch (event.type) {
+      case "turn_started":
+        return { ...state, openTurnId: event.turn_id };
+      case "turn_ended":
+        return state.openTurnId === event.turn_id ? { ...state, openTurnId: null } : state;
       case "session_updated": {
         const { type: _type, ...session } = event;
         return this.#sessionChanged(state, session);
@@ -558,6 +570,7 @@ export class ChatStore {
       transcript: applyEntries(emptyTranscript(this.#cut), this.#entries),
       hasMore: page.has_more,
       loadingEarlier: false,
+      historyRevision: this.#state.historyRevision + 1,
       skipped: this.#state.skipped + page.skipped,
     });
   }
@@ -646,15 +659,67 @@ export class ChatStore {
   // ---------- prompts and the session ----------
 
   /** Sends the text exactly as typed. Answers whether it was taken (the composer then clears). */
-  async send(text: string): Promise<boolean> {
-    if (text.trim() === "") return false;
+  async send(text: string, context?: import("../composer").ComposerContext): Promise<boolean> {
+    if (text.trim() === "" && !context?.attachments.length && !context?.mentions.length)
+      return false;
     try {
-      await this.#transport.send(this.chatId, text);
+      if (context && (context.attachments.length || context.mentions.length)) {
+        if (!this.#transport.composer)
+          throw new Error("Attachments are unavailable in this session.");
+        await this.#transport.composer.send(this.chatId, { text, ...context });
+      } else {
+        await this.#transport.send(this.chatId, text);
+      }
       this.#set({ ...this.#state, sendError: null });
       return true;
     } catch (error) {
       this.#set({ ...this.#state, sendError: errorMessage(error) });
       return false;
+    }
+  }
+
+  /** Steer only the turn the user saw. No fallback to sending or queuing a prompt. */
+  async steer(
+    expectedTurnId: string,
+    text: string,
+    context?: import("../composer").ComposerContext,
+  ): Promise<boolean> {
+    if (this.#state.steeringPending) return false;
+    if (
+      this.#closed ||
+      this.#state.phase !== "live" ||
+      this.#state.session?.status !== "running" ||
+      this.#state.openTurnId !== expectedTurnId ||
+      !this.#state.lists?.capabilities?.steer ||
+      !this.#transport.composer?.steer
+    ) {
+      this.#set({ ...this.#state, sendError: "This turn is no longer available for steering." });
+      return false;
+    }
+    if (!text.trim() && !context?.attachments.length && !context?.mentions.length) return false;
+    this.#set({ ...this.#state, steeringPending: true, sendError: null });
+    try {
+      const answer = await this.#transport.composer.steer(this.chatId, expectedTurnId, {
+        text,
+        attachments: [...(context?.attachments ?? [])],
+        mentions: [...(context?.mentions ?? [])],
+      });
+      const accepted = answer.state === "accepted";
+      this.#set({
+        ...this.#state,
+        sendError: accepted
+          ? null
+          : (answer.detail ??
+            (answer.state === "rejected"
+              ? "The agent did not accept this steering message. Your draft is kept."
+              : "Delivery is unconfirmed. Your draft is kept; review the turn before sending again.")),
+      });
+      return accepted;
+    } catch (error) {
+      this.#set({ ...this.#state, sendError: errorMessage(error) });
+      return false;
+    } finally {
+      this.#set({ ...this.#state, steeringPending: false });
     }
   }
 

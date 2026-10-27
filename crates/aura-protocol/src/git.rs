@@ -1,0 +1,199 @@
+//! Reviewable Git workspace operations. A preview never authorizes a later, changed repository.
+
+use serde::{Deserialize, Serialize};
+use specta::Type;
+
+use crate::Millis;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct GitFileState {
+    pub path: String,
+    pub index: String,
+    pub worktree: String,
+    pub original_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct GitWorkspace {
+    pub root: String,
+    pub branch: Option<String>,
+    pub head: Option<String>,
+    pub files: Vec<GitFileState>,
+    pub blockers: Vec<String>,
+    pub has_submodules: bool,
+    pub is_linked_worktree: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct GitInitializePreview {
+    pub token: String,
+    pub folder: String,
+    pub initial_branch: String,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct IsolationInput {
+    pub slug: String,
+    pub bring_changes: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct IsolationPreview {
+    pub token: String,
+    pub source: GitWorkspace,
+    pub branch: String,
+    pub path: String,
+    pub bring_changes: bool,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum WorktreeState {
+    Creating,
+    Ready,
+    Merging,
+    Retiring,
+    Restoring,
+    RecoveryRequired,
+    Missing,
+    Retired,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ManagedWorktree {
+    pub id: String,
+    pub chat_id: String,
+    pub source: String,
+    pub path: String,
+    pub branch: String,
+    pub base_commit: String,
+    pub state: WorktreeState,
+    pub detail: Option<String>,
+    #[serde(default)]
+    pub recovery: Option<WorktreeRecovery>,
+    pub created_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum WorktreeRecovery {
+    Create,
+    Retire,
+    Restore,
+    Merge {
+        branch: String,
+        before_ref: String,
+        prepared_ref: String,
+        before_commit: String,
+        prepared_commit: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum WorktreeRecoveryAction {
+    Reconcile,
+    Restore,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeRecoveryPreview {
+    pub token: String,
+    pub worktree: ManagedWorktree,
+    pub action: WorktreeRecoveryAction,
+    pub folder: GitWorkspace,
+    pub target: Option<GitWorkspace>,
+    pub destination: String,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum WorktreeDestination {
+    Isolated,
+    Direct,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeRelocationPreview {
+    pub token: String,
+    pub worktree: ManagedWorktree,
+    pub from: String,
+    pub to: String,
+    pub handoff: String,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct PullRequestInput {
+    pub title: String,
+    pub body: String,
+    pub base_branch: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct PullRequestPreview {
+    pub token: String,
+    pub worktree_id: String,
+    pub repository: String,
+    pub repository_url: String,
+    pub head_branch: String,
+    pub head_commit: String,
+    pub base_branch: String,
+    pub title: String,
+    pub body: String,
+    pub will_push: bool,
+    pub existing_url: Option<String>,
+    pub diff_stat: String,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct PullRequestResult {
+    pub url: String,
+    pub created: bool,
+    pub head_commit: String,
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct IsolationResult {
+    pub worktree: ManagedWorktree,
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum WorktreeAction {
+    Merge { message: String },
+    Discard,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeActionPreview {
+    pub token: String,
+    pub worktree: ManagedWorktree,
+    pub action: WorktreeAction,
+    pub target: Option<GitWorkspace>,
+    pub changes: String,
+    pub conflicts: Vec<String>,
+    pub warnings: Vec<String>,
+    pub expires_at: Millis,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct WorktreeActionResult {
+    pub worktree: ManagedWorktree,
+    pub recovery: String,
+    pub commit: Option<String>,
+    pub error: Option<String>,
+}

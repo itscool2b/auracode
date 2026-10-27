@@ -13,8 +13,24 @@
 //! an `Option` with `#[serde(default)]`, and the enums that reach storage or come from agents read a
 //! name they do not know as their fallback (`lenient.rs`).
 
+pub mod account;
+pub mod account_preservation;
+pub mod agents;
+pub mod changes;
+pub mod composer;
+pub mod config_vendor;
+pub mod conversation;
+pub mod folder_resolution;
+pub mod git;
 mod lenient;
+pub mod local_import;
+pub mod project_tools;
+pub mod repository_publication;
+pub mod search;
 pub mod session;
+pub mod setup_actions;
+pub mod workspace;
+pub mod workspace_removal;
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -54,6 +70,12 @@ pub enum AuraEvent {
     UserMessageDelta {
         message_id: String,
         text: String,
+    },
+    // Delivery state for an explicit user message directed to an already running turn.
+    SteeringStatus {
+        message_id: String,
+        state: composer::SteeringState,
+        detail: Option<String>,
     },
     MessageDelta {
         message_id: String,
@@ -121,6 +143,7 @@ impl AuraEvent {
             AuraEvent::TurnStarted { .. } => "turn_started",
             AuraEvent::TurnEnded { .. } => "turn_ended",
             AuraEvent::UserMessageDelta { .. } => "user_message_delta",
+            AuraEvent::SteeringStatus { .. } => "steering_status",
             AuraEvent::MessageDelta { .. } => "message_delta",
             AuraEvent::MessageCompleted { .. } => "message_completed",
             AuraEvent::ThoughtDelta { .. } => "thought_delta",
@@ -155,6 +178,7 @@ impl AuraEvent {
             AuraEvent::TurnStarted { .. }
             | AuraEvent::TurnEnded { .. }
             | AuraEvent::UserMessageDelta { .. }
+            | AuraEvent::SteeringStatus { .. }
             | AuraEvent::MessageDelta { .. }
             | AuraEvent::MessageCompleted { .. }
             | AuraEvent::ThoughtDelta { .. }
@@ -386,8 +410,8 @@ lenient_enum! {
     fallback = Other;
 }
 
-/// An agent asks the UI for input that isn't a tool permission (Pi extension UI, Cursor questions,
-/// ACP elicitation). Never auto-answered.
+/// An agent asks the UI for input that isn't a tool permission (Claude or Cursor questions,
+/// Pi extension UI, ACP elicitation). Never auto-answered.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct UiRequest {
     pub request_id: String,
@@ -408,9 +432,33 @@ pub enum UiPrompt {
         message: String,
         placeholder: Option<String>,
     },
+    // A group of independent questions, answered together and never by the permission policy.
+    Questions {
+        message: String,
+        questions: Vec<UiQuestion>,
+    },
     Notify {
         message: String,
     },
+}
+
+/// One question in a grouped prompt. The driver keeps the original native question and maps it by
+/// `id`, so display normalization never changes the key sent back to the agent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct UiQuestion {
+    /// Stable within the request and unique among its questions.
+    pub id: String,
+    pub header: String,
+    pub question: String,
+    pub options: Vec<UiQuestionOption>,
+    pub multi_select: bool,
+    pub allow_free_text: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct UiQuestionOption {
+    pub label: String,
+    pub description: String,
 }
 
 /// The answer to a [`UiRequest`], matching its [`UiPrompt`] (`Notify` takes none).
@@ -420,6 +468,18 @@ pub enum UiAnswer {
     Confirm { yes: bool },
     Select { index: u32 },
     Input { text: String },
+    Questions { answers: Vec<UiQuestionAnswer> },
+}
+
+/// One answer per question. A single-select question accepts one option or free text; a
+/// multi-select question accepts multiple options and optional free text. Nothing is preselected.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct UiQuestionAnswer {
+    pub question_id: String,
+    /// Distinct indices into the question's options, in their displayed order.
+    pub selected: Vec<u32>,
+    /// Nonblank when present, and accepted only when the question allows free text.
+    pub text: Option<String>,
 }
 
 /// One piece of a prompt. M1a sends `Text` only; M2c adds images and mentions.
@@ -619,11 +679,15 @@ pub enum AutoAnswer {
     },
 }
 
-/// Which driver runs an agent. M1b to M1d add Claude stream-json, Codex app-server and Pi RPC.
+/// Which driver runs an agent. M1c and M1d add Codex app-server and Pi RPC.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum DriverKind {
     Acp,
+    Claude,
+    Codex,
+    Headless,
+    Pi,
     Mock,
 }
 
@@ -701,10 +765,11 @@ mod tests {
             AuraEvent::PromptLifecycle { .. } => 17,
             AuraEvent::Notice { .. } => 18,
             AuraEvent::Error { .. } => 19,
+            AuraEvent::SteeringStatus { .. } => 20,
         }
     }
 
-    const VARIANTS: usize = 20;
+    const VARIANTS: usize = 21;
 
     fn truncation() -> Option<Truncation> {
         Some(Truncation {
@@ -717,6 +782,11 @@ mod tests {
     /// unset somewhere.
     fn samples() -> Vec<AuraEvent> {
         vec![
+            AuraEvent::SteeringStatus {
+                message_id: "steer".into(),
+                state: composer::SteeringState::Accepted,
+                detail: None,
+            },
             AuraEvent::TurnStarted {
                 turn_id: "t".into(),
                 prompt_id: Some("p".into()),
@@ -1153,6 +1223,13 @@ mod tests {
             UiAnswer::Confirm { yes: false },
             UiAnswer::Select { index: 2 },
             UiAnswer::Input { text: "x".into() },
+            UiAnswer::Questions {
+                answers: vec![UiQuestionAnswer {
+                    question_id: "q0".into(),
+                    selected: vec![0, 2],
+                    text: Some("Keep the existing behavior too".into()),
+                }],
+            },
         ] {
             let value = serde_json::to_value(&answer).expect("serialize");
             assert!(value["type"].is_string());
@@ -1207,6 +1284,60 @@ mod tests {
             serde_json::to_value(DriverKind::Acp).expect("serialize"),
             json!("acp")
         );
+        assert_eq!(
+            serde_json::to_value(DriverKind::Claude).expect("serialize"),
+            json!("claude")
+        );
+        assert_eq!(
+            serde_json::from_value::<DriverKind>(json!("claude")).expect("deserialize"),
+            DriverKind::Claude
+        );
+    }
+
+    #[test]
+    fn grouped_questions_keep_identity_and_selection_rules_on_the_wire() {
+        let prompt = UiPrompt::Questions {
+            message: "Choose how to proceed".into(),
+            questions: vec![
+                UiQuestion {
+                    id: "q0".into(),
+                    header: "Format".into(),
+                    question: "Which format should I use?".into(),
+                    options: vec![UiQuestionOption {
+                        label: "Summary".into(),
+                        description: "A brief overview".into(),
+                    }],
+                    multi_select: false,
+                    allow_free_text: true,
+                },
+                UiQuestion {
+                    id: "q1".into(),
+                    header: "Sections".into(),
+                    question: "Which sections should I include?".into(),
+                    options: vec![UiQuestionOption {
+                        label: "Tests".into(),
+                        description: "Show the verification results".into(),
+                    }],
+                    multi_select: true,
+                    allow_free_text: false,
+                },
+            ],
+        };
+        let value = serde_json::to_value(&prompt).expect("serialize");
+        assert_eq!(value["type"], "questions");
+        assert_eq!(value["questions"][0]["id"], "q0");
+        assert_eq!(value["questions"][1]["id"], "q1");
+        assert_eq!(
+            value["questions"][0]["question"],
+            "Which format should I use?"
+        );
+        assert_eq!(value["questions"][0]["multi_select"], false);
+        assert_eq!(value["questions"][1]["multi_select"], true);
+        assert_eq!(value["questions"][1]["allow_free_text"], false);
+        assert_eq!(
+            serde_json::from_value::<UiPrompt>(value).expect("deserialize"),
+            prompt
+        );
     }
 
     #[test]
@@ -1247,3 +1378,5 @@ mod tests {
         const { assert!(EVENT_BUDGET < MAX_FRAME_BYTES) };
     }
 }
+
+pub mod worktree_setup;

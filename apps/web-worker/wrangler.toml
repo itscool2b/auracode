@@ -1,0 +1,23 @@
+# Normal code deployment, with the public prerender output embedded by Rust at build time.
+# There are no Assets, D1, R2, email, secrets or API bindings in this Worker.
+name = "auracode-web-local"
+main = "build/index.js"
+compatibility_date = "2026-10-26"
+workers_dev = false
+preview_urls = false
+
+[build]
+command = "corepack pnpm --filter @auracode/web build && worker-build --release"
+
+[observability]
+enabled = false
+
+[env.production]
+name = "auracode-web"
+account_id = "5feb14f2fe605875bcf1472f348cb7ed"
+routes = [{ pattern = "auracode.si/*", zone_name = "auracode.si" }]
+
+[env.preview]
+name = "auracode-web-preview"
+account_id = "5feb14f2fe605875bcf1472f348cb7ed"
+routes = [{ pattern = "preview.auracode.si/*", zone_name = "auracode.si" }]

@@ -15,6 +15,178 @@ use aura_protocol::{
 };
 use support::*;
 
+#[tokio::test(start_paused = true)]
+async fn grouped_questions_are_bounded_validated_and_never_auto_answered() {
+    use aura_protocol::{UiQuestion, UiQuestionAnswer, UiQuestionOption};
+
+    let questions: Vec<_> = ["single", "multiple"]
+        .into_iter()
+        .map(|id| UiQuestion {
+            id: id.into(),
+            header: "header ".repeat(200),
+            question: "question \"\\🦀 ".repeat(1000),
+            options: (0..4)
+                .map(|index| UiQuestionOption {
+                    label: format!("{index}: {}", "choice ".repeat(100)),
+                    description: "description \"\\🦀 ".repeat(1000),
+                })
+                .collect(),
+            multi_select: id == "multiple",
+            allow_free_text: id == "multiple",
+        })
+        .collect();
+    let (driver, handle) = ScriptedDriver::new(vec![
+        Step::Emit(DriverEvent::Autonomy(full_auto())),
+        ready_step("n1"),
+    ]);
+    let h = Harness::new(vec![driver]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    let sink = Sink::new("main");
+    h.manager
+        .attach(&chat.id, sink.clone())
+        .await
+        .expect("attach");
+    handle.emit(DriverEvent::UiRequest {
+        turn: None,
+        request: UiRequest {
+            request_id: "questions".into(),
+            prompt: UiPrompt::Questions {
+                message: "Please choose".repeat(1000),
+                questions,
+            },
+        },
+    });
+    sink.wait_for("grouped questions", |event| {
+        matches!(event, AuraEvent::UiRequest(_))
+    })
+    .await;
+    let history = h.stored(&chat.id).await;
+    let request = history
+        .iter()
+        .find_map(|event| match event {
+            AuraEvent::UiRequest(request) if request.request_id == "questions" => Some(request),
+            _ => None,
+        })
+        .expect("grouped request");
+    let UiPrompt::Questions { questions, .. } = &request.prompt else {
+        panic!("questions");
+    };
+    assert_eq!(
+        questions
+            .iter()
+            .map(|question| question.id.as_str())
+            .collect::<Vec<_>>(),
+        ["single", "multiple"]
+    );
+    for question in questions {
+        for (index, option) in question.options.iter().enumerate() {
+            assert!(
+                option.label.starts_with(&format!("{index}:")),
+                "option order stays exact"
+            );
+        }
+    }
+    assert!(
+        serde_json::to_vec(&AuraEvent::UiRequest(request.clone()))
+            .expect("JSON")
+            .len()
+            <= aura_protocol::EVENT_BUDGET
+    );
+    assert!(
+        !handle
+            .commands()
+            .iter()
+            .any(|command| matches!(command, LoggedCommand::RespondUi { .. }))
+    );
+    let single = UiQuestionAnswer {
+        question_id: "single".into(),
+        selected: vec![1],
+        text: None,
+    };
+    let multiple = UiQuestionAnswer {
+        question_id: "multiple".into(),
+        selected: vec![0, 3],
+        text: Some("another choice \"\\🦀 ".repeat(1000)),
+    };
+    let mut invalid = vec![
+        vec![],
+        vec![single.clone()],
+        vec![single.clone(), single.clone()],
+    ];
+    for changed in [
+        UiQuestionAnswer {
+            question_id: "unknown".into(),
+            ..multiple.clone()
+        },
+        UiQuestionAnswer {
+            selected: vec![4],
+            ..multiple.clone()
+        },
+        UiQuestionAnswer {
+            selected: vec![1, 1],
+            ..multiple.clone()
+        },
+        UiQuestionAnswer {
+            selected: vec![],
+            text: None,
+            ..multiple.clone()
+        },
+        UiQuestionAnswer {
+            text: Some(" \t".into()),
+            ..multiple.clone()
+        },
+    ] {
+        invalid.push(vec![single.clone(), changed]);
+    }
+    for changed in [
+        UiQuestionAnswer {
+            selected: vec![0, 1],
+            ..single.clone()
+        },
+        UiQuestionAnswer {
+            selected: vec![],
+            text: Some("not allowed".into()),
+            ..single.clone()
+        },
+    ] {
+        invalid.push(vec![changed, multiple.clone()]);
+    }
+    for answers in invalid {
+        assert!(matches!(
+            h.manager
+                .respond_ui(&chat.id, "questions", Some(UiAnswer::Questions { answers }))
+                .await,
+            Err(SessionError::OptionInvalid(_))
+        ));
+    }
+    let answer = UiAnswer::Questions {
+        answers: vec![multiple, single],
+    };
+    h.manager
+        .respond_ui(&chat.id, "questions", Some(answer.clone()))
+        .await
+        .expect("valid grouped answer");
+    assert_eq!(
+        command(
+            &handle,
+            CommandMatch::RespondUi {
+                request_id: Some("questions".into())
+            }
+        )
+        .await,
+        LoggedCommand::RespondUi {
+            request_id: "questions".into(),
+            answer: Some(answer)
+        }
+    );
+    for event in h.stored(&chat.id).await {
+        if matches!(event, AuraEvent::UiResolved { .. }) {
+            assert!(serde_json::to_vec(&event).expect("JSON").len() <= aura_protocol::EVENT_BUDGET);
+        }
+    }
+}
+
 fn end_turn(stop_reason: StopReason) -> Step {
     Step::EndTurn {
         stop_reason,
@@ -326,15 +498,6 @@ async fn two_subscribers() {
 async fn notifications_are_never_open_and_a_refused_autonomy_asks() {
     let (driver, handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
-        Step::Emit(DriverEvent::UiRequest {
-            turn: None,
-            request: UiRequest {
-                request_id: "n".into(),
-                prompt: UiPrompt::Notify {
-                    message: "FYI".into(),
-                },
-            },
-        }),
         Step::Expect(CommandMatch::SetAutonomy),
         Step::Hang,
     ]);
@@ -350,6 +513,16 @@ async fn notifications_are_never_open_and_a_refused_autonomy_asks() {
         .attach(&chat.id, sink.clone())
         .await
         .expect("attach");
+    // The sink only receives live events after attach. Do not race the initial history snapshot.
+    handle.emit(DriverEvent::UiRequest {
+        turn: None,
+        request: UiRequest {
+            request_id: "n".into(),
+            prompt: UiPrompt::Notify {
+                message: "FYI".into(),
+            },
+        },
+    });
     sink.wait_for("the notification", |event| {
         matches!(event, AuraEvent::UiRequest(_))
     })

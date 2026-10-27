@@ -30,6 +30,26 @@ pub enum CoreError {
     #[error("Database error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 
+    #[error("Unlock this account before opening its encrypted profile at {path}.")]
+    ProfileLocked { path: PathBuf },
+
+    #[error("An account database key cannot be used to open a Local profile.")]
+    ProfileEncryptionMismatch,
+
+    #[error(
+        "An older account database exists at {path}. Its data needs an explicit import or restore before this account can open. Both database locations were left unchanged."
+    )]
+    AccountDatabaseLayout { path: PathBuf },
+
+    #[error(
+        "The encrypted database at {path} could not be opened safely. Check the account key or restore an encrypted backup. No repair or replacement was attempted."
+    )]
+    EncryptedDatabase { path: PathBuf },
+
+    #[cfg(feature = "account-sync")]
+    #[error(transparent)]
+    DatabaseEncryption(#[from] aura_sync::database::DatabaseError),
+
     /// The backup taken before a migration failed. The migration is not attempted without one.
     #[error(
         "Could not back up the database to {path} before upgrading it, so it was left unchanged: {source}"

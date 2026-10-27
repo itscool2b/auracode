@@ -20,12 +20,17 @@
 
 pub mod control;
 pub mod env;
+pub mod host;
 pub mod io;
+pub mod locked_file;
 pub mod log;
 pub mod ptable;
+pub mod pty;
+pub mod raw;
 pub mod registry;
 pub mod shutdown;
 pub mod spawn;
+pub mod supervisor;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 
@@ -42,18 +47,20 @@ pub use env::{
     find_program, merge_windows_path, node_options_has_debugger_hook, parse_env0, process_env,
     scrub, secret_values, strip_launch_context,
 };
+pub use host::{HostAvailability, HostExecution, HostSpawner};
 pub use io::{AgentIo, LineSink, LineSource, StdinClosed, StdoutItem, TopKeys};
 pub use log::{
     Direction, LogFactory, LogLimits, LogNote, ProtocolLog, Redactor, RetentionPolicy,
     RetentionReport,
 };
+pub use raw::{ByteSink, RawProcess};
 pub use registry::{
     EscapedProc, InstanceRecord, LeftoverEntry, LeftoverRegistry, SweepReport, sweep_stale,
 };
 pub use shutdown::{ShutdownPlan, ShutdownReport, ShutdownStep};
 pub use spawn::{
     DaemonMatch, HelperEnv, HelperOutput, HelperSpec, LaunchSpec, ProcessCwd, ProcessSpawner,
-    SpawnError, SpawnSpec, SpawnedProcess, Spawner, run_helper,
+    SpawnError, SpawnSpec, SpawnedProcess, Spawner, run_helper, run_helper_input,
 };
 
 /// The longest stdout line an agent may write (Hermes' own limit is 50 MiB). A longer line is

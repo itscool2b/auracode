@@ -19,7 +19,7 @@ export function QueueList({
 }) {
   if (queue.length === 0 && !held) return null;
   return (
-    <section aria-label="Queued messages" data-testid="queue">
+    <section className="chat-queue-list" aria-label="Queued messages" data-testid="queue">
       {queue.length > 0 ? (
         <ul className="chat-queue">
           {queue.map((row) => (

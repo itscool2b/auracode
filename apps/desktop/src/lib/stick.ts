@@ -42,12 +42,14 @@ const CLAMP_SLACK = 2;
 
 export class StickToBottom {
   readonly #scroller: Scroller;
+  readonly #onPinnedChange?: (pinned: boolean) => void;
   #pinned = true;
   /** The position last written or seen: an echo of a write matches it, a reader's scroll does not. */
   #lastTop: number;
 
-  constructor(scroller: Scroller) {
+  constructor(scroller: Scroller, onPinnedChange?: (pinned: boolean) => void) {
     this.#scroller = scroller;
+    this.#onPinnedChange = onPinnedChange;
     this.#lastTop = scroller.scrollTop;
   }
 
@@ -60,12 +62,12 @@ export class StickToBottom {
     const scroller = this.#scroller;
     if (scroller.scrollHeight <= scroller.clientHeight) {
       // Nothing to scroll (a fresh turn, say): follow again from here.
-      this.#pinned = true;
+      this.#setPinned(true);
       this.#lastTop = scroller.scrollTop;
       return;
     }
     // A large scroll up whose event has not arrived yet (WebKit) and that had no intent event.
-    if (this.#pinned && this.#scrolledUpFrom(this.#lastTop)) this.#pinned = false;
+    if (this.#pinned && this.#scrolledUpFrom(this.#lastTop)) this.#setPinned(false);
     if (!this.#pinned) return;
     scroller.scrollTop = scroller.scrollHeight;
     // Read back the clamped position, to recognise this write's own scroll event.
@@ -80,9 +82,9 @@ export class StickToBottom {
     if (Math.abs(top - previous) < ROUNDING) return; // the echo of a write, or no movement
     this.#lastTop = top;
     if (top < previous) {
-      if (this.#scrolledUpFrom(previous)) this.#pinned = false;
+      if (this.#scrolledUpFrom(previous)) this.#setPinned(false);
     } else if (this.#distance() <= REPIN_DISTANCE) {
-      this.#pinned = true;
+      this.#setPinned(true);
     }
   }
 
@@ -91,7 +93,25 @@ export class StickToBottom {
    * scrollbar, keyboard focus moving into the log): stop following now, before the scroll lands.
    */
   release(): void {
-    this.#pinned = false;
+    this.#setPinned(false);
+  }
+
+  /** The reader explicitly asks to return to the latest output. */
+  pin(): void {
+    this.#lastTop = this.#scroller.scrollTop;
+    this.#setPinned(true);
+    this.follow();
+  }
+
+  #setPinned(pinned: boolean): void {
+    if (this.#pinned === pinned) return;
+    this.#pinned = pinned;
+    this.#onPinnedChange?.(pinned);
+  }
+
+  /** A virtual layout compensated for measured rows; this is not a reader's scroll gesture. */
+  acknowledgeAdjustment(): void {
+    this.#lastTop = this.#scroller.scrollTop;
   }
 
   #distance(): number {

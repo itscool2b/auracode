@@ -1,0 +1,337 @@
+// Build tooling only. Read locked package metadata and preserve upstream license texts.
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export const root = fileURLToPath(new URL("../../", import.meta.url));
+export const targets = [
+  "aarch64-apple-darwin",
+  "aarch64-pc-windows-msvc",
+  "x86_64-apple-darwin",
+  "x86_64-pc-windows-msvc",
+];
+const cataloguePath = join(root, "third-party/catalogue.json");
+const digest = (value) => createHash("sha256").update(value).digest("hex");
+const json = (file) => JSON.parse(readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
+const sort = (values) => values.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+
+export function runtimePackages(metadata, packageName) {
+  const packages = new Map(metadata.packages.map((p) => [p.id, p]));
+  const nodes = new Map(metadata.resolve.nodes.map((n) => [n.id, n]));
+  const start = metadata.packages.find((p) => p.name === packageName);
+  if (!start) throw new Error(`Missing runtime root ${packageName}`);
+  const found = new Set();
+  const todo = [start.id];
+  while (todo.length) {
+    const id = todo.pop();
+    if (found.has(id)) continue;
+    found.add(id);
+    for (const dependency of nodes.get(id)?.deps ?? []) {
+      const pkg = packages.get(dependency.pkg);
+      if (
+        dependency.dep_kinds.some((kind) => kind.kind === null) &&
+        !pkg.targets.every((target) => target.kind.includes("proc-macro"))
+      )
+        todo.push(pkg.id);
+    }
+  }
+  return [...found].map((id) => packages.get(id)).filter((p) => p.source);
+}
+
+function inputFiles() {
+  const files = ["Cargo.lock", "Cargo.toml", "pnpm-lock.yaml", "third-party/overrides.json"];
+  for (const folder of ["apps", "crates", "packages"]) {
+    for (const entry of readdirSync(join(root, folder), { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      for (const file of ["Cargo.toml", "package.json", "src-tauri/Cargo.toml"]) {
+        const name = `${folder}/${entry.name}/${file}`;
+        if (existsSync(join(root, name))) files.push(name);
+      }
+    }
+  }
+  return Object.fromEntries(
+    sort(files).map((file) => [file, digest(readFileSync(join(root, file)))]),
+  );
+}
+
+function licenseFiles(directory) {
+  return sort(readdirSync(directory)).filter(
+    (name) =>
+      /^(?:licen[cs]e|notice|copying)(?:[._-]|$)/i.test(name) &&
+      statSync(join(directory, name)).isFile(),
+  );
+}
+
+export function collect() {
+  const overrides = json(join(root, "third-party/overrides.json"));
+  const records = new Map();
+  const texts = {};
+  function file(text, source) {
+    if (!text.trim() || Buffer.byteLength(text) > 1024 * 1024)
+      throw new Error(`Invalid license: ${source}`);
+    const hash = digest(text);
+    texts[hash] = text;
+    return { sha256: hash, source };
+  }
+  function add(record) {
+    const key = `${record.ecosystem}/${record.name}/${record.version}`;
+    const existing = records.get(key);
+    if (existing) {
+      existing.distributions = sort([
+        ...new Set([...existing.distributions, ...record.distributions]),
+      ]);
+      existing.targets = sort([...new Set([...existing.targets, ...record.targets])]);
+      return;
+    }
+    if (!record.files.length) throw new Error(`No reviewed license text for ${key}`);
+    records.set(key, record);
+  }
+  function installedFiles(directory, source) {
+    return licenseFiles(directory).map((name) =>
+      file(readFileSync(join(directory, name), "utf8"), `${source}#${name}`),
+    );
+  }
+  function npm(distribution, directory, seen = new Set()) {
+    directory = realpathSync(directory);
+    if (seen.has(directory)) return;
+    seen.add(directory);
+    const pkg = json(join(directory, "package.json"));
+    if (!pkg.private) {
+      const source = `https://registry.npmjs.org/${pkg.name}/-/${pkg.name.split("/").at(-1)}-${pkg.version}.tgz`;
+      const files = installedFiles(directory, source);
+      if (pkg.name === "ogl" && pkg.version === "1.0.11" && !files.length) {
+        const readme = readFileSync(join(directory, "README.md"), "utf8");
+        const marker = "## Unlicense";
+        if (!readme.includes(marker))
+          throw new Error("OGL no longer includes its reviewed Unlicense section");
+        files.push(file(readme.slice(readme.indexOf(marker)), `${source}#README.md-Unlicense`));
+      }
+      add({
+        ecosystem: "npm",
+        name: pkg.name,
+        version: pkg.version,
+        license: pkg.license,
+        source,
+        distributions: [distribution],
+        targets: [],
+        files,
+      });
+    }
+    for (const name of sort(Object.keys(pkg.dependencies ?? {}))) {
+      let parent = directory;
+      let dependency;
+      while (parent !== dirname(parent)) {
+        const candidate = join(parent, "node_modules", name);
+        if (existsSync(join(candidate, "package.json"))) {
+          dependency = candidate;
+          break;
+        }
+        parent = dirname(parent);
+      }
+      if (!dependency)
+        throw new Error(`Install the locked dependency ${name} before refreshing notices`);
+      npm(distribution, dependency, seen);
+    }
+  }
+  npm("desktop", join(root, "apps/desktop"));
+  npm("web", join(root, "apps/web"));
+  for (const target of targets) {
+    const metadata = JSON.parse(
+      execFileSync(
+        process.env.CARGO ?? "cargo",
+        ["metadata", "--locked", "--offline", "--format-version", "1", "--filter-platform", target],
+        { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, windowsHide: true },
+      ),
+    );
+    for (const pkg of runtimePackages(metadata, "auracode-desktop")) {
+      const directory = dirname(pkg.manifest_path);
+      const source = `https://crates.io/api/v1/crates/${pkg.name}/${pkg.version}/download`;
+      let files = installedFiles(directory, source);
+      const override = overrides[`cargo/${pkg.name}/${pkg.version}`];
+      if (!files.length && override) {
+        const vcs = json(join(directory, ".cargo_vcs_info.json"));
+        if (vcs.git.sha1 !== override.revision)
+          throw new Error(`Upstream revision changed for ${pkg.name}`);
+        files = override.files.map((entry) => {
+          const text = readFileSync(join(root, "third-party", entry.file), "utf8");
+          if (digest(text) !== entry.sha256)
+            throw new Error(`Upstream notice changed for ${pkg.name}`);
+          return file(text, entry.source);
+        });
+      }
+      add({
+        ecosystem: "cargo",
+        name: pkg.name,
+        version: pkg.version,
+        license: pkg.license,
+        source,
+        distributions: ["desktop"],
+        targets: [target],
+        files,
+      });
+      if (pkg.name === "libsqlite3-sys") {
+        const license = join(directory, "sqlcipher/LICENSE");
+        add({
+          ecosystem: "native",
+          name: "SQLCipher (libsqlite3-sys source)",
+          version: pkg.version,
+          license: "BSD-3-Clause",
+          source: `${source}#sqlcipher`,
+          distributions: ["desktop"],
+          targets: [target],
+          files: [file(readFileSync(license, "utf8"), `${source}#sqlcipher/LICENSE`)],
+        });
+      }
+    }
+    if (target.includes("windows")) {
+      // This build dependency contributes compiled native code through SQLCipher's vendored feature.
+      const pkg = metadata.packages.find((p) => p.name === "openssl-src");
+      if (!pkg) throw new Error("Missing vendored OpenSSL source metadata");
+      const source = `https://crates.io/api/v1/crates/${pkg.name}/${pkg.version}/download`;
+      add({
+        ecosystem: "native",
+        name: "OpenSSL (openssl-src source)",
+        version: pkg.version,
+        license: "Apache-2.0",
+        source: `${source}#openssl`,
+        distributions: ["desktop"],
+        targets: [target],
+        files: installedFiles(join(dirname(pkg.manifest_path), "openssl"), `${source}#openssl`),
+      });
+    }
+  }
+  return {
+    version: 1,
+    scope:
+      "Locked production dependency closure, excluding dev/build dependencies and procedural macro executables. Native SQLCipher and Windows vendored OpenSSL are explicitly included. Linker-level and installer SDK qualification is separate.",
+    inputs: inputFiles(),
+    records: [...records.values()].sort((a, b) =>
+      `${a.ecosystem}/${a.name}/${a.version}`.localeCompare(
+        `${b.ecosystem}/${b.name}/${b.version}`,
+        "en",
+      ),
+    ),
+    texts: Object.fromEntries(sort(Object.keys(texts)).map((key) => [key, texts[key]])),
+  };
+}
+
+export function verifiedCatalogue() {
+  const catalogue = json(cataloguePath);
+  catalogue.texts = json(join(root, "third-party/texts.json"));
+  if (JSON.stringify(catalogue.inputs) !== JSON.stringify(inputFiles()))
+    throw new Error(
+      "Third-party notices are stale. Run node .github/scripts/third-party-notices.mjs --write after reviewing dependency changes.",
+    );
+  for (const [hash, text] of Object.entries(catalogue.texts))
+    if (digest(text) !== hash) throw new Error("Third-party license text integrity failed");
+  for (const record of catalogue.records)
+    for (const entry of record.files)
+      if (!catalogue.texts[entry.sha256])
+        throw new Error(`Missing third-party license text for ${record.name}`);
+  return catalogue;
+}
+
+export function renderText(catalogue, distribution) {
+  const records = catalogue.records.filter((record) => record.distributions.includes(distribution));
+  const lines = [
+    "Third-party software notices",
+    "",
+    "These notices apply to the listed third-party components. They do not grant a license to auracode itself.",
+    "",
+    "Component source archives are linked below, including the unmodified source for MPL-covered components.",
+    "",
+  ];
+  const used = new Map();
+  for (const record of records) {
+    lines.push(
+      `${record.name} ${record.version} (${record.ecosystem})`,
+      `License: ${record.license}`,
+      `Source: ${record.source}`,
+    );
+    if (record.targets.length) lines.push(`Targets: ${record.targets.join(", ")}`);
+    for (const entry of record.files) {
+      if (!used.has(entry.sha256)) used.set(entry.sha256, used.size + 1);
+      lines.push(`License text ${used.get(entry.sha256)}: ${entry.source}`);
+    }
+    lines.push("");
+  }
+  for (const [hash, number] of used)
+    lines.push(
+      `================ LICENSE TEXT ${number} ================`,
+      "",
+      catalogue.texts[hash],
+      "",
+    );
+  return lines.join("\n");
+}
+
+export function renderHtml(text) {
+  const safe = text.replace(
+    /[&<>"']/g,
+    (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],
+  );
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Third-party notices | auracode</title><style>html{color-scheme:dark;background:#000;color:#a3a3a3;font:14px/1.6 ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}body{max-width:76rem;margin:4rem auto;padding:0 1rem}h1{margin:0 0 2rem;color:#ededed;font-size:2rem;line-height:1.1;font-weight:500;letter-spacing:-0.03em}pre{margin:0;padding-top:2rem;border-top:1px solid #1f1f1f;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 ui-monospace,Menlo,Consolas,monospace}::selection{background:#333;color:#ededed}</style><body><h1>Third-party notices</h1><pre>${safe}</pre></body></html>`;
+}
+
+const virtualNotices = "virtual:third-party-notices";
+
+export function noticesPlugin(distribution) {
+  return {
+    name: "auracode-third-party-notices",
+    // The desktop CSP has no same-origin connect-src, so the app lazily imports the same text
+    // as a script chunk instead of fetching the emitted file.
+    resolveId(id) {
+      return id === virtualNotices ? `\0${virtualNotices}` : null;
+    },
+    load(id) {
+      if (id !== `\0${virtualNotices}`) return null;
+      return `export default ${JSON.stringify(renderText(verifiedCatalogue(), distribution))};`;
+    },
+    generateBundle() {
+      const text = renderText(verifiedCatalogue(), distribution);
+      this.emitFile({ type: "asset", fileName: "third-party-notices.txt", source: text });
+      this.emitFile({
+        type: "asset",
+        // A directory index gives the website Worker a clean route. It serves HTML only as
+        // prerendered index pages.
+        fileName: "third-party-notices/index.html",
+        source: renderHtml(text),
+      });
+    },
+  };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (process.argv[2] === "--write") {
+    const { texts, ...catalogue } = collect();
+    const textsPath = join(root, "third-party/texts.json");
+    writeFileSync(cataloguePath, `${JSON.stringify(catalogue, null, 2)}\n`);
+    writeFileSync(textsPath, `${JSON.stringify(texts, null, 2)}\n`);
+    execFileSync(
+      process.execPath,
+      [
+        join(root, "node_modules/@biomejs/biome/bin/biome"),
+        "format",
+        "--write",
+        cataloguePath,
+        textsPath,
+      ],
+      { cwd: root, stdio: "pipe", windowsHide: true },
+    );
+    console.log("Updated third-party notice catalogue from locked packages.");
+  } else {
+    const catalogue = verifiedCatalogue();
+    console.log(
+      `Verified ${catalogue.records.length} third-party runtime records and their license texts.`,
+    );
+  }
+}

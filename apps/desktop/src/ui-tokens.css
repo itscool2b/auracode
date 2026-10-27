@@ -1,155 +1,55 @@
 /*
- * Semantic tokens for the chat screens: every colour, size, font, spacing step and radius the chat
- * components use is one of these names. Components never hold a literal, so the visual language
- * restyles every chat screen by remapping these names here.
- *
- * They map onto Orbit (docs/design/visual-language.md, section 3; the Design Lab's
- * src/directions/orbit/tokens.css holds the same values): black and white, one ink at alpha steps
- * for text, and colour that means four things only: orange (look here), green (done, added), red
- * (failed, removed) and ink. The window is pinned dark for now (tauri.conf.json), so the light
- * values below wait for the theme to follow the system.
+ * The desktop app's semantic tokens, mapped onto Graphite (docs/design/visual-language.md, section
+ * 3). The chat shell's stylesheets (shell.css, chat.css, context-panel.css) read colour through these
+ * names and take type sizes, radii and motion straight from the --g-* tokens. Dark only: every text
+ * colour is a solid Graphite value, never an alpha.
  */
+@import "@auracode/ui/graphite.css";
 
 :root {
-  /* Surfaces, back to front. Only the sidebar sits on the window's material; panes are solid. */
-  --ui-surface-sidebar: rgb(0 0 0 / 0.82);
-  --ui-surface-main: #0e0e0d;
-  --ui-surface-panel: #171716;
-  --ui-surface-raised: #1f1f1e;
-  --ui-surface-input: #171716;
-  --ui-surface-code: #000;
-  --ui-surface-hover: rgb(242 241 238 / 0.05);
-  --ui-surface-pressed: rgb(242 241 238 / 0.09);
-  --ui-surface-selected: rgb(242 241 238 / 0.07);
-  /* The user's message is an inverted ink block (Grok Bot). */
-  --ui-surface-user: #e9e8e4;
-  --ui-surface-scrim: rgb(0 0 0 / 0.56);
+  /* Geist with its default glyphs, exactly as the website sets it. */
+  font-feature-settings: normal;
 
-  /* Text, strongest to faintest */
-  --ui-text-primary: #f2f1ee;
-  --ui-text-secondary: rgb(242 241 238 / 0.7);
-  --ui-text-muted: rgb(242 241 238 / 0.5);
-  --ui-text-faint: rgb(242 241 238 / 0.28);
-  --ui-text-on-accent: #0a0a0a;
-  --ui-text-user: #0a0a0a;
-  --ui-text-link: #f2f1ee;
-  --ui-text-link-underline: rgb(242 241 238 / 0.3);
+  /* Surfaces, back to front. Wells sit one step below their pane. */
+  --ui-surface-window: var(--g-bg);
+  --ui-surface-main: var(--g-surface-1);
+  --ui-surface-raised: var(--g-surface-2);
+  --ui-surface-fill: var(--g-surface-3);
+  --ui-surface-selected: var(--g-surface-4);
+  --ui-surface-well: var(--g-bg);
+  --ui-surface-user: var(--g-surface-3);
+  --ui-surface-scrim: var(--g-scrim);
 
-  /* Borders */
-  --ui-border-width: 1px;
-  --ui-border-subtle: rgb(242 241 238 / 0.09);
-  --ui-border-default: rgb(242 241 238 / 0.15);
-  --ui-border-strong: rgb(242 241 238 / 0.24);
-  --ui-focus-ring: rgb(242 241 238 / 0.55);
-  --ui-focus-width: 2px;
+  /* Text, strongest to faintest. Faint is decorative or disabled only. */
+  --ui-text-primary: var(--g-fg-1);
+  --ui-text-secondary: var(--g-fg-2);
+  --ui-text-muted: var(--g-fg-3);
+  --ui-text-faint: var(--g-fg-4);
+  --ui-text-on-primary: var(--g-on-light);
 
-  /* Accent: ink. Primary actions are ink pills; no agent colours. */
-  --ui-accent: #f2f1ee;
-  --ui-accent-soft: rgb(242 241 238 / 0.1);
+  /* Lines: hairlines for structure, strong lines for things you can act on. */
+  --ui-line-faint: var(--g-line-faint);
+  --ui-line: var(--g-line);
+  --ui-line-strong: var(--g-line-strong);
 
-  /* Status: orange means look here, green done, red failed; information stays ink. */
-  --ui-status-info: rgb(242 241 238 / 0.7);
-  --ui-status-success: #31c88e;
-  --ui-status-warning: #ff6308;
-  --ui-status-danger: #f64b5c;
-  --ui-status-info-soft: rgb(242 241 238 / 0.06);
-  --ui-status-warning-soft: rgb(255 99 8 / 0.16);
-  --ui-status-danger-soft: rgb(246 75 92 / 0.14);
-  --ui-diff-added: rgb(49 200 142 / 0.12);
-  --ui-diff-removed: rgb(246 75 92 / 0.12);
+  /* The one white object on a screen, and the three signals. Volt only means look here. */
+  --ui-primary: var(--g-primary);
+  --ui-primary-hover: var(--g-primary-hover);
+  --ui-primary-active: var(--g-primary-active);
+  --ui-signal: var(--g-volt);
+  --ui-signal-tint: var(--g-volt-tint);
+  --ui-success: var(--g-green);
+  --ui-danger: var(--g-red);
+  --ui-danger-hover: var(--g-red-hover);
+  --ui-danger-tint: var(--g-red-tint);
 
-  /* Type: Geist and Geist Mono only. Light on black reads heavier, so dark drops weights by 20. */
-  --ui-font-body: var(--font-sans);
-  --ui-font-mono: var(--font-mono);
-  --ui-size-xs: 11px;
-  --ui-size-sm: 12.5px;
-  --ui-size-md: 14px;
-  --ui-size-lg: 16px;
-  --ui-size-xl: 20px;
-  --ui-leading-tight: 1.3;
-  --ui-leading-body: 1.57;
-  --ui-leading-prose: 1.65;
-  --ui-weight-regular: 380;
-  --ui-weight-medium: 480;
-  --ui-weight-strong: 580;
-  --ui-tracking-caps: 0.08em;
-
-  /* Spacing steps: a 4px base */
-  --ui-space-1: 2px;
-  --ui-space-2: 4px;
-  --ui-space-3: 8px;
-  --ui-space-4: 12px;
-  --ui-space-5: 16px;
-  --ui-space-6: 24px;
-  --ui-space-7: 32px;
-  --ui-space-8: 48px;
-
-  /* Radii: small for content, pills for controls */
-  --ui-radius-sm: 4px;
-  --ui-radius-md: 8px;
-  --ui-radius-lg: 12px;
-  --ui-radius-pill: 9999px;
-  --ui-radius-control: 9999px;
-
-  /* Layout. The titlebar keeps clearing the native window controls. */
+  /* Layout (section 3.9 and 6.1). The titlebar band keeps clearing the native window controls. */
   --ui-sidebar-width: 264px;
-  --ui-transcript-width: 720px;
+  --ui-rail-width: 72px;
   --ui-titlebar-height: 52px;
-  --ui-control-height: 30px;
-  --ui-dot-size: 8px;
-  --ui-composer-rows-min: 56px;
-  --ui-composer-rows-max: 240px;
-  --ui-pre-max-height: 360px;
-  --ui-menu-max-height: 260px;
-
-  /* Motion: no springs, no overshoot */
-  --ui-duration-fast: 150ms;
-  --ui-ease: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --ui-surface-sidebar: rgb(243 242 239 / 0.86);
-    --ui-surface-main: #fff;
-    --ui-surface-panel: #fff;
-    --ui-surface-raised: #f7f6f3;
-    --ui-surface-input: #fff;
-    --ui-surface-code: #f3f2ef;
-    --ui-surface-hover: rgb(10 10 10 / 0.04);
-    --ui-surface-pressed: rgb(10 10 10 / 0.08);
-    --ui-surface-selected: rgb(10 10 10 / 0.06);
-    --ui-surface-user: #0a0a0a;
-    --ui-surface-scrim: rgb(10 10 10 / 0.24);
-
-    --ui-text-primary: #0a0a0a;
-    --ui-text-secondary: rgb(10 10 10 / 0.72);
-    --ui-text-muted: rgb(10 10 10 / 0.57);
-    --ui-text-faint: rgb(10 10 10 / 0.3);
-    --ui-text-on-accent: #fff;
-    --ui-text-user: #fff;
-    --ui-text-link: #0a0a0a;
-    --ui-text-link-underline: rgb(10 10 10 / 0.3);
-
-    --ui-border-subtle: rgb(10 10 10 / 0.08);
-    --ui-border-default: rgb(10 10 10 / 0.14);
-    --ui-border-strong: rgb(10 10 10 / 0.22);
-    --ui-focus-ring: rgb(10 10 10 / 0.5);
-
-    --ui-accent: #0a0a0a;
-    --ui-accent-soft: rgb(10 10 10 / 0.08);
-
-    --ui-status-info: rgb(10 10 10 / 0.72);
-    --ui-status-success: #0a8f5c;
-    --ui-status-warning: #ec5800;
-    --ui-status-danger: #d11a28;
-    --ui-status-info-soft: rgb(10 10 10 / 0.05);
-    --ui-status-warning-soft: rgb(255 99 8 / 0.1);
-    --ui-status-danger-soft: rgb(244 33 46 / 0.09);
-    --ui-diff-added: rgb(0 186 124 / 0.1);
-    --ui-diff-removed: rgb(244 33 46 / 0.08);
-
-    --ui-weight-regular: 400;
-    --ui-weight-medium: 500;
-    --ui-weight-strong: 600;
-  }
+  --ui-header-height: 44px;
+  --ui-pane-inset: 8px;
+  --ui-column: 720px;
+  --ui-gutter: 22px;
+  --ui-panel-width: 380px;
 }

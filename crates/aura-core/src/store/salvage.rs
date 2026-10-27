@@ -1054,8 +1054,8 @@ mod tests {
     use std::collections::BTreeSet;
     use std::fs;
 
-    /// Every table of the current schema the copy must have, whatever was damaged.
-    const TABLES: [&str; 12] = [
+    /// Core fixture tables with row assertions; the complete schema is checked dynamically.
+    const TABLES: [&str; 15] = [
         "settings",
         "projects",
         "project_folders",
@@ -1068,6 +1068,9 @@ mod tests {
         "agent_cache",
         "message_fts",
         "queued_prompts",
+        "composer_attachments",
+        "composer_drafts",
+        "chat_continuations",
     ];
 
     struct Fixture {
@@ -1531,6 +1534,8 @@ mod tests {
         for (index, leaf) in leaves.iter().enumerate() {
             let f = fixture();
             populated(&f, 300);
+            let expected_tables: BTreeSet<_> =
+                own_tables(&raw(&f.db)).unwrap().into_iter().collect();
             smash(&f.db, *leaf);
             let readable = readable_entries(&f.db);
             let before = fs::read(&f.db).expect("read");
@@ -1543,6 +1548,14 @@ mod tests {
             assert!(!scratch_path(&f.out).exists(), "the rebuilt copy is gone");
             let copy = raw(&f.out);
             assert_eq!(quick_check(&copy), "ok");
+            assert_eq!(
+                own_tables(&copy)
+                    .unwrap()
+                    .into_iter()
+                    .collect::<BTreeSet<_>>(),
+                expected_tables,
+                "every table from the current migrations must be reconstructed"
+            );
             assert_eq!(user_version(&copy), i64::from(super::super::SCHEMA_VERSION));
             assert_eq!(fk_violations(&copy), 0);
             for table in TABLES {
@@ -1579,9 +1592,13 @@ mod tests {
             }
             if index == leaves.len() - 1 {
                 assert!(readable.contains("projects"), "{readable:?}");
+                // Later migrations can move FTS off the last schema leaf. Check the actual
+                // unreadable table set instead of assuming a fixed schema-page layout.
                 assert!(
-                    tables.iter().any(|lost| lost == "message_fts"),
-                    "{tables:?}"
+                    expected_tables
+                        .iter()
+                        .any(|table| !readable.contains(table)),
+                    "{readable:?}"
                 );
             }
         }
@@ -1811,11 +1828,12 @@ mod tests {
     fn a_version_the_migrations_dont_know_keeps_the_damaged_files_own_schema() {
         let f = fixture();
         populated(&f, 3000);
+        let future_version = super::super::SCHEMA_VERSION + 1;
         raw(&f.db)
-            .execute_batch(
-                "CREATE TABLE later (x); INSERT INTO later VALUES ('from a later version'); PRAGMA user_version = 7;",
-            )
-            .expect("v7");
+            .execute_batch(&format!(
+                "CREATE TABLE later (x); INSERT INTO later VALUES ('from a later version'); PRAGMA user_version = {future_version};"
+            ))
+            .expect("future schema version");
         let leaves = pages(&f.db, "events", "leaf");
         smash(&f.db, leaves[leaves.len() / 2]);
         assert_eq!(
@@ -1825,7 +1843,7 @@ mod tests {
             }
         );
         let copy = raw(&f.out);
-        assert_eq!(user_version(&copy), 7);
+        assert_eq!(user_version(&copy), i64::from(future_version));
         assert_eq!(count(&copy, "later"), 1);
         assert_eq!(count(&copy, "projects"), 2);
         assert_eq!(fts_matches(&copy, "creme"), 1);

@@ -1,5 +1,7 @@
 import type {
+  AgentAuthStatus,
   AgentEntry,
+  AgentMaintenance,
   Autonomy,
   BlobText,
   ChatAttach,
@@ -14,9 +16,16 @@ import type {
   StorageStatus,
   UiAnswer,
 } from "../../bindings";
+import { changesApi } from "../changes";
+import { type ComposerTransport, composerApi } from "../composer";
+import { type ConversationTransport, conversationApi } from "../conversation";
+import { type GitWorkspaceApi, gitWorkspaceApi } from "../gitWorkspace";
 import {
+  agentAuthStatus,
+  agentMaintenance,
   agentsList,
   agentsRefresh,
+  agentUpdate,
   chatAttach,
   chatBlob,
   chatCancelQueued,
@@ -42,6 +51,7 @@ import {
   statusSubscribe,
   storageStatus,
 } from "../ipc";
+import { type SearchTransport, searchApi } from "../search";
 
 /**
  * Everything the chat screens ask of the shell. The stores take this interface, so Vitest drives
@@ -49,6 +59,14 @@ import {
  * wrappers throw `CommandError`s with the shell's codes.
  */
 export interface Transport {
+  readonly git?: GitWorkspaceApi;
+  readonly conversation?: ConversationTransport;
+  readonly search?: SearchTransport;
+  readonly changes?: import("../changes").ChangesTransport;
+  readonly composer?: ComposerTransport;
+  agentMaintenance(agentId: string): Promise<AgentMaintenance>;
+  agentAuthStatus(agentId: string): Promise<AgentAuthStatus>;
+  agentUpdate(agentId: string): Promise<void>;
   agentsList(): Promise<AgentEntry[]>;
   agentsRefresh(): Promise<AgentEntry[]>;
   envStatus(): Promise<EnvStatus>;
@@ -85,6 +103,14 @@ export interface Transport {
 
 /** The shell, through the typed command wrappers. */
 export const tauriTransport: Transport = {
+  git: gitWorkspaceApi,
+  conversation: conversationApi,
+  search: searchApi,
+  changes: changesApi,
+  composer: composerApi,
+  agentMaintenance,
+  agentAuthStatus,
+  agentUpdate,
   agentsList,
   agentsRefresh,
   envStatus,

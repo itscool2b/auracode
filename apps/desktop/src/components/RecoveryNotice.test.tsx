@@ -18,6 +18,9 @@ const INFO: AppInfo = {
   data_dir: "/data",
   device: null,
   profile: null,
+  profile_locked: false,
+  profile_switching: false,
+  config_profile_recovery: null,
   db: null,
   glass: "liquid_glass",
   launch: { type: "normal" },
@@ -128,9 +131,7 @@ describe("dismissing the database repair notice", () => {
 
     const html = view(lastOf(states));
     expect(html).toContain(NOTICE);
-    expect(html).toContain(
-      `<span role="alert" class="wrap-anywhere text-xs text-(--aura-danger)">${message}</span>`,
-    );
+    expect(html).toContain(`<span role="alert" class="notice-problem">${message}</span>`);
     expect(html).toMatch(ENABLED_BUTTON);
   });
 

@@ -1,0 +1,453 @@
+//! Reviewed vendor CLI recipes. Never evaluates shell text or opens credentials/configuration.
+use aura_process::{EnvKey, EnvMap};
+use aura_protocol::{
+    agents::{AgentHost, AgentInstallation},
+    config_vendor::{
+        VendorAction as A, VendorKind as K, VendorProvider as P, VendorRequest, VendorReview,
+    },
+};
+use sha2::{Digest, Sha256};
+use std::{
+    ffi::OsString,
+    path::{Component, Path, PathBuf},
+};
+
+#[derive(Debug, thiserror::Error)]
+pub enum VendorError {
+    #[error("This action is not supported by this provider's reviewed CLI. No command has run.")]
+    Unsupported,
+    #[error(
+        "Use a qualified plugin name, marketplace name or pinned npm/GitHub package source. Local paths, credentials and command flags are not accepted."
+    )]
+    Target,
+    #[error("The installation or configuration location changed. Refresh agents and review again.")]
+    Changed,
+    #[error("The native home or configuration folder is unavailable or uses a relative override.")]
+    Folder,
+}
+
+pub struct VendorPlan {
+    pub review: VendorReview,
+    pub program: PathBuf,
+    pub args: Vec<OsString>,
+    pub folder: PathBuf,
+    pub config: PathBuf,
+    pub set_env: Vec<(OsString, OsString)>,
+}
+
+pub fn prepare(
+    installation: &AgentInstallation,
+    env: &EnvMap,
+    request: &VendorRequest,
+) -> Result<VendorPlan, VendorError> {
+    if installation.host != AgentHost::Native
+        || installation.agent_id != request.provider.agent_id()
+    {
+        return Err(VendorError::Unsupported);
+    }
+    let minimum = match request.provider {
+        P::Claude => "2.1.310",
+        P::Codex => "0.162.1",
+        P::Pi => "1.0.2",
+    };
+    if !crate::version_at_least(&installation.version, minimum) {
+        return Err(VendorError::Unsupported);
+    }
+    let command = arguments(request)?;
+    crate::maintenance::check_unchanged(installation).map_err(|_| VendorError::Changed)?;
+    let variable = |name: &str| {
+        env.get(&EnvKey::from(name))
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+    };
+    let folder = if cfg!(windows) {
+        variable("USERPROFILE").or_else(|| variable("HOME"))
+    } else {
+        variable("HOME")
+    }
+    .ok_or(VendorError::Folder)?;
+    if !folder.is_absolute() {
+        return Err(VendorError::Folder);
+    }
+    let folder = std::fs::canonicalize(folder).map_err(|_| VendorError::Folder)?;
+    let (key, fallback) = config_path(request.provider);
+    let config = bind_path(&variable(key).unwrap_or_else(|| folder.join(fallback)))?;
+    let (program, prefix) = crate::npm_entry::command(
+        &installation.agent_id,
+        Path::new(&installation.launch_path),
+        env,
+    )
+    .map_err(|_| VendorError::Unsupported)?;
+    let program = std::fs::canonicalize(program).map_err(|_| VendorError::Changed)?;
+    let mut args = prefix.clone();
+    args.extend(command.into_iter().map(OsString::from));
+    let arguments: Vec<String> = args
+        .iter()
+        .map(|arg| arg.to_str().map(str::to_owned).ok_or(VendorError::Changed))
+        .collect::<Result<_, _>>()?;
+    let program_text = text(&program)?;
+    let folder_text = text(&folder)?;
+    let config_text = text(&config)?;
+    let mut hash = Sha256::new();
+    for value in std::iter::once(&program_text)
+        .chain([&folder_text, &config_text, &installation.version])
+        .chain(arguments.iter())
+    {
+        hash.update((value.len() as u64).to_le_bytes());
+        hash.update(value.as_bytes());
+    }
+    crate::installer::hash_file(&mut hash, &program).map_err(|_| VendorError::Changed)?;
+    for path in &prefix {
+        crate::installer::hash_file(&mut hash, Path::new(path))
+            .map_err(|_| VendorError::Changed)?;
+    }
+    let mut notices = vec![
+        "Changes this device's personal agent configuration. Project and cloud-managed integrations are excluded.".into(),
+        "The vendor may download or execute third-party code. Review its terminal prompts before agreeing. No confirmation is supplied automatically.".into(),
+        "Closing the terminal or reaching ten minutes stops this owned command. Partial vendor changes are retained; refresh the Library before retrying. There is no automatic rollback of downloaded code.".into(),
+        "Terminal output is not logged or synchronized. auracode does not inspect vendor credentials. Refresh the Library after completion to verify the result.".into(),
+    ];
+    if request.kind == K::Marketplace && request.action == A::Remove {
+        notices.push("Removing this marketplace can uninstall its plugins and delete their vendor-managed data, options and secrets. This cannot be undone by Library copy history.".into());
+    }
+    if request.provider == P::Claude && request.kind == K::Plugin && request.action == A::Remove {
+        notices.push(
+            "Plugin removal keeps its persistent data using the vendor's --keep-data option."
+                .into(),
+        );
+    }
+    let review = VendorReview {
+        token: String::new(),
+        request: request.clone(),
+        program: program_text,
+        arguments,
+        working_directory: folder_text,
+        config_directory: config_text,
+        revision: format!("{:x}", hash.finalize()),
+        timeout_seconds: 600,
+        notices,
+    };
+    // Pin both home spellings and the provider override so vendor cwd-dependent defaults cannot
+    // disagree with the reviewed personal realm. These are paths only, never credential values.
+    let set_env = vec![
+        ("HOME".into(), folder.as_os_str().into()),
+        ("USERPROFILE".into(), folder.as_os_str().into()),
+        (key.into(), config.as_os_str().into()),
+    ];
+    Ok(VendorPlan {
+        review,
+        program,
+        args,
+        folder,
+        config,
+        set_env,
+    })
+}
+
+pub fn config_path(provider: P) -> (&'static str, &'static str) {
+    match provider {
+        P::Claude => ("CLAUDE_CONFIG_DIR", ".claude"),
+        P::Codex => ("CODEX_HOME", ".codex"),
+        P::Pi => ("PI_CODING_AGENT_DIR", ".pi/agent"),
+    }
+}
+fn text(path: &Path) -> Result<String, VendorError> {
+    path.to_str().map(str::to_owned).ok_or(VendorError::Folder)
+}
+fn bind_path(path: &Path) -> Result<PathBuf, VendorError> {
+    if !path.is_absolute()
+        || path
+            .components()
+            .any(|part| matches!(part, Component::ParentDir))
+    {
+        return Err(VendorError::Folder);
+    }
+    for ancestor in path.ancestors() {
+        match std::fs::symlink_metadata(ancestor) {
+            Ok(_) => {
+                let root = std::fs::canonicalize(ancestor).map_err(|_| VendorError::Folder)?;
+                if !root.is_dir() {
+                    return Err(VendorError::Folder);
+                }
+                return Ok(root.join(
+                    path.strip_prefix(ancestor)
+                        .map_err(|_| VendorError::Folder)?,
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(VendorError::Folder),
+        }
+    }
+    Err(VendorError::Folder)
+}
+fn name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.as_bytes()[0].is_ascii_alphanumeric()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+        && !matches!(value.to_ascii_lowercase().as_str(), "synced" | "claudeai")
+}
+fn qualified(value: &str) -> bool {
+    value
+        .split_once('@')
+        .is_some_and(|(plugin, market)| name(plugin) && name(market))
+}
+fn github(value: &str) -> bool {
+    value
+        .split_once('/')
+        .is_some_and(|(owner, repo)| name(owner) && name(repo))
+}
+fn reference(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-/".contains(&byte))
+        && !value.contains("..")
+        && !value.starts_with(['-', '/'])
+}
+fn package(value: &str, pinned: bool) -> bool {
+    if let Some(source) = value.strip_prefix("npm:") {
+        let (id, version) = source
+            .rsplit_once('@')
+            .filter(|(id, _)| !id.is_empty())
+            .map_or((source, None), |(id, version)| (id, Some(version)));
+        let valid_id = if let Some(scoped) = id.strip_prefix('@') {
+            github(scoped)
+        } else {
+            name(id)
+        };
+        return valid_id
+            && version.is_none_or(|value| {
+                let base = value.split('-').next().unwrap_or("");
+                base.split('.').count() == 3
+                    && base
+                        .split('.')
+                        .all(|v| !v.is_empty() && v.bytes().all(|b| b.is_ascii_digit()))
+                    && reference(value)
+            })
+            && (!pinned || version.is_some());
+    }
+    if let Some(source) = value.strip_prefix("git:github.com/") {
+        let (repo, version) = source
+            .split_once('@')
+            .map_or((source, None), |(repo, version)| (repo, Some(version)));
+        return github(repo) && version.is_none_or(reference) && (!pinned || version.is_some());
+    }
+    false
+}
+pub fn arguments(request: &VendorRequest) -> Result<Vec<String>, VendorError> {
+    if request.target.len() > 320
+        || request.item_revision.as_ref().is_some_and(|value| {
+            value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
+    {
+        return Err(VendorError::Target);
+    }
+    let t = request.target.as_str();
+    let values = match (request.provider, request.kind, request.action) {
+        (P::Claude | P::Codex, K::Plugin, _) if !qualified(t) => return Err(VendorError::Target),
+        (P::Claude, K::Plugin, action) => {
+            let command = match action {
+                A::Install => "install",
+                A::Update => "update",
+                A::Remove => "uninstall",
+                A::Enable => "enable",
+                A::Disable => "disable",
+            };
+            let mut values = vec!["plugin", command, t, "--scope", "user"];
+            if action == A::Remove {
+                values.push("--keep-data");
+            }
+            values
+        }
+        (P::Codex, K::Plugin, A::Install) => vec!["plugin", "add", t],
+        (P::Codex, K::Plugin, A::Remove) => vec!["plugin", "remove", t],
+        (P::Claude | P::Codex, K::Marketplace, A::Install) => {
+            if !github(t) {
+                return Err(VendorError::Target);
+            }
+            let mut values = vec!["plugin", "marketplace", "add", t];
+            if request.provider == P::Claude {
+                values.extend(["--scope", "user"]);
+            }
+            values
+        }
+        (P::Claude | P::Codex, K::Marketplace, A::Update | A::Remove) => {
+            if !name(t) {
+                return Err(VendorError::Target);
+            }
+            let command = match (request.provider, request.action) {
+                (_, A::Remove) => "remove",
+                (P::Codex, _) => "upgrade",
+                _ => "update",
+            };
+            let mut values = vec!["plugin", "marketplace", command, t];
+            if request.provider == P::Claude && request.action == A::Remove {
+                values.extend(["--scope", "user"]);
+            }
+            values
+        }
+        (P::Pi, K::Package, A::Install | A::Remove | A::Update) => {
+            if !package(t, request.action == A::Install) {
+                return Err(VendorError::Target);
+            }
+            match request.action {
+                A::Install => vec!["install", t, "--no-approve"],
+                A::Remove => vec!["remove", t, "--no-approve"],
+                _ => vec!["update", "--extension", t, "--no-approve"],
+            }
+        }
+        _ => return Err(VendorError::Unsupported),
+    };
+    Ok(values.into_iter().map(str::to_owned).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn request(provider: P, kind: K, action: A, target: &str) -> VendorRequest {
+        VendorRequest {
+            provider,
+            kind,
+            action,
+            target: target.into(),
+            item_revision: None,
+        }
+    }
+    #[test]
+    fn exact_vendor_commands_preserve_interactive_consent_and_personal_scope() {
+        assert_eq!(
+            arguments(&request(P::Claude, K::Plugin, A::Remove, "tools@team")).unwrap(),
+            [
+                "plugin",
+                "uninstall",
+                "tools@team",
+                "--scope",
+                "user",
+                "--keep-data"
+            ]
+        );
+        assert_eq!(
+            arguments(&request(P::Claude, K::Marketplace, A::Remove, "team")).unwrap(),
+            ["plugin", "marketplace", "remove", "team", "--scope", "user"]
+        );
+        assert_eq!(
+            arguments(&request(P::Codex, K::Marketplace, A::Update, "team")).unwrap(),
+            ["plugin", "marketplace", "upgrade", "team"]
+        );
+        assert_eq!(
+            arguments(&request(P::Pi, K::Package, A::Update, "npm:@team/tools")).unwrap(),
+            ["update", "--extension", "npm:@team/tools", "--no-approve"]
+        );
+        assert!(matches!(
+            arguments(&request(P::Codex, K::Plugin, A::Enable, "tools@team")),
+            Err(VendorError::Unsupported)
+        ));
+        assert!(matches!(
+            arguments(&request(P::Codex, K::Plugin, A::Update, "tools@team")),
+            Err(VendorError::Unsupported)
+        ));
+    }
+    #[test]
+    fn rejects_flags_private_sources_ambiguous_names_and_vendor_synced_namespace() {
+        for target in [
+            "",
+            "--yes",
+            "thing",
+            "thing@synced",
+            "thing@team --yes",
+            "thing@a/b",
+            "thing@team\n",
+        ] {
+            assert!(
+                arguments(&request(P::Claude, K::Plugin, A::Install, target)).is_err(),
+                "{target}"
+            );
+        }
+        for target in [
+            "npm:foo",
+            "npm:foo@latest",
+            "npm:foo@^1.2.3",
+            "https://user:secret@github.com/a/b",
+            "./local",
+            "git:github.com/a/b",
+            "npm:foo@1.2.3;echo",
+        ] {
+            assert!(
+                arguments(&request(P::Pi, K::Package, A::Install, target)).is_err(),
+                "{target}"
+            );
+        }
+        for target in [
+            "npm:tools@1.2.3",
+            "npm:@team/tools@1.2.3-beta.1",
+            "git:github.com/team/tools@v1.2.3",
+        ] {
+            assert!(
+                arguments(&request(P::Pi, K::Package, A::Install, target)).is_ok(),
+                "{target}"
+            );
+        }
+    }
+    #[test]
+    fn executable_replacement_and_config_override_invalidate_review_without_execution() {
+        use aura_protocol::agents::{InstallChannel, VersionVerification};
+        let temp = tempfile::tempdir().unwrap();
+        let binary = temp.path().join("claude.exe");
+        std::fs::write(&binary, b"fixture executable, never run").unwrap();
+        let binary = std::fs::canonicalize(binary).unwrap();
+        let mut installation = AgentInstallation {
+            agent_id: "claude".into(),
+            provider: "claude".into(),
+            host: AgentHost::Native,
+            launch_path: binary.display().to_string(),
+            resolved_path: Some(binary.display().to_string()),
+            version: "2.1.310".into(),
+            channel: InstallChannel::VendorStandalone,
+            verification: VersionVerification::Unknown,
+        };
+        let mut env = EnvMap::default();
+        env.insert("HOME".into(), temp.path().as_os_str().into());
+        env.insert("USERPROFILE".into(), temp.path().as_os_str().into());
+        let request = request(P::Claude, K::Plugin, A::Install, "tools@team");
+        let first = prepare(&installation, &env, &request).unwrap();
+        assert!(!first.args.iter().any(|value| {
+            ["--yes", "-y", "--accept-command"]
+                .iter()
+                .any(|flag| value == flag)
+        }));
+        std::fs::write(&binary, b"replacement executable, never run").unwrap();
+        assert_ne!(
+            first.review.revision,
+            prepare(&installation, &env, &request)
+                .unwrap()
+                .review
+                .revision
+        );
+        let second = prepare(&installation, &env, &request).unwrap();
+        env.insert(
+            "CLAUDE_CONFIG_DIR".into(),
+            temp.path().join("another").into_os_string(),
+        );
+        assert_ne!(
+            second.review.revision,
+            prepare(&installation, &env, &request)
+                .unwrap()
+                .review
+                .revision
+        );
+        env.insert("CLAUDE_CONFIG_DIR".into(), "relative".into());
+        assert!(matches!(
+            prepare(&installation, &env, &request),
+            Err(VendorError::Folder)
+        ));
+        installation.host = AgentHost::Unsupported;
+        assert!(matches!(
+            prepare(&installation, &env, &request),
+            Err(VendorError::Unsupported)
+        ));
+    }
+}

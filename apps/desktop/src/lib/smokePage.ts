@@ -239,36 +239,125 @@ export function itemSignature(kind: string, read: (name: string) => string): str
   }
 }
 
-/** Every segment of the open chat's transcript, oldest first. */
+/** Visible virtual pieces grouped by their stable segment identity. */
 export function readTranscript(within: ParentNode = document): SegmentView[] {
   const transcript = one("transcript", within);
   if (transcript === null) return [];
-  return all("segment", transcript).map((element) => {
-    const views = [...element.querySelectorAll<HTMLElement>(':scope > [data-testid="item"]')].map(
-      (item): ItemView => {
-        const kind = attr(item, "kind");
-        return {
-          kind,
-          signature: itemSignature(kind, (name) => attr(item, name)),
-          text: text(item),
-          element: item,
-        };
-      },
+  const groups = new Map<string, HTMLElement[]>();
+  // A pending permission moves to the composer dock while retaining its original segment.
+  for (const element of within.querySelectorAll<HTMLElement>("[data-test-segment-key]")) {
+    const key = attr(element, "segment-key");
+    const group = groups.get(key) ?? [];
+    group.push(element);
+    groups.set(key, group);
+  }
+  return [...groups.values()].map((parts) => {
+    const first = parts[0];
+    if (!first) throw new StepError("empty transcript segment");
+    const views = parts.flatMap((element) =>
+      [...element.querySelectorAll<HTMLElement>(':scope > [data-testid="item"]')].map(
+        (item): ItemView => {
+          const kind = attr(item, "kind");
+          return {
+            kind,
+            signature: itemSignature(kind, (name) => attr(item, name)),
+            text: text(kind === "user" ? (one("prompt-text", item) ?? item) : item),
+            element: item,
+          };
+        },
+      ),
     );
-    const turn = attr(element, "kind") === "turn";
+    // A snapshot container supports static assertions across separately mounted virtual pieces.
+    // Actionable ItemViews still point to the actual controls on the page.
+    const element = document.createElement("div");
+    for (const part of parts) element.append(part.cloneNode(true));
     return {
-      kind: turn ? "turn" : "outside",
-      prompt: views.find((view) => view.kind === "user")?.text ?? "",
-      stopReason: attr(element, "stop-reason"),
-      recovered: attr(element, "recovered") === "true",
+      kind: attr(first, "kind") === "turn" ? "turn" : "outside",
+      prompt: attr(first, "prompt"),
+      stopReason: attr(first, "stop-reason"),
+      recovered: attr(first, "recovered") === "true",
       items: views.filter((view) => view.kind !== "user").map((view) => view.signature),
-      plan: all("plan-entry", element).map((entry) => attr(entry, "status")),
+      plan: parts.flatMap((part) => all("plan-entry", part).map((entry) => attr(entry, "status"))),
       views,
       element,
     };
   });
 }
 
+async function paintTranscript(): Promise<void> {
+  await new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+}
+
+/** Finds an actionable item by walking the loaded history, including offscreen virtual rows. */
+export async function revealTranscriptItem(prompt: string, kind: string): Promise<HTMLElement> {
+  const transcript = one("transcript");
+  if (!transcript) throw new StepError("the transcript is not on the page");
+  const find = () =>
+    readTranscript()
+      .find((turn) => turn.prompt === prompt)
+      ?.views.find((view) => view.kind === kind)?.element;
+  transcript.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
+  transcript.scrollTop = 0;
+  for (let page = 0; page < 1000; page++) {
+    await paintTranscript();
+    const closed = all("tool-group", transcript).filter(
+      (node) => node.getAttribute("aria-expanded") === "false",
+    );
+    for (const group of closed) group.click();
+    if (closed.length) await paintTranscript();
+    const item = find();
+    if (item) {
+      item.scrollIntoView({ block: "center" });
+      await paintTranscript();
+      const shown = find();
+      if (shown) return shown;
+    }
+    if (transcript.scrollTop + transcript.clientHeight >= transcript.scrollHeight - 2) break;
+    transcript.scrollTop += Math.max(100, transcript.clientHeight * 0.7);
+  }
+  throw new StepError(`the loaded history for "${prompt}" shows no ${kind}`);
+}
+
+/** Walks the real scroll surface and opens groups before reading a complete DOM snapshot. */
+export async function readFullTranscript(): Promise<SegmentView[]> {
+  const transcript = one("transcript");
+  if (!transcript) return [];
+  const pieces = new Map<string, { index: number; element: HTMLElement }>();
+  // A reader scroll, so incoming content cannot drag the sweep back to the bottom.
+  transcript.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
+  transcript.scrollTop = 0;
+  for (let page = 0; page < 1000; page++) {
+    await paintTranscript();
+    const closed = all("tool-group", transcript).filter(
+      (node) => node.getAttribute("aria-expanded") === "false",
+    );
+    for (const group of closed) group.click();
+    if (closed.length) await paintTranscript();
+    for (const row of transcript.querySelectorAll<HTMLElement>("[data-row-key]")) {
+      const key = row.dataset.rowKey;
+      if (key)
+        pieces.set(key, {
+          index: Number(row.dataset.index),
+          element: row.cloneNode(true) as HTMLElement,
+        });
+    }
+    if (transcript.scrollTop + transcript.clientHeight >= transcript.scrollHeight - 2) break;
+    if (page === 999)
+      throw new StepError("the transcript did not reach its end in 1,000 scroll steps");
+    transcript.scrollTop += Math.max(100, transcript.clientHeight * 0.7);
+  }
+  const snapshot = document.createElement("div");
+  const content = document.createElement("div");
+  content.dataset.testid = "transcript";
+  for (const piece of [...pieces.values()].sort((a, b) => a.index - b.index))
+    content.append(piece.element);
+  snapshot.append(content);
+  one("jump-latest")?.click();
+  await paintTranscript();
+  return readTranscript(snapshot);
+}
 /** A segment in one line, to compare with what a script expects and to show when they differ. */
 export function describeSegment(segment: SegmentShape): string {
   const head =

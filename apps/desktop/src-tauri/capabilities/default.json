@@ -4,6 +4,9 @@
   "description": "Everything the main window's page may call besides auracode's own commands: dragging the window by its title area, and opening http and https links in the browser. Nothing that reveals, reads or opens paths (the data folder is shown by auracode's own reveal_data_dir command, which takes no path), opens other URL schemes, spawns processes, or builds menus and trays.",
   "windows": ["main"],
   "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:event:allow-emit",
     "core:window:allow-start-dragging",
     "core:window:allow-internal-toggle-maximize",
     "core:webview:allow-internal-toggle-devtools",

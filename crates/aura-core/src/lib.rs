@@ -30,15 +30,32 @@
 //! opening the profile and opening its store; the store then moves into the chat store's writer
 //! thread ([`chatstore::ChatStore`]), and [`session::SessionManager`] runs the chats on top of it.
 
+#[cfg(feature = "account-sync")]
+pub mod account_preservation;
+#[cfg(feature = "account-sync")]
+pub mod accounts;
 pub mod chatstore;
+pub mod checkpoints;
+pub mod cloning;
+pub mod config_transition;
+mod conversation;
 pub mod device;
 pub mod error;
+pub mod gitworkspaces;
 pub mod ids;
+#[cfg(feature = "account-sync")]
+pub mod local_import;
+pub mod onboarding;
 pub mod owner;
 pub mod paths;
 pub mod profile;
+#[cfg(feature = "account-sync")]
+pub mod profile_files;
 pub mod session;
 pub mod store;
+#[cfg(feature = "account-sync")]
+pub mod sync;
+pub mod terminal;
 pub mod time;
 
 mod fsutil;

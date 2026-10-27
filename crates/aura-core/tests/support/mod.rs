@@ -162,6 +162,8 @@ impl Harness {
             rt.clone(),
         );
         let manager = SessionManager::new(ManagerDeps {
+            worktrees: None,
+            checkpoints: None,
             store: Arc::clone(&store),
             env,
             spawner: spawner.clone(),
@@ -523,7 +525,7 @@ impl StatusSink for Statuses {
 /// What a scripted agent reports at `Ready`.
 pub fn ready_info(native: &str) -> ReadyInfo {
     ReadyInfo {
-        native_session_id: native.into(),
+        native_session_id: Some(native.into()),
         agent_name: Some("Demo".into()),
         agent_version: Some("1.0.0".into()),
         capabilities: Capabilities::default(),

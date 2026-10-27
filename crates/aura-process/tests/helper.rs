@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use aura_process::{
     HelperEnv, HelperSpec, LeftoverRegistry, SpawnError, find_program, process_env, run_helper,
+    run_helper_input,
 };
 use common::{GONE_WITHIN, Reaper, env, read_pids, testbin, wait_gone};
 use tokio::runtime::Handle;
@@ -59,6 +60,55 @@ async fn captures_git_version_from_stdout() {
         "{output:?}"
     );
     assert!(!output.timed_out && !output.stdout_truncated);
+}
+
+#[tokio::test]
+async fn helper_input_is_complete_before_eof_without_argv_or_files() {
+    let folder = tempfile::tempdir().expect("tempdir");
+    let input = "reviewed multiline body\n".repeat(20_000);
+    let output = run_helper_input(
+        &LeftoverRegistry::disabled(),
+        HelperSpec {
+            max_stdout: 1024 * 1024,
+            ..helper(&["echo"], folder.path())
+        },
+        input.as_bytes().to_vec(),
+    )
+    .await
+    .expect("input helper");
+    assert_eq!(output.exit.and_then(|exit| exit.code), Some(0));
+    assert_eq!(
+        output.stdout,
+        format!("{input}{{\"eof\":true}}\n").as_bytes()
+    );
+    assert!(!output.timed_out);
+    assert_eq!(std::fs::read_dir(folder.path()).expect("files").count(), 0);
+}
+
+#[tokio::test]
+async fn blocked_helper_input_times_out_and_oversized_input_is_refused() {
+    let folder = tempfile::tempdir().expect("tempdir");
+    let output = run_helper_input(
+        &LeftoverRegistry::disabled(),
+        HelperSpec {
+            timeout: Duration::from_millis(100),
+            ..helper(&["hang"], folder.path())
+        },
+        vec![b'x'; 1024 * 1024],
+    )
+    .await
+    .expect("bounded timeout");
+    assert!(output.timed_out);
+    let error = run_helper_input(
+        &LeftoverRegistry::disabled(),
+        helper(&["echo"], folder.path()),
+        vec![0; 1024 * 1024 + 1],
+    )
+    .await
+    .expect_err("limit");
+    assert!(
+        matches!(error, SpawnError::Spawn { source, .. } if source.kind() == std::io::ErrorKind::InvalidInput)
+    );
 }
 
 /// Linux refuses to run a file someone holds open for writing ("text file busy"), as a freshly

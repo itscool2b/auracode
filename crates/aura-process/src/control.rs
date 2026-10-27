@@ -40,6 +40,11 @@ pub trait ControlImpl: Send + Sync + 'static {
     fn kill_tree(&self);
     /// The shutdown chain. Idempotent and shared: a second call joins the first chain.
     fn shutdown(&self, plan: ShutdownPlan) -> BoxFuture<'static, ShutdownReport>;
+    /// Explicit cleanup recovery. Ordinary shutdown remains idempotent; implementations may
+    /// retry a completed chain that could not confirm exit without replacing an in-flight one.
+    fn retry_unconfirmed_shutdown(&self, plan: ShutdownPlan) -> BoxFuture<'static, ShutdownReport> {
+        self.shutdown(plan)
+    }
     /// The direct child's exit on every OS: never a job-wide or group-wide wait.
     fn exited(&self) -> BoxFuture<'static, ExitInfo>;
     fn try_exited(&self) -> Option<ExitInfo>;
@@ -89,6 +94,13 @@ impl ProcessControl {
     /// See [`ControlImpl::shutdown`].
     pub fn shutdown(&self, plan: ShutdownPlan) -> BoxFuture<'static, ShutdownReport> {
         self.imp().shutdown(plan)
+    }
+
+    pub fn retry_unconfirmed_shutdown(
+        &self,
+        plan: ShutdownPlan,
+    ) -> BoxFuture<'static, ShutdownReport> {
+        self.imp().retry_unconfirmed_shutdown(plan)
     }
 
     pub fn exited(&self) -> BoxFuture<'static, ExitInfo> {
@@ -153,6 +165,43 @@ impl ExitInfo {
     }
 }
 
+fn invalidate_unconfirmed(chain: &mut Option<Shared<BoxFuture<'static, ShutdownReport>>>) {
+    if chain
+        .as_ref()
+        .and_then(Shared::peek)
+        .is_some_and(|report| report.exit.is_none() || !report.leftovers.is_empty())
+    {
+        *chain = None;
+    }
+}
+
+/// The shutdown chain can close either protocol lines or an unlogged binary transport.
+pub(crate) enum StdinControl {
+    Lines(LineSink),
+    Bytes(crate::raw::ByteSink),
+}
+
+impl StdinControl {
+    pub(crate) fn close(&self) {
+        match self {
+            Self::Lines(stdin) => stdin.close(),
+            Self::Bytes(stdin) => stdin.close(),
+        }
+    }
+}
+
+impl From<LineSink> for StdinControl {
+    fn from(stdin: LineSink) -> Self {
+        Self::Lines(stdin)
+    }
+}
+
+impl From<crate::raw::ByteSink> for StdinControl {
+    fn from(stdin: crate::raw::ByteSink) -> Self {
+        Self::Bytes(stdin)
+    }
+}
+
 /// What a real agent's control and its shutdown chain share.
 pub(crate) struct ControlState {
     pub(crate) pid: u32,
@@ -162,7 +211,7 @@ pub(crate) struct ControlState {
     /// Unix: its start time, so a recycled pid is never taken for it.
     #[cfg(unix)]
     pub(crate) start: crate::ptable::StartTime,
-    pub(crate) stdin: LineSink,
+    pub(crate) stdin: StdinControl,
     pub(crate) exit: watch::Receiver<Option<ExitInfo>>,
     pub(crate) tail: Arc<StderrTail>,
     pub(crate) log: ProtocolLog,
@@ -179,6 +228,9 @@ pub(crate) struct ControlState {
     /// take it, so nothing signals the group again.
     #[cfg(unix)]
     pub(crate) group_gone: Arc<AtomicBool>,
+    /// A shutdown that could not confirm cleanup must leave its recovery record intact.
+    #[cfg(unix)]
+    pub(crate) retain_registry: AtomicBool,
     /// Windows: kill requests to the waiter, which owns the job.
     #[cfg(windows)]
     pub(crate) kill: tokio::sync::mpsc::UnboundedSender<()>,
@@ -190,7 +242,7 @@ impl ControlState {
     pub(crate) fn new(
         pid: u32,
         #[cfg(unix)] start: crate::ptable::StartTime,
-        stdin: LineSink,
+        stdin: impl Into<StdinControl>,
         exit: watch::Receiver<Option<ExitInfo>>,
         tail: Arc<StderrTail>,
         log: ProtocolLog,
@@ -206,7 +258,7 @@ impl ControlState {
             pgid: pid,
             #[cfg(unix)]
             start,
-            stdin,
+            stdin: stdin.into(),
             exit,
             tail,
             log,
@@ -218,6 +270,8 @@ impl ControlState {
             escaped: Mutex::new(Vec::new()),
             #[cfg(unix)]
             group_gone,
+            #[cfg(unix)]
+            retain_registry: AtomicBool::new(false),
             #[cfg(windows)]
             kill,
             chain: Mutex::new(None),
@@ -244,6 +298,10 @@ impl Drop for ControlState {
     /// The last handle and any chain are gone, so is the process tree (the last handle's drop
     /// killed it): the registry no longer needs its entry. Registry writes block, so on the pool.
     fn drop(&mut self) {
+        #[cfg(unix)]
+        if self.retain_registry.load(Ordering::Acquire) {
+            return;
+        }
         let registry = self.registry.clone();
         let pid = self.pid;
         drop(self.rt.spawn_blocking(move || registry.unregister(pid)));
@@ -309,6 +367,11 @@ impl ControlImpl for ChildControl {
         self.state.exited_now()
     }
 
+    fn retry_unconfirmed_shutdown(&self, plan: ShutdownPlan) -> BoxFuture<'static, ShutdownReport> {
+        invalidate_unconfirmed(&mut lock(&self.state.chain));
+        self.shutdown(plan)
+    }
+
     fn record_escaped(&self) -> BoxFuture<'static, ()> {
         crate::shutdown::record_escaped(Arc::clone(&self.state))
     }
@@ -371,7 +434,10 @@ pub(crate) async fn wait_child(
                 status = native.wait() => Event::Exited(status),
                 kill = kills.recv(), if kills_open => Event::Kill(kill.is_some()),
             },
-            None => Event::Exited(child.wait().await),
+            None => tokio::select! {
+                status = child.wait() => Event::Exited(status),
+                kill = kills.recv(), if kills_open => Event::Kill(kill.is_some()),
+            },
         };
         match event {
             Event::Exited(status) => break status,
@@ -405,6 +471,50 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn retry_releases_only_completed_unconfirmed_chains() {
+        let pending = futures::future::pending::<ShutdownReport>()
+            .boxed()
+            .shared();
+        let mut chain = Some(pending);
+        invalidate_unconfirmed(&mut chain);
+        assert!(chain.is_some(), "an in-flight chain must still be shared");
+        let failed = futures::future::ready(ShutdownReport::default())
+            .boxed()
+            .shared();
+        failed.clone().await;
+        chain = Some(failed);
+        invalidate_unconfirmed(&mut chain);
+        assert!(
+            chain.is_none(),
+            "unknown exit cannot be a permanent cached confirmation"
+        );
+        let confirmed = ShutdownReport {
+            exit: Some(ExitInfo {
+                code: Some(0),
+                signal: None,
+                at_ms: 0,
+            }),
+            ..Default::default()
+        };
+        let complete = futures::future::ready(confirmed.clone()).boxed().shared();
+        complete.clone().await;
+        chain = Some(complete);
+        invalidate_unconfirmed(&mut chain);
+        assert_eq!(chain.as_ref().and_then(Shared::peek), Some(&confirmed));
+        let leftovers = ShutdownReport {
+            leftovers: vec![123],
+            ..confirmed
+        };
+        let incomplete = futures::future::ready(leftovers).boxed().shared();
+        incomplete.clone().await;
+        chain = Some(incomplete);
+        invalidate_unconfirmed(&mut chain);
+        assert!(
+            chain.is_none(),
+            "a leader exit does not prove descendant cleanup"
+        );
+    }
     use std::sync::atomic::{AtomicU32, Ordering};
 
     use super::*;

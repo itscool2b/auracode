@@ -10,6 +10,7 @@ import {
   lastErrorKey,
   reduce,
   renderTranscript,
+  steeringState,
   stopReasonLabel,
   type ToolItem,
   type Transcript,
@@ -48,6 +49,61 @@ function keysOf(model: Transcript): string[][] {
 }
 
 describe("the transcript reducer", () => {
+  it("keeps steering delivery on its original message across deltas and later turns", () => {
+    const pending: AuraEvent = {
+      type: "steering_status",
+      message_id: "steer",
+      state: "pending",
+      detail: null,
+    };
+    const initial = build(
+      numbered([
+        [null, ev.turnStarted("first")],
+        [null, pending],
+        [null, ev.user("steer", "Keep ")],
+        [null, ev.user("steer", "the index")],
+      ]),
+    );
+    expect(initial.items.get("user:steer")).toEqual({
+      kind: "user",
+      key: "user:steer",
+      text: "Keep the index",
+      steering: { state: "pending", detail: null },
+    });
+    const updates = [
+      ev.turnEnded("first"),
+      ev.turnStarted("second"),
+      { ...pending, state: "accepted" as const },
+    ];
+    const finished = applyEntries(
+      initial,
+      updates.map((event, index) => ({
+        seq: index + 4,
+        turnId: null,
+        event,
+      })),
+    );
+    expect(keysOf(finished)).toEqual([["user:steer"], []]);
+    expect(finished.items.get("user:steer")).toMatchObject({
+      text: "Keep the index",
+      steering: { state: "accepted" },
+    });
+    expect(initial.items.get("user:steer")).toMatchObject({ steering: { state: "pending" } });
+  });
+
+  it("shows unresolved ended or recovered steering as unconfirmed, preserving final outcomes", () => {
+    for (const state of ["pending", "accepted", "rejected", "unconfirmed"] as const) {
+      const item = {
+        kind: "user" as const,
+        key: "user:steer",
+        text: "Visible instruction",
+        steering: { state, detail: "Visible outcome" },
+      };
+      expect(steeringState(item, false)).toBe(state);
+      expect(steeringState(item, true)).toBe(state === "pending" ? "unconfirmed" : state);
+    }
+  });
+
   it("groups turns by position and keeps items in the order they first appeared", () => {
     const model = build(
       numbered([

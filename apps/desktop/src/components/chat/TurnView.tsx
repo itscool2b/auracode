@@ -1,17 +1,22 @@
-import { memo } from "react";
+import { AgentMark, CopyButton } from "@auracode/ui/graphite";
+import { Fragment, memo } from "react";
 import type { PlanEntry, UiAnswer } from "../../bindings";
 import type { RequestState } from "../../lib/chat/chatStore";
 import { costLabel, type ErrorActions, tokensLabel } from "../../lib/chat/present";
 import { type RenderedSegment, stopReasonLabel } from "../../lib/chat/transcript";
 import { formatDuration } from "../../lib/format";
 import { Answer } from "../Markdown";
+import type { ConversationIntent } from "./ConversationDialog";
 import { ErrorCard } from "./ErrorCard";
 import { PermissionCard } from "./PermissionCard";
 import { QuestionCard } from "./QuestionCard";
+import { ThoughtBlock } from "./ThoughtBlock";
 import { type BlobProps, ToolBlock } from "./ToolBlock";
+import { UserMessage } from "./UserMessage";
 
 /** What the items of a turn act on. */
 export interface TurnActions extends BlobProps {
+  readonly onContinue?: (intent: ConversationIntent) => void;
   readonly requests: ReadonlyMap<string, RequestState>;
   readonly onRespondPermission: (requestId: string, optionId: string | null) => void;
   readonly onRespondUi: (requestId: string, answer: UiAnswer | null) => void;
@@ -30,130 +35,189 @@ export interface TurnActions extends BlobProps {
 export const TurnView = memo(function TurnView({
   segment,
   actions,
+  agentId = "generic",
+  agentName = "Agent",
+  active = false,
+  live = true,
+  part,
+  suppressByline = false,
 }: {
   readonly segment: RenderedSegment;
   readonly actions: TurnActions;
+  readonly agentId?: string;
+  readonly agentName?: string;
+  readonly active?: boolean;
+  readonly live?: boolean;
+  /** Virtual rows render one stable item or the footer; standalone previews render the whole turn. */
+  readonly part?: number | "footer";
+  readonly suppressByline?: boolean;
 }) {
+  const firstAgentItem = segment.items.findIndex((item) => item.kind !== "user");
+  const selected = typeof part === "number" ? segment.items[part] : undefined;
+  const entries =
+    part === undefined
+      ? segment.items.map((item, index) => ({ item, index }))
+      : selected && typeof part === "number"
+        ? [{ item: selected, index: part }]
+        : [];
+  const footer = part === undefined || part === "footer";
   return (
+    // biome-ignore lint/a11y/useSemanticElements: A transcript group contains messages, not form controls.
     <section
+      role="group"
       className="chat-segment"
       data-kind={segment.turnId === null ? "outside" : "turn"}
       aria-label={segment.turnId === null ? "Between turns" : "Turn"}
-      data-testid="segment"
+      data-testid={part === undefined || part === 0 ? "segment" : "segment-part"}
+      data-part={part ?? "whole"}
+      data-in-group={suppressByline ? "" : undefined}
       data-test-kind={segment.turnId === null ? "outside" : "turn"}
       data-test-turn-id={segment.turnId ?? ""}
+      data-test-segment-key={segment.key}
+      data-test-prompt={segment.items.find((item) => item.kind === "user")?.text ?? ""}
       data-test-stop-reason={segment.end?.stopReason ?? ""}
       data-test-recovered={String(segment.end?.recovered ?? false)}
     >
-      {segment.items.map((item) => {
-        switch (item.kind) {
-          case "user":
-            return (
-              <div key={item.key} className="chat-user" data-testid="item" data-test-kind="user">
-                {item.text}
-              </div>
-            );
-          case "message":
-            return (
-              <div
-                key={item.key}
-                data-testid="item"
-                data-test-kind="message"
-                data-test-completed={String(item.completed)}
-              >
-                <Answer text={item.text} />
-              </div>
-            );
-          case "thought":
-            return (
-              <details
-                key={item.key}
-                className="chat-thought"
-                data-testid="item"
-                data-test-kind="thought"
-                data-test-completed={String(item.completed)}
-                data-test-duration-ms={item.durationMs ?? ""}
-              >
-                <summary>
-                  {item.completed
-                    ? item.durationMs === null
-                      ? "Thought"
-                      : `Thought for ${formatDuration(item.durationMs)}`
-                    : "Thinking…"}
-                </summary>
-                <p>{item.text}</p>
-              </details>
-            );
-          case "tool":
-            return (
-              <ToolBlock
-                key={item.key}
-                tool={item}
-                display={item.display}
-                blobs={actions.blobs}
-                onLoadBlob={actions.onLoadBlob}
-              />
-            );
-          case "permission":
-            return (
-              <PermissionCard
-                key={item.key}
-                item={item}
-                request={actions.requests.get(item.request.request_id)}
-                onRespond={(optionId) =>
-                  actions.onRespondPermission(item.request.request_id, optionId)
-                }
-                blobs={actions.blobs}
-                onLoadBlob={actions.onLoadBlob}
-              />
-            );
-          case "question":
-            return (
-              <QuestionCard
-                key={item.key}
-                item={item}
-                request={actions.requests.get(item.request.request_id)}
-                onRespond={(answer) => actions.onRespondUi(item.request.request_id, answer)}
-              />
-            );
-          case "notice":
-            return (
-              <p
-                key={item.key}
-                className="chat-notice"
-                data-level={item.level}
-                data-testid="item"
-                data-test-kind="notice"
-                data-test-level={item.level}
-              >
-                {item.message}
-              </p>
-            );
-          case "error":
-            return (
-              <ErrorCard
-                key={item.key}
-                item={item}
-                actions={actions.errorActions(item.key, item.errorKind)}
-                onRetry={() => actions.onStart(false)}
-                onStartFresh={() => actions.onStart(true)}
-                onShowLog={actions.onShowLog}
-              />
-            );
-          case "gap":
-            return (
-              <p key={item.key} className="chat-marker" data-testid="item" data-test-kind="gap">
-                Recent output isn't saved yet; it appears here when saving resumes.
-              </p>
-            );
-          default: {
-            const unreachable: never = item;
-            throw new Error(`unhandled item: ${JSON.stringify(unreachable)}`);
+      {entries.map(({ item, index }) => {
+        const byline =
+          index === firstAgentItem &&
+          segment.turnId !== null &&
+          !segment.partial &&
+          !suppressByline ? (
+            <div className="chat-byline">
+              <span className="chat-gutter">
+                <AgentMark agent={agentId} size={16} label={agentName} />
+              </span>
+              <span>{agentName}</span>
+            </div>
+          ) : null;
+        const content = (() => {
+          switch (item.kind) {
+            case "user":
+              return (
+                <UserMessage
+                  key={item.key}
+                  item={item}
+                  settled={segment.end !== null || !live}
+                  onEdit={
+                    segment.turnId && actions.onContinue && !active
+                      ? () =>
+                          actions.onContinue?.({ type: "edit", turn_id: segment.turnId as string })
+                      : undefined
+                  }
+                />
+              );
+            case "message":
+              return (
+                <div
+                  key={item.key}
+                  className="chat-message"
+                  data-testid="item"
+                  data-test-kind="message"
+                  data-test-completed={String(item.completed)}
+                >
+                  <Answer text={item.text} />
+                </div>
+              );
+            case "thought":
+              return (
+                <ThoughtBlock
+                  key={item.key}
+                  item={item}
+                  active={active}
+                  tail={index === segment.items.length - 1}
+                  agentId={agentId}
+                  agentName={agentName}
+                />
+              );
+            case "tool":
+              return (
+                <ToolBlock
+                  key={item.key}
+                  tool={item}
+                  agentId={agentId}
+                  display={item.display}
+                  blobs={actions.blobs}
+                  onLoadBlob={actions.onLoadBlob}
+                />
+              );
+            case "permission":
+              return (
+                <PermissionCard
+                  key={item.key}
+                  item={item}
+                  request={actions.requests.get(item.request.request_id)}
+                  onRespond={(optionId) =>
+                    actions.onRespondPermission(item.request.request_id, optionId)
+                  }
+                  blobs={actions.blobs}
+                  onLoadBlob={actions.onLoadBlob}
+                />
+              );
+            case "question":
+              return (
+                <QuestionCard
+                  key={item.key}
+                  item={item}
+                  request={actions.requests.get(item.request.request_id)}
+                  onRespond={(answer) => actions.onRespondUi(item.request.request_id, answer)}
+                />
+              );
+            case "notice":
+              return (
+                <p
+                  key={item.key}
+                  className="chat-notice"
+                  data-level={item.level}
+                  data-testid="item"
+                  data-test-kind="notice"
+                  data-test-level={item.level}
+                >
+                  {item.message}
+                </p>
+              );
+            case "error":
+              return (
+                <ErrorCard
+                  key={item.key}
+                  item={item}
+                  actions={actions.errorActions(item.key, item.errorKind)}
+                  onRetry={() => actions.onStart(false)}
+                  onStartFresh={() => actions.onStart(true)}
+                  onShowLog={actions.onShowLog}
+                />
+              );
+            case "gap":
+              return (
+                <p key={item.key} className="chat-marker" data-testid="item" data-test-kind="gap">
+                  Recent output isn't saved yet; it appears here when saving resumes.
+                </p>
+              );
+            default: {
+              const unreachable: never = item;
+              throw new Error(`unhandled item: ${JSON.stringify(unreachable)}`);
+            }
           }
-        }
+        })();
+        return (
+          <Fragment key={item.key}>
+            {byline}
+            {content}
+          </Fragment>
+        );
       })}
-      {segment.plan !== null && segment.plan.length > 0 ? <Plan entries={segment.plan} /> : null}
-      <Footer segment={segment} canResume={actions.canResume} onStart={actions.onStart} />
+      {footer && segment.plan !== null && segment.plan.length > 0 ? (
+        <Plan entries={segment.plan} />
+      ) : null}
+      {footer ? (
+        <Footer
+          segment={segment}
+          agentName={agentName}
+          canResume={actions.canResume}
+          onStart={actions.onStart}
+          onContinue={actions.onContinue}
+        />
+      ) : null}
     </section>
   );
 });
@@ -187,12 +251,16 @@ function Plan({ entries }: { readonly entries: readonly PlanEntry[] }) {
 /** Why the turn ended, its tokens with their scope, how long it took, and the session's cost. */
 function Footer({
   segment,
+  agentName,
   canResume,
   onStart,
+  onContinue,
 }: {
   readonly segment: RenderedSegment;
+  readonly agentName: string;
   readonly canResume: boolean;
   readonly onStart: (fresh: boolean) => void;
+  readonly onContinue?: (intent: ConversationIntent) => void;
 }) {
   const { end } = segment;
   if (end === null) return null;
@@ -200,12 +268,37 @@ function Footer({
   if (end.usage !== null) parts.push(tokensLabel(end.usage));
   if (end.durationMs !== null) parts.push(formatDuration(end.durationMs));
   const cost = costLabel(segment.usage);
-  if (cost !== null) parts.push(cost);
+  if (cost !== null) parts.push(`${cost} session`);
+  const response = segment.items
+    .filter((item) => item.kind === "message")
+    .map((item) => item.text)
+    .join("\n\n");
+  const receipt = [agentName, ...parts].join("\n");
   return (
     <p className="chat-footer" data-testid="turn-footer">
       {parts.map((part) => (
         <span key={part}>{part}</span>
       ))}
+      <span className="chat-receipt-actions">
+        {segment.turnId && onContinue ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onContinue({ type: "retry", turn_id: segment.turnId as string })}
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => onContinue({ type: "fork", turn_id: segment.turnId as string })}
+            >
+              Fork
+            </button>
+          </>
+        ) : null}
+        {response ? <CopyButton text={response} label="Copy response as Markdown" /> : null}
+        <CopyButton text={receipt} label="Copy turn receipt" caption="Receipt" />
+      </span>
       {end.recovered && end.stopReason === "interrupted" && canResume ? (
         <button
           type="button"

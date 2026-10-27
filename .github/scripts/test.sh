@@ -363,16 +363,14 @@ test_lint_passes_this_repositorys_workflows() {
   assert_out "every action is pinned, no runner label floats"
 }
 
-# The cost estimate at the top of ci.yml counts one scheduled run a week. The daily schedule it
-# replaced cost several hundred included minutes a month without a single push.
-test_ci_runs_on_schedule_once_a_week() {
-  local crons
-  crons="$(sed -n -E "s/^[[:space:]]*-[[:space:]]*cron:[[:space:]]*[\"']([^\"']*)[\"'].*/\\1/p" \
-    "$scripts/../workflows/ci.yml" | tr -d '\r')"
-  assert_eq 1 "$(printf '%s\n' "$crons" | grep -c .)" "the number of crons in ci.yml"
-  # minute, hour, day of month, month, day of week: one day of the week, every week.
-  if ! printf '%s\n' "$crons" | grep -Eq '^[0-9]+ [0-9]+ \* \* [0-6]$'; then
-    fail "ci.yml's schedule \"$crons\" does not run on one day a week"
+# Integration and final verification are deliberately dispatched by the owner or agent. A routine
+# commit, push, PR update or schedule must not spend another cross-platform verification batch.
+test_ci_runs_only_when_dispatched() {
+  local triggers
+  triggers="$(sed -n '/^on:/,/^[^[:space:]#]/p' "$scripts/../workflows/ci.yml" | tr -d '\r')"
+  printf '%s\n' "$triggers" | grep -q '^  workflow_dispatch:' || fail "CI needs manual dispatch"
+  if printf '%s\n' "$triggers" | grep -Eq '^  (push|pull_request|pull_request_target|schedule):'; then
+    fail "CI must not run automatically for each change or on a schedule"
   fi
 }
 
@@ -608,18 +606,16 @@ test_open_pr_needs_the_pushed_commit() {
   assert_eq 0 "$(gh_calls)" "the number of API calls"
 }
 
-# ci.yml's plan job hands the decision on under the name this script writes it. Under any other
-# name the jobs would read an empty output and every push would run CI.
-test_open_pr_writes_the_output_ci_yml_reads() {
-  local written consumed
+# This helper remains independently usable, even though the manual CI workflow no longer needs
+# push/PR deduplication. Keep its public output contract without restoring automatic runs.
+test_open_pr_writes_its_documented_output() {
+  local written
   open_pr_env
   route "$PULLS" "$LISTED_7"
   route "$PULL_7" "$(a_pull open "$SHA" true)"
   run check-open-pr.sh
   written="$(cut -d= -f1 "$tmp/github_output")"
-  consumed="$(sed -n -E 's/.*\$\{\{ *steps\.pr\.outputs\.([A-Za-z0-9_-]+) *\}\}.*/\1/p' \
-    "$scripts/../workflows/ci.yml" | tr -d '\r')"
-  assert_eq "$written" "$consumed" "the step output ci.yml reads from check-open-pr.sh"
+  assert_eq covered "$written" "the helper's documented output name"
 }
 
 # --- plan-nightly-bundle.sh ----------------------------------------------------------------------

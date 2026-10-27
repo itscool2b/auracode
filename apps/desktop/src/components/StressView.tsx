@@ -1,4 +1,4 @@
-import { AGENT_BRAND_IDS, GlassPanel, Orb } from "@auracode/ui";
+import { AGENT_BRAND_IDS, Orb } from "@auracode/ui";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { StressConfig } from "../bindings";
 import { errorMessage } from "../lib/errors";
@@ -86,18 +86,18 @@ export function StressView({
   const streamRef = useStickToBottom<HTMLDivElement>(answer?.text);
 
   return (
-    <div className="flex h-full flex-col gap-5">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <p className="eyebrow m-0">Stress view</p>
-          <h1 className="display m-0 text-[44px]">The worst case, live.</h1>
-        </div>
+    <div className="stress-view">
+      <header className="stress-header">
+        <h1 className="diagnostics-title">
+          Stress view
+          <span>The worst case, live.</span>
+        </h1>
         <FpsReadout />
       </header>
 
-      <GlassPanel elevation={1} squircle className="flex flex-col gap-3 p-4">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-          <button type="button" className="btn btn-quiet -ml-2" onClick={onExit}>
+      <section className="diagnostics-panel stress-controls" aria-label="Stress controls">
+        <div className="stress-controls-row">
+          <button type="button" className="g-button g-button-ghost stress-back" onClick={onExit}>
             <ArrowLeftIcon /> Back
           </button>
           <RangeField
@@ -118,18 +118,24 @@ export function StressView({
           <label className="field">
             <input
               type="checkbox"
+              className="g-switch"
               checked={config.aura}
               onChange={(event) => onConfigChange({ ...config, aura: event.currentTarget.checked })}
             />
             Aura field
           </label>
-          <div className="ml-auto flex gap-2">
-            <button type="button" className="btn btn-primary" disabled={running} onClick={startRun}>
+          <div className="stress-run">
+            <button
+              type="button"
+              className="g-button g-button-primary"
+              disabled={running}
+              onClick={startRun}
+            >
               Start
             </button>
             <button
               type="button"
-              className="btn"
+              className="g-button"
               disabled={!running}
               onClick={() => {
                 setActive(false);
@@ -142,11 +148,11 @@ export function StressView({
         </div>
         <ConfigLine config={config} onChange={onConfigChange} />
         {problem ? (
-          <p role="alert" className="m-0 text-sm text-(--aura-danger)">
+          <p role="alert" className="diagnostics-alert">
             {problem}
           </p>
         ) : null}
-      </GlassPanel>
+      </section>
 
       <section className="orb-grid" aria-label={`${config.orbs} live orbs`}>
         {Array.from({ length: config.orbs }, (_, index) => {
@@ -166,7 +172,7 @@ export function StressView({
 
       <div
         ref={streamRef}
-        className="focus-gutter min-h-0 flex-1 overflow-y-auto select-text"
+        className="focus-gutter stress-stream"
         role="log"
         aria-label="Stress stream"
         aria-busy={running}
@@ -174,7 +180,7 @@ export function StressView({
         {answer ? (
           <Answer key={`${snapshot.sessionId}:${answer.id}`} text={answer.text} />
         ) : (
-          <p className="muted m-0 text-sm">The stream appears here.</p>
+          <p className="muted stress-empty">The stream appears here.</p>
         )}
       </div>
     </div>
@@ -243,12 +249,12 @@ function ConfigLine({
 
   return (
     <div className="field flex-wrap">
-      <label htmlFor={id} className="font-mono text-xs">
+      <label htmlFor={id} className="stress-config-label">
         AURACODE_STRESS=
       </label>
       <input
         id={id}
-        className="number-input w-[300px]"
+        className="number-input stress-config-input"
         value={draft}
         spellCheck={false}
         aria-invalid={error !== null}
@@ -258,7 +264,7 @@ function ConfigLine({
           if (event.key === "Enter") commit();
         }}
       />
-      {error ? <span className="text-xs text-(--aura-danger)">{error}</span> : null}
+      {error ? <span className="diagnostics-alert">{error}</span> : null}
     </div>
   );
 }
@@ -303,7 +309,7 @@ function FpsReadout() {
     };
   }, []);
   return (
-    <p className="fps m-0 text-right">
+    <p className="fps">
       <strong ref={currentRef}>0</strong> fps
       <br />
       <span className="muted">

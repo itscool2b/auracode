@@ -1,0 +1,563 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": true
+      }
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": "bypassPermissions",
+        "auto_answer": {
+          "type": "never"
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "haiku",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default (recommended)",
+                "description": "Opus 5.5 · Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "opus",
+                "name": "Opus 5.5",
+                "description": "For complex work and everyday tasks",
+                "group": null
+              },
+              {
+                "value": "fable",
+                "name": "Fable 5.1",
+                "description": "For your toughest challenges",
+                "group": null
+              },
+              {
+                "value": "sonnet",
+                "name": "Sonnet 5.5",
+                "description": "Most efficient for simpler tasks",
+                "group": null
+              },
+              {
+                "value": "haiku",
+                "name": "Haiku 5.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-haiku-4-5-20251001",
+                "name": "Haiku 4.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-5",
+                "name": "Sonnet 5",
+                "description": "Efficient for routine tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-5",
+                "name": "Opus 5",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-fable-5",
+                "name": "Fable 5",
+                "description": "Most capable for your hardest and longest-running tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-8",
+                "name": "Opus 4.8",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-7",
+                "name": "Opus 4.7",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-6",
+                "name": "Opus 4.6",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-4-6",
+                "name": "Sonnet 4.6",
+                "description": "Efficient for routine tasks",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": null,
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "low",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "low",
+                "name": "low",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "medium",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "high",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "xhigh",
+                "name": "xhigh",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "max",
+                "name": "max",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "commands",
+      "data": [
+        {
+          "name": "clear",
+          "description": "Start a new session with empty context; previous session stays on disk (resumable with /resume)",
+          "input_hint": "[name]"
+        },
+        {
+          "name": "compact",
+          "description": "Free up context by summarizing the conversation so far",
+          "input_hint": "<optional custom summarization instructions>"
+        },
+        {
+          "name": "context",
+          "description": "Show current context usage",
+          "input_hint": null
+        },
+        {
+          "name": "model",
+          "description": "Set the AI model for Claude Code",
+          "input_hint": "<model>"
+        },
+        {
+          "name": "usage",
+          "description": "Show session cost, plan usage, and what's contributing to your limits",
+          "input_hint": null
+        }
+      ]
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "019a0000-0000-7000-8000-000000000001",
+        "agent_name": "Claude Code",
+        "agent_version": "2.1.310",
+        "capabilities": {
+          "images": true,
+          "steer": false,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": true,
+          "set_effort": true,
+          "permissions": true,
+          "plans": false,
+          "usage": true,
+          "limits": true,
+          "slash_commands": true,
+          "add_dirs": true,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "resumed"
+        },
+        "spawn_id": "01a176ab-fa97-7488-b737-7de02858a944",
+        "replay": null
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "usage_updated",
+          "context_used": null,
+          "context_size": null,
+          "cost": {
+            "amount": 0.01464735,
+            "currency": "USD"
+          }
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "limits_updated",
+          "windows": [
+            {
+              "label": "5 hours",
+              "used_percent": 0.0,
+              "resets_at": null
+            },
+            {
+              "label": "7 days",
+              "used_percent": 100.0,
+              "resets_at": null
+            },
+            {
+              "label": "7 days (Fable)",
+              "used_percent": 0.0,
+              "resets_at": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "full_auto",
+        "native_mode": "bypassPermissions",
+        "auto_answer": {
+          "type": "never"
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "usage_updated",
+          "context_used": 60592,
+          "context_size": 1000000,
+          "cost": {
+            "amount": 0.01464735,
+            "currency": "USD"
+          }
+        }
+      }
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "haiku",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default (recommended)",
+                "description": "Opus 5.5 · Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "opus",
+                "name": "Opus 5.5",
+                "description": "For complex work and everyday tasks",
+                "group": null
+              },
+              {
+                "value": "fable",
+                "name": "Fable 5.1",
+                "description": "For your toughest challenges",
+                "group": null
+              },
+              {
+                "value": "sonnet",
+                "name": "Sonnet 5.5",
+                "description": "Most efficient for simpler tasks",
+                "group": null
+              },
+              {
+                "value": "haiku",
+                "name": "Haiku 5.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-haiku-4-5-20251001",
+                "name": "Haiku 4.5",
+                "description": "Fastest for quick answers",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-5",
+                "name": "Sonnet 5",
+                "description": "Efficient for routine tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-5",
+                "name": "Opus 5",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-fable-5",
+                "name": "Fable 5",
+                "description": "Most capable for your hardest and longest-running tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-8",
+                "name": "Opus 4.8",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-7",
+                "name": "Opus 4.7",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-opus-4-6",
+                "name": "Opus 4.6",
+                "description": "Best for everyday, complex tasks",
+                "group": null
+              },
+              {
+                "value": "claude-sonnet-4-6",
+                "name": "Sonnet 4.6",
+                "description": "Efficient for routine tasks",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": null,
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "low",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "low",
+                "name": "low",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "medium",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "high",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "xhigh",
+                "name": "xhigh",
+                "description": null,
+                "group": null
+              },
+              {
+                "value": "max",
+                "name": "max",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ac-057e-709f-81cc-f8269cc526cc",
+        "event": {
+          "type": "message_delta",
+          "message_id": "msg_011CgQHxKW4pbZEh1a1H72ZW.b0",
+          "text": "1"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ac-057e-709f-81cc-f8269cc526cc",
+        "event": {
+          "type": "message_completed",
+          "message_id": "msg_011CgQHxKW4pbZEh1a1H72ZW.b0"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ac-057e-709f-81cc-f8269cc526cc",
+        "event": {
+          "type": "limits_updated",
+          "windows": [
+            {
+              "label": "5 hours",
+              "used_percent": 0.0,
+              "resets_at": 1793010000000
+            },
+            {
+              "label": "7 days",
+              "used_percent": 100.0,
+              "resets_at": 1793358000000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": "01a176ac-057e-709f-81cc-f8269cc526cc",
+        "event": {
+          "type": "usage_updated",
+          "context_used": 60592,
+          "context_size": 1000000,
+          "cost": {
+            "amount": 0.01527638,
+            "currency": "USD"
+          }
+        }
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "01a176ac-057e-709f-81cc-f8269cc526cc",
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3,
+          "cache_read_tokens": 60573,
+          "cache_write_tokens": 108,
+          "reasoning_tokens": 0,
+          "scope": "turn"
+        },
+        "error": null
+      }
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": true
+      }
+    }
+  ],
+  "replies": [
+    {
+      "set_autonomy": "full_auto",
+      "reply": {
+        "ok": {
+          "requested": "full_auto",
+          "native_mode": "bypassPermissions",
+          "auto_answer": {
+            "type": "never"
+          },
+          "note": null
+        }
+      }
+    }
+  ],
+  "exit": {
+    "type": "closed"
+  }
+}

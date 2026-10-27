@@ -1,0 +1,251 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "status",
+      "data": "opening"
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": true
+      }
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": "Model for the next turn.",
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "model-a",
+            "choices": [
+              {
+                "value": "model-a",
+                "name": "Model A",
+                "description": "Synthetic test model",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": "Reasoning effort for the next turn.",
+          "category": "effort",
+          "kind": {
+            "type": "select",
+            "current": "default",
+            "choices": [
+              {
+                "value": "default",
+                "name": "Default",
+                "description": "Use medium",
+                "group": null
+              },
+              {
+                "value": "medium",
+                "name": "medium",
+                "description": "Balanced",
+                "group": null
+              },
+              {
+                "value": "high",
+                "name": "high",
+                "description": "High",
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "ask",
+        "native_mode": "untrusted",
+        "auto_answer": {
+          "type": "never"
+        },
+        "note": "Applied to each new turn; Codex restrictions still apply."
+      }
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "thread-1",
+        "agent_name": "Codex",
+        "agent_version": "0.162.1",
+        "capabilities": {
+          "images": true,
+          "steer": true,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": true,
+          "set_effort": true,
+          "permissions": true,
+          "plans": true,
+          "usage": true,
+          "limits": true,
+          "slash_commands": false,
+          "add_dirs": false,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "new"
+        },
+        "spawn_id": "019a0000-0000-7000-8000-00000000bbbb",
+        "replay": null
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": false
+      }
+    },
+    {
+      "type": "permission",
+      "data": {
+        "turn": "T1",
+        "request": {
+          "request_id": "019a0000-0000-7000-8000-00000000bbbb.request.1",
+          "tool_call_id": null,
+          "title": "echo test",
+          "kind": "execute",
+          "raw_input": {
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "itemId": "tool-1",
+            "command": "echo test",
+            "startedAtMs": 1
+          },
+          "content": [],
+          "locations": [],
+          "options": [
+            {
+              "option_id": "accept",
+              "kind": "allow_once",
+              "label": "Allow once"
+            },
+            {
+              "option_id": "acceptForSession",
+              "kind": "allow_always",
+              "label": "Allow for this session"
+            },
+            {
+              "option_id": "decline",
+              "kind": "reject_once",
+              "label": "Decline"
+            },
+            {
+              "option_id": "cancel",
+              "kind": "other",
+              "label": "Cancel turn"
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "permission",
+      "data": {
+        "turn": "T1",
+        "request": {
+          "request_id": "019a0000-0000-7000-8000-00000000bbbb.request.2",
+          "tool_call_id": null,
+          "title": "echo test",
+          "kind": "execute",
+          "raw_input": {
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "itemId": "tool-1",
+            "command": "echo test",
+            "startedAtMs": 1
+          },
+          "content": [],
+          "locations": [],
+          "options": [
+            {
+              "option_id": "accept",
+              "kind": "allow_once",
+              "label": "Allow once"
+            },
+            {
+              "option_id": "acceptForSession",
+              "kind": "allow_always",
+              "label": "Allow for this session"
+            },
+            {
+              "option_id": "decline",
+              "kind": "reject_once",
+              "label": "Decline"
+            },
+            {
+              "option_id": "cancel",
+              "kind": "other",
+              "label": "Cancel turn"
+            }
+          ],
+          "truncated": null
+        }
+      }
+    },
+    {
+      "type": "permission_withdrawn",
+      "data": {
+        "request_id": "019a0000-0000-7000-8000-00000000bbbb.request.1"
+      }
+    },
+    {
+      "type": "turn_ended",
+      "data": {
+        "turn_id": "T1",
+        "stop_reason": "end_turn",
+        "usage": null,
+        "error": null
+      }
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": true
+      }
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    }
+  ],
+  "replies": [],
+  "exit": {
+    "type": "closed"
+  }
+}

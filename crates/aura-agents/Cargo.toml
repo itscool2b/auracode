@@ -14,9 +14,14 @@ aura-process.workspace = true
 aura-protocol.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+reqwest.workspace = true
+uuid.workspace = true
+futures.workspace = true
+tempfile.workspace = true
 
 [dev-dependencies]
 aura-process = { workspace = true, features = ["testing"] }

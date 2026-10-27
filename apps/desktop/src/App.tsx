@@ -12,20 +12,35 @@ import type { AppInfo, StressConfig } from "./bindings";
 import { ChatsScreen } from "./components/chat/ChatsScreen";
 import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
+import { LibraryScreen } from "./components/library/LibraryScreen";
 import { Sidebar } from "./components/Sidebar";
 import { StressView } from "./components/StressView";
+import { AccountPanel } from "./components/settings/AccountPanel";
+import {
+  ConfigurationRecovery,
+  recoverProfileConfiguration,
+} from "./components/settings/ConfigurationRecovery";
+import { LockedProfile } from "./components/settings/LockedProfile";
+import { SettingsScreen } from "./components/settings/SettingsScreen";
+import { AgentsScreen } from "./components/setup/AgentsScreen";
+import { Onboarding } from "./components/setup/Onboarding";
+import { subscribeAccountSync } from "./lib/account/sync";
 import type { AppStore } from "./lib/chat/appStore";
 import type { Transport } from "./lib/chat/transport";
 import { errorMessage } from "./lib/errors";
 import { useStream } from "./lib/hooks";
 import { getAppInfo, inTauri, sendSmokeReport, windowReady } from "./lib/ipc";
+import { subscribeNativeNavigation } from "./lib/nativeNavigation";
 import { LATE_NOTICE_CHECKS_MS, withLateNotices } from "./lib/notices";
+import { installProfileEvents, switchProfile } from "./lib/profiles";
 import { afterPaint, whenPainted } from "./lib/ready";
 import { isRunning, type StreamStore } from "./lib/session";
+import { signInNavigationReady, subscribeSignInLinks } from "./lib/signInLinks";
 import { runSmoke, type SmokeHooks } from "./lib/smoke";
 import { runChatSmoke } from "./lib/smokeChat";
 import { activityOf } from "./lib/stream";
 import { DEFAULT_STRESS } from "./lib/stress";
+import type { WorkspaceStore } from "./lib/workspace";
 
 type Boot =
   | { readonly status: "loading" }
@@ -34,7 +49,7 @@ type Boot =
   | { readonly status: "failed"; readonly message: string };
 
 /** The chats (the default), the M0 home (the info card and the demo stream), or the stress view. */
-type View = "chats" | "diagnostics" | "stress";
+type View = "chats" | "diagnostics" | "stress" | "setup" | "agents" | "settings" | "library";
 
 /**
  * Switching views ends the current stream: the shell stops it (so it does not keep streaming into
@@ -50,13 +65,96 @@ export function App({
   store,
   chats,
   transport,
+  workspace,
 }: {
   readonly store: StreamStore;
   readonly chats: AppStore;
   readonly transport: Transport;
+  readonly workspace?: WorkspaceStore;
 }) {
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
-  const [view, setView] = useState<View>("chats");
+  const bootRef = useRef(boot);
+  bootRef.current = boot;
+  const [view, setView] = useState<View>("setup");
+  const [restartSetup, setRestartSetup] = useState(false);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const [settingsReturn, setSettingsReturn] = useState<"chats" | "setup">("chats");
+  const [settingsEntry, setSettingsEntry] = useState({
+    id: "initial",
+    page: "general" as "general" | "account",
+    email: "",
+  });
+  useEffect(
+    () =>
+      subscribeSignInLinks((link) => {
+        const current = bootRef.current;
+        if (
+          !signInNavigationReady(
+            current.status === "ready" ? current.info : null,
+            !!document.querySelector(
+              'dialog[open], [role="dialog"], #profile-transition, #root[inert]',
+            ),
+          )
+        )
+          return false;
+        setSettingsReturn((previous) =>
+          viewRef.current === "settings"
+            ? previous
+            : viewRef.current === "setup"
+              ? "setup"
+              : "chats",
+        );
+        setRestartSetup(false);
+        setSettingsEntry({ id: link.id, page: "account", email: link.email ?? "" });
+        setView("settings");
+        return true;
+      }),
+    [],
+  );
+  const activeProfileId = boot.status === "ready" ? (boot.info.profile?.id ?? null) : null;
+  useEffect(
+    () =>
+      subscribeAccountSync(activeProfileId, (status) => {
+        if (status.state === "idle" && status.last_sync_at !== null) {
+          void chats.reloadChats();
+          void workspace?.refresh();
+        }
+      }),
+    [activeProfileId, chats, workspace],
+  );
+  useEffect(() => {
+    const openSettings = (event: KeyboardEvent) => {
+      if (
+        (view === "chats" || view === "settings") &&
+        (event.metaKey || event.ctrlKey) &&
+        event.key === "," &&
+        !event.altKey &&
+        !event.isComposing &&
+        !event.defaultPrevented &&
+        !document.querySelector('dialog[open], [role="dialog"]')
+      ) {
+        event.preventDefault();
+        if (view === "settings") setView(settingsReturn);
+        else {
+          setSettingsReturn("chats");
+          setSettingsEntry({ id: "shortcut", page: "general", email: "" });
+          setView("settings");
+        }
+      }
+    };
+    document.addEventListener("keydown", openSettings);
+    return () => document.removeEventListener("keydown", openSettings);
+  }, [view, settingsReturn]);
+  const [openChatRequest, setOpenChatRequest] = useState<{ id: string }>();
+  useEffect(
+    () =>
+      subscribeNativeNavigation((id) => {
+        setView("chats");
+        setOpenChatRequest({ id });
+      }),
+    [],
+  );
   const [stressConfig, setStressConfig] = useState<StressConfig>(DEFAULT_STRESS);
   const [stressAutoStart, setStressAutoStart] = useState(false);
   const [brandId, setBrandId] = useState<AgentBrandId>("claude-code");
@@ -68,20 +166,23 @@ export function App({
       return;
     }
     let live = true;
-    getAppInfo().then(
-      (info) => {
-        if (!live) return;
-        if (info.launch.type === "stress") {
-          setStressConfig(info.launch.config);
-          setStressAutoStart(true);
-          setView("stress");
-        }
-        setBoot({ status: "ready", info });
-      },
-      (error: unknown) => {
-        if (live) setBoot({ status: "failed", message: errorMessage(error) });
-      },
-    );
+    installProfileEvents()
+      .then(() => getAppInfo())
+      .then(
+        (info) => {
+          if (!live) return;
+          if (info.launch.type === "stress") {
+            setStressConfig(info.launch.config);
+            setStressAutoStart(true);
+            setView("stress");
+          }
+          if (info.launch.type === "smoke") setView("chats");
+          setBoot({ status: "ready", info });
+        },
+        (error: unknown) => {
+          if (live) setBoot({ status: "failed", message: errorMessage(error) });
+        },
+      );
     const timers = LATE_NOTICE_CHECKS_MS.map((delay) =>
       setTimeout(() => {
         getAppInfo().then(
@@ -179,6 +280,54 @@ export function App({
   }
 
   const { info } = boot;
+  if (info.config_profile_recovery) {
+    const selectedProfile = info.profile?.id;
+    const ownerProfile = info.config_profile_recovery.owner_profile;
+    const access =
+      ownerProfile && info.config_profile_recovery.phase !== "unavailable" ? (
+        <AccountPanel
+          recoveryOnly
+          recoveryProfileId={ownerProfile}
+          recoveryActionLabel={
+            info.profile_locked ? "Unlock selected account" : "Recover configuration"
+          }
+          deviceName={info.device?.name ?? "My computer"}
+          onActivate={async () => {
+            if (info.profile_locked && selectedProfile) {
+              await switchProfile(selectedProfile);
+            } else {
+              const recovered = await recoverProfileConfiguration();
+              if (recovered.config_profile_recovery)
+                throw new Error(recovered.config_profile_recovery.detail);
+              window.location.reload();
+            }
+          }}
+        />
+      ) : null;
+    return (
+      <ConfigurationRecovery recovery={info.config_profile_recovery} locked={info.profile_locked}>
+        {info.notices.map((notice) => (
+          <p className="settings-footnote" key={notice}>
+            {notice}
+          </p>
+        ))}
+        {info.fatal ? (
+          <p role="alert" className="settings-error">
+            {info.fatal}
+          </p>
+        ) : null}
+        {info.profile_locked ? (
+          access
+        ) : access ? (
+          <details>
+            <summary>Restore access to the account used by this switch</summary>
+            {access}
+          </details>
+        ) : null}
+      </ConfigurationRecovery>
+    );
+  }
+  if (info.profile_locked) return <LockedProfile info={info} />;
   if (info.fatal !== null) {
     return (
       <ErrorScreen
@@ -207,25 +356,105 @@ export function App({
   const activity = snapshot.phase === "idle" ? "idle" : activityOf(snapshot.stream);
   const orbState: OrbState = activity;
   const intensity: AuraIntensity = running && activity !== "idle" ? "active" : "calm";
-  const showAura = view === "diagnostics" || stressConfig.aura;
+  const showAura = view === "stress" && stressConfig.aura;
   // The field drifts only while something streams; idle, it holds still and costs nothing.
   const auraPaused = !running && view === "diagnostics";
 
-  if (view === "chats") {
+  if (view === "setup")
     return (
-      <ChatsScreen
+      <Onboarding
         app={chats}
         transport={transport}
-        info={info}
-        onRecoveryDismissed={onRecoveryDismissed}
-        onDiagnostics={() => setView("diagnostics")}
+        workspace={workspace}
+        restart={restartSetup}
+        onDone={() => {
+          setRestartSetup(false);
+          setView("chats");
+        }}
+        onDemo={() => setView("diagnostics")}
+        onAccount={() => {
+          setRestartSetup(false);
+          setSettingsReturn("setup");
+          setSettingsEntry({ id: "setup", page: "account", email: "" });
+          setView("settings");
+        }}
       />
+    );
+  if (view === "agents")
+    return (
+      <AgentsScreen
+        app={chats}
+        transport={transport}
+        onBack={() => setView("chats")}
+        onSetup={() => {
+          setRestartSetup(true);
+          setView("setup");
+        }}
+      />
+    );
+  if (view === "chats" || view === "settings" || view === "library") {
+    return (
+      <>
+        <div hidden={view !== "chats"} style={{ height: "100%" }}>
+          <ChatsScreen
+            active={view === "chats"}
+            workspace={workspace}
+            openChatRequest={openChatRequest}
+            app={chats}
+            transport={transport}
+            info={info}
+            onRecoveryDismissed={onRecoveryDismissed}
+            onDiagnostics={() => setView("diagnostics")}
+            onAgents={() => setView("agents")}
+            onSettings={() => {
+              setSettingsReturn("chats");
+              setSettingsEntry({ id: "chats", page: "general", email: "" });
+              setView("settings");
+            }}
+          />
+        </div>
+        {view === "settings" ? (
+          <SettingsScreen
+            navigationId={settingsEntry.id}
+            initialPage={settingsEntry.page}
+            initialEmail={settingsEntry.email}
+            backLabel={settingsReturn === "setup" ? "Back to setup" : "Back to chats"}
+            info={info}
+            onImported={async () => {
+              await Promise.all([chats.reloadChats(), workspace?.refresh()]);
+            }}
+            onBack={() => setView(settingsReturn)}
+            onAgents={() => setView("agents")}
+            onLibrary={() => setView("library")}
+            onDiagnostics={() => setView("diagnostics")}
+            onSetup={() => {
+              setRestartSetup(true);
+              setView("setup");
+            }}
+          />
+        ) : null}
+        {view === "library" ? (
+          <LibraryScreen
+            onBack={() => setView("settings")}
+            folders={workspace?.getSnapshot().data?.projects.flatMap((project) =>
+              project.folders.map((folder) => ({
+                id: folder.id,
+                label: `${project.name} / ${folder.display_name}`,
+              })),
+            )}
+          />
+        ) : null}
+      </>
     );
   }
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="app" style={brandCssVariables(brand) as CSSProperties}>
+      <div
+        className={`app ${view === "diagnostics" ? "diagnostics-shell" : ""}`}
+        data-theme="dark"
+        style={brandCssVariables(brand) as CSSProperties}
+      >
         <Sidebar
           brandId={brandId}
           onBrandChange={setBrandId}

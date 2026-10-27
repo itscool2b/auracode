@@ -19,7 +19,7 @@ use futures::FutureExt;
 use futures::future::BoxFuture;
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Handle;
 use tokio::sync::watch;
 
@@ -125,6 +125,59 @@ impl Spawner {
     pub fn registry(&self) -> &Arc<LeftoverRegistry> {
         &self.registry
     }
+
+    /// An interactive, owned terminal. The caller supplies a native executable and argument vector.
+    pub async fn spawn_pty(
+        &self,
+        spec: SpawnSpec,
+        size: crate::pty::PtySize,
+    ) -> Result<crate::pty::PtyProcess, SpawnError> {
+        crate::pty::spawn(Arc::clone(&self.registry), self.rt.clone(), spec, size).await
+    }
+
+    /// Starts a native binary transport with the ordinary environment and tree-ownership rules.
+    /// No stdin/stdout/stderr content is logged. Callers must consume both output streams.
+    pub async fn spawn_raw(&self, spec: SpawnSpec) -> Result<crate::raw::RawProcess, SpawnError> {
+        let cwd = match &spec.launch.cwd {
+            ProcessCwd::ChatFolder => spec.folder,
+            ProcessCwd::Fixed(dir) => dir.clone(),
+        };
+        let (vars, _) = child_env(&spec.env, &spec.launch.set_env);
+        check(&self.rt, &cwd, &spec.launch.program, &vars).await?;
+        let command = command(
+            &spec.launch.program,
+            &spec.launch.args,
+            &cwd,
+            &vars,
+            Stdio::piped(),
+        );
+        let mut child = start(&self.rt, command, false, &spec.launch.program)?;
+        let missing_pipe = || SpawnError::Spawn {
+            program: spec.launch.program.display().to_string(),
+            source: io::Error::other("the owned transport is missing a pipe"),
+        };
+        let input = child.stdin().take().ok_or_else(missing_pipe)?;
+        let stdout = child.stdout().take().ok_or_else(missing_pipe)?;
+        let stderr = child.stderr().take().ok_or_else(missing_pipe)?;
+        let (stdin, receiver) = crate::raw::ByteSink::channel();
+        let control = own_child(
+            Arc::clone(&self.registry),
+            self.rt.clone(),
+            child,
+            &spec.launch,
+            stdin.clone(),
+            ProtocolLog::disabled(),
+            Arc::new(StderrTail::default()),
+        )
+        .await?;
+        self.rt.spawn(receiver.forward(input));
+        Ok(crate::raw::RawProcess {
+            stdin,
+            stdout,
+            stderr,
+            control,
+        })
+    }
 }
 
 impl ProcessSpawner for Spawner {
@@ -162,14 +215,6 @@ async fn spawn_agent(
     let command = command(&launch.program, &launch.args, &cwd, &vars, Stdio::piped());
     let mut child = start(&rt, command, false, &launch.program)?;
     let pid = child_pid(child.as_ref(), &launch.program)?;
-    // Until the control exists, a dropped spawn kills the tree and drops its registry entry.
-    let mut guard = SpawnGuard {
-        #[cfg(unix)]
-        pid,
-        rt: rt.clone(),
-        registration: Registration::new(registry.handle(), pid),
-        armed: true,
-    };
     let stdin_pipe = child.stdin().take();
     let stdout_pipe = child.stdout().take();
     let stderr_pipe = child.stderr().take();
@@ -192,21 +237,19 @@ async fn spawn_agent(
         pid,
     });
 
-    // Unix: the start time tells this agent from a recycled pid, and the registry entry lets the
-    // next start stop it if auracode dies first. A registry failure is only a warning.
-    #[cfg(unix)]
-    let start_time = {
-        let registration = guard.registration.clone();
-        let label = launch.label.clone();
-        let daemons = launch.daemons.clone();
-        rt.spawn_blocking(move || register_agent(&registration, pid, label, daemons))
-            .await
-            .unwrap_or(crate::ptable::StartTime::Unknown)
-    };
-
     let tail = Arc::new(StderrTail::default());
     let (sink, stdin_rx) = LineSink::channel();
     let (stdout_tx, source) = stdout_channel();
+    let control = own_child(
+        registry,
+        rt.clone(),
+        child,
+        &launch,
+        sink.clone(),
+        log.clone(),
+        Arc::clone(&tail),
+    )
+    .await?;
     if let Some(pipe) = stdin_pipe {
         rt.spawn(crate::io::write_stdin(pipe, stdin_rx, log.clone()));
     }
@@ -221,6 +264,45 @@ async fn spawn_agent(
     if let Some(pipe) = stderr_pipe {
         rt.spawn(crate::stderr::drain(pipe, Arc::clone(&tail), log.clone()));
     }
+    Ok(SpawnedProcess {
+        spawn_id: log.spawn_id().to_owned(),
+        io: AgentIo {
+            stdin: sink,
+            stdout: source,
+        },
+        control,
+        log,
+    })
+}
+
+/// Attach registry, direct-child exit observation and existing tree cleanup to a prepared child.
+/// The guard covers cancellation while registration is written on the blocking pool.
+pub(crate) async fn own_child(
+    registry: Arc<LeftoverRegistry>,
+    rt: Handle,
+    child: Box<dyn ChildWrapper>,
+    launch: &LaunchSpec,
+    stdin: impl Into<crate::control::StdinControl>,
+    log: ProtocolLog,
+    tail: Arc<StderrTail>,
+) -> Result<ProcessControl, SpawnError> {
+    let pid = child_pid(child.as_ref(), &launch.program)?;
+    let mut guard = SpawnGuard {
+        #[cfg(unix)]
+        pid,
+        rt: rt.clone(),
+        registration: Registration::new(registry.handle(), pid),
+        armed: true,
+    };
+    #[cfg(unix)]
+    let start_time = {
+        let registration = guard.registration.clone();
+        let label = launch.label.clone();
+        let daemons = launch.daemons.clone();
+        rt.spawn_blocking(move || register_agent(&registration, pid, label, daemons))
+            .await
+            .unwrap_or(crate::ptable::StartTime::Unknown)
+    };
     let (exit_tx, exit_rx) = watch::channel(None);
     #[cfg(windows)]
     let (kill_tx, kill_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -239,29 +321,21 @@ async fn spawn_agent(
         pid,
         #[cfg(unix)]
         start_time,
-        sink.clone(),
+        stdin,
         exit_rx,
         tail,
         log.clone(),
         rt,
         registry.handle(),
         #[cfg(unix)]
-        launch.daemons,
+        launch.daemons.clone(),
         #[cfg(unix)]
         group_gone,
         #[cfg(windows)]
         kill_tx,
     );
     guard.armed = false;
-    Ok(SpawnedProcess {
-        spawn_id: log.spawn_id().to_owned(),
-        io: AgentIo {
-            stdin: sink,
-            stdout: source,
-        },
-        control: ProcessControl::new(Arc::new(ChildControl::new(state))),
-        log,
-    })
+    Ok(ProcessControl::new(Arc::new(ChildControl::new(state))))
 }
 
 /// Reads a process's start time and records it in the registry (blocking).
@@ -367,7 +441,12 @@ fn session_of(pid: u32) -> Option<u32> {
 /// The cwd and program checks, on the blocking pool: a macOS privacy prompt can hold the call
 /// until the user answers, and Unix reports a missing cwd as a missing program, so the cwd goes
 /// first.
-async fn check(rt: &Handle, cwd: &Path, program: &Path, vars: &EnvMap) -> Result<(), SpawnError> {
+pub(crate) async fn check(
+    rt: &Handle,
+    cwd: &Path,
+    program: &Path,
+    vars: &EnvMap,
+) -> Result<(), SpawnError> {
     let name = program.display().to_string();
     let (cwd, program) = (cwd.to_path_buf(), program.to_path_buf());
     #[cfg(windows)]
@@ -504,6 +583,27 @@ fn command(
 /// The spike's wrapper stack: `KillOnDrop` everywhere; Unix adds `ResetSigmask` and a group of its
 /// own (a session of its own for helpers that ask for one); Windows adds `CREATE_NO_WINDOW` and a
 /// kill-on-close job object, for every agent and helper.
+/// Some descriptors cannot be created close-on-exec atomically, such as a PTY pair from `openpty`.
+/// Creating and marking them happens under the write side, and every spawn holds the read side,
+/// so no child forked by another thread inherits one in between. An inherited PTY slave would
+/// keep that terminal's output open for the child's whole life and stall its cleanup.
+static INHERITANCE: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
+/// Held while spawning a child.
+pub(crate) fn inheritable_marked() -> std::sync::RwLockReadGuard<'static, ()> {
+    INHERITANCE
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Held while creating descriptors that are not yet close-on-exec.
+#[cfg(unix)]
+pub(crate) fn creating_inheritable() -> std::sync::RwLockWriteGuard<'static, ()> {
+    INHERITANCE
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 pub(crate) fn wrap(command: tokio::process::Command, new_session: bool) -> CommandWrap {
     let mut wrapped = CommandWrap::from(command);
     wrapped.wrap(KillOnDrop);
@@ -550,7 +650,11 @@ fn start(
     let mut wrapped = wrap(command, new_session);
     let mut attempt = 0;
     loop {
-        match wrapped.spawn() {
+        let spawned = {
+            let _marked = inheritable_marked();
+            wrapped.spawn()
+        };
+        match spawned {
             Ok(child) => return Ok(child),
             Err(source)
                 if source.kind() == io::ErrorKind::ExecutableFileBusy && attempt < BUSY_RETRIES =>
@@ -563,7 +667,7 @@ fn start(
     }
 }
 
-fn spawn_error(program: &Path, source: io::Error) -> SpawnError {
+pub(crate) fn spawn_error(program: &Path, source: io::Error) -> SpawnError {
     let program = program.display().to_string();
     match source.kind() {
         io::ErrorKind::NotFound => SpawnError::ProgramNotFound { program },
@@ -593,6 +697,8 @@ pub struct SpawnedProcess {
 /// Why a spawn failed. Every message is a sentence the UI can show.
 #[derive(Debug, thiserror::Error)]
 pub enum SpawnError {
+    #[error("{host} can't run agents: {reason}")]
+    HostUnavailable { host: String, reason: String },
     #[error("{program} was not found")]
     ProgramNotFound { program: String },
     #[error("{program} can't be run: permission denied")]
@@ -673,6 +779,32 @@ pub async fn run_helper(
     registry: &LeftoverRegistry,
     spec: HelperSpec,
 ) -> Result<HelperOutput, SpawnError> {
+    run_helper_inner(registry, spec, None).await
+}
+
+/// Runs an owned helper with at most 1 MiB of unlogged stdin, closing the pipe after all bytes are
+/// written. Input never enters argv or a temporary file. Output capture and cancellation retain the
+/// same bounds and tree ownership as [`run_helper`].
+/// Successful pipe delivery is not an application acknowledgment; callers must validate the result.
+pub async fn run_helper_input(
+    registry: &LeftoverRegistry,
+    spec: HelperSpec,
+    input: Vec<u8>,
+) -> Result<HelperOutput, SpawnError> {
+    if input.len() > 1024 * 1024 {
+        return Err(SpawnError::Spawn {
+            program: spec.program.display().to_string(),
+            source: io::Error::new(io::ErrorKind::InvalidInput, "helper input exceeds 1 MiB"),
+        });
+    }
+    run_helper_inner(registry, spec, Some(input)).await
+}
+
+async fn run_helper_inner(
+    registry: &LeftoverRegistry,
+    spec: HelperSpec,
+    input: Option<Vec<u8>>,
+) -> Result<HelperOutput, SpawnError> {
     let rt = Handle::try_current().map_err(|_| SpawnError::NoRuntime)?;
     let HelperSpec {
         program,
@@ -703,7 +835,17 @@ pub async fn run_helper(
     check(&rt, &cwd, &program, &vars).await?;
     let mut child = start(
         &rt,
-        command(&program, &args, &cwd, &vars, Stdio::null()),
+        command(
+            &program,
+            &args,
+            &cwd,
+            &vars,
+            if input.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            },
+        ),
         new_session,
         &program,
     )?;
@@ -753,6 +895,21 @@ pub async fn run_helper(
         .flatten()
         .map(|task| task.abort_handle())
         .collect();
+    let writer = if let Some(input) = input {
+        let mut pipe = child.stdin().take().ok_or_else(|| SpawnError::Spawn {
+            program: program.display().to_string(),
+            source: io::Error::other("helper stdin pipe is unavailable"),
+        })?;
+        Some(rt.spawn(async move {
+            pipe.write_all(&input).await?;
+            pipe.shutdown().await
+        }))
+    } else {
+        None
+    };
+    if let Some(writer) = &writer {
+        guard.readers.push(writer.abort_handle());
+    }
 
     let (exit, timed_out) = match tokio::time::timeout(timeout, wait_direct(child.as_mut())).await {
         Ok(status) => (status.ok().map(ExitInfo::from_status), false),
@@ -767,7 +924,23 @@ pub async fn run_helper(
     for reader in readers.into_iter().flatten() {
         let _ = tokio::time::timeout(PIPE_EOF_GRACE, reader).await;
     }
+    let input_written = if let Some(mut writer) = writer {
+        let result = tokio::time::timeout(PIPE_EOF_GRACE, &mut writer).await;
+        writer.abort();
+        matches!(result, Ok(Ok(Ok(()))))
+    } else {
+        true
+    };
     guard.finish().await;
+    if !input_written && !timed_out {
+        return Err(SpawnError::Spawn {
+            program: program.display().to_string(),
+            source: io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "helper did not accept its complete input",
+            ),
+        });
+    }
     let captured = std::mem::take(&mut *lock(&stdout));
     Ok(HelperOutput {
         exit,

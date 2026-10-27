@@ -176,9 +176,10 @@ impl Normalizer {
             } => {
                 self.questions
                     .retain(|question| question.request.request_id != request_id);
+                let answer = answer.map(|answer| fit_answer(answer, &request_id, by));
                 AuraEvent::UiResolved {
                     request_id,
-                    answer: answer.map(fit_answer),
+                    answer,
                     by,
                 }
             }
@@ -201,6 +202,15 @@ impl Normalizer {
                 recoverable,
             },
             AuraEvent::SessionUpdated(info) => AuraEvent::SessionUpdated(fit_info(info)),
+            AuraEvent::SteeringStatus {
+                message_id,
+                state,
+                detail,
+            } => AuraEvent::SteeringStatus {
+                message_id,
+                state,
+                detail: detail.map(|detail| cap_escaped(detail, MESSAGE_BYTES)),
+            },
             AuraEvent::UsageUpdated(mut usage) => {
                 if let Some(cost) = &mut usage.cost {
                     cost.currency = cap_chars(std::mem::take(&mut cost.currency), CURRENCY_CHARS);
@@ -882,8 +892,40 @@ fn fit_question(mut request: UiRequest) -> UiRequest {
         UiPrompt::Notify { message } => UiPrompt::Notify {
             message: cap_escaped(message, MESSAGE_BYTES),
         },
+        UiPrompt::Questions {
+            message,
+            mut questions,
+        } => {
+            for question in &mut questions {
+                question.header =
+                    cap_chars(std::mem::take(&mut question.header), OPTION_NAME_CHARS);
+                question.question =
+                    cap_escaped(std::mem::take(&mut question.question), MESSAGE_BYTES);
+                for option in &mut question.options {
+                    option.label = cap_chars(std::mem::take(&mut option.label), OPTION_NAME_CHARS);
+                    option.description =
+                        cap_escaped(std::mem::take(&mut option.description), MESSAGE_BYTES);
+                }
+            }
+            UiPrompt::Questions {
+                message: cap_escaped(message, MESSAGE_BYTES),
+                questions,
+            }
+        }
     };
     let size = |request: &UiRequest| json_len(request) + tag_len("ui_request");
+    if size(&request) > EVENT_BUDGET && matches!(request.prompt, UiPrompt::Questions { .. }) {
+        let mut bare = request.clone();
+        let strings = question_strings(&mut bare.prompt);
+        let count = strings.len();
+        for text in strings {
+            text.clear();
+        }
+        let each = EVENT_BUDGET.saturating_sub(size(&bare)) / count.max(1);
+        for text in question_strings(&mut request.prompt) {
+            *text = prefix_escaped(text, each).to_owned();
+        }
+    }
     if size(&request) > EVENT_BUDGET
         && let UiPrompt::Select { options, .. } = &mut request.prompt
     {
@@ -928,13 +970,54 @@ fn fit_question(mut request: UiRequest) -> UiRequest {
     request
 }
 
-fn fit_answer(answer: UiAnswer) -> UiAnswer {
+fn fit_answer(answer: UiAnswer, request_id: &str, by: ResolvedBy) -> UiAnswer {
     match answer {
         UiAnswer::Input { text } => UiAnswer::Input {
             text: cap_escaped(text, MESSAGE_BYTES),
         },
+        UiAnswer::Questions { mut answers } => {
+            let mut bare = answers.clone();
+            for answer in &mut bare {
+                if let Some(text) = &mut answer.text {
+                    text.clear();
+                }
+            }
+            let count = answers
+                .iter()
+                .filter(|answer| answer.text.is_some())
+                .count();
+            let bare = AuraEvent::UiResolved {
+                request_id: request_id.to_owned(),
+                answer: Some(UiAnswer::Questions { answers: bare }),
+                by,
+            };
+            let each = EVENT_BUDGET.saturating_sub(json_len(&bare)) / count.max(1);
+            for answer in &mut answers {
+                if let Some(text) = &mut answer.text {
+                    *text = prefix_escaped(text, each.min(MESSAGE_BYTES)).to_owned();
+                }
+            }
+            UiAnswer::Questions { answers }
+        }
         other => other,
     }
+}
+
+/// Only display text may shrink. Question IDs and option positions remain exact for answers.
+fn question_strings(prompt: &mut UiPrompt) -> Vec<&mut String> {
+    let UiPrompt::Questions { message, questions } = prompt else {
+        return Vec::new();
+    };
+    let mut strings = vec![message];
+    for question in questions {
+        strings.push(&mut question.header);
+        strings.push(&mut question.question);
+        for option in &mut question.options {
+            strings.push(&mut option.label);
+            strings.push(&mut option.description);
+        }
+    }
+    strings
 }
 
 /// Entries cut to 500 characters, then trailing entries folded into one "+ n more" entry.

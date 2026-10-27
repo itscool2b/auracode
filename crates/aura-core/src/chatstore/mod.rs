@@ -22,13 +22,32 @@
 //! saving is paused, `chats`, `read_blob`, `read_saved_page` and `load_chat` (for a chat with nothing
 //! unsaved and no running turn) are served from saved data at once.
 
+#[cfg(all(test, feature = "account-sync"))]
+mod account_files_tests;
 pub(crate) mod blobs;
 pub(crate) mod compact;
+pub(crate) mod composer;
+pub(crate) mod conversation;
+mod export;
+pub(crate) mod files;
+pub(crate) mod folder_resolution;
 pub(crate) mod history;
-mod recover;
+#[cfg(feature = "account-sync")]
+mod journal;
+pub(crate) mod organization;
+#[cfg(feature = "account-sync")]
+mod preservation;
+pub(crate) mod recover;
 pub(crate) mod rows;
+pub(crate) mod search;
+pub(crate) mod steering;
+#[cfg(feature = "account-sync")]
+mod sync;
 #[cfg(test)]
 pub(crate) mod test_support;
+pub(crate) mod workspace_activity;
+pub(crate) mod workspace_removal;
+pub(crate) mod worktree_setup;
 mod writer;
 
 use std::fmt;
@@ -67,6 +86,9 @@ pub struct ChatStore {
     shared: Arc<Shared>,
     rt: Handle,
     db_path: PathBuf,
+    attachment_dir: PathBuf,
+    attachments: files::Attachments,
+    encrypted: bool,
     recovered: watch::Receiver<Option<RecoveryReport>>,
 }
 
@@ -80,6 +102,255 @@ impl fmt::Debug for ChatStore {
 }
 
 impl ChatStore {
+    pub(crate) async fn folder_resolution(
+        &self,
+        command: folder_resolution::Command,
+    ) -> Result<folder_resolution::Reply, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if !command.writes() {
+            return self
+                .request(Request::FolderResolution { command, reply }, answer)
+                .await?;
+        }
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::FolderResolution { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+    pub(crate) fn workspace_changes(&self) -> watch::Receiver<u64> {
+        self.shared.workspace_activity.subscribe()
+    }
+    #[cfg(test)]
+    pub(crate) fn remove_workspace_before_begin(&self, chat: &str) {
+        self.shared.workspace_activity.remove_before_begin(chat);
+    }
+    pub(crate) fn workspace_available(&self, chat: &str) -> bool {
+        self.shared.workspace_activity.available(chat)
+    }
+    pub(crate) fn begin_workspace_turn(&self, chat: &str) -> Option<workspace_activity::Turn> {
+        self.shared.workspace_activity.begin(chat)
+    }
+    pub(crate) async fn workspace_removal(
+        &self,
+        command: workspace_removal::Command,
+    ) -> Result<workspace_removal::Reply, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if !command.writes() {
+            return self
+                .request(Request::WorkspaceRemoval { command, reply }, answer)
+                .await?;
+        }
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::WorkspaceRemoval { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+    /// The app's fixed profile layout supplies this authority, never a renderer path. Legacy test
+    /// stores outside that layout have no shared-home transition coordinator.
+    pub(crate) fn config_recovery_pending(&self) -> bool {
+        let Some(profiles) = self.db_path.parent().and_then(std::path::Path::parent) else {
+            return false;
+        };
+        if profiles.file_name() != Some(std::ffi::OsStr::new("profiles")) {
+            return false;
+        }
+        profiles
+            .parent()
+            .is_some_and(|root| !matches!(crate::config_transition::pending(root), Ok(None)))
+    }
+
+    pub(crate) async fn search(
+        &self,
+        query: String,
+        include_archived: bool,
+    ) -> Result<aura_protocol::search::SearchResults, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if self.is_paused() {
+            return self
+                .saved(
+                    writer::SavedRead::Search {
+                        query,
+                        include_archived,
+                        reply,
+                    },
+                    answer,
+                )
+                .await?;
+        }
+        self.request(
+            Request::Search {
+                query,
+                include_archived,
+                reply,
+            },
+            answer,
+        )
+        .await?
+    }
+    pub(crate) async fn worktree_setup(
+        &self,
+        command: worktree_setup::Command,
+    ) -> Result<aura_protocol::worktree_setup::WorktreeSetup, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if command.save.is_none() {
+            return self
+                .request(Request::WorktreeSetup { command, reply }, answer)
+                .await?;
+        }
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::WorktreeSetup { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+    pub(crate) async fn steering(&self, command: steering::Command) -> Result<(), StoreError> {
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let (reply, answer) = oneshot::channel();
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::Steering { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+    pub(crate) async fn conversation(
+        &self,
+        command: conversation::ConversationCommand,
+    ) -> Result<conversation::ConversationReply, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if !command.writes() {
+            return self
+                .request(Request::Conversation { command, reply }, answer)
+                .await?;
+        }
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::Conversation { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+    pub(crate) async fn composer(
+        &self,
+        command: composer::ComposerCommand,
+    ) -> Result<Vec<composer::StoredAttachment>, StoreError> {
+        match self.composer_command(command).await? {
+            composer::ComposerReply::Attachments(items) => Ok(items),
+            composer::ComposerReply::Draft(_) => {
+                Err(StoreError::Other("Unexpected draft response.".into()))
+            }
+        }
+    }
+
+    pub(crate) async fn composer_command(
+        &self,
+        command: composer::ComposerCommand,
+    ) -> Result<composer::ComposerReply, StoreError> {
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        let (reply, answer) = oneshot::channel();
+        self.shared.push(
+            Work::Request(Request::Composer { command, reply }),
+            Some(permits),
+        );
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
+    pub(crate) async fn checkpoint_context(
+        &self,
+        chat_id: &str,
+        turn_id: Option<String>,
+    ) -> Result<(ChatRecord, Option<String>), StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if self.is_paused() {
+            return self
+                .saved(
+                    writer::SavedRead::CheckpointContext {
+                        chat_id: chat_id.into(),
+                        turn_id,
+                        reply,
+                    },
+                    answer,
+                )
+                .await?;
+        }
+        self.request(
+            Request::CheckpointContext {
+                chat_id: chat_id.into(),
+                turn_id,
+                reply,
+            },
+            answer,
+        )
+        .await?
+    }
+
+    pub(crate) async fn organize(
+        &self,
+        command: organization::OrganizationCommand,
+    ) -> Result<organization::Organization, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        if command.is_read() {
+            if self.is_paused()
+                && let organization::OrganizationCommand::Snapshot(filter) = command
+            {
+                return self
+                    .saved(writer::SavedRead::Organization { filter, reply }, answer)
+                    .await?;
+            }
+            return self
+                .request(Request::Organization { command, reply }, answer)
+                .await?;
+        }
+        let permits = tokio::time::timeout(REQUEST_TIMEOUT, self.permits(command.bytes()))
+            .await
+            .map_err(|_| self.timed_out())?
+            .ok_or(StoreError::Closed)?;
+        self.shared.push(
+            Work::Request(Request::Organization { command, reply }),
+            Some(permits),
+        );
+        // Mutations acknowledge the actual transaction, never a timeout followed by a late move.
+        answer.await.map_err(|_| StoreError::Closed)?
+    }
     /// Moves the opened `Store` and the owner lock into the writer thread; global recovery is its
     /// first op.
     pub fn start(
@@ -101,6 +372,57 @@ impl ChatStore {
         rt: Handle,
         config: WriterConfig,
     ) -> Result<Arc<ChatStore>, CoreError> {
+        if profile.meta.kind == crate::profile::ProfileKind::Account {
+            return Err(CoreError::ProfileLocked {
+                path: profile.db_path(),
+            });
+        }
+        Self::start_files(
+            store,
+            owner,
+            profile,
+            device_id,
+            rt,
+            config,
+            files::Files::local(profile),
+        )
+    }
+
+    /// Opens encrypted external files before moving the unlocked Account store to its writer.
+    #[cfg(feature = "account-sync")]
+    pub fn start_account(
+        store: Store,
+        owner: ProfileOwner,
+        profile: &Profile,
+        device_id: String,
+        rt: Handle,
+        key: Arc<aura_sync::crypto::files::ProfileFileKey>,
+    ) -> Result<Arc<ChatStore>, CoreError> {
+        if profile.meta.kind != crate::profile::ProfileKind::Account || !store.is_encrypted() {
+            return Err(CoreError::ProfileEncryptionMismatch);
+        }
+        let files = files::Files::account(profile, key).map_err(CoreError::io(&profile.dir))?;
+        Self::start_files(
+            store,
+            owner,
+            profile,
+            device_id,
+            rt,
+            WriterConfig::STANDARD,
+            files,
+        )
+    }
+
+    fn start_files(
+        store: Store,
+        owner: ProfileOwner,
+        profile: &Profile,
+        device_id: String,
+        rt: Handle,
+        config: WriterConfig,
+        files: files::Files,
+    ) -> Result<Arc<ChatStore>, CoreError> {
+        let attachments = files.attachments.clone();
         let shared = Arc::new(Shared::new(config));
         let (recovered, recovered_rx) = watch::channel(None);
         let writer = Writer::new(
@@ -108,8 +430,7 @@ impl ChatStore {
             store,
             owner,
             device_id,
-            profile.attachments_dir(),
-            profile.backups_dir(),
+            files,
             recovered,
         );
         let finished = Arc::clone(&shared);
@@ -129,6 +450,9 @@ impl ChatStore {
             shared,
             rt,
             db_path: profile.db_path(),
+            attachment_dir: profile.attachments_dir(),
+            attachments,
+            encrypted: profile.meta.kind == crate::profile::ProfileKind::Account,
             recovered: recovered_rx,
         }))
     }
@@ -140,6 +464,19 @@ impl ChatStore {
 
     pub fn is_paused(&self) -> bool {
         self.shared.is_paused()
+    }
+
+    pub(crate) fn attachment_dir(&self) -> &std::path::Path {
+        &self.attachment_dir
+    }
+
+    pub(crate) fn attachment_reader(
+        &self,
+    ) -> Option<Arc<dyn aura_drivers::attachments::AttachmentReader>> {
+        self.attachments.reader()
+    }
+    pub(crate) fn encrypted(&self) -> bool {
+        self.encrypted
     }
 
     /// What startup recovery did, once it finished.
@@ -208,6 +545,19 @@ impl ChatStore {
         }
         self.request(Request::LoadChat { chat_id, reply }, answer)
             .await?
+    }
+
+    /// A bounded Markdown snapshot of saved events, serialized by the profile writer.
+    pub async fn export_markdown(&self, chat_id: &str) -> Result<String, StoreError> {
+        let (reply, answer) = oneshot::channel();
+        self.request(
+            Request::ExportMarkdown {
+                chat_id: chat_id.to_owned(),
+                reply,
+            },
+            answer,
+        )
+        .await?
     }
 
     /// One page of a blob's text, ending on a character boundary.
@@ -280,6 +630,9 @@ impl ChatStore {
 
     /// Commits what is queued, then closes the connection. Returns whether everything was saved
     /// within `deadline`.
+    ///
+    /// Use [`Self::flush`] first when a reversible transition must verify pending writes before
+    /// beginning irreversible shutdown.
     pub async fn shutdown(&self, deadline: Duration) -> bool {
         let (done, finished) = std::sync::mpsc::channel();
         self.shared
@@ -289,6 +642,15 @@ impl ChatStore {
             .spawn_blocking(move || writer::wait_finished(&finished, limit))
             .await
             .unwrap_or(false)
+    }
+
+    /// Wait for every earlier FIFO write while keeping the writer open. A pause, failure or
+    /// timeout refuses the transition; cancellation never closes or drops queued work.
+    pub async fn flush(&self, deadline: Duration) -> Result<(), StoreError> {
+        let (reply, answer) = oneshot::channel();
+        tokio::time::timeout(deadline, self.request(Request::Flush { reply }, answer))
+            .await
+            .map_err(|_| self.timed_out())??
     }
 
     /// The same from any thread, with or without a runtime (`RunEvent::Exit`); never panics.
@@ -405,6 +767,14 @@ pub enum Op {
         id: String,
         patch: AgentSessionPatch,
     },
+    /// Commits this native identity in its own transaction and acknowledges the actual result.
+    /// Unlike a barrier, a failed or dead-lettered earlier write cannot report success here.
+    SaveNativeIdentity {
+        id: String,
+        native_id: String,
+        updated_at: Millis,
+        reply: oneshot::Sender<Result<(), StoreError>>,
+    },
     /// Inserts the turn, appends `rows` (TurnStarted, the user's text, ...) and deletes the queued
     /// prompt `turn.prompt_id`, in one transaction: a crash keeps either the queued prompt or the
     /// started turn.
@@ -460,6 +830,7 @@ pub enum Op {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct NewChat {
     pub agent_id: String,
+    pub agent_host: aura_protocol::agents::AgentHost,
     pub folder: PathBuf,
     pub device_id: String,
     pub now: Millis,
@@ -468,9 +839,11 @@ pub struct NewChat {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChatRecord {
     pub id: String,
+    pub folder_id: Option<String>,
     pub title: Option<String>,
     pub title_source: Option<TitleSource>,
     pub agent_id: String,
+    pub agent_host: aura_protocol::agents::AgentHost,
     pub folder: PathBuf,
     pub created_at: Millis,
     pub updated_at: Millis,
@@ -479,6 +852,10 @@ pub struct ChatRecord {
 /// Everything a chat actor starts from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChatLoad {
+    pub(crate) remote_history: bool,
+    pub(crate) continuation: Option<conversation::PendingContinuation>,
+    /// A project default for a chat that has never established an agent session.
+    pub initial_model: Option<String>,
     pub chat: ChatRecord,
     pub next_seq: u32,
     pub next_turn_ordinal: u32,
@@ -500,6 +877,8 @@ pub struct ReplayCheck {
 /// An `agent_sessions` row.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AgentSessionRow {
+    pub capabilities: Option<aura_protocol::Capabilities>,
+    pub host: aura_protocol::agents::AgentHost,
     pub id: String,
     pub chat_id: String,
     pub agent_id: String,
@@ -517,6 +896,7 @@ pub struct AgentSessionRow {
 /// The fields of an [`AgentSessionRow`] to change; `None` keeps a field.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AgentSessionPatch {
+    pub capabilities: Option<aura_protocol::Capabilities>,
     pub native_session_id: Option<String>,
     pub model: Option<String>,
     pub effort: Option<String>,
@@ -528,6 +908,9 @@ pub struct AgentSessionPatch {
 /// A `turns` row as it starts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TurnRow {
+    pub continuation_prefix: Option<String>,
+    pub checkpoint_ref: Option<String>,
+    pub parts: Vec<aura_protocol::PromptPart>,
     pub id: String,
     pub chat_id: String,
     pub agent_session_id: Option<String>,
@@ -574,6 +957,7 @@ pub struct EventRow {
 /// A `queued_prompts` row.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct QueuedRow {
+    pub parts: Vec<aura_protocol::PromptPart>,
     pub id: String,
     pub chat_id: String,
     pub text: String,
@@ -588,6 +972,7 @@ pub struct QueuedRow {
 pub enum TitleSource {
     FirstLine,
     Agent,
+    Manual,
 }
 
 /// What recovery did.
@@ -703,6 +1088,7 @@ mod tests {
     async fn new_chat(store: &ChatStore) -> ChatRecord {
         store
             .create_chat(NewChat {
+                agent_host: Default::default(),
                 agent_id: "mock".into(),
                 folder: PathBuf::from("/work/repo"),
                 device_id: "dev".into(),
@@ -777,6 +1163,133 @@ mod tests {
             }
         }
         lines
+    }
+
+    #[tokio::test]
+    async fn flush_commits_earlier_ops_and_a_timeout_does_not_close_the_writer() {
+        let fixture = start(WriterConfig::STANDARD);
+        let store = &fixture.store;
+        let chat = new_chat(store).await;
+        let held = hold(store);
+        send(
+            store,
+            Op::AppendEvents {
+                chat_id: chat.id.clone(),
+                rows: vec![notice(0, "saved before switch")],
+            },
+        )
+        .await;
+        assert!(store.flush(Duration::from_millis(10)).await.is_err());
+        drop(held);
+        store
+            .flush(Duration::from_secs(5))
+            .await
+            .expect("writer resumes without closing");
+        let read = Connection::open_with_flags(
+            fixture.profile.db_path(),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("independent reader");
+        let count: u32 = read
+            .query_row(
+                "SELECT count(*) FROM events WHERE chat_id=?1",
+                [&chat.id],
+                |row| row.get(0),
+            )
+            .expect("durable rows");
+        assert_eq!(count, 1);
+        drop(read);
+        assert!(store.shutdown(Duration::from_secs(5)).await);
+        assert!(matches!(
+            store.flush(Duration::from_secs(1)).await,
+            Err(StoreError::Closed)
+        ));
+    }
+
+    #[tokio::test]
+    async fn composer_drafts_survive_a_profile_reopen() {
+        use composer::ComposerCommand;
+        let fixture = start(WriterConfig::STANDARD);
+        let chat = new_chat(&fixture.store).await;
+        let input = aura_protocol::composer::ComposerInput {
+            text: "Unsent work".into(),
+            attachments: Vec::new(),
+            mentions: vec!["src/main.rs".into()],
+        };
+        fixture
+            .store
+            .composer_command(ComposerCommand::SaveDraft {
+                chat_id: chat.id.clone(),
+                input: input.clone(),
+            })
+            .await
+            .expect("save acknowledged");
+        assert!(fixture.store.shutdown(Duration::from_secs(10)).await);
+        let (store, _) = Store::open(&fixture.profile).expect("reopen");
+        let json: String = store
+            .conn()
+            .query_row(
+                "SELECT input_json FROM composer_drafts WHERE chat_id=?1",
+                [&chat.id],
+                |row| row.get(0),
+            )
+            .expect("stored draft");
+        assert_eq!(
+            serde_json::from_str::<aura_protocol::composer::ComposerInput>(&json)
+                .expect("typed draft"),
+            input
+        );
+    }
+
+    #[tokio::test]
+    async fn composer_attachment_ids_are_chat_scoped_and_blobs_are_verified() {
+        use composer::ComposerCommand;
+        use sha2::{Digest as _, Sha256};
+        let fixture = start(WriterConfig::STANDARD);
+        let store = &fixture.store;
+        let first = new_chat(store).await;
+        let second = new_chat(store).await;
+        let bytes: Arc<[u8]> = Arc::from(b"explicit context".as_slice());
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        let saved = store
+            .composer(ComposerCommand::Import {
+                chat_id: first.id.clone(),
+                name: "notes.txt".into(),
+                mime: "text/plain".into(),
+                sha256: hash.clone(),
+                bytes,
+            })
+            .await
+            .expect("saved");
+        let id = saved[0].meta.id.clone();
+        assert!(
+            store
+                .composer(ComposerCommand::Resolve {
+                    chat_id: second.id,
+                    ids: vec![id.clone()]
+                })
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            store
+                .composer(ComposerCommand::Resolve {
+                    chat_id: first.id,
+                    ids: vec![id]
+                })
+                .await
+                .expect("owned")[0]
+                .sha256,
+            hash
+        );
+        let dir = fixture.profile.attachments_dir();
+        assert_eq!(
+            aura_drivers::attachments::read(&dir, &hash, 256).expect("verified"),
+            b"explicit context"
+        );
+        std::fs::write(dir.join(&hash), b"changed data").expect("alter synthetic blob");
+        assert!(aura_drivers::attachments::read(&dir, &hash, 256).is_err());
+        assert!(store.shutdown(Duration::from_secs(10)).await);
     }
 
     #[tokio::test]
@@ -896,6 +1409,7 @@ mod tests {
 
     fn queued_prompt(chat: &str) -> Op {
         Op::QueuePut(QueuedRow {
+            parts: Vec::new(),
             id: "p1".into(),
             chat_id: chat.into(),
             text: "hello".into(),
@@ -912,6 +1426,9 @@ mod tests {
         };
         Op::BeginTurn {
             turn: TurnRow {
+                continuation_prefix: None,
+                checkpoint_ref: None,
+                parts: Vec::new(),
                 id: "t1".into(),
                 chat_id: chat.into(),
                 agent_session_id: None,
@@ -1302,6 +1819,7 @@ mod tests {
         send(
             store,
             Op::QueuePut(QueuedRow {
+                parts: Vec::new(),
                 id: "q".into(),
                 chat_id: quiet.id.clone(),
                 text: "next".into(),
@@ -1630,6 +2148,7 @@ mod tests {
             let chat = rows::create_chat(
                 store.conn(),
                 &NewChat {
+                    agent_host: Default::default(),
                     agent_id: "mock".into(),
                     folder: PathBuf::from("/w"),
                     device_id: "dev".into(),
@@ -1697,6 +2216,7 @@ mod tests {
             let chat = rows::create_chat(
                 store.conn(),
                 &NewChat {
+                    agent_host: Default::default(),
                     agent_id: "mock".into(),
                     folder: PathBuf::from("/w"),
                     device_id: "dev".into(),
@@ -1750,6 +2270,9 @@ mod tests {
                 &tx,
                 "dev",
                 &TurnRow {
+                    continuation_prefix: None,
+                    checkpoint_ref: None,
+                    parts: Vec::new(),
                     id: "t1".into(),
                     chat_id: chat.clone(),
                     agent_session_id: None,
@@ -1778,6 +2301,7 @@ mod tests {
             let chat = rows::create_chat(
                 store.conn(),
                 &NewChat {
+                    agent_host: Default::default(),
                     agent_id: "mock".into(),
                     folder: PathBuf::from("/w"),
                     device_id: "dev".into(),
@@ -1789,6 +2313,7 @@ mod tests {
                 store.conn(),
                 "dev",
                 &QueuedRow {
+                    parts: Vec::new(),
                     id: "p1".into(),
                     chat_id: chat.id,
                     text: "hi".into(),
@@ -1827,6 +2352,7 @@ mod tests {
             send(
                 store,
                 Op::QueuePut(QueuedRow {
+                    parts: Vec::new(),
                     id: id.into(),
                     chat_id: chat.id.clone(),
                     text: format!("prompt {id}"),
@@ -1840,6 +2366,9 @@ mod tests {
             store,
             Op::BeginTurn {
                 turn: TurnRow {
+                    continuation_prefix: None,
+                    checkpoint_ref: None,
+                    parts: Vec::new(),
                     id: "t1".into(),
                     chat_id: chat.id.clone(),
                     agent_session_id: None,
@@ -1911,6 +2440,7 @@ mod tests {
             let chat = rows::create_chat(
                 store.conn(),
                 &NewChat {
+                    agent_host: Default::default(),
                     agent_id: "mock".into(),
                     folder: PathBuf::from("/w"),
                     device_id: "dev".into(),

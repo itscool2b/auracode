@@ -19,6 +19,18 @@ use crate::ids::new_id;
 /// How many of an agent session's newest turns the replay check looks through for the newest reply.
 const REPLY_SEARCH_TURNS: i64 = 50;
 
+pub(crate) fn checkpoint_context(
+    conn: &Connection,
+    device: &str,
+    chat_id: &str,
+    turn_id: Option<&str>,
+) -> rusqlite::Result<(ChatRecord, Option<String>)> {
+    let chat = chat(conn, device, chat_id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+    let reference = conn.query_row("SELECT checkpoint_ref FROM turns WHERE chat_id=?1 AND (?2 IS NULL OR id=?2) ORDER BY seq DESC LIMIT 1",
+        params![chat_id, turn_id], |row| row.get::<_, Option<String>>(0)).optional()?.flatten();
+    Ok((chat, reference))
+}
+
 /// The chat with this id, unless it was deleted.
 pub(crate) fn chat(
     conn: &Connection,
@@ -34,16 +46,15 @@ pub(crate) fn chat(
 /// Every chat that is neither deleted nor archived, the most recently updated first.
 pub(crate) fn chats(conn: &Connection, device_id: &str) -> rusqlite::Result<Vec<ChatRecord>> {
     let mut stmt = conn.prepare_cached(&format!(
-        "{CHAT_SELECT} WHERE c.deleted = 0 AND c.archived = 0 ORDER BY c.updated_at DESC, c.id DESC"
+        "{CHAT_SELECT} WHERE c.deleted = 0 AND c.archived = 0 AND EXISTS(SELECT 1 FROM projects p WHERE p.id=c.project_id AND p.deleted=0) AND (c.folder_id IS NULL OR EXISTS(SELECT 1 FROM project_folders f WHERE f.id=c.folder_id AND f.deleted=0)) ORDER BY c.updated_at DESC, c.id DESC"
     ))?;
     let rows = stmt.query_map(params![device_id], chat_record)?;
     rows.collect()
 }
 
-/// A chat with the folder as this device knows it (any device's path when this one has none).
+/// A chat with this device's mapping only. A foreign path must never become a local launch cwd.
 const CHAT_SELECT: &str = "SELECT c.id, c.title, c.title_source, c.active_agent, c.created_at, c.updated_at, \
-     COALESCE((SELECT fl.path FROM folder_locations fl WHERE fl.folder_id = c.folder_id AND fl.device_id = ?1), \
-              (SELECT fl.path FROM folder_locations fl WHERE fl.folder_id = c.folder_id LIMIT 1)) \
+     (SELECT fl.path FROM folder_locations fl WHERE fl.folder_id = c.folder_id AND fl.device_id = ?1), c.agent_host, c.folder_id \
      FROM chats c";
 
 fn chat_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatRecord> {
@@ -51,9 +62,12 @@ fn chat_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatRecord> {
     let folder: Option<String> = row.get(6)?;
     Ok(ChatRecord {
         id: row.get(0)?,
+        folder_id: row.get(8)?,
         title: row.get(1)?,
         title_source: title_source.as_deref().and_then(parse_title_source),
         agent_id: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+        agent_host: serde_json::from_str(&row.get::<_, String>(7)?)
+            .unwrap_or(aura_protocol::agents::AgentHost::Unsupported),
         folder: PathBuf::from(folder.unwrap_or_default()),
         created_at: row.get(4)?,
         updated_at: row.get(5)?,
@@ -64,6 +78,7 @@ fn parse_title_source(text: &str) -> Option<TitleSource> {
     match text {
         "first_line" => Some(TitleSource::FirstLine),
         "agent" => Some(TitleSource::Agent),
+        "manual" => Some(TitleSource::Manual),
         _ => None,
     }
 }
@@ -72,6 +87,7 @@ fn title_source_str(source: TitleSource) -> &'static str {
     match source {
         TitleSource::FirstLine => "first_line",
         TitleSource::Agent => "agent",
+        TitleSource::Manual => "manual",
     }
 }
 
@@ -122,15 +138,18 @@ pub(crate) fn create_chat(conn: &Connection, new: &NewChat) -> rusqlite::Result<
     };
     let id = new_id();
     conn.prepare_cached(
-        "INSERT INTO chats (id, project_id, folder_id, active_agent, created_at, updated_at, device_id) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6)",
+        "INSERT INTO chats (id, project_id, folder_id, active_agent, created_at, updated_at, device_id, agent_host) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6, ?7)",
     )?
-    .execute(params![id, project_id, folder_id, new.agent_id, new.now, new.device_id])?;
+    .execute(params![id, project_id, folder_id, new.agent_id, new.now, new.device_id,
+        serde_json::to_string(&new.agent_host).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?])?;
     Ok(ChatRecord {
         id,
+        folder_id: Some(folder_id),
         title: None,
         title_source: None,
         agent_id: new.agent_id.clone(),
+        agent_host: new.agent_host.clone(),
         folder: new.folder.clone(),
         created_at: new.now,
         updated_at: new.now,
@@ -171,12 +190,20 @@ pub(crate) fn load_chat(
         None => 1,
     };
     let agent_session = latest_agent_session(conn, chat_id)?;
+    let initial_model = if agent_session.is_none() {
+        conn.query_row("SELECT p.default_model FROM chats c JOIN projects p ON p.id=c.project_id WHERE c.id=?1 AND p.deleted=0 AND (p.default_agent IS NULL OR p.default_agent=c.active_agent)",[chat_id],|row| row.get::<_,Option<String>>(0)).optional()?.flatten()
+    } else {
+        None
+    };
     let queue = queued(conn, chat_id)?;
     let replay_check = match &agent_session {
         Some(session) => replay_check(conn, session)?,
         None => None,
     };
     Ok(Some(ChatLoad {
+        initial_model,
+        remote_history: remote_history(conn, chat_id)?,
+        continuation: super::conversation::pending(conn, chat_id)?,
         chat,
         next_seq,
         next_turn_ordinal,
@@ -187,19 +214,38 @@ pub(crate) fn load_chat(
     }))
 }
 
+pub(crate) fn remote_history(conn: &Connection, chat_id: &str) -> rusqlite::Result<bool> {
+    conn.query_row("SELECT COALESCE((SELECT source_agent IS NOT NULL FROM turns WHERE chat_id=?1 ORDER BY seq DESC LIMIT 1),0)",[chat_id],|r|r.get(0))
+}
+
 /// The chat's newest agent session.
 pub(crate) fn latest_agent_session(
     conn: &Connection,
     chat_id: &str,
 ) -> rusqlite::Result<Option<AgentSessionRow>> {
+    let agent: Option<String> = conn.query_row(
+        "SELECT active_agent FROM chats WHERE id=?1",
+        [chat_id],
+        |row| row.get(0),
+    )?;
+    agent_session_for(conn, chat_id, agent.as_deref().unwrap_or(""))
+}
+
+pub(crate) fn agent_session_for(
+    conn: &Connection,
+    chat_id: &str,
+    agent_id: &str,
+) -> rusqlite::Result<Option<AgentSessionRow>> {
     conn.prepare_cached(
         "SELECT id, chat_id, agent_id, native_session_id, model, effort, autonomy, config_json, cwd, \
-         created_at, updated_at FROM agent_sessions WHERE chat_id = ?1 ORDER BY created_at DESC, id DESC LIMIT 1",
+         created_at, updated_at, host, capabilities_json FROM agent_sessions WHERE chat_id = ?1 AND agent_id = ?2 ORDER BY created_at DESC, id DESC LIMIT 1",
     )?
-    .query_row(params![chat_id], |row| {
+    .query_row(params![chat_id, agent_id], |row| {
         let autonomy: Option<String> = row.get(6)?;
         let cwd: String = row.get(8)?;
         Ok(AgentSessionRow {
+            capabilities: row.get::<_,Option<String>>(12)?.and_then(|json| serde_json::from_str(&json).ok()),
+            host: parse_session_host(&row.get::<_, String>(11)?),
             id: row.get(0)?,
             chat_id: row.get(1)?,
             agent_id: row.get(2)?,
@@ -216,13 +262,29 @@ pub(crate) fn latest_agent_session(
     .optional()
 }
 
+fn parse_session_host(value: &str) -> aura_protocol::agents::AgentHost {
+    // The original schema's SQL default remains valid for old writers and recovered rows.
+    if value == "native" {
+        aura_protocol::agents::AgentHost::Native
+    } else {
+        serde_json::from_str(value).unwrap_or(aura_protocol::agents::AgentHost::Unsupported)
+    }
+}
+
 /// The chat's queued prompts, oldest first.
 pub(crate) fn queued(conn: &Connection, chat_id: &str) -> rusqlite::Result<Vec<QueuedRow>> {
     let mut stmt = conn.prepare_cached(
-        "SELECT id, chat_id, text, held, created_at FROM queued_prompts WHERE chat_id = ?1 ORDER BY created_at, id",
+        "SELECT id, chat_id, text, held, created_at, parts_json FROM queued_prompts WHERE chat_id = ?1 ORDER BY created_at, id",
     )?;
     let rows = stmt.query_map(params![chat_id], |row| {
         Ok(QueuedRow {
+            parts: serde_json::from_str(&row.get::<_, String>(5)?).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    5,
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })?,
             id: row.get(0)?,
             chat_id: row.get(1)?,
             text: row.get(2)?,
@@ -335,7 +397,7 @@ pub(crate) fn insert_agent_session(
 ) -> rusqlite::Result<()> {
     conn.prepare_cached(
         "INSERT INTO agent_sessions (id, chat_id, agent_id, native_session_id, model, effort, autonomy, cwd, \
-         created_at, updated_at, device_id, config_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+         created_at, updated_at, device_id, config_json, host, capabilities_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
     )?
     .execute(params![
         row.id,
@@ -350,7 +412,10 @@ pub(crate) fn insert_agent_session(
         row.updated_at,
         device_id,
         row.config_json,
+        serde_json::to_string(&row.host).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
+        row.capabilities.as_ref().map(serde_json::to_string).transpose().map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
     ])?;
+    conn.execute("UPDATE chat_continuations SET pending_json=json_set(pending_json,'$.force_fresh',json('false'),'$.resume_source',NULL,'$.native_start',json('{}')) WHERE chat_id=?1", [&row.chat_id])?;
     Ok(())
 }
 
@@ -364,7 +429,7 @@ pub(crate) fn update_agent_session(
     conn.prepare_cached(
         "UPDATE agent_sessions SET native_session_id = COALESCE(?2, native_session_id), \
          model = COALESCE(?3, model), effort = COALESCE(?4, effort), autonomy = COALESCE(?5, autonomy), \
-         config_json = COALESCE(?6, config_json), updated_at = ?7, device_id = ?8 WHERE id = ?1",
+         config_json = COALESCE(?6, config_json), updated_at = ?7, device_id = ?8, capabilities_json=COALESCE(?9,capabilities_json) WHERE id = ?1",
     )?
     .execute(params![
         id,
@@ -375,7 +440,26 @@ pub(crate) fn update_agent_session(
         patch.config_json,
         patch.updated_at,
         device_id,
+        patch.capabilities.as_ref().map(serde_json::to_string).transpose().map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
     ])?;
+    Ok(())
+}
+
+/// Updates exactly one existing session row; a skipped or missing row is not a saved identity.
+pub(crate) fn save_native_identity(
+    conn: &Connection,
+    device_id: &str,
+    id: &str,
+    native_id: &str,
+    updated_at: Millis,
+) -> rusqlite::Result<()> {
+    let changed = conn.execute(
+        "UPDATE agent_sessions SET native_session_id = ?2, updated_at = ?3, device_id = ?4 WHERE id = ?1",
+        params![id, native_id, updated_at, device_id],
+    )?;
+    if changed != 1 {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
     Ok(())
 }
 
@@ -388,7 +472,7 @@ pub(crate) fn begin_turn(
 ) -> rusqlite::Result<()> {
     conn.prepare_cached(
         "INSERT INTO turns (id, chat_id, agent_session_id, seq, status, started_at, device_id, prompt_id, \
-         first_event_seq) VALUES (?1, ?2, ?3, ?4, 'running', ?5, ?6, ?7, ?8)",
+         first_event_seq, prompt_parts_json, checkpoint_ref, continuation_prefix) VALUES (?1, ?2, ?3, ?4, 'running', ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
     )?
     .execute(params![
         turn.id,
@@ -399,7 +483,12 @@ pub(crate) fn begin_turn(
         device_id,
         turn.prompt_id,
         turn.first_event_seq,
+        serde_json::to_string(&turn.parts).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
+        turn.checkpoint_ref,
+        turn.continuation_prefix,
     ])?;
+    conn.execute("UPDATE turns SET parent_turn_id=(SELECT p.id FROM turns p WHERE p.chat_id=?2 AND p.seq<?3 ORDER BY p.seq DESC LIMIT 1) WHERE id=?1", params![turn.id,turn.chat_id,turn.ordinal])?;
+    conn.execute("UPDATE chat_continuations SET pending_json=json_set(pending_json,'$.handoff','') WHERE chat_id=?1", [&turn.chat_id])?;
     append_events(conn, device_id, &turn.chat_id, rows)?;
     conn.prepare_cached("DELETE FROM queued_prompts WHERE id = ?1")?
         .execute(params![turn.prompt_id])?;
@@ -474,7 +563,7 @@ pub(crate) fn set_title(
     title: &str,
     source: TitleSource,
 ) -> rusqlite::Result<()> {
-    conn.prepare_cached("UPDATE chats SET title = ?2, title_source = ?3 WHERE id = ?1")?
+    conn.prepare_cached("UPDATE chats SET title = ?2, title_source = ?3 WHERE id = ?1 AND (title_source IS NULL OR title_source <> 'manual' OR ?3 = 'manual')")?
         .execute(params![chat_id, title, title_source_str(source)])?;
     Ok(())
 }
@@ -494,8 +583,8 @@ pub(crate) fn queue_put(
     row: &QueuedRow,
 ) -> rusqlite::Result<()> {
     conn.prepare_cached(
-        "INSERT OR REPLACE INTO queued_prompts (id, chat_id, text, held, created_at, device_id) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT OR REPLACE INTO queued_prompts (id, chat_id, text, held, created_at, device_id, parts_json) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
     )?
     .execute(params![
         row.id,
@@ -504,6 +593,7 @@ pub(crate) fn queue_put(
         i64::from(row.held),
         row.created_at,
         device_id,
+        serde_json::to_string(&row.parts).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
     ])?;
     Ok(())
 }
@@ -553,12 +643,64 @@ pub(crate) mod tests {
     use crate::chatstore::test_support::{TestDb, event_row};
 
     #[test]
+    fn chat_host_roundtrips_and_unknown_hosts_never_become_native() {
+        use aura_protocol::agents::AgentHost;
+        let db = TestDb::new();
+        let saved = create_chat(
+            db.conn(),
+            &NewChat {
+                agent_id: "codex".into(),
+                agent_host: AgentHost::Wsl {
+                    distro: "My Linux".into(),
+                },
+                folder: "/work".into(),
+                device_id: "dev".into(),
+                now: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            chat(db.conn(), "dev", &saved.id).unwrap(),
+            Some(saved.clone())
+        );
+        db.conn()
+            .execute(
+                "UPDATE chats SET agent_host = ?1 WHERE id = ?2",
+                params![r#"{"type":"future"}"#, saved.id],
+            )
+            .unwrap();
+        assert_eq!(
+            chat(db.conn(), "dev", &saved.id)
+                .unwrap()
+                .unwrap()
+                .agent_host,
+            AgentHost::Unsupported
+        );
+        db.conn()
+            .execute(
+                "UPDATE chats SET agent_host = 'malformed' WHERE id = ?1",
+                params![saved.id],
+            )
+            .unwrap();
+        assert_eq!(
+            chat(db.conn(), "dev", &saved.id)
+                .unwrap()
+                .unwrap()
+                .agent_host,
+            AgentHost::Unsupported
+        );
+        assert_eq!(parse_session_host("native"), AgentHost::Native);
+        assert_eq!(parse_session_host("future"), AgentHost::Unsupported);
+    }
+
+    #[test]
     fn a_chat_in_a_new_folder_creates_its_project_folder_and_location() {
         let db = TestDb::new();
         let conn = db.conn();
         let chat = create_chat(
             conn,
             &NewChat {
+                agent_host: Default::default(),
                 agent_id: "mock".into(),
                 folder: PathBuf::from("/work/my repo"),
                 device_id: "dev".into(),
@@ -588,6 +730,7 @@ pub(crate) mod tests {
         let db = TestDb::new();
         let conn = db.conn();
         let new = |now| NewChat {
+            agent_host: Default::default(),
             agent_id: "mock".into(),
             folder: PathBuf::from("/work/repo"),
             device_id: "dev".into(),
@@ -627,6 +770,8 @@ pub(crate) mod tests {
         assert_eq!(empty.agent_session, None);
 
         let session = AgentSessionRow {
+            capabilities: None,
+            host: Default::default(),
             id: "s1".into(),
             chat_id: chat.clone(),
             agent_id: "mock".into(),
@@ -644,6 +789,9 @@ pub(crate) mod tests {
             conn,
             "dev",
             &TurnRow {
+                continuation_prefix: None,
+                checkpoint_ref: None,
+                parts: Vec::new(),
                 id: "t1".into(),
                 chat_id: chat.clone(),
                 agent_session_id: Some("s1".into()),
@@ -690,6 +838,7 @@ pub(crate) mod tests {
             conn,
             "dev",
             &QueuedRow {
+                parts: Vec::new(),
                 id: "q2".into(),
                 chat_id: chat.clone(),
                 text: "later".into(),
@@ -702,6 +851,7 @@ pub(crate) mod tests {
             conn,
             "dev",
             &QueuedRow {
+                parts: Vec::new(),
                 id: "q1".into(),
                 chat_id: chat.clone(),
                 text: "first".into(),
@@ -728,6 +878,45 @@ pub(crate) mod tests {
         assert_eq!(check.native_session_id, "native");
         assert_eq!(check.turns, 1);
         assert_eq!(check.last_reply_sha256, hasher.finish());
+    }
+
+    #[test]
+    fn project_default_model_does_not_cross_agent_boundaries() {
+        let db = TestDb::new();
+        let chat = db.chat("/work");
+        let conn = db.conn();
+        conn.execute(
+            "UPDATE projects SET default_agent='different',default_model='vendor-model'",
+            [],
+        )
+        .unwrap();
+        assert_eq!(
+            load_chat(conn, "dev", &chat, 0)
+                .unwrap()
+                .unwrap()
+                .initial_model,
+            None
+        );
+        conn.execute("UPDATE projects SET default_agent='mock'", [])
+            .unwrap();
+        assert_eq!(
+            load_chat(conn, "dev", &chat, 0)
+                .unwrap()
+                .unwrap()
+                .initial_model
+                .as_deref(),
+            Some("vendor-model")
+        );
+        conn.execute("UPDATE projects SET default_agent=NULL", [])
+            .unwrap();
+        assert_eq!(
+            load_chat(conn, "dev", &chat, 0)
+                .unwrap()
+                .unwrap()
+                .initial_model
+                .as_deref(),
+            Some("vendor-model")
+        );
     }
 
     #[test]
@@ -759,6 +948,7 @@ pub(crate) mod tests {
                 conn,
                 "dev",
                 &QueuedRow {
+                    parts: Vec::new(),
                     id: id.into(),
                     chat_id: chat.clone(),
                     text: "x".into(),

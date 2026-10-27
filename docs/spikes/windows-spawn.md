@@ -7,9 +7,10 @@ an agent must stop everything it started.
 
 **Status:** pending only the [manual checklist](#manual-checklist-the-users-windows-pc) on a real
 Windows desktop. Every test in [What the tests prove](#what-the-tests-prove) passed in CI on
-windows-2025 and ubuntu-24.04 ([run 40123051214](https://github.com/itscool2b/auracode/actions/runs/40123051214),
+windows-2025 and the historical Ubuntu 24.04 runner ([run 40123051214](https://github.com/itscool2b/auracode/actions/runs/40123051214),
 2026-10-24, commit 1d77a29), including the hidden-console tests and the job object killing the
-tree when its owner dies, so the decision below stands.
+tree when its owner dies, so the decision below stands. Current product verification targets Windows
+and macOS only. Linux support and verification are deferred; the Linux results below are historical.
 
 ## Decision
 
@@ -194,17 +195,17 @@ impl HiddenChild { // Drop kills the tree
 ## What the tests prove
 
 `cargo test --manifest-path docs/spikes/windows-spawn/Cargo.toml` runs the whole suite locally.
-ci.yml's rust job runs it on windows-2025 and ubuntu-24.04 in steps: it builds the spike, runs
+ci.yml's rust job runs this historical spike on windows-2025 in steps: it builds the spike, runs
 the unit tests, stages the integration tests beside their helpers
 (`.github/scripts/stage-spawn-spike.sh`) and runs them from that folder, which also proves the
 folder works on its own, and on Windows uploads the folder as the `windows-spawn-spike-<sha>`
 artifact for the [manual checklist](#manual-checklist-the-users-windows-pc). The first CI run
 that got through, [run 40123051214](https://github.com/itscool2b/auracode/actions/runs/40123051214) on commit 1d77a29, passed every test on both
-runners: 18 on windows-2025 and 14 on ubuntu-24.04 (the Windows-only and Unix-only tests are
+runners: 18 on windows-2025 and 14 on Ubuntu 24.04 (the Windows-only and Unix-only tests are
 marked n/a). The macOS column is from local runs (25 consecutive runs with no leftover processes
 when the suite was written).
 
-| Test | Proves | macOS result | ubuntu-24.04 result | windows-2025 result |
+| Test | Proves | macOS result | Historical Ubuntu 24.04 result | windows-2025 result |
 |---|---|---|---|---|
 | `captures_git_version_from_stdout` | a hidden spawn runs real git and captures its stdout | pass | pass | pass |
 | `kill_tree_kills_the_grandchild` | a 60 s grandchild of a shell (`sh -c 'sleep 60 & echo $!; wait'`; `cmd /d /c ping -n 60 127.0.0.1`, found by parent pid) is gone within 5 s of `kill_tree` | pass | pass | pass |

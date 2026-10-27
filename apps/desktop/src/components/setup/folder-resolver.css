@@ -1,0 +1,103 @@
+/*
+ * Finding a project's folder on this device. It renders inside the project dialog, so it carries
+ * its own type and uses only Graphite tokens.
+ */
+
+.folder-resolver {
+  display: grid;
+  gap: 12px;
+  color: var(--g-fg-2);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.folder-resolver :where(h3, h4, p, ul) {
+  margin: 0;
+}
+
+.folder-resolver h3 {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 600;
+}
+
+.folder-resolver h4 {
+  margin-top: 8px;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.folder-resolver ul {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.folder-resolver li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.folder-resolver li > .setup-path {
+  min-width: 0;
+}
+
+.folder-resolver > section > ul {
+  display: block;
+  padding-left: 18px;
+  list-style: square;
+}
+
+.folder-resolver > section > ul > li {
+  display: list-item;
+}
+
+.folder-resolver > section > ul > li::marker {
+  color: var(--g-fg-3);
+}
+
+.folder-resolver footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+}
+
+.folder-resolver .setup-folder {
+  justify-content: flex-start;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--g-line-strong);
+  border-radius: var(--g-radius-8);
+  color: var(--g-fg-1);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  overflow-wrap: anywhere;
+}
+
+.folder-resolver > section {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--g-line);
+}
+
+.folder-resolver-saved {
+  color: var(--g-fg-1);
+}
+
+.folder-resolver + .ui-button {
+  margin-top: 20px;
+}

@@ -1,6 +1,8 @@
 import { Channel } from "@tauri-apps/api/core";
 import {
+  type AgentAuthStatus,
   type AgentEntry,
+  type AgentMaintenance,
   type AppError,
   type AppErrorCode,
   type AppInfo,
@@ -19,6 +21,7 @@ import {
   type SessionLists,
   type SmokeReport,
   type StorageStatus,
+  type TerminalChunk,
   type UiAnswer,
 } from "../bindings";
 
@@ -80,7 +83,7 @@ export function toCommandError(rejection: unknown): CommandError {
 type CommandResult<T> = { status: "ok"; data: T } | { status: "error"; error: AppError };
 
 /** A fallible command: its value, or a thrown `CommandError`. */
-async function settle<T>(call: Promise<CommandResult<T>>): Promise<T> {
+export async function settle<T>(call: Promise<CommandResult<T>>): Promise<T> {
   let result: CommandResult<T>;
   try {
     result = await call;
@@ -182,6 +185,46 @@ export function agentsRefresh(): Promise<AgentEntry[]> {
   return infallible(commands.agentsRefresh());
 }
 
+export function agentMaintenance(agentId: string): Promise<AgentMaintenance> {
+  return settle(commands.agentMaintenance(agentId));
+}
+
+export function agentAuthStatus(agentId: string): Promise<AgentAuthStatus> {
+  return settle(commands.agentAuthStatus(agentId));
+}
+
+export function terminalReserve(): Promise<string> {
+  return settle(commands.terminalReserve());
+}
+export function agentLoginStart(
+  terminalId: string,
+  agentId: string,
+  rows: number,
+  cols: number,
+): Promise<string> {
+  return settle(commands.agentLoginStart(terminalId, agentId, rows, cols));
+}
+export function terminalRead(terminalId: string): Promise<TerminalChunk> {
+  return settle(commands.terminalRead(terminalId));
+}
+export async function terminalWrite(terminalId: string, bytes: number[]): Promise<void> {
+  await settle(commands.terminalWrite(terminalId, bytes));
+}
+export async function terminalResize(
+  terminalId: string,
+  rows: number,
+  cols: number,
+): Promise<void> {
+  await settle(commands.terminalResize(terminalId, rows, cols));
+}
+export async function terminalClose(terminalId: string): Promise<void> {
+  await settle(commands.terminalClose(terminalId));
+}
+
+export async function agentUpdate(agentId: string): Promise<void> {
+  await settle(commands.agentUpdate(agentId));
+}
+
 export function envStatus(): Promise<EnvStatus> {
   return infallible(commands.envStatus());
 }
@@ -232,6 +275,10 @@ export function chatHistory(
 
 export function chatLists(chatId: string): Promise<SessionLists> {
   return settle(commands.chatLists(chatId));
+}
+
+export function chatFolderContext(chatId: string) {
+  return settle(commands.chatFolderContext(chatId));
 }
 
 export function chatSend(chatId: string, text: string): Promise<PromptAck> {

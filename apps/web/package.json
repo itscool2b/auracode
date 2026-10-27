@@ -1,0 +1,31 @@
+{
+  "name": "@auracode/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "react-router dev --port 1429",
+    "build": "react-router build && node scripts/headers.mjs",
+    "typecheck": "react-router typegen && tsc --noEmit -p .",
+    "test": "pnpm run build && node --test tests/static.test.mjs",
+    "test:browser": "pnpm run build && node tests/browser.mjs",
+    "test:release": "node tests/release.test.mjs"
+  },
+  "dependencies": {
+    "@auracode/ui": "workspace:*",
+    "@fontsource/geist-pixel": "5.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router": "7.18.4"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@react-router/dev": "7.18.4",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "playwright": "1.63.0",
+    "typescript": "6.0.3",
+    "vite": "8.3.5"
+  }
+}

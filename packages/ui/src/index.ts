@@ -34,6 +34,7 @@ export {
   prefersReducedMotion,
   REDUCED_MOTION_QUERY,
   type SpringPreset,
+  setMotionPreference,
   springs,
   subscribeReducedMotion,
   usePrefersReducedMotion,

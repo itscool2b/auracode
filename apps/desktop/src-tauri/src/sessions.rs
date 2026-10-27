@@ -80,6 +80,14 @@ struct Page {
 }
 
 impl Pages {
+    pub(crate) fn invalidate_all(&self) -> Vec<String> {
+        let mut pages = lock(&self.pages);
+        for page in pages.values_mut() {
+            page.generation.fetch_add(1, Ordering::AcqRel);
+            page.loading = true;
+        }
+        pages.keys().cloned().collect()
+    }
     fn token(&self, label: &str, settles: bool) -> PageToken {
         let mut pages = lock(&self.pages);
         let page = pages.entry(label.to_owned()).or_default();
@@ -240,6 +248,19 @@ pub struct ChatRuntime {
     pub registry: Arc<LeftoverRegistry>,
     /// Sentences that arrive after startup (the sweep's), shown with `app_info`'s notices.
     pub late_notices: Arc<Mutex<Vec<String>>>,
+    pub(crate) services: Arc<RuntimeServices>,
+    pub(crate) account_config: Option<Arc<crate::account_config::AccountConfigServices>>,
+    pub(crate) sync_identity: Option<aura_core::sync::SyncIdentity>,
+    pub(crate) sync_engine: std::sync::OnceLock<Arc<aura_core::sync::engine::SyncEngine>>,
+    pub(crate) sync_history_error: std::sync::atomic::AtomicBool,
+}
+
+/// Process ownership and agent discovery belong to the app instance, not one profile. Reusing
+/// these avoids opening competing registry files when a macOS profile switch prepares its target.
+pub(crate) struct RuntimeServices {
+    registry: Arc<LeftoverRegistry>,
+    redactor: Arc<Redactor>,
+    outside: Outside,
 }
 
 impl std::fmt::Debug for ChatRuntime {
@@ -252,6 +273,7 @@ impl std::fmt::Debug for ChatRuntime {
 
 /// The parts of the chat runtime that reach outside auracode: the login shell, agent probes and
 /// adapter installs, real processes, agent drivers. Tests pass their own.
+#[derive(Clone)]
 pub struct Outside {
     pub env: Arc<EnvResolver>,
     pub detector: Arc<Detector>,
@@ -276,7 +298,11 @@ impl Outside {
             Arc::clone(registry),
             rt.clone(),
         );
-        Outside::over_env(env, registry, data_dir, rt)
+        let outside = Outside::over_env(env, registry, data_dir, rt);
+        outside
+            .detector
+            .enable_release_checks(data_dir.join("catalog-releases.json"));
+        outside
     }
 
     /// The real detector, processes and drivers over `env`: the catalog's agents with their
@@ -290,11 +316,12 @@ impl Outside {
         data_dir: &Path,
         rt: &Handle,
     ) -> Outside {
-        let detector = Detector::new(
+        let detector = Detector::with_preferences(
             Arc::clone(&env),
             Arc::clone(registry),
             data_dir.join(ADAPTERS_DIR),
             rt.clone(),
+            data_dir.join("agent-executables.json"),
         );
         Outside {
             env,
@@ -322,6 +349,17 @@ pub fn start_chats(
     rt: &Handle,
     outside: impl FnOnce(&Arc<LeftoverRegistry>, &Arc<Redactor>, &Path, &Handle) -> Outside,
 ) -> Option<ChatRuntime> {
+    start_profile_chats(booted, app_version, rt, outside, None, None)
+}
+
+pub(crate) fn start_profile_chats(
+    booted: &mut Booted,
+    app_version: &str,
+    rt: &Handle,
+    outside: impl FnOnce(&Arc<LeftoverRegistry>, &Arc<Redactor>, &Path, &Handle) -> Outside,
+    file_key: Option<Arc<aura_sync::crypto::files::ProfileFileKey>>,
+    reuse: Option<Arc<RuntimeServices>>,
+) -> Option<ChatRuntime> {
     if booted.fatal.is_some() {
         return None;
     }
@@ -337,8 +375,18 @@ pub fn start_chats(
         return None;
     };
     let profile = Profile { meta, dir };
-    let store = match ChatStore::start(store, owner, &profile, device.device_id.clone(), rt.clone())
-    {
+    let started = match &file_key {
+        Some(key) => ChatStore::start_account(
+            store,
+            owner,
+            &profile,
+            device.device_id.clone(),
+            rt.clone(),
+            key.clone(),
+        ),
+        None => ChatStore::start(store, owner, &profile, device.device_id.clone(), rt.clone()),
+    };
+    let store = match started {
         Ok(store) => store,
         Err(error) => {
             tracing::error!(%error, "the chat store could not start");
@@ -348,7 +396,11 @@ pub fn start_chats(
     };
 
     let run_dir = data_dir.join(RUN_DIR);
-    let registry = match LeftoverRegistry::open(&run_dir, rt.clone()) {
+    let registry = match reuse
+        .as_ref()
+        .map(|services| Ok(services.registry.clone()))
+        .unwrap_or_else(|| LeftoverRegistry::open(&run_dir, rt.clone()))
+    {
         Ok(registry) => registry,
         Err(error) => {
             tracing::warn!(%error, path = %run_dir.display(), "the leftover registry is unavailable; agents run without it");
@@ -358,39 +410,79 @@ pub fn start_chats(
     let late_notices = Arc::new(Mutex::new(Vec::new()));
     let own = registry.own().clone();
     let notices = Arc::clone(&late_notices);
-    rt.spawn(async move {
-        let report = sweep_stale(&run_dir, &own).await;
-        log_sweep(&report);
-        if let Some(notice) = sweep_notice(&report) {
-            lock(&notices).push(notice);
-        }
-    });
+    if reuse.is_none() {
+        rt.spawn(async move {
+            let report = sweep_stale(&run_dir, &own).await;
+            log_sweep(&report);
+            if let Some(notice) = sweep_notice(&report) {
+                lock(&notices).push(notice);
+            }
+        });
+    }
 
-    let redactor = Arc::new(Redactor::standard());
+    let services = reuse.unwrap_or_else(|| {
+        let redactor = Arc::new(Redactor::standard());
+        Arc::new(RuntimeServices {
+            outside: outside(&registry, &redactor, &data_dir, rt),
+            registry: registry.clone(),
+            redactor,
+        })
+    });
+    let redactor = services.redactor.clone();
     let Outside {
         env,
         detector,
         spawner,
         drivers,
-    } = outside(&registry, &redactor, &data_dir, rt);
+    } = services.outside.clone();
     let logs = LogFactory::new(
         profile.logs_dir().join("protocol"),
         Arc::clone(&redactor),
         rt.clone(),
     );
-    let pruning = logs.clone();
-    rt.spawn(async move {
-        let report = pruning.prune(RetentionPolicy::STANDARD).await;
-        if report.files_removed > 0 || !report.errors.is_empty() {
-            tracing::info!(
-                files = report.files_removed,
-                bytes = report.bytes_removed,
-                errors = report.errors.len(),
-                "pruned old protocol logs"
-            );
+    if file_key.is_none() {
+        let pruning = logs.clone();
+        rt.spawn(async move {
+            let report = pruning.prune(RetentionPolicy::STANDARD).await;
+            if report.files_removed > 0 || !report.errors.is_empty() {
+                tracing::info!(
+                    files = report.files_removed,
+                    bytes = report.bytes_removed,
+                    errors = report.errors.len(),
+                    "pruned old protocol logs"
+                );
+            }
+        });
+    }
+    let (worktrees, checkpoints) = if let Some(key) = &file_key {
+        let worktrees = aura_core::gitworkspaces::GitWorkspaces::new_account(
+            &profile,
+            env.clone(),
+            registry.clone(),
+            key.clone(),
+        );
+        let checkpoints = aura_core::checkpoints::Checkpoints::new_account(
+            &profile,
+            env.clone(),
+            registry.clone(),
+            key.clone(),
+        );
+        match (worktrees, checkpoints) {
+            (Ok(worktrees), Ok(checkpoints)) => (worktrees, checkpoints),
+            _ => {
+                booted.fatal = Some("The encrypted profile metadata could not be opened. Existing files were preserved.".into());
+                return None;
+            }
         }
-    });
+    } else {
+        (
+            aura_core::gitworkspaces::GitWorkspaces::new(&profile, env.clone(), registry.clone()),
+            aura_core::checkpoints::Checkpoints::new(&profile, env.clone(), registry.clone()),
+        )
+    };
     let manager = SessionManager::new(ManagerDeps {
+        worktrees: Some(worktrees),
+        checkpoints: Some(checkpoints),
         store: Arc::clone(&store),
         env,
         spawner,
@@ -409,6 +501,11 @@ pub fn start_chats(
         manager,
         registry,
         late_notices,
+        services,
+        account_config: None,
+        sync_identity: None,
+        sync_engine: std::sync::OnceLock::new(),
+        sync_history_error: std::sync::atomic::AtomicBool::new(false),
     })
 }
 
@@ -446,6 +543,8 @@ pub fn sweep_notice(report: &SweepReport) -> Option<String> {
 pub const QUIT_SESSIONS_DEADLINE: Duration = Duration::from_secs(8);
 /// The chat store's deadline when quitting, after the sessions.
 pub const QUIT_STORE_DEADLINE: Duration = Duration::from_secs(5);
+/// Ordinary quit keeps the app open if an owned file operation or vendor updater needs more time.
+pub const QUIT_OWNED_WORK_DEADLINE: Duration = Duration::from_secs(5);
 /// How much longer than a step's own deadline the quit flow waits for it. The sessions and the
 /// store keep their deadlines themselves; this bounds one that does not, since the window is
 /// hidden and every other exit request waits for the flow.
@@ -543,9 +642,34 @@ impl Quit {
 /// What the quit flow acts on: the window, the dialog, the sessions, the store, the registry and
 /// the app. The app's host is [`AppQuitHost`]; tests record calls.
 pub trait QuitHost: Send + Sync {
+    /// The opaque RAII guard blocks new owned work until this entire quit attempt ends.
+    fn owned_work_guard(&self) -> Option<Box<dyn Send + '_>> {
+        Some(Box::new(()))
+    }
+    fn wait_owned_work(&self, _deadline: Duration) -> impl Future<Output = bool> + Send {
+        async { true }
+    }
+    fn owned_work_blocked(&self) {}
+    fn project_terminal_count(&self) -> usize {
+        0
+    }
+    fn close_project_terminals(&self, _deadline: Duration) -> impl Future<Output = bool> + Send {
+        async { true }
+    }
+    fn terminal_cleanup_blocked(&self) {
+        self.owned_work_blocked();
+    }
+    /// Save editor state while the database and webview are still available.
+    fn flush_drafts(&self) -> impl Future<Output = bool> + Send {
+        async { true }
+    }
     fn hide_window(&self);
     fn show_window(&self);
     fn storage(&self) -> StorageStatus;
+    /// Running/starting/stopping work or unresolved requests, excluding merely idle processes.
+    fn active_work_count(&self) -> usize {
+        0
+    }
     /// Asks whether to quit although saving is paused; `true` quits.
     fn ask_to_quit_unsaved(&self, question: QuitQuestion) -> impl Future<Output = bool> + Send;
     fn stop_sessions(&self, deadline: Duration) -> impl Future<Output = ShutdownSummary> + Send;
@@ -587,6 +711,28 @@ pub fn quit_question(storage: &StorageStatus) -> Option<QuitQuestion> {
     })
 }
 
+pub fn quit_question_with_work(storage: &StorageStatus, active: usize) -> Option<QuitQuestion> {
+    let mut question = quit_question(storage);
+    if active > 0 {
+        let work = if active == 1 {
+            "One chat is still active. Quitting stops its agent.".to_owned()
+        } else {
+            format!("{active} chats are still active. Quitting stops their agents.")
+        };
+        match &mut question {
+            Some(question) => question.message = format!("{work}\n\n{}", question.message),
+            None => {
+                question = Some(QuitQuestion {
+                    message: work,
+                    quit: "Stop agents and quit".into(),
+                    keep: "Keep auracode open".into(),
+                })
+            }
+        }
+    }
+    question
+}
+
 /// How a quit flow ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QuitOutcome {
@@ -601,22 +747,97 @@ pub enum QuitOutcome {
     },
 }
 
-/// The quit flow, after the first exit request was prevented: hide the window; when saving is
-/// paused with unsaved data, ask first (keeping auracode open shows the window again and ends the
+/// The quit flow first drains owned file/vendor work without closing storage, keeping the app open
+/// on timeout. Once drained: hide the window; when saving is
+/// paused with unsaved data or work is active, ask first (keeping auracode open shows the window again and ends the
 /// quit); then stop every session within 8 s, commit and close the store within 5 s, delete the
 /// registry file, and exit with `code`. The next exit request passes ([`Quit::on_exit_requested`]).
 ///
 /// The window is hidden and every other exit request waits for this flow, so a step that overruns
-/// its deadline by [`QUIT_STEP_MARGIN`] is left behind and the flow carries on: `RunEvent::Exit`
-/// then kills whatever runs, and closes the store if it did not close here.
+/// a session/store deadline by [`QUIT_STEP_MARGIN`] is left behind and the flow carries on:
+/// `RunEvent::Exit` then kills owned agent processes and closes the store if it did not close here.
+/// The owned-file preflight never takes that forced path.
 pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutcome {
+    let Some(_owned_work) = host.owned_work_guard() else {
+        host.show_window();
+        host.owned_work_blocked();
+        quit.keep_running();
+        return QuitOutcome::Kept;
+    };
+    if !tokio::time::timeout(
+        QUIT_OWNED_WORK_DEADLINE,
+        host.wait_owned_work(QUIT_OWNED_WORK_DEADLINE),
+    )
+    .await
+    .unwrap_or(false)
+    {
+        host.show_window();
+        host.owned_work_blocked();
+        quit.keep_running();
+        return QuitOutcome::Kept;
+    }
+    let drafts_saved = tokio::time::timeout(Duration::from_secs(3), host.flush_drafts())
+        .await
+        .unwrap_or(false);
     host.hide_window();
-    if let Some(question) = quit_question(&host.storage())
+    let mut question = quit_question_with_work(&host.storage(), host.active_work_count());
+    let terminals = host.project_terminal_count();
+    if terminals > 0 {
+        let message = if terminals == 1 {
+            "One project terminal is open. Quitting stops its shell and owned child processes."
+                .into()
+        } else {
+            format!(
+                "{terminals} project terminals are open. Quitting stops their shells and owned child processes."
+            )
+        };
+        match &mut question {
+            Some(question) => {
+                question.message = format!("{message}\n\n{}", question.message);
+                question.quit = "Stop work and quit".into();
+            }
+            None => {
+                question = Some(QuitQuestion {
+                    message,
+                    quit: "Close terminals and quit".into(),
+                    keep: "Keep auracode open".into(),
+                })
+            }
+        }
+    }
+    if !drafts_saved {
+        let message =
+            "An unsent draft could not be confirmed saved. Quitting may discard its latest edits.";
+        match &mut question {
+            Some(question) => question.message = format!("{message}\n\n{}", question.message),
+            None => {
+                question = Some(QuitQuestion {
+                    message: message.into(),
+                    quit: "Quit anyway".into(),
+                    keep: "Keep auracode open".into(),
+                })
+            }
+        }
+    }
+    if let Some(question) = question
         && !host.ask_to_quit_unsaved(question).await
     {
         host.show_window();
         quit.keep_running();
-        tracing::info!("kept auracode open: saving is paused");
+        tracing::info!("kept auracode open after the quit question");
+        return QuitOutcome::Kept;
+    }
+    if terminals > 0
+        && !tokio::time::timeout(
+            QUIT_SESSIONS_DEADLINE,
+            host.close_project_terminals(QUIT_SESSIONS_DEADLINE),
+        )
+        .await
+        .unwrap_or(false)
+    {
+        host.show_window();
+        host.terminal_cleanup_blocked();
+        quit.keep_running();
         return QuitOutcome::Kept;
     }
     let summary = tokio::time::timeout(
@@ -670,6 +891,74 @@ pub struct AppQuitHost<'a> {
 }
 
 impl QuitHost for AppQuitHost<'_> {
+    fn owned_work_guard(&self) -> Option<Box<dyn Send + '_>> {
+        // lib::quit already holds the transition mutex across runtime selection and this flow.
+        self.chats
+            .manager
+            .try_drain_owned_work()
+            .map(|guard| Box::new(guard) as Box<dyn Send>)
+    }
+
+    fn project_terminal_count(&self) -> usize {
+        self.chats.manager.project_terminal_count()
+    }
+
+    async fn close_project_terminals(&self, deadline: Duration) -> bool {
+        use tauri::Manager as _;
+        self.app
+            .state::<crate::state::AppState>()
+            .terminals
+            .close_projects();
+        self.chats.manager.wait_project_terminals(deadline).await
+    }
+
+    fn terminal_cleanup_blocked(&self) {
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+        self.app.dialog().message("A project terminal's process cleanup could not be confirmed. auracode stayed open and kept its folder protected. Review owned-process recovery before retrying quit.").title("Terminal cleanup needs attention").buttons(MessageDialogButtons::Ok).show(|_|{});
+    }
+
+    async fn wait_owned_work(&self, deadline: Duration) -> bool {
+        self.chats.manager.wait_owned_work(deadline).await
+    }
+
+    fn owned_work_blocked(&self) {
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+        self.app.dialog().message("A folder operation, configuration copy, or agent update is still finishing. auracode has stayed open to preserve that work. Try quitting again when it finishes.")
+            .title("Work is still finishing").buttons(MessageDialogButtons::Ok).show(|_| {});
+    }
+    async fn flush_drafts(&self) -> bool {
+        use tauri::{Emitter as _, Listener as _};
+        let token = aura_core::ids::new_id();
+        let expected = token.clone();
+        let (reply, answer) = tokio::sync::oneshot::channel();
+        let reply = Mutex::new(Some(reply));
+        let listener = self.app.listen("auracode-drafts-flushed", move |event| {
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(event.payload()) else {
+                return;
+            };
+            if value["token"].as_str() == Some(expected.as_str())
+                && let Some(reply) = lock(&reply).take()
+            {
+                let _ = reply.send(value["saved"].as_bool().unwrap_or(false));
+            }
+        });
+        let sent = self
+            .app
+            .emit_to(crate::window::MAIN_WINDOW, "auracode-flush-drafts", token)
+            .is_ok();
+        let saved = if sent {
+            tokio::time::timeout(Duration::from_secs(2), answer)
+                .await
+                .ok()
+                .and_then(Result::ok)
+                .unwrap_or(false)
+        } else {
+            false
+        };
+        self.app.unlisten(listener);
+        saved
+    }
+
     fn hide_window(&self) {
         use tauri::Manager as _;
         if let Some(window) = self.app.get_webview_window(crate::window::MAIN_WINDOW)
@@ -680,13 +969,18 @@ impl QuitHost for AppQuitHost<'_> {
     }
 
     fn show_window(&self) {
-        if let Err(error) = crate::window::show_and_focus(self.app) {
-            tracing::warn!(%error, "could not show the window again");
-        }
+        crate::window::focus_main(self.app);
     }
 
     fn storage(&self) -> StorageStatus {
         self.chats.manager.storage_status()
+    }
+
+    fn active_work_count(&self) -> usize {
+        use tauri::Manager as _;
+        self.app
+            .try_state::<Arc<crate::native_shell::NativeShell>>()
+            .map_or(0, |shell| shell.active_work_count())
     }
 
     async fn ask_to_quit_unsaved(&self, question: QuitQuestion) -> bool {
@@ -716,6 +1010,9 @@ impl QuitHost for AppQuitHost<'_> {
     }
 
     async fn stop_sessions(&self, deadline: Duration) -> ShutdownSummary {
+        if let Some(engine) = self.chats.sync_engine.get() {
+            engine.close(Duration::from_secs(2)).await;
+        }
         self.chats.manager.shutdown_all(deadline).await
     }
 
@@ -739,6 +1036,9 @@ impl QuitHost for AppQuitHost<'_> {
 /// request). Every recorded agent process is killed at once, and the store closes within 1 s
 /// unless the quit flow closed it. Returns whether this closed the store.
 pub fn exit_last_resort(quit: &Quit, chats: &ChatRuntime) -> bool {
+    if let Some(engine) = chats.sync_engine.get() {
+        engine.stop();
+    }
     chats.manager.kill_all_now();
     if quit.store_closed() {
         return false;
@@ -1347,28 +1647,41 @@ mod tests {
         CloseStore(Duration),
         CloseRegistry,
         Exit(i32),
+        OwnedWorkBlocked,
+        CloseProjectTerminals,
+        TerminalCleanupBlocked,
     }
 
     /// Records every call; the store and the sessions are real when given, and either can be
     /// made to never finish.
     struct FakeHost {
+        drafts_saved: bool,
         calls: Mutex<Vec<Call>>,
         storage: StorageStatus,
         quit_anyway: bool,
         chats: Option<ChatRuntime>,
         stuck_sessions: bool,
         stuck_store: bool,
+        active_work: usize,
+        stuck_owned_work: bool,
+        project_terminals: usize,
+        terminal_cleanup: bool,
     }
 
     impl FakeHost {
         fn new(storage: StorageStatus, quit_anyway: bool) -> FakeHost {
             FakeHost {
+                drafts_saved: true,
                 calls: Mutex::new(Vec::new()),
                 storage,
                 quit_anyway,
                 chats: None,
                 stuck_sessions: false,
                 stuck_store: false,
+                active_work: 0,
+                stuck_owned_work: false,
+                project_terminals: 0,
+                terminal_cleanup: true,
             }
         }
 
@@ -1382,6 +1695,40 @@ mod tests {
     }
 
     impl QuitHost for FakeHost {
+        fn owned_work_guard(&self) -> Option<Box<dyn Send + '_>> {
+            match &self.chats {
+                Some(chats) => chats
+                    .manager
+                    .try_drain_owned_work()
+                    .map(|guard| Box::new(guard) as Box<dyn Send>),
+                None => Some(Box::new(())),
+            }
+        }
+        async fn wait_owned_work(&self, deadline: Duration) -> bool {
+            if self.stuck_owned_work {
+                return std::future::pending().await;
+            }
+            match &self.chats {
+                Some(chats) => chats.manager.wait_owned_work(deadline).await,
+                None => true,
+            }
+        }
+        fn owned_work_blocked(&self) {
+            self.record(Call::OwnedWorkBlocked);
+        }
+        fn project_terminal_count(&self) -> usize {
+            self.project_terminals
+        }
+        async fn close_project_terminals(&self, _deadline: Duration) -> bool {
+            self.record(Call::CloseProjectTerminals);
+            self.terminal_cleanup
+        }
+        fn terminal_cleanup_blocked(&self) {
+            self.record(Call::TerminalCleanupBlocked);
+        }
+        async fn flush_drafts(&self) -> bool {
+            self.drafts_saved
+        }
         fn hide_window(&self) {
             self.record(Call::Hide);
         }
@@ -1392,6 +1739,10 @@ mod tests {
 
         fn storage(&self) -> StorageStatus {
             self.storage.clone()
+        }
+
+        fn active_work_count(&self) -> usize {
+            self.active_work
         }
 
         async fn ask_to_quit_unsaved(&self, question: QuitQuestion) -> bool {
@@ -1446,6 +1797,93 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn quit_cancel_preserves_project_shell_and_confirmation_waits_for_cleanup() {
+        for confirmed in [false, true] {
+            let quit = Quit::default();
+            quit.on_exit_requested();
+            let mut host = FakeHost::new(StorageStatus::default(), confirmed);
+            host.project_terminals = 1;
+            let result = run_quit(&quit, &host, 0).await;
+            let calls = host.calls();
+            assert!(matches!(&calls[1],Call::Ask(message) if message.contains("project terminal")));
+            if confirmed {
+                assert!(matches!(result, QuitOutcome::Exited { .. }));
+                assert_eq!(calls[2], Call::CloseProjectTerminals);
+                assert!(matches!(calls[3], Call::StopSessions(_)));
+            } else {
+                assert_eq!(result, QuitOutcome::Kept);
+                assert_eq!(calls.len(), 3);
+                assert_eq!(calls[2], Call::Show);
+            }
+        }
+        let quit = Quit::default();
+        quit.on_exit_requested();
+        let mut host = FakeHost::new(StorageStatus::default(), true);
+        host.project_terminals = 1;
+        host.terminal_cleanup = false;
+        assert_eq!(run_quit(&quit, &host, 0).await, QuitOutcome::Kept);
+        assert!(host.calls().ends_with(&[
+            Call::CloseProjectTerminals,
+            Call::Show,
+            Call::TerminalCleanupBlocked
+        ]));
+        assert!(!host.calls().iter().any(|call| matches!(
+            call,
+            Call::CloseStore(_) | Call::StopSessions(_) | Call::Exit(_)
+        )));
+    }
+
+    #[tokio::test]
+    async fn ordinary_quit_keeps_outer_transition_exclusive_without_reacquiring_it() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut booted = boot(Ok(DataRoot::at(temp.path().join("data"))));
+        let chats = testing::start(&mut booted).expect("chats");
+        let transition = tokio::sync::Mutex::new(());
+        let outer = transition.lock().await;
+        let quit = Quit::default();
+        quit.on_exit_requested();
+        let mut host = FakeHost::new(StorageStatus::default(), false);
+        host.chats = Some(chats);
+        assert!(transition.try_lock().is_err());
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_secs(10), run_quit(&quit, &host, 0))
+                .await
+                .unwrap(),
+            QuitOutcome::Exited { saved: true, .. }
+        ));
+        assert!(transition.try_lock().is_err());
+        drop(outer);
+        assert!(transition.try_lock().is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_failed_editor_flush_keeps_the_app_open_without_stopping_agents() {
+        let quit = Quit::default();
+        quit.on_exit_requested();
+        let mut host = FakeHost::new(StorageStatus::default(), false);
+        host.drafts_saved = false;
+        assert_eq!(run_quit(&quit, &host, 0).await, QuitOutcome::Kept);
+        assert!(
+            matches!(host.calls().as_slice(), [Call::Hide, Call::Ask(message), Call::Show] if message.contains("unsent draft"))
+        );
+        assert!(!quit.is_quitting());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn quit_keeps_storage_open_when_an_owned_mutation_cannot_finish_yet() {
+        let quit = Quit::default();
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+        let mut host = FakeHost::new(StorageStatus::default(), true);
+        host.stuck_owned_work = true;
+        let started = tokio::time::Instant::now();
+        assert_eq!(run_quit(&quit, &host, 0).await, QuitOutcome::Kept);
+        assert_eq!(started.elapsed(), QUIT_OWNED_WORK_DEADLINE);
+        assert_eq!(host.calls(), [Call::Show, Call::OwnedWorkBlocked]);
+        assert!(!quit.store_closed());
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+    }
+
+    #[tokio::test]
     async fn quit_flow() {
         let quit = Quit::default();
         assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
@@ -1480,6 +1918,44 @@ mod tests {
             ExitRequest::Allow,
             "the exit the flow asked for passes"
         );
+    }
+
+    #[tokio::test]
+    async fn quit_with_active_work_can_be_cancelled_without_stopping_or_closing_anything() {
+        let quit = Quit::default();
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+        let mut host = FakeHost::new(StorageStatus::default(), false);
+        host.active_work = 2;
+        assert_eq!(run_quit(&quit, &host, 0).await, QuitOutcome::Kept);
+        let calls = host.calls();
+        assert!(
+            matches!(calls.as_slice(), [Call::Hide, Call::Ask(message), Call::Show] if message.contains("2 chats"))
+        );
+        assert!(!quit.is_quitting());
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+    }
+
+    #[tokio::test]
+    async fn active_work_and_paused_storage_share_one_confirmation_before_cleanup() {
+        let quit = Quit::default();
+        quit.on_exit_requested();
+        let mut host = FakeHost::new(paused(PauseReason::DiskFull, 10), true);
+        host.active_work = 1;
+        assert!(matches!(
+            run_quit(&quit, &host, 0).await,
+            QuitOutcome::Exited { .. }
+        ));
+        let calls = host.calls();
+        let questions: Vec<_> = calls
+            .iter()
+            .filter_map(|call| match call {
+                Call::Ask(message) => Some(message),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(questions.len(), 1);
+        assert!(questions[0].contains("One chat") && questions[0].contains("disk is full"));
+        assert!(matches!(calls.get(2), Some(Call::StopSessions(_))));
     }
 
     #[tokio::test]

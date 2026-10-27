@@ -16,13 +16,17 @@
 //! while the outbox has room; EOF with the process alive gets 2 s, then the tree is killed). `run`
 //! returns once stdout ended, the process exited and the outbox is empty.
 
+pub mod callbacks;
 pub mod dialect;
 pub mod map;
 pub mod options;
 pub mod permissions;
 pub mod requests;
+mod vendor_updates;
 pub mod wire;
 
+#[cfg(test)]
+mod callbacks_tests;
 #[cfg(test)]
 mod tests;
 
@@ -38,7 +42,8 @@ use aura_process::{
 use aura_protocol::session::{AuthCommand, AuthPrompt, ConfigCategory, ConfigValue};
 use aura_protocol::{
     AuraEvent, AutoAnswer, Autonomy, AutonomyState, Capabilities, ErrorKind, NoticeLevel,
-    PermissionRequest, PromptPart, SlashCommand, StopReason, TokenUsage, UsageScope,
+    PermissionRequest, PromptPart, SlashCommand, StopReason, TokenUsage, UiAnswer, UiRequest,
+    UsageScope,
 };
 use futures::FutureExt;
 use futures::future::BoxFuture;
@@ -194,7 +199,9 @@ async fn spawn_phase(
 /// How a failed spawn reads: a missing program, a missing or refused folder, or anything else.
 pub fn spawn_failure(error: &SpawnError) -> DriverError {
     let kind = match error {
-        SpawnError::ProgramNotFound { .. } => ErrorKind::AgentUnavailable,
+        SpawnError::ProgramNotFound { .. } | SpawnError::HostUnavailable { .. } => {
+            ErrorKind::AgentUnavailable
+        }
         SpawnError::InvalidCwd { .. } => ErrorKind::FolderMissing,
         SpawnError::CwdNotAllowed { .. } => ErrorKind::FolderNotAllowed,
         SpawnError::PermissionDenied { .. } | SpawnError::NoRuntime | SpawnError::Spawn { .. } => {
@@ -632,8 +639,11 @@ struct Session {
     /// Transcript events of a start that ended without `Ready` (rule 1 forbids handing them over).
     dropped_before_ready: usize,
     mapper: Mapper,
+    cursor_updates: vendor_updates::CursorUpdates,
     prompt: Option<PromptState>,
     permissions: PendingPermissions,
+    ui_requests: Vec<PendingUi>,
+    ui_counter: u64,
     /// The previous cumulative usage from this process (session-scope dialects).
     usage_total: Option<WireUsage>,
     commands_list: Option<Vec<SlashCommand>>,
@@ -652,7 +662,101 @@ struct Session {
     cancel_deadline: Option<Instant>,
 }
 
+struct PendingUi {
+    request_id: String,
+    rpc_id: Value,
+    turn: Option<String>,
+    call: callbacks::UiCall,
+}
+
 impl Session {
+    fn on_ui_request(&mut self, id: Value, params: &Value, call: callbacks::UiCall) {
+        let foreign = self.session_id.is_some()
+            && params
+                .get("sessionId")
+                .is_some_and(|session| session.as_str() != self.session_id.as_deref());
+        if foreign
+            || self.phase != Phase::Running
+            || (call.context.is_some() && !self.ready)
+            || self.prompt.as_ref().is_some_and(|prompt| prompt.cancelling)
+        {
+            let _ = self.rpc.respond(&id, call.cancelled());
+            return;
+        }
+        if self.ui_requests.len() >= 32
+            || self.ui_requests.iter().any(|pending| pending.rpc_id == id)
+        {
+            let _ = self.rpc.respond_error(
+                &id,
+                codes::INVALID_PARAMS,
+                "Too many or duplicate pending user input requests.",
+            );
+            return;
+        }
+        self.ui_counter += 1;
+        let request_id = format!("{}.q{}", self.spawn_id, self.ui_counter);
+        let turn = self.mapper.turn().map(str::to_owned);
+        if let Some(context) = &call.context {
+            let message_id = format!("{request_id}.plan");
+            self.outbox.push(DriverEvent::Event {
+                turn: turn.clone(),
+                event: AuraEvent::MessageDelta {
+                    message_id: message_id.clone(),
+                    text: context.clone(),
+                },
+            });
+            self.outbox.push(DriverEvent::Event {
+                turn: turn.clone(),
+                event: AuraEvent::MessageCompleted { message_id },
+            });
+        }
+        self.outbox.push(DriverEvent::UiRequest {
+            turn: turn.clone(),
+            request: UiRequest {
+                request_id: request_id.clone(),
+                prompt: call.prompt.clone(),
+            },
+        });
+        self.ui_requests.push(PendingUi {
+            request_id,
+            rpc_id: id,
+            turn,
+            call,
+        });
+    }
+
+    fn on_ui_answer(&mut self, request_id: &str, answer: Option<&UiAnswer>) {
+        let Some(index) = self
+            .ui_requests
+            .iter()
+            .position(|pending| pending.request_id == request_id)
+        else {
+            return;
+        };
+        let pending = &self.ui_requests[index];
+        let result = match answer {
+            Some(answer) => pending.call.answer(answer),
+            None => Some(pending.call.cancelled()),
+        };
+        if let Some(result) = result {
+            let pending = self.ui_requests.remove(index);
+            let _ = self.rpc.respond(&pending.rpc_id, result);
+        }
+    }
+
+    fn cancel_ui(&mut self, turn: Option<&str>) {
+        let (cancelled, keep): (Vec<_>, Vec<_>) = std::mem::take(&mut self.ui_requests)
+            .into_iter()
+            .partition(|pending| turn.is_none() || pending.turn.as_deref() == turn);
+        self.ui_requests = keep;
+        for pending in cancelled {
+            let _ = self.rpc.respond(&pending.rpc_id, pending.call.cancelled());
+            self.outbox.push(DriverEvent::UiWithdrawn {
+                request_id: pending.request_id,
+            });
+        }
+    }
+
     fn new(
         process: SpawnedProcess,
         commands: mpsc::UnboundedReceiver<DriverCommand>,
@@ -674,6 +778,7 @@ impl Session {
             outbox,
             dialect,
             mapper: Mapper::new(spawn_id.clone()),
+            cursor_updates: vendor_updates::CursorUpdates::default(),
             spawn_id,
             rpc: RpcOut::new(io.stdin, true),
             stdout: io.stdout,
@@ -711,6 +816,8 @@ impl Session {
             dropped_before_ready: 0,
             prompt: None,
             permissions: PendingPermissions::default(),
+            ui_requests: Vec::new(),
+            ui_counter: 0,
             usage_total: None,
             commands_list: None,
             commands_deadline: None,
@@ -727,7 +834,10 @@ impl Session {
     async fn run(mut self) -> DriverExit {
         self.outbox
             .push(DriverEvent::Status(DriverStatus::Initializing));
-        let params = requests::initialize(&self.setup.client_version);
+        let mut params = requests::initialize(&self.setup.client_version);
+        if self.dialect.form_elicitation() {
+            params["clientCapabilities"]["elicitation"] = serde_json::json!({"form": {}});
+        }
         if let Ok(id) = self.rpc.request(methods::INITIALIZE, params) {
             let deadline = Instant::now() + self.setup.launch.startup_timeout;
             self.pending.insert(
@@ -889,13 +999,26 @@ impl Session {
                 {
                     self.cancel_prompt();
                 }
+                self.cancel_ui(None);
             }
             DriverCommand::RespondPermission {
                 request_id,
                 outcome,
             } => self.on_respond_permission(&request_id, &outcome),
-            DriverCommand::RespondUi { .. } => {
-                tracing::debug!("an answer to a question this driver never asks");
+            DriverCommand::RespondUi { request_id, answer } => {
+                self.on_ui_answer(&request_id, answer.as_ref())
+            }
+            DriverCommand::Steer { reply, .. } => {
+                let _ = reply.send(crate::driver::SteerResult::Rejected {
+                    message: "This agent cannot steer an exact running turn.".into(),
+                });
+            }
+            DriverCommand::RewindFiles { reply, .. } => {
+                let _ = reply.send(Err(DriverError {
+                    kind: ErrorKind::ProtocolError,
+                    message: "This agent does not support native file rewinding.".into(),
+                    detail: None,
+                }));
             }
             command @ (DriverCommand::SetOption { .. } | DriverCommand::SetAutonomy { .. }) => {
                 if self.ready {
@@ -1046,7 +1169,9 @@ impl Session {
             return;
         }
         let not_found = format!("Method not found: {method}");
-        if not_advertised(method) {
+        if not_advertised(method)
+            && !(method == "elicitation/create" && self.dialect.form_elicitation())
+        {
             let _ = self
                 .rpc
                 .respond_error(&id, codes::METHOD_NOT_FOUND, &not_found);
@@ -1055,6 +1180,10 @@ impl Session {
         let _ = match self.dialect.on_request(method, params) {
             DialectReply::Respond(result) => self.rpc.respond(&id, result),
             DialectReply::Error { code, message } => self.rpc.respond_error(&id, code, &message),
+            DialectReply::Deferred(call) => {
+                self.on_ui_request(id, params, *call);
+                return;
+            }
             DialectReply::NotMine => {
                 self.rpc
                     .respond_error(&id, codes::METHOD_NOT_FOUND, &not_found)
@@ -1063,6 +1192,21 @@ impl Session {
     }
 
     fn on_notification(&mut self, method: &str, params: &Value) {
+        if self.dialect.id() == "cursor" && method.starts_with("cursor/") {
+            if !self.ready
+                || self.loading()
+                || params
+                    .get("sessionId")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| Some(id) != self.session_id.as_deref())
+            {
+                return;
+            }
+            if let Some(update) = self.cursor_updates.notification(method, params) {
+                self.apply_update(update, Instant::now());
+                return;
+            }
+        }
         match method {
             methods::SESSION_UPDATE => self.on_update(params),
             methods::CANCEL_REQUEST => self.on_cancel_request(params),
@@ -1071,7 +1215,10 @@ impl Session {
             _ => {
                 let events = self.dialect.on_notification(method, params);
                 if events.is_empty() {
-                    tracing::debug!(method, "a notification auracode ignores");
+                    tracing::debug!(
+                        method_bytes = method.len(),
+                        "a notification auracode ignores"
+                    );
                 }
                 for event in events {
                     self.push(event);
@@ -1325,6 +1472,14 @@ impl Session {
 
     /// Builds the option model, applies autonomy and the user's earlier choices, then `Ready`.
     fn configure(&mut self, reply: &OpenReply) {
+        if !self
+            .dialect
+            .autonomy_levels()
+            .contains(&self.setup.autonomy)
+        {
+            self.fail_start(protocol_error(format!("{} cannot enforce the requested autonomy level. Choose Full auto; extension questions and plan approval still require an answer.", self.agent_label())), false, ShutdownPlan::STANDARD);
+            return;
+        }
         self.outbox
             .push(DriverEvent::Status(DriverStatus::Configuring));
         let model = OptionModel::from_open(reply);
@@ -1360,7 +1515,7 @@ impl Session {
         self.ready = true;
         self.outbox.push(DriverEvent::Status(DriverStatus::Ready));
         let info = ReadyInfo {
-            native_session_id: self.session_id.clone().unwrap_or_default(),
+            native_session_id: self.session_id.clone(),
             agent_name: self
                 .init
                 .agent_title
@@ -1403,13 +1558,14 @@ impl Session {
             rewind: false,
             set_model: has(ConfigCategory::Model),
             set_effort: has(ConfigCategory::Effort),
-            permissions: true,
+            permissions: self.dialect.id() != "omp",
             plans: true,
             usage: true,
             limits: false,
             slash_commands: true,
-            add_dirs: self.init.additional_directories,
-            autonomy_levels: vec![Autonomy::FullAuto, Autonomy::AutoEdit, Autonomy::Ask],
+            // An advertised extension is insufficient without an implemented request contract.
+            add_dirs: false,
+            autonomy_levels: self.dialect.autonomy_levels(),
         }
     }
 
@@ -1495,7 +1651,11 @@ impl Session {
         let update = match Update::parse(notification.update) {
             Ok(update) => update,
             Err(malformed) => {
-                tracing::debug!(tag = ?malformed.tag, reason = malformed.reason, "a malformed update was dropped");
+                tracing::debug!(
+                    tag_bytes = malformed.tag.as_ref().map(String::len),
+                    reason = malformed.reason,
+                    "a malformed update was dropped"
+                );
                 return;
             }
         };
@@ -1528,7 +1688,7 @@ impl Session {
         if let Update::Unknown(tag) = &update
             && self.unknown_tags.insert(tag.clone())
         {
-            tracing::info!(tag, "an update auracode does not know");
+            tracing::info!(tag_bytes = tag.len(), "an update auracode does not know");
         }
         match self.mapper.map(update, now) {
             Mapped::Events(events) => {
@@ -1626,23 +1786,23 @@ impl Session {
             });
             return;
         }
-        let mut texts = Vec::with_capacity(parts.len());
-        for part in parts {
-            match part {
-                PromptPart::Text { text } => texts.push(text.as_str()),
-                PromptPart::Image { .. } | PromptPart::Mention { .. } => {
-                    self.outbox.push(DriverEvent::TurnEnded {
-                        turn_id,
-                        stop_reason: StopReason::Error,
-                        usage: None,
-                        error: Some(internal(
-                            "This agent can't take images or mentions in auracode yet.",
-                        )),
-                    });
-                    return;
-                }
+        let blocks = match crate::attachments::acp_with_reader(
+            parts,
+            self.setup.attachment_dir.as_deref(),
+            self.setup.attachment_reader.as_deref(),
+            self.init.image,
+        ) {
+            Ok(blocks) => blocks,
+            Err(message) => {
+                self.outbox.push(DriverEvent::TurnEnded {
+                    turn_id,
+                    stop_reason: StopReason::Error,
+                    usage: None,
+                    error: Some(internal(&message)),
+                });
+                return;
             }
-        }
+        };
         // Sent now, it would run under the agent's previous mode (and Hermes refuses a mode change
         // that races a prompt), so it waits for the changes queued before it.
         if self.ops_pending() {
@@ -1657,7 +1817,7 @@ impl Session {
             .push(DriverEvent::Status(DriverStatus::Prompting));
         match self.rpc.request(
             methods::SESSION_PROMPT,
-            requests::prompt(&session_id, &texts),
+            serde_json::json!({"sessionId": session_id, "prompt": blocks}),
         ) {
             Ok(request) => {
                 self.pending.insert(
@@ -1709,6 +1869,7 @@ impl Session {
         for (_, pending) in self.permissions.take_turn(&turn_id) {
             self.answer_cancelled(&pending);
         }
+        self.cancel_ui(Some(&turn_id));
     }
 
     fn on_prompt_reply(&mut self, request: i64, result: Result<Value, Failure>) {
@@ -1719,9 +1880,26 @@ impl Session {
             Ok(value) => {
                 let reply = PromptReply::parse(&value);
                 if let Some(reason) = &reply.unknown_reason {
-                    tracing::info!(reason, "a stop reason auracode does not know");
+                    tracing::info!(
+                        reason_bytes = reason.len(),
+                        "a stop reason auracode does not know"
+                    );
                 }
-                let usage = reply.usage.map(|usage| self.turn_usage(usage));
+                if self.dialect.id() == "grok"
+                    && value
+                        .pointer("/_meta/usage/usageIsIncomplete")
+                        .and_then(Value::as_bool)
+                        == Some(true)
+                {
+                    self.push_notice(
+                        NoticeLevel::Warning,
+                        "Grok reports incomplete token usage for this turn.".into(),
+                    );
+                }
+                let usage = self
+                    .dialect
+                    .prompt_usage(&value)
+                    .map(|usage| self.turn_usage(usage));
                 (reply.stop_reason, usage, None)
             }
             Err(Failure::Rpc(_)) if prompt.cancelling => (StopReason::Cancelled, None, None),
@@ -1756,6 +1934,7 @@ impl Session {
         for (_, pending) in self.permissions.take_turn(&prompt.turn_id) {
             self.answer_cancelled(&pending);
         }
+        self.cancel_ui(Some(&prompt.turn_id));
         self.outbox.push(DriverEvent::TurnEnded {
             turn_id: prompt.turn_id,
             stop_reason,
@@ -1893,6 +2072,17 @@ impl Session {
             self.answer_cancelled(&pending);
             self.push(DriverEvent::PermissionWithdrawn { request_id });
         }
+        if let Some(index) = self
+            .ui_requests
+            .iter()
+            .position(|pending| pending.rpc_id == *rpc_id)
+        {
+            let pending = self.ui_requests.remove(index);
+            let _ = self.rpc.respond(&pending.rpc_id, pending.call.cancelled());
+            self.outbox.push(DriverEvent::UiWithdrawn {
+                request_id: pending.request_id,
+            });
+        }
     }
 
     fn answer_cancelled(&mut self, pending: &Pending) {
@@ -1925,6 +2115,13 @@ impl Session {
                 deadline: Some(arrived + self.setup.timings.request),
             })),
             DriverCommand::SetAutonomy { autonomy, reply } => {
+                if !self.dialect.autonomy_levels().contains(&autonomy) {
+                    let _ = reply.send(Err(protocol_error(format!(
+                        "{} cannot enforce that autonomy level.",
+                        self.agent_label()
+                    ))));
+                    return;
+                }
                 self.autonomy_generation = self.autonomy_generation.wrapping_add(1);
                 let mut op = AutonomyOp::new(
                     autonomy,
@@ -2507,6 +2704,7 @@ impl Session {
         for (_, pending) in self.permissions.take_all() {
             self.answer_cancelled(&pending);
         }
+        self.cancel_ui(None);
         self.rpc.close();
         if let Some(plan) = self.close_plan.take() {
             self.chain = Some(self.control.shutdown(plan));
@@ -2519,6 +2717,7 @@ impl Session {
             return;
         }
         self.phase = Phase::Draining;
+        self.cancel_ui(None);
         self.cancel_deadline = None;
         self.close_plan = None;
         if self.end.is_none() {

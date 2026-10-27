@@ -208,6 +208,30 @@ describe("joining a chat (the join protocol)", () => {
 });
 
 describe("history pages", () => {
+  it("live frames do not finish a pending older-page restore", async () => {
+    const older = historyPage(CHAT, items(numbered([[null, ev.notice("older")]])), {
+      has_more: false,
+      before_seq: 0,
+    });
+    let answer: (page: typeof older) => void = () => {};
+    const fake = new FakeTransport({
+      history: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    });
+    const newest = historyPage(CHAT, [], { has_more: true, before_seq: 1 });
+    const store = await opened(fake, newest, 1);
+    const loading = store.loadEarlier();
+    fake.lastAttach().onFrame(frame(CHAT, 1, [ev.notice("live while loading")]));
+    expect(store.getSnapshot()).toMatchObject({ loadingEarlier: true, historyRevision: 0 });
+    answer(older);
+    await loading;
+    expect(store.getSnapshot()).toMatchObject({ loadingEarlier: false, historyRevision: 1 });
+    expect(store.getSnapshot().transcript.items.size).toBe(2);
+    store.close();
+  });
+
   it("partial_turn_page: a cut page starts inside its turn, and Load earlier continues it", async () => {
     const whole = numbered([
       ["t1", ev.turnStarted("t1")],
@@ -226,12 +250,14 @@ describe("history pages", () => {
     const store = await opened(fake, newest, 5);
     let state = store.getSnapshot();
     expect(state.hasMore).toBe(true);
+    expect(state.historyRevision).toBe(0);
     expect(state.transcript.segments[0]).toMatchObject({ key: "turn:t1", partial: true });
 
     await store.loadEarlier();
     expect(fake.callsOf("history")).toEqual([[CHAT, 2]]);
     state = store.getSnapshot();
     expect(state.hasMore).toBe(false);
+    expect(state.historyRevision).toBe(1);
     expect(state.transcript.segments).toHaveLength(1);
     expect(state.transcript.segments[0]).toMatchObject({ key: "turn:t1", partial: false });
     expect(state.transcript.segments[0]?.itemKeys).toEqual(["user:t1.u", "message:t1.m1"]);
@@ -604,11 +630,16 @@ describe("history errors", () => {
     expect(store.getSnapshot()).toMatchObject({
       loadingEarlier: false,
       earlierError: "auracode's database is not available: busy",
+      historyRevision: 0,
       hasMore: true,
     });
     fail = false;
     await store.loadEarlier();
-    expect(store.getSnapshot()).toMatchObject({ earlierError: null, hasMore: false });
+    expect(store.getSnapshot()).toMatchObject({
+      earlierError: null,
+      hasMore: false,
+      historyRevision: 1,
+    });
   });
 });
 

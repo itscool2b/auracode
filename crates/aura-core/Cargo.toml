@@ -9,22 +9,30 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[features]
+account-sync = ["dep:aura-sync", "aura-sync/sqlcipher", "dep:zeroize"]
+
 [dependencies]
 aura-agents.workspace = true
+aura-config.workspace = true
 aura-drivers.workspace = true
 aura-process.workspace = true
 aura-protocol.workspace = true
+aura-sync = { workspace = true, optional = true }
+base64 = "0.22.1"
 dirs.workspace = true
 futures.workspace = true
 # Fallible (io::Result) instead of panicking when the OS refuses, so a broken hostname lookup
 # degrades to "This device" rather than taking the app down.
 hostname = "0.4.2"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 rusqlite.workspace = true
 rusqlite_migration.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # Content addresses of blobs and the hashes of agent replies.
 sha2.workspace = true
+same-file = "1.0.6"
 specta.workspace = true
 # Only for the `#[specta(type = specta_typescript::Number)]` marker on Unix-ms fields: specta's
 # TypeScript exporter rejects `i64` otherwise. Pure Rust, no Tauri.
@@ -33,12 +41,19 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+zeroize = { version = "1.8", optional = true }
+tempfile.workspace = true
+# Directory-relative operations keep checkpoint reads/reverts inside the selected folder during
+# concurrent path changes, including symlink and Windows reparse-point traversal.
+cap-std = "4.0.3"
+cap-fs-ext = "4.0.3"
 
 [target.'cfg(windows)'.dependencies]
 # The ACL calls that make `profiles\` private to the user (fsutil::restrict_to_owner). Raw bindings,
 # already in the tree through tempfile and dirs, rather than the heavier `windows` crate.
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
+    "Win32_Globalization",
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",

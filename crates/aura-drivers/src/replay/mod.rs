@@ -1,4 +1,4 @@
-//! The replay harness (feature `replay`): the real ACP driver over `FakeSpawner` pipes against a
+//! The replay harness (feature `replay`): real ACP and Claude drivers over `FakeSpawner` pipes against a
 //! fake agent playing a curated protocol log, on paused time, with the collected events and replies
 //! compared with a golden file.
 //!
@@ -40,10 +40,12 @@ pub use fixture::{AgentAction, Fixture, FixtureError, FixtureRecord};
 pub use golden::{assert_golden, golden_path};
 
 use crate::acp::AcpDriver;
+use crate::claude::ClaudeDriver;
+use crate::codex::CodexDriver;
 use crate::driver::{
     AgentDriver, AgentSpawner, DriverCommand, DriverContext, DriverEvent, DriverTimings,
-    EventReceiver, LoggedCommand, PermissionOutcome, SessionSetup, StopPlan, TurnRef,
-    event_channel,
+    EventReceiver, LoggedCommand, NativeStartOptions, PermissionOutcome, SessionSetup, StopPlan,
+    TurnRef, event_channel,
 };
 use fake_agent::FakeAgent;
 
@@ -52,6 +54,25 @@ pub const REPLAY_FOLDER: &str = "<CWD>";
 
 /// The client version replays advertise.
 pub const REPLAY_CLIENT_VERSION: &str = "0.0.0-replay";
+
+/// Stable new-session identity when curation replaced the recorded Claude UUID with a placeholder.
+const REPLAY_NATIVE_SESSION_ID: &str = "019a0000-0000-7000-8000-000000000001";
+
+fn curated_session_id(id: &str) -> bool {
+    id.strip_prefix("<SESSION_")
+        .and_then(|rest| rest.strip_suffix('>'))
+        .is_some_and(|number| {
+            !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+        })
+}
+fn curated_session_uuid(id: &str) -> Option<String> {
+    let number = id
+        .strip_prefix("<SESSION_")?
+        .strip_suffix('>')?
+        .parse::<u64>()
+        .ok()?;
+    (number <= 0xffff_ffff_ffff).then(|| format!("019a0000-0000-7000-8000-{number:012x}"))
+}
 
 /// How long, in virtual time, a replay may take after its last record before it is given up.
 pub const REPLAY_END_LIMIT: Duration = Duration::from_secs(30 * 60);
@@ -86,6 +107,13 @@ impl AgentSpawner for ReplaySpawner {
 /// commands read it.
 fn replay_launch(agent_id: &str) -> LaunchSpec {
     let (program, args, set_env): (&str, &[&str], &[(&str, &str)]) = match agent_id {
+        "claude" => ("/opt/agents/bin/claude", &[], &[]),
+        "codex" => (
+            "/opt/agents/bin/codex",
+            &["app-server", "--listen", "stdio://"],
+            &[],
+        ),
+        "pi" => ("/opt/agents/bin/pi", &[], &[]),
         "hermes" => ("/opt/agents/bin/hermes", &["acp"], &[]),
         "claude-acp" => (
             "/opt/agents/bin/node",
@@ -123,6 +151,8 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
             .ok_or_else(|| format!("the start note has no \"{key}\""))
     };
     let agent_id = text("agent_id")?;
+    let pi = agent_id == "pi" || start["dialect"] == "pi";
+    let native = pi || agent_id == "claude" || start["dialect"] == "claude";
     let autonomy: Autonomy = match start.get("autonomy") {
         Some(value) => {
             serde_json::from_value(value.clone()).map_err(|error| format!("autonomy: {error}"))?
@@ -135,9 +165,51 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
         }
         _ => BTreeMap::new(),
     };
+    let resume = start.get("resume").and_then(Value::as_str).map(|id| {
+        if native {
+            curated_session_uuid(id).unwrap_or_else(|| id.to_owned())
+        } else {
+            id.to_owned()
+        }
+    });
+    let mut native_start: NativeStartOptions = match start.get("native_start") {
+        Some(value) => serde_json::from_value(value.clone())
+            .map_err(|error| format!("native_start: {error}"))?,
+        None => NativeStartOptions::default(),
+    };
+    if native
+        && (resume.is_none() || native_start.fork)
+        && native_start
+            .new_session_id
+            .as_deref()
+            .is_none_or(curated_session_id)
+    {
+        let recorded = native_start
+            .new_session_id
+            .as_deref()
+            .or_else(|| start["native_session_id"].as_str());
+        native_start.new_session_id = Some(
+            recorded
+                .and_then(|id| {
+                    uuid::Uuid::parse_str(id)
+                        .ok()
+                        .map(|id| id.to_string())
+                        .or_else(|| curated_session_uuid(id))
+                })
+                .unwrap_or_else(|| REPLAY_NATIVE_SESSION_ID.into()),
+        );
+    }
     Ok(SessionSetup {
+        attachment_dir: None,
+        attachment_reader: None,
         chat_id: "replay".into(),
-        launch: replay_launch(&agent_id),
+        launch: replay_launch(if pi {
+            "pi"
+        } else if native {
+            "claude"
+        } else {
+            &agent_id
+        }),
         dialect: text("dialect")?,
         agent_id,
         folder: PathBuf::from(REPLAY_FOLDER),
@@ -151,10 +223,8 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
             warnings: Vec::new(),
             resolved_at_ms: 0,
         }),
-        resume: start
-            .get("resume")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
+        resume,
+        native_start,
         autonomy,
         desired,
         timings: DriverTimings::STANDARD,
@@ -162,8 +232,9 @@ pub fn setup_from_start(start: &Value) -> Result<SessionSetup, String> {
     })
 }
 
-/// A `set_option` or `set_autonomy` reply on its way.
+/// A typed control reply on its way.
 enum ReplyWait {
+    Steer(String, oneshot::Receiver<crate::driver::SteerResult>),
     Option(
         String,
         oneshot::Receiver<Result<(), crate::driver::DriverError>>,
@@ -172,9 +243,15 @@ enum ReplyWait {
         Autonomy,
         oneshot::Receiver<Result<aura_protocol::AutonomyState, crate::driver::DriverError>>,
     ),
+    Rewind(
+        String,
+        bool,
+        oneshot::Receiver<Result<crate::driver::FileRewindResult, crate::driver::DriverError>>,
+    ),
 }
 
-/// Runs the real `AcpDriver` over `FakeSpawner` pipes against a fake agent playing `fixture`.
+/// Runs the fixture's real driver over fake pipes. The start's agent or dialect selects Claude;
+/// existing ACP fixtures retain their original driver and comparison rules.
 pub async fn run(fixture: &Fixture) -> ReplayReport {
     let mut report = ReplayReport::default();
     let Some(start) = fixture.start() else {
@@ -183,13 +260,24 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
             .push("the fixture has no start note".into());
         return report;
     };
-    let setup = match setup_from_start(start) {
+    let mut setup = match setup_from_start(start) {
         Ok(setup) => setup,
         Err(reason) => {
             report.mismatches.push(reason);
             return report;
         }
     };
+    if setup.agent_id == "codex" || setup.dialect == "codex" {
+        // Keep strict native payload comparison while reproducing the recorded client identity.
+        if let Some(version) = fixture.records.iter().find_map(|record| match record {
+            FixtureRecord::Out(message) if message["method"] == "initialize" => message
+                .pointer("/params/clientInfo/version")
+                .and_then(Value::as_str),
+            _ => None,
+        }) {
+            setup.client_version = version.into();
+        }
+    }
     let spawn_id = start
         .get("spawn_id")
         .and_then(Value::as_str)
@@ -198,6 +286,15 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
     let (spawner, mut ends) = FakeSpawner::new();
     let (commands, receiver) = mpsc::unbounded_channel();
     let (sender, events) = event_channel();
+    let pi = setup.agent_id == "pi" || setup.dialect == "pi";
+    let native = pi || setup.agent_id == "claude" || setup.dialect == "claude";
+    let native_session = setup
+        .native_start
+        .new_session_id
+        .clone()
+        .map(|id| uuid::Uuid::parse_str(&id).map_or(id, |uuid| uuid.to_string()))
+        .or_else(|| setup.resume.clone())
+        .unwrap_or_default();
     let ctx = DriverContext {
         commands: receiver,
         events: sender,
@@ -207,7 +304,17 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
         }),
         setup,
     };
-    let driver = tokio::spawn(Box::new(AcpDriver::new()).run(ctx));
+    let codex = ctx.setup.agent_id == "codex" || ctx.setup.dialect == "codex";
+    let driver: Box<dyn AgentDriver> = if codex {
+        Box::new(CodexDriver::new())
+    } else if pi {
+        Box::new(crate::pi::PiDriver::new())
+    } else if native {
+        Box::new(ClaudeDriver::new())
+    } else {
+        Box::new(AcpDriver::new())
+    };
+    let driver = tokio::spawn(driver.run(ctx));
     let collected = Arc::new(Mutex::new(Vec::new()));
     let collector = tokio::spawn(collect(events, Arc::clone(&collected)));
     let end = match timeout(Duration::from_secs(5), ends.recv()).await {
@@ -221,6 +328,10 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
         }
     };
     let mut agent = FakeAgent::new(end);
+    agent.strict_jsonrpc(codex);
+    if native && let Some(recorded) = start["native_session_id"].as_str() {
+        agent.native_session(recorded, &native_session);
+    }
     let mut commands = Some(commands);
     let mut replies = Vec::new();
     for (index, record) in fixture.records.iter().enumerate() {
@@ -303,6 +414,22 @@ pub async fn run(fixture: &Fixture) -> ReplayReport {
 /// The command a `cmd` record stands for, with its reply receiver.
 fn command_for(logged: &LoggedCommand) -> (DriverCommand, Option<ReplyWait>) {
     match logged.clone() {
+        LoggedCommand::Steer {
+            turn_id,
+            message_id,
+            parts,
+        } => {
+            let (reply, wait) = oneshot::channel();
+            (
+                DriverCommand::Steer {
+                    turn_id,
+                    message_id: message_id.clone(),
+                    parts,
+                    reply,
+                },
+                Some(ReplyWait::Steer(message_id, wait)),
+            )
+        }
         LoggedCommand::Prompt { turn_id, parts } => (
             DriverCommand::Prompt {
                 turn: TurnRef { turn_id },
@@ -343,6 +470,20 @@ fn command_for(logged: &LoggedCommand) -> (DriverCommand, Option<ReplyWait>) {
                 Some(ReplyWait::Autonomy(autonomy, wait)),
             )
         }
+        LoggedCommand::RewindFiles {
+            user_message_id,
+            dry_run,
+        } => {
+            let (reply, wait) = oneshot::channel();
+            (
+                DriverCommand::RewindFiles {
+                    user_message_id: user_message_id.clone(),
+                    dry_run,
+                    reply,
+                },
+                Some(ReplyWait::Rewind(user_message_id, dry_run, wait)),
+            )
+        }
         // The session's Stop: 3 s for a running turn's cancel, then the standard chain.
         LoggedCommand::Shutdown => (
             DriverCommand::Shutdown {
@@ -358,6 +499,12 @@ fn command_for(logged: &LoggedCommand) -> (DriverCommand, Option<ReplyWait>) {
 
 async fn reply_json(wait: ReplyWait) -> Value {
     match wait {
+        ReplyWait::Steer(message_id, wait) => {
+            let reply = wait
+                .await
+                .map_or(json!("dropped"), |outcome| json!(outcome));
+            json!({"steer": message_id, "reply": reply})
+        }
         ReplyWait::Option(option_id, wait) => {
             let reply = match wait.await {
                 Ok(Ok(())) => json!({"ok": null}),
@@ -373,6 +520,14 @@ async fn reply_json(wait: ReplyWait) -> Value {
                 Err(_) => json!("dropped"),
             };
             json!({"set_autonomy": autonomy, "reply": reply})
+        }
+        ReplyWait::Rewind(user_message_id, dry_run, wait) => {
+            let reply = match wait.await {
+                Ok(Ok(result)) => json!({"ok": result}),
+                Ok(Err(error)) => json!({"err": error}),
+                Err(_) => json!("dropped"),
+            };
+            json!({"rewind_files": user_message_id, "dry_run": dry_run, "reply": reply})
         }
     }
 }
@@ -423,6 +578,38 @@ mod tests {
     }
 
     #[test]
+    fn native_start_reuses_a_recorded_uuid_and_has_a_stable_curated_fallback() {
+        let mut start = json!({"agent_id":"claude","dialect":"claude","native_session_id":"019a0000-0000-7000-8000-000000000009"});
+        let setup = setup_from_start(&start).expect("native setup");
+        assert_eq!(
+            setup.native_start.new_session_id.as_deref(),
+            start["native_session_id"].as_str()
+        );
+        assert_eq!(setup.chat_id, "replay");
+        assert_eq!(
+            setup.launch.program,
+            PathBuf::from("/opt/agents/bin/claude")
+        );
+        start["native_session_id"] = json!("<SESSION_1>");
+        assert_eq!(
+            setup_from_start(&start)
+                .expect("curated setup")
+                .native_start
+                .new_session_id
+                .as_deref(),
+            Some(REPLAY_NATIVE_SESSION_ID)
+        );
+        start["agent_id"] = json!("custom-claude");
+        assert_eq!(
+            setup_from_start(&start)
+                .expect("dialect selects native")
+                .launch
+                .program,
+            PathBuf::from("/opt/agents/bin/claude")
+        );
+    }
+
+    #[test]
     fn the_start_note_becomes_the_setup() {
         let start = serde_json::json!({"agent_id": "hermes", "dialect": "hermes", "resume": "s-1",
             "autonomy": "ask", "desired": {"model": {"type": "choice", "value": "p:a"}}, "spawn_id": "x"});
@@ -436,7 +623,73 @@ mod tests {
         assert_eq!(setup.desired.len(), 1);
         assert_eq!(setup.agent_folder, REPLAY_FOLDER);
         assert_eq!(setup.launch.args, ["acp"]);
+        assert_eq!(setup.native_start, NativeStartOptions::default());
         assert!(setup_from_start(&serde_json::json!({"dialect": "x"})).is_err());
+    }
+
+    #[test]
+    fn native_fork_replay_seeds_the_new_id_and_preserves_the_source() {
+        let source = "019a0000-0000-7000-8000-000000000009";
+        let fork = "019a0000-0000-7000-8000-000000000008";
+        let message = "019a0000-0000-7000-8000-000000000007";
+        let mut start = json!({"agent_id":"claude","dialect":"claude","resume":source,"native_session_id":fork,
+            "native_start":{"fork":true,"resume_at":message,"file_checkpointing":true}});
+        let setup = setup_from_start(&start).expect("fork setup");
+        assert_eq!(setup.resume.as_deref(), Some(source));
+        assert_eq!(setup.native_start.new_session_id.as_deref(), Some(fork));
+        assert_eq!(setup.native_start.resume_at.as_deref(), Some(message));
+        assert!(setup.native_start.fork && setup.native_start.file_checkpointing);
+        assert_eq!(
+            setup_from_start(&setup.start_note("replay"))
+                .expect("round trip")
+                .native_start,
+            setup.native_start
+        );
+        start
+            .as_object_mut()
+            .expect("start object")
+            .remove("native_start");
+        start["native_session_id"] = json!(source);
+        let resumed = setup_from_start(&start).expect("resume setup");
+        assert_eq!(resumed.resume.as_deref(), Some(source));
+        assert_eq!(resumed.native_start.new_session_id, None);
+        start["resume"] = json!("<SESSION_2>");
+        start["native_session_id"] = json!("<SESSION_2>");
+        let resumed = setup_from_start(&start).expect("curated resume setup");
+        assert_eq!(
+            resumed.resume.as_deref(),
+            Some("019a0000-0000-7000-8000-000000000002")
+        );
+        start["native_start"] = json!({"fork":true,"new_session_id":"<SESSION_3>"});
+        let fork = setup_from_start(&start).expect("curated fork setup");
+        assert_eq!(
+            fork.native_start.new_session_id.as_deref(),
+            Some("019a0000-0000-7000-8000-000000000003")
+        );
+        assert_ne!(fork.native_start.new_session_id, fork.resume);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_curated_native_fork_replays_with_deterministic_ids() {
+        let mut fixture = Fixture::parse(
+            "fork",
+            include_str!("../../tests/fixtures/claude/basic.jsonl"),
+        )
+        .expect("fixture");
+        for record in &mut fixture.records {
+            if let FixtureRecord::Start(start) = record {
+                start["resume"] = json!("<SESSION_2>");
+                start["native_start"] = json!({"fork":true,"new_session_id":"<SESSION_1>","resume_at":"019a0000-0000-7000-8000-000000000007"});
+            }
+        }
+        let first = run(&fixture).await;
+        let second = run(&fixture).await;
+        assert!(first.mismatches.is_empty(), "{:?}", first.mismatches);
+        assert!(second.mismatches.is_empty(), "{:?}", second.mismatches);
+        assert_eq!(first.events, second.events);
+        assert_eq!(first.exit, second.exit);
+        assert!(first.events.iter().any(|event| matches!(serde_json::from_value::<DriverEvent>(event.clone()),
+            Ok(DriverEvent::Ready(info)) if info.native_session_id.as_deref() == Some(REPLAY_NATIVE_SESSION_ID) && info.resumed == crate::driver::ResumeOutcome::New)));
     }
 
     #[tokio::test(start_paused = true)]

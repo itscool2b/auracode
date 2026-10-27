@@ -1,10 +1,8 @@
-import { GlassPanel } from "@auracode/ui";
 import { Fragment, type ReactNode, useState } from "react";
 import type { AppInfo } from "../bindings";
 import { errorMessage } from "../lib/errors";
 import { fileManagerName, glassLabel, osName, outcomeLabel } from "../lib/format";
 import { revealDataDir } from "../lib/ipc";
-import { WarningIcon } from "./icons";
 import { RecoveryNotice } from "./RecoveryNotice";
 
 /**
@@ -19,8 +17,8 @@ export function InfoCard({
   readonly onRecoveryDismissed: () => void;
 }) {
   return (
-    <GlassPanel elevation={1} squircle className="flex flex-col gap-4 p-5">
-      <h2 className="panel-title m-0">This launch</h2>
+    <section className="diagnostics-panel info-card">
+      <h2 className="panel-title">This launch</h2>
       <dl className="facts">
         <dt>auracode</dt>
         <dd>{info.app_version}</dd>
@@ -71,7 +69,7 @@ export function InfoCard({
           ) : null}
         </Notices>
       ) : null}
-    </GlassPanel>
+    </section>
   );
 }
 
@@ -102,13 +100,13 @@ export function DataPath({
 }) {
   const [problem, setProblem] = useState<string | null>(null);
   return (
-    <span className="flex flex-col items-start gap-1.5">
-      <code title={path} className="select-text">
+    <span className="data-path" data-prominent={prominent || undefined}>
+      <code title={path}>
         <BreakablePath path={path} />
       </code>
       <button
         type="button"
-        className={prominent ? "btn mt-1" : "btn btn-quiet -ml-3 h-6 px-3 text-xs"}
+        className={prominent ? "g-button g-button-28" : "g-button g-button-ghost g-button-28"}
         onClick={() => {
           setProblem(null);
           revealDataDir().catch((error: unknown) => setProblem(errorMessage(error)));
@@ -117,7 +115,7 @@ export function DataPath({
         Show in {fileManagerName(os)}
       </button>
       {problem ? (
-        <span role="alert" className="text-xs text-(--aura-danger)">
+        <span role="alert" className="data-path-problem">
           {problem}
         </span>
       ) : null}
@@ -134,12 +132,12 @@ export function Notices({
   readonly children?: ReactNode;
 }) {
   return (
-    <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Notices">
+    <ul className="notices" aria-label="Notices">
       {children}
       {notices.map((notice) => (
         <li key={notice} className="notice">
-          <WarningIcon />
-          <span>{notice}</span>
+          <span className="notice-mark" aria-hidden="true" />
+          <span className="notice-text">{notice}</span>
         </li>
       ))}
     </ul>

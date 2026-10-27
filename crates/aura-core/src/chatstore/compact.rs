@@ -516,7 +516,7 @@ pub(crate) fn apply(
     for row in fts.iter().filter(|row| !row.text.is_empty()) {
         insert_fts.execute(params![chat_id, row.message_id, row.text])?;
     }
-    conn.prepare_cached("UPDATE turns SET compacted_at = ?2 WHERE id = ?1")?
+    conn.prepare_cached("UPDATE turns SET compacted_at = ?2, last_event_seq = MAX(COALESCE(last_event_seq,0),COALESCE((SELECT MAX(seq) FROM events WHERE turn_id=?1),0)) WHERE id = ?1")?
         .execute(params![turn_id, now])?;
     Ok(true)
 }

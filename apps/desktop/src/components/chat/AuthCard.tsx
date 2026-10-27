@@ -4,17 +4,18 @@ import { authCommandText } from "../../lib/chat/present";
 
 /**
  * The agent needs its own sign-in: its message, each sign-in command with the variables it sets
- * and Copy, and Retry. auracode runs none of them (M1a): the user signs in in a terminal with
- * their own binary. Retry sends the held prompts again (`chat_resume_queue`) when there are any,
- * else starts the agent.
+ * and Copy, and Retry. A verified vendor login may open an owned terminal sheet through an explicit
+ * action. Retry sends the held prompts again when there are any, else starts the agent.
  */
 export function AuthCard({
   auth,
   onRetry,
+  onSignIn,
   copy = (text) => navigator.clipboard.writeText(text),
 }: {
   readonly auth: AuthPrompt;
   readonly onRetry: () => void;
+  readonly onSignIn?: () => void;
   readonly copy?: (text: string) => Promise<void>;
 }) {
   const [copied, setCopied] = useState<number | null>(null);
@@ -25,7 +26,6 @@ export function AuthCard({
         <span className="chat-block-title" data-testid="auth-message">
           {auth.message}
         </span>
-        <span className="chat-block-tag">Sign-in needed</span>
       </div>
       {auth.commands.map((command, index) => {
         const text = authCommandText(command);
@@ -67,6 +67,11 @@ export function AuthCard({
         </span>
       ) : null}
       <div className="ui-row">
+        {onSignIn ? (
+          <button type="button" className="ui-button" onClick={onSignIn}>
+            Sign in…
+          </button>
+        ) : null}
         <button
           type="button"
           className="ui-button"
@@ -76,7 +81,11 @@ export function AuthCard({
         >
           Retry
         </button>
-        <span className="ui-muted">Sign in in a terminal first, then press Retry.</span>
+        <span className="ui-muted">
+          {onSignIn
+            ? "Complete the vendor sign-in, then press Retry."
+            : "Sign in in a terminal first, then press Retry."}
+        </span>
       </div>
     </div>
   );

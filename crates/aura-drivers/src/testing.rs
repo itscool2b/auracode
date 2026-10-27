@@ -75,6 +75,7 @@ pub enum Step {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommandMatch {
     Prompt,
+    Steer,
     Interrupt,
     /// `Some` matches that request id only.
     RespondPermission {
@@ -85,6 +86,7 @@ pub enum CommandMatch {
     },
     SetOption,
     SetAutonomy,
+    RewindFiles,
     Shutdown,
     Any,
 }
@@ -97,9 +99,11 @@ impl CommandMatch {
         match (self, command) {
             (CommandMatch::Any, _)
             | (CommandMatch::Prompt, LoggedCommand::Prompt { .. })
+            | (CommandMatch::Steer, LoggedCommand::Steer { .. })
             | (CommandMatch::Interrupt, LoggedCommand::Interrupt)
             | (CommandMatch::SetOption, LoggedCommand::SetOption { .. })
             | (CommandMatch::SetAutonomy, LoggedCommand::SetAutonomy { .. })
+            | (CommandMatch::RewindFiles, LoggedCommand::RewindFiles { .. })
             | (CommandMatch::Shutdown, LoggedCommand::Shutdown) => true,
             (
                 CommandMatch::RespondPermission { request_id },
@@ -142,6 +146,7 @@ struct Shared {
     /// How many commands arrived, so `wait_for` wakes on each.
     arrived: watch::Sender<usize>,
     option_reply: Mutex<Result<(), DriverError>>,
+    steer_reply: Mutex<crate::driver::SteerResult>,
     /// `None`: the requested level, no native mode, `Never`.
     autonomy_reply: Mutex<Option<Result<AutonomyState, DriverError>>>,
 }
@@ -164,6 +169,9 @@ impl ScriptedDriver {
             commands: Mutex::new(Vec::new()),
             arrived: watch::Sender::new(0),
             option_reply: Mutex::new(Ok(())),
+            steer_reply: Mutex::new(crate::driver::SteerResult::Rejected {
+                message: "The scripted agent does not steer turns.".into(),
+            }),
             autonomy_reply: Mutex::new(None),
         });
         let (inject, injected) = mpsc::unbounded_channel();
@@ -225,6 +233,9 @@ impl ScriptHandle {
     /// that refused the value (ACP -32602) or did not answer in time.
     pub fn set_option_reply(&self, reply: Result<(), DriverError>) {
         *lock(&self.shared.option_reply) = reply;
+    }
+    pub fn set_steer_reply(&self, reply: crate::driver::SteerResult) {
+        *lock(&self.shared.steer_reply) = reply;
     }
 
     /// What `SetAutonomy` answers from now on. The default is the requested level, no native mode,
@@ -499,12 +510,22 @@ impl Runner {
         let logged = LoggedCommand::from(&command);
         self.shared.record(logged.clone());
         match command {
+            DriverCommand::Steer { reply, .. } => {
+                let _ = reply.send(lock(&self.shared.steer_reply).clone());
+            }
             DriverCommand::Prompt { turn, .. } => self.current_turn = Some(turn.turn_id),
             DriverCommand::SetOption { reply, .. } => {
                 let _ = reply.send(self.shared.option_reply());
             }
             DriverCommand::SetAutonomy { autonomy, reply } => {
                 let _ = reply.send(self.shared.autonomy_reply(autonomy));
+            }
+            DriverCommand::RewindFiles { reply, .. } => {
+                let _ = reply.send(Err(DriverError {
+                    kind: ErrorKind::ProtocolError,
+                    message: "The scripted agent does not rewind files.".into(),
+                    detail: None,
+                }));
             }
             DriverCommand::Interrupt
             | DriverCommand::RespondPermission { .. }
@@ -590,7 +611,9 @@ fn in_turn(event: DriverEvent, turn_id: String) -> DriverEvent {
             error,
         },
         untagged @ (DriverEvent::Status(_)
+        | DriverEvent::RunState { .. }
         | DriverEvent::Ready(_)
+        | DriverEvent::NativeSessionId(_)
         | DriverEvent::PermissionWithdrawn { .. }
         | DriverEvent::UiWithdrawn { .. }
         | DriverEvent::Commands(_)
@@ -612,7 +635,9 @@ async fn sleep_until(deadline: Option<Instant>) {
 /// How a driver reports a failed spawn.
 fn spawn_failure(error: &SpawnError) -> DriverError {
     let kind = match error {
-        SpawnError::ProgramNotFound { .. } => ErrorKind::AgentUnavailable,
+        SpawnError::ProgramNotFound { .. } | SpawnError::HostUnavailable { .. } => {
+            ErrorKind::AgentUnavailable
+        }
         SpawnError::InvalidCwd { .. } => ErrorKind::FolderMissing,
         SpawnError::CwdNotAllowed { .. } => ErrorKind::FolderNotAllowed,
         SpawnError::PermissionDenied { .. } | SpawnError::NoRuntime | SpawnError::Spawn { .. } => {
@@ -757,6 +782,8 @@ mod tests {
 
     fn setup() -> SessionSetup {
         SessionSetup {
+            attachment_dir: None,
+            attachment_reader: None,
             chat_id: "chat".into(),
             agent_id: "mock".into(),
             dialect: "mock".into(),
@@ -773,6 +800,7 @@ mod tests {
                 resolved_at_ms: 0,
             }),
             resume: None,
+            native_start: Default::default(),
             autonomy: Autonomy::FullAuto,
             desired: BTreeMap::new(),
             timings: DriverTimings::STANDARD,

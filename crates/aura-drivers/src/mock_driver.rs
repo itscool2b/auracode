@@ -498,7 +498,7 @@ impl Mock {
         }
         self.push(DriverEvent::Status(DriverStatus::Ready));
         let info = ReadyInfo {
-            native_session_id: format!("mock-{}", uuid::Uuid::now_v7().hyphenated()),
+            native_session_id: Some(format!("mock-{}", uuid::Uuid::now_v7().hyphenated())),
             agent_name: Some("Demo agent".into()),
             agent_version: Some(self.setup.client_version.clone()),
             capabilities: Capabilities {
@@ -592,6 +592,18 @@ impl Mock {
                 self.set_current("mode", &ConfigValue::Choice { value: mode.into() });
                 self.push(DriverEvent::Options(self.options.clone()));
                 let _ = reply.send(Ok(self.autonomy_state()));
+            }
+            DriverCommand::Steer { reply, .. } => {
+                let _ = reply.send(crate::driver::SteerResult::Rejected {
+                    message: "This agent cannot steer an exact running turn.".into(),
+                });
+            }
+            DriverCommand::RewindFiles { reply, .. } => {
+                let _ = reply.send(Err(DriverError {
+                    kind: ErrorKind::ProtocolError,
+                    message: "The demo agent does not rewind files.".into(),
+                    detail: None,
+                }));
             }
         }
     }
@@ -1505,6 +1517,8 @@ mod tests {
 
     fn setup(autonomy: Autonomy, desired: BTreeMap<String, ConfigValue>) -> SessionSetup {
         SessionSetup {
+            attachment_dir: None,
+            attachment_reader: None,
             chat_id: "chat".into(),
             agent_id: "mock".into(),
             dialect: "mock".into(),
@@ -1529,6 +1543,7 @@ mod tests {
                 resolved_at_ms: 0,
             }),
             resume: Some("an-old-session".into()),
+            native_start: Default::default(),
             autonomy,
             desired,
             timings: DriverTimings::STANDARD,
@@ -1723,7 +1738,12 @@ mod tests {
         let DriverEvent::Ready(info) = events.last().expect("Ready") else {
             panic!("Ready")
         };
-        assert!(info.native_session_id.starts_with("mock-"));
+        assert!(
+            info.native_session_id
+                .as_deref()
+                .unwrap()
+                .starts_with("mock-")
+        );
         assert_eq!(
             info.resumed,
             ResumeOutcome::New,

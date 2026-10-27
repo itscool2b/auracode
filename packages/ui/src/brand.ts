@@ -163,8 +163,10 @@ const BRANDS_BY_ID: ReadonlyMap<string, AgentBrand> = new Map(
 /** Other names the same agents go by: binary names, registry ids, vendor-prefixed ids. */
 const ALIASES: ReadonlyMap<string, AgentBrandId> = new Map<string, AgentBrandId>([
   ["claude", "claude-code"],
+  ["claude-acp", "claude-code"],
   ["claudecode", "claude-code"],
   ["codex-cli", "codex"],
+  ["codex-acp", "codex"],
   ["openai-codex", "codex"],
   ["pi-coding-agent", "pi"],
   ["agy", "antigravity"],
@@ -175,6 +177,8 @@ const ALIASES: ReadonlyMap<string, AgentBrandId> = new Map<string, AgentBrandId>
   ["grok-build", "grok"],
   ["grok-cli", "grok"],
   ["open-code", "opencode"],
+  ["opencode-v1", "opencode"],
+  ["opencode-v2", "opencode"],
   ["omp", "oh-my-pi"],
   ["ohmypi", "oh-my-pi"],
   ["hermes-acp", "hermes"],

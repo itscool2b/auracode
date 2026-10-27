@@ -1,0 +1,188 @@
+{
+  "events": [
+    {
+      "type": "status",
+      "data": "spawning"
+    },
+    {
+      "type": "status",
+      "data": "initializing"
+    },
+    {
+      "type": "run_state",
+      "data": {
+        "idle": true
+      }
+    },
+    {
+      "type": "autonomy",
+      "data": {
+        "requested": "ask",
+        "native_mode": "default",
+        "auto_answer": {
+          "type": "never"
+        },
+        "note": null
+      }
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "haiku",
+            "choices": [
+              {
+                "value": "haiku",
+                "name": "Haiku",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "commands",
+      "data": [
+        {
+          "name": "usage",
+          "description": "Show usage",
+          "input_hint": null
+        }
+      ]
+    },
+    {
+      "type": "ready",
+      "data": {
+        "native_session_id": "019a0000-0000-7000-8000-000000000001",
+        "agent_name": "Claude Code",
+        "agent_version": "2.1.310",
+        "capabilities": {
+          "images": true,
+          "steer": false,
+          "interrupt": true,
+          "resume": true,
+          "fork": false,
+          "rewind": false,
+          "set_model": true,
+          "set_effort": true,
+          "permissions": true,
+          "plans": false,
+          "usage": true,
+          "limits": true,
+          "slash_commands": true,
+          "add_dirs": true,
+          "autonomy_levels": [
+            "full_auto",
+            "auto_edit",
+            "ask"
+          ]
+        },
+        "resumed": {
+          "type": "new"
+        },
+        "spawn_id": "019a0000-0000-7000-8000-00000000aaaa",
+        "replay": null
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "notice",
+          "level": "warning",
+          "message": "Claude sent a malformed control frame; it was ignored."
+        }
+      }
+    },
+    {
+      "type": "event",
+      "data": {
+        "turn": null,
+        "event": {
+          "type": "notice",
+          "level": "warning",
+          "message": "Claude sent a malformed control frame; it was ignored."
+        }
+      }
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "haiku",
+            "choices": [
+              {
+                "value": "haiku",
+                "name": "Haiku",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "options",
+      "data": [
+        {
+          "id": "model",
+          "name": "Model",
+          "description": null,
+          "category": "model",
+          "kind": {
+            "type": "select",
+            "current": "haiku",
+            "choices": [
+              {
+                "value": "haiku",
+                "name": "Haiku",
+                "description": null,
+                "group": null
+              }
+            ]
+          },
+          "pending": null
+        }
+      ]
+    },
+    {
+      "type": "status",
+      "data": "closing"
+    }
+  ],
+  "replies": [
+    {
+      "set_option": "model",
+      "reply": {
+        "ok": null
+      }
+    },
+    {
+      "set_option": "model",
+      "reply": {
+        "ok": null
+      }
+    }
+  ],
+  "exit": {
+    "type": "closed"
+  }
+}

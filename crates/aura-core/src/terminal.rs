@@ -1,0 +1,893 @@
+//! Ephemeral terminal ownership. No output, input or exit state is written to the chat store.
+//! A caller reserves a page-owned slot before asynchronous preparation, so reload/close also
+//! cancels a launch that has not produced a process yet.
+use aura_process::{
+    ByteSink, SpawnSpec, Spawner,
+    pty::{PtyControl, PtyOutput, PtySize},
+};
+use serde::Serialize;
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc, Mutex, MutexGuard,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
+use tokio::sync::{Mutex as AsyncMutex, watch};
+
+const MAX_TERMINALS: usize = 4;
+const MAX_INPUT: usize = 16 * 1024;
+const READ_WAIT: Duration = Duration::from_secs(20);
+
+#[derive(Debug, thiserror::Error)]
+pub enum TerminalError {
+    #[error("This terminal is closed or belongs to another window.")]
+    Closed,
+    #[error("A terminal is already open in this window.")]
+    AlreadyOpen,
+    #[error("Close another terminal before opening one.")]
+    Full,
+    #[error("A terminal read is already pending.")]
+    ReadPending,
+    #[error("Terminal input is limited to 16 KiB per write.")]
+    InputTooLarge,
+    #[error("The terminal cannot accept input yet. Try again after it catches up.")]
+    InputBlocked,
+    #[error("The terminal could not start: {0}")]
+    Start(String),
+    #[error("The terminal size is invalid or the terminal is closed.")]
+    Resize,
+    #[error(
+        "The installation reached its ten-minute limit and was stopped. Review the output and refresh agents before trying again."
+    )]
+    TimedOut,
+    #[error(
+        "Terminal cleanup could not be confirmed. Its folders remain reserved until the application closes; inspect the owned-process recovery information before restarting work."
+    )]
+    CleanupUnconfirmed,
+    #[error(
+        "Setup reached its ten-minute limit and was stopped. Review the terminal output and worktree before preparing another command."
+    )]
+    SetupTimedOut,
+}
+
+/// One bounded pull. An empty nonterminal chunk means only that the read wait elapsed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+pub struct TerminalChunk {
+    pub bytes: Vec<u8>,
+    pub done: bool,
+    pub exit_code: Option<i32>,
+    pub truncated: bool,
+}
+
+struct Running {
+    input: ByteSink,
+    output: AsyncMutex<PtyOutput>,
+    control: PtyControl,
+}
+struct Slot {
+    owner: String,
+    claimed: AtomicBool,
+    timed_out: AtomicBool,
+    canceled: watch::Sender<bool>,
+    running: Mutex<Option<Arc<Running>>>,
+    cleanup_unconfirmed: AtomicBool,
+    cleanup: watch::Sender<Option<bool>>,
+    setup_timed_out: AtomicBool,
+    project: AtomicBool,
+}
+impl Slot {
+    fn closed_error(&self) -> TerminalError {
+        if self.timed_out.load(Ordering::Acquire) {
+            TerminalError::TimedOut
+        } else {
+            TerminalError::Closed
+        }
+    }
+    fn cancel(&self) {
+        self.canceled.send_replace(true);
+        if let Some(running) = lock(&self.running).as_ref() {
+            running.control.kill();
+        }
+    }
+}
+impl Drop for Slot {
+    fn drop(&mut self) {
+        self.cancel();
+    }
+}
+
+#[derive(Default)]
+struct Inner {
+    slots: Mutex<HashMap<String, Arc<Slot>>>,
+    stopped: AtomicBool,
+    quiescing: AtomicBool,
+    cleanup_guards: Mutex<Vec<Box<dyn Send + Sync>>>,
+}
+
+/// Blocks new terminal reservations without canceling any existing terminal.
+pub struct IdleTerminalGuard<'a>(&'a Inner);
+
+impl Drop for IdleTerminalGuard<'_> {
+    fn drop(&mut self) {
+        self.0.quiescing.store(false, Ordering::Release);
+    }
+}
+impl Drop for Inner {
+    fn drop(&mut self) {
+        for slot in lock(&self.slots).values() {
+            slot.cancel();
+        }
+    }
+}
+
+/// Clones share ownership; one terminal per window, at most four in this app instance.
+#[derive(Clone, Default)]
+pub struct Terminals(Arc<Inner>);
+
+pub struct TerminalTicket {
+    terminals: Terminals,
+    id: String,
+    slot: Arc<Slot>,
+    committed: bool,
+}
+impl Drop for TerminalTicket {
+    fn drop(&mut self) {
+        if !self.committed {
+            lock(&self.terminals.0.slots).remove(&self.id);
+            self.slot.cancel();
+        }
+    }
+}
+impl TerminalTicket {
+    /// A setup launch owns the caller's folder reservations through process cleanup. Startup
+    /// continues in an owned task if the IPC future disappears; its ticket still responds to Close.
+    pub async fn start_guarded(
+        self,
+        spawner: Arc<Spawner>,
+        spec: SpawnSpec,
+        size: PtySize,
+        guard: Box<dyn Send + Sync>,
+    ) -> Result<String, TerminalError> {
+        tokio::spawn(self.start_guarded_owned(
+            spawner,
+            spec,
+            size,
+            guard,
+            Some(Duration::from_secs(600)),
+        ))
+        .await
+        .map_err(|_| TerminalError::Start("Setup startup ended unexpectedly.".into()))?
+    }
+
+    /// An explicitly opened project shell has no setup deadline. Its folder and profile guard
+    /// remains owned until confirmed process cleanup, including after page or IPC cancellation.
+    pub async fn start_project(
+        self,
+        spawner: Arc<Spawner>,
+        spec: SpawnSpec,
+        size: PtySize,
+        guard: Box<dyn Send + Sync>,
+    ) -> Result<String, TerminalError> {
+        self.slot.project.store(true, Ordering::Release);
+        tokio::spawn(self.start_guarded_owned(spawner, spec, size, guard, None))
+            .await
+            .map_err(|_| TerminalError::Start("Terminal startup ended unexpectedly.".into()))?
+    }
+
+    async fn start_guarded_owned(
+        mut self,
+        spawner: Arc<Spawner>,
+        spec: SpawnSpec,
+        size: PtySize,
+        guard: Box<dyn Send + Sync>,
+        limit: Option<Duration>,
+    ) -> Result<String, TerminalError> {
+        if *self.slot.canceled.borrow() {
+            return Err(TerminalError::Closed);
+        }
+        let process = tokio::time::timeout(Duration::from_secs(15), spawner.spawn_pty(spec, size))
+            .await
+            .map_err(|_| TerminalError::Start("Startup timed out.".into()))?
+            .map_err(|error| TerminalError::Start(error.to_string()))?;
+        let control = process.control.clone();
+        let mut canceled = self.slot.canceled.subscribe();
+        let slot = Arc::downgrade(&self.slot);
+        let terminals = self.terminals.clone();
+        self.slot.cleanup.send_replace(None);
+        // This monitor is independent of output consumption, window lifetime and IPC cancellation.
+        tokio::spawn(async move {
+            tokio::select! {
+                biased;
+                _=control.exited()=>{},
+                _=canceled.wait_for(|value|*value)=>{},
+                _=async {match limit {Some(limit)=>tokio::time::sleep(limit).await,None=>std::future::pending().await}}=>{
+                    if let Some(slot)=slot.upgrade(){slot.setup_timed_out.store(true,Ordering::Release);}
+                    control.kill();
+                },
+            }
+            let report = control.shutdown().await;
+            let confirmed = report.exit.is_some() && report.leftovers.is_empty();
+            if !confirmed {
+                lock(&terminals.0.cleanup_guards).push(guard);
+            } else {
+                drop(guard);
+            }
+            if let Some(slot) = slot.upgrade() {
+                slot.cleanup_unconfirmed
+                    .store(!confirmed, Ordering::Release);
+                slot.cleanup.send_replace(Some(confirmed));
+            }
+        });
+        let mut running = lock(&self.slot.running);
+        if *self.slot.canceled.borrow() {
+            process.control.kill();
+            return Err(TerminalError::Closed);
+        }
+        *running = Some(Arc::new(Running {
+            input: process.input,
+            output: AsyncMutex::new(process.output),
+            control: process.control,
+        }));
+        self.committed = true;
+        Ok(self.id.clone())
+    }
+
+    /// Return the reservation before beginning any vendor work. A close can now name and cancel
+    /// it even if a later start handler has not begun yet.
+    pub fn pending(mut self) -> String {
+        self.slot.claimed.store(false, Ordering::Release);
+        self.committed = true;
+        self.id.clone()
+    }
+    pub async fn start(
+        self,
+        spawner: &Spawner,
+        spec: SpawnSpec,
+        size: PtySize,
+    ) -> Result<String, TerminalError> {
+        self.start_with_limit(spawner, spec, size, None).await
+    }
+
+    /// An installer is bounded even when the renderer stops polling. Login keeps its existing
+    /// interactive lifetime; callers cannot choose an arbitrary program through this seam.
+    pub async fn start_install(
+        self,
+        spawner: &Spawner,
+        spec: SpawnSpec,
+        size: PtySize,
+    ) -> Result<String, TerminalError> {
+        self.start_with_limit(spawner, spec, size, Some(Duration::from_secs(600)))
+            .await
+    }
+
+    async fn start_with_limit(
+        mut self,
+        spawner: &Spawner,
+        spec: SpawnSpec,
+        size: PtySize,
+        limit: Option<Duration>,
+    ) -> Result<String, TerminalError> {
+        if *self.slot.canceled.borrow() {
+            return Err(TerminalError::Closed);
+        }
+        let process = tokio::time::timeout(Duration::from_secs(15), spawner.spawn_pty(spec, size))
+            .await
+            .map_err(|_| TerminalError::Start("Startup timed out.".into()))?
+            .map_err(|error| TerminalError::Start(error.to_string()))?;
+        let mut running = lock(&self.slot.running);
+        if *self.slot.canceled.borrow() {
+            return Err(TerminalError::Closed);
+        }
+        if let Some(limit) = limit {
+            let slot = Arc::downgrade(&self.slot);
+            let control = process.control.clone();
+            tokio::spawn(async move {
+                tokio::select! {
+                    biased;
+                    _ = control.exited() => {},
+                    _ = tokio::time::sleep(limit) => {
+                        if let Some(slot) = slot.upgrade() {
+                            slot.timed_out.store(true, Ordering::Release);
+                            slot.cancel();
+                        }
+                    }
+                }
+            });
+        }
+        *running = Some(Arc::new(Running {
+            input: process.input,
+            output: AsyncMutex::new(process.output),
+            control: process.control,
+        }));
+        self.committed = true;
+        Ok(self.id.clone())
+    }
+}
+
+impl Terminals {
+    /// Only succeeds with no reserved or running terminal. Uses the reservation lock so a new
+    /// login cannot slip between the idle check and an application update.
+    pub fn try_quiesce_when_idle(&self) -> Option<IdleTerminalGuard<'_>> {
+        let slots = lock(&self.0.slots);
+        if !slots.is_empty()
+            || self.0.stopped.load(Ordering::Acquire)
+            || self.0.quiescing.swap(true, Ordering::AcqRel)
+        {
+            return None;
+        }
+        Some(IdleTerminalGuard(&self.0))
+    }
+
+    pub fn reserve(&self, owner: &str) -> Result<TerminalTicket, TerminalError> {
+        let mut slots = lock(&self.0.slots);
+        if self.0.stopped.load(Ordering::Acquire) || self.0.quiescing.load(Ordering::Acquire) {
+            return Err(TerminalError::Closed);
+        }
+        if slots.values().any(|slot| slot.owner == owner) {
+            return Err(TerminalError::AlreadyOpen);
+        }
+        if slots.len() >= MAX_TERMINALS {
+            return Err(TerminalError::Full);
+        }
+        let id = uuid::Uuid::now_v7().to_string();
+        let (canceled, _) = watch::channel(false);
+        let (cleanup, _) = watch::channel(Some(true));
+        let slot = Arc::new(Slot {
+            owner: owner.into(),
+            claimed: AtomicBool::new(true),
+            timed_out: AtomicBool::new(false),
+            canceled,
+            running: Mutex::new(None),
+            cleanup_unconfirmed: AtomicBool::new(false),
+            cleanup,
+            setup_timed_out: AtomicBool::new(false),
+            project: AtomicBool::new(false),
+        });
+        slots.insert(id.clone(), Arc::clone(&slot));
+        Ok(TerminalTicket {
+            terminals: self.clone(),
+            id,
+            slot,
+            committed: false,
+        })
+    }
+
+    pub fn claim(&self, owner: &str, id: &str) -> Result<TerminalTicket, TerminalError> {
+        let slot = self.slot(owner, id)?;
+        if slot.claimed.swap(true, Ordering::AcqRel) {
+            return Err(TerminalError::AlreadyOpen);
+        }
+        Ok(TerminalTicket {
+            terminals: self.clone(),
+            id: id.into(),
+            slot,
+            committed: false,
+        })
+    }
+
+    fn slot(&self, owner: &str, id: &str) -> Result<Arc<Slot>, TerminalError> {
+        lock(&self.0.slots)
+            .get(id)
+            .filter(|slot| slot.owner == owner)
+            .cloned()
+            .ok_or(TerminalError::Closed)
+    }
+    fn running(&self, owner: &str, id: &str) -> Result<(Arc<Slot>, Arc<Running>), TerminalError> {
+        let slot = self.slot(owner, id)?;
+        let running = lock(&slot.running).clone().ok_or(TerminalError::Closed)?;
+        if *slot.canceled.borrow() {
+            return Err(slot.closed_error());
+        }
+        Ok((slot, running))
+    }
+    pub async fn read(&self, owner: &str, id: &str) -> Result<TerminalChunk, TerminalError> {
+        let (slot, running) = self.running(owner, id)?;
+        if slot.cleanup_unconfirmed.load(Ordering::Acquire) {
+            return Err(TerminalError::CleanupUnconfirmed);
+        }
+        if slot.setup_timed_out.load(Ordering::Acquire) {
+            return Err(TerminalError::SetupTimedOut);
+        }
+        let mut output = running
+            .output
+            .try_lock()
+            .map_err(|_| TerminalError::ReadPending)?;
+        let mut canceled = slot.canceled.subscribe();
+        let next = tokio::select! {
+            biased;
+            _ = canceled.wait_for(|closed| *closed) => return Err(slot.closed_error()),
+            next = output.next() => Some(next),
+            _ = tokio::time::sleep(READ_WAIT) => None,
+        };
+        let done = matches!(next, Some(None));
+        if done {
+            let mut cleanup = slot.cleanup.subscribe();
+            tokio::select! {
+                _=canceled.wait_for(|closed|*closed)=>return Err(TerminalError::Closed),
+                result=cleanup.wait_for(|result|result.is_some())=>{
+                    match result {Ok(value) if *value==Some(true)=>{},_=>return Err(TerminalError::CleanupUnconfirmed)}
+                },
+            }
+        }
+        Ok(TerminalChunk {
+            bytes: next.flatten().unwrap_or_default(),
+            done,
+            exit_code: running.control.try_exited().and_then(|exit| exit.code),
+            truncated: output.truncated(),
+        })
+    }
+    pub fn write(&self, owner: &str, id: &str, bytes: Vec<u8>) -> Result<(), TerminalError> {
+        if bytes.len() > MAX_INPUT {
+            return Err(TerminalError::InputTooLarge);
+        }
+        let (_, running) = self.running(owner, id)?;
+        running
+            .input
+            .try_write(bytes)
+            .map_err(|_| TerminalError::InputBlocked)
+    }
+    pub fn resize(&self, owner: &str, id: &str, size: PtySize) -> Result<(), TerminalError> {
+        let (_, running) = self.running(owner, id)?;
+        running
+            .control
+            .resize(size)
+            .map_err(|_| TerminalError::Resize)
+    }
+    pub fn close(&self, owner: &str, id: &str) -> Result<(), TerminalError> {
+        let mut slots = lock(&self.0.slots);
+        if let Some(slot) = slots.get(id) {
+            if slot.owner != owner {
+                return Err(TerminalError::Closed);
+            }
+            slot.cancel();
+            slots.remove(id);
+        }
+        Ok(())
+    }
+    pub fn drop_owner(&self, owner: &str) {
+        lock(&self.0.slots).retain(|_, slot| {
+            if slot.owner == owner {
+                slot.cancel();
+                false
+            } else {
+                true
+            }
+        });
+    }
+    pub fn stop_all(&self) {
+        self.0.stopped.store(true, Ordering::Release);
+        self.close_all();
+    }
+    pub fn close_all(&self) {
+        let mut slots = lock(&self.0.slots);
+        for slot in slots.values() {
+            slot.cancel();
+        }
+        slots.clear();
+    }
+
+    /// Preserve general shells until quit is confirmed. Existing bounded setup/vendor shutdown
+    /// can finish before that question without leaving file mutations behind.
+    pub fn close_non_project(&self) {
+        self.close_kind(false);
+    }
+    pub fn close_projects(&self) {
+        self.close_kind(true);
+    }
+    fn close_kind(&self, project: bool) {
+        lock(&self.0.slots).retain(|_, slot| {
+            if slot.project.load(Ordering::Acquire) == project {
+                slot.cancel();
+                false
+            } else {
+                true
+            }
+        });
+    }
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aura_process::{EnvSource, LaunchSpec, LeftoverRegistry, ProcessCwd, ResolvedEnv};
+    use std::io::Write;
+
+    #[tokio::test]
+    async fn guarded_setup_holds_reservations_until_close_finishes_owned_cleanup() {
+        struct Guard(Arc<AtomicBool>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let folder = tempfile::tempdir().unwrap();
+        let terminals = Terminals::default();
+        let released = Arc::new(AtomicBool::new(false));
+        let ticket = terminals.reserve("setup").unwrap();
+        let id = ticket
+            .start_guarded(
+                Spawner::new(
+                    LeftoverRegistry::disabled(),
+                    tokio::runtime::Handle::current(),
+                ),
+                local_spec(folder.path()),
+                PtySize { rows: 24, cols: 80 },
+                Box::new(Guard(released.clone())),
+            )
+            .await
+            .unwrap();
+        let (_, running) = terminals.running("setup", &id).unwrap();
+        assert!(!released.load(Ordering::Acquire));
+        terminals.close("setup", &id).unwrap();
+        released_after_cleanup(&released, Some(&running)).await;
+        assert!(running.control.try_exited().is_some());
+        assert!(running.control.shutdown().await.leftovers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn project_shell_retains_its_guard_after_start_and_releases_only_after_page_cleanup() {
+        struct Guard(Arc<AtomicBool>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let folder = tempfile::tempdir().unwrap();
+        let terminals = Terminals::default();
+        let released = Arc::new(AtomicBool::new(false));
+        let id = terminals
+            .reserve("main")
+            .unwrap()
+            .start_project(
+                Spawner::new(
+                    LeftoverRegistry::disabled(),
+                    tokio::runtime::Handle::current(),
+                ),
+                local_spec(folder.path()),
+                PtySize { rows: 24, cols: 80 },
+                Box::new(Guard(released.clone())),
+            )
+            .await
+            .unwrap();
+        read_until(&terminals, &id, "local-terminal-ready").await;
+        assert!(!released.load(Ordering::Acquire));
+        let (_, running) = terminals.running("main", &id).unwrap();
+        terminals.drop_owner("main");
+        released_after_cleanup(&released, Some(&running)).await;
+        assert!(running.control.try_exited().is_some());
+        assert!(running.control.shutdown().await.leftovers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn guarded_setup_deadline_cleans_up_without_renderer_polling() {
+        struct Guard(Arc<AtomicBool>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let folder = tempfile::tempdir().unwrap();
+        let terminals = Terminals::default();
+        let released = Arc::new(AtomicBool::new(false));
+        let id = terminals
+            .reserve("setup")
+            .unwrap()
+            .start_guarded_owned(
+                Spawner::new(
+                    LeftoverRegistry::disabled(),
+                    tokio::runtime::Handle::current(),
+                ),
+                local_spec(folder.path()),
+                PtySize { rows: 24, cols: 80 },
+                Box::new(Guard(released.clone())),
+                Some(Duration::from_millis(250)),
+            )
+            .await
+            .unwrap();
+        let running = terminals
+            .running("setup", &id)
+            .ok()
+            .map(|(_, running)| running);
+        released_after_cleanup(&released, running.as_ref()).await;
+        assert!(matches!(
+            terminals.read("setup", &id).await,
+            Err(TerminalError::SetupTimedOut)
+        ));
+        terminals.close("setup", &id).unwrap();
+    }
+
+    // A harmless test-harness subprocess. The ordinary unit test returns immediately; only the
+    // explicit PTY test below supplies this marker and invokes this exact test name.
+    #[test]
+    fn updater_admission_never_cancels_a_terminal_or_reopens_permanent_stop() {
+        let terminals = Terminals::default();
+        let pending = terminals.reserve("main").unwrap();
+        assert!(terminals.try_quiesce_when_idle().is_none());
+        drop(pending);
+        let barrier = terminals.try_quiesce_when_idle().unwrap();
+        assert!(matches!(
+            terminals.reserve("main"),
+            Err(TerminalError::Closed)
+        ));
+        assert!(terminals.try_quiesce_when_idle().is_none());
+        drop(barrier);
+        drop(terminals.reserve("main").unwrap());
+        let barrier = terminals.try_quiesce_when_idle().unwrap();
+        terminals.stop_all();
+        drop(barrier);
+        assert!(matches!(
+            terminals.reserve("main"),
+            Err(TerminalError::Closed)
+        ));
+    }
+
+    /// The product sets no deadline on owned cleanup. A force stop allows about four seconds and
+    /// macOS reads its process table through `ps`, so a loaded runner gets a generous wait, and a
+    /// timeout reports what shutdown saw instead of a bare elapsed error.
+    async fn released_after_cleanup(released: &AtomicBool, running: Option<&Arc<Running>>) {
+        let started = std::time::Instant::now();
+        let waited = tokio::time::timeout(Duration::from_secs(30), async {
+            while !released.load(Ordering::Acquire) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        if waited.is_ok() {
+            return;
+        }
+        let detail = match running {
+            Some(running) => format!(
+                "exit {:?}; shutdown now {:?}",
+                running.control.try_exited(),
+                running.control.shutdown().await
+            ),
+            None => "no running handle".into(),
+        };
+        panic!(
+            "the guard was not released after {:?}: {detail}",
+            started.elapsed()
+        );
+    }
+    #[test]
+    fn terminal_child() {
+        if std::env::var_os("AURACODE_TERMINAL_TEST_CHILD").is_none() {
+            return;
+        }
+        println!("local-terminal-ready");
+        std::io::stdout().flush().unwrap();
+        let mut line = String::new();
+        std::io::stdin().read_line(&mut line).unwrap();
+        println!("local-terminal-input:{}", line.trim());
+        std::io::stdout().flush().unwrap();
+        std::thread::sleep(Duration::from_secs(60));
+    }
+
+    fn local_spec(folder: &std::path::Path) -> SpawnSpec {
+        SpawnSpec {
+            launch: LaunchSpec {
+                label: "local terminal test".into(),
+                program: std::env::current_exe().unwrap(),
+                args: ["--exact", "terminal::tests::terminal_child", "--nocapture"]
+                    .map(Into::into)
+                    .into(),
+                cwd: ProcessCwd::ChatFolder,
+                set_env: vec![("AURACODE_TERMINAL_TEST_CHILD".into(), "1".into())],
+                daemons: Vec::new(),
+                startup_timeout: Duration::from_secs(15),
+            },
+            folder: folder.into(),
+            env: Arc::new(ResolvedEnv {
+                vars: aura_process::process_env(),
+                source: EnvSource::Fallback {
+                    reason: "test".into(),
+                },
+                warnings: Vec::new(),
+                resolved_at_ms: 0,
+            }),
+            max_line_bytes: aura_process::MAX_LINE_BYTES,
+        }
+    }
+
+    async fn read_until(terminals: &Terminals, id: &str, marker: &str) {
+        tokio::time::timeout(Duration::from_secs(30), async {
+            let mut output = Vec::new();
+            loop {
+                let chunk = terminals.read("main", id).await.unwrap();
+                assert!(chunk.bytes.len() <= 8192);
+                output.extend(chunk.bytes);
+                assert!(output.len() < 100_000);
+                if String::from_utf8_lossy(&output).contains(marker) {
+                    break;
+                }
+                assert!(!chunk.done);
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn owned_local_terminal_rejects_other_windows_and_close_cancels_reads() {
+        let folder = tempfile::tempdir().unwrap();
+        let terminals = Terminals::default();
+        let id = terminals.reserve("main").unwrap().pending();
+        let spawner = Spawner::new(
+            LeftoverRegistry::disabled(),
+            tokio::runtime::Handle::current(),
+        );
+        terminals
+            .claim("main", &id)
+            .unwrap()
+            .start(
+                &spawner,
+                local_spec(folder.path()),
+                PtySize {
+                    rows: 24,
+                    cols: 100,
+                },
+            )
+            .await
+            .unwrap();
+        read_until(&terminals, &id, "local-terminal-ready").await;
+        assert!(matches!(
+            terminals.read("other", &id).await,
+            Err(TerminalError::Closed)
+        ));
+        assert!(matches!(
+            terminals.write("other", &id, b"no\r".to_vec()),
+            Err(TerminalError::Closed)
+        ));
+        terminals.write("main", &id, b"hello\r".to_vec()).unwrap();
+        read_until(&terminals, &id, "local-terminal-input:hello").await;
+        let (_, running) = terminals.running("main", &id).unwrap();
+        let output = running.output.lock().await;
+        assert!(matches!(
+            terminals.read("main", &id).await,
+            Err(TerminalError::ReadPending)
+        ));
+        drop(output);
+        let pending = async {
+            loop {
+                if let Err(error) = terminals.read("main", &id).await {
+                    return error;
+                }
+            }
+        };
+        tokio::pin!(pending);
+        // Any final console rendering is harmless. When a read waits, closing wakes it without
+        // waiting the read timeout, and reaches the owned process despite outstanding controls.
+        assert!(matches!(
+            futures::poll!(&mut pending),
+            std::task::Poll::Pending
+        ));
+        terminals.drop_owner("main");
+        let result = tokio::time::timeout(Duration::from_secs(2), pending)
+            .await
+            .unwrap();
+        assert!(matches!(result, TerminalError::Closed));
+        tokio::time::timeout(Duration::from_secs(5), running.control.exited())
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn installation_deadline_stops_its_process_without_renderer_polling() {
+        let folder = tempfile::tempdir().unwrap();
+        let terminals = Terminals::default();
+        let ticket = terminals.reserve("main").unwrap();
+        let id = ticket.id.clone();
+        let spawner = Spawner::new(
+            LeftoverRegistry::disabled(),
+            tokio::runtime::Handle::current(),
+        );
+        ticket
+            .start_with_limit(
+                &spawner,
+                local_spec(folder.path()),
+                PtySize { rows: 24, cols: 80 },
+                Some(Duration::from_millis(250)),
+            )
+            .await
+            .unwrap();
+        let slot = terminals.slot("main", &id).unwrap();
+        let running = lock(&slot.running).clone().unwrap();
+        // No reads are necessary for the Rust-side deadline to own cancellation.
+        tokio::time::timeout(Duration::from_secs(10), running.control.exited())
+            .await
+            .unwrap();
+        assert!(slot.timed_out.load(Ordering::Acquire));
+        assert!(matches!(
+            terminals.read("main", &id).await,
+            Err(TerminalError::TimedOut)
+        ));
+        terminals.close("main", &id).unwrap();
+        assert!(terminals.reserve("main").is_ok());
+    }
+
+    #[test]
+    fn reservations_bound_concurrency_and_cancellation_releases_the_slot() {
+        let terminals = Terminals::default();
+        let first = terminals.reserve("main").unwrap();
+        assert!(matches!(
+            terminals.reserve("main"),
+            Err(TerminalError::AlreadyOpen)
+        ));
+        let other: Vec<_> = (0..3)
+            .map(|i| terminals.reserve(&i.to_string()).unwrap())
+            .collect();
+        assert!(matches!(
+            terminals.reserve("overflow"),
+            Err(TerminalError::Full)
+        ));
+        drop(first);
+        let next = terminals.reserve("main").unwrap();
+        assert!(matches!(
+            terminals.close("wrong-window", &next.id),
+            Err(TerminalError::Closed)
+        ));
+        assert!(!*next.slot.canceled.borrow());
+        terminals.drop_owner("main");
+        assert!(*next.slot.canceled.borrow());
+        assert!(other.iter().all(|ticket| !*ticket.slot.canceled.borrow()));
+        assert!(terminals.reserve("main").is_ok());
+    }
+
+    #[test]
+    fn quit_preflight_preserves_project_slots_until_explicit_close() {
+        let terminals = Terminals::default();
+        let project = terminals.reserve("project").unwrap();
+        project.slot.project.store(true, Ordering::Release);
+        let vendor = terminals.reserve("vendor").unwrap();
+        terminals.close_non_project();
+        assert!(*vendor.slot.canceled.borrow());
+        assert!(!*project.slot.canceled.borrow());
+        assert!(terminals.try_quiesce_when_idle().is_none());
+        terminals.close_projects();
+        assert!(*project.slot.canceled.borrow());
+    }
+
+    #[test]
+    fn stop_cancels_pending_launches_and_refuses_new_work() {
+        let terminals = Terminals::default();
+        let ticket = terminals.reserve("main").unwrap();
+        terminals.stop_all();
+        assert!(*ticket.slot.canceled.borrow());
+        assert!(matches!(
+            terminals.reserve("main"),
+            Err(TerminalError::Closed)
+        ));
+        assert!(matches!(
+            terminals.write("main", &ticket.id, vec![0; MAX_INPUT + 1]),
+            Err(TerminalError::InputTooLarge)
+        ));
+    }
+
+    #[test]
+    fn close_before_start_cannot_launch_and_duplicate_claim_cannot_replace_it() {
+        let terminals = Terminals::default();
+        let id = terminals.reserve("main").unwrap().pending();
+        assert!(matches!(
+            terminals.claim("other", &id),
+            Err(TerminalError::Closed)
+        ));
+        let ticket = terminals.claim("main", &id).unwrap();
+        assert!(matches!(
+            terminals.claim("main", &id),
+            Err(TerminalError::AlreadyOpen)
+        ));
+        terminals.close("main", &id).unwrap();
+        assert!(*ticket.slot.canceled.borrow());
+        assert!(matches!(
+            terminals.claim("main", &id),
+            Err(TerminalError::Closed)
+        ));
+    }
+}

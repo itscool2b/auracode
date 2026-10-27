@@ -275,6 +275,49 @@ pub async fn chat_create(
         .await?)
 }
 
+/// Creates a chat on an explicitly selected execution host. Unsupported hosts are refused before
+/// writing the chat or starting any native process.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_create_on_host(
+    state: State<'_, AppState>,
+    agent_id: String,
+    agent_host: aura_protocol::agents::AgentHost,
+    folder: String,
+) -> Result<ChatSummary, AppError> {
+    Ok(state
+        .sessions()?
+        .create_chat_on_host(&agent_id, agent_host, Path::new(&folder))
+        .await?)
+}
+
+/// Reviewed capabilities for the detected install, without running authentication or updates.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_maintenance(
+    state: State<'_, AppState>,
+    agent_id: String,
+) -> Result<aura_protocol::agents::AgentMaintenance, AppError> {
+    Ok(state.sessions()?.agent_maintenance(&agent_id).await)
+}
+
+/// Ask the vendor CLI for local auth status, retaining no account details or raw output.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_auth_status(
+    state: State<'_, AppState>,
+    agent_id: String,
+) -> Result<aura_protocol::agents::AgentAuthStatus, AppError> {
+    Ok(state.sessions()?.agent_auth_status(&agent_id).await)
+}
+
+/// Explicit update action. No updates run as part of detection or release checks.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_update(state: State<'_, AppState>, agent_id: String) -> Result<(), AppError> {
+    Ok(state.sessions()?.update_agent(&agent_id).await?)
+}
+
 /// Opens a view of a chat: the snapshot and the newest history page, consistent with the frames
 /// `channel` carries from `next_seq` on. Opening a chat never starts its agent. A webview has one
 /// view per chat; attaching again replaces the earlier one.
@@ -327,6 +370,16 @@ pub async fn chat_lists(
     chat_id: String,
 ) -> Result<SessionLists, AppError> {
     Ok(state.sessions()?.lists(&chat_id).await?)
+}
+
+/// Exact device-local folders supplied to a live driver, or a preflight for its next start.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_folder_context(
+    state: State<'_, AppState>,
+    chat_id: String,
+) -> Result<aura_protocol::workspace::ChatFolderContext, AppError> {
+    Ok(state.sessions()?.chat_folder_context(&chat_id).await?)
 }
 
 /// Sends `text` as typed, or queues it behind the running turn (or the start). A stopped chat starts

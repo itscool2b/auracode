@@ -1,0 +1,46 @@
+/* Export and debug bundle dialogs on the Graphite dialog shell. */
+.chat-export-content {
+  display: grid;
+  gap: 16px;
+  color: var(--ui-text-secondary);
+}
+
+.chat-export-content p {
+  margin: 0;
+}
+
+.chat-export-content .settings-error {
+  color: var(--ui-danger);
+}
+
+.chat-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.debug-bundle-preview {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ui-text-primary);
+  font-weight: 500;
+}
+
+.debug-bundle-preview textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--g-radius-8);
+  background-color: var(--ui-surface-well);
+  color: var(--g-code-fg);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: 18px;
+  font-weight: 400;
+  resize: vertical;
+}
