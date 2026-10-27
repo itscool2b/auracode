@@ -619,7 +619,7 @@
 /* ------------------------------------------------------- reviewed installation */
 
 .setup-install-review {
-  max-height: 36vh;
+  max-height: 44vh;
   margin: 0 0 var(--g-space-16);
   overflow: auto;
   color: var(--g-fg-2);
@@ -662,6 +662,10 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.setup-install-review dd li {
+  line-height: var(--g-leading-code);
 }
 
 .setup-install-review > ul {

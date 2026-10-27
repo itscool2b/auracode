@@ -1,6 +1,7 @@
 /*
- * The terminal sheet (visual-language.md 6.19): Graphite's dialog shell, the reviewed command, the
- * output in a terminal well, and the outcome as a white check or a red square beside its words.
+ * The terminal sheet (visual-language.md 6.19) on the dialog pattern: the title and one sentence,
+ * the reviewed command as rows, where the process stands, the output in a terminal well, then
+ * Copy selection and the one Start. The outcome is a white check or a red square beside its words.
  */
 
 .terminal-sheet__header p {
@@ -10,18 +11,36 @@
   line-height: var(--g-leading-ui);
 }
 
+/* Where the process stands, as one line led by its mark. */
 .terminal-sheet__status {
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
-  margin: var(--g-space-12) 0;
+  margin: 0 0 var(--g-space-12);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   overflow-wrap: anywhere;
 }
 
+.terminal-sheet[data-state="running"] .terminal-sheet__status {
+  color: var(--g-fg-1);
+}
+
+/* Running: a green square that does not move; the terminal itself shows the activity. */
+.terminal-sheet[data-state="running"] .terminal-sheet__status::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background-color: var(--g-green);
+}
+
 /* A failed or non-zero exit: a red square before the words. */
+.terminal-sheet[data-outcome="failed"] .terminal-sheet__status {
+  color: var(--g-fg-1);
+}
+
 .terminal-sheet[data-outcome="failed"] .terminal-sheet__status::before {
   content: "";
   flex: none;
@@ -57,9 +76,10 @@
   user-select: text;
 }
 
-.terminal-sheet:is([data-purpose="installation"], [data-purpose="setup"])[data-state="idle"]
-  .terminal-sheet__viewport {
-  height: 180px;
+/* Before Start the well waits small; it opens to full height once the process runs. */
+.terminal-sheet[data-state="idle"] .terminal-sheet__viewport {
+  height: 144px;
+  min-height: 0;
 }
 
 .terminal-sheet__link {
@@ -74,19 +94,23 @@
   text-decoration-line: underline;
   text-decoration-color: var(--g-fg-4);
   text-underline-offset: 3px;
+  transition: text-decoration-color var(--g-dur-fast) var(--g-ease);
 }
 
-/* The hint at the start, the two actions at the end. */
+@media (hover: hover) {
+  .terminal-sheet__link a:hover {
+    text-decoration-color: var(--g-fg-1);
+  }
+}
+
+/* What Copy selection did, at the start of the action row; the actions at its end. */
 .terminal-sheet__footer {
-  align-items: center;
-  margin-top: var(--g-space-16);
-  padding-top: 0;
-  color: var(--g-fg-2);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
+  margin-top: var(--g-space-20);
 }
 
-.terminal-sheet__hint {
+.terminal-sheet__copied {
   margin-right: auto;
   color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
 }

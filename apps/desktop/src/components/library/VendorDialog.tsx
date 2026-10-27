@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { type VendorApi, vendorApi } from "../../lib/config-vendor/api";
 import type {
   VendorAction,
@@ -40,6 +40,7 @@ export function VendorDialog({
   } | null>(null);
   const alive = useRef(false);
   const pending = useRef<string | null>(null);
+  const field = useId();
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -91,8 +92,8 @@ export function VendorDialog({
   return (
     <Modal title="Manage integrations" size="md" onClose={onClose} className="vendor-dialog">
       <p className="vendor-intro">
-        Install and manage personal plugins, marketplaces and Pi packages through the agent's own
-        commands.
+        Install or change a personal plugin, marketplace or Pi package with the agent's own command.
+        You review the exact command before it runs.
       </p>
       <form
         onSubmit={(event) => {
@@ -166,15 +167,19 @@ export function VendorDialog({
             </select>
           </label>
         </div>
-        <label className="vendor-target">
-          {kind === "plugin"
-            ? "Plugin and marketplace"
-            : kind === "package"
-              ? "Package source"
-              : action === "install"
-                ? "GitHub repository"
-                : "Marketplace name"}
+        <div className="vendor-target">
+          <label htmlFor={`${field}-target`}>
+            {kind === "plugin"
+              ? "Plugin and marketplace"
+              : kind === "package"
+                ? "Package source"
+                : action === "install"
+                  ? "GitHub repository"
+                  : "Marketplace name"}
+          </label>
           <input
+            id={`${field}-target`}
+            aria-describedby={`${field}-note`}
             className="g-input"
             autoComplete="off"
             spellCheck={false}
@@ -193,32 +198,32 @@ export function VendorDialog({
                     : "marketplace-name"
             }
           />
-        </label>
-        <p className="vendor-note">
-          {kind === "package"
-            ? "New packages require an exact npm version or a GitHub tag/commit: git:github.com/owner/repository@v1.2.3."
-            : "Use a marketplace you trust. Plugins can download and execute third-party code."}{" "}
-          Project configuration stays separate.
-        </p>
+          <small id={`${field}-note`} className="vendor-note">
+            {kind === "package"
+              ? "New packages need an exact npm version or a GitHub tag or commit, as in git:github.com/owner/repository@v1.2.3."
+              : "Use a marketplace you trust: plugins can download and run third-party code."}{" "}
+            Project configuration stays separate.
+          </small>
+        </div>
         {action === "remove" && kind === "marketplace" ? (
           <p className="vendor-warning">
-            Removing a marketplace may also remove its plugins and their saved data. The command
-            review describes this before Start.
+            Removing a marketplace may also remove its plugins and their saved data. The review
+            describes this before anything starts.
           </p>
         ) : null}
         {error ? (
-          <p className="library-feedback" role="alert">
+          <p className="library-dialog-error" role="alert">
             {error}
           </p>
         ) : null}
-        <footer>
+        <div className="g-dialog-actions vendor-actions">
           <button type="button" className="g-button" onClick={onClose}>
             Cancel
           </button>
           <button type="submit" className="g-button g-button-primary" disabled={busy || !target}>
-            {busy ? "Preparing review…" : "Review command"}
+            {busy ? "Preparing…" : "Review command"}
           </button>
-        </footer>
+        </div>
       </form>
     </Modal>
   );
@@ -227,10 +232,11 @@ export function VendorDialog({
 export function VendorCommand({ review }: { readonly review: VendorReview }) {
   return (
     <section className="vendor-command" aria-label="Integration command review">
-      <h3>
-        {review.request.action} · {review.request.target}
-      </h3>
       <dl>
+        <dt>Action</dt>
+        <dd className="vendor-command-action">
+          {review.request.action} <code>{review.request.target}</code>
+        </dd>
         <dt>Program</dt>
         <dd>
           <code>{review.program}</code>

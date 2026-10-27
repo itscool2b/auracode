@@ -1,47 +1,64 @@
 /*
- * Configuration sync: which agent files follow you between devices, and the reviewed change that
- * moves them. Rows on inset hairlines; the review compares four versions on a hairline grid.
+ * Configuration sync: which agent files follow you between devices, as one list of rows on inset
+ * hairlines (Vercel's list), and the reviewed change that moves them, on the dialog pattern: one
+ * sentence, the choice, four versions on a hairline grid, Cancel and one action. Volt marks only
+ * what needs a decision.
  */
 
 .config-sync-toolbar {
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
-  margin-bottom: var(--g-space-20);
+  margin-bottom: var(--g-space-16);
 }
 
 .config-sync-toolbar p {
   flex: 1;
+  min-width: 0;
   margin: 0 var(--g-space-8) 0 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
 
-.config-sync-toggle[aria-pressed="true"] {
-  border-color: var(--g-fg-4);
-  background-color: var(--g-surface-3);
+.config-sync-views {
+  flex: none;
+  min-inline-size: 0;
+  margin: 0;
+  border: 0;
 }
 
-.config-sync-list-heading {
-  margin: 0;
-  padding: var(--g-space-12) var(--g-space-16) var(--g-space-8);
-  color: var(--g-fg-1);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 500;
+.config-sync-views .g-segment {
+  gap: var(--g-space-6);
 }
+
+/* History holds a change that needs recovery. */
+.config-sync-attention {
+  width: 6px;
+  height: 6px;
+  background-color: var(--g-volt);
+}
+
+/* ------------------------------------------------------------------------ the list */
 
 .config-sync-row {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--g-space-24);
-  min-height: 64px;
+  gap: var(--g-space-16);
+  min-height: 56px;
   padding: var(--g-space-12) var(--g-space-16);
+  transition: background-color var(--g-dur-micro) var(--g-ease);
 }
 
-.config-sync-row::before {
+@media (hover: hover) {
+  .config-sync-row:hover {
+    background-color: var(--g-surface-3);
+  }
+}
+
+.config-sync-row + .config-sync-row::before,
+.config-sync-row + .config-sync-more::before {
   content: "";
   position: absolute;
   top: 0;
@@ -51,12 +68,12 @@
   background-color: var(--g-line);
 }
 
-.config-sync-row > div:first-child {
+.config-sync-name {
   flex: 1;
   min-width: 0;
 }
 
-.config-sync-row strong {
+.config-sync-name strong {
   display: block;
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
@@ -65,34 +82,49 @@
   overflow-wrap: anywhere;
 }
 
-.config-sync-row p {
-  margin: 0;
+.config-sync-name p {
+  margin: var(--g-space-2) 0 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   overflow-wrap: anywhere;
 }
 
+/* Where the item stands: one word group, its square only when it needs you. */
 .config-sync-state {
   display: inline-flex;
-  align-items: center;
-  gap: var(--g-space-8);
-  margin-top: var(--g-space-6);
+  flex: none;
+  flex-direction: column;
+  width: 152px;
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-weight: 500;
 }
 
-/* A conflict or a change that needs review is the one thing here that needs you. */
-.config-sync-state[data-attention="true"] {
+.config-sync-state small {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 400;
+}
+
+.config-sync-state[data-quiet] {
+  color: var(--g-fg-3);
+  font-weight: 400;
+}
+
+.config-sync-state[data-attention] {
+  position: relative;
+  padding-left: var(--g-space-12);
   color: var(--g-volt);
 }
 
-.config-sync-state[data-attention="true"]::before,
-.config-sync-warning::before {
+.config-sync-state[data-attention]::before {
   content: "";
-  flex: none;
+  position: absolute;
+  top: 5px;
+  left: 0;
   width: 6px;
   height: 6px;
   background-color: var(--g-volt);
@@ -100,14 +132,13 @@
 
 .config-sync-actions {
   display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  align-items: flex-end;
-  gap: var(--g-space-8);
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--g-space-16);
 }
 
-.config-sync-actions label,
-.config-sync-delete {
+.config-sync-local {
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
@@ -115,22 +146,74 @@
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   cursor: pointer;
+  transition: color var(--g-dur-fast) var(--g-ease);
 }
 
-.config-sync input {
-  accent-color: var(--g-primary);
+@media (hover: hover) {
+  .config-sync-local:hover {
+    color: var(--g-fg-1);
+  }
 }
 
-.config-sync-empty {
-  margin: 0;
-  padding: 0 var(--g-space-16) var(--g-space-16);
+/* Load more: the list's last row, quiet until hovered. */
+.config-sync-more {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 44px;
+  padding: 0 var(--g-space-16);
+  border: 0;
+  background-color: transparent;
+  color: var(--g-fg-2);
+  font: inherit;
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .config-sync-more:hover:not(:disabled) {
+    background-color: var(--g-surface-3);
+    color: var(--g-fg-1);
+  }
+}
+
+.config-sync-more:disabled {
+  color: var(--g-fg-4);
+  cursor: not-allowed;
+}
+
+.config-sync-more:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Empty: one title and one line (Vercel). */
+.config-sync-none {
+  padding: var(--g-space-40) var(--g-space-24);
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
+  text-align: center;
 }
 
+.config-sync-none strong {
+  display: block;
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.config-sync-none p {
+  margin: var(--g-space-2) 0 0;
+}
+
+/* Not signed in to an invited account: the title, one line and the way to Account. */
 section.config-sync-empty {
-  padding: var(--g-space-20);
+  padding: var(--g-space-24);
   border-radius: var(--g-radius-12);
   background-color: var(--g-surface-2);
   color: var(--g-fg-2);
@@ -147,6 +230,8 @@ section.config-sync-empty h2 {
 section.config-sync-empty p {
   max-width: 560px;
   margin: 0 0 var(--g-space-16);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
 }
 
 .config-sync-notices {
@@ -162,10 +247,28 @@ section.config-sync-empty p {
   cursor: pointer;
 }
 
-.config-sync-notices ul {
+.config-sync-notices ul,
+.config-sync-warnings {
   margin: var(--g-space-8) 0 0;
-  padding-left: var(--g-space-20);
-  list-style: square;
+  padding: 0;
+  list-style: none;
+}
+
+.config-sync-notices li,
+.config-sync-warnings li {
+  position: relative;
+  padding-left: var(--g-space-16);
+}
+
+.config-sync-notices li::before,
+.config-sync-warnings li::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  background-color: var(--g-fg-4);
 }
 
 .config-sync-status {
@@ -175,32 +278,47 @@ section.config-sync-empty p {
   line-height: var(--g-leading-ui);
 }
 
-.config-sync-more {
-  margin: var(--g-space-4) var(--g-space-16) var(--g-space-16);
-}
+/* ---------------------------------------------------------------------- dialogs */
 
-/* ----------------------------------------------------------------------- review */
-
-.config-sync-review-heading strong {
-  display: block;
-  color: var(--g-fg-1);
-  font-size: var(--g-text-heading);
-  line-height: var(--g-leading-heading);
-  font-weight: 600;
+.config-sync-lead {
+  margin: calc(var(--g-space-8) * -1) 0 var(--g-space-20);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
   overflow-wrap: anywhere;
 }
 
-.config-sync-review-heading p {
-  margin: var(--g-space-2) 0 var(--g-space-16);
+.config-sync-lead strong {
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.config-sync-choices {
+  min-inline-size: 0;
+  margin: 0 0 var(--g-space-16);
+  border: 0;
+}
+
+.config-sync-preparing {
+  margin: 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
 
-.config-sync-choices {
-  min-inline-size: 0;
-  margin: 0 0 var(--g-space-20);
-  border: 0;
+.config-sync-failed {
+  padding: var(--g-space-12) var(--g-space-16);
+  border-left: 2px solid var(--g-red);
+  border-radius: 0 var(--g-radius-8) var(--g-radius-8) 0;
+  background-color: var(--g-surface-1);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.config-sync-failed p {
+  margin: 0 0 var(--g-space-8);
 }
 
 .config-sync-comparison {
@@ -228,9 +346,13 @@ section.config-sync-empty p {
   font-weight: 500;
 }
 
+.config-sync-comparison section[data-result] h3 {
+  color: var(--g-fg-1);
+}
+
 .config-sync-comparison pre {
-  min-height: 110px;
-  max-height: 250px;
+  min-height: 96px;
+  max-height: 200px;
   margin: 0;
   padding: var(--g-space-12);
   overflow: auto;
@@ -244,40 +366,49 @@ section.config-sync-empty p {
 }
 
 .config-sync-warnings {
-  margin: 0 0 var(--g-space-16);
-  padding-left: var(--g-space-20);
-  color: var(--g-fg-2);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  list-style: square;
+  margin-top: var(--g-space-12);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
 }
 
+.config-sync-warnings li::before {
+  top: 5px;
+}
+
+/* A conflict: the one line in the dialog that needs you, led by a volt square. */
 .config-sync-warning {
   display: flex;
   align-items: baseline;
   gap: var(--g-space-8);
   margin: 0 0 var(--g-space-16);
-  color: var(--g-fg-2);
+  color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
 
 .config-sync-warning::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background-color: var(--g-volt);
   transform: translateY(-1px);
 }
 
 .config-sync-delete {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
   margin-top: var(--g-space-16);
+  color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
+  cursor: pointer;
 }
 
 .config-sync-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--g-space-8);
-  margin-top: var(--g-space-20);
+  margin-top: var(--g-space-24);
 }
 
 .config-sync-footer > span {
@@ -287,16 +418,36 @@ section.config-sync-empty p {
   line-height: var(--g-leading-meta);
 }
 
-.config-sync-restore p {
-  margin: 0 0 var(--g-space-12);
-  color: var(--g-fg-2);
+.config-sync-facts {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  margin: 0;
+  border-top: 1px solid var(--g-line);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
 
-.config-sync-restore strong {
+.config-sync-facts :is(dt, dd) {
+  margin: 0;
+  padding: var(--g-space-12) 0;
+  border-bottom: 1px solid var(--g-line);
+}
+
+.config-sync-facts dt {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+}
+
+.config-sync-facts dd {
   color: var(--g-fg-1);
-  font-weight: 500;
+}
+
+.config-sync-error {
+  margin: var(--g-space-12) 0 0;
+  color: var(--g-red);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 720px) {
@@ -309,14 +460,14 @@ section.config-sync-empty p {
   }
 
   .config-sync-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--g-space-12);
+    flex-wrap: wrap;
+  }
+
+  .config-sync-state {
+    width: auto;
   }
 
   .config-sync-actions {
-    flex-direction: row;
-    align-items: center;
     justify-content: space-between;
     width: 100%;
   }
