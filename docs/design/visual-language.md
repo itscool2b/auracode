@@ -1186,8 +1186,8 @@ for 300ms, then step 1. Later launches skip it.
 **Layout** (Grok's start screen, the website hero's field): no sidebar. One centred column, 480
 wide (the window minus 48 when narrower), its top at `clamp(128px, 24vh, 208px)` so the heading
 holds one place on every step, over a window-wide DitherField (`quiet`, density 0.36, edges 0.85,
-ceiling 0.6, accent 0.002, `interactive`, still under reduced motion) that gathers at the sides and
-clears to black behind the column (an ellipse at least 400px from the centre) and along the top
+ceiling 0.6, accent 0.001, `interactive`, still under reduced motion) that gathers at the sides and
+clears to black behind the column (an ellipse at least 520px from the centre) and along the top
 edge. `Wordmark` 16 top left and "Skip setup" (ghost) top right, just under the titlebar band.
 
 **Progress**: four 6px pixels, fg-4 ahead, fg-3 done; the current one stretches to a 16px fg-1 bar

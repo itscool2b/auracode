@@ -42,10 +42,10 @@ const FADE_MS = { slow: 800, fast: 240 } as const;
  * edge, where the wordmark and Skip setup sit (the site hero's clearings).
  */
 const TOP_CLEARING = { x: 0.5, y: 0, rx: 1, ry: 0.22 } as const;
-/** The column's clearing reaches at least 400px from the centre, so narrow windows stay calm. */
+/** The column's clearing reaches at least 520px from the centre, so narrow windows stay calm. */
 function clearing(width: number) {
   return [
-    { x: 0.5, y: 0.46, rx: Math.min(0.5, Math.max(0.34, 400 / width)), ry: 0.8 },
+    { x: 0.5, y: 0.46, rx: Math.min(0.5, Math.max(0.34, 520 / width)), ry: 0.8 },
     TOP_CLEARING,
   ];
 }
@@ -333,7 +333,7 @@ export function Onboarding({
         density={0.36}
         edges={0.85}
         ceiling={0.6}
-        accent={0.002}
+        accent={0.001}
         clearing={field}
         interactive
         still={reduced}
