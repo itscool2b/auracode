@@ -241,6 +241,10 @@ canvas {
   background-color: var(--g-bg);
 }
 
+.js .stage-field > .g-dither-canvas {
+  transition: opacity 1250ms var(--g-ease-reveal);
+}
+
 .js .site-field:not([data-live]) > .g-dither-canvas {
   opacity: 0;
 }
@@ -436,10 +440,6 @@ canvas {
   z-index: -1;
 }
 
-.js .stage-field > .g-dither-canvas {
-  transition: opacity 1250ms var(--g-ease-reveal);
-}
-
 .hero {
   position: relative;
   z-index: 2;
@@ -560,10 +560,6 @@ canvas {
   animation: site-fade 380ms var(--g-ease-reveal) 700ms both;
 }
 
-.js .product-frame {
-  animation: site-fade 1250ms var(--g-ease-reveal) 760ms both;
-}
-
 .js .agent-rule {
   animation: g-draw-x var(--g-dur-reveal) var(--g-ease-out) 800ms both;
 }
@@ -592,9 +588,9 @@ canvas {
   background-color: var(--g-bg);
 }
 
-.product-frame .g-crosshair-tl,
-.product-frame .g-crosshair-tr {
-  top: -11px;
+/* The frame arrives last in the hero choreography (x.ai's tiles: 1250ms at 760ms). */
+.js .product-frame {
+  animation: site-fade 1250ms var(--g-ease-reveal) 760ms both;
 }
 
 .product-field {
@@ -833,7 +829,7 @@ canvas {
   transition: grid-template-rows var(--g-dur-panel) var(--g-ease-in-out);
 }
 
-.cap-text > span {
+.cap-text-inner {
   min-height: 0;
   max-width: 440px;
   overflow: hidden;
@@ -844,13 +840,21 @@ canvas {
   transition: opacity var(--g-dur-panel) var(--g-ease-in-out);
 }
 
-.cap-tab[aria-selected="true"] .cap-text,
+/* Without JavaScript every description shows; with it, only the open tab's. */
 html:not(.js) .cap-text {
   grid-template-rows: 1fr;
 }
 
-.cap-tab[aria-selected="true"] .cap-text > span,
-html:not(.js) .cap-text > span {
+html:not(.js) .cap-text-inner {
+  padding-bottom: 16px;
+  opacity: 1;
+}
+
+.cap-tab[aria-selected="true"] .cap-text {
+  grid-template-rows: 1fr;
+}
+
+.cap-tab[aria-selected="true"] .cap-text-inner {
   padding-bottom: 16px;
   opacity: 1;
 }
@@ -1878,10 +1882,6 @@ html:not(.js) .footer-mark-field {
   line-height: var(--g-web-h3-leading);
   font-weight: 500;
   letter-spacing: var(--g-web-h3-tracking);
-}
-
-.prose > h2 + p {
-  margin-top: 12px;
 }
 
 .prose strong {

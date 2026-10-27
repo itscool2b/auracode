@@ -279,7 +279,7 @@ export function renderHtml(text) {
     /[&<>"']/g,
     (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],
   );
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Third-party notices | auracode</title><style>html{color-scheme:dark;background:#121416;color:#e5e7eb;font:14px/1.6 system-ui}body{max-width:76rem;margin:2rem auto;padding:0 1rem}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><body><h1>Third-party notices</h1><pre>${safe}</pre></body></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Third-party notices | auracode</title><style>html{color-scheme:dark;background:#000;color:#a3a3a3;font:14px/1.6 ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}body{max-width:76rem;margin:4rem auto;padding:0 1rem}h1{margin:0 0 2rem;color:#ededed;font-size:2rem;line-height:1.1;font-weight:500;letter-spacing:-0.03em}pre{margin:0;padding-top:2rem;border-top:1px solid #1f1f1f;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 ui-monospace,Menlo,Consolas,monospace}::selection{background:#333;color:#ededed}</style><body><h1>Third-party notices</h1><pre>${safe}</pre></body></html>`;
 }
 
 const virtualNotices = "virtual:third-party-notices";

@@ -130,7 +130,9 @@ export function Capabilities() {
                       {item.title}
                     </span>
                     <span className="cap-text">
-                      <span id={`cap-text-${item.id}`}>{item.text}</span>
+                      <span className="cap-text-inner" id={`cap-text-${item.id}`}>
+                        {item.text}
+                      </span>
                     </span>
                   </button>
                 );
