@@ -229,6 +229,7 @@ function synthetic(mode: string): AuraEvent[] {
   ];
   if (mode === "settled") return events;
   events.push(ev.turnStarted("next"), ev.user("u2", "Check the small window layout too."));
+  if (mode === "streaming") return events;
   if (mode === "permission")
     events.push(
       ev.toolCall("cmd", { kind: "execute", title: "pnpm test -- sidebar" }),
@@ -247,10 +248,158 @@ function synthetic(mode: string): AuraEvent[] {
   return events;
 }
 
+const STREAMED_ANSWER = `The composer now holds its shape at 960 pixels, and the sidebar keeps long titles on one line.
+
+## What changed
+
+- **Composer** keeps the agent, model and effort on one quiet row, and drops the model under 560 pixels.
+- **Sidebar** truncates titles with an ellipsis and keeps the running state at the trailing edge.
+- **Focus order** goes from the transcript to the composer, then to its controls.
+
+\`\`\`css
+.chat-composer {
+  border: 1px solid var(--g-line-strong);
+  border-radius: 16px;
+  background: var(--g-surface-2);
+}
+\`\`\`
+
+| Width | Composer | Sidebar |
+| --- | --- | --- |
+| 1440 | Full row | 264 px |
+| 960 | Model hidden | 264 px |
+
+All 24 layout tests pass. The narrow window keeps every control reachable from the keyboard, and the transcript column stays at 720 pixels wide until the window is narrower than the column.
+
+The right panel still overlaps the composer below 880 pixels of chat width. It should float over the chat with a shadow there instead of squeezing the transcript, which keeps the reading column stable while files are reviewed.
+
+Next, the permission card takes the composer's place while a request waits, so the answer is always where your hands already are.`;
+
+/** A live turn played out over about ten seconds: a thought, four tools, then a long answer. */
+function streamingScript(): { delay: number; events: AuraEvent[] }[] {
+  const steps: { delay: number; events: AuraEvent[] }[] = [];
+  const words = (text: string, size: number) => {
+    const parts = text.split(/(?<= )/);
+    const chunks: string[] = [];
+    for (let index = 0; index < parts.length; index += size)
+      chunks.push(parts.slice(index, index + size).join(""));
+    return chunks;
+  };
+  for (const chunk of words(
+    "Checking how the composer behaves at 960 pixels, then the sidebar truncation and the focus order. ",
+    2,
+  ))
+    steps.push({ delay: 70, events: [ev.thought("stream-thought", chunk)] });
+  steps.push({ delay: 120, events: [ev.thoughtDone("stream-thought", 1900)] });
+  const file = "src/components/chat/Composer.tsx";
+  steps.push({
+    delay: 200,
+    events: [
+      ev.toolCall("stream-read", {
+        kind: "read",
+        title: `Read ${file}`,
+        locations: [{ path: file, line: 124 }],
+      }),
+    ],
+  });
+  steps.push({
+    delay: 500,
+    events: [
+      ev.toolUpdate("stream-read", {
+        status: "completed",
+        content: [
+          {
+            type: "text",
+            text: 'return (\n  <div className="chat-composer">\n    <ContextChips context={context} />\n  </div>\n);',
+            truncated: null,
+          },
+        ],
+      }),
+    ],
+  });
+  steps.push({
+    delay: 150,
+    events: [ev.toolCall("stream-search", { kind: "search", title: 'Search "chat-composer"' })],
+  });
+  steps.push({
+    delay: 400,
+    events: [
+      ev.toolUpdate("stream-search", {
+        status: "completed",
+        content: [
+          { type: "text", text: "src/chat.css:1175\nsrc/orbit-shell.css:680", truncated: null },
+        ],
+      }),
+    ],
+  });
+  steps.push({
+    delay: 150,
+    events: [ev.toolCall("stream-test", { kind: "execute", title: "pnpm test -- layout" })],
+  });
+  const lines: string[] = [];
+  for (let index = 1; index <= 10; index++) {
+    lines.push(`✓ layout ${index} keeps its column at 960 pixels`);
+    steps.push({
+      delay: 120,
+      events: [
+        ev.toolUpdate("stream-test", {
+          content: [
+            { type: "terminal", output: lines.join("\n"), exit_code: null, truncated: null },
+          ],
+        }),
+      ],
+    });
+  }
+  steps.push({
+    delay: 200,
+    events: [
+      ev.toolUpdate("stream-test", {
+        status: "completed",
+        content: [
+          {
+            type: "terminal",
+            output: `${lines.join("\n")}\n\n24 tests passed`,
+            exit_code: 0,
+            truncated: null,
+          },
+        ],
+      }),
+    ],
+  });
+  steps.push({
+    delay: 150,
+    events: [
+      ev.toolCall("stream-edit", {
+        kind: "edit",
+        title: "Edit src/chat.css",
+        status: "completed",
+        content: [
+          {
+            type: "diff",
+            path: "src/chat.css",
+            old_text: ".chat-composer {\n  border-radius: 18px;\n  box-shadow: var(--o-e1);\n}",
+            new_text: ".chat-composer {\n  border-radius: 16px;\n}",
+            truncated: null,
+          },
+        ],
+      }),
+    ],
+  });
+  for (const chunk of words(STREAMED_ANSWER, 3))
+    steps.push({ delay: 30, events: [ev.message("stream-answer", chunk)] });
+  steps.push({ delay: 100, events: [ev.messageDone("stream-answer")] });
+  steps.push({
+    delay: 50,
+    events: [ev.turnEnded("next", "end_turn", { durationMs: 21400 })],
+  });
+  return steps;
+}
+
 function Preview() {
   const requested = new URLSearchParams(location.search).get("preview") ?? "settled";
   const mode = [
     "settled",
+    "streaming",
     "thinking",
     "permission",
     "error",
@@ -274,6 +423,7 @@ function Preview() {
   const [selected, setSelected] = useState<string | null>(mode === "new" ? null : "preview");
   const status: SessionStatus =
     mode === "thinking" ||
+    mode === "streaming" ||
     mode === "permission" ||
     mode === "history-question" ||
     mode === "focus-group"
@@ -294,6 +444,32 @@ function Preview() {
     [mode, status],
   );
   const publishPreview = useRef<((updates: AuraEvent[]) => void) | null>(null);
+  const attached = useRef(false);
+  useEffect(() => {
+    if (mode !== "streaming") return;
+    // Plays one live turn once the chat has joined, as an agent would stream it.
+    const steps = streamingScript();
+    let index = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const next = () => {
+      const step = steps[index];
+      if (!step) return;
+      timer = setTimeout(() => {
+        publishPreview.current?.(step.events);
+        index++;
+        next();
+      }, step.delay);
+    };
+    const wait = setInterval(() => {
+      if (!attached.current) return;
+      clearInterval(wait);
+      timer = setTimeout(next, 600);
+    }, 50);
+    return () => {
+      clearInterval(wait);
+      clearTimeout(timer);
+    };
+  }, [mode]);
   useEffect(() => {
     if (mode !== "focus-group") return;
     const step = (event: Event) => {
@@ -402,6 +578,7 @@ function Preview() {
         },
         attach: async (chatId, onFrame) => {
           receive = onFrame;
+          attached.current = true;
           return attachResult(
             chatId,
             seq,
