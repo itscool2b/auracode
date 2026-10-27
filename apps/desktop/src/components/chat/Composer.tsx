@@ -1,4 +1,4 @@
-import { ArrowUp, AtSign, Paperclip, Square } from "lucide-react";
+import { ArrowUp, Paperclip, Square } from "lucide-react";
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { FileMention, SessionStatus, SlashCommand } from "../../bindings";
 import { matchingCommands, slashQuery } from "../../lib/chat/present";
@@ -85,6 +85,8 @@ export function Composer({
   const menuOpen = matches.length > 0;
   const mentionOpen = mentionItems.length > 0 && mentionQuery !== undefined;
   const empty = text.trim() === "" && !context.attachments.length && !context.mentions.length;
+  const working = status === "running" || status === "starting";
+  const steerable = onSteer !== undefined && status === "running";
 
   const send = async (steer = false): Promise<void> => {
     if (sending || context.busy || blocked || empty) return;
@@ -151,8 +153,8 @@ export function Composer({
         value={text}
         disabled={!context.ready}
         onBlur={() => void context.flush()}
-        placeholder={`Message ${agentName}`}
-        title="Enter sends, Shift+Enter adds a line, / lists commands"
+        placeholder={working ? `Queue a message for ${agentName}` : `Message ${agentName}`}
+        title="Enter sends, Shift+Enter adds a line, / lists commands, @ mentions a file"
         aria-controls={mentionOpen ? mentionId : menuOpen ? menuId : undefined}
         onPaste={(event) => {
           if (!contextApi) return;
@@ -222,58 +224,53 @@ export function Composer({
       />
       <div className="chat-composer-controls">
         {contextApi ? (
-          <div className="composer-context-actions">
-            <button
-              type="button"
-              aria-label="Attach a file"
-              title="Attach a file, drop one here, or paste an image"
-              disabled={context.busy || sending}
-              onClick={() => void context.pick()}
-            >
-              <Paperclip size={16} />
-            </button>
-            <button
-              type="button"
-              aria-label="Mention a project file"
-              title="Mention a project file"
-              onClick={() => {
-                setText((value) => `${value}${value && !value.endsWith(" ") ? " " : ""}@`);
-                setMenuClosed(false);
-                input.current?.focus();
-              }}
-            >
-              <AtSign size={16} />
-            </button>
-          </div>
-        ) : null}
-        {controls}
-        <div className="chat-composer-actions">
-          <StopButton status={status} onStop={onStop} onForceStop={onForceStop} />
-          {onSteer && status === "running" ? (
-            <button
-              type="button"
-              className="g-button g-button-28"
-              data-testid="composer-steer"
-              disabled={sending || context.busy || blocked || empty}
-              onClick={() => void send(true)}
-              title="Send this message to the current running turn"
-            >
-              Steer
-            </button>
-          ) : null}
           <button
             type="button"
-            className="g-button g-button-primary g-button-icon chat-send"
-            data-testid="composer-send"
-            disabled={sending || context.busy || blocked || empty}
-            onClick={() => void send()}
-            aria-label={
-              status === "running" || status === "starting" ? "Queue message" : "Send message"
-            }
-            title={status === "running" || status === "starting" ? "Queue message" : "Send message"}
+            className="chat-composer-attach"
+            aria-label="Attach a file"
+            title="Attach a file, drop one here, or paste an image. Type @ to mention a project file."
+            disabled={context.busy || sending}
+            onClick={() => void context.pick()}
           >
-            <ArrowUp size={16} strokeWidth={2.25} />
+            <Paperclip size={16} />
           </button>
+        ) : null}
+        {controls}
+        <div className="chat-composer-actions" data-running={working ? "" : undefined}>
+          <StopButton
+            status={status}
+            onStop={onStop}
+            onForceStop={onForceStop}
+            quiet={!empty && status !== "cancelling"}
+          />
+          {working && empty ? null : (
+            // While a turn runs, a typed message is queued, or steered into the turn: one pill.
+            <span className="chat-send-group" data-split={steerable ? "" : undefined}>
+              {steerable ? (
+                <button
+                  type="button"
+                  className="chat-steer"
+                  data-testid="composer-steer"
+                  disabled={sending || context.busy || blocked || empty}
+                  onClick={() => void send(true)}
+                  title="Send this message into the running turn"
+                >
+                  Steer
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="g-button g-button-primary g-button-icon chat-send"
+                data-testid="composer-send"
+                disabled={sending || context.busy || blocked || empty}
+                onClick={() => void send()}
+                aria-label={working ? "Queue message" : "Send message"}
+                title={working ? "Queue message (Enter)" : "Send message (Enter)"}
+              >
+                <ArrowUp size={16} strokeWidth={2.25} />
+              </button>
+            </span>
+          )}
         </div>
       </div>
       {error !== null || context.error !== null || mentionError !== null ? (
@@ -294,23 +291,30 @@ export function Composer({
   );
 }
 
-/** Stop while a turn runs or the agent starts; Force stop while the turn cancels. */
+/**
+ * Stop while a turn runs or the agent starts; Force stop while the turn cancels. Stop is the white
+ * circle while the message box is empty, and steps back to a soft one once there is a message to
+ * queue, so the white circle is always the next thing Enter does.
+ */
 export function StopButton({
   status,
   onStop,
   onForceStop,
+  quiet = false,
 }: {
   readonly status: SessionStatus;
   readonly onStop: () => void;
   readonly onForceStop: () => void;
+  readonly quiet?: boolean;
 }) {
   if (status === "cancelling") {
     return (
       <button
         type="button"
-        className="g-button g-button-danger g-button-28"
+        className="g-button g-button-danger chat-force-stop"
         data-testid="composer-force-stop"
         onClick={onForceStop}
+        title="Force stop (Esc)"
       >
         Force stop
       </button>
@@ -320,11 +324,12 @@ export function StopButton({
     return (
       <button
         type="button"
-        className="g-button g-button-primary g-button-icon chat-send"
+        className={`g-button g-button-icon chat-send ${quiet ? "" : "g-button-primary"}`}
         data-testid="composer-stop"
+        data-quiet={quiet ? "" : undefined}
         onClick={onStop}
         aria-label="Stop"
-        title="Stop"
+        title="Stop (Esc)"
       >
         <Square size={10} fill="currentColor" strokeWidth={0} />
       </button>

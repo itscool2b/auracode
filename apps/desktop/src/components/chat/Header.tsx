@@ -1,23 +1,24 @@
 import { AgentMark } from "@auracode/ui/graphite";
-import { Ellipsis, GitBranch, PanelRight, SquareTerminal } from "lucide-react";
-import { useState } from "react";
+import { Ellipsis, PanelRight } from "lucide-react";
 import type { AgentEntry, ChatSummary } from "../../bindings";
 import { chatActivity } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
 import { contextLabel, costLabel, folderStateLabel, statusWord } from "../../lib/chat/present";
 import { hasProcess } from "../../lib/chat/transcript";
 import { inTauri } from "../../lib/ipc";
-import { ChatExportDialog } from "./ChatExportDialog";
 import { projectName } from "./ChatList";
-import { DebugBundleDialog } from "./DebugBundleDialog";
 import { FolderContext } from "./FolderContext";
-import { Popover } from "./Popover";
-import { ProjectToolsDialog } from "./ProjectToolsDialog";
+import { commandKey } from "./Keys";
+import { closePopover, Popover } from "./Popover";
+
+/** Statuses the header says out loud; Ready and Stopped stay quiet (screen readers still hear them). */
+const QUIET = new Set(["ready", "stopped"]);
 
 /**
- * The chat's header: the agent and the version that runs (the user's own binary behind an
- * adapter), the folder and its state, the status with what is happening, the session controls,
- * Show log, and the context used and session cost when the agent reports them.
+ * The chat's header (Grok): the chat's live mark, its title and project at the left, and two
+ * controls at the right, the Changes panel and the chat menu. The menu holds the session facts
+ * (the agent and the version that runs, the context and cost when reported) and every other action;
+ * the command palette offers the same actions by name.
  */
 export function Header({
   state,
@@ -30,6 +31,9 @@ export function Header({
   onChanges,
   onHistory,
   onGit,
+  onTools,
+  onExport,
+  onDebug,
   changesOpen = false,
 }: {
   readonly state: ChatState;
@@ -48,11 +52,11 @@ export function Header({
   readonly onChanges?: () => void;
   readonly onHistory?: () => void;
   readonly onGit?: () => void;
+  readonly onTools?: () => void;
+  readonly onExport?: () => void;
+  readonly onDebug?: () => void;
   readonly changesOpen?: boolean;
 }) {
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
-  const [debugOpen, setDebugOpen] = useState(false);
   const { session } = state;
   const chat = listed ?? state.chat;
   const status = session?.status ?? chat?.status ?? "stopped";
@@ -67,6 +71,13 @@ export function Header({
   const cost = costLabel(state.usage);
   const activity = chatActivity(state);
   const statusLabel = activity === "waiting" ? "Waiting on you" : statusWord(status);
+  const quiet = activity !== "waiting" && QUIET.has(status) && !session?.detail;
+  const tools = chat && inTauri() ? onTools : undefined;
+  const files = chat && inTauri();
+  const item = (run: () => void) => (event: { currentTarget: Element }) => {
+    closePopover(event.currentTarget);
+    run();
+  };
   return (
     <header className="chat-header" data-testid="chat-header">
       <AgentMark
@@ -76,7 +87,7 @@ export function Header({
         label={`${name}, ${session?.detail ?? statusLabel}`}
       />
       <div className="chat-header-who">
-        <span className="chat-header-agent" title={chat?.title ?? "New chat"}>
+        <span className="chat-header-title" title={chat?.title ?? "New chat"}>
           {chat?.title ?? "New chat"}
         </span>
         {chat ? (
@@ -85,152 +96,141 @@ export function Header({
             {folderState !== null ? <span className="chat-row-flag"> · {folderState}</span> : null}
           </span>
         ) : null}
-      </div>
-      <span
-        className="chat-status"
-        data-status={status}
-        data-activity={activity}
-        data-testid="chat-status"
-        data-test-status={status}
-        aria-live="polite"
-      >
-        {statusLabel}
-        {session?.detail ? <span className="ui-muted"> · {session.detail}</span> : null}
-      </span>
-      {onChanges ? (
-        <button
-          type="button"
-          className="g-button g-button-ghost g-button-icon g-button-28"
-          aria-label="Changes"
-          title="Changes"
-          aria-expanded={changesOpen}
-          onClick={(event) => {
-            event.currentTarget.focus();
-            onChanges();
-          }}
+        <span
+          className="chat-status"
+          data-status={status}
+          data-activity={activity}
+          data-quiet={quiet ? "" : undefined}
+          data-testid="chat-status"
+          data-test-status={status}
+          aria-live="polite"
         >
-          <PanelRight size={16} />
-        </button>
-      ) : null}
-      {onGit ? (
-        <button
-          type="button"
-          className="g-button g-button-ghost g-button-icon g-button-28"
-          aria-label="Git workspace"
-          title="Git workspace"
-          onClick={(event) => {
-            event.currentTarget.focus();
-            onGit();
-          }}
-        >
-          <GitBranch size={16} />
-        </button>
-      ) : null}
-      {chat && inTauri() ? (
-        <button
-          type="button"
-          className="g-button g-button-ghost g-button-icon g-button-28"
-          aria-label="Project tools"
-          title="Terminal and editor"
-          onClick={(event) => {
-            event.currentTarget.focus();
-            setToolsOpen(true);
-          }}
-        >
-          <SquareTerminal size={16} />
-        </button>
-      ) : null}
-      {toolsOpen && chat ? (
-        <ProjectToolsDialog key={chat.id} chatId={chat.id} onClose={() => setToolsOpen(false)} />
-      ) : null}
-      <Popover
-        label="Chat details and controls"
-        className="chat-header-menu"
-        trigger={<Ellipsis size={16} />}
-      >
-        <div className="chat-session-info">
-          <strong>{name}</strong>
-          <span>{version ?? "Version not reported"}</span>
-          <span className="ui-mono">{ready?.path}</span>
-        </div>
-        {context !== null || cost !== null ? (
-          <span className="ui-muted" data-testid="chat-usage">
-            {[context, cost].filter((part) => part !== null).join(" · ")}
-          </span>
-        ) : null}
-        {chat && inTauri() ? (
-          <FolderContext key={chat.id} chatId={chat.id} status={status} />
-        ) : null}
-        <div className="chat-header-actions">
-          {chat && inTauri() ? (
-            <>
-              <button type="button" className="g-menu-item" onClick={() => setExportOpen(true)}>
-                Export chat
-              </button>
-              <button type="button" className="g-menu-item" onClick={() => setDebugOpen(true)}>
-                Copy debug bundle
-              </button>
-            </>
-          ) : null}
-          {onHistory ? (
-            <button type="button" className="g-menu-item" onClick={onHistory}>
-              Conversation history
-            </button>
-          ) : null}
-          {live ? (
-            <button
-              type="button"
-              className="g-menu-item"
-              data-testid="chat-stop-session"
-              onClick={onStop}
-              disabled={status === "stopping"}
-            >
-              Stop session
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="g-menu-item"
-                data-testid="chat-start"
-                data-test-resume={String(resumable)}
-                onClick={() => onStart(false)}
-              >
-                {resumable ? "Resume session" : "Start session"}
-              </button>
-              {resumable ? (
-                <button
-                  type="button"
-                  className="g-menu-item"
-                  data-testid="chat-start-fresh"
-                  onClick={() => onStart(true)}
-                >
-                  Start fresh
-                </button>
-              ) : null}
-            </>
-          )}
-          <button
-            type="button"
-            className="g-menu-item"
-            data-testid="chat-show-log"
-            onClick={onShowLog}
-          >
-            Show log
-          </button>
-        </div>
+          {statusLabel}
+          {session?.detail ? <span className="chat-status-detail"> · {session.detail}</span> : null}
+        </span>
         {state.actionError !== null ? (
-          <span role="alert" className="ui-error" data-testid="chat-action-error">
+          <span
+            role="alert"
+            className="chat-header-error"
+            title={state.actionError}
+            data-testid="chat-action-error"
+          >
             {state.actionError}
           </span>
         ) : null}
-      </Popover>
-      {exportOpen && chat ? (
-        <ChatExportDialog key={chat.id} chatId={chat.id} onClose={() => setExportOpen(false)} />
-      ) : null}
-      {debugOpen && chat ? (
-        <DebugBundleDialog key={chat.id} chatId={chat.id} onClose={() => setDebugOpen(false)} />
-      ) : null}
+      </div>
+      <div className="chat-header-controls">
+        {onChanges ? (
+          <button
+            type="button"
+            className="g-button g-button-ghost g-button-icon g-button-28"
+            aria-label="Changes"
+            title={`Changes (${commandKey()} J)`}
+            aria-keyshortcuts="Control+J Meta+J"
+            aria-expanded={changesOpen}
+            onClick={(event) => {
+              event.currentTarget.focus();
+              onChanges();
+            }}
+          >
+            <PanelRight size={16} />
+          </button>
+        ) : null}
+        <Popover
+          label="Chat details and controls"
+          tip="More"
+          className="chat-header-menu"
+          trigger={<Ellipsis size={16} />}
+        >
+          <div className="chat-session-info">
+            <strong>{name}</strong>
+            <span>{version ?? "Version not reported"}</span>
+            {ready?.path ? <span className="ui-mono">{ready.path}</span> : null}
+            {context !== null || cost !== null ? (
+              <span className="chat-session-usage" data-testid="chat-usage">
+                {[context, cost].filter((part) => part !== null).join(" · ")}
+              </span>
+            ) : null}
+          </div>
+          {onGit || tools || onHistory ? (
+            <div className="chat-header-actions">
+              {onGit ? (
+                <button type="button" className="g-menu-item" onClick={item(onGit)}>
+                  Git workspace
+                </button>
+              ) : null}
+              {tools ? (
+                <button type="button" className="g-menu-item" onClick={item(tools)}>
+                  Terminal and editor
+                </button>
+              ) : null}
+              {onHistory ? (
+                <button type="button" className="g-menu-item" onClick={item(onHistory)}>
+                  Conversation history
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="chat-header-actions">
+            {files && onExport ? (
+              <button type="button" className="g-menu-item" onClick={item(onExport)}>
+                Export chat
+              </button>
+            ) : null}
+            {files && onDebug ? (
+              <button type="button" className="g-menu-item" onClick={item(onDebug)}>
+                Copy debug bundle
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="g-menu-item"
+              data-testid="chat-show-log"
+              onClick={item(onShowLog)}
+            >
+              Show log
+            </button>
+          </div>
+          <div className="chat-header-actions">
+            {live ? (
+              <button
+                type="button"
+                className="g-menu-item"
+                data-testid="chat-stop-session"
+                onClick={item(onStop)}
+                disabled={status === "stopping"}
+              >
+                Stop session
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="g-menu-item"
+                  data-testid="chat-start"
+                  data-test-resume={String(resumable)}
+                  onClick={item(() => onStart(false))}
+                >
+                  {resumable ? "Resume session" : "Start session"}
+                </button>
+                {resumable ? (
+                  <button
+                    type="button"
+                    className="g-menu-item"
+                    data-testid="chat-start-fresh"
+                    onClick={item(() => onStart(true))}
+                  >
+                    Start fresh
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
+          {chat && inTauri() ? (
+            <FolderContext key={chat.id} chatId={chat.id} status={status} />
+          ) : null}
+        </Popover>
+      </div>
     </header>
   );
 }

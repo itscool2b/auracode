@@ -52,10 +52,39 @@ export function PickerChoices({
   readonly effort?: boolean;
   readonly children?: ReactNode;
 }) {
+  if (effort)
+    // Effort is one segmented row (Grok's compact fields): the levels side by side, the chosen one
+    // raised, digits choosing by position.
+    return (
+      <fieldset
+        className="picker-choices g-segmented g-segmented-quiet"
+        data-layout="segments"
+        aria-label={label}
+        onKeyDown={movePickerFocus}
+      >
+        {children}
+        {choices.map((choice, index) => (
+          <button
+            key={choice.value}
+            type="button"
+            className="g-segment"
+            data-picker-value={choice.value}
+            aria-pressed={value === choice.value}
+            disabled={!enabled}
+            title={[choice.description, index < 9 ? `Key ${index + 1}` : null]
+              .filter(Boolean)
+              .join(" · ")}
+            onClick={() => onChoose(choice.value)}
+          >
+            {choice.name}
+          </button>
+        ))}
+      </fieldset>
+    );
   return (
     <fieldset className="picker-choices" aria-label={label} onKeyDown={movePickerFocus}>
       {children}
-      {choices.map((choice, index) => (
+      {choices.map((choice) => (
         <button
           key={choice.value}
           type="button"
@@ -65,24 +94,13 @@ export function PickerChoices({
           title={choice.description ?? undefined}
           onClick={() => onChoose(choice.value)}
         >
-          {effort ? (
-            <span className="picker-effort-ticks" aria-hidden="true">
-              {choices.map((tick, level) => (
-                <i key={tick.value} data-filled={level <= index} />
-              ))}
-            </span>
-          ) : null}
           <span className="picker-choice-copy">
             <strong>{choice.name}</strong>
             {choice.description || choice.group ? (
               <small>{choice.description ?? choice.group}</small>
             ) : null}
           </span>
-          {value === choice.value ? (
-            <Check size={13} aria-label="Selected" />
-          ) : effort && index < 9 ? (
-            <kbd>{index + 1}</kbd>
-          ) : null}
+          {value === choice.value ? <Check size={14} aria-label="Selected" /> : null}
         </button>
       ))}
     </fieldset>

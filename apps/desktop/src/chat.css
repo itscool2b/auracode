@@ -74,9 +74,10 @@
   max-width: 82%;
 }
 
+/* Grok's block: right-aligned, one even radius, a fill one step above the pane and no ring. */
 .chat-user {
   padding: var(--g-space-12) var(--g-space-16);
-  border-radius: var(--g-radius-16) var(--g-radius-16) var(--g-radius-4) var(--g-radius-16);
+  border-radius: var(--g-radius-16);
   background-color: var(--g-surface-3);
   color: var(--g-fg-1);
   font-size: var(--g-text-prose);
@@ -118,41 +119,27 @@
   color: var(--g-red);
 }
 
+/* Edit and copy wait at the block's left, centred on its first line, and show under the hand. */
 .chat-user-actions {
   position: absolute;
-  top: 4px;
-  right: calc(100% + 6px);
+  top: 10px;
+  right: calc(100% + var(--g-space-4));
   display: flex;
   gap: var(--g-space-2);
   opacity: 0;
-  transition: opacity var(--g-dur-micro) var(--g-ease);
+  transition: opacity var(--g-dur-fast) var(--g-ease);
 }
 
 .chat-user-wrap:is(:hover, :focus-within) .chat-user-actions {
   opacity: 1;
 }
 
-.chat-user-actions > button,
-.chat-receipt-actions > button {
-  height: 24px;
-  padding: 0 var(--g-space-8);
-  border-radius: var(--g-radius-6);
-  color: var(--g-fg-3);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-  font-weight: 500;
-  white-space: nowrap;
-  transition:
-    background-color var(--g-dur-micro) var(--g-ease),
-    color var(--g-dur-micro) var(--g-ease);
-}
-
-@media (hover: hover) {
-  .chat-user-actions > button:hover,
-  .chat-receipt-actions > button:hover {
-    background-color: var(--g-surface-3);
-    color: var(--g-fg-1);
-  }
+.chat-user-actions > .chat-action-error {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: max-content;
+  max-width: 240px;
 }
 
 /* ---------- The agent's lines: byline, now-row, thinking (6.4) ---------- */
@@ -1177,37 +1164,75 @@
 
 /* ---------- Receipt (6.4) and plan ---------- */
 
+/*
+ * Grok's action row under an answer: copy, retry, fork and the receipt as quiet 28px icons, then
+ * the time in mono. The first icon's glyph lines up with the prose (x 22); there is no tear line.
+ */
 .chat-footer {
   position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--g-space-4) 0;
+  gap: var(--g-space-2);
   min-height: 28px;
-  margin: var(--g-space-4) 0 0;
-  padding: var(--g-space-8) 0 0 var(--ui-gutter);
+  margin: 0 0 0 calc(var(--ui-gutter) - var(--g-space-8) + 1px);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-variant-numeric: tabular-nums;
 }
 
-/* The receipt's tear line (3.5): dashed 8 on, 8 off, from the gutter. */
-.chat-footer::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: var(--ui-gutter);
-  height: 1px;
-  background-image: linear-gradient(90deg, var(--g-line-strong) 50%, transparent 0);
-  background-size: 16px 1px;
+.chat-footer-meta {
+  margin-left: var(--g-space-6);
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  white-space: nowrap;
 }
 
-.chat-footer > span:not(.chat-receipt-actions) + span:not(.chat-receipt-actions)::before {
-  content: "\00b7";
-  margin: 0 var(--g-space-8);
-  color: var(--g-fg-4);
+.chat-footer:is([data-reason="error"], [data-reason="refusal"]) .chat-footer-meta {
+  color: var(--g-red);
+}
+
+.chat-footer > .g-button {
+  margin-left: var(--g-space-8);
+}
+
+/* A quiet icon action: fg-3 at rest, a surface-3 fill and fg-1 under the hand (Grok). */
+.chat-action {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--g-radius-6);
+  color: var(--g-fg-3);
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .chat-action:hover {
+    background-color: var(--g-surface-3);
+    color: var(--g-fg-1);
+  }
+}
+
+.chat-action:active {
+  background-color: var(--g-surface-4);
+  transition-duration: 0ms;
+}
+
+.chat-action[data-state="copied"] {
+  color: var(--g-fg-1);
+}
+
+.chat-action-error {
+  flex-basis: 100%;
+  padding-left: var(--g-space-8);
+  color: var(--g-red);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
 }
 
 .chat-plan {
@@ -1489,6 +1514,12 @@
 
 /* ---------- Composer (6.9) ---------- */
 
+/*
+ * Grok's pill: the message on top, one row of controls under it. At most four controls show
+ * besides the box: attach, the agent chip, Stop while a turn runs, and the send pill (Send, or
+ * Queue with Steer beside it while a turn runs). The attach glyph and the text share one left edge
+ * (x 16 inside the pill); Send sits as far in from the right.
+ */
 .chat-composer {
   position: relative;
   display: flex;
@@ -1507,7 +1538,7 @@
   width: 100%;
   min-height: 48px;
   max-height: 240px;
-  padding: var(--g-space-12) var(--g-space-16) var(--g-space-6);
+  padding: var(--g-space-16) var(--g-space-16) var(--g-space-8);
   border: 0;
   border-radius: var(--g-radius-16) var(--g-radius-16) 0 0;
   background: transparent;
@@ -1522,12 +1553,46 @@
   outline: none;
 }
 
+.chat-composer .g-textarea:disabled {
+  background: transparent;
+}
+
 .chat-composer-controls {
   display: flex;
   align-items: center;
   gap: var(--g-space-4);
   min-height: 32px;
   padding: 0 var(--g-space-8) var(--g-space-8);
+}
+
+/* Attach: a 32px ghost circle whose glyph starts on the text's edge. */
+.chat-composer-attach {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--g-radius-pill);
+  color: var(--g-fg-2);
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .chat-composer-attach:hover:not(:disabled) {
+    background-color: var(--g-surface-3);
+    color: var(--g-fg-1);
+  }
+}
+
+.chat-composer-attach:active:not(:disabled) {
+  background-color: var(--g-surface-4);
+}
+
+.chat-composer-attach:disabled {
+  color: var(--g-fg-4);
+  cursor: not-allowed;
 }
 
 .chat-composer-actions {
@@ -1539,10 +1604,11 @@
 }
 
 /*
- * Send and Stop: the primary icon button as a disc. Disabled it stays a grey disc one step above the
- * composer, which is itself surface-2.
+ * Send and Stop: 32px discs. The white disc is always what Enter or Esc does next; disabled it
+ * stays a grey disc one step above the composer, which is itself surface-2.
  */
 .chat-send {
+  --g-button-h: 32px;
   border-radius: var(--g-radius-pill);
 }
 
@@ -1550,20 +1616,75 @@
   background-color: var(--g-surface-3);
 }
 
+.chat-send[data-quiet] {
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
+}
+
+@media (hover: hover) {
+  .chat-send[data-quiet]:hover {
+    background-color: var(--g-surface-4);
+  }
+}
+
+.chat-force-stop {
+  --g-button-h: 32px;
+}
+
+/* While a turn runs, Steer and Queue are one pill: Steer in words, Queue as the white disc. */
+.chat-send-group {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--g-radius-pill);
+}
+
+.chat-send-group[data-split] {
+  gap: var(--g-space-2);
+  padding: var(--g-space-2);
+  background-color: var(--g-surface-3);
+}
+
+.chat-send-group[data-split] > .chat-send {
+  --g-button-h: 28px;
+}
+
+.chat-steer {
+  height: 28px;
+  padding: 0 var(--g-space-12);
+  border-radius: var(--g-radius-pill);
+  color: var(--g-fg-1);
+  font-weight: 500;
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .chat-steer:hover:not(:disabled) {
+    background-color: var(--g-surface-4);
+  }
+}
+
+.chat-steer:disabled {
+  color: var(--g-fg-4);
+  cursor: not-allowed;
+}
+
 .chat-composer > .ui-error {
-  margin: 0 var(--g-space-16) var(--g-space-8);
+  margin: 0 var(--g-space-16) var(--g-space-12);
 }
 
 .chat-composer-retry {
   align-self: flex-start;
-  margin: 0 var(--g-space-8) var(--g-space-8);
+  margin: 0 var(--g-space-12) var(--g-space-12);
 }
 
+/* Attachments and mentions sit on top inside the pill, like Grok's attached image. */
 .composer-context {
   display: flex;
   flex-wrap: wrap;
   gap: var(--g-space-6);
-  padding: var(--g-space-12) var(--g-space-16) 0;
+  padding: var(--g-space-12) var(--g-space-12) 0;
 }
 
 .composer-context-chip {
@@ -1571,12 +1692,11 @@
   align-items: center;
   gap: var(--g-space-6);
   max-width: min(100%, 280px);
-  height: 24px;
+  height: 28px;
   padding: 0 var(--g-space-2) 0 var(--g-space-8);
-  border-radius: var(--g-radius-6);
-  background-color: var(--g-surface-1);
-  box-shadow: inset 0 0 0 1px var(--g-line-strong);
-  color: var(--g-fg-2);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -1597,9 +1717,9 @@
   display: grid;
   flex: none;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--g-radius-4);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--g-radius-6);
   color: var(--g-fg-3);
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
@@ -1608,7 +1728,7 @@
 
 @media (hover: hover) {
   .composer-context-chip button:hover {
-    background-color: var(--g-surface-3);
+    background-color: var(--g-surface-4);
     color: var(--g-fg-1);
   }
 }
@@ -1618,36 +1738,6 @@
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-}
-
-.composer-context-actions {
-  display: flex;
-  flex: none;
-  gap: var(--g-space-2);
-}
-
-.composer-context-actions button {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--g-radius-8);
-  color: var(--g-fg-2);
-  transition:
-    background-color var(--g-dur-micro) var(--g-ease),
-    color var(--g-dur-micro) var(--g-ease);
-}
-
-@media (hover: hover) {
-  .composer-context-actions button:hover:not(:disabled) {
-    background-color: var(--g-surface-3);
-    color: var(--g-fg-1);
-  }
-}
-
-.composer-context-actions button:disabled {
-  color: var(--g-fg-4);
-  cursor: not-allowed;
 }
 
 /* Menus above the composer: slash commands and file mentions (4.6). */
@@ -1745,9 +1835,13 @@
   min-width: 0;
 }
 
+/* The chip: who answers, with which model, how freely. A ghost pill that fills under the hand. */
 .chat-pickers > .chat-popover > summary {
+  gap: var(--g-space-8);
   max-width: 100%;
-  padding: 0 var(--g-space-8) 0 var(--g-space-6);
+  height: 32px;
+  padding: 0 var(--g-space-12) 0 var(--g-space-8);
+  border-radius: var(--g-radius-pill);
 }
 
 .chat-pickers summary > svg {
@@ -1761,26 +1855,24 @@
   font-weight: 500;
 }
 
-.chat-pill-model,
-.chat-pill-effort {
+.chat-pill-model {
   min-width: 0;
   max-width: 160px;
   overflow: hidden;
+  color: var(--g-fg-2);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-pill-model {
-  color: var(--g-fg-2);
-}
-
-.chat-pill-effort {
-  color: var(--g-fg-3);
-}
-
-.chat-pickers summary > .chat-autonomy-glyph {
+.chat-pill-autonomy {
+  display: inline-grid;
   flex: none;
+  place-items: center;
   color: var(--g-fg-1);
+}
+
+.chat-autonomy-glyph {
+  flex: none;
 }
 
 .chat-autonomy-glyph rect[data-on="false"] {
@@ -1795,63 +1887,54 @@
   background-color: var(--g-red);
 }
 
-/* The agent picker spans the composer: its panel anchors to the composer, not to the pill. */
-.chat-model-popover {
-  position: static;
-}
-
+/*
+ * Grok's voice popover: one panel over the chip, its parts stacked and split by hairlines: the
+ * agent rows, the model rows, then effort and autonomy as compact fields with the note under them.
+ */
 .chat-model-popover > .chat-popover-panel {
-  right: 0;
   bottom: calc(100% + 8px);
   left: 0;
-  width: auto;
-  max-height: min(420px, 70vh);
+  width: min(400px, calc(100vw - 48px));
+  max-height: min(560px, 72vh);
   /* Nested radius (3.4): 16 outside, 4 of padding, 12 on the rows inside. */
   padding: var(--g-space-4);
   gap: 0;
   border-radius: var(--g-radius-16);
 }
 
-.chat-autonomy-popover > .chat-popover-panel {
-  width: 300px;
-}
-
 .chat-model-columns {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-.chat-model-columns[data-columns="three"] {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 0.8fr);
-}
-
 .chat-model-columns > section {
   display: flex;
   flex-direction: column;
-  gap: var(--g-space-4);
+  gap: var(--g-space-2);
   min-width: 0;
-  padding: 0 var(--g-space-4);
+  padding: var(--g-space-4) 0;
 }
 
 .chat-model-columns > section + section {
-  border-left: 1px solid var(--g-line);
+  border-top: 1px solid var(--g-line);
 }
 
-/* No column captions (6.10); the names stay for screen readers. */
-.chat-model-columns > section > h3 {
-  position: absolute;
-  width: 1px;
-  height: 1px;
+/* A part's name (Grok's "Voice"): 14/20 500 in fg-2, sentence case. */
+.chat-model-columns > section > h3:not(.sr-only) {
   margin: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+  padding: var(--g-space-6) var(--g-space-8) var(--g-space-4);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
 }
 
-.chat-model-columns > section > p {
+.chat-picker-empty {
+  margin: 0;
   padding: var(--g-space-6) var(--g-space-8);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
@@ -1859,7 +1942,7 @@
 }
 
 .chat-model-columns .ui-field {
-  gap: var(--g-space-4);
+  gap: var(--g-space-2);
 }
 
 .chat-agent-choices,
@@ -1868,7 +1951,7 @@
   flex-direction: column;
   gap: var(--g-space-2);
   min-width: 0;
-  max-height: 300px;
+  max-height: 264px;
   margin: 0;
   padding: 0;
   overflow: auto;
@@ -1877,13 +1960,15 @@
   scrollbar-color: var(--g-line-strong) transparent;
 }
 
+/* Rows (Vercel's plain menu rows): 36px agents, 44px models with their one-line description. */
 .chat-agent-choices > button,
-.picker-choices > button {
+.picker-choices:not([data-layout]) > button {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
   min-width: 0;
-  min-height: 44px;
+  min-height: 36px;
   padding: var(--g-space-4) var(--g-space-8);
   border-radius: var(--g-radius-12);
   color: var(--g-fg-2);
@@ -1893,13 +1978,23 @@
     color var(--g-dur-micro) var(--g-ease);
 }
 
-.chat-agent-choices > button > span:not(.g-agent-mark),
+.picker-choices:not([data-layout]) > button {
+  min-height: 44px;
+}
+
+.chat-agent-choices > button > small {
+  flex: none;
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
 .picker-choice-copy {
   flex: 1;
   min-width: 0;
 }
 
-.chat-agent-choices strong,
 .picker-choice-copy strong {
   display: block;
   overflow: hidden;
@@ -1909,7 +2004,6 @@
   white-space: nowrap;
 }
 
-.chat-agent-choices small,
 .picker-choice-copy small {
   display: block;
   overflow: hidden;
@@ -1920,29 +2014,24 @@
   white-space: nowrap;
 }
 
-.chat-agent-choices small {
-  font-family: var(--g-mono);
-}
-
 @media (hover: hover) {
-  :is(.chat-agent-choices, .picker-choices) > button:hover:not(:disabled) {
+  :is(.chat-agent-choices, .picker-choices:not([data-layout])) > button:hover:not(:disabled) {
     background-color: var(--g-surface-3);
   }
 }
 
-:is(.chat-agent-choices, .picker-choices) > button[aria-pressed="true"] {
-  background-color: var(--g-surface-3);
+/* The chosen row carries a white check; the fill belongs to the hand and the keyboard. */
+:is(.chat-agent-choices, .picker-choices:not([data-layout])) > button[aria-pressed="true"] {
   color: var(--g-fg-1);
 }
 
 /* Inside a list the highlight and a 2px rail are the focus, not a ring (3.7). */
-:is(.chat-agent-choices, .picker-choices) > button:focus-visible {
-  position: relative;
+:is(.chat-agent-choices, .picker-choices:not([data-layout])) > button:focus-visible {
   outline: none;
   background-color: var(--g-surface-3);
 }
 
-:is(.chat-agent-choices, .picker-choices) > button:focus-visible::before {
+:is(.chat-agent-choices, .picker-choices:not([data-layout])) > button:focus-visible::before {
   content: "";
   position: absolute;
   top: 10px;
@@ -1957,113 +2046,147 @@
   cursor: not-allowed;
 }
 
-:is(.chat-agent-choices, .picker-choices) > button:disabled :is(strong, small) {
+:is(.chat-agent-choices, .picker-choices:not([data-layout])) > button:disabled :is(strong, small) {
   color: var(--g-fg-4);
 }
 
-:is(.chat-agent-choices, .picker-choices) kbd {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 var(--g-space-4);
-  border-radius: var(--g-radius-4);
-  background-color: var(--g-surface-3);
-  box-shadow: inset 0 0 0 1px var(--g-line-strong);
-  color: var(--g-fg-2);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-key);
-  line-height: var(--g-leading-key);
-  font-weight: 500;
-}
-
-.picker-choices > button > svg {
+:is(.chat-agent-choices, .picker-choices) > button > svg {
   flex: none;
   color: var(--g-fg-1);
 }
 
+/* Effort: Graphite's quiet segmented control, the levels sharing the row's width. */
+.picker-choices[data-layout="segments"] {
+  flex-direction: row;
+  max-height: none;
+  overflow: visible;
+}
+
+.picker-choices[data-layout="segments"] > .g-segment {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.picker-choices[data-layout="segments"] > .g-segment:disabled {
+  color: var(--g-fg-4);
+}
+
 .picker-option-label {
-  padding: var(--g-space-4) var(--g-space-8) 0;
+  padding: 0 var(--g-space-8);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-  font-weight: 500;
 }
 
-/* The option's own name repeats the column; it shows only while it carries a state. */
-.picker-option-label:not(:has(.ui-muted)) {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+/* Effort and autonomy as compact fields: the name at the left, the control at the right. */
+.chat-picker-fields {
+  gap: var(--g-space-4);
 }
 
-.picker-effort-ticks {
-  display: flex;
-  flex: none;
-  gap: var(--g-space-2);
-  max-width: 30px;
-  overflow: hidden;
-}
-
-.picker-effort-ticks i {
-  flex-shrink: 0;
-  width: 2px;
-  height: 8px;
-  background-color: var(--g-fg-4);
-}
-
-.picker-effort-ticks i[data-filled="true"] {
-  background-color: var(--g-fg-1);
-}
-
-.picker-key-legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--g-space-16);
-  min-height: 32px;
-  margin-top: var(--g-space-6);
-  padding: 0 var(--g-space-8);
-  border-top: 1px solid var(--g-line);
-  color: var(--g-fg-3);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-}
-
-.chat-other-options {
-  margin-top: var(--g-space-8);
-  padding: 0 var(--g-space-8);
-  color: var(--g-fg-2);
-}
-
-.chat-other-options > summary {
-  min-height: 28px;
-  cursor: pointer;
-}
-
-.chat-current-agent {
-  display: flex;
+.chat-picker-field {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
   align-items: center;
   gap: var(--g-space-8);
-  padding: var(--g-space-8);
-  font-weight: 500;
+  min-height: 40px;
+  padding: 0 var(--g-space-8);
+}
+
+.chat-picker-field > .ui-field {
+  min-width: 0;
+}
+
+.chat-picker-field > .chat-picker-empty {
+  padding: 0;
+}
+
+.chat-picker-field-label {
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 400;
+}
+
+.chat-picker-field .g-select {
+  height: 32px;
+  background-color: var(--g-surface-2);
+}
+
+.chat-autonomy-select {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.chat-autonomy-select > .chat-autonomy-glyph {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  color: var(--g-fg-1);
+  pointer-events: none;
+}
+
+.chat-autonomy-select > .g-select {
+  padding-left: var(--g-space-32);
 }
 
 .chat-picker-note {
   display: flex;
   flex-direction: column;
   gap: var(--g-space-4);
+  padding: 0 var(--g-space-8) var(--g-space-6);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
+}
+
+.chat-picker-note:empty {
+  display: none;
+}
+
+.chat-picker-note > p {
+  margin: 0;
+  color: inherit;
+}
+
+.chat-other-options {
+  margin: 0;
+  padding: 0 var(--g-space-8) var(--g-space-4);
+  color: var(--g-fg-2);
+}
+
+.chat-other-options > summary {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  color: var(--g-fg-2);
+  cursor: pointer;
+  transition: color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .chat-other-options > summary:hover {
+    color: var(--g-fg-1);
+  }
+}
+
+.chat-other-options > .ui-field {
+  margin-bottom: var(--g-space-8);
+}
+
+.chat-picker-toggle label {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+}
+
+.chat-current-agent {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-height: 36px;
+  padding: 0 var(--g-space-8);
+  font-weight: 500;
 }
 
 /* ---------- New chat (6.13) ---------- */

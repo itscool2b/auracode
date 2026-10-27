@@ -378,19 +378,39 @@ details.setup-install-review[open] > summary::before {
 
 /* ---------- Sidebar (6.2) ---------- */
 
+/*
+ * Grok's sidebar on black: the logo and the collapse toggle in the top band, Search and New chat,
+ * then the projects with their chats, and the agents and the account at the foot. Every row is
+ * 32px with its icon or square at x 20 and its words at x 44, so the column has one left edge.
+ */
 .chat-sidebar {
   position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: var(--ui-titlebar-height) var(--g-space-12) var(--g-space-12);
+  padding: var(--ui-titlebar-height) var(--g-space-12) var(--g-space-8);
+}
+
+/* The logo is centred on the band (y 26), clear of the macOS traffic lights (x 18 to 70). */
+.chat-sidebar-logo {
+  position: absolute;
+  top: 14px;
+  left: 20px;
+  color: var(--g-fg-1);
+  pointer-events: none;
+}
+
+.chat-app[data-os="macos"] .chat-sidebar-logo {
+  left: 84px;
 }
 
 .chat-sidebar-toggle {
   position: absolute;
   top: 12px;
   right: 12px;
+  z-index: 1;
+  color: var(--g-fg-3);
 }
 
 .chat-navigation {
@@ -407,7 +427,12 @@ details.setup-install-review[open] > summary::before {
   gap: var(--g-space-2);
 }
 
-.chat-nav-action {
+/* One row style for every sidebar action: fg-2 at rest, a surface-2 fill and fg-1 under the hand. */
+.chat-nav-action,
+.chat-attention-row,
+.chat-project-toggle,
+.chat-row,
+.chat-see-all {
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
@@ -417,7 +442,9 @@ details.setup-install-review[open] > summary::before {
   border-radius: var(--g-radius-8);
   color: var(--g-fg-2);
   text-align: left;
-  transition: color var(--g-dur-micro) var(--g-ease);
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
 }
 
 .chat-nav-action > svg {
@@ -434,12 +461,34 @@ details.setup-install-review[open] > summary::before {
   white-space: nowrap;
 }
 
-/* Hover is a step in contrast, never a fill (X Money). */
 @media (hover: hover) {
-  .chat-nav-action:hover,
+  :is(.chat-nav-action, .chat-attention-row, .chat-project-toggle, .chat-row):hover {
+    background-color: var(--g-surface-2);
+    color: var(--g-fg-1);
+  }
+
   .chat-nav-action:hover > svg {
     color: var(--g-fg-1);
   }
+
+  .chat-see-all:hover {
+    color: var(--g-fg-1);
+  }
+}
+
+:is(.chat-nav-action, .chat-attention-row, .chat-project-toggle, .chat-row):active {
+  background-color: var(--g-surface-3);
+}
+
+/* Inside the sidebar a focused row keeps the ring inside its own box, clear of its neighbours. */
+:is(
+  .chat-nav-action,
+  .chat-attention-row,
+  .chat-project-toggle,
+  .chat-row,
+  .chat-see-all
+):focus-visible {
+  outline-offset: -2px;
 }
 
 .chat-keys {
@@ -448,23 +497,20 @@ details.setup-install-review[open] > summary::before {
   gap: var(--g-space-4);
 }
 
-/* The sidebar's shortcut keycaps rest as outlines and fill in when their row is hovered. */
-.chat-nav-action .g-keycap {
-  background-color: transparent;
-  box-shadow: inset 0 0 0 1px var(--g-line);
-  color: var(--g-fg-3);
-  transition:
-    background-color var(--g-dur-micro) var(--g-ease),
-    box-shadow var(--g-dur-micro) var(--g-ease),
-    color var(--g-dur-micro) var(--g-ease);
+/* The shortcut shows when its row is under the hand or the keyboard (Grok shows none at rest). */
+.chat-nav-action .chat-keys {
+  opacity: 0;
+  transition: opacity var(--g-dur-fast) var(--g-ease);
 }
 
-@media (hover: hover) {
-  .chat-nav-action:hover .g-keycap {
-    background-color: var(--g-surface-3);
-    box-shadow: inset 0 0 0 1px var(--g-line-strong);
-    color: var(--g-fg-2);
-  }
+.chat-nav-action:is(:hover, :focus-visible) .chat-keys {
+  opacity: 1;
+}
+
+.chat-nav-action .g-keycap {
+  background-color: var(--g-surface-3);
+  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  color: var(--g-fg-2);
 }
 
 .chat-sidebar-search {
@@ -485,45 +531,68 @@ details.setup-install-review[open] > summary::before {
   scrollbar-color: var(--g-line-strong) transparent;
 }
 
-/* A quiet sentence-case label, only where a group needs one. Never caps, never mono. */
+/* A section's name (Grok's "Projects"): sentence case 14/20 500 in fg-3, never caps, never mono. */
 .chat-section-label {
   display: flex;
   align-items: center;
   gap: var(--g-space-6);
-  height: 28px;
+  height: 32px;
   margin: 0;
-  padding: 0 var(--g-space-8);
+  padding: 0 var(--g-space-4) 0 var(--g-space-8);
   color: var(--g-fg-3);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
   font-weight: 500;
 }
 
-.chat-section-label > span {
-  font-variant-numeric: tabular-nums;
-}
-
-.chat-section-label > .g-button-icon {
-  --g-button-h: 24px;
-  margin-left: auto;
-  margin-right: calc(var(--g-space-4) * -1);
-}
-
-.chat-dock-link {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
+.chat-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-4);
+  height: 24px;
+  margin-left: calc(var(--g-space-4) * -1);
+  padding: 0 var(--g-space-4);
+  border-radius: var(--g-radius-6);
   color: inherit;
   font: inherit;
-  cursor: pointer;
   transition: color var(--g-dur-micro) var(--g-ease);
 }
 
+.chat-section-chevron {
+  color: var(--g-fg-3);
+  transition: transform var(--g-dur-base) var(--g-ease);
+}
+
+.chat-section-toggle[aria-expanded="false"] .chat-section-chevron {
+  transform: rotate(-90deg);
+}
+
 @media (hover: hover) {
-  .chat-dock-link:hover {
+  .chat-section-toggle:hover {
     color: var(--g-fg-1);
   }
+}
+
+.chat-section-count {
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+/* New project waits at the end of its label and shows with the section under the hand. */
+.chat-section-action {
+  margin-left: auto;
+  opacity: 0;
+  transition:
+    opacity var(--g-dur-fast) var(--g-ease),
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+.chat-project-section:is(:hover, :focus-within) .chat-section-action {
+  opacity: 1;
 }
 
 .chat-attention {
@@ -532,24 +601,26 @@ details.setup-install-review[open] > summary::before {
   gap: var(--g-space-2);
 }
 
-.chat-attention .chat-section-label {
+.chat-attention .chat-section-title {
   color: var(--g-fg-2);
 }
 
-.chat-attention .chat-section-label > span {
+.chat-attention .chat-section-count {
   color: var(--g-volt);
+  font-weight: 500;
 }
 
 .chat-attention-row {
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-8);
-  width: 100%;
-  height: 32px;
-  padding: 0 var(--g-space-8) 0 var(--g-space-12);
-  border-radius: var(--g-radius-8);
   color: var(--g-fg-1);
-  text-align: left;
+}
+
+/* The waiting square centres on the project square's axis (x 28), in the same 16px box. */
+.chat-attention-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
 }
 
 .chat-attention-row > span:last-child {
@@ -564,15 +635,15 @@ details.setup-install-review[open] > summary::before {
   font-size: inherit;
 }
 
-@media (hover: hover) {
-  .chat-attention-row:hover {
-    background-color: var(--g-surface-2);
-  }
+.chat-project-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-2);
 }
 
 .chat-sidebar-empty {
   margin: 0;
-  padding: 0 var(--g-space-8);
+  padding: var(--g-space-6) var(--g-space-8);
   color: var(--g-fg-3);
 }
 
@@ -591,16 +662,9 @@ details.setup-install-review[open] > summary::before {
 }
 
 .chat-project-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-8);
-  width: 100%;
-  height: 32px;
-  padding: 0 var(--g-space-32) 0 var(--g-space-8);
-  border-radius: var(--g-radius-8);
+  padding-right: var(--g-space-32);
   color: var(--g-fg-1);
   font-weight: 500;
-  text-align: left;
 }
 
 .chat-project-toggle > span:nth-child(2) {
@@ -611,13 +675,13 @@ details.setup-install-review[open] > summary::before {
   white-space: nowrap;
 }
 
-.chat-project-toggle small {
-  color: var(--g-fg-3);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
+.chat-project-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
 }
 
 /* A neutral 6px square marks a project; folded projects and hovered ones show the chevron. */
@@ -635,6 +699,7 @@ details.setup-install-review[open] > summary::before {
   width: 6px;
   height: 6px;
   background-color: var(--g-fg-3);
+  transition: opacity var(--g-dur-micro) var(--g-ease);
 }
 
 .chat-project-swatch > svg {
@@ -642,7 +707,9 @@ details.setup-install-review[open] > summary::before {
   inset: 2px;
   color: var(--g-fg-2);
   opacity: 0;
-  transition: transform var(--g-dur-base) var(--g-ease);
+  transition:
+    opacity var(--g-dur-micro) var(--g-ease),
+    transform var(--g-dur-base) var(--g-ease);
 }
 
 .chat-project-toggle[aria-expanded="true"] .chat-project-swatch > svg {
@@ -676,31 +743,15 @@ details.setup-install-review[open] > summary::before {
   list-style: none;
 }
 
+/* A chat's words start under its project's name (x 44). */
 .chat-row {
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-8);
-  width: 100%;
-  height: 32px;
-  padding: 0 var(--g-space-8) 0 var(--g-space-32);
-  border-radius: var(--g-radius-8);
-  color: var(--g-fg-2);
-  text-align: left;
-  transition: color var(--g-dur-micro) var(--g-ease);
+  padding-left: var(--g-space-32);
 }
 
-@media (hover: hover) {
-  .chat-row:hover {
-    color: var(--g-fg-1);
-  }
-}
-
-/* The open chat is lifted one surface step with a hairline ring. */
+/* The open chat is one surface step up, like Grok's selected row: a fill and no ring. */
 .chat-row[aria-current="true"] {
-  background-color: var(--g-surface-2);
-  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  background-color: var(--g-surface-3);
   color: var(--g-fg-1);
-  font-weight: 500;
 }
 
 .chat-row-title {
@@ -720,11 +771,10 @@ details.setup-install-review[open] > summary::before {
 }
 
 .chat-row-menu {
-  --g-button-h: 24px;
   position: absolute;
   top: 4px;
   right: 4px;
-  background-color: var(--g-bg);
+  background-color: var(--g-surface-2);
   opacity: 0;
   transition:
     opacity var(--g-dur-micro) var(--g-ease),
@@ -734,7 +784,8 @@ details.setup-install-review[open] > summary::before {
 
 @media (hover: hover) {
   .chat-row-menu:hover:not(:disabled) {
-    background-color: var(--g-surface-3);
+    background-color: var(--g-surface-4);
+    color: var(--g-fg-1);
   }
 }
 
@@ -743,9 +794,9 @@ details.setup-install-review[open] > summary::before {
   opacity: 1;
 }
 
-/* On the open chat the menu button takes the lifted row's fill, so the title ends cleanly. */
+/* On the open chat the menu button takes the row's fill, so the title ends cleanly. */
 .chat-row-container:has(> .chat-row[aria-current="true"]) > .chat-row-menu {
-  background-color: var(--g-surface-2);
+  background-color: var(--g-surface-3);
 }
 
 .chat-row-status {
@@ -762,7 +813,7 @@ details.setup-install-review[open] > summary::before {
   visibility: hidden;
 }
 
-/* The pin centres on the project square above it (x 16). */
+/* The pin sits in the gutter, on the project square's axis (x 20). */
 .chat-pin-mark {
   position: absolute;
   top: 11px;
@@ -771,53 +822,336 @@ details.setup-install-review[open] > summary::before {
   pointer-events: none;
 }
 
+/* Grok's "See all": a quiet line that opens the archived chats. */
+.chat-see-all {
+  color: var(--g-fg-3);
+}
+
 /* ---------- Agent dock and account row (6.2) ---------- */
 
 .chat-sidebar-footer {
   display: flex;
   flex-direction: column;
-  gap: var(--g-space-6);
+  gap: var(--g-space-8);
   margin-top: var(--g-space-8);
-  padding-top: var(--g-space-8);
-  border-top: 1px solid var(--g-line);
 }
 
+/* One 28px tile per usable agent, on the column's left edge (x 20), then "+N" for the rest. */
 .chat-agent-dock {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--g-space-2);
-  padding: 0 var(--g-space-4);
-  margin-bottom: var(--g-space-8);
+  gap: var(--g-space-4);
+  padding: 0 var(--g-space-8);
 }
 
-.chat-agent-popover > summary {
-  flex-direction: column;
+.chat-popover.chat-agent-popover > summary,
+.chat-popover.chat-account-menu > summary {
   justify-content: center;
-  gap: var(--g-space-4);
-  width: 32px;
-  height: 44px;
-  min-height: 0;
+  width: 28px;
+  height: 28px;
   padding: 0;
+  border-radius: var(--g-radius-6);
+}
+
+.chat-popover.chat-agent-popover > summary {
+  background-color: transparent;
+}
+
+/* The tile is the mark; under the hand its ring and code step up to fg (Harvey's slow settle). */
+.chat-agent-tile {
+  position: relative;
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+
+.chat-agent-tile > .g-agent-mark {
+  transition:
+    box-shadow var(--g-dur-settle) var(--g-ease-settle),
+    background-color var(--g-dur-settle) var(--g-ease-settle),
+    color var(--g-dur-settle) var(--g-ease-settle);
+}
+
+@media (hover: hover) {
+  .chat-popover.chat-agent-popover > summary:hover {
+    background-color: transparent;
+  }
+
+  .chat-agent-popover > summary:hover .chat-agent-tile > .g-agent-mark {
+    background-color: var(--g-surface-4);
+    box-shadow: inset 0 0 0 1px var(--g-fg-4);
+    color: var(--g-fg-1);
+  }
+}
+
+.chat-popover.chat-agent-popover[open] > summary {
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.chat-agent-popover[open] .chat-agent-tile > .g-agent-mark {
+  background-color: var(--g-surface-4);
+  box-shadow: inset 0 0 0 1px var(--g-fg-3);
+  color: var(--g-fg-1);
+}
+
+.chat-agent-popover > summary:active .chat-agent-tile > .g-agent-mark {
+  background-color: var(--g-surface-4);
+  transition-duration: 0ms;
+}
+
+/* Found: the tile settles in once (250ms, x.ai's letter ease). Reduced motion zeroes the time. */
+.chat-agent-tile:is([data-state="ready"], [data-state="sign-in"]) > .g-agent-mark {
+  animation: chat-agent-settle var(--g-dur-letter) var(--g-ease-out) both;
+}
+
+@keyframes chat-agent-settle {
+  from {
+    opacity: 0.4;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * Detecting: an open, dashed tile with the code in fg-3 while a 1px line scans it top to bottom,
+ * calmly (1400ms, linear). When the agent is found the tile fills and settles in.
+ */
+.chat-agent-tile[data-state="checking"] > .g-agent-mark {
+  background-color: transparent;
+  box-shadow: none;
+  outline: 1px dashed var(--g-line-strong);
+  outline-offset: -1px;
+  color: var(--g-fg-3);
+}
+
+.chat-agent-tile[data-state="checking"]::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background-color: var(--g-fg-3);
+  animation: chat-agent-scan var(--g-dur-shimmer) linear infinite;
+  pointer-events: none;
+}
+
+@keyframes chat-agent-scan {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(25px);
+  }
+}
+
+/* Waiting on you: the volt square arrives once; it never pulses. */
+.chat-agent-tile[data-state="waiting"] > .g-agent-mark {
+  animation: chat-agent-settle var(--g-dur-letter) var(--g-ease-out) both;
+}
+
+/* A sign-in or an update: a 4px fg-1 square on the corner, cut out of the black around it. */
+.chat-agent-tile:is([data-state="sign-in"], [data-update])::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  z-index: 1;
+  width: 4px;
+  height: 4px;
+  background-color: var(--g-fg-1);
+  box-shadow: 0 0 0 2px var(--g-bg);
+}
+
+/* Graphite's tooltip (4.6) in place of the platform's: 500ms of hover, then a 150ms fade. */
+.chat-popover > summary[data-tip] {
+  position: relative;
+}
+
+.chat-popover > summary[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  box-sizing: border-box;
+  max-width: 240px;
+  padding: var(--g-space-4) var(--g-space-8);
+  overflow: hidden;
+  border: 1px solid var(--g-line-strong);
+  border-radius: var(--g-radius-6);
+  background-color: var(--g-surface-3);
+  box-shadow: var(--g-shadow);
+  color: var(--g-fg-1);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--g-dur-fast) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .chat-popover:not([open]) > summary[data-tip]:hover::after {
+    opacity: 1;
+    transition-delay: var(--g-dur-dim);
+  }
+}
+
+.chat-account-menu > summary[data-tip]::after {
+  right: 0;
+  left: auto;
+}
+
+/* "+N": the agents behind it, as a dashed tile with the count in mono. */
+.chat-agent-more {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--g-radius-6);
+  outline: 1px dashed var(--g-line-strong);
+  outline-offset: -1px;
   color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-key);
   line-height: var(--g-leading-key);
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  transition:
+    outline-color var(--g-dur-fast) var(--g-ease),
+    color var(--g-dur-fast) var(--g-ease);
 }
 
-/* An idle or missing agent's tile already shows its code; the code under it shows with a state. */
-.chat-agent-popover > summary > .g-agent-mark:is([data-state="idle"], [data-ghost]) + span {
-  visibility: hidden;
+@media (hover: hover) {
+  .chat-agent-rest > summary:hover .chat-agent-more {
+    outline-color: var(--g-fg-3);
+    color: var(--g-fg-1);
+  }
 }
 
+.chat-agent-rest[open] .chat-agent-more {
+  outline-color: var(--g-fg-3);
+  color: var(--g-fg-1);
+}
+
+/*
+ * The agent card (6.2): mark, name and version, one line about it, then its actions. Every card
+ * opens upward from the dock's own left edge, so it lines up with the column whichever tile opened it.
+ */
+.chat-agent-dock {
+  position: relative;
+}
+
+.chat-popover.chat-agent-popover {
+  position: static;
+}
+
+.chat-agent-popover > .chat-popover-panel {
+  bottom: calc(100% + 8px);
+  left: var(--g-space-4);
+  width: 296px;
+  gap: var(--g-space-12);
+}
+
+.chat-agent-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
+}
+
+.chat-agent-card-head > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-agent-card-head strong {
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 600;
+}
+
+.chat-agent-card-head small {
+  overflow: hidden;
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-agent-card-actions,
 .chat-agent-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--g-space-8);
+  gap: var(--g-space-6);
+}
+
+.chat-agent-actions:empty {
+  display: none;
 }
 
 .chat-agent-actions > :is(span, p) {
   width: 100%;
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* The other agents: plain menu rows (Vercel), the state at the end in fg-3. */
+.chat-agent-rest > .chat-popover-panel {
+  width: 264px;
+  gap: 0;
+  padding: var(--g-space-4);
+}
+
+.chat-agent-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-agent-list .g-menu-item > .chat-agent-list-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-agent-list .g-menu-item > small {
+  flex: none;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.chat-agent-list .g-menu-item[data-usable="false"] > .chat-agent-list-name {
+  color: var(--g-fg-2);
+}
+
+.chat-agent-manage {
+  margin-top: var(--g-space-4);
+  border-top: 1px solid var(--g-line);
+  border-radius: 0 0 var(--g-radius-8) var(--g-radius-8);
+  color: var(--g-fg-2);
 }
 
 /* ---------- Collapsed rail ---------- */
@@ -831,12 +1165,22 @@ details.setup-install-review[open] > summary::before {
 }
 
 .chat-app[data-sidebar-collapsed="true"]
-  :is(.chat-nav-action > span, .chat-project-scroll, .chat-sidebar-footer, .chat-sidebar-search) {
+  :is(
+    .chat-nav-action > span,
+    .chat-project-scroll,
+    .chat-sidebar-footer,
+    .chat-sidebar-search,
+    .chat-sidebar-logo
+  ) {
   display: none;
 }
 
 /* ---------- Chat header (6.3) ---------- */
 
+/*
+ * Grok's header: what this chat is at the left, two controls at the right (the Changes panel and
+ * the chat menu). Everything else is one click into the menu or one search away in the palette.
+ */
 .chat-header {
   position: relative;
   z-index: 3;
@@ -850,14 +1194,15 @@ details.setup-install-review[open] > summary::before {
 
 .chat-header-who {
   display: flex;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   align-items: baseline;
   gap: var(--g-space-8);
   min-width: 0;
   overflow: hidden;
+  white-space: nowrap;
 }
 
-.chat-header-agent {
+.chat-header-title {
   flex: 0 1 auto;
   max-width: 420px;
   min-width: 0;
@@ -865,7 +1210,6 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-fg-1);
   font-weight: 500;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .chat-header-folder {
@@ -874,7 +1218,6 @@ details.setup-install-review[open] > summary::before {
   overflow: hidden;
   color: var(--g-fg-3);
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .chat-header-folder .chat-row-flag {
@@ -883,21 +1226,28 @@ details.setup-install-review[open] > summary::before {
   font-weight: 400;
 }
 
+/* The status speaks only when it says something: working, waiting, failed, a sign-in. */
 .chat-status {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 280px;
-  margin-right: auto;
+  max-width: 320px;
   overflow: hidden;
   color: var(--g-fg-3);
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .chat-status::before {
   content: "\00b7";
   margin-right: var(--g-space-8);
-  color: var(--g-fg-4);
+  color: var(--g-fg-3);
+}
+
+.chat-status[data-quiet] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 
 .chat-status[data-status="failed"],
@@ -910,38 +1260,78 @@ details.setup-install-review[open] > summary::before {
   font-weight: 500;
 }
 
+.chat-header-error {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--g-red);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  text-overflow: ellipsis;
+}
+
+.chat-header-controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-4);
+  margin-left: auto;
+}
+
+.chat-header-controls > .g-button-icon {
+  color: var(--g-fg-3);
+}
+
 .chat-header .g-button-icon[aria-expanded="true"] {
   background-color: var(--g-surface-3);
   color: var(--g-fg-1);
 }
 
-/* The menu trigger matches the header's ghost icon buttons beside it. */
-.chat-header-menu > summary {
+/* The menu trigger matches the ghost icon button beside it. */
+.chat-popover.chat-header-menu > summary {
   justify-content: center;
   width: 28px;
   padding: 0;
-  color: var(--g-fg-2);
+  border-radius: var(--g-radius-6);
+  color: var(--g-fg-3);
 }
 
+.chat-header-menu > summary[data-tip]::after {
+  top: calc(100% + 6px);
+  right: 0;
+  bottom: auto;
+  left: auto;
+}
+
+/* The chat menu (4.6): plain 32px rows in groups split by hairlines, the facts on top. */
 .chat-header-menu > .chat-popover-panel {
   top: calc(100% + 6px);
   right: 0;
   bottom: auto;
   left: auto;
-  width: 300px;
-  padding: var(--g-space-6);
+  width: 288px;
+  max-height: min(560px, calc(100vh - 80px));
+  padding: var(--g-space-4);
   gap: 0;
+  animation-name: chat-menu-in;
 }
 
-/* The session facts line up with the menu items' text (8px in from the panel's padding). */
-.chat-header-menu .chat-popover-panel > :not(.chat-header-actions) {
-  padding: var(--g-space-8);
+@keyframes chat-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .chat-session-info {
   display: flex;
   flex-direction: column;
   gap: var(--g-space-2);
+  padding: var(--g-space-8);
 }
 
 .chat-session-info strong {
@@ -960,14 +1350,11 @@ details.setup-install-review[open] > summary::before {
   line-height: var(--g-leading-meta);
 }
 
-/* The context and cost line under the agent. */
-.chat-header-menu .chat-popover-panel > .ui-muted {
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
+.chat-session-info > .chat-session-usage {
+  color: var(--g-fg-2);
   font-variant-numeric: tabular-nums;
 }
 
-/* The header menu's actions are menu items (4.6) under a hairline. */
 .chat-header-actions {
   display: flex;
   flex-direction: column;
@@ -980,6 +1367,9 @@ details.setup-install-review[open] > summary::before {
   display: flex;
   flex-direction: column;
   gap: var(--g-space-8);
+  margin-top: var(--g-space-4);
+  padding: var(--g-space-8);
+  border-top: 1px solid var(--g-line);
 }
 
 .chat-folder-context section {
@@ -1088,19 +1478,6 @@ details.setup-install-review[open] > summary::before {
     opacity: 1;
     transform: none;
   }
-}
-
-/* The agent card opens upward from the dock (6.2). */
-.chat-agent-popover > .chat-popover-panel {
-  bottom: calc(100% + 8px);
-  left: -4px;
-  width: 280px;
-}
-
-.chat-agent-popover > .chat-popover-panel > strong {
-  font-size: var(--g-text-heading);
-  line-height: var(--g-leading-heading);
-  font-weight: 600;
 }
 
 /* ---------- Banners (6.8) ---------- */
@@ -1624,8 +2001,18 @@ details.setup-install-review[open] > summary::before {
   .chat-popover-panel {
     animation: none;
   }
+
+  /* Detection holds still: no scan, only the code waiting in fg-3 in its dashed tile. */
+  .chat-agent-tile[data-state="checking"]::after {
+    display: none;
+  }
 }
 
 :root:is([data-motion="reduced"], [data-motion="off"]) .chat-popover-panel {
   animation: none;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"])
+  .chat-agent-tile[data-state="checking"]::after {
+  display: none;
 }

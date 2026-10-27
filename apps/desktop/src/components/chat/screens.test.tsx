@@ -16,7 +16,9 @@ import {
 } from "../../lib/chat/testing";
 import { applyEntries, emptyTranscript, renderTranscript } from "../../lib/chat/transcript";
 import { Banners, envBanner, RecoveryBannerView, storageBanner } from "./Banners";
+import { dockAgents, dockState } from "./AgentDock";
 import { ChatList, projectName, projectsOf } from "./ChatList";
+import { initials } from "./ProfileStatus";
 import { StillWorking } from "./ChatView";
 import { StopButton } from "./Composer";
 import { Header } from "./Header";
@@ -199,6 +201,47 @@ describe("the chat list", () => {
   });
 });
 
+describe("the agent dock", () => {
+  const ready = { state: "ready", version: "1.0.0", path: "/bin/agent" } as const;
+  const missing = { state: "missing", reason: "Not installed." } as const;
+
+  it("shows one tile per usable product, native first, and keeps the rest behind +N", () => {
+    const catalog = [
+      agent("claude", ready),
+      agent("claude-acp", ready),
+      agent("codex", missing),
+      agent("codex-acp", ready),
+      agent("pi", { state: "checking" }),
+      agent("cursor", missing),
+      agent("mock", ready),
+    ];
+    const { shown, rest } = dockAgents(catalog);
+    expect(shown.map((entry) => entry.id)).toEqual(["claude", "codex-acp", "pi"]);
+    expect(rest.map((entry) => entry.id)).toEqual(["claude-acp", "codex", "cursor", "mock"]);
+    // With no real agent usable, the scripted demo is the one tile.
+    expect(dockAgents([agent("claude", missing), agent("mock", ready)]).shown).toHaveLength(1);
+  });
+
+  it("gives each tile its state: needs you over working over sign-in over ready", () => {
+    const claude = agent("claude", ready);
+    const chat = (extra: Parameters<typeof chatSummary>[1]) =>
+      chatSummary("c", { agent_id: "claude", ...extra });
+    expect(dockState(claude, [])).toBe("ready");
+    expect(dockState(agent("pi", { state: "checking" }), [])).toBe("checking");
+    expect(dockState(claude, [chat({ status: "auth_required" })])).toBe("sign-in");
+    expect(dockState(claude, [chat({ status: "running" })])).toBe("running");
+    expect(
+      dockState(claude, [chat({ status: "running" }), chat({ needs_attention: true })]),
+    ).toBe("waiting");
+  });
+
+  it("names the profile by its initials", () => {
+    expect(initials("Local")).toBe("L");
+    expect(initials("Work account")).toBe("WA");
+    expect(initials("  ")).toBe("?");
+  });
+});
+
 describe("the header", () => {
   it("offers Start or Resume, and Start fresh, while nothing runs; Stop session while it runs", async () => {
     const stopped = await stateWith(historyPage("c1", []), {
@@ -214,7 +257,8 @@ describe("the header", () => {
         onShowLog={noop}
       />,
     );
-    expect(buttons(fresh).map((b) => b.label)).toEqual(["Start session", "Show log"]);
+    // The menu ends on the session's lifecycle, after the quieter actions.
+    expect(buttons(fresh).map((b) => b.label)).toEqual(["Show log", "Start session"]);
     const resumable = renderToStaticMarkup(
       <Header
         state={stopped}
@@ -226,9 +270,9 @@ describe("the header", () => {
       />,
     );
     expect(buttons(resumable).map((b) => b.label)).toEqual([
+      "Show log",
       "Resume session",
       "Start fresh",
-      "Show log",
     ]);
     // The list has the newer folder state (it reloads after a failed start); the snapshot is from
     // the join.
@@ -268,7 +312,7 @@ describe("the header", () => {
         onShowLog={noop}
       />,
     );
-    expect(buttons(html).map((b) => b.label)).toEqual(["Stop session", "Show log"]);
+    expect(buttons(html).map((b) => b.label)).toEqual(["Show log", "Stop session"]);
     expect(html).toContain("Working");
     expect(html).toContain("Applying your settings");
     expect(html).toContain("0.22.5");

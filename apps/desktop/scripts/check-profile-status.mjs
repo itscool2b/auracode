@@ -74,6 +74,8 @@ try {
       await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${engine}-paused.png`) });
+      // Settings lives in the account row's menu (Vercel's user row): open it, then choose.
+      await page.locator('summary[aria-label="Account menu"]').click();
       await page.getByRole("button", { name: "Open settings" }).click();
       assert.ok((await calls()).includes("settings"));
       await page.getByRole("button", { name: "Personal account", exact: true }).click();

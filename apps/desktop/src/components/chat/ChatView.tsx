@@ -5,14 +5,19 @@ import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
+import { inTauri } from "../../lib/ipc";
 import { ChangesPanel } from "./ChangesPanel";
 import { ChatAuthCard } from "./ChatAuthCard";
+import { ChatExportDialog } from "./ChatExportDialog";
+import type { PaletteCommand } from "./CommandPalette";
 import { Composer } from "./Composer";
 import { ConversationDialog, type ConversationIntent } from "./ConversationDialog";
+import { DebugBundleDialog } from "./DebugBundleDialog";
 import { GitDialog } from "./GitDialog";
 import { Header } from "./Header";
 import { PermissionCard } from "./PermissionCard";
 import { Pickers } from "./Pickers";
+import { ProjectToolsDialog } from "./ProjectToolsDialog";
 import { QuestionCard } from "./QuestionCard";
 import { QueueList } from "./QueueList";
 import { Transcript } from "./Transcript";
@@ -31,6 +36,7 @@ export function ChatView({
   agents,
   onOpenChat,
   active = true,
+  onCommands,
 }: {
   readonly chatId: string;
   readonly transport: Transport;
@@ -41,10 +47,13 @@ export function ChatView({
   readonly agents: readonly AgentEntry[] | null;
   readonly onOpenChat?: (id: string) => void;
   readonly active?: boolean;
+  /** The chat's own actions, for the command palette: the header menu's items by name. */
+  readonly onCommands?: (commands: readonly PaletteCommand[]) => void;
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport));
   const [changesOpen, setChangesOpen] = useState(false);
   const [gitOpen, setGitOpen] = useState(false);
+  const [dialog, setDialog] = useState<"tools" | "export" | "debug" | null>(null);
   const [continuation, setContinuation] = useState<ConversationIntent | null>(null);
   const [handoff, setHandoff] = useState<PendingHandoff | null>(null);
   const [canContinueHere, setCanContinueHere] = useState(false);
@@ -143,6 +152,105 @@ export function ChatView({
     },
     [store, transport.conversation, canContinueHere],
   );
+
+  // The header menu's actions, by name, for the command palette.
+  useEffect(() => {
+    if (!onCommands) return;
+    const desktop = inTauri();
+    const commands: PaletteCommand[] = [
+      ...(transport.changes
+        ? [
+            {
+              id: "chat-changes",
+              title: changesOpen ? "Hide changes" : "Show changes",
+              detail: "The files this chat changed",
+              run: () => setChangesOpen((open) => !open),
+            },
+          ]
+        : []),
+      ...(transport.git
+        ? [
+            {
+              id: "chat-git",
+              title: "Git workspace",
+              detail: "Branches, worktrees and pull requests for this chat",
+              run: () => setGitOpen(true),
+            },
+          ]
+        : []),
+      ...(desktop
+        ? [
+            {
+              id: "chat-tools",
+              title: "Terminal and editor",
+              detail: "Open this project in a terminal or an editor",
+              run: () => setDialog("tools"),
+            },
+          ]
+        : []),
+      ...(transport.conversation
+        ? [
+            {
+              id: "chat-history",
+              title: "Conversation history",
+              detail: "Earlier turns, edits and forks",
+              run: () => setContinuation({ type: "history" }),
+            },
+          ]
+        : []),
+      ...(desktop
+        ? [
+            {
+              id: "chat-export",
+              title: "Export chat",
+              detail: "Save this chat as a file",
+              run: () => setDialog("export"),
+            },
+            {
+              id: "chat-debug",
+              title: "Copy debug bundle",
+              detail: "Details to attach to a bug report",
+              run: () => setDialog("debug"),
+            },
+          ]
+        : []),
+      {
+        id: "chat-log",
+        title: "Show log",
+        detail: "The session's log file",
+        run: () => void store.revealLog(),
+      },
+      ...(live
+        ? [
+            {
+              id: "chat-stop",
+              title: "Stop session",
+              detail: "End the agent's process for this chat",
+              run: () => void store.stop(),
+            },
+          ]
+        : [
+            {
+              id: "chat-start",
+              title: resumable ? "Resume session" : "Start session",
+              detail: "Start the agent for this chat",
+              run: () => startSession(false),
+            },
+            ...(resumable
+              ? [
+                  {
+                    id: "chat-fresh",
+                    title: "Start fresh",
+                    detail: "A new session with a visible handoff",
+                    run: () => startSession(true),
+                  },
+                ]
+              : []),
+          ]),
+    ];
+    onCommands(commands);
+  }, [onCommands, transport, changesOpen, live, resumable, store, startSession]);
+  useEffect(() => () => onCommands?.([]), [onCommands]);
 
   const actions = useMemo<TurnActions>(
     () => ({
@@ -257,6 +365,9 @@ export function ChatView({
         onShowLog={() => void store.revealLog()}
         onHistory={transport.conversation ? () => setContinuation({ type: "history" }) : undefined}
         onGit={transport.git ? () => setGitOpen(true) : undefined}
+        onTools={() => setDialog("tools")}
+        onExport={() => setDialog("export")}
+        onDebug={() => setDialog("debug")}
         changesOpen={changesOpen}
         onChanges={transport.changes ? () => setChangesOpen((open) => !open) : undefined}
       />
@@ -467,6 +578,15 @@ export function ChatView({
             onOpenChat?.(id);
           }}
         />
+      ) : null}
+      {dialog === "tools" ? (
+        <ProjectToolsDialog key={chatId} chatId={chatId} onClose={() => setDialog(null)} />
+      ) : null}
+      {dialog === "export" ? (
+        <ChatExportDialog key={chatId} chatId={chatId} onClose={() => setDialog(null)} />
+      ) : null}
+      {dialog === "debug" ? (
+        <DebugBundleDialog key={chatId} chatId={chatId} onClose={() => setDialog(null)} />
       ) : null}
       {gitOpen && transport.git ? (
         <GitDialog

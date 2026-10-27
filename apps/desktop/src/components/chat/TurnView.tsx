@@ -1,4 +1,4 @@
-import { AgentMark, CopyButton } from "@auracode/ui/graphite";
+import { GitFork, ReceiptText, RotateCcw } from "lucide-react";
 import { Fragment, memo } from "react";
 import type { PlanEntry, UiAnswer } from "../../bindings";
 import type { RequestState } from "../../lib/chat/chatStore";
@@ -7,6 +7,7 @@ import { type RenderedSegment, stopReasonLabel } from "../../lib/chat/transcript
 import { formatDuration } from "../../lib/format";
 import { Answer } from "../Markdown";
 import type { ConversationIntent } from "./ConversationDialog";
+import { CopyAction } from "./CopyAction";
 import { ErrorCard } from "./ErrorCard";
 import { PermissionCard } from "./PermissionCard";
 import { QuestionCard } from "./QuestionCard";
@@ -79,17 +80,14 @@ export const TurnView = memo(function TurnView({
       data-test-recovered={String(segment.end?.recovered ?? false)}
     >
       {entries.map(({ item, index }) => {
+        // Grok names no one above its answers: the agent's name is said once, to screen readers,
+        // where its part of the turn begins. The header and the composer show who is answering.
         const byline =
           index === firstAgentItem &&
           segment.turnId !== null &&
           !segment.partial &&
           !suppressByline ? (
-            <div className="chat-byline">
-              <span className="chat-gutter">
-                <AgentMark agent={agentId} size={16} label={agentName} />
-              </span>
-              <span>{agentName}</span>
-            </div>
+            <span className="sr-only">{agentName}</span>
           ) : null;
         const content = (() => {
           switch (item.kind) {
@@ -264,41 +262,54 @@ function Footer({
 }) {
   const { end } = segment;
   if (end === null) return null;
-  const parts = [stopReasonLabel(end)];
-  if (end.usage !== null) parts.push(tokensLabel(end.usage));
-  if (end.durationMs !== null) parts.push(formatDuration(end.durationMs));
+  const reason = stopReasonLabel(end);
+  const tokens = end.usage !== null ? tokensLabel(end.usage) : null;
+  const duration = end.durationMs !== null ? formatDuration(end.durationMs) : null;
   const cost = costLabel(segment.usage);
-  if (cost !== null) parts.push(`${cost} session`);
+  const parts = [reason, tokens, duration, cost !== null ? `${cost} session` : null].filter(
+    (part): part is string => part !== null,
+  );
   const response = segment.items
     .filter((item) => item.kind === "message")
     .map((item) => item.text)
     .join("\n\n");
   const receipt = [agentName, ...parts].join("\n");
+  // Grok's row: the actions as quiet icons, then the time. A turn that ended normally says only
+  // its time; any other ending says how it ended. Tokens and cost wait in the receipt and the hint.
+  const meta = [end.stopReason === "end_turn" ? null : reason, duration].filter(Boolean);
   return (
-    <p className="chat-footer" data-testid="turn-footer">
-      {parts.map((part) => (
-        <span key={part}>{part}</span>
-      ))}
-      <span className="chat-receipt-actions">
-        {segment.turnId && onContinue ? (
-          <>
-            <button
-              type="button"
-              onClick={() => onContinue({ type: "retry", turn_id: segment.turnId as string })}
-            >
-              Retry
-            </button>
-            <button
-              type="button"
-              onClick={() => onContinue({ type: "fork", turn_id: segment.turnId as string })}
-            >
-              Fork
-            </button>
-          </>
-        ) : null}
-        {response ? <CopyButton text={response} label="Copy response as Markdown" /> : null}
-        <CopyButton text={receipt} label="Copy turn receipt" caption="Receipt" />
-      </span>
+    <div className="chat-footer" data-testid="turn-footer" data-reason={end.stopReason}>
+      {response ? <CopyAction text={response} label="Copy response as Markdown" /> : null}
+      {segment.turnId && onContinue ? (
+        <>
+          <button
+            type="button"
+            className="chat-action"
+            aria-label="Retry"
+            title="Retry"
+            onClick={() => onContinue({ type: "retry", turn_id: segment.turnId as string })}
+          >
+            <RotateCcw size={14} />
+          </button>
+          <button
+            type="button"
+            className="chat-action"
+            aria-label="Fork"
+            title="Fork into a new chat"
+            onClick={() => onContinue({ type: "fork", turn_id: segment.turnId as string })}
+          >
+            <GitFork size={14} />
+          </button>
+        </>
+      ) : null}
+      <CopyAction text={receipt} label="Copy turn receipt" icon={<ReceiptText size={14} />} />
+      {meta.length ? (
+        <span className="chat-footer-meta" title={parts.join(" · ")}>
+          {meta.join(" · ")}
+        </span>
+      ) : (
+        <span className="sr-only">{reason}</span>
+      )}
       {end.recovered && end.stopReason === "interrupted" && canResume ? (
         <button
           type="button"
@@ -309,6 +320,6 @@ function Footer({
           Resume session
         </button>
       ) : null}
-    </p>
+    </div>
   );
 }

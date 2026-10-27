@@ -1,6 +1,7 @@
-import { CopyButton } from "@auracode/ui/graphite";
+import { Pencil } from "lucide-react";
 import { useCallback, useState } from "react";
 import { steeringState, type UserItem } from "../../lib/chat/transcript";
+import { CopyAction } from "./CopyAction";
 import { useDisclosure } from "./DisclosureMemory";
 
 export function UserMessage({
@@ -57,11 +58,17 @@ export function UserMessage({
       ) : null}
       <div className="chat-user-actions">
         {onEdit && !item.steering ? (
-          <button type="button" onClick={onEdit}>
-            Edit prompt
+          <button
+            type="button"
+            className="chat-action"
+            aria-label="Edit prompt"
+            title="Edit and resend"
+            onClick={onEdit}
+          >
+            <Pencil size={14} />
           </button>
         ) : null}
-        <CopyButton text={item.text} label="Copy prompt" />
+        <CopyAction text={item.text} label="Copy prompt" />
       </div>
     </div>
   );
