@@ -194,9 +194,9 @@
   color: var(--ui-text-secondary);
 }
 
+/* The mark beside it and the request card already carry volt; the words stay quiet. */
 .chat-now[data-state="waiting"] {
-  color: var(--ui-signal);
-  font-weight: 500;
+  color: var(--ui-text-secondary);
 }
 
 .chat-thought > summary {

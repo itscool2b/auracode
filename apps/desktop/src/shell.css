@@ -826,6 +826,7 @@
   flex-wrap: wrap;
   gap: 2px;
   padding: 0 4px;
+  margin-bottom: 8px;
 }
 
 .chat-agent-popover > summary {
