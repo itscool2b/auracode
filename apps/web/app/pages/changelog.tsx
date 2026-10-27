@@ -1,12 +1,18 @@
-import { Page } from "../ui";
+import catalog from "#release-catalog";
+import { Arrow, Page } from "../ui";
+
 export const meta = () => [{ title: "Changelog · auracode" }];
+
 export default function Changelog() {
   return (
-    <Page eyebrow="DEVELOPMENT NOTES" title="Taking shape.">
-      <article className="release">
-        <time dateTime="2026-10-26">26 OCT 2026</time>
-        <div>
-          <span className="status">Development preview</span>
+    <Page wide title="Changelog." tone="Notes from the development preview.">
+      <article className="release-entry" data-reveal="">
+        <div className="release-meta">
+          <time dateTime="2026-10-26">26 October 2026</time>
+          <span>Development preview</span>
+          <span className="g-new">New</span>
+        </div>
+        <div className="release-body prose">
           <h2>One workspace. Your own agents.</h2>
           <p>
             The Windows and macOS desktop brings native coding agents into a shared local workspace.
@@ -26,12 +32,10 @@ export default function Changelog() {
               : "No public installer is published yet. This page will link versioned release notes, checksums and known issues when each release is available."}
           </p>
           <a className="text-link" href="/download">
-            View download status ↗
+            View download status <Arrow />
           </a>
         </div>
       </article>
     </Page>
   );
 }
-
-import catalog from "#release-catalog";

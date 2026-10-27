@@ -1,10 +1,13 @@
-import { Page } from "../ui";
+import { Arrow, Page } from "../ui";
 export const meta = () => [{ title: "Privacy · auracode" }];
 export default function Privacy() {
   return (
-    <Page eyebrow="PRIVACY / PRE-RELEASE NOTICE" title="Your work stays yours.">
+    <Page
+      title="Privacy."
+      tone="Your work stays yours."
+      lead="Local work needs no account. Cloud access is invite-only."
+    >
       <article className="prose">
-        <p className="lead">Local work needs no account. Cloud access is invite-only.</p>
         <p>
           This notice describes the implemented design as of October 26, 2026. Operator identity,
           legal contact details and jurisdiction-specific terms require review before the account
@@ -65,7 +68,7 @@ export default function Privacy() {
           workspace for you.
         </p>
         <a className="text-link" href="/account">
-          Manage your account ↗
+          Manage your account <Arrow />
         </a>
       </article>
     </Page>

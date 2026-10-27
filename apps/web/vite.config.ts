@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig } from "vite";
 import { noticesPlugin } from "../../.github/scripts/third-party-notices.mjs";
+import { ditherFallbacksPlugin } from "./scripts/dither-fallbacks.ts";
 
 const app = fileURLToPath(new URL(".", import.meta.url));
 const stage = process.env.AURACODE_RELEASE_STAGE;
@@ -19,7 +20,7 @@ if (stage) {
   }
 }
 export default defineConfig({
-  plugins: [reactRouter(), noticesPlugin("web")],
+  plugins: [reactRouter(), noticesPlugin("web"), ditherFallbacksPlugin()],
   resolve: {
     alias: {
       "#release-catalog": stage

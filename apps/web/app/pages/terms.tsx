@@ -1,10 +1,13 @@
-import { Page } from "../ui";
+import { Arrow, Page } from "../ui";
 export const meta = () => [{ title: "Terms · auracode" }];
 export default function Terms() {
   return (
-    <Page eyebrow="TERMS / PRE-RELEASE DRAFT" title="A clear place to start.">
+    <Page
+      title="Terms."
+      tone="A clear place to start."
+      lead="Cloud access is an invite-only private preview."
+    >
       <article className="prose">
-        <p className="lead">Cloud access is an invite-only private preview.</p>
         <p>
           These product terms are a draft, not final launch terms. Operator identification, contact
           details, applicable rights and legal review are required before public accounts or
@@ -45,7 +48,7 @@ export default function Terms() {
           providers may still need a connection for their own services.
         </p>
         <a className="text-link" href="/privacy">
-          Read the privacy notice ↗
+          Read the privacy notice <Arrow />
         </a>
       </article>
     </Page>

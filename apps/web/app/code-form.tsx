@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ApiError, api, type Challenge } from "./api";
 import { Turnstile } from "./turnstile";
-import { Notice } from "./ui";
+import { Arrow, Notice } from "./ui";
 export function CodeForm({
   mode = "signin",
   csrf,
@@ -82,8 +82,10 @@ export function CodeForm({
   return (
     <form onSubmit={submit} className="code-form">
       {challenge ? (
-        <>
-          <label htmlFor="code">Six-digit code</label>
+        <div className="field">
+          <label className="field-label" htmlFor="code">
+            Six-digit code
+          </label>
           <p className="field-help">
             Sent to <strong>{email}</strong>. Check your spam folder too.
           </p>
@@ -100,40 +102,45 @@ export function CodeForm({
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
             required
-            className="code-input"
+            className="g-input field-input code-input"
           />
-          <p className="caption">
+          <p className="field-meta">
             {remaining
               ? `Code expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}.`
               : "This code has expired. Request another code."}
           </p>
-        </>
+        </div>
       ) : (
         <>
-          <label htmlFor="email">{mode === "email" ? "New email address" : "Email address"}</label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            maxLength={254}
-          />
+          <div className="field">
+            <label className="field-label" htmlFor="email">
+              {mode === "email" ? "New email address" : "Email address"}
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              maxLength={254}
+              className="g-input field-input"
+            />
+          </div>
           <Turnstile key={captcha} onToken={setToken} />
         </>
       )}
       {error && <Notice error>{error}</Notice>}
       {inviteRequired && mode === "signin" ? (
         <a className="text-link" href="/download">
-          Explore the free Local app ↗
+          Explore the free Local app <Arrow />
         </a>
       ) : null}
       <button
         type="submit"
-        className="button full"
+        className="g-button g-button-primary g-button-44"
         disabled={
           busy || (!challenge && !token) || (!!challenge && (!remaining || code.length !== 6))
         }
@@ -145,7 +152,6 @@ export function CodeForm({
               ? "Confirm email change"
               : "Verify and sign in"
             : "Send a code"}
-        <span aria-hidden="true">↗</span>
       </button>
       {challenge && (
         <button
@@ -162,7 +168,7 @@ export function CodeForm({
         </button>
       )}
       <noscript>
-        <p>
+        <p className="note">
           JavaScript is required for secure code verification. Downloads and public information work
           without it.
         </p>

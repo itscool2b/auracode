@@ -2,7 +2,14 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "types": ["vite/client", "node"],
+    "allowImportingTsExtensions": true,
     "rootDirs": [".", "./.react-router/types"]
   },
-  "include": ["app", ".react-router/types", "vite.config.ts", "react-router.config.ts"]
+  "include": [
+    "app",
+    ".react-router/types",
+    "scripts/dither-fallbacks.ts",
+    "vite.config.ts",
+    "react-router.config.ts"
+  ]
 }
