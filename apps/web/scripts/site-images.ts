@@ -1,10 +1,12 @@
 // Build glue for the site's generated images, written as small palette PNGs: each dither field's
 // no-JavaScript fallback, drawn by the same renderer the browser uses (renderDitherFrame) at one
-// image pixel per cell, and the favicon, the pixel "a" on black (visual language 4.14).
+// image pixel per cell, creatures included, and the favicon, the pixel "a" on black (visual
+// language 4.14).
 import { deflateSync } from "node:zlib";
 import type { Plugin } from "vite";
 import { renderDitherFrame, VOLT } from "../../../packages/ui/src/graphite/dither.ts";
 import { PIXEL_MARK_GRID } from "../../../packages/ui/src/graphite/pixels.ts";
+import { paintSprites } from "../../../packages/ui/src/graphite/sprites.ts";
 import { DITHER_PALETTES, GRAPHITE_COLORS } from "../../../packages/ui/src/graphite/tokens.ts";
 import { FIELD_FALLBACKS, type FieldFallback, type FieldSettings } from "../app/fields.ts";
 
@@ -71,6 +73,9 @@ export function fallbackPng(fallback: FieldFallback, field: FieldSettings): Buff
   const cols = Math.ceil(fallback.width / field.cell);
   const rows = Math.ceil(fallback.height / field.cell);
   const greys = DITHER_PALETTES[field.palette];
+  // The creatures where the live field draws them in its first frame.
+  const overlay = new Float32Array(cols * rows);
+  paintSprites(overlay, cols, rows, fallback.sprites ?? [], 0, field.cell);
   const levels = renderDitherFrame({
     cols,
     rows,
@@ -79,12 +84,15 @@ export function fallbackPng(fallback: FieldFallback, field: FieldSettings): Buff
     levels: greys.length + 1,
     density: field.density,
     accent: field.accent,
-    clearing: {
-      x: fallback.clearing.x * cols,
-      y: fallback.clearing.y * rows,
-      rx: fallback.clearing.rx * cols,
-      ry: fallback.clearing.ry * rows,
-    },
+    edges: field.edges ?? 0,
+    ceiling: field.ceiling ?? 1,
+    clearing: fallback.clearing.map((area) => ({
+      x: area.x * cols,
+      y: area.y * rows,
+      rx: area.rx * cols,
+      ry: area.ry * rows,
+    })),
+    overlay,
   });
   const volt = greys.length + 1;
   const indices = Uint8Array.from(levels, (level) => (level === VOLT ? volt : level));

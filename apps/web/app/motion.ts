@@ -3,7 +3,14 @@
  * offscreen or the tab is hidden, and stops for prefers-reduced-motion. Measured timings live in
  * docs/design/visual-language.md (3.8) and the Graphite tokens.
  */
-import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 const REDUCED = "(prefers-reduced-motion: reduce)";
 
@@ -19,6 +26,23 @@ export function useReducedMotion(): boolean {
     subscribeReduced,
     () => window.matchMedia(REDUCED).matches,
     () => false,
+  );
+}
+
+/** Whether a media query matches, live. `fallback` on the server and during hydration. */
+export function useMedia(query: string, fallback = false): boolean {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const media = window.matchMedia(query);
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    },
+    [query],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia(query).matches,
+    () => fallback,
   );
 }
 

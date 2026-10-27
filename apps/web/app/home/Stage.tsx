@@ -1,6 +1,7 @@
 import { DitherField, type DitherTarget } from "@auracode/ui/graphite";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { AGENT_NAMES } from "../agents";
+import { HERO_CREATURES, HERO_CREATURES_COMPACT } from "../creatures";
 import {
   type FieldClearing,
   FRAME_FIELD,
@@ -8,36 +9,49 @@ import {
   STAGE_FALLBACK,
   STAGE_FIELD,
 } from "../fields";
-import { useReducedMotion, useScrollValue } from "../motion";
+import { useMedia, useReducedMotion, useScrollValue } from "../motion";
 import { RotatingAgent } from "./RotatingAgent";
 
-/** How far beyond the copy the field stays thinned, across and down: the copy sits in the core. */
-const REACH_X = 2.3;
-const REACH_Y = 2.1;
+/**
+ * How far beyond the copy the field stays thinned, across and down: the copy sits in the core. On a
+ * phone the copy fills the width, so the clearing reaches past both edges.
+ */
+const REACH_X = 1.55;
+const REACH_X_COMPACT = 2.4;
+const REACH_Y = 1.7;
+/** The second clearing keeps the product frame's top edge calm: its width and height in px. */
+const SEAM_RX = 0.625;
+const SEAM_RY = 210;
+const SEAM_DROP = 40;
 
 /**
- * The opening stage: the live dither field fills it edge to edge and thins to black behind the
- * headline, lead and buttons; the product frame sits in the lower half inside Vercel's hairline
- * guides, and its own field dissolves into the real screenshot as it scrolls up the page.
+ * The opening stage: the live dither field fills it edge to edge, gathers toward the sides and
+ * thins to black behind the headline, lead and buttons and along the product frame's top edge.
+ * Seals and turtles swim through it. The frame's own field dissolves into the real screenshot,
+ * already under way when the page opens, as the frame scrolls up.
  */
 export function Stage() {
   const stage = useRef<HTMLDivElement>(null);
   const copy = useRef<HTMLDivElement>(null);
+  const hero = useRef<HTMLElement>(null);
   const frame = useRef<HTMLElement>(null);
   const image = useRef<HTMLImageElement>(null);
   const reduced = useReducedMotion();
-  const [clearing, setClearing] = useState<FieldClearing>(STAGE_CLEARING);
+  const compact = useMedia("(max-width: 767px)");
+  const [clearing, setClearing] = useState<readonly FieldClearing[]>(STAGE_CLEARING);
   const [source, setSource] = useState<string | null>(null);
-  // 0 while the frame's top is at 80% of the viewport, 1 once it reaches 25%.
+  // Already past half when the frame's top first shows below the copy, so the screenshot's top has
+  // formed when the page opens; done once the frame's top reaches 55% of the viewport.
   const progress = useScrollValue(
     frame,
-    (rect, viewport) => (viewport * 0.8 - rect.top) / (viewport * 0.55),
+    (rect, viewport) => (viewport * 1.15 - rect.top) / (viewport * 0.6),
   );
 
   useEffect(() => {
     const field = stage.current;
     const block = copy.current;
-    if (!field || !block || typeof ResizeObserver === "undefined") return;
+    const section = hero.current;
+    if (!field || !block || !section || typeof ResizeObserver === "undefined") return;
     const measure = () => {
       const box = field.getBoundingClientRect();
       if (box.width < 1 || box.height < 1) return;
@@ -54,27 +68,32 @@ export function Stage() {
       }
       if (!Number.isFinite(left)) return;
       const round = (value: number) => Math.round(value * 1000) / 1000;
-      const next = {
-        x: round(((left + right) / 2 - box.left) / box.width),
-        y: round(((top + bottom) / 2 - box.top) / box.height),
-        rx: round((((right - left) / 2) * REACH_X) / box.width),
-        ry: round((((bottom - top) / 2) * REACH_Y) / box.height),
-      };
+      const seam = section.getBoundingClientRect().bottom - box.top;
+      const next: readonly FieldClearing[] = [
+        {
+          x: round(((left + right) / 2 - box.left) / box.width),
+          y: round(((top + bottom) / 2 - box.top) / box.height),
+          rx: round((((right - left) / 2) * (compact ? REACH_X_COMPACT : REACH_X)) / box.width),
+          ry: round((((bottom - top) / 2) * REACH_Y) / box.height),
+        },
+        {
+          x: 0.5,
+          y: round((seam + SEAM_DROP) / box.height),
+          rx: SEAM_RX,
+          ry: round(SEAM_RY / box.height),
+        },
+      ];
       setClearing((previous) =>
-        previous.x === next.x &&
-        previous.y === next.y &&
-        previous.rx === next.rx &&
-        previous.ry === next.ry
-          ? previous
-          : next,
+        JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
       );
     };
     const observer = new ResizeObserver(measure);
     observer.observe(field);
     observer.observe(block);
+    observer.observe(section);
     measure();
     return () => observer.disconnect();
-  }, []);
+  }, [compact]);
 
   useEffect(() => {
     const img = image.current;
@@ -97,16 +116,19 @@ export function Stage() {
         className="stage-field site-field"
         cell={STAGE_FIELD.cell}
         density={STAGE_FIELD.density}
+        edges={compact ? 0 : STAGE_FIELD.edges}
+        ceiling={STAGE_FIELD.ceiling}
         accent={STAGE_FIELD.accent}
         palette={STAGE_FIELD.palette}
         seed={STAGE_FIELD.seed}
         clearing={clearing}
+        sprites={compact ? HERO_CREATURES_COMPACT : HERO_CREATURES}
         interactive
       />
       <noscript>
         <img className="field-fallback" src={`/${STAGE_FALLBACK.file}`} alt="" />
       </noscript>
-      <section className="hero" aria-labelledby="hero-title">
+      <section className="hero" aria-labelledby="hero-title" ref={hero}>
         <div className="hero-copy" ref={copy}>
           <h1 id="hero-title" className="hero-title" aria-label="One window for your coding agents">
             <span className="hero-line" data-clear="" aria-hidden="true">
@@ -142,10 +164,6 @@ export function Stage() {
       </section>
       <div className="showcase">
         <figure className="product-frame" ref={frame}>
-          <span className="g-crosshair g-crosshair-tl" aria-hidden="true" />
-          <span className="g-crosshair g-crosshair-tr" aria-hidden="true" />
-          <span className="g-crosshair g-crosshair-bl" aria-hidden="true" />
-          <span className="g-crosshair g-crosshair-br" aria-hidden="true" />
           <DitherField
             className="product-field site-field"
             cell={FRAME_FIELD.cell}

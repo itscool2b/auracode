@@ -1,8 +1,12 @@
 import { DitherField } from "@auracode/ui/graphite";
 import type { CSSProperties } from "react";
+import { CLOSING_CREATURES } from "../creatures";
 import { CLOSING_CLEARING, CLOSING_FALLBACK, CLOSING_FIELD } from "../fields";
 
-/** The closing statement over a quiet dither band that thins to black behind the words. */
+/**
+ * The closing statement over a dark dither band that thins to black behind the words, with a turtle
+ * and a seal crossing it.
+ */
 export function Closing() {
   return (
     <section className="closing" aria-labelledby="closing-title">
@@ -10,10 +14,12 @@ export function Closing() {
         className="closing-field site-field"
         cell={CLOSING_FIELD.cell}
         density={CLOSING_FIELD.density}
+        ceiling={CLOSING_FIELD.ceiling}
         accent={CLOSING_FIELD.accent}
         palette={CLOSING_FIELD.palette}
         seed={CLOSING_FIELD.seed}
         clearing={CLOSING_CLEARING}
+        sprites={CLOSING_CREATURES}
       />
       <noscript>
         <img className="field-fallback" src={`/${CLOSING_FALLBACK.file}`} alt="" />
