@@ -1,17 +1,16 @@
-import { CopyButton, OrbitMark } from "@auracode/ui/orbit";
+import { AgentMark, CopyButton, StatusDot } from "@auracode/ui/graphite";
 import {
   ArrowRightLeft,
   Brain,
+  ChevronRight,
   FileMinus,
   FilePenLine,
   FileText,
-  Globe,
+  Link,
   Search,
   SlidersHorizontal,
-  Square,
   SquareTerminal,
   Wrench,
-  X,
 } from "lucide-react";
 import { useState } from "react";
 import type { ToolContent, ToolLocation, Truncation } from "../../bindings";
@@ -44,10 +43,84 @@ const TOOL_ICON = {
   search: Search,
   execute: SquareTerminal,
   think: Brain,
-  fetch: Globe,
+  fetch: Link,
   switch_mode: SlidersHorizontal,
   other: Wrench,
 } as const;
+
+/** Words an agent leads a tool title with; what follows is the object the call acts on. */
+const VERBS = new Set([
+  "add",
+  "apply",
+  "build",
+  "call",
+  "check",
+  "copy",
+  "create",
+  "delete",
+  "download",
+  "edit",
+  "execute",
+  "fetch",
+  "find",
+  "fix",
+  "glob",
+  "grep",
+  "inspect",
+  "install",
+  "list",
+  "load",
+  "move",
+  "open",
+  "patch",
+  "read",
+  "remove",
+  "rename",
+  "replace",
+  "run",
+  "save",
+  "search",
+  "switch",
+  "test",
+  "update",
+  "upload",
+  "use",
+  "view",
+  "write",
+]);
+
+/** A shell command as agents title it: it starts like a program or a path, never like a sentence. */
+const COMMAND = /^[a-z./~][^\s]*\s/;
+
+/**
+ * How a tool row reads (6.4): the verb in sans, then the object, in mono when it is one token (a
+ * path, a pattern, an identifier) or a shell command ("Read" `Sidebar.tsx`, "Ran" `pnpm test`). A
+ * command titled by itself gets the verb of its state. Display only: the full title stays the
+ * row's tooltip.
+ */
+export function toolLabel(
+  title: string,
+  kind: ToolItem["toolKind"],
+  display: ToolDisplayStatus,
+): { readonly verb: string | null; readonly object: string; readonly literal: boolean } {
+  const text = title.trim();
+  const unwrap = (value: string) => value.replace(/^`([^`]+)`$/, "$1");
+  // "write_file: aura-perm.txt": a tool's own name and its argument.
+  const named = /^([a-z][\w.-]*):\s+(\S.*)$/.exec(text);
+  if (named?.[1] && named[2]) return { verb: named[1], object: unwrap(named[2]), literal: true };
+  const space = text.indexOf(" ");
+  const first = space > 0 ? text.slice(0, space) : "";
+  if (/^[A-Z][a-z]+$/.test(first) && VERBS.has(first.toLowerCase())) {
+    const object = unwrap(text.slice(space + 1).trim());
+    const isLiteral = !/\s/.test(object) || (kind === "execute" && /^[a-z./~]/.test(object));
+    return { verb: first, object, literal: isLiteral };
+  }
+  if (kind === "execute" && COMMAND.test(text)) {
+    const verb = display === "pending" ? "Run" : display === "in_progress" ? "Running" : "Ran";
+    return { verb, object: unwrap(text), literal: true };
+  }
+  return { verb: null, object: text, literal: false };
+}
 
 /** A tool call: title, kind, status and locations, with its output below. */
 export function ToolBlock({
@@ -62,10 +135,12 @@ export function ToolBlock({
   readonly agentId?: string;
 } & BlobProps) {
   const running = display === "pending" || display === "in_progress";
-  const Icon = display === "failed" ? X : display === "stopped" ? Square : TOOL_ICON[tool.toolKind];
+  const Icon = TOOL_ICON[tool.toolKind];
   const [expanded, setExpanded] = useDisclosure(tool.key, display, running || display === "failed");
   const [outputFocused, setOutputFocused] = useState(false);
   const open = expanded || outputFocused;
+  const title = tool.title || tool.toolName || "Tool";
+  const label = toolLabel(title, tool.toolKind, display);
   return (
     <div
       className="chat-tool"
@@ -88,24 +163,37 @@ export function ToolBlock({
           if (event.currentTarget.open !== open) setExpanded(event.currentTarget.open);
         }}
       >
-        <summary className="chat-tool-head">
-          {running ? (
-            <OrbitMark
-              agent={agentId}
-              state="tool"
-              size={16}
-              label={`Running ${tool.title || tool.toolName || "tool"}`}
-            />
-          ) : (
-            <span className="chat-tool-icon" aria-hidden="true">
-              <Icon size={14} strokeWidth={1.5} />
+        <summary className="chat-tool-head" title={title}>
+          <span className="chat-gutter">
+            {running ? (
+              <AgentMark
+                agent={agentId}
+                state="tool"
+                size={16}
+                label={`Running ${tool.title || tool.toolName || "tool"}`}
+              />
+            ) : display === "failed" ? (
+              <StatusDot tone="red" />
+            ) : display === "stopped" ? (
+              <StatusDot tone="neutral" />
+            ) : (
+              <Icon className="chat-tool-icon" size={14} strokeWidth={1.5} aria-hidden="true" />
+            )}
+          </span>
+          <span className="chat-tool-label">
+            {label.verb ? (
+              <>
+                <span className="chat-tool-verb">{label.verb}</span>{" "}
+              </>
+            ) : null}
+            <span className="chat-tool-object" data-literal={label.literal ? "" : undefined}>
+              {label.object}
             </span>
-          )}
-          <span className="chat-block-title">{tool.title || tool.toolName || "Tool"}</span>
-          <span className="chat-block-tag">{tool.toolKind.replace("_", " ")}</span>
+          </span>
           <span className="chat-tool-status" data-status={display}>
             {STATUS_LABEL[display]}
           </span>
+          <ChevronRight className="chat-tool-chevron" size={12} aria-hidden="true" />
         </summary>
         <div className="chat-tool-well">
           <Locations locations={tool.locations} />

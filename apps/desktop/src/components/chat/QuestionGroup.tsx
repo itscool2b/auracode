@@ -67,7 +67,7 @@ export function QuestionGroupForm({
             data-test-question-id={question.id}
           >
             <legend className="chat-question-legend">
-              <span className="chat-block-tag">{question.header}</span>
+              <span className="chat-question-tag">{question.header}</span>
               <span>{question.question}</span>
             </legend>
             <p className="ui-muted chat-question-hint">

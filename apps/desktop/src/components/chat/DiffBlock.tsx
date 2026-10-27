@@ -1,4 +1,4 @@
-import { CopyButton } from "@auracode/ui/orbit";
+import { CopyButton } from "@auracode/ui/graphite";
 import { useId, useMemo } from "react";
 import { diffLines } from "../../lib/diff";
 import { useDisclosure } from "./DisclosureMemory";

@@ -1,4 +1,4 @@
-import { OrbitMark } from "@auracode/ui/orbit";
+import { AgentMark } from "@auracode/ui/graphite";
 import { useEffect, useId, useState, useSyncExternalStore } from "react";
 import type {
   AgentAuthStatus,
@@ -149,6 +149,7 @@ export function NewChat({
     !organization.busy &&
     !state.creating &&
     state.maintenanceBusy !== "update";
+  const chosenFolder = preview?.folder.path ?? state.folder;
   return (
     <form
       className="chat-new-form"
@@ -200,167 +201,195 @@ export function NewChat({
       }}
     >
       <div className="chat-welcome">
-        <OrbitMark
+        <AgentMark
           agent={selected?.id ?? "generic"}
-          size={56}
+          size={40}
           label={selected ? `${selected.name}, ready for a new chat` : "Choose your agent"}
         />
-        <h1>What are we working on?</h1>
-        <p>Your agents, in one place. Choose a folder to begin.</p>
-      </div>
-      <div className="ui-field">
-        <label htmlFor={agentId}>Agent</label>
-        <div className="ui-row">
-          <select
-            id={agentId}
-            className="ui-select"
-            data-testid="new-chat-agent"
-            value={state.agentId ?? ""}
-            onChange={(event) => draft.chooseAgent(event.currentTarget.value)}
-          >
-            <option value="" disabled>
-              {agents === null ? "Looking for agents…" : "Choose an agent"}
-            </option>
-            {(agents ?? []).map((agent) => {
-              const choice = agentChoice(agent);
-              return (
-                <option key={agent.id} value={agent.id} disabled={!choice.enabled}>
-                  {choice.reason === null ? agent.name : `${agent.name}: ${choice.reason}`}
-                </option>
-              );
-            })}
-          </select>
-          <button
-            type="button"
-            className="ui-button"
-            data-testid="new-chat-refresh"
-            disabled={refreshing}
-            onClick={onRefreshAgents}
-          >
-            {refreshing ? "Refreshing…" : "Refresh agents"}
-          </button>
-        </div>
-        <details className="chat-new-details">
-          <summary>Agent details and sign-in</summary>
-          {selected ? <span className="ui-muted">{selected.description}</span> : null}
-          {ready !== null ? <span className="ui-muted ui-mono">{ready}</span> : null}
-          {selected?.installation ? (
-            <InstallationStatus installation={selected.installation} />
-          ) : null}
-          {selected?.latest_release?.version ? (
-            <small className="ui-muted">
-              Latest on {selected.latest_release.source}: {selected.latest_release.version}
-              {selected.latest_release.stale ? " (cached; refresh unavailable)" : null}
-            </small>
-          ) : null}
-          {selected?.installation ? (
-            <section className="ui-field" aria-label="Agent maintenance">
-              {state.maintenanceBusy === "checking" ? (
-                <small className="ui-muted">Checking available actions…</small>
+        {/* One two-tone sentence (6.13): the agent and the project in ink, the rest in grey. */}
+        <h1>
+          {selected ? (
+            <>
+              <span className="chat-welcome-fg">{selected.name}</span> is ready
+              {chosenFolder ? (
+                <>
+                  {" "}
+                  in <span className="chat-welcome-fg">{projectName(chosenFolder)}</span>
+                </>
               ) : null}
-              <div className="ui-row">
-                {state.maintenance?.auth_status ? (
-                  <button
-                    type="button"
-                    className="ui-button"
-                    disabled={state.maintenanceBusy !== null}
-                    onClick={() => void draft.checkAuth()}
-                  >
-                    {state.maintenanceBusy === "auth" ? "Checking sign-in…" : "Check sign-in"}
-                  </button>
-                ) : null}
-                {state.maintenance?.update_unavailable === null ? (
-                  <button
-                    type="button"
-                    className="ui-button"
-                    disabled={state.maintenanceBusy !== null || state.creating}
-                    onClick={() => void draft.updateAgent().then(() => onRefreshAgents())}
-                  >
-                    {state.maintenanceBusy === "update" ? "Updating agent…" : "Update agent"}
-                  </button>
-                ) : null}
-              </div>
-              {state.maintenance?.update_unavailable ? (
-                <small className="ui-muted">{state.maintenance.update_unavailable}</small>
-              ) : null}
-              {state.auth ? (
-                <span role="status" className="ui-muted">
-                  {authStatusText(state.auth)}
-                </span>
-              ) : null}
-              {state.maintenanceMessage ? (
-                <span role="status">{state.maintenanceMessage}</span>
-              ) : null}
-              {state.maintenanceError ? (
-                <span role="alert" className="ui-error">
-                  {state.maintenanceError}
-                </span>
-              ) : null}
-            </section>
-          ) : null}
-        </details>
-        {note !== null ? <span>{note}</span> : null}
-      </div>
-      {unavailable.length > 0 ? (
-        <details className="chat-new-details">
-          <summary>Other agents</summary>
-          <ul className="chat-unavailable">
-            {unavailable.map((agent) => (
-              <li key={agent.id}>
-                {agent.name}: {agentChoice(agent).reason}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-      <div className="ui-field">
-        <span>Folder</span>
-        {workspace && (organization.data?.projects.length ?? 0) > 0 ? (
-          <select
-            className="ui-select"
-            aria-label="Project folder"
-            value={folderId}
-            onChange={(event) => {
-              setFolderId(event.currentTarget.value);
-              const project = organization.data?.projects.find((item) =>
-                item.folders.some((folder) => folder.id === event.currentTarget.value),
-              );
-              if (project?.default_agent) draft.chooseAgent(project.default_agent);
-            }}
-          >
-            <option value="">Choose a different folder…</option>
-            {organization.data?.projects.map((project) => (
-              <optgroup key={project.id} label={project.name}>
-                {project.folders.map((folder) => (
-                  <option key={folder.id} value={folder.id} disabled={folder.folder_state !== "ok"}>
-                    {folder.display_name}
-                    {folder.folder_state !== "ok" ? " (unavailable on this device)" : ""}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        ) : null}
-        <div className="ui-row">
-          <button
-            type="button"
-            className="ui-button"
-            data-testid="new-chat-pick-folder"
-            disabled={state.picking}
-            onClick={() => {
-              setFolderId("");
-              void draft.chooseFolder();
-            }}
-          >
-            {state.picking ? "Choosing…" : "Choose folder"}
-          </button>
-          <span
-            className="ui-mono"
-            data-testid="new-chat-folder"
-            data-test-folder={state.folder ?? ""}
-          >
-            {preview?.folder.path ?? state.folder ?? "No folder chosen"}
+              .
+            </>
+          ) : (
+            <span className="chat-welcome-fg">What are we working on?</span>
+          )}
+          <span className="chat-welcome-next">
+            {!selected
+              ? "Choose an agent and a folder."
+              : chosenFolder
+                ? "Create the chat to start."
+                : "Choose a folder to begin."}
           </span>
+        </h1>
+      </div>
+      <div className="chat-new-card">
+        <div className="ui-field">
+          <label htmlFor={agentId}>Agent</label>
+          <div className="ui-row">
+            <select
+              id={agentId}
+              className="ui-select"
+              data-testid="new-chat-agent"
+              value={state.agentId ?? ""}
+              onChange={(event) => draft.chooseAgent(event.currentTarget.value)}
+            >
+              <option value="" disabled>
+                {agents === null ? "Looking for agents…" : "Choose an agent"}
+              </option>
+              {(agents ?? []).map((agent) => {
+                const choice = agentChoice(agent);
+                return (
+                  <option key={agent.id} value={agent.id} disabled={!choice.enabled}>
+                    {choice.reason === null ? agent.name : `${agent.name}: ${choice.reason}`}
+                  </option>
+                );
+              })}
+            </select>
+            <button
+              type="button"
+              className="ui-button"
+              data-testid="new-chat-refresh"
+              disabled={refreshing}
+              onClick={onRefreshAgents}
+            >
+              {refreshing ? "Refreshing…" : "Refresh agents"}
+            </button>
+          </div>
+          <details className="chat-new-details">
+            <summary>Agent details and sign-in</summary>
+            {selected ? <span className="ui-muted">{selected.description}</span> : null}
+            {ready !== null ? <span className="ui-muted ui-mono">{ready}</span> : null}
+            {selected?.installation ? (
+              <InstallationStatus installation={selected.installation} />
+            ) : null}
+            {selected?.latest_release?.version ? (
+              <small className="ui-muted">
+                Latest on {selected.latest_release.source}: {selected.latest_release.version}
+                {selected.latest_release.stale ? " (cached; refresh unavailable)" : null}
+              </small>
+            ) : null}
+            {selected?.installation ? (
+              <section className="ui-field" aria-label="Agent maintenance">
+                {state.maintenanceBusy === "checking" ? (
+                  <small className="ui-muted">Checking available actions…</small>
+                ) : null}
+                <div className="ui-row">
+                  {state.maintenance?.auth_status ? (
+                    <button
+                      type="button"
+                      className="ui-button"
+                      disabled={state.maintenanceBusy !== null}
+                      onClick={() => void draft.checkAuth()}
+                    >
+                      {state.maintenanceBusy === "auth" ? "Checking sign-in…" : "Check sign-in"}
+                    </button>
+                  ) : null}
+                  {state.maintenance?.update_unavailable === null ? (
+                    <button
+                      type="button"
+                      className="ui-button"
+                      disabled={state.maintenanceBusy !== null || state.creating}
+                      onClick={() => void draft.updateAgent().then(() => onRefreshAgents())}
+                    >
+                      {state.maintenanceBusy === "update" ? "Updating agent…" : "Update agent"}
+                    </button>
+                  ) : null}
+                </div>
+                {state.maintenance?.update_unavailable ? (
+                  <small className="ui-muted">{state.maintenance.update_unavailable}</small>
+                ) : null}
+                {state.auth ? (
+                  <span role="status" className="ui-muted">
+                    {authStatusText(state.auth)}
+                  </span>
+                ) : null}
+                {state.maintenanceMessage ? (
+                  <span role="status">{state.maintenanceMessage}</span>
+                ) : null}
+                {state.maintenanceError ? (
+                  <span role="alert" className="ui-error">
+                    {state.maintenanceError}
+                  </span>
+                ) : null}
+              </section>
+            ) : null}
+          </details>
+          {note !== null ? <span>{note}</span> : null}
+        </div>
+        {unavailable.length > 0 ? (
+          <details className="chat-new-details">
+            <summary>Other agents</summary>
+            <ul className="chat-unavailable">
+              {unavailable.map((agent) => (
+                <li key={agent.id}>
+                  {agent.name}: {agentChoice(agent).reason}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+        <div className="ui-field">
+          <span>Folder</span>
+          {workspace && (organization.data?.projects.length ?? 0) > 0 ? (
+            <select
+              className="ui-select"
+              aria-label="Project folder"
+              value={folderId}
+              onChange={(event) => {
+                setFolderId(event.currentTarget.value);
+                const project = organization.data?.projects.find((item) =>
+                  item.folders.some((folder) => folder.id === event.currentTarget.value),
+                );
+                if (project?.default_agent) draft.chooseAgent(project.default_agent);
+              }}
+            >
+              <option value="">Choose a different folder…</option>
+              {organization.data?.projects.map((project) => (
+                <optgroup key={project.id} label={project.name}>
+                  {project.folders.map((folder) => (
+                    <option
+                      key={folder.id}
+                      value={folder.id}
+                      disabled={folder.folder_state !== "ok"}
+                    >
+                      {folder.display_name}
+                      {folder.folder_state !== "ok" ? " (unavailable on this device)" : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          ) : null}
+          <div className="ui-row">
+            <button
+              type="button"
+              className="ui-button"
+              data-testid="new-chat-pick-folder"
+              disabled={state.picking}
+              onClick={() => {
+                setFolderId("");
+                void draft.chooseFolder();
+              }}
+            >
+              {state.picking ? "Choosing…" : "Choose folder"}
+            </button>
+            <span
+              className="ui-mono"
+              data-testid="new-chat-folder"
+              data-test-folder={state.folder ?? ""}
+            >
+              {preview?.folder.path ?? state.folder ?? "No folder chosen"}
+            </span>
+          </div>
         </div>
       </div>
       {preview && preview.busy_chats.length > 0 ? (
@@ -382,7 +411,7 @@ export function NewChat({
           {previewError ?? organization.error}
         </p>
       ) : null}
-      <div className="ui-row">
+      <div className="ui-row chat-new-submit">
         <button
           type="submit"
           className="ui-button"

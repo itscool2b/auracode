@@ -26,7 +26,6 @@ export function AuthCard({
         <span className="chat-block-title" data-testid="auth-message">
           {auth.message}
         </span>
-        <span className="chat-block-tag">Sign-in needed</span>
       </div>
       {auth.commands.map((command, index) => {
         const text = authCommandText(command);

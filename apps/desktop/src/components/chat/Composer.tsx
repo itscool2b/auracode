@@ -273,7 +273,7 @@ export function Composer({
             }
             title={status === "running" || status === "starting" ? "Queue message" : "Send message"}
           >
-            <ArrowUp size={18} />
+            <ArrowUp size={16} strokeWidth={2.25} />
           </button>
         </div>
       </div>
@@ -324,7 +324,7 @@ export function StopButton({
         aria-label="Stop"
         title="Stop"
       >
-        <Square size={12} fill="currentColor" />
+        <Square size={10} fill="currentColor" strokeWidth={0} />
       </button>
     );
   }

@@ -1,4 +1,4 @@
-import { OrbitMark } from "@auracode/ui/orbit";
+import { AgentMark } from "@auracode/ui/graphite";
 import { useEffect, useRef, useState } from "react";
 import type {
   AgentEntry,
@@ -236,7 +236,7 @@ export function ConversationDialog({
             {turns.turns.map((turn) => (
               <li key={turn.turn_id}>
                 <div>
-                  <OrbitMark agent={turn.agent_id} size={16} />
+                  <AgentMark agent={turn.agent_id} size={16} />
                   <span>{turn.prompt_preview || "Agent activity"}</span>
                   <small>{turn.status}</small>
                 </div>
@@ -297,7 +297,7 @@ export function ConversationDialog({
       {preview ? (
         <>
           <div className="conversation-target">
-            <OrbitMark agent={preview.agent_id} size={24} />
+            <AgentMark agent={preview.agent_id} size={24} />
             <div>
               <strong>{agent?.name ?? preview.agent_id}</strong>
               <span>

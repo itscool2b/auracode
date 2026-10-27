@@ -1,5 +1,5 @@
-import { OrbitMark } from "@auracode/ui/orbit";
-import { ChevronDown, Signal } from "lucide-react";
+import { AgentMark } from "@auracode/ui/graphite";
+import { ChevronDown } from "lucide-react";
 import { Fragment, useId } from "react";
 import type {
   AgentEntry,
@@ -12,6 +12,37 @@ import type {
 import { AUTONOMIES, autonomyLabel, orderedOptions, pendingLabel } from "../../lib/chat/present";
 import { focusPickerChoice, movePickerFocus, PickerChoices } from "./PickerChoices";
 import { Popover } from "./Popover";
+
+/**
+ * The autonomy level as three square ticks, 4, 6 and 8px tall (6.11): Ask fills one, Auto-edit
+ * two, Full auto three. Decorative; the label beside it names the level.
+ */
+function AutonomyGlyph({ autonomy }: { readonly autonomy: Autonomy }) {
+  const level = autonomy === "full_auto" ? 3 : autonomy === "auto_edit" ? 2 : 1;
+  return (
+    <svg
+      className="chat-autonomy-glyph"
+      width="10"
+      height="8"
+      viewBox="0 0 10 8"
+      fill="currentColor"
+      shapeRendering="crispEdges"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {[4, 6, 8].map((height, index) => (
+        <rect
+          key={height}
+          x={index * 4}
+          y={8 - height}
+          width="2"
+          height={height}
+          data-on={index < level}
+        />
+      ))}
+    </svg>
+  );
+}
 
 const AGENT_KEYS: Readonly<Record<string, string>> = {
   claude: "c",
@@ -84,8 +115,10 @@ export function Pickers({
         shortcut="."
         className="chat-model-popover"
         trigger={
+          // A quiet text control (Aside): the agent, its model and effort, then a chevron. The
+          // agent's mark lives in the header and the picker rows; here its code would be visible
+          // text missing from the control's name.
           <>
-            <OrbitMark agent={agent?.id ?? "generic"} size={16} />
             <strong>{agent?.name ?? "Agent"}</strong>{" "}
             {model ? <span className="chat-pill-model">{choiceLabel(model)}</span> : null}{" "}
             {effort ? <span className="chat-pill-effort">{choiceLabel(effort)}</span> : null}
@@ -163,7 +196,7 @@ export function Pickers({
                       }
                     }}
                   >
-                    <OrbitMark agent={entry.id} size={18} />
+                    <AgentMark agent={entry.id} size={16} />
                     <span>
                       <strong>{entry.name}</strong>
                       <small>
@@ -178,7 +211,7 @@ export function Pickers({
               </fieldset>
             ) : (
               <span className="chat-current-agent">
-                <OrbitMark agent={agent?.id ?? "generic"} size={20} />
+                <AgentMark agent={agent?.id ?? "generic"} size={16} />
                 {agent?.name ?? "Agent"}
               </span>
             )}
@@ -251,7 +284,7 @@ export function Pickers({
         className="chat-autonomy-popover"
         trigger={
           <>
-            <Signal size={15} />
+            <AutonomyGlyph autonomy={chosen} />
             <span>{autonomyLabel(chosen)}</span>
             <ChevronDown size={12} />
           </>

@@ -1,4 +1,5 @@
-import { OrbitMark } from "@auracode/ui/orbit";
+import { AgentMark } from "@auracode/ui/graphite";
+import { ChevronRight } from "lucide-react";
 import type { RenderedItem } from "../../lib/chat/transcript";
 
 type RenderedTool = Extract<RenderedItem, { kind: "tool" }>;
@@ -46,7 +47,9 @@ export function ToolGroup({
     <div className="chat-tool-group">
       {byline ? (
         <div className="chat-byline">
-          <OrbitMark agent={agentId} size={16} label={agentName} />
+          <span className="chat-gutter">
+            <AgentMark agent={agentId} size={16} label={agentName} />
+          </span>
           <span>{agentName}</span>
         </div>
       ) : null}
@@ -57,13 +60,13 @@ export function ToolGroup({
         onClick={onToggle}
         data-testid="tool-group"
       >
-        {running ? (
-          <OrbitMark agent={agentId} size={16} state="tool" label={`${agentName}, working`} />
-        ) : (
-          <span className="chat-disclosure" aria-hidden="true">
-            {expanded ? "⌄" : "›"}
-          </span>
-        )}
+        <span className="chat-gutter">
+          {running ? (
+            <AgentMark agent={agentId} size={16} state="tool" label={`${agentName}, working`} />
+          ) : (
+            <ChevronRight className="chat-disclosure" size={12} aria-hidden="true" />
+          )}
+        </span>
         <span className="chat-tool-group-summary">
           {running ? running.title || "Working" : summary}
         </span>

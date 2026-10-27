@@ -1,5 +1,5 @@
 /** Development-only visual harness. It never starts a process or uses the native transport. */
-import { useOrbitTheme } from "@auracode/ui/orbit";
+import { PanelLeft } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import fullAuto from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-full-auto.events.json";
@@ -326,9 +326,7 @@ function streamingScript(): { delay: number; events: AuraEvent[] }[] {
     events: [
       ev.toolUpdate("stream-search", {
         status: "completed",
-        content: [
-          { type: "text", text: "src/chat.css:1175\nsrc/orbit-shell.css:680", truncated: null },
-        ],
+        content: [{ type: "text", text: "src/chat.css:1175\nsrc/shell.css:640", truncated: null }],
       }),
     ],
   });
@@ -418,8 +416,8 @@ function Preview() {
   ].includes(requested)
     ? requested
     : "settled";
-  const systemTheme = useOrbitTheme();
   const [palette, setPalette] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [selected, setSelected] = useState<string | null>(mode === "new" ? null : "preview");
   const status: SessionStatus =
     mode === "thinking" ||
@@ -619,8 +617,24 @@ function Preview() {
   }, [mode, status, chat]);
   const draft = useMemo(() => new NewChatDraft(transport), [transport]);
   return (
-    <div className="chat-app orbit-theme" data-theme={systemTheme} data-glass="none">
+    // Mirrors ChatsScreen's frame: the drag bands, the sidebar toggle, the panes.
+    <div
+      className="chat-app"
+      data-theme="dark"
+      data-glass="none"
+      data-sidebar-collapsed={collapsed}
+    >
       <aside className="chat-sidebar" aria-label="Sidebar">
+        <div className="chat-drag" />
+        <button
+          type="button"
+          className="chat-sidebar-toggle chat-icon-button"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed((value) => !value)}
+        >
+          <PanelLeft size={16} />
+        </button>
         <ChatList
           onSearch={() => setPalette(true)}
           chats={[
@@ -647,6 +661,7 @@ function Preview() {
         />
       </aside>
       <main className="chat-main">
+        <div className="chat-drag" />
         {selected === null ? (
           <NewChat
             agents={[AGENT]}

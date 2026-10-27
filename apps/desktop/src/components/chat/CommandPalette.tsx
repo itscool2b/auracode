@@ -1,3 +1,4 @@
+import { Keycap } from "@auracode/ui/graphite";
 import { File, Folder, MessageSquare, Search, Terminal } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { FileMention, SearchResults } from "../../bindings";
@@ -202,7 +203,7 @@ export function CommandPalette({
             }
           }}
         />
-        <kbd>Esc</kbd>
+        <Keycap>Esc</Keycap>
       </div>
       <section className="palette-scopes" aria-label="Search scope">
         {scopes.map((value) => (
@@ -265,7 +266,7 @@ export function CommandPalette({
                 <strong>{result.title}</strong>
                 <small>{result.detail}</small>
               </span>
-              {index === current ? <kbd>↵</kbd> : null}
+              {index === current ? <Keycap>↵</Keycap> : null}
             </div>
           );
         })}
@@ -276,9 +277,16 @@ export function CommandPalette({
         </p>
       ) : null}
       <footer>
-        <span>↑ ↓ to move</span>
-        <span>Enter to open</span>
-        <span>Esc to close</span>
+        <span>
+          <Keycap>↑</Keycap>
+          <Keycap>↓</Keycap> to move
+        </span>
+        <span>
+          <Keycap>Enter</Keycap> to open
+        </span>
+        <span>
+          <Keycap>Esc</Keycap> to close
+        </span>
       </footer>
     </Modal>
   );

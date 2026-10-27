@@ -1,4 +1,3 @@
-import { useOrbitTheme } from "@auracode/ui/orbit";
 import { PanelLeft } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { AppInfo, ProjectSummary } from "../../bindings";
@@ -46,7 +45,6 @@ export function ChatsScreen({
   readonly openChatRequest?: { id: string };
 }) {
   const snapshot = useSyncExternalStore(app.subscribe, app.getSnapshot, app.getSnapshot);
-  const theme = useOrbitTheme();
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState(() => new NewChatDraft(transport));
   const [collapsed, setCollapsed] = useState(false);
@@ -84,9 +82,10 @@ export function ChatsScreen({
   }, [app]);
 
   return (
+    // Dark only: the window is pure black and every pane is opaque, whatever material the OS offers.
     <div
-      className="chat-app orbit-theme"
-      data-theme={theme}
+      className="chat-app"
+      data-theme="dark"
       data-glass={info.glass}
       data-sidebar-collapsed={collapsed}
     >

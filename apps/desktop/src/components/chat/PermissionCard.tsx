@@ -56,9 +56,6 @@ export function PermissionCard({
         <span className="chat-block-title" data-testid="permission-title">
           {ask.title}
         </span>
-        {ask.kind !== null ? (
-          <span className="chat-block-tag">{ask.kind.replace("_", " ")}</span>
-        ) : null}
       </div>
       {raw !== null ? <pre className="ui-pre">{raw}</pre> : null}
       <Locations locations={ask.locations} />

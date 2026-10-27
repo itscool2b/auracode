@@ -1,7 +1,9 @@
+import { PixelLoader, StatusDot } from "@auracode/ui/graphite";
 import { Archive, ChevronRight, Ellipsis, Pin, Plus, Search, SquarePen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ChatSummary, ProjectSummary, WorkspaceSnapshot } from "../../bindings";
 import { folderStateLabel, statusWord } from "../../lib/chat/present";
+import { commandKey, Keys } from "./Keys";
 
 export function projectsOf(
   chats: readonly ChatSummary[],
@@ -113,21 +115,23 @@ export function ChatList({
           type="button"
           className="chat-nav-action"
           data-testid="new-chat-button"
+          aria-keyshortcuts="Control+N Meta+N"
           onClick={onNewChat}
         >
           <SquarePen size={16} />
           <span>New chat</span>
-          <kbd>N</kbd>
+          <Keys keys={[commandKey(), "N"]} />
         </button>
         <button
           type="button"
           className="chat-nav-action"
+          aria-keyshortcuts="Control+K Meta+K"
           onClick={() => (onSearch ? onSearch() : setSearching((value) => !value))}
           aria-expanded={onSearch ? undefined : searching}
         >
           <Search size={16} />
           <span>Search</span>
-          <kbd>K</kbd>
+          <Keys keys={[commandKey(), "K"]} />
         </button>
         {searching ? (
           <input
@@ -165,7 +169,7 @@ export function ChatList({
                 className="chat-attention-row"
                 onClick={() => onSelect(chat.id)}
               >
-                <span className="chat-dot" />
+                <StatusDot tone="volt" />
                 <span>
                   {chat.title ?? "New chat"}
                   <small> · {projectName(chat.folder)}</small>
@@ -195,7 +199,7 @@ export function ChatList({
           <p className="chat-sidebar-empty">No chats match “{query}”.</p>
         ) : null}
         <ul className="chat-projects">
-          {projects.map((project, index) => (
+          {projects.map((project) => (
             <li key={project.folder}>
               <div className="chat-project-heading">
                 <button
@@ -212,11 +216,8 @@ export function ChatList({
                     })
                   }
                 >
-                  <span
-                    className="chat-project-swatch"
-                    data-tone={index % 4}
-                    style={project.color ? { backgroundColor: project.color } : undefined}
-                  >
+                  {/* A neutral square: project colours never reach the chrome. */}
+                  <span className="chat-project-swatch" aria-hidden="true">
                     <ChevronRight size={12} />
                   </span>
                   <span>{project.name}</span>
@@ -302,13 +303,17 @@ function ChatRow({
         {chat.title ?? "New chat"}
       </span>
       {chat.needs_attention ? (
-        <span className="chat-dot" role="img" aria-label={label} />
+        <span className="chat-row-status">
+          <StatusDot tone="volt" label={label} />
+        </span>
       ) : chat.status === "failed" || folder !== null ? (
-        <span className="chat-row-warning" role="img" aria-label={label}>
-          !
+        <span className="chat-row-status">
+          <StatusDot tone="red" label={label} />
         </span>
       ) : running ? (
-        <span className="chat-running-dot" role="img" aria-label={label} />
+        <span className="chat-row-status">
+          <PixelLoader size={12} tempo="tool" label={label} />
+        </span>
       ) : null}
     </button>
   );

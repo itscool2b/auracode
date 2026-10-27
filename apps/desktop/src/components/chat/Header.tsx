@@ -1,4 +1,4 @@
-import { OrbitMark } from "@auracode/ui/orbit";
+import { AgentMark } from "@auracode/ui/graphite";
 import { Ellipsis, GitBranch, PanelRight, SquareTerminal } from "lucide-react";
 import { useState } from "react";
 import type { AgentEntry, ChatSummary } from "../../bindings";
@@ -69,7 +69,7 @@ export function Header({
   const statusLabel = activity === "waiting" ? "Waiting on you" : statusWord(status);
   return (
     <header className="chat-header" data-testid="chat-header">
-      <OrbitMark
+      <AgentMark
         agent={chat?.agent_id ?? agent?.id ?? "generic"}
         state={activity}
         size={16}
@@ -82,15 +82,14 @@ export function Header({
         {chat ? (
           <span className="chat-header-folder" title={chat.folder}>
             {projectName(chat.folder)}
-            {folderState !== null ? (
-              <span className="chat-row-warning"> · {folderState}</span>
-            ) : null}
+            {folderState !== null ? <span className="chat-row-flag"> · {folderState}</span> : null}
           </span>
         ) : null}
       </div>
       <span
         className="chat-status"
         data-status={status}
+        data-activity={activity}
         data-testid="chat-status"
         data-test-status={status}
         aria-live="polite"
@@ -147,7 +146,7 @@ export function Header({
       <Popover
         label="Chat details and controls"
         className="chat-header-menu"
-        trigger={<Ellipsis size={18} />}
+        trigger={<Ellipsis size={16} />}
       >
         <div className="chat-session-info">
           <strong>{name}</strong>

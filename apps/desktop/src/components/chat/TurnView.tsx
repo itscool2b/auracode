@@ -1,4 +1,4 @@
-import { CopyButton, OrbitMark } from "@auracode/ui/orbit";
+import { AgentMark, CopyButton } from "@auracode/ui/graphite";
 import { Fragment, memo } from "react";
 import type { PlanEntry, UiAnswer } from "../../bindings";
 import type { RequestState } from "../../lib/chat/chatStore";
@@ -70,6 +70,7 @@ export const TurnView = memo(function TurnView({
       aria-label={segment.turnId === null ? "Between turns" : "Turn"}
       data-testid={part === undefined || part === 0 ? "segment" : "segment-part"}
       data-part={part ?? "whole"}
+      data-in-group={suppressByline ? "" : undefined}
       data-test-kind={segment.turnId === null ? "outside" : "turn"}
       data-test-turn-id={segment.turnId ?? ""}
       data-test-segment-key={segment.key}
@@ -84,7 +85,9 @@ export const TurnView = memo(function TurnView({
           !segment.partial &&
           !suppressByline ? (
             <div className="chat-byline">
-              <OrbitMark agent={agentId} size={16} label={agentName} />
+              <span className="chat-gutter">
+                <AgentMark agent={agentId} size={16} label={agentName} />
+              </span>
               <span>{agentName}</span>
             </div>
           ) : null;
@@ -108,11 +111,12 @@ export const TurnView = memo(function TurnView({
               return (
                 <div
                   key={item.key}
+                  className="chat-message"
                   data-testid="item"
                   data-test-kind="message"
                   data-test-completed={String(item.completed)}
                 >
-                  <Answer text={item.text} motion="none" />
+                  <Answer text={item.text} />
                 </div>
               );
             case "thought":

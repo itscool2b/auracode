@@ -1,4 +1,4 @@
-import { OrbitMark } from "@auracode/ui/orbit";
+import { AgentMark } from "@auracode/ui/graphite";
 import {
   type ReactNode,
   useCallback,
@@ -320,12 +320,14 @@ function NowRow({
   if (!visible) return null;
   return (
     <div className="chat-now" data-state={activity} role="status">
-      <OrbitMark
-        agent={agentId}
-        state={activity}
-        size={16}
-        label={`${agentName}, ${label.toLowerCase()}`}
-      />
+      <span className="chat-gutter">
+        <AgentMark
+          agent={agentId}
+          state={activity}
+          size={16}
+          label={`${agentName}, ${label.toLowerCase()}`}
+        />
+      </span>
       <span>{label}</span>
     </div>
   );

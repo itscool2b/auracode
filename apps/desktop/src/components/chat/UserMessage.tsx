@@ -1,4 +1,4 @@
-import { CopyButton } from "@auracode/ui/orbit";
+import { CopyButton } from "@auracode/ui/graphite";
 import { useCallback, useState } from "react";
 import { steeringState, type UserItem } from "../../lib/chat/transcript";
 import { useDisclosure } from "./DisclosureMemory";

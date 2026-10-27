@@ -1,4 +1,4 @@
-import { OrbitMark } from "@auracode/ui/orbit";
+import { AgentMark } from "@auracode/ui/graphite";
 import type { AgentEntry, ChatSummary, ProfileMeta } from "../../bindings";
 import { agentChoice } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
@@ -44,7 +44,7 @@ export function AgentDock({
     <div className="chat-sidebar-footer">
       <h2 className="chat-section-label">
         {onAgents ? (
-          <button type="button" onClick={onAgents} className="setup-text-button">
+          <button type="button" onClick={onAgents} className="chat-dock-link">
             Agents
           </button>
         ) : (
@@ -72,7 +72,7 @@ export function AgentDock({
               className="chat-agent-popover"
               trigger={
                 <>
-                  <OrbitMark agent={agent.id} state={state} size={24} ghost={!choice.enabled} />
+                  <AgentMark agent={agent.id} state={state} size={24} ghost={!choice.enabled} />
                   <span>{code}</span>
                 </>
               }

@@ -57,7 +57,6 @@ export function QuestionCard({
         <span className="chat-block-title" data-testid="question-prompt">
           {prompt.message}
         </span>
-        <span className="chat-block-tag">Question</span>
       </div>
       {item.resolution !== null ? (
         <p className="chat-resolution" data-testid="question-resolution">

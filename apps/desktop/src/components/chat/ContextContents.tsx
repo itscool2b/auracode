@@ -1,4 +1,4 @@
-import { CopyButton, OrbitMark } from "@auracode/ui/orbit";
+import { AgentMark, CopyButton } from "@auracode/ui/graphite";
 import { Check, Circle, FileText, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { AgentEntry, FileMention, ProjectFilePreview } from "../../bindings";
@@ -27,7 +27,6 @@ export function ContextContents({
   const plan = state.transcript.segments.findLast((segment) => segment.plan?.length)?.plan;
   return (
     <div className="context-panel-content">
-      <div className="context-eyebrow">Latest reported plan</div>
       {plan ? (
         <>
           <p className="context-plan-count">
@@ -172,14 +171,14 @@ function Files({ state, api }: { readonly state: ChatState; readonly api?: Compo
       </label>
       {!query && touched.length ? (
         <section aria-label="Files in the loaded conversation">
-          <div className="context-eyebrow">
+          <h3 className="context-group-label">
             {state.hasMore ? "Touched in loaded history" : "Touched in this chat"}
-          </div>
+          </h3>
           {touched.map(([name, status]) => row(name, status))}
         </section>
       ) : null}
       <section aria-label="Project files">
-        <div className="context-eyebrow">Project files</div>
+        <h3 className="context-group-label">Project files</h3>
         {matches.map((item) => row(item.path))}
         {!matches.length && !searchError ? (
           <p className="context-hint">No matching project files.</p>
@@ -301,12 +300,11 @@ function Session({
   ];
   return (
     <div className="context-panel-content">
-      <div className="context-eyebrow">Properties</div>
       <dl className="context-properties">
         <div>
           <dt>Agent</dt>
           <dd>
-            <OrbitMark agent={state.chat?.agent_id ?? "generic"} size={16} />
+            <AgentMark agent={state.chat?.agent_id ?? "generic"} size={16} />
             {agent?.name ?? state.chat?.agent_name ?? "Agent"}
           </dd>
         </div>
@@ -340,7 +338,6 @@ function Session({
           </strong>
         </div>
       </div>
-      <div className="context-eyebrow">Usage</div>
       <p className="context-hint">
         {tokens ? tokensLabel(tokens) : "Token usage has not been reported."}
       </p>

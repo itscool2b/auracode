@@ -23,6 +23,8 @@ export function Modal({
     node?.showModal();
     return () => node?.close();
   }, []);
+  // The dialog is Graphite (`.chat-modal`, shell.css). It portals outside the app root, so it keeps
+  // the legacy `orbit-theme` scope for dialog content on screens that still read --o-* tokens.
   return createPortal(
     <dialog
       ref={dialog}

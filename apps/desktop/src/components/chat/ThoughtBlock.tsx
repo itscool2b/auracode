@@ -1,8 +1,13 @@
-import { OrbitMark } from "@auracode/ui/orbit";
+import { AgentMark } from "@auracode/ui/graphite";
+import { ChevronRight } from "lucide-react";
 import type { ThoughtItem } from "../../lib/chat/transcript";
 import { formatDuration } from "../../lib/format";
 import { useDisclosure } from "./DisclosureMemory";
 
+/**
+ * A thought as one quiet line, "Thought for 2.4 s", opening onto the reasoning on a spine. While it
+ * streams, the live mark takes the chevron's place in the gutter: the row's one moving thing.
+ */
 export function ThoughtBlock({
   item,
   active,
@@ -30,20 +35,27 @@ export function ThoughtBlock({
       }}
     >
       <summary>
-        {active && !item.completed ? (
-          <OrbitMark agent={agentId} state="thinking" size={16} label={`${agentName}, thinking`} />
-        ) : (
-          <span className="chat-disclosure" aria-hidden="true">
-            ›
-          </span>
-        )}
-        {item.completed
-          ? item.durationMs === null
-            ? "Thought"
-            : `Thought for ${formatDuration(item.durationMs)}`
-          : active
-            ? "Thinking…"
-            : "Thinking interrupted"}
+        <span className="chat-gutter">
+          {active && !item.completed ? (
+            <AgentMark
+              agent={agentId}
+              state="thinking"
+              size={16}
+              label={`${agentName}, thinking`}
+            />
+          ) : (
+            <ChevronRight className="chat-disclosure" size={12} aria-hidden="true" />
+          )}
+        </span>
+        <span>
+          {item.completed
+            ? item.durationMs === null
+              ? "Thought"
+              : `Thought for ${formatDuration(item.durationMs)}`
+            : active
+              ? "Thinking…"
+              : "Thinking interrupted"}
+        </span>
       </summary>
       <p>
         {item.text ||
