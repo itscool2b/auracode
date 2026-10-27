@@ -36,9 +36,9 @@ third-party reference image, font or script is shipped.
 
 The product image is a capture of the real desktop interface in its local preview mode, not a
 fabricated mock. Regenerate it from the integrated desktop whenever the app changes visibly. The
-dither fields, pixel mark and favicon are original and generated at build time by
-`scripts/site-images.ts`. Without JavaScript the hero and closing fields show their first frame as
-a static image and the other fields step aside for their content (the screenshot, the wordmark,
+dither field fallbacks, the favicons and the social card are generated at build time by
+`scripts/site-images.ts`, the last two from the logo's own path. Without JavaScript the hero and closing fields show their first frame as
+a static image and the other fields step aside for their content (the screenshot, the footer logo,
 the 404 numerals). Reduced motion shows a still frame.
 
 ## Deployment prerequisites
