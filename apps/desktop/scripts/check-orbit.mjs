@@ -395,7 +395,8 @@ async function inspect(engine, launcher) {
       node.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
       node.scrollTop = 0;
     });
-    await page.waitForTimeout(300);
+    // Unmounting follows the next layout pass; under load WebKit can take longer than a fixed sleep.
+    await lastTool.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
     assert.equal(await lastTool.count(), 0, "old tool remained mounted");
     const thought = page.locator(".chat-thought");
     await thought.locator("summary").click();
