@@ -139,7 +139,9 @@ describe("the worktree chip", () => {
     const other = view({ options: { ...DEFAULT_WORKTREE_OPTIONS, startBranch: "release/1.4" } });
     const html = chip(other);
     expect(html).toContain("Only when starting from main.");
-    expect(html).toMatch(/<input type="checkbox" role="switch" aria-checked="false" class="g-switch" disabled=""/);
+    expect(html).toMatch(
+      /<input type="checkbox" role="switch" aria-checked="false" class="g-switch" disabled=""/,
+    );
     const busy = chip(view({ options: { ...DEFAULT_WORKTREE_OPTIONS, bringChanges: true } }), 2);
     expect(busy).toContain("Copies your working files once the chats in this folder stop.");
   });

@@ -1,5 +1,57 @@
 # Auracode implementation progress
 
+## 2026-10-27: M4 worktree chats in New chat, and recreating deleted folders (interface)
+
+Branch `m4-worktree-ui` (from `app-redesign` with `m4-worktree-backend` merged) builds the interface
+for the entry below, after the Codex app's per-thread Local or Worktree mode.
+
+- **New chat:** once a project folder and an agent are known, `WorktreeChoice`
+  (`lib/chat/worktreeChoice.ts`) reviews it with `worktree_chat_preview`. A Git folder shows one
+  chip row under the card ("Worktree from main on aura/7f3a9c2e"); its popover, in the picker's
+  shell, switches to Local, starts from another local branch, names the branch (Apply or Enter,
+  never submitting New chat), brings uncommitted changes (only from the current branch) and skips
+  the saved setup. Defaults need no click: Create applies the reviewed plan. Changes are reviewed
+  after 200ms (a typed name at once); answers for an older folder, agent or option are dropped; a
+  refused change goes back to the last reviewed options with Rust's reason beside its control, and
+  Create stops and reopens the popover rather than apply other options. Reviews are cached by their
+  options until 30 seconds before expiry, so switching back and forth does not pile up open previews
+  (Rust allows 32), and the first generated name is kept so the chip does not change name with
+  each review. A plan near expiry is reviewed again before Create, and a refused apply (stale or
+  expired token) is reviewed again for the next Create. A plain folder shows nothing extra and
+  works directly; a folder that cannot have a worktree (no commit yet, detached HEAD) falls back to
+  Local with the reason under the chip. The busy-folder consent shows only for Local.
+- **Setup:** a saved setup command waits in the shared terminal sheet with the reviewed folder,
+  copied files and command as rows; Start stays explicit, as the setup panel already decided. A
+  clean exit starts the agent at once (`chat_start`); closing early or a failed exit starts it too
+  and shows the note, with Create becoming Open chat.
+- **Picked folders:** a folder chosen with Choose folder now joins the workspace as its own project
+  at once (it was created at Create before), so its Git state is reviewed before Create, as a
+  project is added before a thread in the Codex app. A failure leaves it to Create, which then
+  shows a first worktree review instead of creating one unseen.
+- **Recreate:** a missing worktree in the Git workspace dialog offers Recreate folder beside Review
+  recovery. The confirmation follows Vercel's transfer dialog: the question, Rust's sentence that
+  uncommitted files in the deleted folder are gone and committed work is kept, the branch, commit
+  and folder as rows, Rust's other notes, then Cancel and Recreate folder. A refused or expired
+  review is fetched again for the next try. Only the Git dialog lists missing worktrees today; a
+  chat whose folder is missing still shows its start error without a link there.
+- **Fixtures and checks:** `?preview=new-worktree`, `new-setup`, `new-unavailable`, `new-plain`
+  and `git-missing` (`dev/newChatWorktreeFixture.ts` imitates Rust's review); `check-layout.mjs`
+  probes them plus the popover, Local, a refused name, the setup terminal and the recreate dialog;
+  `check-new-chat-worktree.mjs` drives the flows; `check-git-review.mjs` now ends with recreation.
+  `.new-chat` fills the pane below the drag band so the popover has the window's room under the
+  card. Visual language 6.13 and 6.19 describe the chip, its popover and the dialog.
+
+Verified locally on Windows: `pnpm lint` (no new warnings), `pnpm typecheck` and `pnpm test` (root
+scripts 22, ui 276, desktop 5 node and 376 with 19 skipped, design lab 352, web 4; 25 new desktop
+tests for the choice store, the chip, the setup status and the recreate sentence). In Chromium and
+WebKit: `check-new-chat-worktree` (8 axe scans each, all clean), `check-chat`, `check-settings`
+(which runs `check-git-review` with recreation and `check-worktree-setup`) and `check-layout`, 188
+of 188 views clean. Sheets beside the Grok composer and Vercel transfer dialog references, at
+1440x900 and 1024x700 with 2x details, are the ignored
+`target/design-research/sheets/app-m4-*.png`. Not run: the bindings export (the merge took the
+backend's `bindings.ts` without conflict), the WebDriver smoke against a real build, a real Git
+repository through the built app, the hand walkthrough and CI.
+
 ## 2026-10-27: M4 one-step worktree chats and recreating deleted worktrees
 
 Backend only; the redesigned interface is built separately.
