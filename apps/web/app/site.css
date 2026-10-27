@@ -411,10 +411,10 @@ canvas {
   border-bottom: 1px solid var(--g-line);
 }
 
-/* The column rules continue through the stage as Vercel's guides. */
+/* The column rules continue through the full-bleed fields as Vercel's guides. */
 @media (min-width: 1024px) {
-  .stage::before,
-  .stage::after {
+  :is(.stage, .closing)::before,
+  :is(.stage, .closing)::after {
     content: "";
     position: absolute;
     top: 0;
@@ -425,11 +425,11 @@ canvas {
     pointer-events: none;
   }
 
-  .stage::before {
+  :is(.stage, .closing)::before {
     left: calc((100% - var(--col)) / 2);
   }
 
-  .stage::after {
+  :is(.stage, .closing)::after {
     right: calc((100% - var(--col)) / 2);
   }
 }
@@ -1446,14 +1446,27 @@ html:not(.js) .cap-text-inner {
 }
 
 .feature {
+  position: relative;
   min-height: 248px;
   padding: 36px max(24px, var(--inset)) 44px;
-  transition: opacity var(--g-dur-dim) var(--g-ease-smooth);
 }
 
-/* X Money's tiles: hovering one dims the others to half over 500ms. */
+/*
+ * X Money's tiles: hovering one dims the others to half over 500ms. A black veil does the dimming,
+ * so the cell's black ground stays opaque and the hairlines between cells never show through.
+ */
+.feature::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: var(--g-bg);
+  opacity: 0;
+  transition: opacity var(--g-dur-dim) var(--g-ease-smooth);
+  pointer-events: none;
+}
+
 @media (hover: hover) {
-  .feature-grid:has(> .feature:hover) > .feature:not(:hover) {
+  .feature-grid:has(> .feature:hover) > .feature:not(:hover)::after {
     opacity: 0.5;
   }
 }
