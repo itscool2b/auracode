@@ -1663,7 +1663,7 @@ details.setup-install-review[open] > summary::before {
   background-color: var(--g-volt);
 }
 
-.dialog-section .chat-move-busy p {
+.chat-move-busy-names {
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);

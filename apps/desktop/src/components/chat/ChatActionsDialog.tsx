@@ -24,7 +24,9 @@ export function MoveBusyWarning({
   return (
     <div className="chat-move-busy" data-testid="move-busy">
       <strong>This folder has active work</strong>
-      <p>{busy.map((chat) => chat.title ?? chat.agent_name).join(", ")}</p>
+      <span className="chat-move-busy-names">
+        {busy.map((chat) => chat.title ?? chat.agent_name).join(", ")}
+      </span>
       <label>
         <input
           type="checkbox"
