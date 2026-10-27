@@ -551,16 +551,31 @@ mod tests {
         }
         tx.commit().expect("commit");
 
+        // Walk the history once for its page cursors, newest first.
         let mut cursor = seq;
-        let mut times = Vec::new();
+        let mut cursors = Vec::new();
         loop {
-            let started = Instant::now();
+            cursors.push(cursor);
             let page = page(conn, &chat, cursor, DEFAULT_PAGE_BYTES).expect("page");
-            times.push(started.elapsed());
             if !page.has_more {
                 break;
             }
             cursor = page.before_seq.expect("cursor");
+        }
+        // Time each page twice, alternating the newest and oldest ends, and keep its best time: a
+        // busy moment on a shared runner then slows both ends alike instead of one quarter.
+        let mut times = vec![std::time::Duration::MAX; cursors.len()];
+        for _ in 0..2 {
+            for step in 0..cursors.len() {
+                let index = if step % 2 == 0 {
+                    step / 2
+                } else {
+                    cursors.len() - 1 - step / 2
+                };
+                let started = Instant::now();
+                page(conn, &chat, cursors[index], DEFAULT_PAGE_BYTES).expect("page");
+                times[index] = times[index].min(started.elapsed());
+            }
         }
         assert!(times.len() >= 10_000 / 64, "{}", times.len());
         // A page that scans from either end of the chat makes one end of the history slower than
