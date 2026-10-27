@@ -3091,3 +3091,40 @@ names are kept unless noted.
 
 Sheets of every screen at 1440 x 900 and 1024 x 700 beside their references are in the ignored
 `target/design-research/sheets/app-2b-settings-*.png`.
+
+### App restyle step 2b: Agents, onboarding, Library, sync and dialogs (2026-10-27)
+
+Branch `app-secondary` (on `app-one-system`) redesigns the secondary surfaces against the owner's
+Vercel and Grok references, translated to Graphite dark. Chat and settings were redesigned in
+parallel on other branches and are not touched here.
+
+- **Agents** (visual language 6.17a): Vercel's project list. One framed list, a 64px row per
+  harness with its mark, name, version, status (a word and a 6px square; volt only for Needs
+  sign-in), the date auracode last verified it, at most one action (Install, Update or Sign in) and
+  a kebab menu for the rest. A row opens its details and the executable picker. Detection shows
+  the mark's pixel loader, then the status and version settle once and the green square arrives.
+  The one-click list is `ONE_CLICK` in `AgentRow.tsx` (it moved from `AgentsScreen.tsx`).
+- **Onboarding** (6.17): four skippable steps in one centred column (Grok's start screen) over
+  the dither field gathered at the window's sides (the website hero). The side panel, the numbered
+  checklist, the motion step and "Skip this step" are gone; a setup saved at the motion step
+  resumes at First project. The account step says plainly that accounts are optional and
+  invite-only.
+- **Library** (6.18) and **configuration sync**: Vercel list cleanliness; Copy history is a view
+  after one divider; review, apply, restore and recovery dialogs follow one pattern (the title, one
+  sentence, rows or a hairline grid, Cancel and one primary or the red pill).
+- **Dialogs and takeover screens** (6.19, 6.21): the terminal sheet, clone, install review,
+  vendor command, folder resolver, startup error and configuration recovery on the same pattern.
+- **Checks:** `check-setup.mjs` now asserts the centred layout, the roster and the retired-step
+  resume instead of the removed panel and motion radios, and audits Agents with a row menu open
+  from the keyboard. Biome's descending-specificity warnings in these stylesheets went from 22 to
+  none (repository total 70 to 48).
+
+Verified locally on Windows: `pnpm lint`, `pnpm typecheck` and `pnpm test` (root scripts 22, ui
+276, desktop 5 node and 348 with 19 skipped, design lab 352, web 4), and in Chromium and WebKit
+`check-setup`, `check-setup-actions`, `check-agent-installations`, `check-chat-auth`,
+`check-library`, `check-config-sync`, `check-config-recovery`, `check-worktree-setup`,
+`check-git-review`, `check-workspace-removal`, `check-repository-publication`,
+`check-folder-resolution` and `check-settings`, each passing with its axe audits clean. Sheets
+of each screen at 1440x900 and 1024x700 beside its reference, with checklists, are in the ignored
+`target/design-research/sheets/app-2b-secondary-*.png`. Not done here: the hand walkthrough of
+the built app and the Windows and macOS CI run, which belong to the integration of steps 2a to 2c.

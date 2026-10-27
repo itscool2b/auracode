@@ -9,11 +9,21 @@ export function InstallAgent({
   agentName,
   onRefresh,
   api = installApi,
+  label = "Review installation",
+  ariaLabel,
+  className = "g-button g-button-outline g-button-28",
+  onError,
 }: {
   readonly agentId: string;
   readonly agentName: string;
   readonly onRefresh: () => void;
   readonly api?: InstallApi;
+  /** The button's words: "Install" on an agent row, "Review installation" on its own. */
+  readonly label?: string;
+  readonly ariaLabel?: string;
+  readonly className?: string;
+  /** Where a failed review is reported; without it the reason shows under the button. */
+  readonly onError?: (message: string) => void;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -33,8 +43,9 @@ export function InstallAgent({
     <>
       <button
         type="button"
-        className="g-button g-button-outline g-button-28"
+        className={className}
         disabled={pending}
+        aria-label={ariaLabel}
         onClick={() => {
           setPending(true);
           setError("");
@@ -45,12 +56,13 @@ export function InstallAgent({
                 if (mounted.current) setReview({ value, terminal: api.terminal(value) });
               },
               (reason: unknown) => {
-                if (mounted.current)
-                  setError(
-                    reason instanceof Error
-                      ? reason.message
-                      : "The installation review could not load.",
-                  );
+                if (!mounted.current) return;
+                const message =
+                  reason instanceof Error
+                    ? reason.message
+                    : "The installation review could not load.";
+                if (onError) onError(message);
+                else setError(message);
               },
             )
             .finally(() => {
@@ -58,7 +70,7 @@ export function InstallAgent({
             });
         }}
       >
-        {pending ? "Preparing review…" : "Review installation"}
+        {pending ? "Preparing…" : label}
       </button>
       {error ? (
         <p role="alert" className="setup-alert">
@@ -77,11 +89,14 @@ export function InstallAgent({
           }}
           onFinished={onRefresh}
           review={
-            <details className="setup-install-review" open>
-              <summary>
-                {review.value.package} · {review.value.version}
-              </summary>
+            <section className="setup-install-review" aria-label="Installation review">
               <dl>
+                <dt>Package</dt>
+                <dd>
+                  <code>
+                    {review.value.package}@{review.value.version}
+                  </code>
+                </dd>
                 <dt>Program</dt>
                 <dd>
                   <code>{review.value.program}</code>
@@ -106,7 +121,7 @@ export function InstallAgent({
                   <li key={notice}>{notice}</li>
                 ))}
               </ul>
-            </details>
+            </section>
           }
         />
       ) : null}

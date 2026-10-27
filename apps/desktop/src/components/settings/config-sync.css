@@ -1,8 +1,9 @@
 /*
  * Configuration sync: which agent files follow you between devices, and the reviewed change that
  * moves them. Items are settings rows (the file in mono, where it applies, its state, the
- * keep-local switch) with Review as their one action; the review compares four versions on a
- * hairline grid.
+ * keep-local switch) with Review as their one action. The dialogs follow the dialog pattern: one
+ * sentence, the choice, four versions on a hairline grid, Cancel and one action. Volt marks only
+ * what needs a decision.
  */
 
 .config-sync-heading {
@@ -38,8 +39,7 @@
   color: var(--g-volt);
 }
 
-.config-sync-state[data-attention="true"]::before,
-.config-sync-warning::before {
+.config-sync-state[data-attention="true"]::before {
   content: "";
   flex: none;
   width: 6px;
@@ -107,30 +107,47 @@
   list-style: square;
 }
 
-/* ----------------------------------------------------------------------- review */
+/* ---------------------------------------------------------------------- dialogs */
 
-.config-sync-review-heading strong {
-  display: block;
-  color: var(--g-fg-1);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-code);
-  line-height: var(--g-leading-code);
-  font-weight: 400;
-  font-variant-ligatures: none;
+.config-sync-lead {
+  margin: calc(var(--g-space-8) * -1) 0 var(--g-space-20);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
   overflow-wrap: anywhere;
 }
 
-.config-sync-review-heading p {
-  margin: var(--g-space-2) 0 var(--g-space-16);
-  color: var(--g-fg-3);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
+.config-sync-lead strong {
+  color: var(--g-fg-1);
+  font-weight: 500;
 }
 
 .config-sync-choices {
   min-inline-size: 0;
-  margin: 0 0 var(--g-space-20);
+  margin: 0 0 var(--g-space-16);
   border: 0;
+}
+
+.config-sync-preparing {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.config-sync-failed {
+  padding: var(--g-space-12) var(--g-space-16);
+  border-left: 2px solid var(--g-red);
+  border-radius: 0 var(--g-radius-8) var(--g-radius-8) 0;
+  background-color: var(--g-surface-1);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.config-sync-failed p {
+  margin: 0 0 var(--g-space-8);
 }
 
 .config-sync-comparison {
@@ -158,9 +175,13 @@
   font-weight: 500;
 }
 
+.config-sync-comparison section[data-result] h3 {
+  color: var(--g-fg-1);
+}
+
 .config-sync-comparison pre {
-  min-height: 110px;
-  max-height: 250px;
+  min-height: 96px;
+  max-height: 200px;
   margin: 0;
   padding: var(--g-space-12);
   overflow: auto;
@@ -174,25 +195,46 @@
 }
 
 .config-sync-warnings {
-  margin: 0 0 var(--g-space-16);
-  padding-left: var(--g-space-20);
-  color: var(--g-fg-2);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  list-style: square;
+  margin: var(--g-space-12) 0 0;
+  padding: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  list-style: none;
 }
 
+.config-sync-warnings li {
+  position: relative;
+  padding-left: var(--g-space-16);
+}
+
+.config-sync-warnings li::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  background-color: var(--g-fg-4);
+}
+
+/* A conflict: the one line in the dialog that needs you, led by a volt square. */
 .config-sync-warning {
   display: flex;
   align-items: baseline;
   gap: var(--g-space-8);
   margin: 0 0 var(--g-space-16);
-  color: var(--g-fg-2);
+  color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
 
 .config-sync-warning::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background-color: var(--g-volt);
   transform: translateY(-1px);
 }
 
@@ -208,7 +250,7 @@
 }
 
 .config-sync-footer {
-  margin-top: var(--g-space-20);
+  margin-top: var(--g-space-24);
 }
 
 .config-sync-footer > span {
@@ -218,16 +260,36 @@
   line-height: var(--g-leading-meta);
 }
 
-.config-sync-restore p {
-  margin: 0 0 var(--g-space-12);
-  color: var(--g-fg-2);
+.config-sync-facts {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  margin: 0;
+  border-top: 1px solid var(--g-line);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
 
-.config-sync-restore strong {
+.config-sync-facts :is(dt, dd) {
+  margin: 0;
+  padding: var(--g-space-12) 0;
+  border-bottom: 1px solid var(--g-line);
+}
+
+.config-sync-facts dt {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+}
+
+.config-sync-facts dd {
   color: var(--g-fg-1);
-  font-weight: 500;
+}
+
+.config-sync-error {
+  margin: var(--g-space-12) 0 0;
+  color: var(--g-red);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 720px) {

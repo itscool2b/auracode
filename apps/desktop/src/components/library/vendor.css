@@ -1,21 +1,14 @@
-/* Managing personal plugins and packages through the agent's own command, reviewed first. */
+/*
+ * Managing personal plugins and packages through the agent's own command, on the dialog pattern:
+ * one sentence, the fields, Cancel and Review command. The reviewed command reads as key and value
+ * rows on hairlines before the terminal can start it.
+ */
 
-.vendor-intro,
-.vendor-note {
-  margin: 0;
+.vendor-intro {
+  margin: calc(var(--g-space-8) * -1) 0 var(--g-space-20);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-}
-
-.vendor-intro {
-  margin-bottom: var(--g-space-20);
-}
-
-.vendor-note {
-  color: var(--g-fg-3);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
 }
 
 .vendor-dialog form {
@@ -29,7 +22,8 @@
   gap: var(--g-space-12);
 }
 
-.vendor-dialog label {
+.vendor-fields label,
+.vendor-target {
   display: grid;
   gap: var(--g-space-8);
   min-width: 0;
@@ -39,20 +33,20 @@
   font-weight: 500;
 }
 
-.vendor-dialog input {
+.vendor-target input {
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
+  font-variant-ligatures: none;
 }
 
-.vendor-dialog footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--g-space-8);
-  padding-top: var(--g-space-16);
-  border-top: 1px solid var(--g-line);
+.vendor-note {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 400;
 }
 
-/* A consequence worth reading before Start: one line led by a volt square (6.6). */
+/* A consequence worth reading before anything starts: one line led by a volt square (6.6). */
 .vendor-warning {
   display: flex;
   align-items: baseline;
@@ -72,32 +66,30 @@
   transform: translateY(-1px);
 }
 
+.vendor-actions {
+  margin-top: var(--g-space-8);
+}
+
 .vendor-command {
   max-height: 38vh;
-  margin: 0 0 var(--g-space-4);
-  padding: var(--g-space-12) 0;
+  margin: 0 0 var(--g-space-16);
   overflow: auto;
-  border-top: 1px solid var(--g-line);
-  border-bottom: 1px solid var(--g-line);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
 
-.vendor-command h3 {
-  margin: 0 0 var(--g-space-12);
-  color: var(--g-fg-1);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-
 .vendor-command dl {
   display: grid;
   grid-template-columns: 160px minmax(0, 1fr);
-  gap: var(--g-space-8) var(--g-space-16);
   margin: 0;
+  border-top: 1px solid var(--g-line);
+}
+
+.vendor-command :is(dt, dd) {
+  margin: 0;
+  padding: var(--g-space-8) 0;
+  border-bottom: 1px solid var(--g-line);
 }
 
 .vendor-command dt {
@@ -107,32 +99,51 @@
 }
 
 .vendor-command dd {
-  margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.vendor-command-action {
+  color: var(--g-fg-1);
+}
+
+.vendor-command-action::first-letter {
+  text-transform: uppercase;
 }
 
 .vendor-command code {
   color: var(--g-fg-1);
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
+  font-variant-ligatures: none;
 }
 
 .vendor-command ol {
   margin: 0;
-  padding-left: 0;
+  padding: 0;
   list-style: none;
-}
-
-.vendor-command > ul li::marker {
-  color: var(--g-fg-3);
 }
 
 .vendor-command > ul {
   margin: var(--g-space-12) 0 0;
-  padding-left: var(--g-space-20);
+  padding: 0;
   color: var(--g-fg-2);
-  list-style: square;
+  list-style: none;
+}
+
+.vendor-command > ul li {
+  position: relative;
+  padding-left: var(--g-space-16);
+}
+
+.vendor-command > ul li::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  background-color: var(--g-fg-4);
 }
 
 .vendor-command > ul li + li {
@@ -146,10 +157,10 @@
 
   .vendor-command dl {
     grid-template-columns: 1fr;
-    gap: var(--g-space-4);
   }
 
-  .vendor-command dd {
-    margin-bottom: var(--g-space-8);
+  .vendor-command dt {
+    padding-bottom: 0;
+    border-bottom: 0;
   }
 }

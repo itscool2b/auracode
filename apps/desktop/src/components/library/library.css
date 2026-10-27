@@ -1,7 +1,8 @@
 /*
- * The Library in Graphite (docs/design/visual-language.md, 6.18): a black page whose body is one
- * hairline-framed grid of three panes (Vercel): categories, items on hairlines, and the preview
- * with the file in a well. Only --g-* tokens.
+ * The Library in Graphite (docs/design/visual-language.md, 6.18), on Vercel's page grammar: a
+ * title with one line under it, the actions top right, a search and two filters, then one
+ * hairline frame of three panes: the views, the items on hairlines, and the chosen item with its
+ * file in a well. Every edge sits on the page's 32px column. Only --g-* tokens.
  */
 
 .library-screen {
@@ -22,11 +23,12 @@
   position: absolute;
   inset: 0 0 auto;
   z-index: 1;
-  height: 52px;
+  height: var(--ui-titlebar-height);
 }
 
 /* ---------------------------------------------------------------- header and tools */
 
+/* The ghost Back carries 12px of padding; the bar starts 12px early so its arrow sits on 32. */
 .library-topbar {
   position: relative;
   z-index: 2;
@@ -39,7 +41,7 @@
 .library-heading {
   display: flex;
   flex: none;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: var(--g-space-24);
   padding: var(--g-space-24) var(--g-space-32) var(--g-space-20);
@@ -54,33 +56,25 @@
   letter-spacing: var(--g-tracking-title);
 }
 
-.library-heading h1 > span {
-  display: block;
-  margin-top: var(--g-space-4);
+.library-heading p {
+  margin: var(--g-space-4) 0 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 400;
-  letter-spacing: 0;
 }
 
 .library-heading-actions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  flex: none;
+  align-items: center;
   gap: var(--g-space-8);
-}
-
-.library-toggle[aria-pressed="true"] {
-  border-color: var(--g-fg-4);
-  background-color: var(--g-surface-3);
 }
 
 .library-toolbar {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--g-space-16);
+  gap: var(--g-space-8);
   padding: 0 var(--g-space-32) var(--g-space-16);
 }
 
@@ -89,7 +83,7 @@
   display: flex;
   flex: 1;
   align-items: center;
-  max-width: 440px;
+  min-width: 0;
 }
 
 .library-search svg {
@@ -100,6 +94,7 @@
 }
 
 .library-search .g-input {
+  width: 100%;
   padding-left: calc(var(--g-space-12) + var(--g-space-24));
 }
 
@@ -108,15 +103,7 @@
 }
 
 .library-select {
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-8);
-  color: var(--g-fg-3);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-}
-
-.library-select select {
+  flex: none;
   width: auto;
   max-width: 240px;
 }
@@ -143,10 +130,10 @@
 .library-body {
   display: grid;
   flex: 1;
-  grid-template-columns: 208px minmax(280px, 0.9fr) minmax(360px, 1.1fr);
+  grid-template-columns: 200px minmax(280px, 0.9fr) minmax(360px, 1.1fr);
   gap: 1px;
   min-height: 0;
-  margin: 0 var(--g-space-8) var(--g-space-8);
+  margin: 0 var(--g-space-32) var(--g-space-24);
   overflow: hidden;
   border: 1px solid var(--g-line);
   border-radius: var(--g-radius-12);
@@ -159,26 +146,28 @@
   background-color: var(--g-bg);
 }
 
+/* The views: plain rows, the current one filled (Vercel's sidebar), one divider before history. */
 .library-categories {
   display: flex;
   flex-direction: column;
   gap: var(--g-space-2);
   overflow-y: auto;
-  padding: var(--g-space-12) var(--g-space-8);
+  padding: var(--g-space-8);
 }
 
 .library-categories > button {
-  position: relative;
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--g-space-8);
   width: 100%;
   height: 32px;
-  padding: 0 var(--g-space-8) 0 var(--g-space-12);
+  padding: 0 var(--g-space-8);
   border: 0;
   border-radius: var(--g-radius-8);
   background-color: transparent;
   color: var(--g-fg-2);
+  font: inherit;
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   text-align: left;
@@ -188,11 +177,6 @@
     color var(--g-dur-micro) var(--g-ease);
 }
 
-.library-categories > button svg {
-  flex: none;
-  color: var(--g-fg-3);
-}
-
 @media (hover: hover) {
   .library-categories > button:hover {
     background-color: var(--g-surface-2);
@@ -200,50 +184,50 @@
   }
 }
 
+.library-categories > button:active {
+  background-color: var(--g-surface-3);
+  transition-duration: 0ms;
+}
+
 .library-categories > button[aria-current] {
+  background-color: var(--g-surface-3);
   color: var(--g-fg-1);
   font-weight: 500;
 }
 
-.library-categories > button[aria-current]::before {
-  content: "";
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 2px;
-  background-color: var(--g-fg-1);
+.library-categories > button:focus-visible {
+  outline-offset: -2px;
 }
 
 .library-categories small {
   margin-left: auto;
   color: var(--g-fg-3);
-  font-family: var(--g-mono);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
-.library-source-note {
-  margin: auto var(--g-space-12) 0;
-  padding-top: var(--g-space-24);
-  color: var(--g-fg-3);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
+.library-categories > hr {
+  flex: none;
+  width: 100%;
+  height: 1px;
+  margin: var(--g-space-6) 0;
+  border: 0;
+  background-color: var(--g-line);
 }
 
-.library-source-note > span {
-  color: var(--g-fg-1);
-  font-weight: 500;
-}
-
-.library-source-note p {
-  margin: var(--g-space-4) 0 0;
+/* A copy that needs recovery: the one volt mark on the page. */
+.library-attention {
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  background-color: var(--g-volt);
 }
 
 .library-sources {
-  margin: var(--g-space-12) var(--g-space-12) var(--g-space-4);
+  margin: auto 0 0;
+  padding: var(--g-space-12) var(--g-space-8) var(--g-space-4);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -255,12 +239,17 @@
   cursor: pointer;
 }
 
+.library-sources :where(summary small) {
+  color: var(--g-fg-3);
+  font-weight: 400;
+}
+
 .library-sources p {
   margin: var(--g-space-8) 0 0;
   color: var(--g-fg-2);
 }
 
-.library-sources small {
+.library-sources :where(p small) {
   display: block;
   color: var(--g-fg-3);
   overflow-wrap: anywhere;
@@ -270,32 +259,6 @@
 
 .library-items {
   overflow-y: auto;
-}
-
-.library-list-heading {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 44px;
-  padding: 0 var(--g-space-16);
-  border-bottom: 1px solid var(--g-line);
-  background-color: var(--g-bg);
-  color: var(--g-fg-1);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 500;
-}
-
-.library-list-heading small {
-  color: var(--g-fg-3);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
 }
 
 .library-items ul,
@@ -315,11 +278,12 @@
   align-items: center;
   gap: var(--g-space-12);
   width: 100%;
-  min-height: 60px;
-  padding: var(--g-space-12) var(--g-space-16);
+  min-height: 56px;
+  padding: var(--g-space-8) var(--g-space-16);
   border: 0;
   background-color: transparent;
   color: var(--g-fg-1);
+  font: inherit;
   text-align: left;
   cursor: pointer;
   transition: background-color var(--g-dur-micro) var(--g-ease);
@@ -329,6 +293,11 @@
   .library-items li button:hover {
     background-color: var(--g-surface-1);
   }
+}
+
+.library-items li button:active {
+  background-color: var(--g-surface-2);
+  transition-duration: 0ms;
 }
 
 .library-items li button[aria-pressed="true"] {
@@ -354,7 +323,7 @@
   flex: none;
 }
 
-.library-items :where(li button) > span:not(.library-mark) {
+.library-items li button > span:last-child {
   flex: 1;
   min-width: 0;
 }
@@ -370,17 +339,12 @@
   white-space: nowrap;
 }
 
-.library-items small {
+.library-items :where(li small) {
   display: block;
   margin-top: var(--g-space-2);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
-}
-
-.library-items li button > svg:last-child {
-  flex: none;
-  color: var(--g-fg-3);
 }
 
 .library-notices {
@@ -391,7 +355,7 @@
 }
 
 .library-notices summary {
-  color: var(--g-fg-1);
+  color: var(--g-fg-2);
   font-weight: 500;
   cursor: pointer;
 }
@@ -408,88 +372,83 @@
   user-select: text;
 }
 
-.library-detail header {
+.library-detail > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--g-space-16);
   margin-bottom: var(--g-space-20);
+}
+
+.library-detail > header > div {
+  min-width: 0;
 }
 
 .library-detail h2 {
   margin: 0;
   color: var(--g-fg-1);
-  font-size: var(--g-text-title);
-  line-height: var(--g-leading-title);
-  font-weight: 500;
-  letter-spacing: var(--g-tracking-title);
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.library-detail :where(header) > p {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--g-space-8);
-  margin: var(--g-space-4) 0 var(--g-space-12);
+.library-detail :where(header p) {
+  margin: var(--g-space-2) 0 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
 
-.library-kind {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 var(--g-space-8);
-  border-radius: var(--g-radius-6);
-  background-color: var(--g-surface-3);
-  color: var(--g-fg-2);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-  font-weight: 500;
-}
-
-.library-detail header code {
+.library-detail :where(header code) {
   display: block;
-  margin-bottom: var(--g-space-12);
+  margin-top: var(--g-space-6);
   color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
+  font-variant-ligatures: none;
   overflow-wrap: anywhere;
 }
 
-.library-detail header > p:last-child {
-  display: block;
-  margin: 0;
+.library-detail > header .g-button {
+  flex: none;
+}
+
+/* The file, in a well: a 36px head with its name and size, then the text. */
+.library-well {
+  overflow: hidden;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-1);
 }
 
 .library-file-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 32px;
+  gap: var(--g-space-12);
+  height: 36px;
   padding: 0 var(--g-space-16);
-  border: 1px solid var(--g-line);
-  border-bottom-color: var(--g-line-faint);
-  border-radius: var(--g-radius-8) var(--g-radius-8) 0 0;
-  background-color: var(--g-surface-1);
-  color: var(--g-fg-3);
+  border-bottom: 1px solid var(--g-line-faint);
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
 
 .library-file-heading small {
-  font-family: var(--g-mono);
+  color: var(--g-fg-3);
+  font-family: var(--g-sans);
   font-size: var(--g-text-meta);
   font-variant-numeric: tabular-nums;
 }
 
 .library-code {
-  max-height: 390px;
+  max-height: 400px;
   margin: 0;
   padding: var(--g-space-12) var(--g-space-16);
   overflow: auto;
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-1);
   color: var(--g-code-fg);
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
@@ -501,11 +460,6 @@
   user-select: text;
 }
 
-.library-file-heading + .library-code {
-  border-top: 0;
-  border-radius: 0 0 var(--g-radius-8) var(--g-radius-8);
-}
-
 .library-file-list {
   margin-top: var(--g-space-16);
   color: var(--g-fg-2);
@@ -514,7 +468,7 @@
 }
 
 .library-file-list summary {
-  color: var(--g-fg-1);
+  color: var(--g-fg-2);
   font-weight: 500;
   cursor: pointer;
 }
@@ -522,7 +476,7 @@
 .library-file-list ul {
   margin: var(--g-space-8) 0 0;
   padding-left: var(--g-space-20);
-  list-style: square;
+  list-style: none;
 }
 
 .library-file-list code,
@@ -530,6 +484,7 @@
   color: var(--g-fg-1);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
+  font-variant-ligatures: none;
 }
 
 .library-detail-note {
@@ -572,8 +527,10 @@
   width: 100%;
 }
 
+/* Empty states: one title and one line, nothing else (Vercel). */
 .library-empty,
 .library-unselected {
+  margin: 0;
   padding: var(--g-space-64) var(--g-space-24);
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
@@ -581,14 +538,9 @@
   text-align: center;
 }
 
-.library-empty svg,
-.library-unselected svg {
-  color: var(--g-fg-3);
-}
-
-.library-empty h2,
+.library-empty :is(h2, h3),
 .library-unselected h2 {
-  margin: var(--g-space-12) 0 var(--g-space-4);
+  margin: 0;
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -598,8 +550,8 @@
 
 .library-empty p,
 .library-unselected p {
-  max-width: 280px;
-  margin: 0 auto;
+  max-width: 360px;
+  margin: var(--g-space-2) auto 0;
 }
 
 .library-unselected {
@@ -630,22 +582,27 @@
 }
 
 .library-history > p {
-  margin: var(--g-space-4) 0 var(--g-space-20);
+  margin: var(--g-space-2) 0 var(--g-space-20);
   color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
+}
+
+.library-history > .library-empty {
+  border: 1px dashed var(--g-line-strong);
+  border-radius: var(--g-radius-12);
 }
 
 .library-history > ul {
   border-top: 1px solid var(--g-line);
 }
 
-.library-history > ul > li {
+.library-history :where(ul > li) {
   display: flex;
   align-items: center;
-  gap: var(--g-space-20);
-  min-height: 64px;
-  padding: var(--g-space-12) 0;
+  gap: var(--g-space-16);
+  min-height: 56px;
+  padding: var(--g-space-8) 0;
   border-bottom: 1px solid var(--g-line);
 }
 
@@ -654,81 +611,70 @@
   min-width: 0;
 }
 
-.library-history :where(strong, span, small) {
+.library-history :where(li strong) {
   display: block;
-  overflow-wrap: anywhere;
-}
-
-.library-history strong {
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
-.library-history span {
-  margin: var(--g-space-2) 0;
-  color: var(--g-fg-2);
+.library-history li small {
+  display: block;
+  margin-top: var(--g-space-2);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
 
-.library-history small {
+.library-history li[data-state="recovery_required"] .library-receipt-state {
+  color: var(--g-volt);
+}
+
+.library-history li > code {
+  flex: none;
   color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
 
-.library-history .library-empty {
-  padding: var(--g-space-32) 0;
-  text-align: left;
-}
+/* ---------------------------------------------------------------- review dialogs */
 
-/* ---------------------------------------------------------------- review dialog */
-
-.library-review > :is(p, details, ul) {
-  margin: 0 0 var(--g-space-16);
+/* One sentence: what moves from where to where (Vercel's transfer dialog). */
+.library-review-intro {
+  margin: calc(var(--g-space-8) * -1) 0 var(--g-space-20);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
 }
 
-.library-review summary {
+.library-review-intro strong {
   color: var(--g-fg-1);
   font-weight: 500;
-  cursor: pointer;
-}
-
-.library-review ul {
-  padding-left: var(--g-space-20);
-  list-style: square;
-}
-
-.library-review-intro {
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-8);
-  color: var(--g-fg-1);
-}
-
-.library-review-intro svg {
-  color: var(--g-fg-3);
 }
 
 .library-comparison {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--g-space-12);
-  margin: 0 0 var(--g-space-16);
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-line);
 }
 
 .library-comparison section {
   min-width: 0;
+  background-color: var(--g-bg);
 }
 
 .library-comparison h3 {
-  margin: 0 0 var(--g-space-8);
+  margin: 0;
+  padding: var(--g-space-8) var(--g-space-12);
+  border-bottom: 1px solid var(--g-line-faint);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -736,29 +682,78 @@
 }
 
 .library-comparison pre {
-  height: 250px;
-  background-color: var(--g-bg);
+  height: 240px;
+  margin: 0;
+  padding: var(--g-space-12);
+  overflow: auto;
+  color: var(--g-code-fg);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-term);
+  font-variant-ligatures: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-.library-review footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--g-space-8);
-  margin-top: var(--g-space-8);
-  padding-top: var(--g-space-16);
+.library-review-files {
+  margin-top: var(--g-space-16);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.library-review-files summary {
+  color: var(--g-fg-1);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.library-review-files ul,
+.library-restore-files {
+  margin: var(--g-space-8) 0 0;
+  padding: 0;
   border-top: 1px solid var(--g-line);
+  list-style: none;
+}
+
+.library-review-files li,
+.library-restore-files li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-12);
+  padding: var(--g-space-8) 0;
+  border-bottom: 1px solid var(--g-line);
+}
+
+.library-review-files li span {
+  flex: none;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.library-review .library-detail-note {
+  margin-top: var(--g-space-12);
+}
+
+.library-dialog-error {
+  margin: var(--g-space-12) 0 0;
+  color: var(--g-red);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.library-actions {
+  margin-top: var(--g-space-24);
 }
 
 /* ----------------------------------------------------------------------- narrow */
 
-@media (max-width: 1000px) {
+@media (max-width: 1100px) {
   .library-body {
-    grid-template-columns: 168px minmax(220px, 0.85fr) minmax(280px, 1fr);
-  }
-
-  .library-toolbar {
-    flex-wrap: wrap;
-    gap: var(--g-space-12);
+    grid-template-columns: 176px minmax(220px, 0.85fr) minmax(280px, 1fr);
   }
 
   .library-detail {
@@ -769,6 +764,7 @@
 @media (max-width: 760px) {
   .library-body {
     grid-template-columns: 1fr 1fr;
+    margin-inline: var(--g-space-16);
   }
 
   .library-categories {
@@ -779,18 +775,17 @@
     grid-column: 1 / 3;
   }
 
-  .library-heading {
-    flex-direction: column;
-    align-items: flex-start;
+  .library-heading,
+  .library-toolbar {
+    padding-inline: var(--g-space-16);
   }
 
-  .library-heading-actions {
-    justify-content: flex-start;
+  .library-toolbar {
+    flex-wrap: wrap;
   }
 
   .library-search {
     flex-basis: 100%;
-    max-width: none;
   }
 
   .library-comparison {

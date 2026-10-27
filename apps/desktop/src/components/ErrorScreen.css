@@ -1,7 +1,7 @@
 /*
  * Startup failure replaces the app (visual-language.md 6.21): a black window, a centred 600px
- * column, the agent mark in its error state, a calm title over aura-core's own words, and the data
- * folder in a well that can be copied. Nothing here moves.
+ * column, the logo, a calm title over aura-core's own words, the data folder in a well that can be
+ * copied, and one line on what to do. Nothing here moves.
  */
 
 .error-screen {

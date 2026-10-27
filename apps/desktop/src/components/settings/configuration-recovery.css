@@ -1,52 +1,81 @@
 /*
- * An interrupted profile switch replaces the app: a calm title, aura-core's own words, and the one
- * action that finishes or restores the switch.
+ * An interrupted profile switch replaces the app, calm like the startup error: the logo, a title
+ * over aura-core's own words, what the one action does, and that action. Anything that can also
+ * help (notices, account access) follows below on the same column.
  */
 
 .configuration-recovery {
   position: relative;
+  box-sizing: border-box;
   min-height: 100%;
   overflow: auto;
 }
 
-.configuration-recovery .settings-content {
-  padding-top: clamp(var(--g-space-64), 16vh, var(--g-space-160));
+.configuration-recovery-drag {
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--ui-titlebar-height);
 }
 
-.configuration-recovery header > p,
-.configuration-recovery-action > p {
+.configuration-recovery-content {
+  box-sizing: border-box;
+  width: min(100%, 600px);
+  margin-inline: auto;
+  padding: clamp(var(--g-space-64), 18vh, var(--g-space-160)) var(--g-space-24) var(--g-space-64);
+}
+
+.configuration-recovery-logo {
+  display: block;
+  margin-bottom: var(--g-space-24);
+  color: var(--g-fg-2);
+}
+
+.configuration-recovery-content :where(header > h1) {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-title);
+}
+
+.configuration-recovery-content :where(header > p) {
   max-width: 60ch;
-}
-
-.configuration-recovery header > p {
-  margin-top: var(--g-space-8);
+  margin: var(--g-space-8) 0 0;
   color: var(--g-fg-2);
   font-size: var(--g-text-prose);
   line-height: var(--g-leading-prose);
+  overflow-wrap: anywhere;
 }
 
 .configuration-recovery-action {
-  padding-top: var(--g-space-20);
-  border-top: 1px solid var(--g-line);
-  color: var(--g-fg-2);
+  margin-top: var(--g-space-24);
+  color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
 
 .configuration-recovery-action > p {
+  max-width: 60ch;
   margin: 0 0 var(--g-space-16);
 }
 
-.configuration-recovery-action > .g-button {
-  margin-bottom: var(--g-space-16);
+.configuration-recovery-locked {
+  color: var(--g-volt);
 }
 
 .configuration-recovery-action [role="status"] {
-  margin: 0 0 var(--g-space-12);
+  margin: var(--g-space-12) 0 0;
+}
+
+.configuration-recovery-content > :not(header, section, .configuration-recovery-logo) {
+  margin-top: var(--g-space-16);
 }
 
 .configuration-recovery details {
   margin-top: var(--g-space-32);
+  padding-top: var(--g-space-16);
+  border-top: 1px solid var(--g-line);
   color: var(--g-fg-2);
 }
 
@@ -57,7 +86,7 @@
 }
 
 @media (max-width: 560px) {
-  .configuration-recovery .settings-content {
-    padding-inline: var(--g-space-24);
+  .configuration-recovery-content {
+    padding-inline: var(--g-space-16);
   }
 }
