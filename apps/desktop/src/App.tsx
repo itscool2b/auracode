@@ -451,7 +451,7 @@ export function App({
   return (
     <MotionConfig reducedMotion="user">
       <div
-        className={`app orbit-theme ${view === "diagnostics" ? "diagnostics-shell" : ""}`}
+        className={`app ${view === "diagnostics" ? "diagnostics-shell" : ""}`}
         data-theme="dark"
         style={brandCssVariables(brand) as CSSProperties}
       >

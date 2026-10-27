@@ -1,7 +1,7 @@
 /**
  * Graphite: auracode's visual language (docs/design/visual-language.md). Black, a grey ladder, one
- * volt accent and a live ordered-dither field. Import the stylesheet once at the app root:
- *   import "@auracode/ui/fonts.css";
+ * volt accent and a live ordered-dither field. Import the stylesheet once at the app root; it
+ * brings Geist and Geist Mono with it:
  *   import "@auracode/ui/graphite.css"; // or graphite-tokens.css for the variables alone
  */
 

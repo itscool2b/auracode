@@ -787,14 +787,6 @@
   flex: none;
 }
 
-/*
- * The design system paints a ghost mark's code in fg-4, as decoration. It is still text, and at
- * 2.5:1 it fails WCAG contrast, so here it takes fg-3 (5.7:1); the dashed tile still says absent.
- */
-.setup-shell .g-agent-mark[data-ghost] {
-  color: var(--g-fg-3);
-}
-
 .setup-panel-name {
   flex: 1;
   min-width: 0;

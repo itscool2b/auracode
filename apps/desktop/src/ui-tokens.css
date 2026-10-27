@@ -5,13 +5,6 @@
  * colour is a solid Graphite value, never an alpha.
  */
 @import "@auracode/ui/graphite.css";
-/*
- * Legacy Orbit variables (scoped to `.orbit-theme`) and OrbitMark styles, kept only for screens that
- * have not moved to Graphite yet. Nothing in the chat shell reads them. Remove both imports once no
- * screen renders OrbitMark or reads --o-* tokens.
- */
-@import "@auracode/ui/orbit-tokens.css";
-@import "@auracode/ui/orbit.css";
 
 :root {
   /* Geist with its default glyphs, exactly as the website sets it. */

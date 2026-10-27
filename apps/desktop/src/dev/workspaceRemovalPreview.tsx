@@ -58,7 +58,7 @@ Object.assign(window, { workspaceRemovalFixture: { calls: () => [...calls] } });
 function Fixture() {
   const [open, setOpen] = useState(true);
   return (
-    <main className="orbit-theme" style={{ minHeight: "100vh", padding: 30 }}>
+    <main className="g-root" style={{ minHeight: "100vh", padding: 30 }}>
       <h1>Workspace removal fixture</h1>
       {open ? (
         <WorkspaceRemovalDialog

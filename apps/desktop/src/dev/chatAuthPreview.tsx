@@ -67,13 +67,13 @@ function Fixture() {
   const [agentId, setAgentId] = useState("claude");
   return (
     <main
-      className="orbit-theme"
+      className="g-root"
       data-theme="dark"
       style={{
         padding: 24,
         minHeight: "100vh",
-        background: "var(--o-pane)",
-        color: "var(--o-text-1)",
+        background: "var(--g-surface-1)",
+        color: "var(--g-fg-1)",
       }}
     >
       <h1>Chat sign-in recovery</h1>

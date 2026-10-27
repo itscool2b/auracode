@@ -206,9 +206,9 @@ function Preview() {
   const [open, setOpen] = useState(true);
   return (
     <main
-      className="orbit-theme"
+      className="g-root"
       data-theme="dark"
-      style={{ height: "100%", background: "var(--o-tray)" }}
+      style={{ height: "100%", background: "var(--g-bg)" }}
     >
       <h1 className="settings-sr-only">Git fixture workspace</h1>
       {open ? (

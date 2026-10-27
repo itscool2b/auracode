@@ -51,13 +51,13 @@ function Fixture() {
   const [profile, setProfile] = useState(profiles[0] ?? null);
   return (
     <main
-      className="orbit-theme"
+      className="g-root"
       data-theme="dark"
       style={{
         padding: 40,
         minHeight: "100vh",
-        background: "var(--o-pane)",
-        color: "var(--o-text-1)",
+        background: "var(--g-surface-1)",
+        color: "var(--g-fg-1)",
       }}
     >
       <h1>Workspace identity</h1>
@@ -78,7 +78,7 @@ function Fixture() {
       </section>
       <aside
         aria-label="Workspace sidebar"
-        style={{ width: 264, background: "var(--o-raised)", padding: 12, borderRadius: 12 }}
+        style={{ width: 264, background: "var(--g-surface-2)", padding: 12, borderRadius: 12 }}
       >
         <ProfileStatus
           profile={profile}

@@ -133,7 +133,7 @@ function Preview() {
   });
   return (
     <main
-      className="chat-app orbit-theme"
+      className="chat-app"
       data-theme="dark"
       style={{ display: "flex", flexDirection: "column" }}
     >

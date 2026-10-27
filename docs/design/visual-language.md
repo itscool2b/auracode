@@ -548,7 +548,7 @@ glyph's place**; the agent's name always sits beside the mark.
 | waiting | A solid volt square, `0.375 * size` (parity-adjusted to centre on whole pixels) |
 | done | A white pixel check (cells `max(2, round(size / 8))`), drawn once a pixel at a time, 50ms apart (about 250ms, X Money's check), by CSS |
 | error | A solid red square, same geometry as waiting |
-| ghost (any state) | Transparent tile, 1px dashed line-strong outline, the code in fg-4 |
+| ghost (any state) | Transparent tile, 1px dashed line-strong outline, the code in fg-3 (it is text, so it keeps AA contrast) |
 
 Codes: CC Claude Code, CX Codex, PI Pi, MP oh-my-pi, AG Antigravity, HM Hermes, CU Cursor, GB
 Grok Build, OC OpenCode; any other agent takes the first two letters of its id; an empty or

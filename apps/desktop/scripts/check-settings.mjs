@@ -93,11 +93,9 @@ try {
       await page.screenshot({ path: resolve(out, `${engine}-general.png`) });
       await page.getByRole("button", { name: "Shortcuts", exact: true }).click();
       // Settings moves focus to the new heading in the next animation frame.
-      await page.waitForFunction(
-        () => document.activeElement?.textContent === "Shortcuts",
-        null,
-        { timeout: 5000 },
-      );
+      await page.waitForFunction(() => document.activeElement?.textContent === "Shortcuts", null, {
+        timeout: 5000,
+      });
       assert.equal(
         await page
           .getByRole("heading", { name: "Shortcuts", exact: true })
