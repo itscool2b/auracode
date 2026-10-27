@@ -11,8 +11,8 @@
     "signing": "pnpm --filter @auracode/desktop signing",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "node --test .github/scripts/check-instructions.test.mjs .github/scripts/third-party-notices.test.mjs && pnpm -r --if-present test",
-    "lint": "node .github/scripts/check-instructions.mjs && biome check .",
+    "test": "node --test .github/scripts/check-instructions.test.mjs .github/scripts/check-styles.test.mjs .github/scripts/third-party-notices.test.mjs && pnpm -r --if-present test",
+    "lint": "node .github/scripts/check-instructions.mjs && node .github/scripts/check-styles.mjs && biome check .",
     "format": "biome format --write .",
     "check": "pnpm lint && pnpm typecheck && pnpm test"
   },
