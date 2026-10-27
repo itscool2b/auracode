@@ -134,7 +134,7 @@ function Preview() {
   });
   if (closed)
     return (
-      <main className="orbit-theme" data-theme="dark">
+      <main className="g-root">
         <h1>Back to workspace</h1>
       </main>
     );

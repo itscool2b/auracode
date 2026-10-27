@@ -6,11 +6,11 @@ import "./settings.css";
 
 export function LockedProfile({ info }: { readonly info: AppInfo }) {
   return (
-    <div className="locked-profile orbit-theme">
-      <div className="chat-drag" data-tauri-drag-region="" />
+    <div className="locked-profile g-root">
+      <div className="settings-drag" data-tauri-drag-region="" />
       <main className="settings-content">
         <header>
-          <LockKeyhole size={24} aria-hidden="true" />
+          <LockKeyhole size={20} aria-hidden="true" />
           <h1>Your account workspace is locked</h1>
           <p>Unlock this account to open its projects and chats, or open your Local profile.</p>
         </header>

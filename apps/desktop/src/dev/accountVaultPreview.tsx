@@ -26,12 +26,8 @@ function Preview() {
     },
   }));
   return (
-    <main
-      className="orbit-theme settings-shell"
-      data-theme="dark"
-      style={{ display: "block", padding: "48px", overflow: "auto" }}
-    >
-      <div className="account-panel">
+    <main className="settings-shell g-root" style={{ display: "block", overflow: "auto" }}>
+      <div className="account-panel settings-content">
         <h1>Secure account storage</h1>
         <h2>Your account</h2>
         <AccountVault api={api} onUnlocked={() => setUnlocked(true)} />

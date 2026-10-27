@@ -81,7 +81,7 @@ export function AccountVerification({
       {phase === "failed" || phase === "pending" ? (
         <button
           type="button"
-          className="ui-button"
+          className="g-button g-button-28"
           onClick={() => setAttempt((value) => value + 1)}
         >
           Retry verification

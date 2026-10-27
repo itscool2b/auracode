@@ -15,11 +15,8 @@ function Preview() {
   const [result, setResult] = useState("");
   const [activationCount, setActivationCount] = useState(0);
   return (
-    <main
-      className="settings-shell orbit-theme"
-      style={{ display: "block", padding: "60px", overflow: "auto" }}
-    >
-      <div className="settings-content" style={{ maxWidth: 640, margin: "0 auto" }}>
+    <main className="settings-shell g-root" style={{ display: "block", overflow: "auto" }}>
+      <div className="settings-content">
         <header>
           <h1>{mode === "locked" ? "Your account workspace is locked" : "Account"}</h1>
           <p>Open your encrypted workspace or continue with Local.</p>

@@ -190,7 +190,11 @@ Object.assign(window, {
 });
 function Verification({ onToken }: { readonly onToken: (value: string) => void }) {
   return (
-    <button className="ui-button" type="button" onClick={() => onToken("synthetic-proof")}>
+    <button
+      className="g-button g-button-28"
+      type="button"
+      onClick={() => onToken("synthetic-proof")}
+    >
       Complete synthetic verification
     </button>
   );
@@ -198,27 +202,28 @@ function Verification({ onToken }: { readonly onToken: (value: string) => void }
 function Preview() {
   const [open, setOpen] = useState(true);
   return (
-    <main
-      className="orbit-theme settings-shell"
-      data-theme="dark"
-      style={{ display: "block", overflow: "auto", padding: "36px 72px" }}
-    >
-      <div style={{ maxWidth: 650, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 32, fontWeight: 500, letterSpacing: -1 }}>Account</h1>
-        {open ? (
-          <AccountPanel
-            api={api}
-            deviceName="Current computer"
-            Verification={Verification}
-            activeProfileId={new URLSearchParams(location.search).get("active")}
-            subscribeSync={subscribeSync}
-          />
-        ) : (
-          <p>Account closed.</p>
-        )}
-        <button className="ui-button" type="button" onClick={() => setOpen(!open)}>
-          {open ? "Close account" : "Open account"}
-        </button>
+    <main className="settings-shell g-root">
+      <div className="settings-main">
+        <div className="settings-content">
+          <header>
+            <h1>Account</h1>
+            <p>Profiles, sign-in, devices and recovery.</p>
+          </header>
+          {open ? (
+            <AccountPanel
+              api={api}
+              deviceName="Current computer"
+              Verification={Verification}
+              activeProfileId={new URLSearchParams(location.search).get("active")}
+              subscribeSync={subscribeSync}
+            />
+          ) : (
+            <p>Account closed.</p>
+          )}
+          <button className="g-button g-button-ghost" type="button" onClick={() => setOpen(!open)}>
+            {open ? "Close account" : "Open account"}
+          </button>
+        </div>
       </div>
     </main>
   );

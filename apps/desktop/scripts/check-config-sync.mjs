@@ -32,6 +32,10 @@ export async function checkConfigSync(browser, url, out, engine) {
     await page.getByRole("button", { name: "Open Account settings" }).waitFor();
     assert.deepEqual(await page.evaluate(() => window.configSyncCalls), []);
     await review();
+    // The chosen segment and the enabled pill settle their colours; audit the settled dialog.
+    await page.waitForFunction(() =>
+      document.getAnimations().every((animation) => !(animation instanceof CSSTransition)),
+    );
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
     await page.screenshot({ path: resolve(out, `${engine}-config-sync-review.png`) });
     assert.equal(

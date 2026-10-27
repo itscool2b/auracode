@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ProfileMeta } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
 import { type ProfileApi, profileApi, switchProfile } from "../../lib/profiles";
+import "./settings.css";
 import "./account.css";
 
 export function ProfilePicker({
@@ -58,7 +59,11 @@ export function ProfilePicker({
         Each profile has its own projects, chats and drafts. Local is free and stays on this
         computer. Cloud profiles require an invitation during private preview.
       </p>
-      {!profiles && !error ? <p role="status">Loading profiles…</p> : null}
+      {!profiles && !error ? (
+        <p role="status" className="settings-footnote">
+          Loading profiles…
+        </p>
+      ) : null}
       <ul className="account-profiles">
         {profiles?.map((profile) => {
           const current = profile.id === activeId;
@@ -66,7 +71,7 @@ export function ProfilePicker({
             current && locked ? LockKeyhole : profile.kind === "local" ? HardDrive : Cloud;
           return (
             <li key={profile.id}>
-              <Icon size={17} aria-hidden="true" />
+              <Icon size={16} aria-hidden="true" />
               <div>
                 <strong>{profile.display_name}</strong>
                 <p>
@@ -75,7 +80,7 @@ export function ProfilePicker({
                 </p>
               </div>
               <button
-                className="ui-button"
+                className="g-button g-button-outline g-button-28"
                 type="button"
                 disabled={pending !== null || (current && !locked)}
                 onClick={() => void choose(profile.id)}
@@ -92,7 +97,7 @@ export function ProfilePicker({
           <p>{error}</p>
           {!profiles ? (
             <button
-              className="ui-button"
+              className="g-button"
               type="button"
               onClick={() => setAttempt((value) => value + 1)}
             >

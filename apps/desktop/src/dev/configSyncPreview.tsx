@@ -110,7 +110,7 @@ export function mountConfigSyncPreview(container: HTMLElement) {
   };
   createRoot(container).render(
     <StrictMode>
-      <main className="settings-shell orbit-theme" data-theme="dark">
+      <main className="settings-shell g-root">
         <div className="settings-main">
           <div className="settings-content">
             <header>

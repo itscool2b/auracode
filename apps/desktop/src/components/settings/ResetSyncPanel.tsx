@@ -84,7 +84,7 @@ export function ResetSyncPanel({
   if (!pending?.pending && !expanded)
     return allowReview ? (
       <button
-        className="ui-button"
+        className="g-button g-button-ghost account-reset-toggle"
         type="button"
         disabled={locked}
         onClick={() => setExpanded(true)}
@@ -110,7 +110,7 @@ export function ResetSyncPanel({
           </p>
           <div className="account-actions">
             <button
-              className="ui-button"
+              className="g-button"
               type="button"
               disabled={locked || !authenticated}
               onClick={() => void run(() => finish(api.retry()))}
@@ -118,7 +118,7 @@ export function ResetSyncPanel({
               {pending.committed ? "Finish reset locally" : "Retry saved reset"}
             </button>
             <button
-              className="ui-button"
+              className="g-button"
               type="button"
               disabled={locked || !authenticated}
               onClick={() => void run(() => finish(api.cancel()))}
@@ -130,7 +130,7 @@ export function ResetSyncPanel({
       ) : null}
       {pending && !pending.pending && !review ? (
         <button
-          className="ui-button"
+          className="g-button"
           type="button"
           disabled={locked || access !== "pending_approval"}
           onClick={() =>
@@ -163,7 +163,7 @@ export function ResetSyncPanel({
           <label htmlFor={`${id}-key`}>New recovery key</label>
           <textarea
             id={`${id}-key`}
-            className="ui-input account-secret"
+            className="g-input account-secret"
             value={review.recovery_key}
             readOnly
             spellCheck={false}
@@ -182,7 +182,7 @@ export function ResetSyncPanel({
           </label>
           <input
             id={`${id}-confirm`}
-            className="ui-input"
+            className="g-input"
             value={confirmation}
             disabled={locked}
             autoComplete="off"
@@ -191,14 +191,14 @@ export function ResetSyncPanel({
           />
           <div className="account-actions">
             <button
-              className="ui-button"
+              className="g-button g-button-danger"
               type="submit"
               disabled={locked || !retained || confirmation !== "RESET SYNC"}
             >
               Permanently reset sync
             </button>
             <button
-              className="ui-button"
+              className="g-button"
               type="button"
               disabled={locked}
               onClick={() => void run(() => finish(api.dismiss()))}

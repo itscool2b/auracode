@@ -4,6 +4,7 @@ import { errorMessage } from "../../lib/errors";
 import { type LocalImportApi, localImportApi } from "../../lib/localImport";
 import { Modal } from "../chat/Modal";
 import "./local-import.css";
+import "./settings.css";
 
 /** Mount only for the unlocked active Account. Reading Local starts with the review button. */
 export function LocalImportPanel({
@@ -65,7 +66,7 @@ export function LocalImportPanel({
     <section className="settings-section local-import-panel" aria-labelledby="local-import-title">
       <h3 id="local-import-title">Your Local projects</h3>
       <p>Bring selected projects and chats into this Account. Your Local copy stays available.</p>
-      <button type="button" className="ui-button" disabled={busy} onClick={() => void preview()}>
+      <button type="button" className="g-button" disabled={busy} onClick={() => void preview()}>
         Review Local projects
       </button>
       {result && (
@@ -77,7 +78,11 @@ export function LocalImportPanel({
             ` ${result.missing_attachments} saved attachment(s) were already missing from Local.`}
         </p>
       )}
-      {!open && error && <p role="alert">{error}</p>}
+      {!open && error && (
+        <p role="alert" className="settings-alert">
+          {error}
+        </p>
+      )}
       {open && (
         <Modal
           title="Bring Local projects into this Account"
@@ -85,9 +90,15 @@ export function LocalImportPanel({
           closeDisabled={busy}
         >
           {busy && (
-            <p role="status">{review ? "Copying selected projects…" : "Reading Local projects…"}</p>
+            <p role="status" className="settings-footnote">
+              {review ? "Copying selected projects…" : "Reading Local projects…"}
+            </p>
           )}
-          {error && <p role="alert">{error}</p>}
+          {error && (
+            <p role="alert" className="settings-alert">
+              {error}
+            </p>
+          )}
           {review && (
             <>
               <ul className="local-import-notices">
@@ -134,7 +145,7 @@ export function LocalImportPanel({
           <footer className="local-import-actions">
             <button
               type="button"
-              className="ui-button"
+              className="g-button"
               disabled={busy}
               onClick={() => setOpen(false)}
             >
@@ -143,7 +154,7 @@ export function LocalImportPanel({
             {needsReview || !review ? (
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 disabled={busy}
                 onClick={() => void preview()}
               >
@@ -152,7 +163,7 @@ export function LocalImportPanel({
             ) : (
               <button
                 type="button"
-                className="ui-button primary"
+                className="g-button g-button-primary"
                 disabled={busy || selected.size === 0}
                 onClick={() => void apply()}
               >

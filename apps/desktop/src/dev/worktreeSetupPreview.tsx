@@ -74,7 +74,7 @@ export function mountWorktreeSetupPreview(container: HTMLElement) {
   Object.assign(window, { setupCalls: calls });
   createRoot(container).render(
     <main
-      className="orbit-theme settings-shell"
+      className="orbit-theme settings-shell g-root"
       style={{ display: "block", padding: 40, overflow: "auto" }}
     >
       <div style={{ maxWidth: 760, margin: "0 auto" }}>

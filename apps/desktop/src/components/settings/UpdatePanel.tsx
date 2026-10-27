@@ -95,16 +95,16 @@ export function UpdatePanel({ api }: { readonly api: UpdatesApi }) {
             phase === "available" ? (
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 disabled={working}
                 onClick={() => void run("download")}
               >
-                <Download size={14} /> Download
+                <Download size={14} aria-hidden="true" /> Download
               </button>
             ) : phase === "ready" || phase === "waiting_for_idle" ? (
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 disabled={working}
                 onClick={() => setConfirm(true)}
               >
@@ -113,11 +113,12 @@ export function UpdatePanel({ api }: { readonly api: UpdatesApi }) {
             ) : (
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 disabled={working}
                 onClick={() => void run("check")}
               >
-                <RefreshCw size={14} /> {working ? "Working…" : "Check for updates"}
+                <RefreshCw size={14} aria-hidden="true" />{" "}
+                {working ? "Working…" : "Check for updates"}
               </button>
             )
           ) : null}
@@ -157,12 +158,16 @@ export function UpdatePanel({ api }: { readonly api: UpdatesApi }) {
               installation. If anything needs attention, the update will wait.
             </p>
             <div>
-              <button type="button" className="ui-button" onClick={() => setConfirm(false)}>
+              <button
+                type="button"
+                className="g-button g-button-ghost"
+                onClick={() => setConfirm(false)}
+              >
                 Keep working
               </button>
               <button
                 type="button"
-                className="ui-button ui-primary"
+                className="g-button g-button-primary"
                 onClick={() => void run("install")}
               >
                 Install and restart
@@ -176,7 +181,7 @@ export function UpdatePanel({ api }: { readonly api: UpdatesApi }) {
           <p>{error}</p>
           <button
             type="button"
-            className="ui-button"
+            className="g-button g-button-28"
             disabled={working}
             onClick={() => void run("status")}
           >

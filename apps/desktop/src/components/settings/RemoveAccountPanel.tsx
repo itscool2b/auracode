@@ -79,7 +79,7 @@ export function RemoveAccountPanel({
             cannot finish, removal stays unavailable.
           </p>
           <button
-            className="ui-button"
+            className="g-button"
             type="button"
             disabled={busy || disabled}
             onClick={() => void run(onLocal)}
@@ -89,7 +89,7 @@ export function RemoveAccountPanel({
         </>
       ) : (
         <button
-          className="ui-button"
+          className="g-button"
           type="button"
           disabled={busy || disabled}
           onClick={() => void run(load)}
@@ -106,7 +106,7 @@ export function RemoveAccountPanel({
                 <p>{item.pending ? "Removal needs completion" : "Stored on this computer"}</p>
               </div>
               <button
-                className="ui-button"
+                className="g-button g-button-outline g-button-28"
                 type="button"
                 disabled={busy || disabled}
                 onClick={() => void run(() => open(item.profile_id))}
@@ -175,7 +175,7 @@ export function RemoveAccountPanel({
             </label>
             <input
               id={`${id}-confirmation`}
-              className="ui-input"
+              className="g-input"
               value={confirmation}
               autoComplete="off"
               spellCheck={false}
@@ -185,7 +185,7 @@ export function RemoveAccountPanel({
             <div className="account-actions">
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 disabled={busy}
                 onClick={() => setReview(null)}
               >
@@ -194,7 +194,7 @@ export function RemoveAccountPanel({
               {review.resuming ? (
                 <button
                   type="button"
-                  className="ui-button"
+                  className="g-button"
                   disabled={busy}
                   onClick={() =>
                     void run(async () => {
@@ -212,8 +212,7 @@ export function RemoveAccountPanel({
               ) : null}
               <button
                 type="button"
-                className="ui-button"
-                data-kind="danger"
+                className="g-button g-button-danger"
                 disabled={busy || disabled || !understood || confirmation !== "REMOVE"}
                 onClick={() => void run(apply)}
               >

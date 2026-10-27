@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { ShieldAlert } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 import type { AppInfo, ConfigProfileRecovery } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
@@ -46,14 +45,10 @@ export function ConfigurationRecovery({
     }
   };
   return (
-    <div className="configuration-recovery orbit-theme">
-      <div className="chat-drag" data-tauri-drag-region="" />
+    <div className="configuration-recovery g-root">
+      <div className="settings-drag" data-tauri-drag-region="" />
       <main className="settings-content" aria-labelledby="configuration-recovery-title">
         <header>
-          <span className="configuration-recovery-label">
-            <ShieldAlert size={15} aria-hidden="true" />
-            Configuration recovery
-          </span>
           <h1 id="configuration-recovery-title">
             {unavailable ? "Your settings are preserved" : "Finish opening your workspace"}
           </h1>
@@ -74,7 +69,7 @@ export function ConfigurationRecovery({
           ) : null}
           {!unavailable ? (
             <button
-              className="ui-button"
+              className="g-button g-button-primary"
               type="button"
               disabled={busy || locked}
               onClick={() => void apply()}
@@ -82,7 +77,11 @@ export function ConfigurationRecovery({
               {busy ? "Recovering…" : restore ? "Restore previous settings" : "Finish switching"}
             </button>
           ) : null}
-          {busy ? <p role="status">Checking the saved configuration transaction…</p> : null}
+          {busy ? (
+            <p role="status" className="settings-footnote">
+              Checking the saved configuration transaction…
+            </p>
+          ) : null}
           {error ? (
             <p className="settings-error" role="alert">
               {error}

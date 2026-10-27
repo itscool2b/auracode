@@ -19,6 +19,10 @@ export async function checkDataTransfer(page, url, out, engine) {
   assert.deepEqual(await calls(), ["review"]);
   await page.getByRole("button", { name: "Review Local projects" }).click();
   await page.getByRole("checkbox", { name: /Orbit/ }).check();
+  // Graphite settles a button's colours over 300ms once it is enabled; audit the settled screen.
+  await page.waitForFunction(() =>
+    document.getAnimations().every((animation) => !(animation instanceof CSSTransition)),
+  );
   assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
   await page.screenshot({ path: resolve(out, `${engine}-local-import.png`) });
   await apply.click();

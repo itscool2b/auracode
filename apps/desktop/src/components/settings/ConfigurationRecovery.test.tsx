@@ -19,7 +19,7 @@ it("renders recovery without invoking it and names the exact action", () => {
   expect(run).not.toHaveBeenCalled();
   expect(html).toContain("Restore previous settings");
   expect(html).toContain("Unmanaged settings stay in place");
-  expect(html).toContain("configuration-recovery orbit-theme");
+  expect(html).toContain("configuration-recovery g-root");
 });
 
 it("keeps unavailable recovery read-only and locked recovery disabled", () => {

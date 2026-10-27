@@ -1,4 +1,4 @@
-import { Check, KeyRound, Laptop, RefreshCw, ShieldCheck } from "lucide-react";
+import { Check, Laptop, RefreshCw } from "lucide-react";
 import { type ComponentType, useEffect, useRef, useState } from "react";
 import { type AccountApi, AccountCommandError, accountApi } from "../../lib/account/api";
 import type {
@@ -20,6 +20,7 @@ import { RebindProfilePanel } from "./RebindProfilePanel";
 import { RemoveAccountPanel } from "./RemoveAccountPanel";
 import { ResetSyncPanel } from "./ResetSyncPanel";
 import { SignOutDialog } from "./SignOutDialog";
+import "./settings.css";
 import "./account.css";
 
 type Challenge = SignInChallenge & { expiresAt: number; resendAt: number };
@@ -274,16 +275,17 @@ export function AccountPanel({
   return (
     <div className="account-panel" aria-busy={busy}>
       <section className="settings-section">
-        <div className="account-heading">
-          <ShieldCheck size={20} />
-          <h2>{recoveryOnly ? "Unlock the account for this recovery" : "Your account"}</h2>
-        </div>
+        <h2>{recoveryOnly ? "Unlock the account for this recovery" : "Your account"}</h2>
         <p className="account-description">
           {recoveryOnly
             ? "Sign in to the existing account that owns the saved configuration. Account and device changes stay unavailable until recovery finishes."
             : "Local is free and works offline. Cloud accounts, encrypted sync and transfers are invite-only during private preview."}
         </p>
-        {!status && !error ? <p role="status">Reading account status…</p> : null}
+        {!status && !error ? (
+          <p role="status" className="settings-footnote">
+            Reading account status…
+          </p>
+        ) : null}
         {signedOut ? (
           <div className="settings-group account-card">
             <h3>
@@ -310,10 +312,10 @@ export function AccountPanel({
                   });
                 }}
               >
-                <label className="ui-field">
+                <label className="settings-field">
                   Code sent to {email}
                   <input
-                    className="ui-input account-code-input"
+                    className="g-input account-code-input"
                     autoComplete="one-time-code"
                     inputMode="numeric"
                     pattern="[0-9]{6}"
@@ -333,15 +335,14 @@ export function AccountPanel({
                 </p>
                 <div className="account-actions">
                   <button
-                    className="ui-button"
-                    data-kind="primary"
+                    className="g-button g-button-primary"
                     disabled={locked || code.length !== 6 || challenge.expiresAt <= now}
                     type="submit"
                   >
                     Verify code
                   </button>
                   <button
-                    className="ui-button"
+                    className="g-button"
                     type="button"
                     disabled={locked || challenge.resendAt > now}
                     onClick={() => {
@@ -362,10 +363,10 @@ export function AccountPanel({
                   void requestCode();
                 }}
               >
-                <label className="ui-field">
+                <label className="settings-field">
                   Email address
                   <input
-                    className="ui-input"
+                    className="g-input"
                     type="email"
                     autoComplete="email"
                     required
@@ -382,8 +383,7 @@ export function AccountPanel({
                   <p className="settings-error">Verification is unavailable for this build.</p>
                 )}
                 <button
-                  className="ui-button"
-                  data-kind="primary"
+                  className="g-button g-button-primary"
                   type="submit"
                   disabled={locked || !proof || !email.trim()}
                 >
@@ -406,7 +406,7 @@ export function AccountPanel({
             <div className="account-actions">
               {status.local_key_available && status.profile_id !== activeProfileId ? (
                 <button
-                  className="ui-button"
+                  className="g-button"
                   type="button"
                   disabled={locked || wrongRecoveryAccount}
                   onClick={() => void run(onActivate)}
@@ -415,7 +415,7 @@ export function AccountPanel({
                 </button>
               ) : null}
               <button
-                className="ui-button"
+                className="g-button"
                 type="button"
                 disabled={locked}
                 onClick={() => void run(() => update(api.refresh()))}
@@ -430,7 +430,7 @@ export function AccountPanel({
             <h3>Finish checking your session</h3>
             <p>Your email code was accepted. Continue to check this device.</p>
             <button
-              className="ui-button"
+              className="g-button"
               disabled={locked}
               onClick={() => void run(() => update(api.refresh()))}
               type="button"
@@ -449,10 +449,10 @@ export function AccountPanel({
           >
             <h3>Name this device</h3>
             <p>You will see this name when approving access from another device.</p>
-            <label className="ui-field">
+            <label className="settings-field">
               Device name
               <input
-                className="ui-input"
+                className="g-input"
                 required
                 maxLength={80}
                 value={name}
@@ -461,9 +461,8 @@ export function AccountPanel({
               />
             </label>
             <button
-              className="ui-button"
+              className="g-button g-button-primary"
               type="submit"
-              data-kind="primary"
               disabled={locked || !name.trim()}
             >
               Register this device
@@ -472,7 +471,6 @@ export function AccountPanel({
         ) : null}
         {status?.access === "needs_first_key" && !recoveryOnly ? (
           <div className="settings-group account-card">
-            <KeyRound size={22} />
             <h3>Keep a way back in</h3>
             <p>
               Your recovery key unlocks your account data if you lose access to every approved
@@ -480,10 +478,10 @@ export function AccountPanel({
             </p>
             {recovery ? (
               <>
-                <label className="ui-field">
+                <label className="settings-field">
                   Recovery key
                   <textarea
-                    className="ui-input account-secret"
+                    className="g-input account-secret"
                     readOnly
                     spellCheck={false}
                     autoComplete="off"
@@ -504,9 +502,8 @@ export function AccountPanel({
                   I saved my recovery key somewhere safe
                 </label>
                 <button
-                  className="ui-button"
+                  className="g-button g-button-primary"
                   type="button"
-                  data-kind="primary"
                   disabled={locked || !retained}
                   onClick={() =>
                     void run(async () => {
@@ -523,10 +520,9 @@ export function AccountPanel({
               </>
             ) : (
               <button
-                className="ui-button"
+                className="g-button g-button-primary"
                 type="button"
                 disabled={locked}
-                data-kind="primary"
                 onClick={() => void prepareRecovery()}
               >
                 Create recovery key
@@ -536,7 +532,6 @@ export function AccountPanel({
         ) : null}
         {status?.access === "pending_approval" ? (
           <div className="settings-group account-card">
-            <Laptop size={22} />
             <h3>Approve this device</h3>
             <p>
               On an approved device, open Settings, then Account. Select this device and enter the
@@ -546,12 +541,12 @@ export function AccountPanel({
               {status.approval_code ?? "Code unavailable. Refresh to try again."}
             </code>
             <button
-              className="ui-button"
+              className="g-button"
               type="button"
               disabled={locked}
               onClick={() => void run(() => update(api.refresh()))}
             >
-              <RefreshCw size={14} />
+              <RefreshCw size={14} aria-hidden="true" />
               Check approval
             </button>
             <details className="account-recovery">
@@ -564,10 +559,10 @@ export function AccountPanel({
                   void run(() => update(api.recover(key)));
                 }}
               >
-                <label className="ui-field">
+                <label className="settings-field">
                   Recovery key
                   <input
-                    className="ui-input account-secret"
+                    className="g-input account-secret"
                     type="password"
                     autoComplete="off"
                     spellCheck={false}
@@ -578,7 +573,7 @@ export function AccountPanel({
                   />
                 </label>
                 <button
-                  className="ui-button"
+                  className="g-button"
                   type="submit"
                   disabled={locked || !recoveryInput.trim()}
                 >
@@ -606,8 +601,7 @@ export function AccountPanel({
               I compared the complete fingerprint and it matches
             </label>
             <button
-              className="ui-button"
-              data-kind="primary"
+              className="g-button g-button-primary"
               type="button"
               disabled={locked || !compared || !status.fingerprint}
               onClick={() =>
@@ -622,7 +616,7 @@ export function AccountPanel({
           <>
             <div className="settings-group account-card">
               <div className="account-heading">
-                <Check size={18} />
+                <Check size={16} aria-hidden="true" />
                 <h3>This device is approved</h3>
               </div>
               <dl className="account-facts">
@@ -649,7 +643,7 @@ export function AccountPanel({
               {recoveryOnly || !status.profile_id || status.profile_id !== activeProfileId ? (
                 <div className="account-actions">
                   <button
-                    className="ui-button ui-button-primary"
+                    className="g-button g-button-primary"
                     type="button"
                     disabled={locked || wrongRecoveryAccount}
                     onClick={() => void run(onActivate)}
@@ -668,16 +662,20 @@ export function AccountPanel({
                 <div className="account-heading">
                   <h2>Devices</h2>
                   <button
-                    className="ui-button"
+                    className="g-button g-button-ghost g-button-28"
                     type="button"
                     disabled={locked}
                     onClick={() => setDeviceGeneration((value) => value + 1)}
                   >
-                    <RefreshCw size={13} />
+                    <RefreshCw size={14} aria-hidden="true" />
                     Refresh devices
                   </button>
                 </div>
-                {!devices && !deviceError ? <p role="status">Loading devices…</p> : null}
+                {!devices && !deviceError ? (
+                  <p role="status" className="settings-footnote">
+                    Loading devices…
+                  </p>
+                ) : null}
                 {deviceError ? (
                   <p role="alert" className="settings-error">
                     {deviceError}
@@ -686,7 +684,7 @@ export function AccountPanel({
                 <ul className="account-devices">
                   {devices?.map((device) => (
                     <li key={device.id}>
-                      <Laptop size={18} />
+                      <Laptop size={16} aria-hidden="true" />
                       <div>
                         <strong>
                           {device.name}
@@ -703,7 +701,7 @@ export function AccountPanel({
                       </div>
                       {device.revoked_at === null ? (
                         <button
-                          className="ui-button"
+                          className="g-button g-button-outline g-button-28"
                           type="button"
                           disabled={locked}
                           onClick={() => {
@@ -732,7 +730,7 @@ export function AccountPanel({
               <>
                 {!status.profile_id || status.profile_id !== activeProfileId || recoveryOnly ? (
                   <button
-                    className="ui-button"
+                    className="g-button"
                     type="button"
                     disabled={locked || wrongRecoveryAccount}
                     onClick={() => void run(onActivate)}
@@ -751,7 +749,7 @@ export function AccountPanel({
         ) : null}
         {!recoveryOnly && status && !signedOut && status.access !== "deleted" ? (
           <button
-            className="ui-button"
+            className="g-button"
             type="button"
             disabled={locked}
             onClick={() => {
@@ -773,7 +771,7 @@ export function AccountPanel({
           <p>{error}</p>
           {!status ? (
             <button
-              className="ui-button"
+              className="g-button"
               type="button"
               onClick={() => setGeneration((value) => value + 1)}
             >
@@ -788,7 +786,7 @@ export function AccountPanel({
         </p>
       ) : null}
       <button
-        className="ui-button"
+        className="g-button g-button-ghost account-vault-toggle"
         type="button"
         disabled={busy}
         onClick={() => setShowVault((value) => !value)}
@@ -845,10 +843,10 @@ export function AccountPanel({
                   Enter the verification code shown on that device. This gives it access to your
                   encrypted account data.
                 </p>
-                <label className="ui-field">
+                <label className="settings-field">
                   Recipient verification code
                   <input
-                    className="ui-input account-secret"
+                    className="g-input account-secret"
                     autoComplete="off"
                     spellCheck={false}
                     value={deviceCode}
@@ -870,7 +868,7 @@ export function AccountPanel({
             ) : null}
             <div className="account-actions">
               <button
-                className="ui-button"
+                className="g-button"
                 type="button"
                 disabled={busy}
                 onClick={() => setDeviceAction(null)}
@@ -878,9 +876,12 @@ export function AccountPanel({
                 Cancel
               </button>
               <button
-                className="ui-button"
+                className={
+                  deviceAction.kind === "approve"
+                    ? "g-button g-button-primary"
+                    : "g-button g-button-danger"
+                }
                 type="button"
-                data-kind={deviceAction.kind === "approve" ? "primary" : "danger"}
                 disabled={locked || (deviceAction.kind === "approve" && !deviceCode.trim())}
                 onClick={() =>
                   void run(async () => {

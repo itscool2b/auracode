@@ -1,6 +1,6 @@
-import { OrbitMark } from "@auracode/ui/orbit";
+import { Keycap, Wordmark } from "@auracode/ui/graphite";
 import { ArrowLeft, ArrowUpRight, FolderOpen } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import type { AppInfo, MotionPreference, SetupSnapshot } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
 import { revealDataDir } from "../../lib/ipc";
@@ -16,11 +16,11 @@ import "./settings.css";
 
 type Page = "general" | "account" | "configuration" | "shortcuts" | "about";
 const TITLES: Record<Page, readonly [string, string]> = {
-  general: ["General", "Your workspace. At your pace."],
-  account: ["Account", "Your work, across your devices."],
-  configuration: ["Configuration sync", "Bring your setup with you."],
-  shortcuts: ["Shortcuts", "Keep your hands on the keyboard."],
-  about: ["About auracode", "One window for your agents."],
+  general: ["General", "Motion, setup and where your data lives."],
+  account: ["Account", "Profiles, sign-in, devices and recovery."],
+  configuration: ["Configuration sync", "Agent instructions, skills and settings on every device."],
+  shortcuts: ["Shortcuts", "The keys that work across auracode."],
+  about: ["About auracode", "Version, updates and the software inside."],
 };
 
 function Row({
@@ -29,7 +29,7 @@ function Row({
   children,
 }: {
   readonly title: string;
-  readonly detail: string;
+  readonly detail: ReactNode;
   readonly children?: ReactNode;
 }) {
   return (
@@ -40,6 +40,22 @@ function Row({
       </div>
       {children}
     </div>
+  );
+}
+
+/** One keycap per key in a chord; a repeated key shows twice. */
+function Keys({ keys, mac }: { readonly keys: string; readonly mac: boolean }) {
+  const names: Record<string, string> = { "⌘": "Command", "⇧": "Shift" };
+  const caps = keys === "Esc again" ? ["Esc", "Esc"] : keys.split(" ");
+  return (
+    <span className="settings-keys">
+      {caps.map((key, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: a chord can repeat a key, so position is its identity.
+        <Fragment key={index}>
+          <Keycap label={names[key]}>{mac && key === "Shift" ? "⇧" : key}</Keycap>
+        </Fragment>
+      ))}
+    </span>
   );
 }
 
@@ -125,7 +141,7 @@ function General({
             title="Welcome and setup"
             detail="Review your agents and choose your first project again."
           >
-            <button className="ui-button" type="button" onClick={onSetup}>
+            <button className="g-button" type="button" onClick={onSetup}>
               Run setup
             </button>
           </Row>
@@ -140,12 +156,12 @@ function General({
             detail="Chats stay on this device. No account is needed for local work."
           >
             <button
-              className="ui-button"
+              className="g-button"
               type="button"
               disabled={!info.data_dir}
               onClick={() => void reveal().catch((failure) => setError(errorMessage(failure)))}
             >
-              <FolderOpen size={14} /> Open folder
+              <FolderOpen size={14} aria-hidden="true" /> Open folder
             </button>
           </Row>
           {info.data_dir ? <p className="settings-path">{info.data_dir}</p> : null}
@@ -155,7 +171,7 @@ function General({
         <div className="settings-error" role="alert">
           <p>{error}</p>
           <button
-            className="ui-button"
+            className="g-button g-button-28"
             type="button"
             disabled={busy}
             onClick={() => setReload((value) => value + 1)}
@@ -230,7 +246,8 @@ export function SettingsScreen({
     document.addEventListener("keydown", dismiss);
     return () => document.removeEventListener("keydown", dismiss);
   }, [onBack]);
-  const key = info.os === "macos" ? "⌘" : "Ctrl";
+  const mac = info.os === "macos";
+  const key = mac ? "⌘" : "Ctrl";
   const shortcuts = [
     ["Open settings", `${key} ,`],
     ["Search chats, projects and files", `${key} K`],
@@ -242,11 +259,11 @@ export function SettingsScreen({
     ["Force stop after interrupt", "Esc again"],
   ];
   return (
-    <div className="settings-shell orbit-theme" data-theme="dark">
+    <div className="settings-shell g-root">
       <aside className="settings-sidebar" aria-label="Settings navigation">
-        <div className="chat-drag" data-tauri-drag-region="" />
+        <div className="settings-drag" data-tauri-drag-region="" />
         <button type="button" className="settings-back" onClick={onBack}>
-          <ArrowLeft size={15} /> {backLabel}
+          <ArrowLeft size={16} aria-hidden="true" /> {backLabel}
         </button>
         <h2>Settings</h2>
         <nav>
@@ -263,24 +280,23 @@ export function SettingsScreen({
               {value === "about" ? "About" : TITLES[value][0]}
             </button>
           ))}
+          <hr />
           <button type="button" onClick={onAgents}>
-            Agents <ArrowUpRight size={13} />
+            Agents <ArrowUpRight size={14} aria-hidden="true" />
           </button>
           {onLibrary ? (
             <button type="button" onClick={onLibrary}>
-              Library <ArrowUpRight size={13} />
+              Library <ArrowUpRight size={14} aria-hidden="true" />
             </button>
           ) : null}
         </nav>
         <div className="settings-identity">
-          <OrbitMark agent="claude" size={25} />
-          <span>
-            auracode<small>{info.app_version}</small>
-          </span>
+          <Wordmark size={14} />
+          <span>{info.app_version}</span>
         </div>
       </aside>
       <main className="settings-main">
-        <div className="chat-drag" data-tauri-drag-region="" />
+        <div className="settings-drag" data-tauri-drag-region="" />
         <div className="settings-content">
           <header>
             <h1 ref={heading} tabIndex={-1}>
@@ -322,7 +338,7 @@ export function SettingsScreen({
                   <div key={title}>
                     <dt>{title}</dt>
                     <dd>
-                      <kbd>{keys}</kbd>
+                      <Keys keys={keys ?? ""} mac={mac} />
                     </dd>
                   </div>
                 ))}
@@ -338,16 +354,28 @@ export function SettingsScreen({
               <section className="settings-section">
                 <h2>Application</h2>
                 <div className="settings-group">
-                  <Row title="auracode" detail={`Version ${info.app_version}`} />
+                  <Row
+                    title="auracode"
+                    detail={
+                      <>
+                        Version <span className="settings-mono">{info.app_version}</span>
+                      </>
+                    }
+                  />
                   <Row
                     title="This device"
-                    detail={`${info.os === "macos" ? "macOS" : "Windows"} ${info.os_version} · ${info.arch}`}
+                    detail={
+                      <>
+                        {info.os === "macos" ? "macOS" : "Windows"} {info.os_version} ·{" "}
+                        <span className="settings-mono">{info.arch}</span>
+                      </>
+                    }
                   />
                   <Row
                     title="Diagnostics"
                     detail="Startup information and local troubleshooting tools."
                   >
-                    <button className="ui-button" type="button" onClick={onDiagnostics}>
+                    <button className="g-button" type="button" onClick={onDiagnostics}>
                       Open
                     </button>
                   </Row>
@@ -355,7 +383,7 @@ export function SettingsScreen({
                     title="Third-party notices"
                     detail="Licenses for the open source software included in auracode."
                   >
-                    <button className="ui-button" type="button" onClick={() => setNotices(true)}>
+                    <button className="g-button" type="button" onClick={() => setNotices(true)}>
                       View
                     </button>
                   </Row>

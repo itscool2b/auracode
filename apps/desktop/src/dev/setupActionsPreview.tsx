@@ -124,7 +124,7 @@ if (import.meta.env.DEV) {
   function Preview() {
     const [mounted, setMounted] = useState(true);
     return (
-      <main className="orbit-theme setup-shell" data-theme="dark" style={{ padding: 40 }}>
+      <main className="g-root setup-shell" style={{ display: "block", padding: 40 }}>
         <h1>Install Pi</h1>
         {mounted ? (
           <InstallAgent

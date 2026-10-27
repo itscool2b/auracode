@@ -84,6 +84,10 @@ try {
       await page
         .getByLabel("Type RESET SYNC to permanently remove the old cloud data", { exact: true })
         .fill("RESET SYNC");
+      // Graphite settles an enabled pill's colours over 300ms; audit the settled screen.
+      await page.waitForFunction(() =>
+        document.getAnimations().every((animation) => !(animation instanceof CSSTransition)),
+      );
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${name}.png`), fullPage: true });
       await page.getByRole("button", { name: "Permanently reset sync", exact: true }).click();
@@ -145,6 +149,10 @@ try {
       await page.getByLabel("I understand that local data and key access will be lost").check();
       assert.equal(await erase.isDisabled(), true);
       await page.getByLabel("Type REMOVE to erase this workspace and key").fill("REMOVE");
+      // Graphite settles an enabled pill's colours over 300ms; audit the settled screen.
+      await page.waitForFunction(() =>
+        document.getAnimations().every((animation) => !(animation instanceof CSSTransition)),
+      );
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${name}-removal.png`), fullPage: true });
       await erase.click();

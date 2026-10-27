@@ -60,7 +60,10 @@ Object.assign(window, { folderFixture: { calls: () => [...calls] } });
 const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
-    <main className="setup-shell" style={{ overflow: "auto", padding: 40 }}>
+    <main
+      className="setup-shell g-root"
+      style={{ display: "block", overflow: "auto", padding: 40 }}
+    >
       <Modal title="Folder on this device" onClose={() => {}}>
         <FolderResolver
           folderId="folder"

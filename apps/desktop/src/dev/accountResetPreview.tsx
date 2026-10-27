@@ -131,12 +131,8 @@ function Preview() {
     };
   });
   return (
-    <main
-      className="orbit-theme settings-shell"
-      data-theme="dark"
-      style={{ display: "block", padding: 48, overflow: "auto" }}
-    >
-      <div className="account-panel">
+    <main className="settings-shell g-root" style={{ display: "block", overflow: "auto" }}>
+      <div className="account-panel settings-content">
         <h1>Account recovery</h1>
         <h2>Your account</h2>
         {mode?.startsWith("remove") ? (

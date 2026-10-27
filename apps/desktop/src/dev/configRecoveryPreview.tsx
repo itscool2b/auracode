@@ -65,7 +65,7 @@ function AuthPreview({ mode }: { readonly mode: string }) {
     } satisfies AccountApi;
   }, [mode]);
   return (
-    <main className="orbit-theme settings-content">
+    <main className="g-root settings-content">
       <h1>Recover account access</h1>
       <AccountPanel
         api={api}
@@ -101,7 +101,7 @@ function Preview() {
       "A configuration switch was interrupted. Restore the previous profile's managed configuration before continuing.",
   };
   return done ? (
-    <main className="orbit-theme settings-content">
+    <main className="g-root settings-content">
       <h1>Recovery confirmed</h1>
     </main>
   ) : (

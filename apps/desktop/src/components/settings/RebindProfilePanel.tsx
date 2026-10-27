@@ -58,7 +58,7 @@ export function RebindProfilePanel({
       </p>
       {choices === null ? (
         <button
-          className="ui-button"
+          className="g-button"
           type="button"
           disabled={busy || disabled}
           onClick={() => void open()}
@@ -70,7 +70,7 @@ export function RebindProfilePanel({
           <label htmlFor={`${id}-profile`}>Existing Account workspace</label>
           <select
             id={`${id}-profile`}
-            className="ui-input"
+            className="g-input"
             value={selected}
             disabled={busy || disabled || !!profileId}
             onChange={(event) => setSelected(event.currentTarget.value)}
@@ -87,7 +87,7 @@ export function RebindProfilePanel({
           ) : null}
           <button
             type="button"
-            className="ui-button"
+            className="g-button"
             disabled={busy || disabled || !choices.some((profile) => profile.id === selected)}
             onClick={() => void restore()}
           >

@@ -30,10 +30,15 @@ export function SignOutDialog({
           </p>
         ) : null}
         <div className="account-actions">
-          <button className="ui-button" type="button" disabled={busy} onClick={onCancel}>
+          <button className="g-button" type="button" disabled={busy} onClick={onCancel}>
             Stay signed in
           </button>
-          <button className="ui-button" type="button" disabled={busy} onClick={onConfirm}>
+          <button
+            className="g-button g-button-primary"
+            type="button"
+            disabled={busy}
+            onClick={onConfirm}
+          >
             {busy ? "Signing out…" : "Sign out now"}
           </button>
         </div>

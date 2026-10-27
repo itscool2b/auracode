@@ -39,7 +39,7 @@ function setBusy(busy: boolean): void {
   if (busy) {
     const status = document.createElement("div");
     status.id = "profile-transition";
-    status.className = "profile-transition orbit-theme";
+    status.className = "profile-transition g-root";
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
     status.textContent = "Saving drafts and opening your profile…";

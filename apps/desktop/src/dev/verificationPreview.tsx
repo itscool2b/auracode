@@ -5,16 +5,16 @@ import { AccountVerification } from "../components/settings/AccountVerification"
 function Preview() {
   const [token, setToken] = useState("");
   return (
-    <main
-      className="orbit-theme settings-shell"
-      data-theme="dark"
-      style={{ display: "block", padding: 32 }}
-    >
-      <h1>Sign-in verification fixture</h1>
-      <AccountVerification onToken={setToken} />
-      <button type="button" className="ui-button" disabled={!token}>
-        Request sign-in code
-      </button>
+    <main className="settings-shell g-root" style={{ display: "block", overflow: "auto" }}>
+      <div className="settings-content">
+        <header>
+          <h1>Sign-in verification fixture</h1>
+        </header>
+        <AccountVerification onToken={setToken} />
+        <button type="button" className="g-button g-button-primary" disabled={!token}>
+          Request sign-in code
+        </button>
+      </div>
     </main>
   );
 }

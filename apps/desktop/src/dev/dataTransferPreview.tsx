@@ -58,7 +58,7 @@ function Fixture() {
   const [open, setOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   return (
-    <main className="orbit-theme settings-content" data-theme="dark">
+    <main className="g-root settings-content">
       <h1>Workspace transfer fixture</h1>
       <LocalImportPanel
         api={api}
@@ -66,10 +66,10 @@ function Fixture() {
           calls.push("refresh");
         }}
       />
-      <button type="button" className="ui-button" onClick={() => setOpen(true)}>
+      <button type="button" className="g-button" onClick={() => setOpen(true)}>
         Export chat
       </button>
-      <button type="button" className="ui-button" onClick={() => setDebugOpen(true)}>
+      <button type="button" className="g-button" onClick={() => setDebugOpen(true)}>
         Copy debug bundle
       </button>
       {debugOpen ? (

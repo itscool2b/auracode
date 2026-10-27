@@ -5,6 +5,7 @@ import { errorMessage } from "../../lib/errors";
 import { Modal } from "../chat/Modal";
 import "./local-import.css";
 import "./keep-local.css";
+import "./settings.css";
 
 /** Mount only for Deleted with the matching retained Account profile unlocked. No automatic copy. */
 export function KeepAsLocalPanel({
@@ -68,7 +69,7 @@ export function KeepAsLocalPanel({
       <h3 id="keep-local-title">Keep your workspace</h3>
       <p>This account was deleted. Its encrypted workspace remains on this computer.</p>
       {!result ? (
-        <button type="button" className="ui-button" disabled={busy} onClick={() => void preview()}>
+        <button type="button" className="g-button" disabled={busy} onClick={() => void preview()}>
           Review Keep as Local
         </button>
       ) : (
@@ -81,7 +82,7 @@ export function KeepAsLocalPanel({
           </p>
           <button
             type="button"
-            className="ui-button"
+            className="g-button"
             disabled={busy}
             onClick={() => void activate()}
           >
@@ -89,11 +90,23 @@ export function KeepAsLocalPanel({
           </button>
         </>
       )}
-      {!open && error && <p role="alert">{error}</p>}
+      {!open && error && (
+        <p role="alert" className="settings-alert">
+          {error}
+        </p>
+      )}
       {open && (
         <Modal title="Keep a Local copy" onClose={() => setOpen(false)} closeDisabled={busy}>
-          {busy && <p role="status">Preparing the Local copy…</p>}
-          {error && <p role="alert">{error}</p>}
+          {busy && (
+            <p role="status" className="settings-footnote">
+              Preparing the Local copy…
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="settings-alert">
+              {error}
+            </p>
+          )}
           {review && (
             <>
               <p>
@@ -118,7 +131,7 @@ export function KeepAsLocalPanel({
           <footer className="local-import-actions">
             <button
               type="button"
-              className="ui-button"
+              className="g-button"
               disabled={busy}
               onClick={() => setOpen(false)}
             >
@@ -127,7 +140,7 @@ export function KeepAsLocalPanel({
             {review ? (
               <button
                 type="button"
-                className="ui-button primary"
+                className="g-button g-button-primary"
                 disabled={busy || !accepted}
                 onClick={() => void apply()}
               >
@@ -136,7 +149,7 @@ export function KeepAsLocalPanel({
             ) : (
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 disabled={busy}
                 onClick={() => void preview()}
               >

@@ -13,6 +13,7 @@ import type {
 } from "../../lib/config-sync/bindings";
 import { errorMessage } from "../../lib/errors";
 import { Modal } from "../chat/Modal";
+import "./settings.css";
 import "./config-sync.css";
 
 const OPERATIONS: Record<ConfigOperation, string> = {
@@ -113,8 +114,8 @@ export function ConfigSyncPanel({
           email and open your Account workspace to review agent instructions, skills and settings.
           Local use is free and stays on this computer.
         </p>
-        <button type="button" className="ui-button" onClick={onAccount}>
-          Open Account settings <ArrowRight size={14} />
+        <button type="button" className="g-button g-button-outline" onClick={onAccount}>
+          Open Account settings <ArrowRight size={14} aria-hidden="true" />
         </button>
       </section>
     );
@@ -127,15 +128,20 @@ export function ConfigSyncPanel({
         </p>
         <button
           type="button"
-          className="ui-button"
+          className="g-button g-button-outline g-button-28 config-sync-toggle"
           aria-pressed={showHistory}
           onClick={() => setShowHistory(!showHistory)}
         >
-          <History size={14} />
+          <History size={14} aria-hidden="true" />
           History
         </button>
-        <button type="button" className="ui-button" disabled={loading || busy} onClick={refresh}>
-          <RefreshCw size={14} />
+        <button
+          type="button"
+          className="g-button g-button-ghost g-button-28"
+          disabled={loading || busy}
+          onClick={refresh}
+        >
+          <RefreshCw size={14} aria-hidden="true" />
           Refresh
         </button>
       </div>
@@ -149,7 +155,11 @@ export function ConfigSyncPanel({
           {error}
         </p>
       ) : null}
-      {loading ? <p role="status">Reading your configuration…</p> : null}
+      {loading ? (
+        <p role="status" className="settings-footnote">
+          Reading your configuration…
+        </p>
+      ) : null}
       {inventory?.notices.length ? (
         <details className="config-sync-notices">
           <summary>Some configuration needs attention ({inventory.notices.length})</summary>
@@ -184,7 +194,7 @@ export function ConfigSyncPanel({
               {receipt.status !== "rolled_back" ? (
                 <button
                   type="button"
-                  className="ui-button"
+                  className="g-button g-button-outline g-button-28"
                   disabled={busy}
                   onClick={() => setRestore(receipt)}
                 >
@@ -248,11 +258,11 @@ export function ConfigSyncPanel({
                 </label>
                 <button
                   type="button"
-                  className="ui-button"
+                  className="g-button g-button-outline g-button-28"
                   disabled={busy || loading}
                   onClick={() => setSelected(item)}
                 >
-                  Review <ArrowRight size={14} />
+                  Review <ArrowRight size={14} aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -260,7 +270,7 @@ export function ConfigSyncPanel({
           {inventory?.next_cursor ? (
             <button
               type="button"
-              className="ui-button config-sync-more"
+              className="g-button config-sync-more"
               disabled={busy || loading}
               onClick={() =>
                 void action(async () => {
@@ -325,7 +335,7 @@ export function ConfigSyncPanel({
             <div className="config-sync-footer">
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 disabled={busy}
                 onClick={() => setRestore(null)}
               >
@@ -333,7 +343,7 @@ export function ConfigSyncPanel({
               </button>
               <button
                 type="button"
-                className="ui-button"
+                className="g-button g-button-primary"
                 disabled={busy}
                 onClick={() => void action(async () => completed(await api.rollback(restore.id)))}
               >
@@ -437,7 +447,7 @@ function ConfigReview({
           <strong>{item.label}</strong>
           <p>{item.provider ? PROVIDERS[item.provider] : "Agent configuration"}</p>
         </div>
-        <fieldset className="config-sync-choices">
+        <fieldset className="g-segmented config-sync-choices">
           <legend className="settings-sr-only">How to resolve this item</legend>
           {(
             [
@@ -449,7 +459,7 @@ function ConfigReview({
             <button
               type="button"
               key={value}
-              className="ui-button"
+              className="g-segment"
               aria-pressed={choice === value}
               disabled={busy}
               onClick={() => setChoice(value)}
@@ -463,7 +473,7 @@ function ConfigReview({
             <p>{error}</p>
             <button
               type="button"
-              className="ui-button"
+              className="g-button"
               disabled={busy}
               onClick={() => setVersion((value) => value + 1)}
             >
@@ -471,7 +481,9 @@ function ConfigReview({
             </button>
           </div>
         ) : !preview ? (
-          <p role="status">Preparing your review…</p>
+          <p role="status" className="settings-footnote">
+            Preparing your review…
+          </p>
         ) : null}
         {preview ? (
           <>
@@ -515,12 +527,12 @@ function ConfigReview({
             ) : null}
             <div className="config-sync-footer">
               <span>{OPERATIONS[preview.item.operation]}</span>
-              <button type="button" className="ui-button" disabled={busy} onClick={onClose}>
+              <button type="button" className="g-button" disabled={busy} onClick={onClose}>
                 Cancel
               </button>
               <button
                 type="button"
-                className="ui-button config-sync-primary"
+                className="g-button g-button-primary"
                 disabled={busy || !preview.can_apply || (preview.deletes_item && !confirmDelete)}
                 onClick={() => void apply()}
               >

@@ -47,7 +47,7 @@ Object.assign(window, { preservationFixture: { calls: () => [...calls] } });
 export function mountAccountPreservationPreview(container: HTMLElement) {
   createRoot(container).render(
     <StrictMode>
-      <main style={{ maxWidth: 680, margin: "48px auto", padding: 24 }}>
+      <main className="g-root settings-content">
         <h1>Account</h1>
         <KeepAsLocalPanel
           api={api}

@@ -81,7 +81,7 @@ export function AccountVault({
       ) : null}
       {status?.can_create && !creating ? (
         <button
-          className="ui-button"
+          className="g-button"
           type="button"
           disabled={busy}
           onClick={() => setCreating(true)}
@@ -106,7 +106,7 @@ export function AccountVault({
           <label htmlFor={`${id}-passphrase`}>Passphrase</label>
           <input
             id={`${id}-passphrase`}
-            className="ui-input"
+            className="g-input"
             type="password"
             autoComplete={creating ? "new-password" : "current-password"}
             minLength={12}
@@ -121,7 +121,7 @@ export function AccountVault({
               <label htmlFor={`${id}-confirm`}>Confirm passphrase</label>
               <input
                 id={`${id}-confirm`}
-                className="ui-input"
+                className="g-input"
                 type="password"
                 autoComplete="new-password"
                 value={confirmation}
@@ -133,7 +133,7 @@ export function AccountVault({
           ) : null}
           <div className="account-actions">
             <button
-              className="ui-button"
+              className="g-button g-button-primary"
               type="submit"
               disabled={busy || passphrase.length < 12 || (creating && passphrase !== confirmation)}
             >
@@ -145,7 +145,7 @@ export function AccountVault({
             </button>
             {creating ? (
               <button
-                className="ui-button"
+                className="g-button g-button-ghost"
                 type="button"
                 disabled={busy}
                 onClick={() => {
@@ -160,7 +160,11 @@ export function AccountVault({
           </div>
         </form>
       ) : null}
-      {!status && !error ? <p role="status">Checking storage selection…</p> : null}
+      {!status && !error ? (
+        <p role="status" className="settings-footnote">
+          Checking storage selection…
+        </p>
+      ) : null}
       {error ? (
         <p className="settings-error" role="alert">
           {error}
