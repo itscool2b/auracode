@@ -1,12 +1,6 @@
 import { AGENT_BRANDS, type AgentBrandId } from "@auracode/ui";
 import { AgentMark, Keycap, StatusDot } from "@auracode/ui/graphite";
-import {
-  type CSSProperties,
-  type PointerEvent,
-  type ReactNode,
-  useEffect,
-  useState,
-} from "react";
+import { type CSSProperties, type PointerEvent, type ReactNode, useEffect, useState } from "react";
 import { useReducedMotion } from "../motion";
 
 /*
