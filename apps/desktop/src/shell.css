@@ -1250,6 +1250,17 @@ details.setup-install-review[open] > summary::before {
   clip-path: inset(50%);
 }
 
+/* The live mark sits on the status's line, centred on its lowercase letters. */
+.chat-status-mark {
+  display: inline-block;
+  margin-right: var(--g-space-6);
+  vertical-align: -3px;
+}
+
+.chat-status-mark > .g-agent-mark {
+  vertical-align: top;
+}
+
 .chat-status[data-status="failed"],
 .chat-status[data-status="auth_required"] {
   color: var(--g-red);

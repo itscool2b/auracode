@@ -71,11 +71,15 @@
   }
 }
 
-/* The menu opens upward over the row, aligned to its right edge (Vercel's plain rows). */
+/* The menu opens upward over the row from the avatar's edge (x 20), Vercel's plain rows. */
+.chat-popover.chat-account-menu {
+  position: static;
+}
+
 .chat-account-menu > .chat-popover-panel {
-  right: -4px;
-  bottom: calc(100% + 6px);
-  left: auto;
+  right: auto;
+  bottom: calc(100% + 4px);
+  left: var(--g-space-8);
   width: 220px;
   gap: 0;
   padding: var(--g-space-4);

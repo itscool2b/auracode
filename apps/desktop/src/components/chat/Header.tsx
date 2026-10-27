@@ -15,8 +15,8 @@ import { closePopover, Popover } from "./Popover";
 const QUIET = new Set(["ready", "stopped"]);
 
 /**
- * The chat's header (Grok): the chat's live mark, its title and project at the left, and two
- * controls at the right, the Changes panel and the chat menu. The menu holds the session facts
+ * The chat's header (Grok): the title and project at the left, then the status with its live mark
+ * only while it says something, and two controls at the right, the Changes panel and the chat menu. The menu holds the session facts
  * (the agent and the version that runs, the context and cost when reported) and every other action;
  * the command palette offers the same actions by name.
  */
@@ -80,12 +80,6 @@ export function Header({
   };
   return (
     <header className="chat-header" data-testid="chat-header">
-      <AgentMark
-        agent={chat?.agent_id ?? agent?.id ?? "generic"}
-        state={activity}
-        size={16}
-        label={`${name}, ${session?.detail ?? statusLabel}`}
-      />
       <div className="chat-header-who">
         <span className="chat-header-title" title={chat?.title ?? "New chat"}>
           {chat?.title ?? "New chat"}
@@ -105,6 +99,17 @@ export function Header({
           data-test-status={status}
           aria-live="polite"
         >
+          {/* The live mark rides with the status it shows, so the title never moves (Grok). */}
+          {activity !== "idle" ? (
+            <span className="chat-status-mark" aria-hidden="true">
+              <AgentMark
+                agent={chat?.agent_id ?? agent?.id ?? "generic"}
+                state={activity}
+                size={16}
+                label={`${name}, ${session?.detail ?? statusLabel}`}
+              />
+            </span>
+          ) : null}
           {statusLabel}
           {session?.detail ? <span className="chat-status-detail"> · {session.detail}</span> : null}
         </span>

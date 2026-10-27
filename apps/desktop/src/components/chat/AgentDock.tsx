@@ -216,7 +216,6 @@ export function AgentDock({
                           else onAgents?.();
                         }}
                       >
-                        <AgentMark agent={agent.id} size={16} ghost={!usable} />
                         <span className="chat-agent-list-name">{agent.name}</span>
                         <small>{detail}</small>
                       </button>

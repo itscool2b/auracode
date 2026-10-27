@@ -854,6 +854,18 @@
   gap: var(--g-space-8);
 }
 
+/* An agent's note that asks nothing reads as a quiet line on the pane, not as a card. */
+.chat-block[data-notify] {
+  padding: var(--g-space-4) 0 var(--g-space-4) var(--ui-gutter);
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.chat-block[data-notify] .chat-block-title {
+  color: var(--g-fg-2);
+  font-weight: 400;
+}
+
 .chat-resolution {
   margin: 0;
   color: var(--g-fg-2);
