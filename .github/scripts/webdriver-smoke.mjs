@@ -101,8 +101,14 @@ export async function exerciseApp(driver, folder, save, checks = []) {
   await save("echo");
   passed("typed-prompt-visible-reply");
 
+  // The echo turn's receipt can render before the session reports idle; a prompt sent in that gap
+  // is queued, and a stop then holds it. Send once the session is ready, stop once the turn runs.
+  await until("ready session after the echo turn", () =>
+    driver.visible(`${byTest("chat-status")}[data-test-status="ready"]`),
+  );
   await driver.type(byTest("composer-input"), "/slow");
   await driver.click(byTest("composer-send"));
+  await until("running slow turn", () => driver.visible('[data-test-prompt="/slow"]'));
   await driver.click(byTest("composer-stop"));
   await until("cancelled turn", () =>
     driver.visible('[data-test-prompt="/slow"][data-test-stop-reason="cancelled"]'),
