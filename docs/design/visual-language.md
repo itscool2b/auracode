@@ -207,6 +207,10 @@ never the only cue.
 
 Comments are dim, never italic. ANSI inverse renders as the hue at 16% behind the hue's text.
 
+**Project marks**: `--g-project-slate #8A98A6`, `--g-project-sand #A59E92`,
+`--g-project-sage #8C9C88`, `--g-project-clay #A88E80`. Four quiet tones a person can give a
+project; they colour that project's own swatch and nothing else, never chrome or text.
+
 **Dither palettes** (greys above black, darkest first): `quiet` `#191919 #2E2E2E #4D4D4D`
 (behind reading content), `standard` `#2E2E2E #4D4D4D #858585` (hero), `bright`
 `#4D4D4D #A3A3A3 #EDEDED` (type made of pixels). Lit pixels are volt in every palette.
@@ -259,7 +263,11 @@ fg-3, Aside). In sentences that describe an action, connective words are fg-3 an
 
 ### 3.3 Spacing
 
-4px base: `--g-space-2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128, 160`.
+4px base: `--g-space-2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128, 160`. The desktop
+app writes every margin, padding and gap with these tokens (only 0 and 1px hairlines are literal);
+geometry that follows a layout value (the 22px transcript gutter, the 52px titlebar band, a mark's
+width) is written from that value. `.github/scripts/check-styles.mjs` keeps the app's stylesheets on
+the colour, space, radius, type, weight and motion tokens.
 Row heights: 24 compact, 28 tool rows and menu-dense rows, 32 menu rows, buttons and sidebar rows,
 36 inputs and composer segments, 44 headers and two-line rows. Website section rhythm: 160px
 between sections at 1024px and wider, 96px from 640 to 1023, 72px below.
@@ -371,10 +379,12 @@ loaded later always wins. React components live in `@auracode/ui/graphite`.
 
 ### 4.1 Buttons (`.g-button`)
 
-Pill, 14/20 500, gap 6, 1px transparent border. Heights: `.g-button-28` (padding 0 12, gap 4),
-default 32 (0 14), `.g-button-36` (0 16), `.g-button-44` (0 20, 15/20, gap 8; website CTAs).
-`.g-button-icon` makes it square. Colour changes settle over 300ms `--g-ease-settle`; pressing
-drops the transition to 0. Hover rules apply only on `(hover: hover)`.
+Pill, 14/20 500, gap 6, 1px transparent border. Heights: `.g-button-24` (padding 0 8, gap 4,
+12/16; compact inline actions), `.g-button-28` (padding 0 12, gap 4), default 32 (0 14),
+`.g-button-36` (0 16), `.g-button-44` (0 20, 15/20, gap 8; website CTAs). `.g-button-icon` makes
+it square at radius 6. Colour changes settle over 300ms `--g-ease-settle`; pressing drops the
+transition to 0. Hover rules apply only on `(hover: hover)`. The desktop app has no other button
+class: every button, icon button and dialog close is `.g-button` with these modifiers.
 
 | Variant | Rest | Hover | Pressed |
 |---|---|---|---|
@@ -383,14 +393,16 @@ drops the transition to 0. Hover rules apply only on `(hover: hover)`.
 | `.g-button-outline` | transparent, 1px line-strong | border fg-4, fill surface-2 | surface-4 |
 | `.g-button-ghost` | transparent, fg-2 | surface-3, fg-1 | surface-4 |
 | `.g-button-danger` | red, black label; confirm dialogs only, one per dialog | `#FF7A7A` | |
-| Disabled | surface-2, fg-4, `not-allowed` | | |
+| Disabled | surface-2, fg-4, `not-allowed`; a ghost stays unfilled; on a raised surface (dialogs, popovers, the dock, the composer, settings groups) surface-3 | | |
 
 One primary per view. A split button joins a pill and a 28px chevron segment with a 1px divider
 at `#D6D6D6`. Keycaps inside a primary take `#D6D6D6` with a `#222222` glyph.
 
 ### 4.2 Inputs (`.g-input`)
 
-36px, radius 8, surface-1, 1px line-strong, 14/20, padding 0 12, placeholder fg-3. Hover border
+`.g-input`, `.g-select` (the same field with a 12px fg-3 chevron at right 12 and padding-right 32)
+and `.g-textarea` are one field style: 36px, radius 8, surface-1, 1px line-strong, 14/20 400,
+padding 0 12, placeholder fg-3, min width 0 so a field never forces its row wider. Hover border
 fg-4; focus border fg-3 plus the focus ring; invalid (`aria-invalid="true"`) border red with the
 reason under the field in 12/16 red; disabled border line, text fg-4. Textareas: height auto, min
 72, padding 8 12, vertical resize. Website forms use 44px inputs (padding 0 16, 16/24). Labels
@@ -443,8 +455,13 @@ under reduced motion, where it holds step 0 (head top-left, trail below it).
   card, plan card).
 - **Tooltip** (`.g-tooltip`): surface-3, 1px line-strong, radius 6, padding 4 8, 12/16 fg-1, max
   280, the shadow, keycaps for its shortcut; 500ms delay, 150ms fade.
-- **Dialog** (`.g-dialog` on a native `<dialog>`): 440px (max viewport minus 32), padding 24,
-  surface-2, 1px line-strong, radius 16, the shadow, scrim `rgb(0 0 0 / 0.72)`. Title 22/28 500 as
+- **Dialog** (`.g-dialog` on a native `<dialog>`): three widths, sm 440 (the base), `.g-dialog-md`
+  560 and `.g-dialog-lg` 760, each at most the viewport minus 32 (one 16px margin on every side, also
+  for its height; long content scrolls the dialog); padding 24, surface-2, 1px line-strong, radius
+  16, the shadow, scrim `rgb(0 0 0 / 0.72)`. `.g-dialog-header` holds the `.g-dialog-title` and a
+  28px ghost icon close button; `.g-dialog-actions` is the action row. Sm for confirmations and
+  one-field forms, md for forms and lists, lg for reviews, comparisons, terminals and the palette.
+  Title 22/28 500 as
   a two-tone sentence ("Revert **turn 3** in **auracode**"), key-value rows on hairlines, one calm
   line in fg-2 about the consequence, buttons right-aligned: soft "Cancel" and one primary (or the
   red pill for destruction). Enters over 300ms `--g-ease-quint` (opacity, 8px rise); Esc and the
@@ -468,7 +485,7 @@ radius 8, padding 12 16, mono 13/20 in code text, no ligatures, tab size 2, hori
 wrap unless the setting turns it on. Header (32px, 1px line-faint under it): the file path in mono
 12/16 fg-3 when known, and the `CopyButton` at right; no language label in caps. Token classes:
 `.g-tok-keyword`, `-string`, `-number`, `-function`, `-comment`. Inline code: mono 0.9em fg-1 on
-surface-3, radius 4, padding 1 5. File references (`pacing.ts:42`) are inline-code chips with a
+surface-3, radius 4, padding 2 4, at `--g-text-code-inline` (0.9em). File references (`pacing.ts:42`) are inline-code chips with a
 10px arrow; clicking opens the file.
 
 `CopyButton`: 24px, radius 6, padding 0 8, 12/16 500 fg-3, a 12px icon; hover surface-3 and fg-1;
@@ -893,7 +910,7 @@ width the panel floats over the chat with the shadow.
    the chat count in mono 12 fg-3 right, a chevron on hover (rotates 90 degrees open). A folded
    project shows its chats' state in place of the count: volt square, loader, or red square and "1
    failed".
-5. **Chat rows** (32px, text inset 28): title 14/20 fg-2 (fg-1 500 when unread or active). Trailing
+5. **Chat rows** (32px, text inset 32, under the project name): title 14/20 fg-2 (fg-1 500 when unread or active). Trailing
    slot: idle, the relative time in mono 12 fg-3 ("4m", "Tue"); running, the loader and elapsed
    time with the title in fg-3; needs approval, a volt square and "Needs you" 12/16 500 volt; done
    and unseen, a white 6px square and the time; failed, a red square and "Failed" in red. The active
@@ -934,7 +951,7 @@ Column 720 max, centred, 24px under the header; bottom padding is the composer h
 the mark and the words in place.
 
 - **User message**: right-aligned block, max 82% of the column, surface-3, prose 15/24 fg-1,
-  padding 10 14, radius 16 16 4 16 (the tail points at the composer). Over 12 lines it clamps with
+  padding 12 16, radius 16 16 4 16 (the tail points at the composer). Over 12 lines it clamps with
   "Show all" (12/16 500 fg-2, underlined). A steer adds "Steered at 0:31" in 12/16 fg-3 under the
   block. Attachments: 24px chips (radius 6, 1px line, surface-1, 12px icon, mono 12 fg-2) and 48px
   image thumbnails. Hover shows edit, copy and more (24px icon buttons) to its left.
@@ -1008,7 +1025,7 @@ the mark and the words in place.
 ### 6.6 Permission card
 
 Takes the composer's place until answered; the now-row reads "Waiting on you". Shell: the composer
-width, surface-2, 1px line-strong, radius 16, padding 16 18 14, the shadow. First line: the agent's
+width, surface-2, 1px line-strong, radius 16, padding 16, the shadow. First line: the agent's
 `AgentMark` (16, waiting: the volt square) and the request as a two-tone sentence in 18/26 500:
 "Run" fg-3, `cargo test -p aura-drivers` in mono 16.5 fg-1, "in" fg-3, `auracode` mono fg-1; the
 wait "0:09" in mono 12 fg-3 at right, "1 of 2" when several queue. Then the reason in 14/20 fg-2
@@ -1034,8 +1051,8 @@ field. Footer: the pager, "Skip" ghost, "Continue" primary (⌘ Enter). Answers 
 
 ### 6.8 Errors and notices
 
-- **Turn error** (in the transcript): a well with a 2px red left edge (radius 0 8 8 0), padding 10
-  14: a red square, the title 14/20 500 fg-1 ("Claude Code stopped: process exited with code 1"), the
+- **Turn error** (in the transcript): a well with a 2px red left edge (radius 0 8 8 0), padding 12
+  16: a red square, the title 14/20 500 fg-1 ("Claude Code stopped: process exited with code 1"), the
   last stderr line in mono 13 fg-2, then 28px actions "Retry" (soft), "Open log" (ghost), "Continue
   with Codex" (ghost).
 - **Blocking notice** (composer segment, 36px, surface-3): a 6px volt square when it blocks sending,
@@ -1126,13 +1143,13 @@ key hints. **Files**: touched files then the tree (28px rows), a read-only viewe
 **Plan**: the plan card's steps at full height. **Session**: key-value rows (30px; label 12/16 fg-3
 in a 96px column) for agent and model (24px chips, radius 6, 1px line-strong, the agent's 14px
 mark), effort, autonomy, folder and branch in mono, the session id in mono with a middle ellipsis
-and copy; two usage tiles (surface-2, radius 12, padding 14: "Cost" "$0" with superscript "21",
+and copy; two usage tiles (surface-2, radius 12, padding 16: "Cost" "$0" with superscript "21",
 "Tokens" "6.9k"); a 4px context bar with a tick at the auto-compact threshold; a 24px turn timeline
 strip on surface-1 with 1px fg-3 ticks per tool call and fg-4 blocks for thinking.
 
 ### 6.15 Command palette and menus
 
-⌘K: 640 wide at y 120, surface-2, radius 16, the shadow; a 48px input (prose 15/24); scope chips
+⌘K: the large dialog (760 wide) at y 120, surface-2, radius 16, the shadow; a 48px input (prose 15/24); scope chips
 (Chats, Projects, Files, Commands, Settings; 26px, the selected one a white pill); 36px result rows
 with keycaps right; hovering dims siblings; no match becomes "Ask Claude Code instead" (⌘ Enter);
 footer key legend. Context menus (4.6): message (Copy, Copy as Markdown, Copy receipt; Retry, Edit
@@ -1208,8 +1225,8 @@ copies produce a receipt in a well and an event toast. The vendor dialog uses th
 
 ### 6.19 Dialogs and sheets
 
-Every dialog is 4.6's shell. The TerminalSheet (vendor install and setup commands) is a 640px
-dialog: the command in a well with copy, a "Start" primary that is the only thing that launches it,
+Every dialog is 4.6's shell, in one of its three widths. The TerminalSheet (vendor install and
+setup commands) is the large dialog: the command in a well with copy, a "Start" primary that is the only thing that launches it,
 the output in a terminal well (4.10), and the exit status as a check or red square with words. Sign
 out, notices, profile pickers and recovery dialogs reuse the same parts.
 
