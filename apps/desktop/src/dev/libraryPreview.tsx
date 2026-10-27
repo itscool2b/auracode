@@ -2,7 +2,7 @@
 import "../styles.css";
 import "../ui-tokens.css";
 import "../chat.css";
-import "../orbit-shell.css";
+import "../shell.css";
 import { createRoot } from "react-dom/client";
 import { LibraryScreen } from "../components/library/LibraryScreen";
 import type { VendorApi } from "../lib/config-vendor/api";

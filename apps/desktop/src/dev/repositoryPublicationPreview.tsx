@@ -1,7 +1,7 @@
 /** Synthetic publication only. All GitHub and Git operations are fake in this entry. */
 import "../styles.css";
 import "../ui-tokens.css";
-import "../orbit-shell.css";
+import "../shell.css";
 import "../components/setup/setup.css";
 import { createRoot } from "react-dom/client";
 import { Modal } from "../components/chat/Modal";

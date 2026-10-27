@@ -1,7 +1,7 @@
 import "./styles.css";
 import "./ui-tokens.css";
+import "./shell.css";
 import "./chat.css";
-import "./orbit-shell.css";
 import "./context-panel.css";
 import "./diagnostics.css";
 import { StrictMode } from "react";

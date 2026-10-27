@@ -1,101 +1,62 @@
-/* Chat semantics share the chosen Orbit tokens with the Design Lab and website. */
+/*
+ * The desktop app's semantic tokens, mapped onto Graphite (docs/design/visual-language.md, section
+ * 3). The chat shell's stylesheets (shell.css, chat.css, context-panel.css) read colour through these
+ * names and take type sizes, radii and motion straight from the --g-* tokens. Dark only: every text
+ * colour is a solid Graphite value, never an alpha.
+ */
 @import "@auracode/ui/graphite.css";
+/*
+ * Legacy Orbit variables (scoped to `.orbit-theme`) and OrbitMark styles, kept only for screens that
+ * have not moved to Graphite yet. Nothing in the chat shell reads them. Remove both imports once no
+ * screen renders OrbitMark or reads --o-* tokens.
+ */
 @import "@auracode/ui/orbit-tokens.css";
 @import "@auracode/ui/orbit.css";
 
-.orbit-theme {
-  /* Surfaces, back to front. Only the sidebar sits on the window's material; panes are solid. */
-  --ui-surface-sidebar: var(--o-tray-tint);
-  --ui-surface-main: var(--o-pane);
-  --ui-surface-panel: var(--o-raised);
-  --ui-surface-raised: var(--o-raised-2);
-  --ui-surface-input: var(--o-raised);
-  --ui-surface-code: var(--o-well);
-  --ui-surface-hover: var(--o-hover);
-  --ui-surface-pressed: var(--o-pressed);
-  --ui-surface-selected: var(--o-selected);
-  /* The user's message is an inverted ink block (Grok Bot). */
-  --ui-surface-user: var(--o-user-bg);
-  --ui-surface-scrim: var(--o-scrim);
+:root {
+  /* Geist with its default glyphs, exactly as the website sets it. */
+  font-feature-settings: normal;
 
-  /* Text, strongest to faintest */
-  --ui-text-primary: var(--o-text-1);
-  --ui-text-secondary: var(--o-text-2);
-  --ui-text-muted: var(--o-text-3);
-  --ui-text-faint: var(--o-text-4);
-  --ui-text-on-accent: var(--o-on-ink);
-  --ui-text-user: var(--o-user-fg);
-  --ui-text-link: var(--o-text-1);
-  --ui-text-link-underline: var(--o-text-4);
+  /* Surfaces, back to front. Wells sit one step below their pane. */
+  --ui-surface-window: var(--g-bg);
+  --ui-surface-main: var(--g-surface-1);
+  --ui-surface-raised: var(--g-surface-2);
+  --ui-surface-fill: var(--g-surface-3);
+  --ui-surface-selected: var(--g-surface-4);
+  --ui-surface-well: var(--g-bg);
+  --ui-surface-user: var(--g-surface-3);
+  --ui-surface-scrim: var(--g-scrim);
 
-  /* Borders */
-  --ui-border-width: 1px;
-  --ui-border-subtle: var(--o-line);
-  --ui-border-default: var(--o-line-strong);
-  --ui-border-strong: var(--o-dash);
-  --ui-focus-ring: var(--o-ink);
-  --ui-focus-width: 2px;
+  /* Text, strongest to faintest. Faint is decorative or disabled only. */
+  --ui-text-primary: var(--g-fg-1);
+  --ui-text-secondary: var(--g-fg-2);
+  --ui-text-muted: var(--g-fg-3);
+  --ui-text-faint: var(--g-fg-4);
+  --ui-text-on-primary: var(--g-on-light);
 
-  /* Accent: ink. Primary actions are ink pills; no agent colours. */
-  --ui-accent: var(--o-ink);
-  --ui-accent-soft: var(--o-selected);
+  /* Lines: hairlines for structure, strong lines for things you can act on. */
+  --ui-line-faint: var(--g-line-faint);
+  --ui-line: var(--g-line);
+  --ui-line-strong: var(--g-line-strong);
 
-  /* Status: orange means look here, green done, red failed; information stays ink. */
-  --ui-status-info: var(--o-text-2);
-  --ui-status-success: var(--o-green-text);
-  --ui-status-warning: var(--o-signal-text);
-  --ui-status-danger: var(--o-red);
-  --ui-status-info-soft: var(--o-hover);
-  --ui-status-warning-soft: var(--o-signal-tint);
-  --ui-status-danger-soft: var(--o-red-tint);
-  --ui-diff-added: var(--o-add-line);
-  --ui-diff-removed: var(--o-del-line);
+  /* The one white object on a screen, and the three signals. Volt only means look here. */
+  --ui-primary: var(--g-primary);
+  --ui-primary-hover: var(--g-primary-hover);
+  --ui-primary-active: var(--g-primary-active);
+  --ui-signal: var(--g-volt);
+  --ui-signal-tint: var(--g-volt-tint);
+  --ui-success: var(--g-green);
+  --ui-danger: var(--g-red);
+  --ui-danger-hover: var(--g-red-hover);
+  --ui-danger-tint: var(--g-red-tint);
 
-  /* Type: Geist and Geist Mono only. Light on black reads heavier, so dark drops weights by 20. */
-  --ui-font-body: var(--o-sans);
-  --ui-font-mono: var(--o-mono);
-  --ui-size-xs: 11px;
-  --ui-size-sm: 12.5px;
-  --ui-size-md: 14px;
-  --ui-size-lg: 16px;
-  --ui-size-xl: 20px;
-  --ui-leading-tight: 1.3;
-  --ui-leading-body: 1.57;
-  --ui-leading-prose: 1.65;
-  --ui-weight-regular: var(--o-w-body);
-  --ui-weight-medium: var(--o-w-strong);
-  --ui-weight-strong: var(--o-w-heading);
-  --ui-tracking-caps: 0.08em;
-
-  /* Spacing steps: a 4px base */
-  --ui-space-1: 2px;
-  --ui-space-2: 4px;
-  --ui-space-3: 8px;
-  --ui-space-4: 12px;
-  --ui-space-5: 16px;
-  --ui-space-6: 24px;
-  --ui-space-7: 32px;
-  --ui-space-8: 48px;
-
-  /* Radii: small for content, pills for controls */
-  --ui-radius-sm: 4px;
-  --ui-radius-md: 8px;
-  --ui-radius-lg: 12px;
-  --ui-radius-pill: 9999px;
-  --ui-radius-control: 9999px;
-
-  /* Layout. The titlebar keeps clearing the native window controls. */
+  /* Layout (section 3.9 and 6.1). The titlebar band keeps clearing the native window controls. */
   --ui-sidebar-width: 264px;
-  --ui-transcript-width: 720px;
+  --ui-rail-width: 72px;
   --ui-titlebar-height: 52px;
-  --ui-control-height: 30px;
-  --ui-dot-size: 8px;
-  --ui-composer-rows-min: 56px;
-  --ui-composer-rows-max: 240px;
-  --ui-pre-max-height: 360px;
-  --ui-menu-max-height: 260px;
-
-  /* Motion: no springs, no overshoot */
-  --ui-duration-fast: 150ms;
-  --ui-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ui-header-height: 44px;
+  --ui-pane-inset: 8px;
+  --ui-column: 720px;
+  --ui-gutter: 22px;
+  --ui-panel-width: 380px;
 }

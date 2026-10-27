@@ -2,7 +2,7 @@
 import "../styles.css";
 import "../ui-tokens.css";
 import "../chat.css";
-import "../orbit-shell.css";
+import "../shell.css";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentMaintenance } from "../bindings";

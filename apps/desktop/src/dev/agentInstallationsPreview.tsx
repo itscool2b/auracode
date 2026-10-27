@@ -1,7 +1,7 @@
 /** Synthetic executable choices. No native probe, filesystem or agent calls. */
 import "../styles.css";
 import "../ui-tokens.css";
-import "../orbit-shell.css";
+import "../shell.css";
 import "../components/setup/setup.css";
 import { createRoot } from "react-dom/client";
 import type { AgentInstallations as Installations } from "../bindings";

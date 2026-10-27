@@ -5,7 +5,7 @@ import type { AccountVaultApi } from "../lib/account/vault";
 import "../styles.css";
 import "../ui-tokens.css";
 import "../chat.css";
-import "../orbit-shell.css";
+import "../shell.css";
 import "../components/settings/settings.css";
 import "../components/settings/account.css";
 

@@ -1,7 +1,7 @@
 /** Synthetic setup actions. No native command or network request is made. */
 import "../styles.css";
 import "../ui-tokens.css";
-import "../orbit-shell.css";
+import "../shell.css";
 import "../components/setup/setup.css";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";

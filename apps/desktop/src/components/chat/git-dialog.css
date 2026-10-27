@@ -1,215 +1,301 @@
+/* The Git workspace dialog on the Graphite dialog shell (shell.css, `.chat-modal`). */
 .git-dialog {
-  width: min(660px, calc(100vw - 40px));
+  width: min(660px, calc(100vw - 32px));
   padding: 0;
 }
+
 .git-dialog > header {
-  padding: 20px 24px;
+  margin: 0;
+  padding: 20px 24px 16px;
 }
+
 .git-dialog-body {
   max-height: calc(100dvh - 200px);
-  overflow: auto;
   padding: 0 24px 24px;
+  overflow: auto;
 }
+
 .git-repository,
 .git-review,
 .git-result {
   padding: 16px;
-  border: 1px solid var(--o-line-strong);
-  border-radius: 10px;
+  border-radius: var(--g-radius-12);
+  background-color: var(--ui-surface-main);
+  box-shadow: inset 0 0 0 1px var(--ui-line);
 }
+
 .git-branch {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-weight: 500;
 }
+
 .git-branch code {
   margin-left: auto;
-  color: var(--o-text-3);
-  font: 11px var(--o-mono);
+  color: var(--ui-text-muted);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 400;
 }
+
 .git-path {
-  color: var(--o-text-3);
-  font: 11px / 1.7 var(--o-mono);
+  color: var(--ui-text-muted);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: 18px;
   overflow-wrap: anywhere;
 }
+
 .git-status {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  color: var(--o-text-2);
-  font-size: 11px;
+  color: var(--ui-text-secondary);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
 }
+
 .git-repository details {
   margin-top: 16px;
-  font-size: 12px;
 }
+
 .git-repository summary {
+  color: var(--ui-text-secondary);
   cursor: pointer;
 }
+
 .git-files {
   max-height: 200px;
-  overflow: auto;
+  margin: 8px 0 0;
   padding: 0;
+  overflow: auto;
   list-style: none;
 }
+
 .git-files li {
   display: flex;
   align-items: baseline;
   gap: 12px;
-  padding: 5px 0;
-  color: var(--o-text-2);
-  font: 11px / 18px var(--o-mono);
+  padding: 4px 0;
+  color: var(--ui-text-secondary);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: 18px;
 }
+
 .git-files code {
   white-space: pre;
 }
+
 .git-files span {
   overflow-wrap: anywhere;
 }
+
 .git-notice {
   display: flex;
   align-items: center;
   gap: 16px;
   margin-bottom: 16px;
-  font-size: 12px;
-  line-height: 1.7;
+  color: var(--ui-text-secondary);
 }
+
 .git-notice .ui-button {
   flex-shrink: 0;
 }
+
+/* A warning leads with a volt square and says the consequence in words. */
 .git-warning {
-  color: var(--o-signal-text);
-  font-size: 12px;
-  line-height: 1.7;
+  display: flex;
+  gap: 10px;
+  color: var(--ui-text-secondary);
   overflow-wrap: anywhere;
 }
+
+.git-warning::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 7px;
+  background-color: var(--ui-signal);
+}
+
 .git-section,
 .git-review,
 .git-result {
   margin-top: 20px;
 }
+
 .git-section h3,
 .git-review h3,
 .git-result h3 {
   margin: 0 0 12px;
-  font-size: 14px;
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
   font-weight: 500;
 }
+
 .git-section > p,
 .git-result p,
 .git-note {
-  color: var(--o-text-2);
-  font-size: 12px;
-  line-height: 1.7;
+  color: var(--ui-text-secondary);
 }
+
+.git-section > p {
+  margin: 0 0 12px;
+}
+
 .git-section .ui-field {
   margin-bottom: 12px;
 }
+
 .git-copy-option {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   margin: 16px 0;
-  font-size: 12px;
   cursor: pointer;
 }
+
 .git-copy-option input {
-  accent-color: var(--o-ink);
+  margin-top: 2px;
 }
+
 .git-copy-option small {
   display: block;
-  margin-top: 5px;
-  color: var(--o-text-3);
-  font-size: 11px;
-  line-height: 1.6;
+  margin-top: 4px;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
 }
+
 .git-actions {
   display: flex;
-  justify-content: flex-end;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
 }
+
 .git-review dl {
   display: grid;
   grid-template-columns: 100px 1fr;
   gap: 10px 16px;
-  font-size: 12px;
+  margin: 0;
 }
+
 .git-review dt {
-  color: var(--o-text-3);
+  color: var(--ui-text-muted);
 }
+
 .git-review dd {
   margin: 0;
+  color: var(--ui-text-primary);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: 20px;
   overflow-wrap: anywhere;
-  font: 11px / 1.6 var(--o-mono);
 }
+
 .git-review pre {
   max-height: 180px;
-  overflow: auto;
+  margin: 0;
   padding: 12px;
-  border-radius: 6px;
-  background: var(--o-raised-2);
-  color: var(--o-text-2);
-  font: 11px / 1.7 var(--o-mono);
+  overflow: auto;
+  border-radius: var(--g-radius-8);
+  background-color: var(--ui-surface-well);
+  box-shadow: inset 0 0 0 1px var(--ui-line);
+  color: var(--g-code-fg);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-term);
+  line-height: var(--g-leading-term);
   white-space: pre-wrap;
 }
+
 .git-review h4 {
-  color: var(--o-text-2);
-  font-size: 12px;
+  margin: 12px 0 6px;
+  color: var(--ui-text-secondary);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
 }
+
 .git-review .git-conflict-title {
-  color: var(--o-signal-text);
+  color: var(--ui-danger);
 }
+
 .git-review li {
-  font: 11px / 1.7 var(--o-mono);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: 18px;
   overflow-wrap: anywhere;
 }
+
 .git-worktrees {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   margin: 16px 0 0;
   padding: 0;
   list-style: none;
 }
+
 .git-worktrees > li {
-  padding: 16px;
-  border-radius: 8px;
-  background: var(--o-raised-2);
-  font-size: 12px;
+  padding: 14px 16px;
+  border-radius: var(--g-radius-12);
+  background-color: var(--ui-surface-main);
+  box-shadow: inset 0 0 0 1px var(--ui-line);
 }
+
 .git-worktrees strong {
   font-weight: 500;
 }
+
 .git-worktrees li > p {
-  color: var(--o-text-2);
-  line-height: 1.7;
+  color: var(--ui-text-secondary);
 }
+
+/* A worktree's state, sentence case beside its name: never a caps tag. */
 .git-state {
   float: right;
-  color: var(--o-text-3);
-  font: 10px var(--o-mono);
-  text-transform: uppercase;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
 }
+
 .git-footer {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 16px 24px;
-  border-top: 1px dashed var(--o-dash);
-  color: var(--o-text-3);
-  font-size: 11px;
+  color: var(--ui-text-muted);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
 }
+
+/* The tear line (3.5): dashed 8 on, 8 off. */
+.git-footer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 24px;
+  left: 24px;
+  height: 1px;
+  background-image: linear-gradient(90deg, var(--ui-line-strong) 50%, transparent 0);
+  background-size: 16px 1px;
+}
+
 .git-pr-body {
   min-height: 140px;
   resize: vertical;
-  font-size: 12px;
-  line-height: 1.7;
 }
+
 .git-result a {
-  color: var(--o-text-1);
-  font-size: 12px;
-  text-underline-offset: 4px;
+  color: var(--ui-text-primary);
+  text-decoration-color: var(--ui-text-faint);
+  text-underline-offset: 3px;
 }

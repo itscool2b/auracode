@@ -10,7 +10,7 @@ import type { AccountResetApi } from "../lib/account/reset";
 import "../styles.css";
 import "../ui-tokens.css";
 import "../chat.css";
-import "../orbit-shell.css";
+import "../shell.css";
 import "../components/settings/settings.css";
 import "../components/settings/account.css";
 

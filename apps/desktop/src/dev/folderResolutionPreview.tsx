@@ -1,7 +1,7 @@
 /** Synthetic folder resolution only. No native filesystem, agent or remote calls. */
 import "../styles.css";
 import "../ui-tokens.css";
-import "../orbit-shell.css";
+import "../shell.css";
 import "../components/setup/setup.css";
 import { createRoot } from "react-dom/client";
 import type { FolderLocationReview, FolderResolution } from "../bindings";
