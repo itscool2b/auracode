@@ -1,9 +1,19 @@
 # Desktop account client foundation
 
-`crates/aura-sync` owns account transport, cryptography and app-only secure storage in Rust. This is
-not completed M7 acceptance: desktop account IPC/UI, SQLCipher profiles, durable outbox/merge/cursors,
-config adapters and macOS execution are still pending. No real sign-in or credential-store access was
-used during development. The cloud contract is `docs/cloud-api-v1.md` on the cloud API branch.
+`crates/aura-sync` owns account transport, cryptography and app-only secure storage in Rust. Status
+as of 2026-10-27:
+- **Built:**
+  - the desktop account IPC (23 commands in `apps/desktop/src-tauri/src/accounts.rs`) and UI
+    (`AccountPanel.tsx`, `AccountVerification.tsx`);
+  - SQLCipher profile keying (`aura-sync/src/database.rs`);
+  - the encrypted sync engine with its outbox, merge and cursors (`aura-core/src/sync/`, worker in
+    `account_sync.rs`);
+  - config sync adapters (`aura-config/src/sync/`).
+- **Not done (live acceptance):** a real invited sign-in against the production API (whose route is
+  not yet active), approval and recovery across two real devices, and macOS execution.
+
+No real sign-in or credential-store access was used during development. The cloud contract is
+`docs/cloud-api-v1.md`.
 
 ## UI and actor seam
 
@@ -70,10 +80,14 @@ and retry. If local persistence and server revocation both fail, the disk may st
 token. Restore always requires explicit session verification before sync. Recovery/passphrase loss
 does not trigger a plaintext fallback or erase the encrypted profile.
 
-Pending gates: IPC cancellation and window/profile switch integration, private profile directory
-validation, SQLCipher keying/migration backups, local-only import consent, real OS storage execution
-on macOS, visible Turnstile/account UI, encrypted offline queue/merge, config preview/rollback, and
-end-to-end approval/recovery across two real app devices. Those are not claimed complete here.
+Remaining gates are live acceptance only:
+- real OS credential storage on macOS;
+- a real invited sign-in through the visible Turnstile flow;
+- end-to-end approval and recovery across two real app devices.
+
+The code paths for IPC cancellation, profile switching, SQLCipher keying with migration backups,
+local-only import consent, the encrypted offline queue and merge, and config preview and rollback
+exist in code. They are not claimed complete until that acceptance runs.
 ## Encrypted profile storage seam
 
 `aura-core/account-sync` enables SQLCipher-backed account opening. Obtain a profile-bound
