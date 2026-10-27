@@ -38,9 +38,12 @@ are discarded before delivery. A bounded notification queue never blocks session
 Clicking a notification queues its local chat ID in Rust, restores the window and emits
 `auracode-open-chat` with a unit payload. The UI calls `shell_take_navigation` on startup, window
 focus and that event. It returns `string | null`, consuming the latest pending chat ID. The UI checks
-the returned ID against its current chats before selecting it. This survives webview suspension and
-reload within the running app. Delivery, installed-app attribution and behavior after the process
-has exited remain subject to the OS notification service.
+the returned ID against its current chats before selecting it (`navigationTarget` in
+`apps/desktop/src/lib/nativeNavigation.ts`): it waits until the chat list and the workspace have
+loaded, opens an archived chat with the archived view, and ignores an unknown ID (a deleted chat or
+another profile's notification), leaving the current selection as it was. This survives webview
+suspension and reload within the running app. Delivery, installed-app attribution and behavior
+after the process has exited remain subject to the OS notification service.
 
 ## Evidence and remaining checks
 
@@ -51,7 +54,8 @@ login, credential or real power/notification test is involved in these checks.
 
 Installed Windows and macOS checks remain required for tray interaction, notification permission and
 click routing, actual idle-sleep behavior, hide/minimize rendering measurements, and dark materials.
-The frontend navigation consumer is integrated separately. This checkpoint does not claim those
+The frontend navigation consumer validates the chat ID in the UI (covered by Vitest); the native
+click routing above still needs the installed-app checks. This checkpoint does not claim those
 acceptance checks passed.
 
 Sources: [Tauri notifications](https://v2.tauri.app/plugin/notification/),

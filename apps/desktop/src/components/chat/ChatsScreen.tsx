@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { AppInfo, ProjectSummary } from "../../bindings";
 import { type AppStore, NewChatDraft } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
+import { navigationTarget } from "../../lib/nativeNavigation";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { AgentDock } from "./AgentDock";
 import { Banners } from "./Banners";
@@ -91,9 +92,6 @@ export function ChatsScreen({
   const [palette, setPalette] = useState(false);
   const [chatCommands, setChatCommands] = useState<readonly PaletteCommand[]>([]);
   const chatIds = snapshot.chats?.map((chat) => chat.id).join(",") ?? "";
-  useEffect(() => {
-    if (openChatRequest) setSelected(openChatRequest.id);
-  }, [openChatRequest]);
   // A new or externally created chat can also create a project. Live status text is merged below.
   // biome-ignore lint/correctness/useExhaustiveDependencies: Membership refresh depends on the set of listed IDs, not each status update.
   useEffect(() => {
@@ -106,6 +104,27 @@ export function ChatsScreen({
         .map((entry) => liveById.get(entry.chat.id) ?? entry.chat)
     : snapshot.chats;
   const optionsEntry = organization.data?.chats.find((entry) => entry.chat.id === chatOptions);
+  // A notification's chat opens only once the lists confirm this profile has it (docs/native-shell.md).
+  const [pendingOpen, setPendingOpen] = useState<string | null>(null);
+  useEffect(() => {
+    if (openChatRequest) setPendingOpen(openChatRequest.id);
+  }, [openChatRequest]);
+  useEffect(() => {
+    if (pendingOpen === null) return;
+    const target = navigationTarget(pendingOpen, {
+      chats: snapshot.chats,
+      chatsFailed: snapshot.chatsError !== null,
+      workspace: organization.data,
+      workspacePending:
+        workspace !== undefined && organization.data === null && organization.error === null,
+    });
+    if (target.kind === "wait") return;
+    setPendingOpen(null);
+    if (target.kind === "open") {
+      setArchived(target.archived);
+      setSelected(target.chatId);
+    }
+  }, [pendingOpen, snapshot.chats, snapshot.chatsError, organization, workspace]);
 
   useEffect(() => {
     app.start();
