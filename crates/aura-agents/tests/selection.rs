@@ -7,6 +7,20 @@ use common::*;
 use std::sync::Arc;
 use tokio::{runtime::Handle, sync::mpsc};
 
+/// Deletes a fake tool that a probe just ran. Windows can refuse for a moment while the exited
+/// process or a scanner still holds the file, so a denied delete is retried for up to 5 s.
+fn remove_tool(path: &std::path::Path) -> std::io::Result<()> {
+    for _ in 0..50 {
+        match std::fs::remove_file(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            result => return result,
+        }
+    }
+    std::fs::remove_file(path)
+}
+
 fn detector(machine: &Machine, env: aura_process::ResolvedEnv) -> Arc<Detector> {
     Detector::with_preferences(
         EnvResolver::fixed(env),
@@ -65,7 +79,7 @@ async fn explicit_shadowed_choice_persists_and_never_changes_an_existing_launch(
             .program,
         second
     );
-    std::fs::remove_file(&second).unwrap();
+    remove_tool(&second).unwrap();
     restarted.detect_all(true).await;
     assert!(matches!(
         restarted.detect(&spec).await,
@@ -152,7 +166,7 @@ async fn metadata_refresh_detects_removal_and_addition_without_restarting_runnin
         .prepare_launch(&spec("claude"), mpsc::unbounded_channel().0)
         .await
         .unwrap();
-    std::fs::remove_file(machine.tool("claude")).unwrap();
+    remove_tool(&machine.tool("claude")).unwrap();
     detector.refresh_changed_installations().await;
     assert!(matches!(
         detector.detect(&spec("claude")).await,
