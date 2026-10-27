@@ -47,6 +47,8 @@ export function VirtualRows({
 }) {
   const reading = useRef<{ anchor: ReadingAnchor; revision: number } | null>(null);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set by a reader's scroll gesture until its scroll event arrives (see scrollToFn).
+  const readerScrolling = useRef(false);
   const [leadingHeight, setLeadingHeight] = useState(0);
   const leadingRef = useCallback((node: HTMLDivElement | null) => {
     if (!node) return;
@@ -65,6 +67,19 @@ export function VirtualRows({
     count: rows.length,
     getScrollElement: () => scroller.current,
     scrollToFn: (offset, options, instance) => {
+      // Size corrections, and retries of a correction the old height clamped, are computed from the
+      // last scroll offset the virtualizer read. A reader's jump (Home, a scrollbar drag) can land
+      // before that scroll event, which WebKit may deliver a frame late; writing then would throw
+      // the reader back. Skip it: the pending scroll event re-anchors and drops the stale retry.
+      const element = instance.scrollElement;
+      const known = instance.scrollOffset;
+      if (
+        readerScrolling.current &&
+        element &&
+        known !== null &&
+        Math.abs(element.scrollTop - known) > 2
+      )
+        return;
       elementScroll(offset, options, instance);
       stick.current?.acknowledgeAdjustment();
     },
@@ -140,12 +155,35 @@ export function VirtualRows({
       virtual.shouldAdjustScrollPositionOnItemSizeChange = undefined;
       if (settleTimer.current !== null) clearTimeout(settleTimer.current);
     };
-    const element = scroller.current;
+    // Listen on the document: this effect runs before the parent attaches the scroller's ref, so
+    // the log element may not exist yet. Each handler looks it up when the event arrives.
+    const inLog = (target: EventTarget | null) =>
+      target instanceof Node && scroller.current?.contains(target) === true;
+    let gestureTimer: ReturnType<typeof setTimeout> | null = null;
+    const settle = (event?: Event) => {
+      if (event && event.target !== scroller.current) return;
+      readerScrolling.current = false;
+      if (gestureTimer !== null) clearTimeout(gestureTimer);
+      gestureTimer = null;
+    };
+    const gesture = (event: Event) => {
+      if (!inLog(event.target)) return;
+      cancel();
+      // A press scrolls only on the scrollbar, which belongs to the container itself.
+      if (event.type === "pointerdown" && event.target !== scroller.current) return;
+      readerScrolling.current = true;
+      if (gestureTimer !== null) clearTimeout(gestureTimer);
+      gestureTimer = setTimeout(settle, 250);
+    };
+    const options = { capture: true, passive: true };
     for (const name of ["wheel", "touchmove", "keydown", "pointerdown"])
-      element?.addEventListener(name, cancel, { passive: true });
+      document.addEventListener(name, gesture, options);
+    document.addEventListener("scroll", settle, options);
     return () => {
       for (const name of ["wheel", "touchmove", "keydown", "pointerdown"])
-        element?.removeEventListener(name, cancel);
+        document.removeEventListener(name, gesture, options);
+      document.removeEventListener("scroll", settle, options);
+      settle();
       if (settleTimer.current !== null) clearTimeout(settleTimer.current);
       captureHistory.current = null;
     };
