@@ -33,7 +33,7 @@ export function InstallAgent({
     <>
       <button
         type="button"
-        className="setup-button"
+        className="g-button g-button-outline g-button-28"
         disabled={pending}
         onClick={() => {
           setPending(true);
@@ -60,7 +60,11 @@ export function InstallAgent({
       >
         {pending ? "Preparing review…" : "Review installation"}
       </button>
-      {error ? <p role="alert">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="setup-alert">
+          {error}
+        </p>
+      ) : null}
       {review ? (
         <TerminalSheet
           agentId={agentId}

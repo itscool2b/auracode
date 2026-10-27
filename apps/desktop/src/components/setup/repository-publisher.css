@@ -1,53 +1,83 @@
+/* Publishing a local folder as a private GitHub repository, inside the project dialog. */
+
 .repository-publisher,
 .repository-publisher form {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
-  color: var(--o-text-2);
-  font: 400 13px / 1.65 var(--o-sans);
+  color: var(--g-fg-2);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
 }
-.repository-publisher h3,
-.repository-publisher p,
-.repository-publisher ul,
-.repository-publisher dl {
+
+.repository-publisher :where(h3, p, ul, dl) {
   margin: 0;
 }
+
 .repository-publisher h3 {
-  color: var(--o-text-1);
-  font-size: 14px;
-  font-weight: 500;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 600;
 }
+
+.repository-publisher .setup-field {
+  margin: 0;
+}
+
+.repository-publisher form > .g-button {
+  justify-self: start;
+}
+
+/* Key-value rows on hairlines, the values that a machine made in mono. */
 .repository-publisher dl {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  gap: 8px 12px;
+  grid-template-columns: 112px minmax(0, 1fr);
+  border-top: 1px solid var(--g-line);
 }
-.repository-publisher dt {
-  color: var(--o-text-3);
-}
-.repository-publisher dd {
+
+.repository-publisher :is(dt, dd) {
   margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--g-line);
+}
+
+.repository-publisher dt {
+  color: var(--g-fg-3);
+}
+
+.repository-publisher dd {
+  color: var(--g-fg-1);
   overflow-wrap: anywhere;
 }
+
 .repository-publisher ul {
-  padding-left: 16px;
+  padding-left: 18px;
+  list-style: square;
 }
+
+.repository-publisher li::marker {
+  color: var(--g-fg-3);
+}
+
 .repository-publisher li + li {
-  margin-top: 8px;
+  margin-top: 4px;
 }
+
 .repository-publisher footer {
   display: flex;
-  justify-content: flex-end;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
-.repository-publisher button {
-  min-height: 32px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  font-size: 12px;
-}
-.repository-publisher [role="status"],
-.repository-publisher [role="alert"] {
+
+.repository-publisher-result {
+  color: var(--g-fg-1);
   overflow-wrap: anywhere;
+}
+
+.repository-publisher-close {
+  justify-self: start;
+  margin-left: -12px;
 }

@@ -113,7 +113,7 @@ export function RepositoryPublisher({
     });
   if (!open)
     return (
-      <button type="button" className="setup-text-button" onClick={show}>
+      <button type="button" className="g-button g-button-ghost g-button-28" onClick={show}>
         Publish to GitHub
       </button>
     );
@@ -134,6 +134,7 @@ export function RepositoryPublisher({
           <label className="setup-field">
             GitHub owner
             <input
+              className="g-input"
               maxLength={39}
               disabled={busy || savedTarget || !draftReady}
               value={owner}
@@ -144,6 +145,7 @@ export function RepositoryPublisher({
           <label className="setup-field">
             Repository name
             <input
+              className="g-input"
               maxLength={100}
               required
               disabled={busy || savedTarget || !draftReady}
@@ -154,7 +156,7 @@ export function RepositoryPublisher({
           <p>Visibility: Private</p>
           <button
             type="submit"
-            className="setup-button"
+            className="g-button g-button-outline"
             disabled={busy || !name.trim() || !draftReady}
           >
             {result || savedTarget ? "Review saved publication" : "Review publication"}
@@ -183,7 +185,7 @@ export function RepositoryPublisher({
           <footer>
             <button
               type="button"
-              className="setup-text-button"
+              className="g-button g-button-ghost"
               disabled={busy}
               onClick={() => setReview(null)}
             >
@@ -191,7 +193,7 @@ export function RepositoryPublisher({
             </button>
             <button
               type="button"
-              className="setup-button"
+              className="g-button g-button-primary"
               disabled={busy || !review.private}
               onClick={apply}
             >
@@ -200,16 +202,24 @@ export function RepositoryPublisher({
           </footer>
         </>
       )}
-      {busy && <p role="status">Waiting for the owned GitHub operation…</p>}
+      {busy && (
+        <p role="status" className="setup-footnote">
+          Waiting for the owned GitHub operation…
+        </p>
+      )}
       {result && (
-        <p role="status">
+        <p role="status" className="repository-publisher-result">
           {result.detail} {result.url}
         </p>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p role="alert" className="setup-alert">
+          {error}
+        </p>
+      )}
       <button
         type="button"
-        className="setup-text-button"
+        className="g-button g-button-ghost g-button-28 repository-publisher-close"
         disabled={busy}
         onClick={() => {
           setOpen(false);

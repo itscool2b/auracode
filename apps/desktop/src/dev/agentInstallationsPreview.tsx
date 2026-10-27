@@ -81,9 +81,12 @@ Object.assign(window, { installationFixture: { calls: () => [...calls] } });
 const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
-    <main className="setup-shell orbit-theme" style={{ padding: 40, overflow: "auto" }}>
-      <section style={{ maxWidth: 640 }}>
-        <h1>Claude Code</h1>
+    <main
+      className="setup-shell g-root"
+      style={{ display: "block", padding: 40, overflow: "auto" }}
+    >
+      <section className="setup-agent-detail" style={{ maxWidth: 640, paddingLeft: 0 }}>
+        <h1 className="setup-preview-title">Claude Code</h1>
         <AgentInstallations agentId="claude" api={api} onChanged={() => calls.push("changed")} />
       </section>
     </main>,

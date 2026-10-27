@@ -54,50 +54,87 @@ try {
       await page.getByRole("button", { name: "Get started" }).waitFor();
       await page.waitForFunction(() => !document.querySelector("[data-cinematic]"));
       await page.screenshot({ path: resolve(out, `${engine}-welcome.png`) });
-      const checkMapLabels = async () => {
-        const boxes = await page.locator(".setup-night").evaluate((panel) => {
-          const bounds = panel.getBoundingClientRect();
-          return [...panel.querySelectorAll(".o-globe-label")].map((label) => {
-            const box = label.getBoundingClientRect();
-            return {
-              left: box.left - bounds.left,
-              top: box.top - bounds.top,
-              right: box.right - bounds.left,
-              bottom: box.bottom - bounds.top,
-              width: bounds.width,
-              height: bounds.height,
-              text: label.textContent,
-            };
-          });
+      // The pane beside setup fills the rest of the window, its dither field covers it, and every
+      // agent row on its roster card is visible, unclipped and clear of the others.
+      const checkPanel = async () => {
+        const layout = await page.locator(".setup-panel").evaluate((panel) => {
+          const box = (node) => {
+            const rect = node.getBoundingClientRect();
+            return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+          };
+          const card = panel.querySelector(".setup-panel-card");
+          const canvas = panel.querySelector(".setup-panel-field canvas");
+          return {
+            window: { width: innerWidth, height: innerHeight },
+            column: box(document.querySelector(".setup-column")),
+            panel: {
+              ...box(panel),
+              inner: { width: panel.clientWidth, height: panel.clientHeight },
+            },
+            canvas: box(canvas),
+            card: box(card),
+            rows: [...card.querySelectorAll(".setup-panel-agent")].map((row) => {
+              const name = row.querySelector(".setup-panel-name");
+              return {
+                ...box(row),
+                text: row.textContent,
+                visible: getComputedStyle(row).visibility === "visible",
+                truncated: name.scrollWidth > name.clientWidth,
+              };
+            }),
+          };
         });
-        assert.equal(boxes.length, 9);
-        for (const [index, box] of boxes.entries()) {
+        const { window, column, panel, canvas, card, rows } = layout;
+        assert.ok(Math.abs(panel.left - column.right) <= 1, `${engine}: panel leaves a gap`);
+        assert.ok(
+          Math.abs(panel.right - (window.width - 8)) <= 1 &&
+            Math.abs(panel.top - 8) <= 1 &&
+            Math.abs(panel.bottom - (window.height - 8)) <= 1,
+          `${engine}: panel does not fill its column`,
+        );
+        assert.ok(
+          canvas.right - canvas.left >= panel.inner.width &&
+            canvas.bottom - canvas.top >= panel.inner.height,
+          `${engine}: field does not cover the panel`,
+        );
+        assert.ok(
+          card.left - panel.left >= 8 &&
+            card.top - panel.top >= 8 &&
+            panel.right - card.right >= 8 &&
+            panel.bottom - card.bottom >= 8,
+          `${engine}: roster card clipped`,
+        );
+        assert.equal(rows.length, 9);
+        for (const [index, row] of rows.entries()) {
+          assert.ok(row.visible && row.bottom > row.top, `${engine}: hidden ${row.text}`);
+          assert.ok(!row.truncated, `${engine}: truncated ${row.text}`);
           assert.ok(
-            box.left >= 8 &&
-              box.top >= 8 &&
-              box.right <= box.width - 8 &&
-              box.bottom <= box.height - 8,
-            `${engine}: clipped ${box.text}`,
+            row.left >= card.left &&
+              row.top >= card.top &&
+              row.right <= card.right &&
+              row.bottom <= card.bottom,
+            `${engine}: clipped ${row.text}`,
           );
-          for (const other of boxes.slice(index + 1))
+          for (const other of rows.slice(index + 1))
             assert.ok(
-              box.right + 4 <= other.left ||
-                other.right + 4 <= box.left ||
-                box.bottom + 4 <= other.top ||
-                other.bottom + 4 <= box.top,
-              `${engine}: overlapping ${box.text} / ${other.text}`,
+              row.bottom <= other.top || other.bottom <= row.top,
+              `${engine}: overlapping ${row.text} / ${other.text}`,
             );
         }
       };
-      await checkMapLabels();
+      await checkPanel();
       await page.setViewportSize({ width: 1024, height: 768 });
-      await page.waitForFunction(
-        () =>
-          Number(document.querySelector(".setup-night svg")?.getAttribute("width")) ===
-          document.querySelector(".setup-night")?.clientWidth,
-      );
-      await checkMapLabels();
-      await page.screenshot({ path: resolve(out, `${engine}-compact-map.png`) });
+      await page.waitForFunction(() => {
+        const panel = document.querySelector(".setup-panel");
+        const canvas = panel?.querySelector(".setup-panel-field canvas");
+        return (
+          !!canvas &&
+          panel.getBoundingClientRect().right === innerWidth - 8 &&
+          canvas.getBoundingClientRect().width >= panel.clientWidth
+        );
+      });
+      await checkPanel();
+      await page.screenshot({ path: resolve(out, `${engine}-compact-panel.png`) });
       await page.setViewportSize({ width: 1440, height: 900 });
       const assertNoVendorCalls = async () =>
         assert.deepEqual(
@@ -113,7 +150,10 @@ try {
       await assertNoVendorCalls();
       // The newly announced heading is focused. Enter advances without stealing input/form keys.
       await page.keyboard.press("Enter");
-      await page.getByRole("heading", { name: "Your agents, together." }).waitFor();
+      // The heading follows detection: three fixture agents are installed, six are not.
+      await page
+        .getByRole("heading", { name: /^Found 3 agents\.\s*6 more can be installed\.$/ })
+        .waitFor();
       await page.getByRole("button", { name: /Claude Code.*Installed/ }).click();
       await assertNoVendorCalls();
       await page.screenshot({ path: resolve(out, `${engine}-discovery.png`) });
@@ -132,7 +172,7 @@ try {
       await page.getByRole("radio", { name: /Off/ }).check();
       await page.waitForFunction(() => document.documentElement.dataset.motion === "off");
       await page.reload();
-      await page.getByRole("heading", { name: "Set your pace." }).waitFor();
+      await page.getByRole("heading", { name: "Choose how much moves." }).waitFor();
       await page.waitForFunction(() => !document.querySelector("[data-cinematic]"));
       assert.equal(await page.getByRole("radio", { name: /Off/ }).isChecked(), true);
       await page.getByRole("button", { name: "Continue", exact: true }).click();

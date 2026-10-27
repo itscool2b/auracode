@@ -1,3 +1,4 @@
+import { FolderOpen, GitBranch } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { type CloneApi, cloneApi } from "../../lib/setup-actions/api";
@@ -23,10 +24,11 @@ export function CloneProject({
     <>
       <button
         type="button"
-        className="setup-text-button"
+        className="g-button g-button-ghost setup-clone"
         disabled={disabled}
         onClick={() => setOpen(true)}
       >
+        <GitBranch size={14} aria-hidden="true" />
         {label}
       </button>
       {open ? (
@@ -178,8 +180,7 @@ function CloneDialog({
   const content = (
     <dialog
       ref={dialog}
-      className="orbit-theme setup-clone-dialog"
-      data-theme="dark"
+      className="g-root g-dialog setup-clone-dialog"
       aria-labelledby={title}
       onCancel={(event) => {
         event.preventDefault();
@@ -187,11 +188,8 @@ function CloneDialog({
       }}
     >
       <header>
-        <div>
-          <span className="setup-eyebrow">FIRST PROJECT</span>
-          <h2 id={title}>Clone from GitHub</h2>
-        </div>
-        <button type="button" className="setup-text-button" onClick={close}>
+        <h2 id={title}>Clone from GitHub</h2>
+        <button type="button" className="g-button g-button-ghost g-button-28" onClick={close}>
           Close clone
         </button>
       </header>
@@ -209,6 +207,7 @@ function CloneDialog({
           <label className="setup-field">
             GitHub repository
             <input
+              className="g-input"
               required
               maxLength={256}
               value={remote}
@@ -218,14 +217,18 @@ function CloneDialog({
             />
           </label>
           <button type="button" className="setup-folder" disabled={busy} onClick={choose}>
+            <FolderOpen size={18} aria-hidden="true" />
             <span>
               <strong>Choose parent folder</strong>
-              <small>{parent || "Pick where the new folder will be created"}</small>
+              <small className={parent ? "setup-path" : undefined}>
+                {parent || "Pick where the new folder will be created"}
+              </small>
             </span>
           </button>
           <label className="setup-field">
             New folder name
             <input
+              className="g-input"
               required
               maxLength={100}
               value={name}
@@ -239,7 +242,7 @@ function CloneDialog({
           </p>
           <button
             type="submit"
-            className="setup-button"
+            className="g-button g-button-primary g-button-36"
             disabled={busy || !parent || !remote || !name}
           >
             {busy ? "Preparing…" : "Review clone"}
@@ -260,10 +263,20 @@ function CloneDialog({
             ))}
           </ul>
           <footer>
-            <button type="button" className="setup-text-button" disabled={busy} onClick={back}>
+            <button
+              type="button"
+              className="g-button g-button-ghost g-button-36"
+              disabled={busy}
+              onClick={back}
+            >
               Back
             </button>
-            <button type="button" className="setup-button" disabled={busy} onClick={start}>
+            <button
+              type="button"
+              className="g-button g-button-primary g-button-36"
+              disabled={busy}
+              onClick={start}
+            >
               {busy ? "Starting…" : "Start clone"}
             </button>
           </footer>
@@ -276,7 +289,7 @@ function CloneDialog({
           {active ? (
             <button
               type="button"
-              className="setup-button"
+              className="g-button g-button-outline"
               disabled={busy}
               onClick={() => void run(() => api.cancel(record.id))}
             >
@@ -287,13 +300,13 @@ function CloneDialog({
               {record.state === "ready" ? (
                 <button
                   type="button"
-                  className="setup-button"
+                  className="g-button g-button-primary"
                   onClick={() => chooseFolder(record.destination)}
                 >
                   Use this folder
                 </button>
               ) : null}
-              <button type="button" className="setup-text-button" onClick={back}>
+              <button type="button" className="g-button g-button-ghost" onClick={back}>
                 Review another clone
               </button>
             </>
@@ -320,7 +333,7 @@ function CloneDialog({
                 {item.state === "ready" ? (
                   <button
                     type="button"
-                    className="setup-text-button"
+                    className="g-button g-button-outline g-button-28"
                     onClick={() => chooseFolder(item.destination)}
                   >
                     Use folder

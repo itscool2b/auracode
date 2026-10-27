@@ -54,7 +54,7 @@ export function AgentInstallations({
     <div className="setup-installations">
       <button
         type="button"
-        className="setup-text-button"
+        className="g-button g-button-ghost g-button-28"
         disabled={busy}
         aria-expanded={open}
         onClick={() => (open ? setOpen(false) : void load())}
@@ -66,10 +66,26 @@ export function AgentInstallations({
           <p>
             Choose for this device. Applies to new sessions and alternate transports of this agent.
           </p>
-          {busy ? <p role="status">Checking executables…</p> : null}
-          {error ? <p role="alert">{error}</p> : null}
-          {message ? <p role="status">{message}</p> : null}
-          {value?.notice ? <p role="alert">{value.notice}</p> : null}
+          {busy ? (
+            <p role="status" className="setup-footnote">
+              Checking executables…
+            </p>
+          ) : null}
+          {error ? (
+            <p role="alert" className="setup-alert">
+              {error}
+            </p>
+          ) : null}
+          {message ? (
+            <p role="status" className="setup-footnote">
+              {message}
+            </p>
+          ) : null}
+          {value?.notice ? (
+            <p role="alert" className="setup-alert">
+              {value.notice}
+            </p>
+          ) : null}
           {value ? (
             <fieldset disabled={busy || value.notice !== null}>
               <legend>Executables in discovery order</legend>
@@ -108,7 +124,7 @@ export function AgentInstallations({
               <div className="setup-executable-actions">
                 <button
                   type="button"
-                  className="setup-button"
+                  className="g-button g-button-outline g-button-28"
                   disabled={
                     choice === null ||
                     choice === value.preferred_path ||
@@ -123,7 +139,7 @@ export function AgentInstallations({
                 {value.preferred_path !== null ? (
                   <button
                     type="button"
-                    className="setup-text-button"
+                    className="g-button g-button-ghost g-button-28"
                     onClick={() => void save(null)}
                   >
                     Use environment default
@@ -136,7 +152,7 @@ export function AgentInstallations({
           ) : null}
           <button
             type="button"
-            className="setup-text-button"
+            className="g-button g-button-ghost g-button-28 setup-recheck"
             disabled={busy}
             onClick={() => void load()}
           >

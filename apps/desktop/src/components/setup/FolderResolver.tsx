@@ -156,7 +156,7 @@ export function FolderResolver({
                   <span className="setup-path">{root}</span>{" "}
                   <button
                     type="button"
-                    className="setup-text-button"
+                    className="g-button g-button-ghost g-button-28"
                     disabled={busy}
                     aria-label={`Remove code root ${root}`}
                     onClick={() => roots(value.roots.filter((path) => path !== root))}
@@ -167,12 +167,12 @@ export function FolderResolver({
               ))}
             </ul>
           ) : (
-            <p>No code roots selected.</p>
+            <p className="setup-footnote">No code roots selected.</p>
           )}
           <footer>
             <button
               type="button"
-              className="setup-text-button"
+              className="g-button g-button-ghost g-button-28"
               disabled={busy || value.roots.length >= 16}
               onClick={addRoot}
             >
@@ -180,7 +180,7 @@ export function FolderResolver({
             </button>
             <button
               type="button"
-              className="setup-button"
+              className="g-button g-button-outline g-button-28"
               disabled={busy || !value.roots.length}
               onClick={search}
             >
@@ -204,7 +204,7 @@ export function FolderResolver({
             </ul>
           )}
           {searched && !value.matches.length && (
-            <p role="status">
+            <p role="status" className="setup-footnote">
               No matching repository found in the checked folders. Locate it directly or clone it.
             </p>
           )}
@@ -213,7 +213,7 @@ export function FolderResolver({
       <footer>
         <button
           type="button"
-          className="setup-text-button"
+          className="g-button g-button-ghost g-button-28"
           disabled={busy || !value}
           onClick={() => locate()}
         >
@@ -242,21 +242,38 @@ export function FolderResolver({
           <footer>
             <button
               type="button"
-              className="setup-text-button"
+              className="g-button g-button-ghost g-button-28"
               disabled={busy}
               onClick={() => setReview(null)}
             >
               Cancel
             </button>
-            <button type="button" className="setup-button" disabled={busy} onClick={apply}>
+            <button
+              type="button"
+              className="g-button g-button-primary g-button-28"
+              disabled={busy}
+              onClick={apply}
+            >
               Use on this device
             </button>
           </footer>
         </section>
       )}
-      {busy && <p role="status">Checking folder…</p>}
-      {saved && <p role="status">Folder location saved for this device.</p>}
-      {error && <p role="alert">{error}</p>}
+      {busy && (
+        <p role="status" className="setup-footnote">
+          Checking folder…
+        </p>
+      )}
+      {saved && (
+        <p role="status" className="folder-resolver-saved">
+          Folder location saved for this device.
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="setup-alert">
+          {error}
+        </p>
+      )}
     </section>
   );
 }
