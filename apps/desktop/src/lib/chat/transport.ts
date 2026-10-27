@@ -12,6 +12,7 @@ import type {
   EventBatch,
   HistoryPage,
   PromptAck,
+  QueuedPrompt,
   SessionLists,
   StorageStatus,
   UiAnswer,
@@ -31,10 +32,13 @@ import {
   chatCancelQueued,
   chatCreate,
   chatDetach,
+  chatEditQueued,
   chatForceStop,
   chatHistory,
   chatInterrupt,
   chatLists,
+  chatMoveQueued,
+  chatQueuedText,
   chatRespondPermission,
   chatRespondUi,
   chatResumeQueue,
@@ -88,6 +92,12 @@ export interface Transport {
   lists(chatId: string): Promise<SessionLists>;
   send(chatId: string, text: string): Promise<PromptAck>;
   cancelQueued(chatId: string, promptId: string): Promise<void>;
+  /** The words of a queued prompt as typed. */
+  queuedText(chatId: string, promptId: string): Promise<string>;
+  /** Replaces a queued prompt's words; answers the queue after the change. */
+  editQueued(chatId: string, promptId: string, text: string): Promise<QueuedPrompt[]>;
+  /** Moves a queued prompt to `index` (0 goes next); answers the queue after the change. */
+  moveQueued(chatId: string, promptId: string, index: number): Promise<QueuedPrompt[]>;
   resumeQueue(chatId: string): Promise<void>;
   interrupt(chatId: string): Promise<void>;
   forceStop(chatId: string): Promise<void>;
@@ -126,6 +136,9 @@ export const tauriTransport: Transport = {
   lists: chatLists,
   send: chatSend,
   cancelQueued: chatCancelQueued,
+  queuedText: chatQueuedText,
+  editQueued: chatEditQueued,
+  moveQueued: chatMoveQueued,
   resumeQueue: chatResumeQueue,
   interrupt: chatInterrupt,
   forceStop: chatForceStop,

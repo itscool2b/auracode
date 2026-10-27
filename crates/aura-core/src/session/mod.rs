@@ -868,6 +868,53 @@ impl SessionManager {
         .await
     }
 
+    /// The words of a queued prompt as typed, without its attachments' text or mention lines.
+    pub async fn queued_text(
+        &self,
+        chat_id: &str,
+        prompt_id: &str,
+    ) -> Result<String, SessionError> {
+        self.ask(chat_id, |reply| ChatMsg::QueuedText {
+            prompt_id: prompt_id.to_owned(),
+            reply,
+        })
+        .await
+    }
+
+    /// Replaces a queued prompt's words, keeping its attachments, mentions, place and hold.
+    /// Answers the queue after the change.
+    pub async fn edit_queued(
+        &self,
+        chat_id: &str,
+        prompt_id: &str,
+        text: String,
+    ) -> Result<Vec<aura_protocol::session::QueuedPrompt>, SessionError> {
+        if self.shared().is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
+        self.ask(chat_id, |reply| ChatMsg::EditQueued {
+            prompt_id: prompt_id.to_owned(),
+            text: text.clone(),
+            reply,
+        })
+        .await
+    }
+
+    /// Moves a queued prompt to `index` (0 goes next). Answers the queue after the change.
+    pub async fn move_queued(
+        &self,
+        chat_id: &str,
+        prompt_id: &str,
+        index: usize,
+    ) -> Result<Vec<aura_protocol::session::QueuedPrompt>, SessionError> {
+        self.ask(chat_id, |reply| ChatMsg::MoveQueued {
+            prompt_id: prompt_id.to_owned(),
+            index,
+            reply,
+        })
+        .await
+    }
+
     pub async fn resume_queue(&self, chat_id: &str) -> Result<(), SessionError> {
         self.ask(chat_id, |reply| ChatMsg::ResumeQueue { reply })
             .await

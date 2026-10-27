@@ -1264,8 +1264,69 @@
   white-space: nowrap;
 }
 
-.chat-queue li > .g-button-icon {
+.chat-queue li .g-button-icon {
   color: var(--g-fg-3);
+}
+
+/*
+ * Edit, Move up and Move down: quiet until the row is under the hand or holds the keyboard, so a
+ * long queue reads as messages, not toolbars. Remove always shows.
+ */
+.chat-queue-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-2);
+  opacity: 0;
+  transition: opacity var(--g-dur-fast) var(--g-ease);
+}
+
+.chat-queue li:focus-within .chat-queue-actions {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .chat-queue li:hover .chat-queue-actions {
+    opacity: 1;
+  }
+}
+
+@media (hover: none) {
+  .chat-queue-actions {
+    opacity: 1;
+  }
+}
+
+/* Editing: the row opens into the field, its actions under it at the right. */
+.chat-queue li[data-editing] {
+  padding: var(--g-space-4) 0 var(--g-space-4);
+}
+
+.chat-queue-editor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--g-space-8);
+  min-width: 0;
+}
+
+.chat-queue-editor .g-textarea {
+  min-height: 36px;
+  padding: var(--g-space-6) var(--g-space-12);
+  resize: none;
+}
+
+.chat-queue-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--g-space-4);
+}
+
+.chat-queue-error {
+  margin: 0;
+  color: var(--g-red);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
 }
 
 .chat-queue-note {

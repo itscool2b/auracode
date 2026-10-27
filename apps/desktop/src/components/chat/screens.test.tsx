@@ -24,7 +24,7 @@ import { Header } from "./Header";
 import { downloadNote, InstallationStatus, NewChat } from "./NewChat";
 import { Pickers } from "./Pickers";
 import { initials } from "./ProfileStatus";
-import { QueueList } from "./QueueList";
+import { QueueEditor, QueueList } from "./QueueList";
 import { Transcript } from "./Transcript";
 import { type TurnActions, TurnView } from "./TurnView";
 
@@ -493,6 +493,43 @@ describe("the queue and the composer's stop button", () => {
       <QueueList queue={[]} held={true} onRemove={noop} onSendQueued={noop} />,
     );
     expect(buttons(unknown).map((b) => b.label)).toEqual(["Send queued"]);
+  });
+
+  it("edits and reorders queued messages with buttons, never by dragging alone", () => {
+    const html = renderToStaticMarkup(
+      <QueueList
+        queue={[
+          { prompt_id: "p1", preview: "first", held: false, created_at: 1 },
+          { prompt_id: "p2", preview: "second", held: false, created_at: 2 },
+        ]}
+        held={false}
+        onRemove={noop}
+        onSendQueued={noop}
+        onLoadText={async () => "first"}
+        onEdit={async () => null}
+        onMove={async () => {}}
+      />,
+    );
+    expect(buttons(html)).toEqual([
+      { label: "Edit queued message", disabled: false },
+      { label: "Move up in the queue", disabled: true },
+      { label: "Move down in the queue", disabled: false },
+      { label: "Remove from the queue", disabled: false },
+      { label: "Edit queued message", disabled: false },
+      { label: "Move up in the queue", disabled: false },
+      { label: "Move down in the queue", disabled: true },
+      { label: "Remove from the queue", disabled: false },
+    ]);
+    expect(html).not.toContain("draggable");
+  });
+
+  it("opens a queued message's words in a labelled field with Cancel and Save", () => {
+    const html = renderToStaticMarkup(
+      <QueueEditor initial="first draft" onSave={async () => null} onCancel={noop} />,
+    );
+    expect(html).toContain('aria-label="Queued message"');
+    expect(html).toContain(">first draft</textarea>");
+    expect(buttons(html).map((b) => b.label)).toEqual(["Cancel", "Save"]);
   });
 
   it("escape_twice: Stop while a turn runs or starts, Force stop while it cancels", () => {

@@ -1,7 +1,14 @@
 /** Browser-only steering fixture. It never invokes the native transport or starts an agent. */
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { AuraEvent, Capabilities, EventBatch, SessionStatus, SteeringAck } from "../bindings";
+import type {
+  AuraEvent,
+  Capabilities,
+  EventBatch,
+  QueuedPrompt,
+  SessionStatus,
+  SteeringAck,
+} from "../bindings";
 import { ChatView } from "../components/chat/ChatView";
 import {
   attachResult,
@@ -23,7 +30,12 @@ function Preview() {
     let status: SessionStatus = scenario === "idle" ? "ready" : "running";
     let turn: string | null =
       scenario === "unknown-turn" || scenario === "idle" ? null : "fixture-turn";
-    const chat = chatSummary("steering-chat", { agent_id: "codex", agent_name: "Codex", status });
+    // Codex steers; the unsupported case is Claude Code, which takes a message after the turn.
+    const agent =
+      scenario === "unsupported"
+        ? { agent_id: "claude", agent_name: "Claude Code" }
+        : { agent_id: "codex", agent_name: "Codex" };
+    const chat = chatSummary("steering-chat", { ...agent, status });
     const events: AuraEvent[] = [
       ev.turnStarted("fixture-turn"),
       ev.user("original", "Review this change"),
@@ -55,6 +67,8 @@ function Preview() {
     let pending: ((value: SteeringAck) => void) | null = null;
     let message = "";
     const calls = { steer: 0, send: 0, expected: "" };
+    const queue: QueuedPrompt[] = [];
+    const words = new Map<string, string>();
     const recovery = { starts: 0, previews: [] as string[], applied: 0 };
     const publish = (updates: AuraEvent[]) => {
       const seq = events.length;
@@ -92,7 +106,8 @@ function Preview() {
             historyPage(chat.id, items(numbered(events.map((event) => [null, event])))),
             {
               chat,
-              session: sessionInfo({ status, agent_name: "Codex" }),
+              session: sessionInfo({ status, agent_name: agent.agent_name }),
+              queue: queue.map((row) => ({ ...row })),
               open_turn_id: turn,
             },
           );
@@ -101,9 +116,41 @@ function Preview() {
           status = "cancelling";
           publish([ev.session({ status })]);
         },
-        send: async () => {
+        send: async (_id, text) => {
           calls.send++;
-          return { prompt_id: "queued", queued: true };
+          if (status !== "running") return { prompt_id: "queued", queued: true };
+          // While the turn runs a message waits in the queue, which can be edited and reordered.
+          const prompt_id = `queued-${calls.send}`;
+          words.set(prompt_id, text);
+          queue.push({
+            prompt_id,
+            preview: text.slice(0, 256),
+            held: false,
+            created_at: calls.send,
+          });
+          publish([ev.lifecycle(prompt_id, "queued", text.slice(0, 256))]);
+          return { prompt_id, queued: true };
+        },
+        queuedText: async (_id, promptId) => words.get(promptId) ?? "",
+        editQueued: async (_id, promptId, text) => {
+          const row = queue.find((item) => item.prompt_id === promptId);
+          if (row && text.trim()) {
+            words.set(promptId, text);
+            row.preview = text.slice(0, 256);
+          }
+          if (!text.trim()) throw new Error("The message is empty.");
+          return queue.map((item) => ({ ...item }));
+        },
+        moveQueued: async (_id, promptId, index) => {
+          const from = queue.findIndex((item) => item.prompt_id === promptId);
+          const [row] = queue.splice(from, 1);
+          if (row) queue.splice(Math.min(index, queue.length), 0, row);
+          return queue.map((item) => ({ ...item }));
+        },
+        cancelQueued: async (_id, promptId) => {
+          const index = queue.findIndex((item) => item.prompt_id === promptId);
+          if (index >= 0) queue.splice(index, 1);
+          publish([ev.lifecycle(promptId, "cancelled")]);
         },
       }),
     );

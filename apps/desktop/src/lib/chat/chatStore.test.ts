@@ -717,6 +717,57 @@ describe("prompts and the session", () => {
       ["revealLog", CHAT],
     ]);
   });
+
+  it("edits and reorders queued prompts from the shell's exact queue", async () => {
+    const row = (prompt_id: string, preview: string, held = false) => ({
+      prompt_id,
+      preview,
+      held,
+      created_at: 1,
+    });
+    const fake = new FakeTransport({
+      queuedText: async (_chat, id) => (id === "p1" ? "frist draft" : "later"),
+      editQueued: async (_chat, _id, text) =>
+        text.trim() === ""
+          ? Promise.reject(new CommandError("prompt_empty", "The message is empty."))
+          : [row("p1", text), row("p2", "later", true)],
+      moveQueued: async () => [row("p2", "later", true), row("p1", "first draft")],
+    });
+    const store = await opened(fake, historyPage(CHAT, []), 0, {
+      queue: [row("p1", "frist draft"), row("p2", "later", true)],
+    });
+    expect(await store.queuedText("p1")).toBe("frist draft");
+    expect(await store.editQueued("p1", "first draft")).toBeNull();
+    expect(store.getSnapshot().queue.map((item) => item.preview)).toEqual(["first draft", "later"]);
+    // A refused edit keeps the queue and says why, for the editor to show; the header stays quiet.
+    expect(await store.editQueued("p1", " ")).toBe("The message is empty.");
+    expect(store.getSnapshot().queue[0]?.preview).toBe("first draft");
+    expect(store.getSnapshot().actionError).toBeNull();
+    await store.moveQueued("p2", 0);
+    expect(store.getSnapshot().queue).toEqual([row("p2", "later", true), row("p1", "first draft")]);
+    expect(fake.calls.slice(2).map((call) => [call.method, ...call.args])).toEqual([
+      ["queuedText", CHAT, "p1"],
+      ["editQueued", CHAT, "p1", "first draft"],
+      ["editQueued", CHAT, "p1", " "],
+      ["moveQueued", CHAT, "p2", 0],
+    ]);
+  });
+
+  it("drops a queued prompt that started or was removed before an edit or a move", async () => {
+    const gone = () => Promise.reject(new CommandError("request_not_pending", "gone"));
+    const fake = new FakeTransport({ queuedText: gone, editQueued: gone, moveQueued: gone });
+    const queue = [
+      { prompt_id: "p1", preview: "one", held: false, created_at: 1 },
+      { prompt_id: "p2", preview: "two", held: false, created_at: 2 },
+      { prompt_id: "p3", preview: "three", held: false, created_at: 3 },
+    ];
+    const store = await opened(fake, historyPage(CHAT, []), 0, { queue });
+    expect(await store.queuedText("p1")).toBeNull();
+    expect(await store.editQueued("p2", "x")).toBeNull();
+    await store.moveQueued("p3", 0);
+    expect(store.getSnapshot().queue).toEqual([]);
+    expect(store.getSnapshot().actionError).toBeNull();
+  });
 });
 
 describe("cards and questions", () => {

@@ -62,6 +62,8 @@ export const MODES = [
   "agents",
   "chat-options",
   "chat-options#busy-folder",
+  "steering#queued",
+  "steering#queue-edit",
   // The chat shell's floating layers, opened the way a person opens them.
   "settled#picker",
   "settled#palette",
@@ -71,6 +73,16 @@ export const MODES = [
   "settled#account-menu",
   "thinking#typed",
 ];
+
+/** Queues two messages behind the steering fixture's running turn. */
+async function queueTwo(page) {
+  const input = page.getByTestId("composer-input");
+  for (const text of ["Then run the unit tests", "Update the changelog"]) {
+    await input.fill(text);
+    await input.press("Enter");
+  }
+  await page.getByTestId("queued-prompt").nth(1).waitFor();
+}
 
 /** How each "<mode>#<view>" opens its layer before the probes run. */
 const OPENERS = {
@@ -84,6 +96,12 @@ const OPENERS = {
     await page.getByLabel("Move to project").selectOption({ label: "Website" });
     await page.getByTestId("move-folder").selectOption("folder-site");
     await page.getByTestId("move-busy").waitFor();
+  },
+  queued: (page) => queueTwo(page),
+  "queue-edit": async (page) => {
+    await queueTwo(page);
+    await page.getByTestId("queued-edit").first().click();
+    await page.getByTestId("queued-edit-input").waitFor();
   },
   typed: async (page) => {
     await page.getByTestId("composer-input").click();

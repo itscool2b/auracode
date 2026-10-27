@@ -18,6 +18,7 @@ import {
   type EventBatch,
   type HistoryPage,
   type PromptAck,
+  type QueuedPrompt,
   type SessionLists,
   type SmokeReport,
   type StorageStatus,
@@ -287,6 +288,26 @@ export function chatSend(chatId: string, text: string): Promise<PromptAck> {
 
 export async function chatCancelQueued(chatId: string, promptId: string): Promise<void> {
   await settle(commands.chatCancelQueued(chatId, promptId));
+}
+
+export function chatQueuedText(chatId: string, promptId: string): Promise<string> {
+  return settle(commands.chatQueuedText(chatId, promptId));
+}
+
+export function chatEditQueued(
+  chatId: string,
+  promptId: string,
+  text: string,
+): Promise<QueuedPrompt[]> {
+  return settle(commands.chatEditQueued(chatId, promptId, text));
+}
+
+export function chatMoveQueued(
+  chatId: string,
+  promptId: string,
+  index: number,
+): Promise<QueuedPrompt[]> {
+  return settle(commands.chatMoveQueued(chatId, promptId, index));
 }
 
 export async function chatResumeQueue(chatId: string): Promise<void> {

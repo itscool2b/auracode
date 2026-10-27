@@ -6,6 +6,7 @@ mod conversation;
 mod folder_context;
 mod folder_resolution;
 mod project_tools;
+mod queue_changes;
 mod steering;
 #[cfg(feature = "account-sync")]
 mod sync_history;

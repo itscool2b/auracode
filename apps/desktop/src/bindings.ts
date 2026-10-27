@@ -260,6 +260,15 @@ export const commands = {
 	chatSend: (chatId: string, text: string) => typedError<PromptAck, AppError>(__TAURI_INVOKE("chat_send", { chatId, text })),
 	/**  Removes a queued prompt. */
 	chatCancelQueued: (chatId: string, promptId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_cancel_queued", { chatId, promptId })),
+	/**  The words of a queued prompt as typed, for editing it in place. */
+	chatQueuedText: (chatId: string, promptId: string) => typedError<string, AppError>(__TAURI_INVOKE("chat_queued_text", { chatId, promptId })),
+	/**
+	 *  Replaces a queued prompt's words (its attachments, mentions, place and hold stay) and returns
+	 *  the queue after the change.
+	 */
+	chatEditQueued: (chatId: string, promptId: string, text: string) => typedError<QueuedPrompt[], AppError>(__TAURI_INVOKE("chat_edit_queued", { chatId, promptId, text })),
+	/**  Moves a queued prompt to `index` (0 goes next) and returns the queue after the change. */
+	chatMoveQueued: (chatId: string, promptId: string, index: number) => typedError<QueuedPrompt[], AppError>(__TAURI_INVOKE("chat_move_queued", { chatId, promptId, index })),
 	/**  Releases the held prompts ("Send queued"), starting the agent when it is stopped. */
 	chatResumeQueue: (chatId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_resume_queue", { chatId })),
 	/**  Asks the agent to stop the running turn (Esc). While it is already cancelling, this force-stops. */
