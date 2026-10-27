@@ -64,34 +64,50 @@ export function LocalImportPanel({
   };
   return (
     <section className="settings-section local-import-panel" aria-labelledby="local-import-title">
-      <h3 id="local-import-title">Your Local projects</h3>
-      <p>Bring selected projects and chats into this Account. Your Local copy stays available.</p>
-      <button type="button" className="g-button" disabled={busy} onClick={() => void preview()}>
-        Review Local projects
-      </button>
-      {result && (
-        <p role="status">
-          {result.project_ids.length === 0
-            ? "These projects are already in this Account."
-            : `Imported ${result.project_ids.length} project(s) and ${result.chats} chat(s).`}
-          {result.missing_attachments > 0 &&
-            ` ${result.missing_attachments} saved attachment(s) were already missing from Local.`}
-        </p>
-      )}
-      {!open && error && (
-        <p role="alert" className="settings-alert">
-          {error}
-        </p>
-      )}
+      <div className="settings-group">
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <div>
+              <h3 id="local-import-title" className="settings-row-label">
+                Your Local projects
+              </h3>
+              <p>Bring chosen projects and chats into this Account. Local keeps its copy.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="g-button g-button-outline g-button-28"
+            disabled={busy}
+            onClick={() => void preview()}
+          >
+            Review Local projects
+          </button>
+          {result && (
+            <p className="settings-note settings-span" role="status">
+              {result.project_ids.length === 0
+                ? "These projects are already in this Account."
+                : `Imported ${result.project_ids.length} project(s) and ${result.chats} chat(s).`}
+              {result.missing_attachments > 0 &&
+                ` ${result.missing_attachments} saved attachment(s) were already missing from Local.`}
+            </p>
+          )}
+          {!open && error && (
+            <p role="alert" className="settings-alert settings-span">
+              {error}
+            </p>
+          )}
+        </div>
+      </div>
       {open && (
         <Modal
           title="Bring Local projects into this Account"
           size="md"
+          className="local-import-dialog"
           onClose={() => setOpen(false)}
           closeDisabled={busy}
         >
           {busy && (
-            <p role="status" className="settings-footnote">
+            <p role="status" className="settings-note">
               {review ? "Copying selected projects…" : "Reading Local projects…"}
             </p>
           )}
@@ -102,13 +118,15 @@ export function LocalImportPanel({
           )}
           {review && (
             <>
-              <ul className="local-import-notices">
-                {review.notices.map((notice) => (
-                  <li key={notice}>{notice}</li>
-                ))}
-              </ul>
+              {review.notices.length ? (
+                <ul className="local-import-notices">
+                  {review.notices.map((notice) => (
+                    <li key={notice}>{notice}</li>
+                  ))}
+                </ul>
+              ) : null}
               {review.projects.length === 0 ? (
-                <p>No Local projects are available to import.</p>
+                <p className="local-import-count">No Local projects are available to import.</p>
               ) : (
                 <fieldset disabled={busy || needsReview} className="local-import-projects">
                   <legend>Choose projects</legend>
@@ -140,10 +158,12 @@ export function LocalImportPanel({
                   ))}
                 </fieldset>
               )}
-              {selected.size >= 64 && <p>Import up to 64 projects at a time.</p>}
+              {selected.size >= 64 && (
+                <p className="settings-note">Import up to 64 projects at a time.</p>
+              )}
             </>
           )}
-          <footer className="local-import-actions">
+          <footer className="g-dialog-actions local-import-actions">
             <button
               type="button"
               className="g-button"

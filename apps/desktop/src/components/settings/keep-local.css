@@ -1,20 +1,6 @@
+/* The consent under the Keep as Local review: on a hairline, apart from the counts above it. */
 .keep-local-consent {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--g-space-8);
   margin-top: var(--g-space-16);
   padding-top: var(--g-space-16);
   border-top: 1px solid var(--g-line);
-  color: var(--g-fg-1);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  cursor: pointer;
-}
-
-.keep-local-consent input {
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  margin: var(--g-space-2) 0 0;
-  accent-color: var(--g-primary);
 }

@@ -66,30 +66,31 @@ export function RemoveAccountPanel({
     }
   };
   return (
-    <section className="settings-section account-card" aria-labelledby={`${id}-title`}>
-      <h3 id={`${id}-title`}>Remove from this device</h3>
-      <p>
-        This is separate from signing out. It permanently erases a selected local Account workspace
-        and auracode's account and device key bundle.
-      </p>
-      {!localActive ? (
-        <>
+    <section className="settings-row" aria-labelledby={`${id}-title`}>
+      <div className="settings-row-text">
+        <div>
+          <h3 id={`${id}-title`} className="settings-row-label">
+            Remove from this device
+          </h3>
           <p>
-            Switch to Local first so your managed configuration is restored safely. If recovery
-            cannot finish, removal stays unavailable.
+            {localActive
+              ? "Permanently erases an Account workspace and its keys here. Signing out does not."
+              : "Switch to Local first so your managed configuration is restored safely."}
           </p>
-          <button
-            className="g-button"
-            type="button"
-            disabled={busy || disabled}
-            onClick={() => void run(onLocal)}
-          >
-            Switch to Local before removing
-          </button>
-        </>
+        </div>
+      </div>
+      {!localActive ? (
+        <button
+          className="g-button g-button-outline g-button-28"
+          type="button"
+          disabled={busy || disabled}
+          onClick={() => void run(onLocal)}
+        >
+          Switch to Local before removing
+        </button>
       ) : (
         <button
-          className="g-button"
+          className="g-button g-button-outline g-button-28"
           type="button"
           disabled={busy || disabled}
           onClick={() => void run(load)}
@@ -97,71 +98,89 @@ export function RemoveAccountPanel({
           Review accounts on this device
         </button>
       )}
-      {localActive && items ? (
-        <ul className="account-devices">
-          {items.map((item) => (
-            <li key={item.profile_id}>
-              <div>
-                <strong>{item.display_name}</strong>
-                <p>{item.pending ? "Removal needs completion" : "Stored on this computer"}</p>
-              </div>
-              <button
-                className="g-button g-button-outline g-button-28"
-                type="button"
-                disabled={busy || disabled}
-                onClick={() => void run(() => open(item.profile_id))}
-              >
-                {item.pending ? "Review pending removal" : "Review removal"}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {items?.length === 0 ? <p>No mapped Account workspaces remain in this data folder.</p> : null}
-      {notice ? <p role="status">{notice}</p> : null}
-      {error && !review ? (
-        <p className="settings-error" role="alert">
-          {error}
-        </p>
+      {(localActive && items?.length) || items?.length === 0 || notice || (error && !review) ? (
+        <div className="settings-span account-step">
+          {localActive && items?.length ? (
+            <ul className="account-sublist">
+              {items.map((item) => (
+                <li key={item.profile_id}>
+                  <div>
+                    <strong>{item.display_name}</strong>
+                    <p>{item.pending ? "Removal needs completion" : "Stored on this computer"}</p>
+                  </div>
+                  <button
+                    className="g-button g-button-outline g-button-28"
+                    type="button"
+                    disabled={busy || disabled}
+                    onClick={() => void run(() => open(item.profile_id))}
+                  >
+                    {item.pending ? "Review pending removal" : "Review removal"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {items?.length === 0 ? (
+            <p className="settings-note">
+              No mapped Account workspaces remain in this data folder.
+            </p>
+          ) : null}
+          {notice ? (
+            <p className="settings-note" role="status">
+              {notice}
+            </p>
+          ) : null}
+          {error && !review ? (
+            <p className="settings-alert" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
       ) : null}
       {review ? (
         <Modal
           title="Remove this Account from the device"
+          size="md"
           className="account-device-dialog"
           closeDisabled={busy}
           onClose={() => setReview(null)}
         >
-          <div className="account-card account-removal-body">
+          <div className="account-dialog">
             {error ? (
               <p className="settings-error" role="alert">
                 {error}
               </p>
             ) : null}
-            <h3>{review.display_name}</h3>
-            <p>
-              Selected workspace: <code>{review.profile_id}</code>
-            </p>
-            <p>
-              {review.pending_changes === null
-                ? "The number of changes not yet synced is unknown. Any remaining local-only data will be lost."
-                : `${review.pending_changes} changes have not yet synced and will be lost.`}
-            </p>
+            <dl className="account-facts">
+              <dt>Workspace</dt>
+              <dd>{review.display_name}</dd>
+              <dt>Id</dt>
+              <dd>
+                <code>{review.profile_id}</code>
+              </dd>
+              <dt>Not synced</dt>
+              <dd>
+                {review.pending_changes === null
+                  ? "Unknown. Any local-only data will be lost."
+                  : `${review.pending_changes} changes will be lost.`}
+              </dd>
+            </dl>
             <p>
               {review.other_profiles} other mapped workspace(s) in this data folder are kept. Other
-              isolated data folders using this same secure-store bundle will lose key access; their
-              files stay untouched and need your recovery key to reopen.
+              data folders that use this secure-store bundle lose key access; their files stay and
+              need your recovery key to reopen.
             </p>
             <p>
-              This does not delete cloud data or revoke sessions in other running app instances.
-              Existing agent credentials and configuration files are untouched.
+              Cloud data, sessions in other running app instances, agent credentials and
+              configuration files are not touched.
             </p>
             {review.resuming ? (
               <p>
-                A removal is already recorded. Some files may already be gone. Continue to finish
-                key and cleanup removal.
+                A removal is already recorded and some files may be gone. Continue to finish
+                removing the key and cleaning up.
               </p>
             ) : null}
-            <label className="account-check">
+            <label className="settings-check">
               <input
                 type="checkbox"
                 checked={understood}
@@ -170,7 +189,7 @@ export function RemoveAccountPanel({
               />
               I understand that local data and key access will be lost
             </label>
-            <label htmlFor={`${id}-confirmation`}>
+            <label className="settings-field" htmlFor={`${id}-confirmation`}>
               Type REMOVE to erase this workspace and key
             </label>
             <input
@@ -182,7 +201,7 @@ export function RemoveAccountPanel({
               disabled={busy}
               onChange={(event) => setConfirmation(event.currentTarget.value)}
             />
-            <div className="account-actions">
+            <div className="g-dialog-actions">
               <button
                 type="button"
                 className="g-button"
@@ -194,7 +213,7 @@ export function RemoveAccountPanel({
               {review.resuming ? (
                 <button
                   type="button"
-                  className="g-button"
+                  className="g-button g-button-ghost"
                   disabled={busy}
                   onClick={() =>
                     void run(async () => {

@@ -9,8 +9,6 @@ import { ChatList } from "../components/chat/ChatList";
 import { SidebarBand } from "../components/chat/ChatsScreen";
 import { ChatView } from "../components/chat/ChatView";
 import { CommandPalette, type PaletteCommand } from "../components/chat/CommandPalette";
-import { NewChat } from "../components/chat/NewChat";
-import { NewChatDraft } from "../lib/chat/appStore";
 import {
   attachResult,
   chatSummary,
@@ -23,6 +21,7 @@ import {
   numbered,
   sessionInfo,
 } from "../lib/chat/testing";
+import { NewChatPreview } from "./newChatPreview";
 import { withPreviewContext } from "./previewContext";
 
 const AGENT: AgentEntry = {
@@ -662,7 +661,6 @@ function Preview() {
       }),
     );
   }, [mode, status, chat]);
-  const draft = useMemo(() => new NewChatDraft(transport), [transport]);
   return (
     // Mirrors ChatsScreen's frame: the drag bands, the sidebar toggle, the panes.
     <div
@@ -707,13 +705,7 @@ function Preview() {
       <main className="chat-main">
         <div className="chat-drag" />
         {selected === null ? (
-          <NewChat
-            agents={[AGENT]}
-            refreshing={false}
-            draft={draft}
-            onRefreshAgents={() => {}}
-            onCreated={() => setSelected("preview")}
-          />
+          <NewChatPreview base={AGENT} onCreated={() => setSelected("preview")} />
         ) : (
           <ChatView
             onCommands={setChatCommands}

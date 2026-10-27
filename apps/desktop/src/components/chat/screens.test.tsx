@@ -82,7 +82,7 @@ const ACTIONS: TurnActions = {
 };
 
 describe("New chat", () => {
-  it("unavailable_agent_disabled: agents that can't run here are disabled with their reason", () => {
+  it("unavailable_agent_disabled: agents that can't run here are not offered and show their reason", () => {
     const agents = [
       agent("mock", { state: "ready", version: null, path: "built in" }),
       agent("claude-acp", {
@@ -100,14 +100,17 @@ describe("New chat", () => {
         onCreated={noop}
       />,
     );
-    expect(html).toContain('<option value="mock">mock</option>');
-    expect(html).toContain(
-      '<option value="claude-acp" disabled="">claude-acp: Node.js 22 or newer is required (found 20.11.0).</option>',
+    // Only agents that can run are offered as choices; the others wait under Other agents.
+    expect(html).toMatch(
+      /<input type="radio"(?=[^>]*value="mock")(?=[^>]*aria-label="mock, ready")/,
     );
-    expect(html).toContain(
-      '<option value="hermes" disabled="">hermes: hermes --version failed.</option>',
-    );
+    expect(html).not.toContain('value="claude-acp"');
+    expect(html).not.toContain('value="hermes"');
     expect(html).toContain("Other agents");
+    expect(html).toMatch(
+      /data-test-unavailable="claude-acp".*Node\.js 22 or newer is required \(found 20\.11\.0\)\./,
+    );
+    expect(html).toMatch(/data-test-unavailable="hermes".*hermes --version failed\./);
     // Nothing chosen yet: Create waits for an agent and a folder.
     expect(buttons(html).find((b) => b.label === "Create")?.disabled).toBe(true);
     expect(buttons(html).find((b) => b.label === "Refresh agents")?.disabled).toBe(false);

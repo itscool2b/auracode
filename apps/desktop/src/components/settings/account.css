@@ -1,140 +1,33 @@
 /*
- * Account and profile panels in Graphite. Cards are surface-2 panels in the settings pane; lists
- * are grouped rows on inset hairlines; secrets and fingerprints sit in wells. Only --g-* tokens.
+ * Account and profile panels in Graphite: X Money's grouped rows. Each step of the account flow is
+ * one row in the Cloud account well (its title, one line, at most one control); its form, key or
+ * list opens under it. Secrets, codes and fingerprints sit in wells one step below. Only --g-*
+ * tokens.
  */
 
 .account-panel {
   max-width: 680px;
 }
 
-.account-heading {
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-8);
+.settings-section + .account-panel,
+.account-panel + .settings-section {
+  margin-top: var(--g-space-32);
 }
 
-.account-heading :is(h2, h3) {
-  margin: 0;
-}
-
-.account-heading > .g-button {
-  margin-left: auto;
-}
-
-.account-description,
-.account-notice {
-  max-width: 600px;
-  margin: var(--g-space-4) 0 var(--g-space-16);
-  color: var(--g-fg-3);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-}
-
-.account-panel > .account-notice {
-  margin: 0 0 var(--g-space-16);
-  color: var(--g-fg-2);
-}
-
-/* --------------------------------------------------------------------------- cards */
-
-.account-card {
-  position: relative;
-  padding: var(--g-space-20);
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
-  color: var(--g-fg-2);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-}
-
-.account-card + .account-card {
-  margin-top: var(--g-space-16);
-}
-
-.account-card h3 {
-  margin: 0 0 var(--g-space-4);
-  color: var(--g-fg-1);
-  font-size: var(--g-text-heading);
-  line-height: var(--g-leading-heading);
-  font-weight: 600;
-}
-
-.account-card .account-heading {
-  margin-bottom: var(--g-space-4);
-}
-
-.account-card .account-heading h3 {
-  margin: 0;
-}
-
-.account-card .account-heading svg {
-  flex: none;
-  color: var(--g-fg-1);
-}
-
-.account-card p {
-  max-width: 560px;
-  margin: 0 0 var(--g-space-12);
-  overflow-wrap: anywhere;
-}
-
-.account-card form,
-form.account-card {
+/* What a step needs, under its title: a form, a key, a list or a notice, left-aligned. */
+.account-step {
   display: grid;
-  gap: var(--g-space-16);
+  justify-items: start;
+  gap: var(--g-space-12);
 }
 
-.account-card form > *,
-form.account-card > * {
-  margin: 0;
+.account-step > :is(.settings-form, .settings-well, .account-sublist, .account-subsection) {
+  justify-self: stretch;
 }
 
-.account-card > .g-button,
-.account-card form > .g-button {
-  justify-self: start;
-}
-
-.account-card > .g-button {
-  margin-top: var(--g-space-4);
-}
-
-.account-card > label:not(.account-check, .settings-field) {
-  display: block;
-  margin: var(--g-space-12) 0 var(--g-space-8);
-  color: var(--g-fg-1);
-  font-weight: 500;
-}
-
-.account-card details {
-  margin-top: var(--g-space-16);
-}
-
-.account-card summary {
-  color: var(--g-fg-1);
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.account-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--g-space-8);
-  margin-top: var(--g-space-16);
-}
-
-.account-card form .account-actions {
-  margin-top: 0;
-}
-
-/* A field: the label above in 14/20 500, help under the input in 12/16 (4.2). */
-.settings-field {
-  display: grid;
-  gap: var(--g-space-8);
-  color: var(--g-fg-1);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 500;
+/* A single-line field never runs the full width of the well. */
+.account-short-input {
+  max-width: 400px;
 }
 
 .account-code-input {
@@ -159,57 +52,119 @@ textarea.account-secret {
   line-height: var(--g-leading-code);
 }
 
-.account-check {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--g-space-8);
-  margin: var(--g-space-16) 0 var(--g-space-12);
-  color: var(--g-fg-1);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  cursor: pointer;
+/* The approval code is read aloud across devices: larger, spaced, tabular. */
+.account-code {
+  justify-self: stretch;
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
-.account-check input {
+/* Grok's avatar circle: a profile, a device, or the account's state (approved, locked). */
+.account-badge {
+  display: grid;
   flex: none;
-  width: 16px;
-  height: 16px;
-  margin: var(--g-space-2) 0 0;
-  accent-color: var(--g-primary);
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-surface-3);
+  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  color: var(--g-fg-1);
 }
 
-/* Fingerprints and approval codes: machine data in a well one step below the card. */
-.account-fingerprint {
-  display: block;
-  margin: var(--g-space-12) 0;
-  padding: var(--g-space-12) var(--g-space-16);
-  border: 1px solid var(--g-line);
+.settings-row-text > .account-badge {
+  color: var(--g-fg-1);
+}
+
+/* A list inside a row: removal candidates on hairlines, in a well one step below. */
+.account-sublist {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
   border-radius: var(--g-radius-8);
   background-color: var(--g-surface-1);
-  color: var(--g-fg-1);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-code);
-  line-height: var(--g-leading-code);
-  font-variant-ligatures: none;
-  overflow-wrap: anywhere;
-  user-select: text;
+  box-shadow: inset 0 0 0 1px var(--g-line);
 }
 
-.account-recovery {
-  margin-top: var(--g-space-20);
-  padding-top: var(--g-space-16);
+.account-sublist li {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: var(--g-space-8) var(--g-space-12);
+}
+
+.account-sublist li + li {
   border-top: 1px solid var(--g-line);
 }
 
-.account-recovery form {
-  margin-top: var(--g-space-16);
+.account-sublist li > div {
+  flex: 1;
+  min-width: 0;
 }
 
-/* Key-value facts on hairlines. */
+.account-sublist strong {
+  display: block;
+  color: var(--g-fg-1);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.account-sublist p {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* A step inside a step (Keep as Local under a deleted account): the title, a line, one action. */
+.account-subsection {
+  display: grid;
+  justify-items: start;
+  gap: var(--g-space-12);
+  padding: var(--g-space-12) var(--g-space-16);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+}
+
+.account-subsection p:not(.settings-note) {
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------- dialog contents */
+
+.account-dialog {
+  display: grid;
+  gap: var(--g-space-12);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.account-dialog p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.account-dialog strong {
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.account-dialog > .g-dialog-actions {
+  margin-top: var(--g-space-8);
+}
+
+/* Key-value facts on hairlines (4.6's dialog rows). */
 .account-facts {
   display: grid;
-  grid-template-columns: 140px minmax(0, 1fr);
-  margin: var(--g-space-12) 0 var(--g-space-16);
+  grid-template-columns: 96px minmax(0, 1fr);
+  margin: 0;
   border-top: 1px solid var(--g-line);
 }
 
@@ -221,6 +176,8 @@ textarea.account-secret {
 
 .account-facts dt {
   color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-ui);
 }
 
 .account-facts dd {
@@ -228,154 +185,74 @@ textarea.account-secret {
   overflow-wrap: anywhere;
 }
 
-/* ------------------------------------------------------------- devices and profiles */
+.account-facts code {
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  font-variant-ligatures: none;
+}
 
-.account-devices,
-.account-profiles {
-  margin: 0;
-  padding: 0;
+/* ----------------------------------------------------------------- verification */
+
+/* Turnstile's widget, framed by the website: its own height in a well, then one status line. */
+.account-verification {
+  display: grid;
+  gap: var(--g-space-8);
+  justify-self: stretch;
+}
+
+.account-verification-well {
   overflow: hidden;
-  list-style: none;
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
-}
-
-.account-devices:empty,
-.account-profiles:empty {
-  display: none;
-}
-
-.account-card .account-devices {
-  margin-top: var(--g-space-12);
+  border-radius: var(--g-radius-8);
   background-color: var(--g-surface-1);
+  /* Outside the frame: an inset ring would sit under the iframe. */
+  box-shadow: 0 0 0 1px var(--g-line);
 }
 
-.account-devices li,
-.account-profiles li {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-12);
-  min-height: 56px;
-  padding: var(--g-space-12) var(--g-space-16);
-  color: var(--g-fg-2);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-}
-
-.account-devices li + li::before,
-.account-profiles li + li::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 16px;
-  height: 1px;
-  background-color: var(--g-line);
-}
-
-.account-devices li > svg,
-.account-profiles li > svg {
-  flex: none;
-  color: var(--g-fg-3);
-}
-
-.account-devices li > div,
-.account-profiles li > div {
-  flex: 1;
-  min-width: 0;
-}
-
-.account-devices strong,
-.account-profiles strong {
-  display: block;
-  color: var(--g-fg-1);
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-
-.account-devices p,
-.account-profiles p {
-  margin: 0;
-  color: var(--g-fg-3);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-}
-
-.account-devices li > .g-button,
-.account-profiles li > .g-button {
-  flex: none;
-}
-
-.account-vault-toggle,
-.account-reset-toggle {
-  margin: var(--g-space-8) 0 0 calc(var(--g-space-12) * -1);
-}
-
-/* Turnstile's widget, framed by the website: its own height, no border, dark. */
 .account-verification-frame {
+  display: block;
   width: 100%;
   height: 190px;
   border: 0;
   color-scheme: dark;
 }
 
-.account-verification {
-  display: grid;
+.account-verification-status {
+  display: flex;
+  align-items: center;
   gap: var(--g-space-8);
-}
-
-.account-verification iframe {
-  border-radius: var(--g-radius-8);
-}
-
-.account-verification p {
-  margin: 0;
+  min-height: 24px;
   color: var(--g-fg-3);
+}
+
+.account-verification-status p {
+  flex: 1;
+  margin: 0;
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
 
-.account-verification .g-button {
-  justify-self: start;
+.account-verification-status > svg {
+  flex: none;
 }
 
-.account-panel > .account-card {
-  margin-top: var(--g-space-16);
-}
-
-/* ---------------------------------------------------------------- dialog contents */
-
-.g-dialog .account-card {
-  padding: 0;
-  background-color: transparent;
-}
-
-.account-device-dialog .account-actions,
-.g-dialog .account-card > .account-actions {
-  justify-content: flex-end;
-  margin-top: var(--g-space-20);
-}
-
-.account-removal-body {
-  display: grid;
-  gap: var(--g-space-12);
-}
-
-.account-removal-body :is(p, h3, .account-check) {
-  margin: 0;
-}
-
-.account-removal-body label:not(.account-check) {
+.account-verification[data-phase="verified"] .account-verification-status {
   color: var(--g-fg-1);
-  font-weight: 500;
 }
 
-.account-removal-body code {
+.account-verification-square {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 var(--g-space-2);
+  background-color: var(--g-fg-3);
+}
+
+.account-verification[data-phase="failed"] .account-verification-square {
+  background-color: var(--g-red);
+}
+
+.account-verification[data-phase="failed"] .account-verification-status p {
   color: var(--g-fg-1);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-code);
-  overflow-wrap: anywhere;
 }
 
 /* ------------------------------------------------------ profile switch and lock */
@@ -409,12 +286,14 @@ textarea.account-secret {
   padding: clamp(var(--g-space-64), 14vh, var(--g-space-128)) var(--g-space-40) var(--g-space-64);
 }
 
-.locked-profile header {
+.locked-profile-header {
   margin-bottom: var(--g-space-40);
 }
 
-.locked-profile header > svg {
-  display: block;
+.locked-profile-header > .account-badge {
   margin-bottom: var(--g-space-20);
-  color: var(--g-fg-3);
+}
+
+.locked-profile-header h1 {
+  margin: 0;
 }

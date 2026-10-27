@@ -113,10 +113,7 @@ export function mountConfigSyncPreview(container: HTMLElement) {
       <main className="settings-shell g-root">
         <div className="settings-main">
           <div className="settings-content">
-            <header>
-              <h1>Configuration sync</h1>
-              <p>Bring your setup with you.</p>
-            </header>
+            <h1>Configuration sync</h1>
             <ConfigSyncPanel
               active={scenario !== "local"}
               onAccount={() => window.configSyncCalls.push("account")}

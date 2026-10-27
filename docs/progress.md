@@ -3062,3 +3062,32 @@ Verified locally on Windows: `pnpm lint`, `pnpm typecheck` and `pnpm test` (root
 `check-project-tools`, `check-profile-status` (now opening the account menu first) and
 `check-settings` (which includes settings navigation). Side-by-side sheets against the Grok and
 Vercel references are in the ignored `target/design-research/sheets/app-2b-chat-*.png`.
+
+### App restyle step 2b: New chat, Settings and Account (2026-10-27)
+
+Branch `app-settings` (on `app-one-system`) redesigns New chat, Settings, Account and the update,
+profile and configuration sync panels after the owner's references: Grok's start screen and
+settings, X Money's grouped rows, Vercel's empty states. Behaviour, test hooks and accessible
+names are kept unless noted.
+
+- **New chat:** the logo, one two-tone display line, one hint and one composer card. Agents that
+  can run here are pills over native radios whose mark shows the state: the loader while
+  detected, the code once found (settling in once, still under reduced motion), the volt square
+  when a sign-in check says it needs you. Unavailable agents and their reasons sit under Other
+  agents. The rules moved from `chat.css` to `new-chat.css`. The agent picker is no longer a
+  select, so `testIds.test.tsx`, `screens.test.tsx` and the smoke run's `choose()` and
+  `agentOption()` read the radio by its value; the smoke run was not executed against a real
+  build in this step.
+- **Settings:** icon nav with Grok's filled pill, no page subtitles, wells of rows with one control
+  each. General is one well, Shortcuts one keycap table (New chat and the menu keys added), About
+  the logo, name and version over Updates, This device, Diagnostics and notices.
+- **Account:** Profiles, Cloud account, Devices and Security. Each sign-in step is one row with its
+  form under it; sign-in errors are one red line under the field; Sign out and the reset entry are
+  chevron rows. Turnstile sits in a well over a status line with a loader, check or red square.
+- **Configuration sync:** files in mono with their state and keep-local switch, Review as the one
+  action, Vercel empty states.
+- **Docs:** visual language 6.13 (New chat) and 6.16 (Settings) describe what is built. The style
+  guard allowlists settings.css's checkbox data URL like the shell's.
+
+Sheets of every screen at 1440 x 900 and 1024 x 700 beside their references are in the ignored
+`target/design-research/sheets/app-2b-settings-*.png`.

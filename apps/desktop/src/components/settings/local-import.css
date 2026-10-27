@@ -1,30 +1,15 @@
 /* Bringing Local projects into an Account, and keeping a deleted Account as Local. */
 
-.local-import-panel {
-  padding: var(--g-space-20);
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
+.local-import-dialog p {
+  margin: 0 0 var(--g-space-12);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-}
-
-.local-import-panel h3 {
-  margin: 0 0 var(--g-space-4);
-  color: var(--g-fg-1);
-  font-size: var(--g-text-heading);
-  line-height: var(--g-leading-heading);
-  font-weight: 600;
-}
-
-.local-import-panel > p {
-  max-width: 560px;
-  margin: 0 0 var(--g-space-12);
   overflow-wrap: anywhere;
 }
 
-.local-import-panel > [role="alert"] {
-  color: var(--g-red);
+.local-import-count {
+  color: var(--g-fg-1);
 }
 
 .local-import-notices {
@@ -46,7 +31,7 @@
 
 .local-import-projects {
   max-height: 320px;
-  margin: var(--g-space-16) 0;
+  margin: 0;
   padding: 0;
   overflow: auto;
   border: 0;
@@ -55,6 +40,8 @@
 .local-import-projects legend {
   padding: 0 0 var(--g-space-8);
   color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
   font-weight: 500;
 }
 
@@ -72,14 +59,6 @@
   border-bottom: 1px solid var(--g-line);
 }
 
-.local-import-projects input {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: var(--g-primary);
-}
-
 .local-import-projects span {
   display: grid;
   gap: var(--g-space-2);
@@ -88,6 +67,8 @@
 
 .local-import-projects strong {
   color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
   font-weight: 500;
   overflow-wrap: anywhere;
 }
@@ -99,8 +80,5 @@
 }
 
 .local-import-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--g-space-8);
   margin-top: var(--g-space-20);
 }

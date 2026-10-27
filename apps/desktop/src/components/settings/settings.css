@@ -1,7 +1,10 @@
 /*
- * Settings in Graphite (docs/design/visual-language.md, 6.16): the sidebar becomes the settings
- * nav, the page is a surface-1 pane with a 680px column, and every group is a surface-2 panel of
- * rows on inset hairlines (X Money). Only --g-* tokens.
+ * Settings in Graphite (docs/design/visual-language.md, 6.16), after Grok's settings and X Money's
+ * grouped rows: the sidebar becomes the settings nav (icon and label, the open page on a filled
+ * pill), and each page is a title over groups. A group is an optional heading and one short line,
+ * then a surface-2 well of rows on inset hairlines. A row is a label with an optional one-line
+ * description and at most one small control at the right; anything more opens under it, across
+ * the row. Only --g-* tokens.
  */
 
 .settings-shell {
@@ -16,128 +19,6 @@
   height: 52px;
 }
 
-/* ------------------------------------------------------------------------ sidebar */
-
-.settings-sidebar {
-  position: relative;
-  display: flex;
-  flex: 0 0 var(--g-app-sidebar);
-  flex-direction: column;
-  min-width: 0;
-  padding: var(--ui-titlebar-height) var(--g-space-12) var(--g-space-16);
-}
-
-.settings-back {
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-8);
-  height: 32px;
-  padding: 0 var(--g-space-8);
-  border: 0;
-  border-radius: var(--g-radius-8);
-  background-color: transparent;
-  color: var(--g-fg-2);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color var(--g-dur-micro) var(--g-ease),
-    color var(--g-dur-micro) var(--g-ease);
-}
-
-.settings-back svg {
-  flex: none;
-  color: var(--g-fg-3);
-}
-
-.settings-sidebar h2 {
-  margin: var(--g-space-24) var(--g-space-12) var(--g-space-8);
-  color: var(--g-fg-1);
-  font-size: var(--g-text-heading);
-  line-height: var(--g-leading-heading);
-  font-weight: 600;
-}
-
-.settings-sidebar nav {
-  display: grid;
-  gap: var(--g-space-2);
-}
-
-.settings-sidebar nav button {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: 32px;
-  padding: 0 var(--g-space-8) 0 var(--g-space-12);
-  border: 0;
-  border-radius: var(--g-radius-8);
-  background-color: transparent;
-  color: var(--g-fg-2);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color var(--g-dur-micro) var(--g-ease),
-    color var(--g-dur-micro) var(--g-ease);
-}
-
-.settings-sidebar nav button svg {
-  flex: none;
-  color: var(--g-fg-3);
-}
-
-@media (hover: hover) {
-  .settings-back:hover,
-  .settings-sidebar nav button:hover {
-    background-color: var(--g-surface-2);
-    color: var(--g-fg-1);
-  }
-}
-
-/* The active page: ink, 500 and a 2px rail on the row's left edge. */
-.settings-sidebar nav button[aria-current] {
-  color: var(--g-fg-1);
-  font-weight: 500;
-}
-
-.settings-sidebar nav button[aria-current]::before {
-  content: "";
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 2px;
-  background-color: var(--g-fg-1);
-}
-
-.settings-sidebar nav hr {
-  width: calc(100% - 24px);
-  height: 1px;
-  margin: var(--g-space-8) var(--g-space-12);
-  border: 0;
-  background-color: var(--g-line);
-}
-
-.settings-identity {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--g-space-8);
-  margin-top: auto;
-  padding: var(--g-space-16) var(--g-space-12) 0;
-}
-
-.settings-identity > span:last-child {
-  color: var(--g-fg-3);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-}
-
 /* --------------------------------------------------------------------------- pane */
 
 .settings-main {
@@ -146,9 +27,9 @@
   min-width: 0;
   margin: var(--g-space-8) var(--g-space-8) var(--g-space-8) 0;
   overflow: auto;
-  border: 1px solid var(--g-line);
   border-radius: var(--g-radius-12);
   background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
 }
@@ -164,12 +45,8 @@
   padding: var(--g-space-48) var(--g-space-40) var(--g-space-64);
 }
 
-.settings-content > header {
-  margin-bottom: var(--g-space-32);
-}
-
 .settings-content h1 {
-  margin: 0;
+  margin: 0 0 var(--g-space-24);
   color: var(--g-fg-1);
   font-size: var(--g-text-title);
   line-height: var(--g-leading-title);
@@ -181,87 +58,228 @@
   outline: none;
 }
 
-.settings-content :where(header) > p {
-  margin: var(--g-space-4) 0 0;
+/* About's title: the logo, the name and the version in mono. */
+.settings-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-16);
+  margin-bottom: var(--g-space-24);
+}
+
+.settings-identity > svg {
+  flex: none;
+  color: var(--g-fg-1);
+}
+
+.settings-identity h1 {
+  margin: 0;
+}
+
+.settings-identity p {
+  margin: 0;
   color: var(--g-fg-3);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-ligatures: none;
 }
 
 /* ------------------------------------------------------------- groups and rows */
 
-.settings-section {
-  margin-bottom: var(--g-space-32);
+/* A group (X Money): an optional heading and one short line, then the well. */
+.settings-section + .settings-section,
+.settings-section + :is(.settings-error, .settings-footnote) + .settings-section {
+  margin-top: var(--g-space-32);
 }
 
-.account-card + .settings-section,
-.settings-section + .account-card {
-  margin-top: var(--g-space-16);
-}
-
-.account-panel > .settings-section > .g-button {
-  margin-top: var(--g-space-16);
-}
-
-.settings-section > h2 {
-  margin: 0 0 var(--g-space-8);
+.settings-section > h2,
+.settings-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-height: 28px;
+  margin: 0;
   color: var(--g-fg-1);
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 500;
+}
+
+.settings-heading > :is(h2, h3) {
+  flex: 1;
+  margin: 0;
+  font: inherit;
+}
+
+.settings-lead {
+  max-width: 600px;
+  margin: var(--g-space-4) 0 0;
+  color: var(--g-fg-3);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .settings-group {
   position: relative;
+  margin: var(--g-space-12) 0 0;
+  padding: 0;
   overflow: hidden;
+  list-style: none;
   border-radius: var(--g-radius-12);
   background-color: var(--g-surface-2);
 }
 
-.settings-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--g-space-24);
-  min-height: 56px;
-  padding: var(--g-space-12) var(--g-space-16);
+.settings-group:empty {
+  display: none;
 }
 
-/* Separators sit on hairlines inset to the text start. */
-.settings-row + .settings-row::before,
-.settings-shortcuts > div + div::before {
+.settings-section > .settings-group:first-child,
+.settings-content > .settings-group:first-child,
+h1 + .settings-group {
+  margin-top: 0;
+}
+
+/*
+ * A row: the label and description at left, one control at right. Anything else in the row (a
+ * form, a list, a notice) spans both columns under them.
+ */
+.settings-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--g-space-24);
+  row-gap: var(--g-space-12);
+  min-height: 56px;
+  box-sizing: border-box;
+  padding: var(--g-space-12) var(--g-space-16);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.settings-row > .settings-span {
+  grid-column: 1 / -1;
+  padding-left: var(--settings-indent, 0);
+}
+
+/* Under a row led by a 16px icon or a 32px badge, what opens lines up with the label, not the icon. */
+.settings-row:has(> .settings-row-text > svg:first-child) {
+  --settings-indent: calc(var(--g-space-16) + var(--g-space-12));
+}
+
+.settings-row:has(> .settings-row-text > .account-badge) {
+  --settings-indent: calc(var(--g-space-32) + var(--g-space-12));
+}
+
+/* Hairlines between rows, inset 16px on both sides (X Money). */
+.settings-group > * + *::before {
   content: "";
   position: absolute;
   top: 0;
-  right: 0;
+  right: 16px;
   left: 16px;
   height: 1px;
   background-color: var(--g-line);
 }
 
-.settings-row > div {
+.settings-group > * {
+  position: relative;
+}
+
+.settings-row-text {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
   min-width: 0;
 }
 
-.settings-row strong {
+.settings-row-text > div {
+  min-width: 0;
+}
+
+.settings-row-text > svg {
+  flex: none;
+  color: var(--g-fg-3);
+}
+
+.settings-row strong,
+.settings-row-label {
   display: block;
+  margin: 0;
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
-.settings-row p {
-  margin: 0;
+.settings-row-text p,
+.settings-row-text small {
+  display: block;
+  margin: var(--g-space-2) 0 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   overflow-wrap: anywhere;
 }
 
-.settings-row > .g-button {
-  flex-shrink: 0;
+.settings-row > .g-button,
+.settings-row > .settings-control {
+  justify-self: end;
+}
+
+/* A whole row that opens something (X Money's chevron rows). */
+.settings-link {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
+  width: 100%;
+  min-height: 56px;
+  padding: var(--g-space-12) var(--g-space-16);
+  border: 0;
+  background-color: transparent;
+  color: var(--g-fg-1);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--g-dur-micro) var(--g-ease);
+}
+
+.settings-link > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-link > svg {
+  flex: none;
+  color: var(--g-fg-3);
+}
+
+@media (hover: hover) {
+  .settings-link:hover:not(:disabled) {
+    background-color: var(--g-surface-3);
+  }
+}
+
+.settings-link:active:not(:disabled) {
+  background-color: var(--g-surface-4);
+  transition-duration: 0ms;
+}
+
+.settings-link:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: -2px;
+  border-radius: var(--g-radius-12);
+}
+
+.settings-link:disabled {
+  color: var(--g-fg-4);
+  cursor: not-allowed;
 }
 
 .settings-mono {
@@ -269,28 +287,21 @@
   font-variant-ligatures: none;
 }
 
-.settings-path {
-  margin: 0;
-  padding: 0 var(--g-space-16) var(--g-space-16);
-  color: var(--g-fg-3);
-  font-family: var(--g-mono);
-  font-size: var(--g-text-meta);
-  line-height: var(--g-leading-meta);
-  overflow-wrap: anywhere;
-}
-
-.settings-note,
 .settings-footnote {
-  margin: var(--g-space-8) 0 0;
+  margin: var(--g-space-12) 0 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   overflow-wrap: anywhere;
 }
 
+/* A quiet line inside a row, under its label. */
 .settings-note {
   margin: 0;
-  padding: 0 var(--g-space-16) var(--g-space-16);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
 }
 
 /* A strong segmented control on native radios: one white pill marks the choice (4.3). */
@@ -342,8 +353,10 @@
     color var(--g-dur-fast) var(--g-ease);
 }
 
-.settings-segmented label:hover input:not(:checked) + span {
-  color: var(--g-fg-1);
+@media (hover: hover) {
+  .settings-segmented label:hover input:not(:checked) + span {
+    color: var(--g-fg-1);
+  }
 }
 
 .settings-segmented input:checked + span {
@@ -356,6 +369,137 @@
   outline-offset: 2px;
 }
 
+/* ------------------------------------------------------------------------ fields */
+
+/* A field: the label above in 14/20 500, help under the input in 12/16 (4.2). */
+.settings-field {
+  display: grid;
+  gap: var(--g-space-8);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.settings-form {
+  display: grid;
+  gap: var(--g-space-16);
+  justify-items: start;
+}
+
+.settings-form > *,
+.settings-form > .settings-field {
+  margin: 0;
+}
+
+.settings-form > :is(.settings-field, .g-input, .g-select, .g-textarea, label, .settings-well) {
+  justify-self: stretch;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-space-8);
+}
+
+/* Square white checkboxes with a black check, as in the chat (shell.css draws the same). */
+:is(.settings-shell, .locked-profile) input[type="checkbox"]:not([role="switch"]) {
+  flex: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin: var(--g-space-2) 0 0;
+  border: 1px solid var(--g-line-strong);
+  border-radius: var(--g-radius-4);
+  background-color: var(--g-surface-1);
+  background-position: center;
+  background-repeat: no-repeat;
+  appearance: none;
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-fast) var(--g-ease),
+    border-color var(--g-dur-fast) var(--g-ease);
+}
+
+:is(.settings-shell, .locked-profile) input[type="checkbox"]:not([role="switch"]):checked {
+  border-color: var(--g-primary);
+  background-color: var(--g-primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='%23000' stroke-width='1.75'%3E%3Cpath d='m2 5.25 2 2 4-4.5'/%3E%3C/svg%3E");
+}
+
+:is(.settings-shell, .locked-profile) input[type="checkbox"]:not([role="switch"]):disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+:is(.settings-shell, .locked-profile) input[type="checkbox"]:not([role="switch"]):focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+/* A consent: the checkbox and its sentence. */
+.settings-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-space-8);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+/* The shell draws dialog checkboxes with no margin; keep the box on the sentence's first line. */
+.g-dialog .settings-check > input[type="checkbox"]:not([role="switch"]) {
+  margin-top: var(--g-space-2);
+}
+
+/* Machine data the person compares or keeps: a well one step below the row. */
+.settings-well {
+  display: block;
+  box-sizing: border-box;
+  margin: 0;
+  padding: var(--g-space-12) var(--g-space-16);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+  color: var(--g-fg-1);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  font-variant-ligatures: none;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* Quiet disclosures inside a row; shell.css draws their turning chevron. */
+.settings-disclosure > summary {
+  min-height: 24px;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .settings-disclosure > summary:hover {
+    color: var(--g-fg-1);
+  }
+}
+
+.settings-disclosure > summary:focus-visible {
+  border-radius: var(--g-radius-4);
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+.settings-disclosure[open] > summary {
+  margin-bottom: var(--g-space-8);
+}
+
 /* ---------------------------------------------------------------------- shortcuts */
 
 .settings-shortcuts {
@@ -363,12 +507,12 @@
 }
 
 .settings-shortcuts > div {
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--g-space-16);
   min-height: 44px;
+  box-sizing: border-box;
   padding: var(--g-space-8) var(--g-space-16);
 }
 
@@ -393,7 +537,6 @@
 .settings-download {
   display: grid;
   gap: var(--g-space-8);
-  padding: 0 var(--g-space-16) var(--g-space-16);
   color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
@@ -425,41 +568,23 @@
   background-color: var(--g-fg-1);
 }
 
-.settings-notes {
-  padding: 0 var(--g-space-16) var(--g-space-16);
+.settings-notes p {
+  margin: 0;
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-}
-
-.settings-notes summary {
-  color: var(--g-fg-1);
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.settings-notes p {
-  margin: var(--g-space-8) 0 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
+/* Install and restart: the question, its consequence, and the two answers, right-aligned. */
 .settings-confirm {
-  position: relative;
-  padding: var(--g-space-16);
+  display: grid;
+  gap: var(--g-space-4);
+  padding: var(--g-space-12) var(--g-space-16);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-3);
   color: var(--g-fg-1);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-}
-
-.settings-confirm::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 16px;
-  height: 1px;
-  background-color: var(--g-line);
 }
 
 .settings-confirm strong {
@@ -467,7 +592,7 @@
 }
 
 .settings-confirm p {
-  margin: var(--g-space-4) 0 var(--g-space-12);
+  margin: 0;
   color: var(--g-fg-2);
 }
 
@@ -476,20 +601,22 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--g-space-8);
+  margin-top: var(--g-space-8);
 }
 
 /* ------------------------------------------------------------------------ errors */
 
 /* A failed step: a well with a red edge, the reason, and what to do (6.8). */
 .settings-error {
-  margin: var(--g-space-16) 0;
+  margin: var(--g-space-16) 0 0;
   padding: var(--g-space-12) var(--g-space-16);
-  border-left: 2px solid var(--g-red);
-  border-radius: 0 var(--g-radius-8) var(--g-radius-8) 0;
+  border-radius: var(--g-radius-8);
   background-color: var(--g-surface-2);
+  box-shadow: inset 2px 0 0 var(--g-red);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 
@@ -497,16 +624,40 @@
   margin: 0;
 }
 
+.settings-error > .g-button {
+  margin-top: var(--g-space-12);
+}
+
+/* Inside a row the error is one red line, not another well. */
+.settings-row .settings-error,
+.g-dialog .settings-error {
+  margin: 0;
+  padding: 0;
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--g-red);
+}
+
+.settings-row .settings-error > .g-button,
+.g-dialog .settings-error > .g-button {
+  margin-top: var(--g-space-8);
+}
+
+/* The reason under an invalid field, in 12/16 red (4.2). */
+.settings-field-error {
+  margin: 0;
+  color: var(--g-red);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
 .settings-alert {
-  margin: var(--g-space-8) 0 0;
+  margin: 0;
   color: var(--g-red);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   overflow-wrap: anywhere;
-}
-
-.settings-error > .g-button {
-  margin-top: var(--g-space-8);
 }
 
 /* ------------------------------------------------------------------------ notices */
@@ -545,20 +696,128 @@
   overflow-wrap: anywhere;
 }
 
+/* ------------------------------------------------------------------------ sidebar */
+
+.settings-sidebar {
+  position: relative;
+  display: flex;
+  flex: 0 0 var(--g-app-sidebar);
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--ui-titlebar-height) var(--g-space-12) var(--g-space-16);
+}
+
+.settings-back,
+.settings-sidebar nav button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--g-space-8);
+  border: 0;
+  border-radius: var(--g-radius-8);
+  background-color: transparent;
+  color: var(--g-fg-2);
+  font-family: var(--g-sans);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease);
+}
+
+.settings-back svg,
+.settings-sidebar nav button svg {
+  flex: none;
+  color: var(--g-fg-3);
+  transition: color var(--g-dur-micro) var(--g-ease);
+}
+
+.settings-nav-label {
+  flex: 1;
+}
+
+.settings-sidebar h2 {
+  margin: var(--g-space-24) var(--g-space-8) var(--g-space-8);
+  color: var(--g-fg-1);
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 600;
+}
+
+.settings-sidebar nav {
+  display: grid;
+  gap: var(--g-space-2);
+}
+
+@media (hover: hover) {
+  .settings-back:hover,
+  .settings-sidebar nav button:hover {
+    background-color: var(--g-surface-2);
+    color: var(--g-fg-1);
+  }
+
+  .settings-back:hover svg,
+  .settings-sidebar nav button:hover svg {
+    color: var(--g-fg-2);
+  }
+}
+
+.settings-back:active,
+.settings-sidebar nav button:active {
+  background-color: var(--g-surface-3);
+  transition-duration: 0ms;
+}
+
+.settings-back:focus-visible,
+.settings-sidebar nav button:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: -2px;
+}
+
+/* The open page: Grok's filled pill, ink and 500. */
+.settings-sidebar nav button[aria-current] {
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.settings-sidebar nav button[aria-current] svg {
+  color: var(--g-fg-1);
+}
+
+.settings-sidebar nav hr {
+  width: calc(100% - 16px);
+  height: 1px;
+  margin: var(--g-space-8);
+  border: 0;
+  background-color: var(--g-line);
+}
+
 /* ------------------------------------------------------------------------ narrow */
 
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .settings-sidebar {
-    flex-basis: 200px;
+    flex-basis: 208px;
   }
 
   .settings-content {
     padding: var(--g-space-40) var(--g-space-24) var(--g-space-48);
   }
+}
 
+@media (max-width: 720px) {
   .settings-row {
-    flex-wrap: wrap;
-    gap: var(--g-space-12);
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-row > .g-button,
+  .settings-row > .settings-control {
+    justify-self: start;
   }
 }
 
