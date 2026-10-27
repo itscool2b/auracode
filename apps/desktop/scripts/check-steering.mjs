@@ -123,7 +123,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   for (const [engine, browserType] of Object.entries({ chromium, webkit })) {
     const browser = await browserType.launch();
     try {
-      await checkSteering(browser, process.env.ORBIT_URL ?? "http://localhost:1426", out, engine);
+      await checkSteering(browser, process.env.CHECK_URL ?? "http://localhost:1426", out, engine);
       console.log(
         `${engine}: qualified steering, exact turn, delivery states, draft retention and Stop passed`,
       );

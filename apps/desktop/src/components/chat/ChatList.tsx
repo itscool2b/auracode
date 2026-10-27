@@ -22,7 +22,7 @@ export function projectName(folder: string): string {
   return parts[parts.length - 1] ?? folder;
 }
 
-/** The project tray shares the selected Orbit frame, with live attention and folder state. */
+/** The sidebar's projects and chats, with live attention and folder state. */
 export function ChatList({
   active = true,
   chats,

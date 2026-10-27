@@ -136,7 +136,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
     const browser = await launcher.launch();
     try {
-      await checkQuestions(browser, process.env.ORBIT_URL ?? "http://127.0.0.1:1468", out, engine);
+      await checkQuestions(browser, process.env.CHECK_URL ?? "http://127.0.0.1:1468", out, engine);
       console.log(
         engine +
           ": question docking, keyboard answers, pending/error/withdraw/reattach and draft retention passed",

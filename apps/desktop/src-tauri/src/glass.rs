@@ -5,7 +5,7 @@
 //! | macOS 26+ | Liquid Glass (regular), vibrancy listed as Tauri's fallback | transparent |
 //! | macOS 13.3 (the oldest the bundle installs on) to 15 | vibrancy (`UnderWindowBackground`, following system appearance) | transparent |
 //! | Windows 11 (build 22000+) | Mica (following system appearance) | transparent |
-//! | Windows 10, Linux, anything else | none: the UI paints its opaque Orbit tray | opaque |
+//! | Windows 10, Linux, anything else | none: the UI paints its opaque Graphite frame | opaque |
 //! | `AURACODE_NO_GLASS=1` | none (the power spike's baseline) | opaque |
 //!
 //! Opaque is the fallback because a transparent window with no material behind it shows whatever

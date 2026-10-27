@@ -21,7 +21,7 @@ const { values } = parseArgs({
   options: { server: { type: "string" }, engines: { type: "string", default: "chromium,webkit" } },
 });
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const out = resolve(app, "../../target/orbit-browser");
+const out = resolve(app, "../../target/chat-browser");
 const url = values.server ?? "http://127.0.0.1:1457";
 const require = createRequire(import.meta.url);
 let server;
@@ -48,7 +48,7 @@ async function inspect(engine, launcher) {
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     await context.addInitScript(() => {
-      window.__orbitFrames = 0;
+      window.__chatFrames = 0;
       Object.defineProperty(navigator, "clipboard", {
         configurable: true,
         value: {
@@ -61,7 +61,7 @@ async function inspect(engine, launcher) {
       const request = window.requestAnimationFrame.bind(window);
       window.requestAnimationFrame = (callback) =>
         request((time) => {
-          window.__orbitFrames++;
+          window.__chatFrames++;
           callback(time);
         });
     });
@@ -178,11 +178,11 @@ async function inspect(engine, launcher) {
         // Reduced motion and settled views must consume no continuous animation frames.
         await page.waitForTimeout(100);
         await page.evaluate(() => {
-          window.__orbitFrames = 0;
+          window.__chatFrames = 0;
         });
         await page.waitForTimeout(250);
         assert.equal(
-          await page.evaluate(() => window.__orbitFrames),
+          await page.evaluate(() => window.__chatFrames),
           0,
           `${mode}: frames under reduced motion`,
         );
@@ -579,10 +579,10 @@ async function inspect(engine, launcher) {
     await page.locator('[data-test-phase="live"]').waitFor();
     await page.waitForTimeout(200);
     await page.evaluate(() => {
-      window.__orbitFrames = 0;
+      window.__chatFrames = 0;
     });
     await page.waitForTimeout(250);
-    assert.ok(await page.evaluate(() => window.__orbitFrames > 0), "active marks never animate");
+    assert.ok(await page.evaluate(() => window.__chatFrames > 0), "active marks never animate");
     // Every live indicator: the thinking marks, the sidebar's running loader and the dock's mark.
     const live =
       '.g-agent-mark:is([data-state="thinking"], [data-state="streaming"], [data-state="tool"]), .g-loader';
@@ -595,11 +595,11 @@ async function inspect(engine, launcher) {
     });
     await page.waitForTimeout(150);
     await page.evaluate(() => {
-      window.__orbitFrames = 0;
+      window.__chatFrames = 0;
     });
     await page.waitForTimeout(250);
     assert.equal(
-      await page.evaluate(() => window.__orbitFrames),
+      await page.evaluate(() => window.__chatFrames),
       0,
       "offscreen marks still animate",
     );
@@ -610,11 +610,11 @@ async function inspect(engine, launcher) {
     await page.evaluate(() => {
       Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
       document.dispatchEvent(new Event("visibilitychange"));
-      window.__orbitFrames = 0;
+      window.__chatFrames = 0;
     });
     await page.waitForTimeout(250);
     assert.equal(
-      await page.evaluate(() => window.__orbitFrames),
+      await page.evaluate(() => window.__chatFrames),
       0,
       "hidden document still animates",
     );

@@ -89,7 +89,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
         viewport: { width: 1440, height: 900 },
         reducedMotion: "reduce",
       });
-      const url = process.env.ORBIT_URL ?? "http://127.0.0.1:1438";
+      const url = process.env.CHECK_URL ?? "http://127.0.0.1:1438";
       await context.route("**/*", (route) =>
         new URL(route.request().url()).origin === new URL(url).origin
           ? route.continue()

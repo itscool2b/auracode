@@ -204,7 +204,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   for (const [engine, browserType] of Object.entries({ chromium, webkit })) {
     const browser = await browserType.launch();
     try {
-      await checkAccount(browser, process.env.ORBIT_URL ?? "http://localhost:1426", out, engine);
+      await checkAccount(browser, process.env.CHECK_URL ?? "http://localhost:1426", out, engine);
       console.log(`${engine}: account setup and device review passed`);
     } finally {
       await browser.close();

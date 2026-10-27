@@ -126,7 +126,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
         reducedMotion: "reduce",
       });
       const page = await context.newPage();
-      await checkDataTransfer(page, process.env.ORBIT_URL ?? "http://127.0.0.1:1438", out, engine);
+      await checkDataTransfer(page, process.env.CHECK_URL ?? "http://127.0.0.1:1438", out, engine);
       console.log(`${engine}: Local import and readable chat export passed`);
     } finally {
       await browser.close();

@@ -13,12 +13,12 @@ credential inspection or model prompt is triggered by opening setup or Agents. E
 maintenance buttons use the existing Rust vendor commands; Sign in opens the existing terminal sheet
 whose Start action is separately explicit.
 
-The dark mission checklist and black globe panel follow the inspected original
-[Grok Console flow](https://mobbin.com/flows/0a988ace-d6ce-4fcb-a1bd-5e1db4b71236). Globe rendering is
-shared with the chosen Orbit design reference. Agent rows resolve in place; narrow panels retain the
-globe geometry while omitting labels that would clip. Keyboard focus moves to each step's heading.
-Enter advances except inside controls, editable content and dialogs. Motion preferences also stop
-the shared live Orbit clock, rather than merely hiding its animation with CSS.
+The dark checklist and its side panel follow the inspected original
+[Grok Console flow](https://mobbin.com/flows/0a988ace-d6ce-4fcb-a1bd-5e1db4b71236). The panel is
+Graphite's dither field (docs/design/visual-language.md, 4.15 and 6.17). Agent rows resolve in place;
+narrow panels omit labels that would clip. Keyboard focus moves to each step's heading. Enter
+advances except inside controls, editable content and dialogs. Motion preferences also stop the
+shared frame clock, rather than merely hiding its animation with CSS.
 
 Project selection reuses Rust workspace validation. Folder drops only select a path; Add project
 performs the write. A project created before a setup-save failure is reused on retry. Existing

@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p .",
     "test": "node --test scripts/build-env.test.mjs && vitest run",
-    "check:orbit": "node scripts/check-orbit.mjs",
+    "check:chat": "node scripts/check-chat.mjs",
     "check:setup": "node scripts/check-setup.mjs",
     "check:settings": "node scripts/check-settings.mjs",
     "tauri": "tauri",
