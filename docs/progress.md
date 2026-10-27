@@ -3265,3 +3265,55 @@ overview sheet of every preview mode is the ignored
 Library and setup actions fixtures, which have their own pages instead of `?preview=` routes (the
 Library still has 11 findings per view there). Not done: the hand walkthrough of the built app and
 the Windows and macOS CI run.
+
+### M2b and M2c gaps (2026-10-27)
+
+Branch `m2bc-gaps` (from `app-redesign`) closes the gaps left after the 2b integration. Each item
+is its own commit.
+
+- **Move into a busy folder:** Chat options offers the destination project's folders. A folder
+  with other active chats shows New chat's warning and an explicit checkbox; Move chat waits for
+  it, `allow_busy_folder` is true only when the warning shows and is checked, and the folder is
+  checked again right before the move (`lib/chatMove.ts`). Dialog sections draw their hairline
+  inset.
+- **Notification click target:** `navigationTarget` checks the ID `shell_take_navigation` returns
+  against the chat list and the workspace before anything is selected: it waits while they load,
+  opens an archived chat with the archived view and ignores an unknown ID.
+- **Queue:** each queued row has Edit (inline; Enter saves, Esc cancels without interrupting the
+  turn), Move up and Move down beside Remove, keyboard reachable, with focus following a moved
+  row. Rust gains `chat_queued_text`, `chat_edit_queued` and `chat_move_queued`: an edit keeps the
+  prompt's attachments, mentions, place and hold; a move rewrites the stored times so a reopened
+  chat keeps the order; the prompt a checkpoint is being saved for can no longer change.
+- **Steer:** only Codex steers. For Claude Code and Pi a message typed during a turn shows "After
+  this turn" where Steer would be, never a dead control; the Queue disc stays what Enter does. The
+  Steer and Queue pill now holds 24px segments 4px in, on the grid.
+- **Shortcuts:** Ctrl+1 to Ctrl+9 (Cmd on macOS) open the Nth chat the sidebar lists (folded
+  projects count none; Needs you rows are not counted twice), never while composing or behind a
+  dialog; the first nine rows carry `aria-keyshortcuts`, and Settings lists the keys with Ctrl+N.
+- **Settings:** General has New chats (default agent, its model once that agent has listed models
+  in this run, and autonomy with Full auto the default), While agents work (Notifications, Keep
+  awake, Keep running in the tray or menu bar) and App. The values live in the profile's setup
+  preferences (older files read the defaults) and Rust applies them at startup, after a profile
+  switch and on every save: the session manager starts never-started chats with the default
+  autonomy and model (a project's model and a saved session win), the native shell skips
+  notifications, releases or takes keep-awake at once, and closes through the guarded quit path
+  when the tray switch is off. New chat selects the default agent once detection says it can run.
+- **Library:** the three-pane frame's ring and dividers are inset, the views and items panes are
+  200 and 360px, row hairlines sit over each 56px row, and the item detail and copy controls are on
+  the grid. `check-layout.mjs` now opens fixture pages by name and walks `library.html`, an opened
+  item and Copy history, plus Chat options, the queue and its editor, both typed composer states
+  and General with a default agent.
+
+Verified locally on Windows: `pnpm lint` (Biome's 37 warnings, none new), `pnpm typecheck` and
+`pnpm test` (root scripts 22, ui 276, desktop 5 node and 377 with 19 skipped, design lab 352,
+web 4); `cargo test -p aura-core --lib --features account-sync` (518) and `cargo test -p
+auracode-desktop --lib` (205, bindings regenerated); `cargo clippy -p aura-core -p
+auracode-desktop --lib --tests -- -D warnings` and `cargo fmt --check`. In Chromium and WebKit:
+`check-layout` (192 of 192 views clean), `check-chat`, `check-settings` (with the checks it runs,
+`check-steering` among them), `check-library`, `check-setup`, `check-setup-actions`,
+`check-chat-auth`, `check-agent-installations`, `check-config-recovery`,
+`check-folder-resolution`, `check-profile-status` (its first run's browser crashed, the rerun
+passed), `check-repository-publication`, `check-workspace-removal`, `check-account-reset` and
+`check-account-vault`. Sheets are the ignored `target/design-research/sheets/app-gaps-*.png`. Not
+done: the hand walkthrough of the built app, the WebDriver smoke, the Windows and macOS CI run, and
+the installed-app checks of notifications, tray closing and keep-awake, which have only unit tests.

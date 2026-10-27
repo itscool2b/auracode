@@ -6,7 +6,7 @@ import { AgentsScreen } from "../components/setup/AgentsScreen";
 import { Onboarding } from "../components/setup/Onboarding";
 import { AppStore } from "../lib/chat/appStore";
 import { FakeTransport } from "../lib/chat/testing";
-import type { SetupApi } from "../lib/setup";
+import { DEFAULT_GENERAL, type SetupApi } from "../lib/setup";
 import { WorkspaceStore } from "../lib/workspace";
 
 const params = new URLSearchParams(location.search);
@@ -78,6 +78,7 @@ const initial: SetupSnapshot = {
     motion: "full",
     completed: false,
     first_project_id: null,
+    general: { ...DEFAULT_GENERAL },
   },
 };
 let stored: SetupSnapshot = JSON.parse(

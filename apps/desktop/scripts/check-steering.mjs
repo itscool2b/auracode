@@ -38,6 +38,19 @@ export async function checkSteering(browser, url, out, engine) {
     await delivery("unconfirmed").waitFor();
     await page.getByText("Keep this visible after recovery", { exact: true }).waitFor();
 
+    // An agent without steering (Claude Code here) says it takes the message after the turn.
+    await open("unsupported");
+    await input.fill("Then update the changelog");
+    await page.getByTestId("composer-after-turn").waitFor();
+    assert.equal(await steer.count(), 0);
+    assert.equal(
+      await page.getByRole("button", { name: "Queue message", exact: true }).isEnabled(),
+      true,
+    );
+    await settled(page);
+    assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+    await page.screenshot({ path: resolve(out, `${engine}-steering-after-turn.png`) });
+
     await open();
     await input.fill("Use the existing index");
     await steer.click();

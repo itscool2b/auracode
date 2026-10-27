@@ -55,7 +55,7 @@ use super::normalize::{
 };
 use super::policy::{Decision, decide};
 use super::spawner::{ProcessBook, SessionSpawner};
-use super::{ChatState, FrameSink, SessionError, Shared, SinkGone};
+use super::{ChatState, FrameSink, SessionError, Shared, SinkGone, lock};
 use crate::chatstore::blobs::BLOB_UNSAVED;
 use crate::chatstore::rows::{ReplyHasher, turn_status};
 use crate::chatstore::{
@@ -176,6 +176,23 @@ pub(crate) enum ChatMsg {
         prompt_id: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
+    /// The words of a queued prompt as typed, for editing it in place.
+    QueuedText {
+        prompt_id: String,
+        reply: oneshot::Sender<Result<String, SessionError>>,
+    },
+    /// Replaces a queued prompt's words; answers the queue after the change.
+    EditQueued {
+        prompt_id: String,
+        text: String,
+        reply: oneshot::Sender<Result<Vec<QueuedPrompt>, SessionError>>,
+    },
+    /// Moves a queued prompt to `index` (0 goes next); answers the queue after the change.
+    MoveQueued {
+        prompt_id: String,
+        index: usize,
+        reply: oneshot::Sender<Result<Vec<QueuedPrompt>, SessionError>>,
+    },
     ResumeQueue {
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
@@ -256,6 +273,10 @@ impl ChatMsg {
                 drop(reply.send(Err(error)));
             }
             ChatMsg::Blob { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::QueuedText { reply, .. } => drop(reply.send(Err(error))),
+            ChatMsg::EditQueued { reply, .. } | ChatMsg::MoveQueued { reply, .. } => {
+                drop(reply.send(Err(error)));
+            }
             ChatMsg::CancelQueued { reply, .. }
             | ChatMsg::ResumeQueue { reply }
             | ChatMsg::Interrupt { reply }
@@ -609,9 +630,11 @@ impl ChatActor {
             );
         }
         let spec = shared.deps.detector.spec(&chat.agent_id);
+        let defaults = lock(&shared.new_chat_defaults).clone();
         let autonomy = agent_session
             .as_ref()
-            .map_or_else(Autonomy::default, |session| session.autonomy);
+            .map_or(defaults.autonomy, |session| session.autonomy);
+        let initial_model = initial_model.or_else(|| defaults.model_for(&chat.agent_id));
         let desired = initial_options(agent_session.as_ref(), initial_model);
         let store = Arc::clone(&shared.deps.store);
         let replay_check = replay_check.filter(|_| {
@@ -967,6 +990,28 @@ impl ChatActor {
                 let result = self.cancel_queued(&prompt_id);
                 drop(reply.send(result));
             }
+            ChatMsg::QueuedText { prompt_id, reply } => {
+                let result = self.waiting(&prompt_id).and_then(|index| {
+                    editable(&self.queue[index]).map(|(text, _)| text.to_owned())
+                });
+                drop(reply.send(result));
+            }
+            ChatMsg::EditQueued {
+                prompt_id,
+                text,
+                reply,
+            } => {
+                let result = self.edit_queued(&prompt_id, text);
+                drop(reply.send(result));
+            }
+            ChatMsg::MoveQueued {
+                prompt_id,
+                index,
+                reply,
+            } => {
+                let result = self.move_queued(&prompt_id, index);
+                drop(reply.send(result));
+            }
             ChatMsg::ResumeQueue { reply } => {
                 let result = self.require_workspace().map(|()| self.resume_queue());
                 drop(reply.send(result));
@@ -1294,8 +1339,10 @@ impl ChatActor {
             self.continuation = load.continuation;
             self.replay_check = load.replay_check.filter(|_| !self.continuation.as_ref().is_some_and(|value| value.force_fresh || value.native_start.fork));
             self.spec = self.shared.deps.detector.spec(&self.chat.agent_id);
-            self.autonomy = self.agent_session.as_ref().map_or_else(Autonomy::default, |session| session.autonomy);
-            self.desired = initial_options(self.agent_session.as_ref(), load.initial_model);
+            let defaults = lock(&self.shared.new_chat_defaults).clone();
+            self.autonomy = self.agent_session.as_ref().map_or(defaults.autonomy, |session| session.autonomy);
+            let initial_model = load.initial_model.or_else(|| defaults.model_for(&self.chat.agent_id));
+            self.desired = initial_options(self.agent_session.as_ref(), initial_model);
             self.autonomy_state = stopped_autonomy(self.autonomy, None);
             self.options.clear();
             self.commands.clear();
@@ -1564,6 +1611,101 @@ impl ChatActor {
         self.info_dirty = true;
         self.schedule_flush();
         Ok(())
+    }
+
+    /// The queue position of a prompt that still waits. The prompt a checkpoint is being saved for
+    /// is already on its way to the agent, so it can no longer change.
+    fn waiting(&self, prompt_id: &str) -> Result<usize, SessionError> {
+        if self
+            .checkpointing
+            .as_ref()
+            .is_some_and(|(id, _)| id == prompt_id)
+        {
+            return Err(SessionError::OptionInvalid(
+                "This message is already on its way to the agent.".into(),
+            ));
+        }
+        self.queue
+            .iter()
+            .position(|row| row.id == prompt_id)
+            .ok_or(SessionError::RequestNotPending)
+    }
+
+    /// Replaces the words of a queued prompt. Its attachments and mentions, its place in the queue
+    /// and whether it is held stay as they are.
+    fn edit_queued(
+        &mut self,
+        prompt_id: &str,
+        text: String,
+    ) -> Result<Vec<QueuedPrompt>, SessionError> {
+        let index = self.waiting(prompt_id)?;
+        let (_, context) = editable(&self.queue[index])?;
+        let display = format!("{text}{context}");
+        if display.trim().is_empty() {
+            return Err(SessionError::PromptEmpty);
+        }
+        let limit = self.shared.deps.limits.max_prompt_bytes;
+        if display.len() > limit {
+            return Err(SessionError::PromptTooLarge {
+                bytes: display.len(),
+                limit,
+            });
+        }
+        let row = &mut self.queue[index];
+        if let Some(PromptPart::Text { text: typed }) = row.parts.first_mut() {
+            *typed = text;
+        }
+        row.text = display;
+        let row = row.clone();
+        self.queue_op(Op::QueuePut(row));
+        self.info_dirty = true;
+        self.schedule_flush();
+        Ok(self.queued_prompts())
+    }
+
+    /// Moves a queued prompt to `index` (clamped to the end). The stored order follows: the rows'
+    /// times are reassigned in the new order, so a reopened chat sends them in the same order.
+    fn move_queued(
+        &mut self,
+        prompt_id: &str,
+        index: usize,
+    ) -> Result<Vec<QueuedPrompt>, SessionError> {
+        let from = self.waiting(prompt_id)?;
+        let to = index.min(self.queue.len().saturating_sub(1));
+        if from != to {
+            let row = self.queue.remove(from);
+            self.queue.insert(to, row);
+            let mut times: Vec<Millis> = self.queue.iter().map(|row| row.created_at).collect();
+            times.sort_unstable();
+            let mut previous: Option<Millis> = None;
+            let mut changed = Vec::new();
+            for (row, time) in self.queue.iter_mut().zip(times) {
+                let time = previous.map_or(time, |previous| time.max(previous.saturating_add(1)));
+                previous = Some(time);
+                if row.created_at != time {
+                    row.created_at = time;
+                    changed.push(row.clone());
+                }
+            }
+            for row in changed {
+                self.queue_op(Op::QueuePut(row));
+            }
+            self.info_dirty = true;
+            self.schedule_flush();
+        }
+        Ok(self.queued_prompts())
+    }
+
+    fn queued_prompts(&self) -> Vec<QueuedPrompt> {
+        self.queue
+            .iter()
+            .map(|row| QueuedPrompt {
+                prompt_id: row.id.clone(),
+                preview: cap_chars(row.text.clone(), PREVIEW_CHARS),
+                held: row.held,
+                created_at: row.created_at,
+            })
+            .collect()
     }
 
     fn require_workspace(&self) -> Result<(), SessionError> {
@@ -3064,6 +3206,17 @@ impl ChatActor {
                 self.schedule_flush();
             }
             DriverEvent::Options(options) => {
+                // Settings offers these as the agent's models for its default model.
+                if let Some(choices) = options.iter().find_map(|option| match &option.kind {
+                    ConfigKind::Select { choices, .. }
+                        if option.category == ConfigCategory::Model && !choices.is_empty() =>
+                    {
+                        Some(choices.clone())
+                    }
+                    _ => None,
+                }) {
+                    lock(&self.shared.reported_models).insert(self.chat.agent_id.clone(), choices);
+                }
                 self.options = options;
                 self.revision = self.revision.wrapping_add(1);
                 self.info_dirty = true;
@@ -4435,16 +4588,7 @@ impl ChatActor {
         ChatSnapshot {
             chat: self.summary(),
             session: self.session_info(),
-            queue: self
-                .queue
-                .iter()
-                .map(|row| QueuedPrompt {
-                    prompt_id: row.id.clone(),
-                    preview: cap_chars(row.text.clone(), PREVIEW_CHARS),
-                    held: row.held,
-                    created_at: row.created_at,
-                })
-                .collect(),
+            queue: self.queued_prompts(),
             open_turn_id: self.turn.as_ref().map(|turn| turn.id.clone()),
             usage: self.usage.clone(),
             limits: self.limits.clone(),
@@ -4459,6 +4603,24 @@ impl Drop for ChatActor {
     fn drop(&mut self) {
         self.cancel_checkpoint();
     }
+}
+
+/// A queued prompt's typed words and the context after them (attached files' text, image and mention
+/// lines). The composer always sends the typed words as the first part; a plain send has no parts.
+fn editable(row: &QueuedRow) -> Result<(&str, &str), SessionError> {
+    match row.parts.first() {
+        None => Ok((row.text.as_str(), "")),
+        Some(PromptPart::Text { text }) => row
+            .text
+            .strip_prefix(text.as_str())
+            .map(|context| (text.as_str(), context))
+            .ok_or_else(uneditable),
+        Some(_) => Err(uneditable()),
+    }
+}
+
+fn uneditable() -> SessionError {
+    SessionError::OptionInvalid("This message can't be edited. Remove it and send it again.".into())
 }
 
 fn initial_options(

@@ -1,11 +1,13 @@
 //! Small, profile-local setup preferences. No agent, account or credential data belongs here.
 //! The profile owner lock serializes processes; this store serializes commands within that owner.
+//! Settings' General page keeps its defaults for new chats and the native shell here too.
 
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use aura_protocol::Autonomy;
 use serde::{Deserialize, Serialize};
 
 use crate::fsutil::{quarantine_file, write_json_atomic};
@@ -41,6 +43,38 @@ pub struct SetupPreferences {
     pub motion: MotionPreference,
     pub completed: bool,
     pub first_project_id: Option<String>,
+    /// Files written before these settings existed read their defaults ([`fill_defaults`]).
+    pub general: GeneralPreferences,
+}
+
+/// Settings' General page: what new chats start with, and how auracode behaves while agents work
+/// in the background. Full auto stays the default; an agent's own restrictions still apply.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct GeneralPreferences {
+    /// The agent New chat selects first. `None`: the person picks each time.
+    pub default_agent: Option<String>,
+    /// The model new chats with `default_agent` start on. `None`: the agent's own default.
+    pub default_model: Option<String>,
+    pub default_autonomy: Autonomy,
+    /// Notify when a background chat finishes, fails or needs you.
+    pub notifications: bool,
+    /// Keep the computer from idle sleep while an agent works.
+    pub keep_awake: bool,
+    /// Closing the window keeps auracode running in the tray or menu bar.
+    pub close_to_tray: bool,
+}
+
+impl Default for GeneralPreferences {
+    fn default() -> Self {
+        Self {
+            default_agent: None,
+            default_model: None,
+            default_autonomy: Autonomy::FullAuto,
+            notifications: true,
+            keep_awake: true,
+            close_to_tray: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -54,11 +88,36 @@ pub struct SetupSnapshot {
 #[derive(Debug, Clone, Deserialize, Serialize, specta::Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SetupAction {
-    Visit { step: SetupStep },
-    Motion { value: MotionPreference },
-    Project { project_id: String },
+    Visit {
+        step: SetupStep,
+    },
+    Motion {
+        value: MotionPreference,
+    },
+    Project {
+        project_id: String,
+    },
     Finish,
     Restart,
+    /// Changing the agent clears the default model, which belongs to the previous agent.
+    DefaultAgent {
+        agent_id: Option<String>,
+    },
+    DefaultModel {
+        model: Option<String>,
+    },
+    DefaultAutonomy {
+        value: Autonomy,
+    },
+    Notifications {
+        enabled: bool,
+    },
+    KeepAwake {
+        enabled: bool,
+    },
+    CloseToTray {
+        enabled: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +138,7 @@ impl Default for Record {
                 motion: MotionPreference::Full,
                 completed: false,
                 first_project_id: None,
+                general: GeneralPreferences::default(),
             },
         }
     }
@@ -136,7 +196,7 @@ impl OnboardingStore {
                 {
                     return Err(SetupError::NewerVersion);
                 }
-                match serde_json::from_value::<Record>(value) {
+                match serde_json::from_value::<Record>(fill_defaults(value)) {
                     Ok(record) if record.version == VERSION => record,
                     _ => {
                         let moved = quarantine_file(&path)?;
@@ -199,9 +259,12 @@ impl OnboardingStore {
                 {
                     return Err(SetupError::NewerVersion);
                 }
-                let record: Record = serde_json::from_value(value).map_err(|_| {
-                    SetupError::Invalid("The encrypted setup record is invalid and was retained.")
-                })?;
+                let record: Record =
+                    serde_json::from_value(fill_defaults(value)).map_err(|_| {
+                        SetupError::Invalid(
+                            "The encrypted setup record is invalid and was retained.",
+                        )
+                    })?;
                 if record.version != VERSION {
                     return Err(SetupError::Invalid(
                         "The encrypted setup version is unsupported and was retained.",
@@ -230,6 +293,16 @@ impl OnboardingStore {
         }
         write_json_atomic(&self.path, record)?;
         Ok(())
+    }
+
+    /// The saved preferences, for the native shell and new chats. Unlike [`Self::snapshot`],
+    /// reading never marks the boot seen.
+    pub fn preferences(&self) -> SetupPreferences {
+        self.record
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .preferences
+            .clone()
     }
 
     /// Marks the boot seen only when the interface asks for setup, never in headless runs.
@@ -273,6 +346,37 @@ impl OnboardingStore {
                 next.preferences.step = SetupStep::Welcome;
                 next.preferences.completed = false;
             }
+            SetupAction::DefaultAgent { agent_id } => {
+                if let Some(agent) = &agent_id {
+                    identifier(agent, 128, "The agent identifier is invalid.")?;
+                }
+                let general = &mut next.preferences.general;
+                if general.default_agent != agent_id {
+                    general.default_model = None;
+                }
+                general.default_agent = agent_id;
+            }
+            SetupAction::DefaultModel { model } => {
+                if let Some(model) = &model {
+                    identifier(model, 256, "The model identifier is invalid.")?;
+                    if next.preferences.general.default_agent.is_none() {
+                        return Err(SetupError::Invalid(
+                            "Choose a default agent before its model.",
+                        ));
+                    }
+                }
+                next.preferences.general.default_model = model;
+            }
+            SetupAction::DefaultAutonomy { value } => {
+                next.preferences.general.default_autonomy = value;
+            }
+            SetupAction::Notifications { enabled } => {
+                next.preferences.general.notifications = enabled;
+            }
+            SetupAction::KeepAwake { enabled } => next.preferences.general.keep_awake = enabled,
+            SetupAction::CloseToTray { enabled } => {
+                next.preferences.general.close_to_tray = enabled;
+            }
         }
         next.preferences.revision = revision
             .checked_add(1)
@@ -289,6 +393,40 @@ impl OnboardingStore {
             notice: self.notice.clone(),
         }
     }
+}
+
+/// Supplies every General preference a saved file lacks (files from before those settings
+/// existed, or from before one was added) with its default, so the file still reads. The types
+/// keep every field required, which keeps the TypeScript bindings exact.
+fn fill_defaults(mut value: serde_json::Value) -> serde_json::Value {
+    let Some(preferences) = value
+        .get_mut("preferences")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return value;
+    };
+    let Ok(serde_json::Value::Object(defaults)) =
+        serde_json::to_value(GeneralPreferences::default())
+    else {
+        return value;
+    };
+    let general = preferences
+        .entry("general")
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    if let Some(general) = general.as_object_mut() {
+        for (key, default) in defaults {
+            general.entry(key).or_insert(default);
+        }
+    }
+    value
+}
+
+/// Agent and model identifiers are opaque, bounded and single-line.
+fn identifier(value: &str, limit: usize, message: &'static str) -> Result<(), SetupError> {
+    if value.is_empty() || value.len() > limit || value.chars().any(char::is_control) {
+        return Err(SetupError::Invalid(message));
+    }
+    Ok(())
 }
 
 fn read(path: &Path) -> Result<Option<serde_json::Value>, SetupError> {
@@ -391,6 +529,149 @@ mod tests {
         assert!(!restarted.completed);
         assert_eq!(restarted.first_project_id.as_deref(), Some("project"));
         assert_eq!(restarted.step, SetupStep::Welcome);
+    }
+
+    #[test]
+    fn general_preferences_default_to_full_auto_with_every_shell_service_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        let general = store.preferences().general;
+        assert_eq!(general, GeneralPreferences::default());
+        assert_eq!(general.default_autonomy, Autonomy::FullAuto);
+        assert!(general.notifications && general.keep_awake && general.close_to_tray);
+        assert_eq!(general.default_agent, None);
+        // Reading for the shell is not the interface asking for setup.
+        assert!(store.snapshot().unwrap().cold_start);
+    }
+
+    #[test]
+    fn general_preferences_are_saved_and_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        let actions = [
+            SetupAction::DefaultAgent {
+                agent_id: Some("codex".into()),
+            },
+            SetupAction::DefaultModel {
+                model: Some("gpt-5.5-codex".into()),
+            },
+            SetupAction::DefaultAutonomy {
+                value: Autonomy::Ask,
+            },
+            SetupAction::Notifications { enabled: false },
+            SetupAction::KeepAwake { enabled: false },
+            SetupAction::CloseToTray { enabled: false },
+        ];
+        for (revision, action) in actions.into_iter().enumerate() {
+            store.apply(revision as u32, action).unwrap();
+        }
+        let general = OnboardingStore::open(dir.path())
+            .unwrap()
+            .preferences()
+            .general;
+        assert_eq!(
+            general,
+            GeneralPreferences {
+                default_agent: Some("codex".into()),
+                default_model: Some("gpt-5.5-codex".into()),
+                default_autonomy: Autonomy::Ask,
+                notifications: false,
+                keep_awake: false,
+                close_to_tray: false,
+            }
+        );
+    }
+
+    #[test]
+    fn a_new_default_agent_clears_the_previous_agents_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        assert!(matches!(
+            store.apply(
+                0,
+                SetupAction::DefaultModel {
+                    model: Some("model".into())
+                }
+            ),
+            Err(SetupError::Invalid(_))
+        ));
+        store
+            .apply(
+                0,
+                SetupAction::DefaultAgent {
+                    agent_id: Some("codex".into()),
+                },
+            )
+            .unwrap();
+        store
+            .apply(
+                1,
+                SetupAction::DefaultModel {
+                    model: Some("model".into()),
+                },
+            )
+            .unwrap();
+        // Choosing the same agent again keeps its model; another agent clears it.
+        let same = store
+            .apply(
+                2,
+                SetupAction::DefaultAgent {
+                    agent_id: Some("codex".into()),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            same.preferences.general.default_model.as_deref(),
+            Some("model")
+        );
+        let other = store
+            .apply(
+                3,
+                SetupAction::DefaultAgent {
+                    agent_id: Some("claude".into()),
+                },
+            )
+            .unwrap();
+        assert_eq!(other.preferences.general.default_model, None);
+        for bad in [String::new(), "x".repeat(129), "line\nbreak".into()] {
+            assert!(matches!(
+                store.apply(
+                    4,
+                    SetupAction::DefaultAgent {
+                        agent_id: Some(bad)
+                    }
+                ),
+                Err(SetupError::Invalid(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn files_from_before_general_preferences_read_their_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("onboarding.json"),
+            br#"{"version":1,"boot_seen":true,"preferences":{"revision":3,"step":"project","motion":"reduced","completed":true,"first_project_id":null}}"#,
+        )
+        .unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        let snapshot = store.snapshot().unwrap();
+        assert!(snapshot.notice.is_none(), "an older file is not damaged");
+        assert_eq!(snapshot.preferences.motion, MotionPreference::Reduced);
+        assert_eq!(snapshot.preferences.general, GeneralPreferences::default());
+        // A file missing only some of them keeps what it has.
+        std::fs::write(
+            dir.path().join("onboarding.json"),
+            br#"{"version":1,"boot_seen":true,"preferences":{"revision":3,"step":"project","motion":"full","completed":true,"first_project_id":null,"general":{"notifications":false}}}"#,
+        )
+        .unwrap();
+        let general = OnboardingStore::open(dir.path())
+            .unwrap()
+            .preferences()
+            .general;
+        assert!(!general.notifications);
+        assert!(general.keep_awake && general.close_to_tray);
+        assert_eq!(general.default_autonomy, Autonomy::FullAuto);
     }
 
     #[test]

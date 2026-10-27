@@ -274,6 +274,12 @@ impl AppState {
         Ok(self.lease(manager))
     }
 
+    /// The active profile's setup preferences without a command lease, for reads the app makes on
+    /// its own (startup and profile switches apply Settings' General page). Never for changes.
+    pub(crate) fn setup_service(&self) -> Option<Arc<crate::onboarding::SetupService>> {
+        lock(&self.runtime).onboarding.clone()
+    }
+
     pub fn onboarding(
         &self,
     ) -> Result<ProfileLease<Arc<crate::onboarding::SetupService>>, AppError> {

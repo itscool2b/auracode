@@ -1612,13 +1612,14 @@ details.setup-install-review[open] > summary::before {
   padding-top: var(--g-space-8);
 }
 
+/* The section's hairline is drawn inset, so its content starts 16px down, on the grid. */
 .dialog-section {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--g-space-8);
   padding-top: var(--g-space-16);
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-line);
 }
 
 .dialog-section :is(p, .ui-field) {
@@ -1628,6 +1629,54 @@ details.setup-install-review[open] > summary::before {
 .dialog-section p {
   margin: 0;
   color: var(--g-fg-3);
+}
+
+/* The busy-folder warning in Chat options: New chat's well, one checkbox, nothing louder. */
+.chat-move-busy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-4);
+  width: 100%;
+  padding: var(--g-space-12) var(--g-space-16);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.chat-move-busy strong {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+/* Volt: the one thing to look at before moving. */
+.chat-move-busy strong::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background-color: var(--g-volt);
+}
+
+.chat-move-busy-names {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.chat-move-busy label {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  margin-top: var(--g-space-4);
+  color: var(--g-fg-1);
+  cursor: pointer;
 }
 
 .chat-project-folders {

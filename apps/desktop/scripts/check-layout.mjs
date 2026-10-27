@@ -1,8 +1,9 @@
 /**
- * The layout probe: walks every ?preview= mode in Chromium and WebKit at two window sizes, plus the
- * chat shell's floating layers opened as a person opens them ("settled#picker": the picker, the
- * palette, the chat and account menus, the other agents, the Changes panel, a typed message), and
- * fails on the five things a clean screen never has:
+ * The layout probe: walks every ?preview= mode (and library.html, the fixture with its own page) in
+ * Chromium and WebKit at two window sizes, plus the chat shell's floating layers opened as a person
+ * opens them ("settled#picker": the picker, the palette, the chat and account menus, the other
+ * agents, the Changes panel, a typed message) and other screens' states ("library.html#library-item"),
+ * and fails on the five things a clean screen never has:
  *
  * 1. Horizontal overflow: the page scrolls sideways, or a visible box reaches past the window.
  * 2. Off-grid containers: a padded block container whose offset from its padded parent, or whose
@@ -58,6 +59,8 @@ export const MODES = [
   "keep-local",
   "git",
   "settings",
+  // General with a default agent chosen: its Model row and the agent's reported models.
+  "settings#defaults",
   "setup",
   "agents",
   // New chat in a project folder: a Git folder's worktree chip, no commit yet, a plain folder.
@@ -65,6 +68,18 @@ export const MODES = [
   "new-unavailable",
   "new-plain",
   "git-missing",
+  "chat-options",
+  "chat-options#busy-folder",
+  // The Library's three-pane frame, a fixture page of its own.
+  "library.html",
+  "library.html#library-item",
+  "library.html#library-history",
+  "steering#queued",
+  "steering#queue-edit",
+  // A message typed during a turn: Steer beside the Queue disc, or, for an agent without
+  // steering, "After this turn" there instead.
+  "steering#typed",
+  "steering&case=unsupported#typed",
   // The chat shell's floating layers, opened the way a person opens them.
   "settled#picker",
   "settled#palette",
@@ -87,6 +102,16 @@ const openWorktree = async (page) => {
   await page.locator(".new-chat-worktree-panel").waitFor();
 };
 
+/** Queues two messages behind the steering fixture's running turn. */
+async function queueTwo(page) {
+  const input = page.getByTestId("composer-input");
+  for (const text of ["Then run the unit tests", "Update the changelog"]) {
+    await input.fill(text);
+    await input.press("Enter");
+  }
+  await page.getByTestId("queued-prompt").nth(1).waitFor();
+}
+
 /** How each "<mode>#<view>" opens its layer before the probes run. */
 const OPENERS = {
   picker: (page) => page.keyboard.press("Control+."),
@@ -95,6 +120,29 @@ const OPENERS = {
   changes: (page) => page.getByRole("button", { name: "Changes", exact: true }).click(),
   "other-agents": (page) => page.locator('summary[aria-label$="other agents"]').click(),
   "account-menu": (page) => page.locator('summary[aria-label="Account menu"]').click(),
+  "busy-folder": async (page) => {
+    await page.getByLabel("Move to project").selectOption({ label: "Website" });
+    await page.getByTestId("move-folder").selectOption("folder-site");
+    await page.getByTestId("move-busy").waitFor();
+  },
+  defaults: async (page) => {
+    await page.getByLabel("Default agent").selectOption("codex");
+    await page.getByLabel("Default model").waitFor();
+  },
+  "library-item": async (page) => {
+    await page.getByRole("button", { name: /Review changes Claude/ }).click();
+    await page.getByLabel("Copy destination").waitFor();
+  },
+  "library-history": async (page) => {
+    await page.getByRole("button", { name: /^Copy history/ }).click();
+    await page.locator(".library-history").waitFor();
+  },
+  queued: (page) => queueTwo(page),
+  "queue-edit": async (page) => {
+    await queueTwo(page);
+    await page.getByTestId("queued-edit").first().click();
+    await page.getByTestId("queued-edit-input").waitFor();
+  },
   typed: async (page) => {
     await page.getByTestId("composer-input").click();
     await page.keyboard.type("Hi");
@@ -558,7 +606,10 @@ try {
         const page = await context.newPage();
         for (const mode of modes) {
           const [preview, view] = mode.split("#");
-          await page.goto(`${url}/?preview=${preview}`);
+          // A fixture with its own page (library.html) is opened by name.
+          await page.goto(
+            preview.endsWith(".html") ? `${url}/${preview}` : `${url}/?preview=${preview}`,
+          );
           await page.waitForLoadState("networkidle").catch(() => {});
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(900);

@@ -28,6 +28,17 @@ also hides the webview. A failed visibility operation remains retryable. Rust se
 continue independently. This enables WebView2's own hidden-content behavior rather than promising
 that every JavaScript timer is stopped. Smoke runs retain their existing rendering behavior.
 
+## Settings switches
+
+Settings' General page saves three switches with the profile's setup preferences, all on by
+default, and Rust applies them at once (`apps/desktop/src-tauri/src/general_preferences.rs`): at
+startup, after a profile switch and on every save. Notifications off skips OS notifications; the
+tray badge and counts still update. Keep awake off releases the assertion even mid-turn, and
+turning it on during work takes it. Keep running in the tray (menu bar on macOS) off makes closing
+the window take the guarded quit path described above. The same page's defaults for new chats
+(agent, model, autonomy) reach the session manager the same way; full auto remains the default and
+each agent's own restrictions still apply.
+
 ## Notifications and navigation
 
 Background attention requests, completed turns and failures produce generic notifications without
@@ -38,9 +49,12 @@ are discarded before delivery. A bounded notification queue never blocks session
 Clicking a notification queues its local chat ID in Rust, restores the window and emits
 `auracode-open-chat` with a unit payload. The UI calls `shell_take_navigation` on startup, window
 focus and that event. It returns `string | null`, consuming the latest pending chat ID. The UI checks
-the returned ID against its current chats before selecting it. This survives webview suspension and
-reload within the running app. Delivery, installed-app attribution and behavior after the process
-has exited remain subject to the OS notification service.
+the returned ID against its current chats before selecting it (`navigationTarget` in
+`apps/desktop/src/lib/nativeNavigation.ts`): it waits until the chat list and the workspace have
+loaded, opens an archived chat with the archived view, and ignores an unknown ID (a deleted chat or
+another profile's notification), leaving the current selection as it was. This survives webview
+suspension and reload within the running app. Delivery, installed-app attribution and behavior
+after the process has exited remain subject to the OS notification service.
 
 ## Evidence and remaining checks
 
@@ -51,7 +65,8 @@ login, credential or real power/notification test is involved in these checks.
 
 Installed Windows and macOS checks remain required for tray interaction, notification permission and
 click routing, actual idle-sleep behavior, hide/minimize rendering measurements, and dark materials.
-The frontend navigation consumer is integrated separately. This checkpoint does not claim those
+The frontend navigation consumer validates the chat ID in the UI (covered by Vitest); the native
+click routing above still needs the installed-app checks. This checkpoint does not claim those
 acceptance checks passed.
 
 Sources: [Tauri notifications](https://v2.tauri.app/plugin/notification/),

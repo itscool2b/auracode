@@ -17,14 +17,14 @@ import {
 import { applyEntries, emptyTranscript, renderTranscript } from "../../lib/chat/transcript";
 import { dockAgents, dockState } from "./AgentDock";
 import { Banners, envBanner, RecoveryBannerView, storageBanner } from "./Banners";
-import { ChatList, projectName, projectsOf } from "./ChatList";
+import { ChatList, chatShortcutIndex, projectName, projectsOf, visibleChatIds } from "./ChatList";
 import { StillWorking } from "./ChatView";
-import { StopButton } from "./Composer";
+import { SendControls, StopButton } from "./Composer";
 import { Header } from "./Header";
 import { downloadNote, InstallationStatus, NewChat } from "./NewChat";
 import { Pickers } from "./Pickers";
 import { initials } from "./ProfileStatus";
-import { QueueList } from "./QueueList";
+import { QueueEditor, QueueList } from "./QueueList";
 import { Transcript } from "./Transcript";
 import { type TurnActions, TurnView } from "./TurnView";
 
@@ -201,6 +201,48 @@ describe("the chat list", () => {
     expect(html).toContain("folder not allowed");
     expect(html).toContain('aria-label="Waiting for your answer"');
     expect(html.match(/aria-current="true"/g)).toHaveLength(1);
+  });
+
+  it("numbers the visible chats for Ctrl+1 to Ctrl+9, skipping folded projects", () => {
+    const projects = [
+      { folder: "app", chats: [chatSummary("a1"), chatSummary("a2")] },
+      { folder: "site", chats: [chatSummary("s1")] },
+      { folder: "docs", chats: [chatSummary("d1")] },
+    ];
+    expect(visibleChatIds(projects, new Set(), false)).toEqual(["a1", "a2", "s1", "d1"]);
+    expect(visibleChatIds(projects, new Set(["site"]), false)).toEqual(["a1", "a2", "d1"]);
+    expect(visibleChatIds(projects, new Set(), true)).toEqual([]);
+    const key = (overrides: Partial<Parameters<typeof chatShortcutIndex>[0]>) =>
+      chatShortcutIndex({
+        key: "1",
+        code: "Digit1",
+        ctrlKey: true,
+        metaKey: false,
+        altKey: false,
+        isComposing: false,
+        ...overrides,
+      });
+    expect(key({})).toBe(0);
+    expect(key({ key: "9", code: "Digit9", ctrlKey: false, metaKey: true })).toBe(8);
+    // AZERTY: the 1 key without Shift types "&", and its code still says Digit1.
+    expect(key({ key: "&" })).toBe(0);
+    expect(key({ key: "0", code: "Digit0" })).toBeNull();
+    expect(key({ ctrlKey: false })).toBeNull();
+    expect(key({ altKey: true })).toBeNull();
+    expect(key({ isComposing: true })).toBeNull();
+    expect(key({ key: "k", code: "KeyK" })).toBeNull();
+  });
+
+  it("tells assistive technology the first nine chats' shortcuts", () => {
+    const chats = Array.from({ length: 10 }, (_, index) =>
+      chatSummary(`c${index}`, { folder: "/code/app", title: `Chat ${index}` }),
+    );
+    const html = renderToStaticMarkup(
+      <ChatList chats={chats} error={null} selected={null} onSelect={noop} onNewChat={noop} />,
+    );
+    expect(html).toContain('aria-keyshortcuts="Control+1 Meta+1"');
+    expect(html).toContain('aria-keyshortcuts="Control+9 Meta+9"');
+    expect(html).not.toContain("Control+10");
   });
 });
 
@@ -495,6 +537,43 @@ describe("the queue and the composer's stop button", () => {
     expect(buttons(unknown).map((b) => b.label)).toEqual(["Send queued"]);
   });
 
+  it("edits and reorders queued messages with buttons, never by dragging alone", () => {
+    const html = renderToStaticMarkup(
+      <QueueList
+        queue={[
+          { prompt_id: "p1", preview: "first", held: false, created_at: 1 },
+          { prompt_id: "p2", preview: "second", held: false, created_at: 2 },
+        ]}
+        held={false}
+        onRemove={noop}
+        onSendQueued={noop}
+        onLoadText={async () => "first"}
+        onEdit={async () => null}
+        onMove={async () => {}}
+      />,
+    );
+    expect(buttons(html)).toEqual([
+      { label: "Edit queued message", disabled: false },
+      { label: "Move up in the queue", disabled: true },
+      { label: "Move down in the queue", disabled: false },
+      { label: "Remove from the queue", disabled: false },
+      { label: "Edit queued message", disabled: false },
+      { label: "Move up in the queue", disabled: false },
+      { label: "Move down in the queue", disabled: true },
+      { label: "Remove from the queue", disabled: false },
+    ]);
+    expect(html).not.toContain("draggable");
+  });
+
+  it("opens a queued message's words in a labelled field with Cancel and Save", () => {
+    const html = renderToStaticMarkup(
+      <QueueEditor initial="first draft" onSave={async () => null} onCancel={noop} />,
+    );
+    expect(html).toContain('aria-label="Queued message"');
+    expect(html).toContain(">first draft</textarea>");
+    expect(buttons(html).map((b) => b.label)).toEqual(["Cancel", "Save"]);
+  });
+
   it("escape_twice: Stop while a turn runs or starts, Force stop while it cancels", () => {
     const label = (status: Parameters<typeof StopButton>[0]["status"]) =>
       buttons(
@@ -505,6 +584,35 @@ describe("the queue and the composer's stop button", () => {
     expect(label("cancelling")).toEqual(["Force stop"]);
     expect(label("ready")).toEqual([]);
     expect(label("stopped")).toEqual([]);
+  });
+
+  it("says an agent that cannot steer takes a typed message after the turn", () => {
+    const controls = (status: "running" | "starting" | "ready", steerable: boolean) =>
+      renderToStaticMarkup(
+        <SendControls
+          status={status}
+          steerable={steerable}
+          disabled={false}
+          agentName="Claude Code"
+          onSend={noop}
+          onSteer={noop}
+        />,
+      );
+    // Claude Code and Pi during a turn: calm words where Steer would be, Queue as the action.
+    const claude = controls("running", false);
+    expect(claude).toContain('data-testid="composer-after-turn"');
+    expect(claude).toContain(">After this turn</span>");
+    expect(claude).not.toContain("composer-steer");
+    expect(buttons(claude)).toEqual([{ label: "Queue message", disabled: false }]);
+    expect(claude).toMatch(/aria-describedby="[^"]+"/);
+    expect(claude).toContain("Queue for Claude Code after this turn (Enter)");
+    // Codex steers: Steer in words beside the Queue disc, and no after-turn note.
+    const codex = controls("running", true);
+    expect(buttons(codex).map((b) => b.label)).toEqual(["Steer", "Queue message"]);
+    expect(codex).not.toContain("After this turn");
+    // While the agent starts nothing can steer yet, and idle the disc simply sends.
+    expect(controls("starting", false)).not.toContain("After this turn");
+    expect(buttons(controls("ready", false))).toEqual([{ label: "Send message", disabled: false }]);
   });
 
   it("still_working_indicator: counts the minutes and offers Stop", () => {

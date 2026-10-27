@@ -11,19 +11,22 @@ import {
   RefreshCcw,
   SlidersHorizontal,
 } from "lucide-react";
-import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
-import type { AppInfo, MotionPreference, SetupSnapshot } from "../../bindings";
-import { errorMessage } from "../../lib/errors";
+import { Fragment, useEffect, useRef, useState } from "react";
+import type { AppInfo } from "../../bindings";
 import { revealDataDir } from "../../lib/ipc";
-import { type SetupApi, setMotionPreference, setupApi } from "../../lib/setup";
+import { type GeneralApi, generalApi, type SetupApi, setupApi } from "../../lib/setup";
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
 import { AccountPanel } from "./AccountPanel";
 import { ConfigSyncPanel } from "./ConfigSyncPanel";
+import { GeneralPanel } from "./GeneralPanel";
 import { LocalImportPanel } from "./LocalImportPanel";
 import { NoticesDialog } from "./NoticesDialog";
 import { ProfilePicker } from "./ProfilePicker";
+import { Row } from "./SettingsRow";
 import { UpdatePanel } from "./UpdatePanel";
 import "./settings.css";
+
+export { Row } from "./SettingsRow";
 
 type Page = "general" | "account" | "configuration" | "shortcuts" | "about";
 const PAGES: readonly (readonly [Page, string, LucideIcon])[] = [
@@ -34,29 +37,6 @@ const PAGES: readonly (readonly [Page, string, LucideIcon])[] = [
   ["about", "About", Info],
 ];
 
-/** A settings row: the label, an optional one-line description, and at most one control. */
-export function Row({
-  title,
-  detail,
-  children,
-}: {
-  readonly title: string;
-  readonly detail?: ReactNode;
-  readonly children?: ReactNode;
-}) {
-  return (
-    <div className="settings-row">
-      <div className="settings-row-text">
-        <div>
-          <strong>{title}</strong>
-          {detail ? <p>{detail}</p> : null}
-        </div>
-      </div>
-      {children}
-    </div>
-  );
-}
-
 /** One keycap per key in a chord; a repeated key shows twice. */
 function Keys({ keys, mac }: { readonly keys: string; readonly mac: boolean }) {
   const names: Record<string, string> = {
@@ -64,6 +44,7 @@ function Keys({ keys, mac }: { readonly keys: string; readonly mac: boolean }) {
     "⇧": "Shift",
     "↑": "Up arrow",
     "↓": "Down arrow",
+    "1–9": "1 to 9",
   };
   const caps = keys === "Esc again" ? ["Esc", "Esc"] : keys.split(" ");
   return (
@@ -78,122 +59,6 @@ function Keys({ keys, mac }: { readonly keys: string; readonly mac: boolean }) {
   );
 }
 
-function General({
-  info,
-  api,
-  onSetup,
-  reveal,
-}: {
-  readonly info: AppInfo;
-  readonly api: SetupApi;
-  readonly onSetup: () => void;
-  readonly reveal: () => Promise<void>;
-}) {
-  const [saved, setSaved] = useState<SetupSnapshot | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
-  const mounted = useRef(false);
-  const saving = useRef(false);
-  useEffect(() => {
-    void reload;
-    mounted.current = true;
-    let live = true;
-    api.snapshot().then(
-      (next) => {
-        if (live) {
-          setSaved(next);
-          setError(null);
-        }
-      },
-      (failure) => {
-        if (live) setError(errorMessage(failure));
-      },
-    );
-    return () => {
-      live = false;
-      mounted.current = false;
-    };
-  }, [api, reload]);
-  const motion = async (value: MotionPreference) => {
-    if (!saved || saving.current) return;
-    saving.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      const next = await api.apply(saved.preferences.revision, { type: "motion", value });
-      setMotionPreference(next.preferences.motion);
-      if (mounted.current) setSaved(next);
-    } catch (failure) {
-      if (mounted.current) setError(errorMessage(failure));
-    } finally {
-      saving.current = false;
-      if (mounted.current) setBusy(false);
-    }
-  };
-  return (
-    <>
-      <div className="settings-group">
-        <Row title="Motion" detail="Full still follows your system's reduced motion setting.">
-          <fieldset className="settings-segmented settings-control" disabled={!saved || busy}>
-            <legend className="sr-only">Motion</legend>
-            {(["full", "reduced", "off"] as const).map((value) => (
-              <label key={value}>
-                <input
-                  type="radio"
-                  name="settings-motion"
-                  value={value}
-                  checked={saved?.preferences.motion === value}
-                  onChange={() => void motion(value)}
-                />
-                <span>{value === "full" ? "Full" : value === "reduced" ? "Reduced" : "Off"}</span>
-              </label>
-            ))}
-          </fieldset>
-        </Row>
-        <Row title="Welcome and setup" detail="Review your agents and pick a first project again.">
-          <button className="g-button g-button-outline g-button-28" type="button" onClick={onSetup}>
-            Run setup
-          </button>
-        </Row>
-        <Row
-          title="Data folder"
-          detail={
-            info.data_dir ? (
-              <span className="settings-mono">{info.data_dir}</span>
-            ) : (
-              "Chats stay on this device."
-            )
-          }
-        >
-          <button
-            className="g-button g-button-outline g-button-28"
-            type="button"
-            disabled={!info.data_dir}
-            onClick={() => void reveal().catch((failure) => setError(errorMessage(failure)))}
-          >
-            Open folder
-          </button>
-        </Row>
-      </div>
-      {saved?.notice ? <p className="settings-footnote">{saved.notice}</p> : null}
-      {error ? (
-        <div className="settings-error" role="alert">
-          <p>{error}</p>
-          <button
-            className="g-button g-button-28"
-            type="button"
-            disabled={busy}
-            onClick={() => setReload((value) => value + 1)}
-          >
-            Reload preferences
-          </button>
-        </div>
-      ) : null}
-    </>
-  );
-}
-
 export function SettingsScreen({
   info,
   onBack,
@@ -203,6 +68,7 @@ export function SettingsScreen({
   onDiagnostics,
   onImported,
   setup = setupApi,
+  general = generalApi,
   updates = updatesApi,
   reveal = revealDataDir,
   initialPage = "general",
@@ -218,6 +84,7 @@ export function SettingsScreen({
   readonly onDiagnostics: () => void;
   readonly onImported?: () => Promise<void>;
   readonly setup?: SetupApi;
+  readonly general?: GeneralApi;
   readonly updates?: UpdatesApi;
   readonly reveal?: () => Promise<void>;
   readonly initialPage?: Page;
@@ -264,6 +131,7 @@ export function SettingsScreen({
   const key = mac ? "⌘" : "Ctrl";
   const shortcuts = [
     ["New chat", `${key} N`],
+    ["Open chat 1 to 9 in the sidebar", `${key} 1–9`],
     ["Search chats, projects and files", `${key} K`],
     ["Open context panel", `${key} J`],
     ["Choose agent, model and effort", `${key} .`],
@@ -331,7 +199,13 @@ export function SettingsScreen({
             </h1>
           )}
           {page === "general" ? (
-            <General info={info} api={setup} onSetup={onSetup} reveal={reveal} />
+            <GeneralPanel
+              info={info}
+              api={setup}
+              general={general}
+              onSetup={onSetup}
+              reveal={reveal}
+            />
           ) : null}
           {page === "account" ? (
             <>

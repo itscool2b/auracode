@@ -458,6 +458,9 @@ export function ChatView({
               held={held}
               onRemove={(promptId) => void store.cancelQueued(promptId)}
               onSendQueued={() => void store.resumeQueue()}
+              onLoadText={(promptId) => store.queuedText(promptId)}
+              onEdit={(promptId, text) => store.editQueued(promptId, text)}
+              onMove={(promptId, index) => store.moveQueued(promptId, index)}
             />
             {pendingRequests.length > 0 ? (
               <section className="chat-permission-dock" aria-label="Waiting for your response">

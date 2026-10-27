@@ -1,13 +1,13 @@
 /** Development-only settings harness. No native process, updater, keychain or network request. */
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { AppInfo, SetupSnapshot, UpdateStatus } from "../bindings";
+import type { AgentEntry, AppInfo, SetupSnapshot, UpdateStatus } from "../bindings";
 import { SettingsScreen } from "../components/settings/SettingsScreen";
 import { accountApi } from "../lib/account/api";
 import type { AccountStatus } from "../lib/account/bindings";
 import { accountResetApi } from "../lib/account/reset";
 import { profileApi } from "../lib/profiles";
-import type { SetupApi } from "../lib/setup";
+import { DEFAULT_GENERAL, type GeneralApi, type SetupApi } from "../lib/setup";
 import type { UpdatesApi } from "../lib/updates";
 
 const info: AppInfo = {
@@ -116,6 +116,7 @@ const preferences: SetupSnapshot = {
     motion: "full",
     completed: true,
     first_project_id: null,
+    general: { ...DEFAULT_GENERAL },
   },
 };
 const setup: SetupApi = {
@@ -126,10 +127,48 @@ const setup: SetupApi = {
       throw new Error("Preferences could not be saved. Your previous setting is unchanged.");
     if (revision !== preferences.preferences.revision)
       throw new Error("Preferences changed. Reload and retry.");
+    const general = preferences.preferences.general;
     if (action.type === "motion") preferences.preferences.motion = action.value;
+    if (action.type === "default_agent") {
+      if (general.default_agent !== action.agent_id) general.default_model = null;
+      general.default_agent = action.agent_id;
+    }
+    if (action.type === "default_model") general.default_model = action.model;
+    if (action.type === "default_autonomy") general.default_autonomy = action.value;
+    if (action.type === "notifications") general.notifications = action.enabled;
+    if (action.type === "keep_awake") general.keep_awake = action.enabled;
+    if (action.type === "close_to_tray") general.close_to_tray = action.enabled;
     preferences.preferences.revision++;
     return structuredClone(preferences);
   },
+};
+const agent = (id: string, name: string, ready: boolean): AgentEntry => ({
+  id,
+  name,
+  description: name,
+  availability: ready
+    ? { state: "ready", version: "1.0.0", path: `/usr/local/bin/${id}` }
+    : { state: "missing", reason: "Not installed." },
+  launch: id,
+  needs_download: false,
+  last_verified: "",
+  installation: null,
+  latest_release: null,
+});
+// Codex has reported its models in this run; Claude Code has not started a chat yet.
+const general: GeneralApi = {
+  agents: async () => [
+    agent("claude", "Claude Code", true),
+    agent("codex", "Codex", true),
+    agent("pi", "Pi", false),
+  ],
+  models: async (agentId) =>
+    agentId === "codex"
+      ? [
+          { value: "gpt-5.5-codex", name: "GPT-5.5 Codex", description: null, group: null },
+          { value: "gpt-5.5-mini", name: "GPT-5.5 mini", description: null, group: null },
+        ]
+      : [],
 };
 let status: UpdateStatus = {
   channel: new URLSearchParams(location.search).has("staging") ? "staging" : "stable",
@@ -173,7 +212,11 @@ const updates: UpdatesApi = {
   },
 };
 Object.assign(window, {
-  settingsFixture: { calls: () => [...calls], motion: () => preferences.preferences.motion },
+  settingsFixture: {
+    calls: () => [...calls],
+    motion: () => preferences.preferences.motion,
+    general: () => structuredClone(preferences.preferences.general),
+  },
 });
 function Preview() {
   const [closed, setClosed] = useState(false);
@@ -196,6 +239,7 @@ function Preview() {
       initialEmail={signInFixture ? entry.email : ""}
       info={info}
       setup={setup}
+      general={general}
       updates={updates}
       reveal={async () => {
         calls.push("reveal");

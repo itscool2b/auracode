@@ -7,6 +7,7 @@ mod power;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use aura_core::onboarding::GeneralPreferences;
 use aura_core::session::{SinkGone, StatusSink};
 use aura_protocol::session::ChatStatusUpdate;
 use tauri::{Emitter, Manager};
@@ -33,11 +34,70 @@ pub struct NativeShell {
     notification_id: AtomicU32,
     #[cfg(any(windows, target_os = "macos"))]
     power: Mutex<Option<power::Power>>,
+    /// Settings' switches (all on by default) and whether any chat is working now.
+    switches: Switches,
+}
+
+/// Settings' General switches as the shell reads them, and the latest work state.
+struct Switches {
+    notifications: AtomicBool,
+    keep_awake: AtomicBool,
+    keep_in_tray: AtomicBool,
+    working: AtomicBool,
+}
+
+impl Default for Switches {
+    fn default() -> Self {
+        let general = GeneralPreferences::default();
+        Self {
+            notifications: AtomicBool::new(general.notifications),
+            keep_awake: AtomicBool::new(general.keep_awake),
+            keep_in_tray: AtomicBool::new(general.close_to_tray),
+            working: AtomicBool::new(false),
+        }
+    }
 }
 
 impl NativeShell {
     pub fn active_work_count(&self) -> usize {
         lock(&self.activity).work_count()
+    }
+
+    /// Settings' switches take effect at once: turning keep-awake off while an agent works
+    /// releases the assertion now; turning it on during work takes it.
+    pub fn apply_preferences(&self, general: &GeneralPreferences) {
+        let switches = &self.switches;
+        switches
+            .notifications
+            .store(general.notifications, Ordering::Release);
+        switches
+            .keep_in_tray
+            .store(general.close_to_tray, Ordering::Release);
+        switches
+            .keep_awake
+            .store(general.keep_awake, Ordering::Release);
+        self.sync_power();
+    }
+
+    /// Records whether any chat works now and holds the keep-awake assertion only while it does
+    /// and Settings allows it.
+    fn set_working(&self, working: bool) {
+        self.switches.working.store(working, Ordering::Release);
+        self.sync_power();
+    }
+
+    fn sync_power(&self) {
+        #[cfg(any(windows, target_os = "macos"))]
+        if let Some(power) = lock(&self.power).as_ref() {
+            power.set(
+                self.switches.working.load(Ordering::Acquire)
+                    && self.switches.keep_awake.load(Ordering::Acquire),
+            );
+        }
+    }
+
+    fn notifications_enabled(&self) -> bool {
+        self.switches.notifications.load(Ordering::Acquire)
     }
 
     pub fn shutdown(&self) {
@@ -146,6 +206,7 @@ pub fn setup(app: &tauri::AppHandle) {
             pending_chat: Mutex::new(None),
             notification_id: AtomicU32::new(0),
             power: Mutex::new(Some(power::Power::start())),
+            switches: Switches::default(),
         });
         if let Some(chats) = state.chats() {
             chats.manager.status_subscribe(Arc::new(ProfileSink {
@@ -173,7 +234,7 @@ pub fn setup(app: &tauri::AppHandle) {
                         let counts = *changes.borrow_and_update();
                         let active = counts.active > 0;
                         if active != was_active {
-                            if let Some(power) = lock(&shell.power).as_ref() { power.set(active); }
+                            shell.set_working(active);
                             was_active = active;
                         }
                         update_tray(&app, counts);
@@ -191,13 +252,24 @@ pub fn setup(app: &tauri::AppHandle) {
     let _ = app;
 }
 
-/// True only after the tray was successfully installed. Without a visible way back, the window
-/// uses the ordinary quit path instead of hiding an unreachable application.
+/// Applies Settings' notification, keep-awake and close-to-tray switches. Without a shell (smoke
+/// launches, Linux) there is nothing to switch.
+pub fn apply_preferences(app: &tauri::AppHandle, general: &GeneralPreferences) {
+    if let Some(shell) = app.try_state::<Arc<NativeShell>>() {
+        shell.apply_preferences(general);
+    }
+}
+
+/// True only after the tray was successfully installed and while Settings keeps auracode in the
+/// tray. Otherwise the window uses the ordinary guarded quit path, never hiding an application
+/// the person asked to close or could not reach again.
 pub fn close_to_tray(app: &tauri::AppHandle) -> bool {
     let Some(shell) = app.try_state::<Arc<NativeShell>>() else {
         return false;
     };
-    if !shell.tray_ready.load(Ordering::Acquire) {
+    if !shell.tray_ready.load(Ordering::Acquire)
+        || !shell.switches.keep_in_tray.load(Ordering::Acquire)
+    {
         return false;
     }
     if app
@@ -386,6 +458,9 @@ fn show_notification(app: &tauri::AppHandle, epoch: u64, chat: &str, notice: Not
     let Some(shell) = app.try_state::<Arc<NativeShell>>() else {
         return;
     };
+    if !shell.notifications_enabled() {
+        return;
+    }
     if shell.profile_epoch.load(Ordering::Acquire) != epoch
         || !lock(&shell.activity).notice_is_current(chat, notice)
     {
@@ -430,6 +505,7 @@ mod profile_tests {
             notification_id: AtomicU32::new(0),
             #[cfg(any(windows, target_os = "macos"))]
             power: Mutex::new(None),
+            switches: Switches::default(),
         };
         let update = ChatStatusUpdate {
             chat_id: "old-chat".into(),
@@ -447,5 +523,87 @@ mod profile_tests {
         assert_eq!(shell.active_work_count(), 0);
         shell.send_at(epoch, &update).unwrap();
         assert_eq!(shell.active_work_count(), 1);
+    }
+}
+
+#[cfg(all(test, any(windows, target_os = "macos")))]
+mod switch_tests {
+    use super::*;
+
+    fn shell(power: Option<power::Power>) -> NativeShell {
+        let (counts, _) = watch::channel(Counts::default());
+        let (notices, _) = mpsc::channel(8);
+        let (stopped, _) = watch::channel(false);
+        NativeShell {
+            activity: Mutex::default(),
+            counts,
+            notices,
+            stopped,
+            profile_epoch: AtomicU64::new(0),
+            tray_ready: AtomicBool::new(true),
+            pending_chat: Mutex::new(None),
+            notification_id: AtomicU32::new(0),
+            power: Mutex::new(power),
+            switches: Switches::default(),
+        }
+    }
+
+    #[test]
+    fn notification_and_tray_switches_start_on_and_follow_settings() {
+        let shell = shell(None);
+        assert!(shell.notifications_enabled());
+        assert!(shell.switches.keep_in_tray.load(Ordering::Acquire));
+        shell.apply_preferences(&GeneralPreferences {
+            notifications: false,
+            close_to_tray: false,
+            ..GeneralPreferences::default()
+        });
+        assert!(!shell.notifications_enabled());
+        assert!(!shell.switches.keep_in_tray.load(Ordering::Acquire));
+        shell.apply_preferences(&GeneralPreferences::default());
+        assert!(shell.notifications_enabled());
+        assert!(shell.switches.keep_in_tray.load(Ordering::Acquire));
+    }
+
+    /// Keep-awake holds the assertion only while work runs and Settings allows it, and a change
+    /// in Settings applies during the work, not at the next turn.
+    #[test]
+    fn keep_awake_follows_work_and_the_settings_switch_at_once() {
+        use std::sync::mpsc::{Sender, channel};
+        use std::time::Duration;
+        struct Held(Sender<&'static str>);
+        impl Drop for Held {
+            fn drop(&mut self) {
+                let _ = self.0.send("release");
+            }
+        }
+        let (record, events) = channel();
+        let power = power::Power::start_with(move || {
+            record.send("hold").expect("record hold");
+            Some(Held(record.clone()))
+        });
+        let shell = shell(Some(power));
+        let next = || {
+            events
+                .recv_timeout(Duration::from_secs(5))
+                .expect("power event")
+        };
+        shell.set_working(true);
+        assert_eq!(next(), "hold");
+        shell.apply_preferences(&GeneralPreferences {
+            keep_awake: false,
+            ..GeneralPreferences::default()
+        });
+        assert_eq!(next(), "release", "turning it off releases during the work");
+        shell.set_working(false);
+        shell.set_working(true);
+        assert!(
+            events.recv_timeout(Duration::from_millis(200)).is_err(),
+            "work never holds the assertion while the switch is off"
+        );
+        shell.apply_preferences(&GeneralPreferences::default());
+        assert_eq!(next(), "hold", "turning it on during work holds it now");
+        shell.set_working(false);
+        assert_eq!(next(), "release");
     }
 }

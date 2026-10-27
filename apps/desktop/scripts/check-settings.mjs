@@ -97,6 +97,33 @@ try {
       await page.evaluate(() => sessionStorage.removeItem("settings-fail-save"));
       await page.getByRole("button", { name: "Reload preferences" }).click();
       await page.getByRole("alert").waitFor({ state: "hidden" });
+      // General's defaults for new chats and the background switches save at once.
+      const general = () => page.evaluate(() => window.settingsFixture.general());
+      assert.equal(await page.getByLabel("Default model").count(), 0);
+      await page.getByLabel("Default agent").selectOption("codex");
+      await page.getByLabel("Default model").selectOption("gpt-5.5-codex");
+      await page.getByRole("radio", { name: "Ask", exact: true }).check();
+      await page.getByRole("switch", { name: "Notifications" }).uncheck();
+      await page.getByRole("switch", { name: "Keep awake" }).uncheck();
+      await page.getByRole("switch", { name: "Keep running in the tray" }).uncheck();
+      await page.waitForFunction(() => !window.settingsFixture.general().close_to_tray);
+      assert.deepEqual(await general(), {
+        default_agent: "codex",
+        default_model: "gpt-5.5-codex",
+        default_autonomy: "ask",
+        notifications: false,
+        keep_awake: false,
+        close_to_tray: false,
+      });
+      // Another agent clears the model, which belonged to Codex; it has not listed its own.
+      await page.getByLabel("Default agent").selectOption("claude");
+      await page.getByText("Claude Code lists its models once one of its chats starts.").waitFor();
+      assert.equal(await page.getByLabel("Default model").count(), 0);
+      assert.equal((await general()).default_model, null);
+      await page.getByRole("radio", { name: "Full auto", exact: true }).check();
+      for (const name of ["Notifications", "Keep awake", "Keep running in the tray"])
+        await page.getByRole("switch", { name }).check();
+      await page.waitForFunction(() => window.settingsFixture.general().close_to_tray);
       await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
       await page.screenshot({ path: resolve(out, `${engine}-general.png`) });
