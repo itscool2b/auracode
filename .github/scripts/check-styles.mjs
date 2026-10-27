@@ -27,6 +27,11 @@ export const ALLOWLIST = [
     reason: "The checkbox's check is an SVG data URL, which cannot read a custom property.",
   },
   {
+    file: "components/settings/settings.css",
+    fragment: "stroke='%23000'",
+    reason: "Settings draws the chat's checkbox; its check is an SVG data URL, which cannot read a custom property.",
+  },
+  {
     file: "components/TerminalSheet.css",
     fragment: "fill='%23ededed'",
     reason:
