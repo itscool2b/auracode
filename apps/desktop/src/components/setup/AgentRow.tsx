@@ -458,7 +458,7 @@ export function AgentRow({
                 <span className="agent-row-hollow" />
               ) : null}
             </span>
-            <span className={phase === "checking" ? "g-shimmer" : undefined}>{STATUS[phase]}</span>
+            <span>{STATUS[phase]}</span>
           </span>
           {compact ? null : (
             <span

@@ -84,6 +84,11 @@
   font-size: var(--g-text-code);
 }
 
+/* Remove ends on the row's edge, as Search ends on the row below. */
+.folder-resolver-roots .g-button-ghost {
+  margin-right: calc(var(--g-space-12) * -1);
+}
+
 .folder-resolver > section > ul {
   display: block;
   padding-left: var(--g-space-20);

@@ -2,7 +2,7 @@ import { usePrefersReducedMotion } from "@auracode/ui";
 import { DitherField, Keycap, Wordmark } from "@auracode/ui/graphite";
 import { listen } from "@tauri-apps/api/event";
 import { ArrowRight, Check, FolderOpen, RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   AgentEntry,
   ProjectSummary,
@@ -41,10 +41,14 @@ const FADE_MS = { slow: 800, fast: 240 } as const;
  * The field gathers at the window's sides and thins to black behind the column and along the top
  * edge, where the wordmark and Skip setup sit (the site hero's clearings).
  */
-const CLEARING = [
-  { x: 0.5, y: 0.46, rx: 0.34, ry: 0.8 },
-  { x: 0.5, y: 0, rx: 1, ry: 0.22 },
-] as const;
+const TOP_CLEARING = { x: 0.5, y: 0, rx: 1, ry: 0.22 } as const;
+/** The column's clearing reaches at least 400px from the centre, so narrow windows stay calm. */
+function clearing(width: number) {
+  return [
+    { x: 0.5, y: 0.46, rx: Math.min(0.5, Math.max(0.34, 400 / width)), ry: 0.8 },
+    TOP_CLEARING,
+  ];
+}
 
 /** Setups saved before motion left the steps resume at the step that followed it. */
 function current(step: SetupStep | undefined): SetupStep {
@@ -72,6 +76,14 @@ export function Onboarding({
   readonly api?: SetupApi;
 }) {
   const reduced = usePrefersReducedMotion();
+  const [width, setWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const measure = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  // Rounded so a window drag rebuilds the field's clearing only every 40px.
+  const field = useMemo(() => clearing(Math.round(width / 40) * 40), [width]);
   const agentsState = useSyncExternalStore(app.subscribe, app.getSnapshot, app.getSnapshot);
   const [saved, setSaved] = useState<SetupSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -322,7 +334,7 @@ export function Onboarding({
         edges={0.85}
         ceiling={0.6}
         accent={0.002}
-        clearing={CLEARING}
+        clearing={field}
         interactive
         still={reduced}
       />

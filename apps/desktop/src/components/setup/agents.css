@@ -2,7 +2,8 @@
  * Agents and setup's roster (docs/design/visual-language.md, 6.17): one row per harness on
  * hairlines inside one frame, as Vercel lists projects. A row says what detection found in words, a
  * square and a grey ladder; volt appears only when the agent needs you. Detection is the one
- * thing that moves: a grey scan under a row while it is looked for, then the status settles once.
+ * thing that moves: the mark's pixel loader while an agent is looked for, then the status and
+ * version settle once and the green square arrives.
  */
 
 /* ----------------------------------------------------------------------- the page */
@@ -405,7 +406,7 @@
 .agent-list[data-compact] .agent-row-note {
   margin: 0 calc(var(--g-space-8) * -1);
   padding-right: var(--g-space-8);
-  padding-left: calc(var(--g-space-24) + var(--g-space-12));
+  padding-left: calc(var(--g-space-8) + var(--g-space-24) + var(--g-space-12));
 }
 
 .agent-list[data-compact] .agent-detail {
@@ -473,20 +474,10 @@
   animation: agent-dot var(--g-dur-letter) var(--g-ease-out) var(--g-dur-micro) both;
 }
 
-/* Looking: a calm grey scan runs along the row's lower edge until detection answers. */
-.agent-row[data-phase="checking"]::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  z-index: 1;
-  height: 1px;
-  background:
-    linear-gradient(90deg, transparent, var(--g-fg-3) 50%, transparent) 0 0 / 40% 1px no-repeat;
-  animation: agent-scan var(--g-dur-shimmer) linear infinite;
-  pointer-events: none;
-}
+/*
+ * Looking: the mark's pixel loader walks its six cells (AgentMark's thinking state) while the words
+ * wait in fg-3. It is the row's one live indicator (section 7), so nothing else in the row moves.
+ */
 
 @keyframes agent-settle {
   from {
@@ -505,15 +496,6 @@
   }
   to {
     transform: none;
-  }
-}
-
-@keyframes agent-scan {
-  from {
-    background-position: -66.667% 0;
-  }
-  to {
-    background-position: 166.667% 0;
   }
 }
 
@@ -537,18 +519,13 @@
   }
 }
 
-/* Reduced motion: every state shows at once and the scan becomes a still grey edge. */
+/* Reduced motion: every state shows at once; the loader holds its still frame (4.5). */
 @media (prefers-reduced-motion: reduce) {
   .agent-row-status,
   .agent-row-version,
   .agent-row-status .g-status-dot,
   .agent-detail,
   .agent-menu {
-    animation: none;
-  }
-
-  .agent-row[data-phase="checking"]::after {
-    background: var(--g-line-strong);
     animation: none;
   }
 }
@@ -561,11 +538,6 @@
     .agent-detail,
     .agent-menu
   ) {
-  animation: none;
-}
-
-:root:is([data-motion="reduced"], [data-motion="off"]) .agent-row[data-phase="checking"]::after {
-  background: var(--g-line-strong);
   animation: none;
 }
 

@@ -580,7 +580,7 @@ in luminance as well as hue (17.9:1 against 6.9:1 on black), and the label and t
 the mark always say the state.
 
 Sizes in use: 14 (composer pill, event chips), 16 (header, bylines, live gutter, pickers, menus),
-20 (onboarding roster), 24 (agent dock, library), 32 and 48 (settings, error screen), 56 (empty
+24 (onboarding roster, agent dock, library), 32 (Agents, settings), 48 (settings), 56 (empty
 state).
 
 ### 4.14 `Logo`, `Wordmark` and the app icon
@@ -1183,52 +1183,71 @@ field condenses into the logo; at 1400ms "auracode" rises under it (`Wordmark` t
 at 1800ms the field reveals (800ms) into step 1. Reduced motion: one still frame of the formed mark
 for 300ms, then step 1. Later launches skip it.
 
-**Layout**: no sidebar. Left column (40% of the window, 440 to 568 wide, padding 64 64 40) on bg:
-`Wordmark` 16 and "Skip setup" (ghost). Right: a pane inset 8px (surface-1, radius 12, 1px line)
-filled by a calm DitherField (`quiet`, `interactive`, still under reduced motion) with a two-tone
-line at its bottom-left in 14/20: "Agents run on this machine." / "auracode never sees their keys."
-This replaces the Orbit night panel and globe.
+**Layout** (Grok's start screen, the website hero's field): no sidebar. One centred column, 480
+wide (the window minus 48 when narrower), its top at `clamp(128px, 24vh, 208px)` so the heading
+holds one place on every step, over a window-wide DitherField (`quiet`, density 0.36, edges 0.85,
+ceiling 0.6, accent 0.002, `interactive`, still under reduced motion) that gathers at the sides and
+clears to black behind the column (an ellipse at least 400px from the centre) and along the top
+edge. `Wordmark` 16 top left and "Skip setup" (ghost) top right, just under the titlebar band.
 
-**Steps** (a checklist joined by a dashed line spine; 20px square numerals, active white with a
-black numeral, done white with a check; titles 16/22 600, pending fg-3; the active step opens in
-place over 300ms; done steps fold to a 12/16 fg-3 summary and reopen on click; Enter continues):
+**Progress**: four 6px pixels, fg-4 ahead, fg-3 done; the current one stretches to a 16px fg-1 bar
+over 300ms quint. Each is a 24px button that visits its step. No numerals, no checklist.
 
-1. **Agents**: a two-tone display heading that follows the scan ("Looking for agents." / "Still
-   looking for 2." then "Found 5 agents." / "2 more can be installed."). The roster has a slot per
-   agent from the first frame: checking slots show the loader and "Looking for Cursor" in fg-3, then
-   resolve in place (`.g-enter`: opacity and an 8px rise, 340ms). 48px rows on hairlines: a 20px
-   `AgentMark`, name 14/20 500, a mono 12 fg-3 line with path and version, status at right: "Ready"
-   with a green square, "Sign in" (500 fg-1 with a volt square; reveals the agent's own login
-   command as a copyable mono chip), or an outline 28 "Install" that opens the TerminalSheet. Under
-   it, mono 12 fg-3: "Scanned PATH and ~/.local/bin in 1.2s". No agents: "No agents found." /
-   "Install one, or try the demo." with a soft "Try the demo chat".
-2. **Account**: "Sync across your machines." / "Or keep auracode local." a 36px email field, "A
-   6-digit code signs you in. No password, and agents keep their own keys." in 12/16 fg-3, then
-   "Continue" (or "Send code") and "Skip, use auracode locally".
-3. **Motion**: "Make it yours." / "Change it later in Settings." with the Full, Reduced, Off
-   segmented control, applied at once. There is no theme or accent choice.
-4. **First project**: "Add a first project." / "Any folder works." a 120px dashed drop zone (1px
-   fg-4, radius 12) with "Choose folder" (outline, ⌘ O) and "Clone from GitHub" (ghost, branch icon);
-   a chosen folder shows its name and path and "Change".
+**Steps** (each skippable: Continue never requires anything; Enter continues outside controls):
 
-Buttons: "Continue" primary (Enter; "Open auracode" last) and "Skip" ghost.
+1. **Welcome**: "Welcome to auracode." / "Your agents, one window." and one sentence.
+2. **Agents**: a two-tone display heading that follows the scan ("Looking for agents." / "Still
+   looking for 2." then "Found 3 agents." / "6 more can be installed."). The roster is the Agents
+   list (6.17a) in its compact form: 48px rows on hairlines, what this computer has first and the
+   rest folded into "Show 6 not installed"; a row opens its details and actions in place. Refresh
+   (ghost) under it; with no agents, "Explore the local demo" (outline).
+3. **Account**: "Accounts are optional." / "auracode works without one." and one sentence saying sync
+   is invite-only and how to use an invitation, with "Open Account" (outline).
+4. **First project**: "Add a first project." / "Any folder works." a 96px dashed drop zone ("Choose a
+   folder", "or drop it here"), the name field and "Add project" once a folder is chosen, then
+   "Clone from GitHub" (ghost) and, when projects exist, "Or choose a project".
+
+Motion is not a step: Full already follows the system setting, and Settings changes it. A setup
+saved at the retired motion step resumes at First project. The one primary is "Get started",
+"Continue" or "Open auracode", with the Enter keycap.
+
+### 6.17a Agents
+
+Vercel's project list. Back to chats and Run setup again (ghosts) on the top line; "Agents" in
+`.g-text-title` with "3 of 9 installed on this computer." under it and Refresh (outline) at right.
+One frame (1px line, radius 12) of 64px rows on hairlines: a 32px `AgentMark`, the name 14/20 500
+over the version in mono 12/16 fg-3, the status in 12/16 (a 6px square and a word: green
+"Installed", volt "Needs sign-in", red "Unavailable", an fg-4 outline square and fg-3 "Not
+installed", fg-3 "Looking"), the date auracode last verified the integration in 12/16 fg-3
+tabular, at most one outline 28 action (Install, Update or Sign in) and a kebab menu (plain rows,
+one divider) for the rest: Sign in, Check sign-in, Update, Installation guide, Copy path. A row
+opens its details on surface-1: the description, facts on hairlines (runs from, installed with,
+latest release, updates, verified) and the executable picker. Detection: the mark shows the pixel
+loader while an agent is looked for (the row's one live indicator); when it is found the status and
+version settle once (2px rise, 340ms reveal) and the green square scales in (250ms). Rows enter
+with `.g-enter`. Reduced motion: everything in place, the loader still.
 
 ### 6.18 Library
 
-The library lists skills, instructions, MCP servers, plugins and packages across agents. Header:
-title 22/28 with a two-tone continuation, a 36px search input, and a segmented control for the
-kind (Everything, Skills, Instructions, MCP servers, Plugins, Packages). Items are 44px rows on
-hairlines: a 16px icon in fg-3, the name 14/20 500, the source agent as a 24px `AgentMark` and name
-in fg-3, a mono 12 fg-3 path; status per source as a status square and words. Selecting opens a
-preview pane (surface-1) with the file in a well and "Copy to Codex" style actions as soft buttons;
-copies produce a receipt in a well and an event toast. The vendor dialog uses the dialog shell.
+Vercel's page grammar: Back, "Library" in `.g-text-title` with one line under it, Refresh (ghost
+icon) and Manage integrations (outline) at right, then a 36px search and two selects (source,
+agent). One frame of three panes on the page's 32px column: the views as plain 32px rows with
+counts (the current one filled surface-3) and Copy history after one divider (a volt square when a
+copy needs recovery), Sources folded at the bottom; the items as 56px rows on hairlines (a 24px
+`AgentMark`, name 14/20 500, agent and scope in 12/16 fg-3; the selected row surface-2 with the
+rail); the chosen item with its title 16/22 600, its file in a well with a 36px head, and "Copy to"
+with Review copy (the page's one primary). Empty states are a title and one line.
 
 ### 6.19 Dialogs and sheets
 
-Every dialog is 4.6's shell, in one of its three widths. The TerminalSheet (vendor install and
-setup commands) is the large dialog: the command in a well with copy, a "Start" primary that is the only thing that launches it,
-the output in a terminal well (4.10), and the exit status as a check or red square with words. Sign
-out, notices, profile pickers and recovery dialogs reuse the same parts.
+Every dialog is 4.6's shell, in one of its three widths, on Vercel's transfer dialog: the title,
+one sentence saying what happens to what (the variables in fg-1 500), the details as key and value
+rows on hairlines or a hairline grid of versions, then `.g-dialog-actions`: Cancel (soft) and one
+primary, or the red pill for a removal. The TerminalSheet (sign-in, installs, vendor commands) is
+the large dialog: its sentence says closing stops the process and output is not saved, the
+reviewed command as rows, a status line led by its mark (a still green square while running, the
+white check or red square after), the terminal well at 144px until Start and full height after,
+and Copy selection beside the one Start.
 
 ### 6.20 Notifications
 
@@ -1242,10 +1261,12 @@ ACP client** · +69" with the figure in green, or "Needs you: **Run cargo test**
 
 ### 6.21 Error screens
 
-Startup failure replaces the app: black window, a centred 600px column, a 48px `AgentMark` in the
-error state (red square), the title in `.g-text-title`, aura-core's message in 15/24 fg-2, the data
-path in a well with copy, notices as rows, and "Copy diagnostics" (soft) and "Quit" (ghost). Calm:
-nothing was changed or lost. Recovery notices use the warning row (6.8).
+Startup failure and an interrupted profile switch replace the app the same way: a black window, a
+centred 600px column, the 32px logo in fg-2, the title in `.g-text-title`, aura-core's message in
+15/24 fg-2, then what to do. The startup error shows the data path in a well with copy and a
+Show in Explorer button, notices as rows, and one line saying nothing was deleted; configuration
+recovery shows what its one action does and that action (the note to unlock the account first is
+volt). Calm: nothing was changed or lost. Recovery notices use the warning row (6.8).
 
 ---
 
@@ -1265,7 +1286,7 @@ nothing was changed or lost. Recovery notices use the warning row (6.8).
   `grid-template-rows` (300ms).
 - One live indicator animates at a time per row or card (a shimmer or a loader, not both); the
   dither field is the only ambient motion on a screen, and the app shows it only during the first
-  launch intro and on the onboarding panel, never behind the transcript.
+  launch intro and behind the onboarding column, never behind the transcript.
 - All animation shares one `requestAnimationFrame` loop (`frameClock()`); offscreen, hidden and
   reduced-motion elements own no frame; DitherField caps at 30fps.
 - Long lists virtualise; rows use `contain: layout style`.
