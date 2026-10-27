@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>auracode</title>
+  <!-- The Windows icon (icon.ico): the same pixel "a" on a full-bleed black tile, without the macOS
+       inset, so the taskbar, title bar and tray sizes stay legible. Cells are 128 px on multiples
+       of 128: 2 px cells at 16, 3 at 24, 4 at 32, 6 at 48. The volt pixel of app-icon.svg is left
+       out here, because at these sizes it would be a one-pixel speck. -->
+  <rect width="1024" height="1024" rx="192" fill="#000000"/>
+  <rect x="3" y="3" width="1018" height="1018" rx="189" fill="none" stroke="#2e2e2e" stroke-width="6"/>
+  <path shape-rendering="crispEdges" fill="#ededed" d="M256 128h512v128H256zM768 256h128v128H768zM256 384h640v128H256zM128 512h128v128H128zM768 512h128v128H768zM128 640h128v128H128zM768 640h128v128H768zM256 768h640v128H256z"/>
+</svg>
