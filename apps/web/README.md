@@ -23,24 +23,23 @@ the skip link and verifies keyboard activation. Real Safari/macOS acceptance rem
 
 React Router 7.18.4 supports TypeScript through version 6 in its peer contract, so this package pins
 TypeScript 6.0.3 locally. The desktop/workspace compiler remains unchanged. The website uses the
-shared Geist font package and the approved dark Orbit values.
+shared Geist font package and the Graphite tokens from `@auracode/ui`.
 
 ## Reference evidence
 
-Read the root task's `docs/design/reference-audit.md`, then inspected these original references:
+The site follows the Graphite language in [visual-language.md](../../docs/design/visual-language.md).
+Its section 2 records what each reference contributes and section 5 the site composition. The
+references are the owner's Mobbin and official-site set: SpaceXAI (x.ai), X Money, Harvey, Aside
+and Vercel for organisation, styling and measured motion, and the AI in Design Report 2026 as the
+bar for uniqueness, not copied. Timings come from the live sites, not from static images. No
+third-party reference image, font or script is shipped.
 
-- [SpaceXAI Grok Bot](https://mobbin.com/sites/sections/dfea7d6f-670a-4d55-8289-ff0267c89efb): sparse
-  navigation, concise title and a large contained product viewport.
-- [Aside hero](https://mobbin.com/sites/sections/bdad14df-7d77-4d9d-8c30-dfd826d134d1): centered headline
-  and action, with the actual product below. Its light palette and cloud art are not reused.
-- [Harvey product framing](https://mobbin.com/sites/sections/599949fd-6c3a-4f84-84cf-e74a9082141d):
-  restrained text hierarchy and contained product presentation. The original audit's Harvey panels
-  remain the account/table structure reference.
-
-The screenshot is the actual dark React desktop fixture supplied by the root task on 2026-10-26,
-not a fabricated product mock. Refresh it from the integrated desktop before public release.
-The SVG globe and orbital mark are original Orbit geometry. Reduced motion stops rotation and
-entrances. No third-party reference image is shipped.
+The product image is a capture of the real desktop interface in its local preview mode, not a
+fabricated mock. Regenerate it from the integrated desktop whenever the app changes visibly. The
+dither fields, pixel mark and favicon are original and generated at build time by
+`scripts/site-images.ts`. Without JavaScript the hero and closing fields show their first frame as
+a static image and the other fields step aside for their content (the screenshot, the wordmark,
+the 404 numerals). Reduced motion shows a still frame.
 
 ## Deployment prerequisites
 
