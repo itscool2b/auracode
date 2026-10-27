@@ -50,9 +50,22 @@ const agents: AgentEntry[] = [
   needs_download: false,
   last_verified: "2026-10-26",
 }));
+// `?detect` resolves one agent per detection poll, so rows can be seen settling one by one.
+let resolved = params.has("detect") ? 0 : agents.length;
+const detected = (): AgentEntry[] =>
+  agents.map((agent, index) =>
+    index < resolved ? agent : { ...agent, availability: { state: "checking" } },
+  );
 const transport = new FakeTransport({
-  agentsList: async () => agents,
-  agentsRefresh: async () => agents,
+  agentsList: async () => {
+    const value = detected();
+    resolved = Math.min(agents.length, resolved + 1);
+    return value;
+  },
+  agentsRefresh: async () => {
+    resolved = agents.length;
+    return agents;
+  },
   pickFolder: async () => "C:/fixture/Orbit",
 });
 const app = new AppStore(transport);

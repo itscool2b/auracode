@@ -62,87 +62,52 @@ try {
       await page.getByRole("button", { name: "Get started" }).waitFor();
       await page.waitForFunction(() => !document.querySelector("[data-cinematic]"));
       await page.screenshot({ path: resolve(out, `${engine}-welcome.png`) });
-      // The pane beside setup fills the rest of the window, its dither field covers it, and every
-      // agent row on its roster card is visible, unclipped and clear of the others.
-      const checkPanel = async () => {
-        const layout = await page.locator(".setup-panel").evaluate((panel) => {
+      // Setup is one centred column over the window-wide dither field; the field covers the
+      // window, and the column, the wordmark and Skip setup stay inside it and clear of each other.
+      const checkLayout = async () => {
+        const layout = await page.evaluate(() => {
           const box = (node) => {
             const rect = node.getBoundingClientRect();
             return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
           };
-          const card = panel.querySelector(".setup-panel-card");
-          const canvas = panel.querySelector(".setup-panel-field canvas");
           return {
             window: { width: innerWidth, height: innerHeight },
             column: box(document.querySelector(".setup-column")),
-            panel: {
-              ...box(panel),
-              inner: { width: panel.clientWidth, height: panel.clientHeight },
-            },
-            canvas: box(canvas),
-            card: box(card),
-            rows: [...card.querySelectorAll(".setup-panel-agent")].map((row) => {
-              const name = row.querySelector(".setup-panel-name");
-              return {
-                ...box(row),
-                text: row.textContent,
-                visible: getComputedStyle(row).visibility === "visible",
-                truncated: name.scrollWidth > name.clientWidth,
-              };
-            }),
+            heading: box(document.querySelector(".setup-heading")),
+            top: box(document.querySelector(".setup-top")),
+            skip: box(document.querySelector(".setup-skip")),
+            canvas: box(document.querySelector(".setup-backdrop canvas")),
+            overflow: document.documentElement.scrollWidth > innerWidth,
           };
         });
-        const { window, column, panel, canvas, card, rows } = layout;
-        assert.ok(Math.abs(panel.left - column.right) <= 1, `${engine}: panel leaves a gap`);
+        const { window, column, heading, top, skip, canvas, overflow } = layout;
         assert.ok(
-          Math.abs(panel.right - (window.width - 8)) <= 1 &&
-            Math.abs(panel.top - 8) <= 1 &&
-            Math.abs(panel.bottom - (window.height - 8)) <= 1,
-          `${engine}: panel does not fill its column`,
+          Math.abs(column.left + column.right - window.width) <= 1,
+          `${engine}: column is not centred`,
         );
         assert.ok(
-          canvas.right - canvas.left >= panel.inner.width &&
-            canvas.bottom - canvas.top >= panel.inner.height,
-          `${engine}: field does not cover the panel`,
+          heading.left >= column.left && heading.right <= column.right,
+          `${engine}: heading leaves the column`,
         );
+        assert.ok(heading.top >= top.bottom, `${engine}: heading runs under the top bar`);
+        assert.ok(skip.right <= window.width && skip.left >= 0, `${engine}: Skip setup clipped`);
         assert.ok(
-          card.left - panel.left >= 8 &&
-            card.top - panel.top >= 8 &&
-            panel.right - card.right >= 8 &&
-            panel.bottom - card.bottom >= 8,
-          `${engine}: roster card clipped`,
+          canvas.left <= 0 &&
+            canvas.top <= 0 &&
+            canvas.right >= window.width &&
+            canvas.bottom >= window.height,
+          `${engine}: field does not cover the window`,
         );
-        assert.equal(rows.length, 9);
-        for (const [index, row] of rows.entries()) {
-          assert.ok(row.visible && row.bottom > row.top, `${engine}: hidden ${row.text}`);
-          assert.ok(!row.truncated, `${engine}: truncated ${row.text}`);
-          assert.ok(
-            row.left >= card.left &&
-              row.top >= card.top &&
-              row.right <= card.right &&
-              row.bottom <= card.bottom,
-            `${engine}: clipped ${row.text}`,
-          );
-          for (const other of rows.slice(index + 1))
-            assert.ok(
-              row.bottom <= other.top || other.bottom <= row.top,
-              `${engine}: overlapping ${row.text} / ${other.text}`,
-            );
-        }
+        assert.equal(overflow, false, `${engine}: setup scrolls sideways`);
       };
-      await checkPanel();
+      await checkLayout();
       await page.setViewportSize({ width: 1024, height: 768 });
-      await page.waitForFunction(() => {
-        const panel = document.querySelector(".setup-panel");
-        const canvas = panel?.querySelector(".setup-panel-field canvas");
-        return (
-          !!canvas &&
-          panel.getBoundingClientRect().right === innerWidth - 8 &&
-          canvas.getBoundingClientRect().width >= panel.clientWidth
-        );
-      });
-      await checkPanel();
-      await page.screenshot({ path: resolve(out, `${engine}-compact-panel.png`) });
+      await page.waitForFunction(
+        () =>
+          document.querySelector(".setup-backdrop canvas")?.getBoundingClientRect().width >= 1024,
+      );
+      await checkLayout();
+      await page.screenshot({ path: resolve(out, `${engine}-compact.png`) });
       await page.setViewportSize({ width: 1440, height: 900 });
       const assertNoVendorCalls = async () =>
         assert.deepEqual(
@@ -162,6 +127,30 @@ try {
       await page
         .getByRole("heading", { name: /^Found 3 agents\.\s*6 more can be installed\.$/ })
         .waitFor();
+      // What this computer has leads; every shown row is whole, inside the column and clear of the
+      // next, and the six missing agents fold into one row.
+      const rows = await page.evaluate(() => {
+        const column = document.querySelector(".setup-column").getBoundingClientRect();
+        return [...document.querySelectorAll(".setup-column .agent-row")].map((row) => {
+          const rect = row.getBoundingClientRect();
+          const name = row.querySelector(".agent-row-name strong");
+          return {
+            text: row.textContent,
+            top: rect.top,
+            bottom: rect.bottom,
+            inside: rect.left >= column.left - 8 && rect.right <= column.right + 8,
+            truncated: name.scrollWidth > name.clientWidth,
+          };
+        });
+      });
+      assert.equal(rows.length, 3, `${engine}: installed agents lead`);
+      for (const [index, row] of rows.entries()) {
+        assert.ok(row.inside && row.bottom > row.top, `${engine}: clipped ${row.text}`);
+        assert.ok(!row.truncated, `${engine}: truncated ${row.text}`);
+        for (const other of rows.slice(index + 1))
+          assert.ok(row.bottom <= other.top, `${engine}: overlapping ${row.text} / ${other.text}`);
+      }
+      await page.getByRole("button", { name: "Show 6 not installed" }).waitFor();
       await page.getByRole("button", { name: /Claude Code.*Installed/ }).click();
       await assertNoVendorCalls();
       await page.screenshot({ path: resolve(out, `${engine}-discovery.png`) });
@@ -178,13 +167,17 @@ try {
       await page.getByRole("button", { name: "Back to setup" }).click();
       await page.getByRole("button", { name: "Open Account", exact: true }).waitFor();
       await page.getByRole("button", { name: "Continue", exact: true }).click();
-      await page.getByRole("radio", { name: /Off/ }).check();
-      await page.waitForFunction(() => document.documentElement.dataset.motion === "off");
+      // The step survives a restart, and a setup saved at the retired motion step resumes at the
+      // step that followed it.
+      await page.getByRole("heading", { name: /^Add a first project\./ }).waitFor();
+      await page.evaluate(() => {
+        const saved = JSON.parse(sessionStorage.getItem("setup-fixture"));
+        saved.preferences.step = "motion";
+        sessionStorage.setItem("setup-fixture", JSON.stringify(saved));
+      });
       await page.reload();
-      await page.getByRole("heading", { name: "Choose how much moves." }).waitFor();
+      await page.getByRole("heading", { name: /^Add a first project\./ }).waitFor();
       await page.waitForFunction(() => !document.querySelector("[data-cinematic]"));
-      assert.equal(await page.getByRole("radio", { name: /Off/ }).isChecked(), true);
-      await page.getByRole("button", { name: "Continue", exact: true }).click();
       await page.getByRole("button", { name: /Choose a folder/ }).click();
       await page.getByRole("textbox", { name: "Project name" }).fill("A quiet project");
       await page.evaluate(() => sessionStorage.setItem("fail-setup", "yes"));
@@ -241,7 +234,7 @@ try {
       await intro.close();
       assert.deepEqual(errors, [], `${engine} page errors`);
       console.log(
-        `${engine}: setup persistence, restart/skip, storage retry without duplicate project, motion, local demo, passive detection and accessibility passed`,
+        `${engine}: setup persistence, restart/skip, storage retry without duplicate project, retired-step resume, centred layout, local demo, passive detection and accessibility passed`,
       );
     } finally {
       await browser.close();

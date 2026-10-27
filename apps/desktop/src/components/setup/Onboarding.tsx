@@ -1,10 +1,10 @@
 import { usePrefersReducedMotion } from "@auracode/ui";
-import { gridPath, Keycap, Wordmark } from "@auracode/ui/graphite";
+import { DitherField, Keycap, Wordmark } from "@auracode/ui/graphite";
 import { listen } from "@tauri-apps/api/event";
 import { ArrowRight, Check, FolderOpen, RefreshCw } from "lucide-react";
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
-  MotionPreference,
+  AgentEntry,
   ProjectSummary,
   SetupAction,
   SetupSnapshot,
@@ -20,53 +20,36 @@ import { projectName } from "../chat/ChatList";
 import { AgentRoster } from "./AgentsScreen";
 import { CloneProject } from "./CloneProject";
 import { type IntroMode, SetupIntro } from "./SetupIntro";
-import { primaryAgents, SetupPanel } from "./SetupPanel";
 import "./setup.css";
 
+/**
+ * Four steps, each skippable: Continue never requires anything. Motion is not one of them: Full
+ * already follows the system's reduced motion, and Settings changes it.
+ */
 const STEPS: readonly { id: SetupStep; label: string }[] = [
   { id: "welcome", label: "Welcome" },
   { id: "agents", label: "Your agents" },
   { id: "account", label: "Account" },
-  { id: "motion", label: "Motion" },
   { id: "project", label: "First project" },
 ];
-
-const MOTION: Record<MotionPreference, string> = { full: "Full", reduced: "Reduced", off: "Off" };
-
-/** The done check as pixels (5 by 4), at 2px cells inside the 20px step square. */
-const CHECK = ["....#", "...#.", "#.#..", ".#..."];
-const CHECK_PATH = gridPath(CHECK, 2, 5, 6);
 
 /** How long the intro holds before setup shows: the dissolve on a first launch, a beat later. */
 const INTRO_MS = { live: 1800, still: 240, reducedFirst: 300 } as const;
 /** The intro fades out over the dither reveal (800ms), or quickly once someone skips it. */
 const FADE_MS = { slow: 800, fast: 240 } as const;
+/**
+ * The field gathers at the window's sides and thins to black behind the column and along the top
+ * edge, where the wordmark and Skip setup sit (the site hero's clearings).
+ */
+const CLEARING = [
+  { x: 0.5, y: 0.46, rx: 0.34, ry: 0.8 },
+  { x: 0.5, y: 0, rx: 1, ry: 0.22 },
+] as const;
 
-function StepMark({
-  state,
-  number,
-}: {
-  readonly state: "done" | "active" | "pending";
-  number: number;
-}) {
-  return (
-    <span className="setup-step-mark" data-state={state} aria-hidden="true">
-      {state === "done" ? (
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 20 20"
-          shapeRendering="crispEdges"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path d={CHECK_PATH} fill="currentColor" />
-        </svg>
-      ) : (
-        number
-      )}
-    </span>
-  );
+/** Setups saved before motion left the steps resume at the step that followed it. */
+function current(step: SetupStep | undefined): SetupStep {
+  if (step === undefined) return "welcome";
+  return step === "motion" ? "project" : step;
 }
 
 export function Onboarding({
@@ -103,9 +86,8 @@ export function Onboarding({
   const heading = useRef<HTMLHeadingElement>(null);
   const started = useRef<Promise<SetupSnapshot> | null>(null);
   const lock = useRef(false);
-  const motionHint = useId();
   const agents = agentsState.agents ?? [];
-  const step = saved?.preferences.step ?? "welcome";
+  const step = current(saved?.preferences.step);
   const index = STEPS.findIndex((item) => item.id === step);
   useEffect(() => {
     app.start();
@@ -299,7 +281,9 @@ export function Onboarding({
         return;
       if (
         event.target instanceof Element &&
-        event.target.closest("button, input, select, textarea, a, dialog, [contenteditable=true]")
+        event.target.closest(
+          "button, input, select, textarea, a, dialog, [role=menu], [contenteditable=true]",
+        )
       )
         return;
       event.preventDefault();
@@ -323,319 +307,250 @@ export function Onboarding({
   const headings: Record<SetupStep, [string, string]> = {
     welcome: ["Welcome to auracode.", "Your agents, one window."],
     agents: agentsHeading,
-    account: ["Sync across machines.", "Or keep auracode local."],
-    motion: ["Choose how much moves.", "Change it in Settings."],
+    account: ["Accounts are optional.", "auracode works without one."],
+    motion: ["Add a first project.", "Any folder works."],
     project: ["Add a first project.", "Any folder works."],
-  };
-  const summaries: Partial<Record<SetupStep, string>> = {
-    agents: agentsState.agents === null ? undefined : `${installed} installed`,
-    motion: saved ? MOTION[saved.preferences.motion] : undefined,
   };
   const introMode: IntroMode =
     saved === null ? "pending" : saved.cold_start && !reduced ? "live" : "still";
-  const motion = saved?.preferences.motion;
   return (
     <main className="setup-shell g-root" data-cinematic={cinematic || undefined}>
+      <DitherField
+        className="setup-backdrop"
+        palette="quiet"
+        density={0.36}
+        edges={0.85}
+        ceiling={0.6}
+        accent={0.002}
+        clearing={CLEARING}
+        interactive
+        still={reduced}
+      />
       <div className="setup-drag" data-tauri-drag-region="" />
+      <header className="setup-top">
+        <Wordmark size={16} />
+        <button
+          type="button"
+          className="g-button g-button-ghost g-button-28 setup-skip"
+          disabled={busy}
+          onClick={() => (saved ? void run(() => apply({ type: "finish" })) : onDone())}
+        >
+          Skip setup
+        </button>
+      </header>
       <section className="setup-column">
-        <header className="setup-top">
-          <Wordmark size={16} />
-          <button
-            type="button"
-            className="g-button g-button-ghost g-button-28 setup-skip"
-            disabled={busy}
-            onClick={() => (saved ? void run(() => apply({ type: "finish" })) : onDone())}
-          >
-            Skip setup
-          </button>
-        </header>
-        <div className="setup-body">
-          <div className="setup-checklist">
-            <nav aria-label="Setup steps" className="setup-steps">
-              {STEPS.slice(0, index + 1).map((item, at) => (
+        <nav aria-label="Setup steps" className="setup-progress">
+          <ol>
+            {STEPS.map((item, at) => (
+              <li key={item.id}>
                 <button
-                  key={item.id}
                   type="button"
-                  className="setup-step"
-                  aria-current={step === item.id ? "step" : undefined}
-                  disabled={busy || !saved}
+                  className="setup-progress-step"
+                  data-state={at < index ? "done" : at === index ? "current" : "next"}
+                  aria-current={at === index ? "step" : undefined}
+                  aria-label={`${item.label}${at < index ? ", done" : ""}`}
+                  title={item.label}
+                  disabled={busy || !saved || at === index}
                   onClick={() => void run(() => apply({ type: "visit", step: item.id }))}
                 >
-                  <StepMark state={at < index ? "done" : "active"} number={at + 1} />
-                  <span className="setup-step-title">{item.label}</span>
-                  {at < index && summaries[item.id] ? (
-                    <span className="setup-step-summary">{summaries[item.id]}</span>
-                  ) : null}
-                  {at < index ? <span className="sr-only">, done</span> : null}
+                  <span aria-hidden="true" />
                 </button>
-              ))}
-            </nav>
-            <div className="setup-content" key={step}>
-              <h1 ref={heading} tabIndex={-1} className="setup-heading">
-                {headings[step][0]}
-                <span>{headings[step][1]}</span>
-              </h1>
-              {step === "welcome" ? (
-                <>
-                  <p className="setup-lead">
-                    Run the coding agents already on this computer in one chat window. Each keeps
-                    its own sign-in.
-                  </p>
-                  <p className="setup-footnote">Local first. No account needed.</p>
-                </>
-              ) : null}
-              {step === "agents" ? (
-                <>
-                  <AgentRoster
-                    compact
-                    agents={roster}
-                    transport={transport}
-                    onRefresh={() => void app.refreshAgents()}
-                  />
-                  <div className="setup-inline">
-                    <span className="setup-footnote">
-                      {agents.length
-                        ? `${installed} installed. Sign-in is checked only when you ask.`
-                        : "Looking for installed agents…"}
-                    </span>
-                    <button
-                      type="button"
-                      className="g-button g-button-ghost g-button-28"
-                      disabled={agentsState.agentsRefreshing}
-                      onClick={() => void app.refreshAgents()}
-                    >
-                      <RefreshCw size={14} aria-hidden="true" />
-                      Refresh
-                    </button>
-                  </div>
-                  {installed === 0 ? (
-                    <button
-                      type="button"
-                      className="g-button g-button-outline setup-demo"
-                      onClick={onDemo}
-                    >
-                      Explore the local demo <ArrowRight size={14} aria-hidden="true" />
-                    </button>
-                  ) : null}
-                </>
-              ) : null}
-              {step === "account" ? (
-                <>
-                  <p className="setup-lead">
-                    Local is free and works offline without an account. Cloud accounts, encrypted
-                    sync and transfers are invite-only during private preview.
-                  </p>
-                  <button type="button" className="g-button g-button-outline" onClick={onAccount}>
-                    Open Account
-                  </button>
-                  <p className="setup-footnote">
-                    Have an invitation? Sign in with your invited email. You can also continue with
-                    Local.
-                  </p>
-                </>
-              ) : null}
-              {step === "motion" ? (
-                <>
-                  <p className="setup-lead">
-                    Full keeps transitions and the live field. Reduced and Off hold them still.
-                  </p>
-                  <fieldset className="setup-motion" aria-describedby={motionHint}>
-                    <legend className="sr-only">Interface motion</legend>
-                    <div className="setup-segmented">
-                      {(["full", "reduced", "off"] as const).map((value) => (
-                        <label key={value}>
-                          <input
-                            type="radio"
-                            name="motion"
-                            value={value}
-                            disabled={busy || !saved}
-                            checked={motion === value}
-                            onChange={() => void run(() => apply({ type: "motion", value }))}
-                          />
-                          <span>{MOTION[value]}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
-                  <p className="setup-footnote" id={motionHint}>
-                    Full still follows your system's reduced motion setting.
-                  </p>
-                </>
-              ) : null}
-              {step === "project" ? (
-                <>
-                  <p className="setup-lead">
-                    Choose an existing folder or drop one into this window. Its files stay where
-                    they are.
-                  </p>
-                  <button
-                    type="button"
-                    className="setup-folder"
-                    disabled={busy || !workspace}
-                    onClick={pick}
-                  >
-                    <FolderOpen size={20} aria-hidden="true" />
-                    <span>
-                      <strong>{folder ? projectName(folder) : "Choose a folder"}</strong>
-                      <small className={folder ? "setup-path" : undefined}>
-                        {folder || "Or drop a folder here"}
-                      </small>
-                    </span>
-                  </button>
-                  {folder ? (
-                    <form
-                      className="setup-project-form"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        saveProject();
-                      }}
-                    >
-                      <label className="setup-field">
-                        Project name
-                        <input
-                          className="g-input"
-                          required
-                          maxLength={128}
-                          value={name}
-                          disabled={busy}
-                          onChange={(event) => setName(event.currentTarget.value)}
-                        />
-                      </label>
-                      <button
-                        type="submit"
-                        className="g-button g-button-outline g-button-36"
-                        disabled={busy || !name.trim()}
-                      >
-                        {project ? "Save selection" : "Add project"}
-                      </button>
-                    </form>
-                  ) : null}
-                  {existing.length > 0 ? (
-                    <label className="setup-field">
-                      Or choose a project
-                      <select
-                        className="g-select"
-                        disabled={busy}
-                        value={project?.id ?? ""}
-                        onChange={(event) => {
-                          const selected = existing.find(
-                            (item) => item.id === event.currentTarget.value,
-                          );
-                          if (selected) {
-                            setProject(selected);
-                            setFolder("");
-                            void run(() => apply({ type: "project", project_id: selected.id }));
-                          }
-                        }}
-                      >
-                        <option value="">Select a project</option>
-                        {existing.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  {saved?.preferences.first_project_id && project ? (
-                    <p role="status" className="setup-project-saved">
-                      <Check size={14} aria-hidden="true" /> {project.name} is ready.
-                    </p>
-                  ) : null}
-                  <CloneProject
-                    disabled={busy || !workspace}
-                    pickParent={() => transport.pickFolder()}
-                    onFolder={(path) => {
-                      setFolder(path);
-                      setName(projectName(path));
-                      setProject(null);
-                    }}
-                  />
-                </>
-              ) : null}
-              {saved?.notice ? (
-                <p className="setup-footnote" role="status">
-                  {saved.notice}
-                </p>
-              ) : null}
-              {error ? (
-                <div className="setup-error" role="alert">
-                  <p>{error}</p>
-                  <div>
-                    <button
-                      type="button"
-                      className="g-button g-button-ghost g-button-28"
-                      onClick={() =>
-                        void run(async () => {
-                          const value = await api.snapshot();
-                          setSaved(value);
-                          setMotionPreference(value.preferences.motion);
-                        })
-                      }
-                    >
-                      Reload saved setup
-                    </button>
-                    <button
-                      type="button"
-                      className="g-button g-button-ghost g-button-28"
-                      onClick={onDone}
-                    >
-                      Continue without saving setup
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              <div className="setup-actions">
-                <button
-                  type="button"
-                  className="g-button g-button-primary g-button-36"
-                  disabled={busy || !saved}
-                  onClick={advance}
-                >
-                  {busy
-                    ? "Saving…"
-                    : step === "welcome"
-                      ? "Get started"
-                      : step === "project"
-                        ? "Open auracode"
-                        : "Continue"}
-                  <span className="setup-enter" aria-hidden="true">
-                    <Keycap>↵</Keycap>
-                  </span>
-                </button>
-                {index > 0 ? (
-                  <button
-                    type="button"
-                    className="g-button g-button-ghost g-button-36"
-                    disabled={busy}
-                    onClick={advance}
-                  >
-                    Skip this step
+              </li>
+            ))}
+          </ol>
+        </nav>
+        <div className="setup-content" key={step}>
+          <h1 ref={heading} tabIndex={-1} className="setup-heading">
+            {headings[step][0]}
+            <span>{headings[step][1]}</span>
+          </h1>
+          {step === "welcome" ? (
+            <p className="setup-lead">
+              Run the coding agents already on this computer in one chat window. Each keeps its own
+              sign-in, and nothing leaves this machine.
+            </p>
+          ) : null}
+          {step === "agents" ? (
+            <>
+              <AgentRoster
+                agents={roster}
+                transport={transport}
+                onRefresh={() => void app.refreshAgents()}
+              />
+              <div className="setup-inline">
+                {installed === 0 && agentsState.agents !== null && looking === 0 ? (
+                  <button type="button" className="g-button g-button-outline" onClick={onDemo}>
+                    Explore the local demo <ArrowRight size={14} aria-hidden="true" />
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  className="g-button g-button-ghost g-button-28 setup-refresh"
+                  disabled={agentsState.agentsRefreshing}
+                  onClick={() => void app.refreshAgents()}
+                >
+                  <RefreshCw size={14} aria-hidden="true" />
+                  {agentsState.agentsRefreshing ? "Refreshing…" : "Refresh"}
+                </button>
+              </div>
+            </>
+          ) : null}
+          {step === "account" ? (
+            <>
+              <p className="setup-lead">
+                auracode runs on this computer, offline, with no account. Sync between your devices
+                is invite-only for now: if you have an invitation, sign in with that email.
+              </p>
+              <button type="button" className="g-button g-button-outline" onClick={onAccount}>
+                Open Account
+              </button>
+            </>
+          ) : null}
+          {step === "project" ? (
+            <>
+              <p className="setup-lead">
+                Choose a folder, drop one into this window or clone one from GitHub. Its files stay
+                where they are.
+              </p>
+              <button
+                type="button"
+                className="setup-folder"
+                data-chosen={folder ? true : undefined}
+                disabled={busy || !workspace}
+                onClick={pick}
+              >
+                <FolderOpen size={20} aria-hidden="true" />
+                <span>
+                  <strong>{folder ? projectName(folder) : "Choose a folder"}</strong>
+                  <small className={folder ? "setup-path" : undefined}>
+                    {folder || "or drop it here"}
+                  </small>
+                </span>
+              </button>
+              {folder ? (
+                <form
+                  className="setup-project-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    saveProject();
+                  }}
+                >
+                  <label className="setup-field">
+                    Project name
+                    <input
+                      className="g-input"
+                      required
+                      maxLength={128}
+                      value={name}
+                      disabled={busy}
+                      onChange={(event) => setName(event.currentTarget.value)}
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="g-button g-button-outline g-button-36"
+                    disabled={busy || !name.trim()}
+                  >
+                    {project ? "Save selection" : "Add project"}
+                  </button>
+                </form>
+              ) : null}
+              {saved?.preferences.first_project_id && project ? (
+                <p role="status" className="setup-project-saved">
+                  <Check size={14} aria-hidden="true" /> {project.name} is ready.
+                </p>
+              ) : null}
+              <div className="setup-project-more">
+                <CloneProject
+                  disabled={busy || !workspace}
+                  pickParent={() => transport.pickFolder()}
+                  onFolder={(path) => {
+                    setFolder(path);
+                    setName(projectName(path));
+                    setProject(null);
+                  }}
+                />
+                {existing.length > 0 ? (
+                  <select
+                    className="g-select setup-existing"
+                    aria-label="Or choose a project"
+                    disabled={busy}
+                    value={project?.id ?? ""}
+                    onChange={(event) => {
+                      const selected = existing.find(
+                        (item) => item.id === event.currentTarget.value,
+                      );
+                      if (selected) {
+                        setProject(selected);
+                        setFolder("");
+                        void run(() => apply({ type: "project", project_id: selected.id }));
+                      }
+                    }}
+                  >
+                    <option value="">Or choose a project</option>
+                    {existing.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+          {saved?.notice ? (
+            <p className="setup-footnote" role="status">
+              {saved.notice}
+            </p>
+          ) : null}
+          {error ? (
+            <div className="setup-error" role="alert">
+              <p>{error}</p>
+              <div>
+                <button
+                  type="button"
+                  className="g-button g-button-ghost g-button-28"
+                  onClick={() =>
+                    void run(async () => {
+                      const value = await api.snapshot();
+                      setSaved(value);
+                      setMotionPreference(value.preferences.motion);
+                    })
+                  }
+                >
+                  Reload saved setup
+                </button>
+                <button
+                  type="button"
+                  className="g-button g-button-ghost g-button-28"
+                  onClick={onDone}
+                >
+                  Continue without saving setup
+                </button>
               </div>
             </div>
-            {index < STEPS.length - 1 ? (
-              <nav aria-label="Remaining setup steps" className="setup-steps setup-upcoming">
-                {STEPS.slice(index + 1).map((item, at) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="setup-step"
-                    disabled={busy || !saved}
-                    onClick={() => void run(() => apply({ type: "visit", step: item.id }))}
-                  >
-                    <StepMark state="pending" number={at + index + 2} />
-                    <span className="setup-step-title">{item.label}</span>
-                  </button>
-                ))}
-              </nav>
-            ) : null}
+          ) : null}
+          <div className="setup-actions">
+            <button
+              type="button"
+              className="g-button g-button-primary g-button-36"
+              disabled={busy || !saved}
+              onClick={advance}
+            >
+              {busy
+                ? "Saving…"
+                : step === "welcome"
+                  ? "Get started"
+                  : step === "project"
+                    ? "Open auracode"
+                    : "Continue"}
+              <span className="setup-enter" aria-hidden="true">
+                <Keycap>↵</Keycap>
+              </span>
+            </button>
           </div>
         </div>
-        <footer className="setup-bottom">Everything here can be changed later.</footer>
       </section>
-      <SetupPanel agents={agents} />
       {introGone ? null : (
         <SetupIntro mode={introMode} leaving={cinematic ? false : skipped ? "fast" : "slow"} />
       )}
@@ -652,5 +567,16 @@ export function Onboarding({
         </button>
       ) : null}
     </main>
+  );
+}
+
+/** Transport aliases stay visible on Agents; setup shows one row per harness. */
+export function primaryAgents(agents: readonly AgentEntry[]): readonly AgentEntry[] {
+  return agents.filter(
+    (agent) =>
+      !agent.id.endsWith("-acp") &&
+      !agent.id.endsWith("-stream") &&
+      agent.id !== "mock" &&
+      agent.id !== "opencode-v2",
   );
 }

@@ -34,16 +34,6 @@ export const ALLOWLIST = [
   },
   {
     file: "components/setup/setup.css",
-    fragment: "clamp(28px, 2.3vw, var(--g-text-display))",
-    reason: "Setup's heading steps from display size down to 28px so each tone keeps one line.",
-  },
-  {
-    file: "components/setup/setup.css",
-    fragment: "line-height: 1.1875",
-    reason: "The fluid heading needs display's 38/32 ratio, not a fixed leading.",
-  },
-  {
-    file: "components/setup/setup.css",
     fragment: "0.01ms !important",
     reason: "The app's reduced-motion switch ends every animation at once and still fires its end.",
   },

@@ -62,10 +62,7 @@ export function AgentInstallations({
         {open ? "Hide executables" : "Choose executable"}
       </button>
       {open ? (
-        <div>
-          <p>
-            Choose for this device. Applies to new sessions and alternate transports of this agent.
-          </p>
+        <div className="setup-installations-panel">
           {busy ? (
             <p role="status" className="setup-footnote">
               Checking executables…
@@ -88,12 +85,19 @@ export function AgentInstallations({
           ) : null}
           {value ? (
             <fieldset disabled={busy || value.notice !== null}>
-              <legend>Executables in discovery order</legend>
+              <legend>
+                Executable for new sessions
+                <small>On this device, in discovery order.</small>
+              </legend>
               {value.candidates.length === 0 ? (
                 <p>No executables found. Install the vendor CLI, then refresh.</p>
               ) : null}
-              {value.candidates.map((candidate, index) => (
-                <label key={candidate.path} className="setup-executable">
+              {value.candidates.map((candidate) => (
+                <label
+                  key={candidate.path}
+                  className="setup-executable"
+                  data-unavailable={candidate.availability.state !== "ready" || undefined}
+                >
                   <input
                     type="radio"
                     name={group}
@@ -103,9 +107,6 @@ export function AgentInstallations({
                     onChange={() => setChoice(candidate.path)}
                   />
                   <span>
-                    <strong>
-                      {index + 1}. {candidate.selected ? "Current choice" : "Shadowed"}
-                    </strong>
                     <code>{candidate.path}</code>
                     <small>
                       {candidate.source} ·{" "}
@@ -116,16 +117,27 @@ export function AgentInstallations({
                           : candidate.availability.reason}
                     </small>
                   </span>
+                  {candidate.selected ? (
+                    <span className="setup-executable-used">In use</span>
+                  ) : null}
                 </label>
               ))}
               {value.truncated ? (
-                <p>Only the first eight executables and 256 PATH folders are shown.</p>
+                <p className="setup-footnote">
+                  Only the first eight executables and 256 PATH folders are shown.
+                </p>
               ) : null}
-              <div className="setup-executable-actions">
+            </fieldset>
+          ) : null}
+          <div className="setup-executable-actions">
+            {value ? (
+              <>
                 <button
                   type="button"
-                  className="g-button g-button-outline g-button-28"
+                  className="g-button g-button-28"
                   disabled={
+                    busy ||
+                    value.notice !== null ||
                     choice === null ||
                     choice === value.preferred_path ||
                     !value.candidates.some(
@@ -140,6 +152,7 @@ export function AgentInstallations({
                   <button
                     type="button"
                     className="g-button g-button-ghost g-button-28"
+                    disabled={busy || value.notice !== null}
                     onClick={() => void save(null)}
                   >
                     Use environment default
@@ -147,17 +160,17 @@ export function AgentInstallations({
                 ) : (
                   <span>Using the environment override, then PATH order.</span>
                 )}
-              </div>
-            </fieldset>
-          ) : null}
-          <button
-            type="button"
-            className="g-button g-button-ghost g-button-28 setup-recheck"
-            disabled={busy}
-            onClick={() => void load()}
-          >
-            Check again
-          </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              className="g-button g-button-ghost g-button-28 setup-recheck"
+              disabled={busy}
+              onClick={() => void load()}
+            >
+              Check again
+            </button>
+          </div>
         </div>
       ) : null}
     </div>
