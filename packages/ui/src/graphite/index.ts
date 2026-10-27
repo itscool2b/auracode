@@ -46,6 +46,15 @@ export {
 } from "./pixels";
 export { StatusDot, type StatusDotProps, type StatusTone } from "./StatusDot";
 export {
+  type DitherSprite,
+  type ParsedSprite,
+  paintSprites,
+  parseSprite,
+  type SpriteAvoid,
+  type SpritePose,
+  spritePose,
+} from "./sprites";
+export {
   contrastRatio,
   DITHER_PALETTES,
   type DitherPaletteName,

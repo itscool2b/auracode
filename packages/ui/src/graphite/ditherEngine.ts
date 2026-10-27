@@ -12,6 +12,7 @@ import {
   sampleField,
   VOLT,
 } from "./dither";
+import { type DitherSprite, paintSprites } from "./sprites";
 import { GRAPHITE_COLORS } from "./tokens";
 
 /** What a DitherField dissolves into. Images must be same-origin (or CORS-enabled) to be read. */
@@ -68,6 +69,8 @@ export interface DitherEngineOptions {
   readonly fps: number;
   readonly reduced: boolean;
   readonly clearing: DitherClearingArea | null;
+  /** Shapes drawn into the field's luminance; none by default. */
+  readonly sprites?: readonly DitherSprite[];
 }
 
 /**
@@ -148,6 +151,7 @@ export function createDitherEngine(
   let lastTick = 0;
   let elapsed = 0;
   let destroyed = false;
+  let overlay: Float32Array | null = null;
   const lut = new Uint32Array(256);
   const lens = { x: 0, y: 0, strength: 0, goal: 0, px: 0, py: 0, seen: false };
 
@@ -356,7 +360,17 @@ export function createDitherEngine(
         ? { x: lens.x, y: lens.y, radius: LENS_PX / cssCell, strength: lens.strength }
         : null;
     const area = options.clearing;
+    // Sprites ride the field's own clock, so they freeze where it freezes and pause where it does.
+    let spriteOverlay: Float32Array | null = null;
+    const sprites = options.sprites;
+    if (sprites && sprites.length > 0) {
+      const size = buffers.cols * buffers.rows;
+      if (!overlay || overlay.length !== size) overlay = new Float32Array(size);
+      paintSprites(overlay, buffers.cols, buffers.rows, sprites, time, cssCell, activeLens);
+      spriteOverlay = overlay;
+    }
     const out = renderLevels(buffers, {
+      overlay: spriteOverlay,
       levels: levels(),
       density: options.density,
       accent: options.accent,

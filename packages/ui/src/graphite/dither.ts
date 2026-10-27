@@ -9,6 +9,8 @@
  * dither, not the noise, supplies the fine texture. That keeps a full-width hero near 2ms a frame.
  */
 
+import { type DitherSprite, paintSprites } from "./sprites";
+
 /** Palette index written for a lit volt pixel; greys are 0 (black) to levels - 1. */
 export const VOLT = 255;
 
@@ -342,6 +344,11 @@ export interface FrameSettings {
   readonly lens: DitherLens | null;
   /** An ellipse, in cell units, where the field thins out to black so text over it stays clear. */
   readonly clearing?: DitherClearing | null;
+  /**
+   * Sprite luminance per cell from paintSprites: below 0 leaves the field, 0 to 1 replaces it before
+   * the threshold, so sprites dither like the field. Inside a clearing they fade to black too.
+   */
+  readonly overlay?: Float32Array | null;
 }
 
 /** An elliptical clearing in cell units: centre and radii. */
@@ -382,6 +389,8 @@ export function renderLevels(buffers: FieldBuffers, settings: FrameSettings): Ui
     settings.clearing && settings.clearing.rx > 0 && settings.clearing.ry > 0
       ? settings.clearing
       : null;
+  const overlay =
+    settings.overlay && settings.overlay.length >= cols * rows ? settings.overlay : null;
   for (let y = 0; y < rows; y++) {
     const gy = y / COARSE_STEP;
     const y0 = Math.floor(gy);
@@ -427,6 +436,14 @@ export function renderLevels(buffers: FieldBuffers, settings: FrameSettings): Ui
 
       // Volt comes from the field's own peaks, never from the lens.
       let spark = base > PEAK && (sparks[i] ?? 1) < accent;
+      if (overlay) {
+        // A sprite replaces the field's value in its cells and never lights volt itself.
+        const value = overlay[i] ?? -1;
+        if (value >= 0) {
+          s = value * keep;
+          spark = false;
+        }
+      }
       if (target) {
         const threshold = thresholds[i] ?? 0;
         if (progress > threshold) {
@@ -473,14 +490,24 @@ export interface DitherFrameOptions {
   readonly texture?: number;
   readonly order?: DissolveOrder;
   readonly clearing?: DitherClearing | null;
+  /** Sprites drawn into the field at `time`, exactly where the live engine draws them. */
+  readonly sprites?: readonly DitherSprite[];
 }
 
 /** Renders one frame from scratch: for tests and for writing the static fallback image. */
 export function renderDitherFrame(options: DitherFrameOptions): Uint8Array {
   const seed = options.seed ?? DEFAULT_SEED;
+  const cellPx = options.cellPx ?? 4;
+  const time = options.time ?? 0;
   const buffers = createFieldBuffers(options.cols, options.rows, seed, options.order ?? "scatter");
-  sampleField(buffers, createValueNoise3(seed), options.cellPx ?? 4, options.time ?? 0);
+  sampleField(buffers, createValueNoise3(seed), cellPx, time);
+  let overlay: Float32Array | null = null;
+  if (options.sprites && options.sprites.length > 0) {
+    overlay = new Float32Array(buffers.cols * buffers.rows);
+    paintSprites(overlay, buffers.cols, buffers.rows, options.sprites, time, cellPx);
+  }
   return renderLevels(buffers, {
+    overlay,
     levels: options.levels ?? 4,
     density: options.density ?? 0.5,
     accent: options.accent ?? DEFAULT_ACCENT,

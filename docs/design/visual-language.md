@@ -621,7 +621,7 @@ makes uneven cells; past 240,000 cells the cell grows. Each frame:
 (0 holds); `density` 0.5; `accent` 0.02; `interactive` false; `target`; `progress` (0, or 1 when
 only a target is set); `reveal` false; `order` "scatter"; `palette` "standard" (or 2 to 4 greys);
 `transparent` false (black cells clear, to layer over a surface); `clearing`; `fallbackSrc`;
-`still` false; `seed` `0x6a09e667`; `fps` 30; `label` (otherwise `aria-hidden`).
+`still` false; `seed` `0x6a09e667`; `fps` 30; `sprites` (none); `label` (otherwise `aria-hidden`).
 
 - **Lens** (`interactive`, fine pointers with hover only): within 120 CSS px of the pointer the
   field develops: the floor drops by up to 0.16 and contrast rises by up to 60%, both falling off
@@ -641,6 +641,13 @@ only a target is set); `reveal` false; `order` "scatter"; `palette` "standard" (
   once.
 - **Clearing**: an ellipse in fractions of the field (`{ x 0.5, y 0.5, rx, ry }`) where the field
   thins to black a pixel at a time, so a headline set over it stays readable.
+- **Sprites** (opt-in, none by default): small luminance grids with 2 to 4 frames (`.` empty, `0`
+  to `9` ninths of full brightness), drawn into the field's luminance before the threshold, so they
+  dither in the same cells and greys as the noise. Each drifts in CSS px a second with an optional
+  sine bob, a lazy roll and a 1-cell black moat, travels fully off one side before entering from the
+  other, mirrors when swimming left, eases away from the lens, fades to black inside a clearing and
+  never lights volt. They ride the field's clock: frozen in place under reduced motion or `still`,
+  paused whenever the field pauses.
 
 **Performance.** Draws from the shared frame clock, at most `fps` (30) times a second, only while
 the field intersects the viewport (64px margin), the page is visible, motion is allowed, `still`
@@ -651,10 +658,10 @@ hero at 4px cells, lens and clearing included.
 **Server, no JS, no canvas.** Server rendering emits the wrapper, the optional fallback `<img>` and
 an empty canvas, touching no browser API. The fallback shows until the first frame lands and stays
 if the canvas is unavailable. For a field without a target, `renderDitherFrame({ cols, rows,
-cellPx, seed, density, accent, clearing })` (clearing in cells, time 0) renders the identical first
-frame in Node, so a build step can write the fallback PNG at one pixel per cell and the hand-off is
-seamless. With `children` and no scripting, the field steps aside (`@media (scripting: none)`).
-Give the field a size; it fills its box.
+cellPx, seed, density, accent, clearing, sprites })` (clearing in cells, time 0) renders the
+identical first frame in Node, sprites included, so a build step can write the fallback PNG at one
+pixel per cell and the hand-off is seamless. With `children` and no scripting, the field steps
+aside (`@media (scripting: none)`). Give the field a size; it fills its box.
 
 ---
 

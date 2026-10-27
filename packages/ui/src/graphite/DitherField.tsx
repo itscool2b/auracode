@@ -8,6 +8,7 @@ import {
   type DitherEngineOptions,
   type DitherTarget,
 } from "./ditherEngine";
+import type { DitherSprite } from "./sprites";
 import { DITHER_PALETTES, type DitherPaletteName } from "./tokens";
 
 export type { DitherClearingArea, DitherTarget } from "./ditherEngine";
@@ -55,9 +56,17 @@ export interface DitherFieldProps {
    * headline set over it stays readable: `{ rx: 0.34, ry: 0.3, y: 0.42 }`. Default none.
    */
   readonly clearing?: DitherClearingArea;
+  /**
+   * Small shapes that drift through the field, drawn into its luminance so they dither like it.
+   * Pass a stable array (a module constant); a new array each render restarts nothing but costs a
+   * comparison. Default none.
+   */
+  readonly sprites?: readonly DitherSprite[];
   /** Set when the field itself means something; otherwise it is hidden from assistive tech. */
   readonly label?: string;
 }
+
+const NO_SPRITES: readonly DitherSprite[] = [];
 
 /**
  * Graphite's signature: a live ordered-dither field on a 2D canvas, rendered at one canvas pixel per
@@ -84,6 +93,7 @@ export function DitherField({
   seed = DEFAULT_SEED,
   fps = 30,
   clearing,
+  sprites = NO_SPRITES,
   label,
 }: DitherFieldProps) {
   const reduced = usePrefersReducedMotion();
@@ -92,7 +102,7 @@ export function DitherField({
   const fallback = useRef<HTMLImageElement>(null);
   const engine = useRef<DitherEngine | null>(null);
   const greys = typeof palette === "string" ? DITHER_PALETTES[palette] : palette;
-  const options: DitherEngineOptions = {
+  const settings: Omit<DitherEngineOptions, "sprites"> = {
     cell: finite(cell, 4, 1, 64),
     speed: finite(speed, 1, 0, 8),
     density: finite(density, 0.5, 0, 1),
@@ -117,9 +127,11 @@ export function DitherField({
         }
       : null,
   };
+  const options: DitherEngineOptions = { ...settings, sprites };
   const latest = useRef(options);
   latest.current = options;
-  const key = JSON.stringify(options);
+  // Sprites are compared by reference: serialising their frames on every render would cost more.
+  const key = JSON.stringify(settings);
 
   useEffect(() => {
     const node = root.current;
@@ -136,7 +148,7 @@ export function DitherField({
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` is the serialised options.
   useEffect(() => {
     engine.current?.update(latest.current);
-  }, [key]);
+  }, [key, sprites]);
 
   const reveals = children !== undefined;
   // Revealed content speaks for itself; a field alone is decorative unless it is given a name.
