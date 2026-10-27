@@ -108,7 +108,7 @@ pub struct WorktreeChatPlan {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WorktreeChatPreview {
     Worktree {
-        plan: WorktreeChatPlan,
+        plan: Box<WorktreeChatPlan>,
     },
     /// The folder is not a Git repository. The chat works directly in the folder instead.
     NotGitRepository {

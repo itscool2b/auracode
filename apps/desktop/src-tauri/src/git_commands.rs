@@ -155,3 +155,48 @@ pub async fn worktree_pr_apply(
         .worktree_pr_apply(&chat_id, &token)
         .await?)
 }
+
+#[tauri::command]
+#[specta::specta]
+pub async fn worktree_chat_preview(
+    state: State<'_, AppState>,
+    input: aura_protocol::git::WorktreeChatInput,
+) -> Result<aura_protocol::git::WorktreeChatPreview, AppError> {
+    Ok(state.sessions()?.worktree_chat_preview(input).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn worktree_chat_apply(
+    state: State<'_, AppState>,
+    token: String,
+) -> Result<aura_protocol::git::WorktreeChatResult, AppError> {
+    Ok(state.sessions()?.worktree_chat_apply(&token).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn worktree_recreate_preview(
+    state: State<'_, AppState>,
+    chat_id: String,
+    worktree_id: String,
+) -> Result<aura_protocol::git::WorktreeRecreatePreview, AppError> {
+    Ok(state
+        .sessions()?
+        .worktree_recreate_preview(&chat_id, &worktree_id)
+        .await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn worktree_recreate_apply(
+    state: State<'_, AppState>,
+    chat_id: String,
+    worktree_id: String,
+    token: String,
+) -> Result<WorktreeActionResult, AppError> {
+    Ok(state
+        .sessions()?
+        .worktree_recreate_apply(&chat_id, &worktree_id, &token)
+        .await?)
+}

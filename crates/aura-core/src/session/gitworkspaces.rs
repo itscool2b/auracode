@@ -304,6 +304,43 @@ impl SessionManager {
         }).await.map_err(|_| invalid("The recovery task ended unexpectedly. Its saved state and files remain available for review."))?
     }
 
+    /// Reviews recreating a worktree folder that was deleted outside the app, from its branch.
+    pub async fn worktree_recreate_preview(
+        &self,
+        chat_id: &str,
+        worktree_id: &str,
+    ) -> Result<aura_protocol::git::WorktreeRecreatePreview, SessionError> {
+        self.git_chat(chat_id).await?;
+        self.worktrees()?
+            .recreate_preview(chat_id, worktree_id)
+            .await
+            .map_err(|error| invalid(error.to_string()))
+    }
+
+    /// Only the two owned paths are reserved. Adding a worktree for an existing branch writes
+    /// Git metadata only and does not touch the source folder's files or index.
+    pub async fn worktree_recreate_apply(
+        &self,
+        chat_id: &str,
+        worktree_id: &str,
+        token: &str,
+    ) -> Result<WorktreeActionResult, SessionError> {
+        let manager = self.clone();
+        let chat_id = chat_id.to_owned();
+        let worktree_id = worktree_id.to_owned();
+        let token = token.to_owned();
+        self.deps().rt.spawn(async move {
+            let _organization = manager.shared().organization.lock().await;
+            manager.git_chat(&chat_id).await?;
+            let service = manager.worktrees()?;
+            let folders = service.recreate_folders(&chat_id, &worktree_id).await
+                .map_err(|error| invalid(error.to_string()))?;
+            let _reservations = manager.reserve_git_folders(folders).await?;
+            service.recreate_apply(&chat_id, &worktree_id, &token).await
+                .map_err(|error| invalid(error.to_string()))
+        }).await.map_err(|_| invalid("The recreate task ended unexpectedly. Its saved state remains available for review."))?
+    }
+
     pub async fn worktree_relocation_preview(
         &self,
         chat_id: &str,

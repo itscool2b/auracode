@@ -177,6 +177,11 @@ async fn another_local_branch_can_be_the_start_and_must_not_move_after_preview()
         .run(&rig.work, git::args(&["checkout", "-q", "main"]), 8192)
         .await
         .expect("checkout main");
+    // A tag with the same name never shadows the local branch.
+    rig.git
+        .run(&rig.work, git::args(&["tag", "release", "main"]), 8192)
+        .await
+        .expect("ambiguous tag");
     assert!(
         rig.service
             .new_chat_preview(NewChatRequest {
@@ -369,6 +374,47 @@ async fn non_git_folders_fall_back_to_direct_with_a_reason() {
         .expect("nested outcome");
     assert!(matches!(&outcome, NewChatPlan::Direct(message) if message.contains("not its root")));
     assert!(rig.service.read_records().expect("records").is_empty());
+}
+
+#[tokio::test]
+async fn without_git_only_a_folder_lacking_repository_metadata_falls_back_to_direct() {
+    let dir = tempfile::tempdir().expect("fixture");
+    let profile =
+        crate::profile::Profiles::new(crate::paths::DataRoot::at(dir.path().join("data")))
+            .open_active()
+            .expect("profile");
+    let env = EnvResolver::fixed(aura_process::ResolvedEnv {
+        vars: Default::default(),
+        source: aura_process::EnvSource::Fallback {
+            reason: "no Git fixture".into(),
+        },
+        warnings: vec![],
+        resolved_at_ms: 0,
+    });
+    let service = GitWorkspaces::new(&profile, env, LeftoverRegistry::disabled());
+    let plain = dir.path().join("plain");
+    std::fs::create_dir(&plain).expect("plain");
+    let request = || NewChatRequest {
+        chat_id: "chat",
+        folder: &plain,
+        start_branch: None,
+        branch: None,
+        title: None,
+        bring_changes: false,
+    };
+    assert!(matches!(
+        service.new_chat_preview(request()).await.expect("direct"),
+        NewChatPlan::Direct(message) if message.contains("not a Git repository")
+    ));
+    std::fs::create_dir(plain.join(".git")).expect("repository metadata fixture");
+    assert!(
+        service
+            .new_chat_preview(request())
+            .await
+            .expect_err("Git is required for a repository")
+            .to_string()
+            .contains("Install Git")
+    );
 }
 
 #[tokio::test]

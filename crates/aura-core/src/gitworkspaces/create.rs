@@ -364,7 +364,8 @@ pub(super) fn creating_record(
     }
 }
 
-/// Local branch short names under `prefix`, most recently committed first.
+/// Local branch names under `prefix` (a `refs/heads/` path), most recently committed first. Full
+/// names are stripped explicitly: `refname:short` may add `heads/` when a tag has the same name.
 pub(super) async fn local_branches(
     git: &git::Git,
     root: &Path,
@@ -376,7 +377,7 @@ pub(super) async fn local_branches(
             args(&[
                 "for-each-ref",
                 "--sort=-committerdate",
-                "--format=%(refname:short)",
+                "--format=%(refname)",
                 prefix,
             ]),
             1024 * 1024,
@@ -384,7 +385,8 @@ pub(super) async fn local_branches(
         .await?;
     Ok(text(&branches)?
         .lines()
-        .filter(|line| !line.is_empty())
+        .filter_map(|line| line.strip_prefix("refs/heads/"))
+        .filter(|name| !name.is_empty())
         .map(str::to_owned)
         .collect())
 }

@@ -208,6 +208,10 @@ export const commands = {
 	worktreeRelocationApply: (chatId: string, token: string) => typedError<ContinuationResult, AppError>(__TAURI_INVOKE("worktree_relocation_apply", { chatId, token })),
 	worktreePrPreview: (chatId: string, worktreeId: string, input: PullRequestInput) => typedError<PullRequestPreview, AppError>(__TAURI_INVOKE("worktree_pr_preview", { chatId, worktreeId, input })),
 	worktreePrApply: (chatId: string, token: string) => typedError<PullRequestResult, AppError>(__TAURI_INVOKE("worktree_pr_apply", { chatId, token })),
+	worktreeChatPreview: (input: WorktreeChatInput) => typedError<WorktreeChatPreview, AppError>(__TAURI_INVOKE("worktree_chat_preview", { input })),
+	worktreeChatApply: (token: string) => typedError<WorktreeChatResult, AppError>(__TAURI_INVOKE("worktree_chat_apply", { token })),
+	worktreeRecreatePreview: (chatId: string, worktreeId: string) => typedError<WorktreeRecreatePreview, AppError>(__TAURI_INVOKE("worktree_recreate_preview", { chatId, worktreeId })),
+	worktreeRecreateApply: (chatId: string, worktreeId: string, token: string) => typedError<WorktreeActionResult, AppError>(__TAURI_INVOKE("worktree_recreate_apply", { chatId, worktreeId, token })),
 	/**  Every chat, newest activity first. */
 	chatsList: () => typedError<ChatSummary[], AppError>(__TAURI_INVOKE("chats_list")),
 	workspaceSnapshot: (filter: WorkspaceFilter) => typedError<WorkspaceSnapshot, AppError>(__TAURI_INVOKE("workspace_snapshot", { filter })),
@@ -743,6 +747,8 @@ export type ChatFolderContext = {
 	active: boolean,
 	supports_additional: boolean,
 };
+
+export type ChatFolderMode = "direct" | "worktree";
 
 export type ChatMove = {
 	project_id: string,
@@ -2090,6 +2096,67 @@ export type WorktreeActionResult = {
 	error: string | null,
 };
 
+/**  A compact summary for a chip below the composer. */
+export type WorktreeChatChip = {
+	mode: ChatFolderMode,
+	starting_branch: string | null,
+	branch: string | null,
+	label: string,
+};
+
+/**  One-step request for a new chat whose folder is a new app-owned worktree. */
+export type WorktreeChatInput = {
+	/**  The project folder the worktree is created from. It must be a repository root. */
+	folder_id: string,
+	agent_id: string,
+	/**  A local branch to start from. `None` starts from the source folder's current branch. */
+	start_branch: string | null,
+	/**  The new branch. `None` picks a unique `aura/<slug>` name. An existing branch is never reused. */
+	branch: string | null,
+	/**  Optional chat title. It also names an automatic branch. */
+	title: string | null,
+	/**  Copy the source's uncommitted working files. Only allowed from the current commit. */
+	bring_changes: boolean,
+	/**  Run the source folder's saved worktree setup after creation. */
+	run_setup: boolean,
+};
+
+export type WorktreeChatPlan = {
+	token: string,
+	source: GitWorkspace,
+	starting_branch: string,
+	starting_commit: string,
+	branch: string,
+	/**  True when the branch name was generated rather than typed. */
+	branch_generated: boolean,
+	path: string,
+	bring_changes: boolean,
+	/**  Local branches the starting branch can be chosen from, most recent first (bounded). */
+	local_branches: string[],
+	/**  The saved setup recipe that will run after creation, if any. */
+	setup: WorktreeSetupInput | null,
+	chip: WorktreeChatChip,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type WorktreeChatPreview = { type: "worktree"; plan: WorktreeChatPlan } | 
+/**  The folder is not a Git repository. The chat works directly in the folder instead. */
+{ type: "not_git_repository"; folder: string; message: string; chip: WorktreeChatChip };
+
+export type WorktreeChatResult = {
+	chat: WorkspaceChat,
+	worktree: ManagedWorktree,
+	/**
+	 *  Present when setup ran. A `command_token` starts the reviewed command in the owned
+	 *  terminal (`worktree_setup_start`); the agent is then started explicitly.
+	 */
+	setup: WorktreeSetupResult | null,
+	/**  True when the agent start was requested. */
+	started: boolean,
+	warnings: string[],
+};
+
 export type WorktreeDestination = "isolated" | "direct";
 
 export type WorktreeRecovery = { type: "create" } | { type: "retire" } | { type: "restore" } | { type: "merge"; branch: string; before_ref: string; prepared_ref: string; before_commit: string; prepared_commit: string };
@@ -2103,6 +2170,16 @@ export type WorktreeRecoveryPreview = {
 	folder: GitWorkspace,
 	target: GitWorkspace | null,
 	destination: string,
+	warnings: string[],
+	expires_at: number,
+};
+
+export type WorktreeRecreatePreview = {
+	token: string,
+	worktree: ManagedWorktree,
+	path: string,
+	branch: string,
+	commit: string,
 	warnings: string[],
 	expires_at: number,
 };

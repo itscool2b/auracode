@@ -41,6 +41,7 @@ pub(crate) enum NewChatPlan {
 }
 
 const MAX_LISTED_BRANCHES: usize = 200;
+const NOT_GIT: &str = "This folder is not a Git repository. The chat works directly in the folder.";
 
 fn invalid(message: &str) -> GitError {
     GitError::Message(message.into())
@@ -55,7 +56,14 @@ impl GitWorkspaces {
         if request.chat_id.is_empty() || request.chat_id.len() > 128 {
             return Err(invalid("The chat identifier is invalid."));
         }
-        let git = self.git().await?;
+        let git = match self.git().await {
+            Ok(git) => git,
+            // Without usable Git, a folder with no repository metadata is still a plain folder.
+            Err(_) if std::fs::symlink_metadata(request.folder.join(".git")).is_err() => {
+                return Ok(NewChatPlan::Direct(NOT_GIT.into()));
+            }
+            Err(error) => return Err(error),
+        };
         if let Some(message) = direct_reason(&git, request.folder).await? {
             return Ok(NewChatPlan::Direct(message));
         }
@@ -391,9 +399,7 @@ async fn direct_reason(git: &git::Git, folder: &Path) -> Result<Option<String>> 
         if std::fs::symlink_metadata(folder.join(".git")).is_ok() {
             return Ok(None);
         }
-        return Ok(Some(
-            "This folder is not a Git repository. The chat works directly in the folder.".into(),
-        ));
+        return Ok(Some(NOT_GIT.into()));
     }
     let root = std::path::PathBuf::from(text(&output.stdout)?);
     if root.canonicalize().ok().as_ref() != Some(&folder) {
