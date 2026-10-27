@@ -52,3 +52,6 @@ test-results/
 
 # Local git worktrees for parallel milestone tracks
 .worktrees/
+
+# Local browser automation output
+/.playwright-mcp/
