@@ -36,6 +36,11 @@ fn package(agent: &str) -> Result<(&'static str, &'static str), InstallError> {
         "claude" => Ok(("@anthropic-ai/claude-code", "2.1.310")),
         "codex" => Ok(("@openai/codex", "0.162.1")),
         "pi" => Ok(("@earendil-works/pi-coding-agent", "1.0.2")),
+        // The official package (published by OpenCode's author). Its postinstall links the
+        // platform binary, so scripts stay on like Claude's and Codex's. OpenCode 2.x is not on
+        // npm at the catalog's version, and oh-my-pi needs the Bun runtime, so both keep their
+        // official guides.
+        "opencode" => Ok(("opencode-ai", "1.19.4")),
         _ => Err(InstallError::Unsupported),
     }
 }
@@ -190,6 +195,20 @@ mod tests {
         assert!(first.review.arguments[0].ends_with("npm-cli.js"));
         for agent in ["claude", "codex"] {
             assert!(plan(agent, &node, &shim, temp.path()).is_ok());
+        }
+        let opencode = plan("opencode", &node, &shim, temp.path()).unwrap();
+        assert_eq!(
+            &opencode.review.arguments[1..],
+            &["install", "--global", "opencode-ai@1.19.4"]
+        );
+        for agent in ["opencode-v2", "omp", "cursor", "grok"] {
+            assert!(
+                matches!(
+                    plan(agent, &node, &shim, temp.path()),
+                    Err(InstallError::Unsupported)
+                ),
+                "{agent}"
+            );
         }
         assert!(matches!(
             plan("pi;exec", &node, &shim, temp.path()),

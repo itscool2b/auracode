@@ -41,7 +41,7 @@ const INSTALL_GUIDES: Readonly<Record<string, string>> = {
 };
 
 /** The agents Rust can install with one reviewed command. */
-const ONE_CLICK = ["claude", "codex", "pi"];
+const ONE_CLICK = ["claude", "codex", "pi", "opencode"];
 
 /** Where detection stands for one agent, as the row shows it. */
 export type AgentPhase = "checking" | "ready" | "signin" | "missing" | "broken";
