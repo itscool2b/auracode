@@ -34,6 +34,11 @@
   gap: var(--g-space-16);
   max-width: calc(var(--g-app-column) + 32px);
   margin: 0 auto;
+  /* Centred, then snapped down to the 4px grid, so the column never lands on a half step. */
+  margin-left: max(
+    0px,
+    round(down, calc((100% - var(--g-app-column) - var(--g-space-32)) / 2), var(--g-space-4))
+  );
   padding: var(--g-space-24) var(--g-space-16) var(--g-space-32);
 }
 
@@ -934,13 +939,15 @@
   gap: var(--g-space-12);
   min-height: 40px;
   padding: var(--g-space-8);
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px var(--g-line);
   cursor: pointer;
   transition: background-color var(--g-dur-micro) var(--g-ease);
 }
 
 .chat-question-option:last-child {
-  border-bottom: 1px solid var(--g-line);
+  box-shadow:
+    inset 0 1px var(--g-line),
+    inset 0 -1px var(--g-line);
 }
 
 @media (hover: hover) {
@@ -1066,6 +1073,10 @@
   width: 100%;
   max-width: calc(var(--g-app-column) + 32px);
   margin: 0 auto;
+  margin-left: max(
+    0px,
+    round(down, calc((100% - var(--g-app-column) - var(--g-space-32)) / 2), var(--g-space-4))
+  );
   padding: 0 var(--g-space-16) var(--g-space-16);
 }
 
@@ -1135,7 +1146,7 @@
 /* Several requests queue in one dock, a hairline between each (the label is the first child). */
 .chat-permission-dock > div:nth-child(n + 3) {
   margin-top: var(--g-space-4);
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px var(--g-line);
 }
 
 .chat-permission-dock .chat-block {
@@ -2054,19 +2065,19 @@
 .chat-model-columns > section {
   display: flex;
   flex-direction: column;
-  gap: var(--g-space-2);
+  gap: var(--g-space-4);
   min-width: 0;
   padding: var(--g-space-4) 0;
 }
 
 .chat-model-columns > section + section {
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px var(--g-line);
 }
 
 /* A part's name (Grok's "Voice"): 14/20 500 in fg-2, sentence case. */
 .chat-model-columns > section > h3:not(.sr-only) {
   margin: 0;
-  padding: var(--g-space-6) var(--g-space-8) var(--g-space-4);
+  padding: var(--g-space-8) var(--g-space-8) var(--g-space-4);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -2082,14 +2093,14 @@
 }
 
 .chat-model-columns .ui-field {
-  gap: var(--g-space-2);
+  gap: var(--g-space-4);
 }
 
 .chat-agent-choices,
 .picker-choices {
   display: flex;
   flex-direction: column;
-  gap: var(--g-space-2);
+  gap: var(--g-space-4);
   min-width: 0;
   max-height: 264px;
   margin: 0;
@@ -2200,11 +2211,16 @@
   flex-direction: row;
   max-height: none;
   overflow: visible;
+  /* A 32px track with 24px levels 4px in, so every level sits on the grid. */
+  height: 32px;
+  padding: var(--g-space-4);
+  gap: var(--g-space-4);
 }
 
 .picker-choices[data-layout="segments"] > .g-segment {
   flex: 1 1 0;
   min-width: 0;
+  height: 24px;
 }
 
 .picker-choices[data-layout="segments"] > .g-segment:disabled {
@@ -2274,7 +2290,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--g-space-4);
-  padding: 0 var(--g-space-8) var(--g-space-6);
+  padding: 0 var(--g-space-8) var(--g-space-8);
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);

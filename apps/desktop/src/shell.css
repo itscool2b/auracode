@@ -1149,7 +1149,7 @@ details.setup-install-review[open] > summary::before {
 
 .chat-agent-manage {
   margin-top: var(--g-space-4);
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px var(--g-line);
   border-radius: 0 0 var(--g-radius-8) var(--g-radius-8);
   color: var(--g-fg-2);
 }
@@ -1316,7 +1316,7 @@ details.setup-install-review[open] > summary::before {
 
 /* The chat menu (4.6): plain 32px rows in groups split by hairlines, the facts on top. */
 .chat-header-menu > .chat-popover-panel {
-  top: calc(100% + 6px);
+  top: calc(100% + 8px);
   right: 0;
   bottom: auto;
   left: auto;
@@ -1371,7 +1371,7 @@ details.setup-install-review[open] > summary::before {
   flex-direction: column;
   margin-top: var(--g-space-4);
   padding-top: var(--g-space-4);
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px var(--g-line);
 }
 
 .chat-folder-context {
@@ -1380,7 +1380,7 @@ details.setup-install-review[open] > summary::before {
   gap: var(--g-space-8);
   margin-top: var(--g-space-4);
   padding: var(--g-space-8);
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px var(--g-line);
 }
 
 .chat-folder-context section {
@@ -1469,10 +1469,13 @@ details.setup-install-review[open] > summary::before {
   max-height: min(480px, 65vh);
   padding: var(--g-space-16);
   overflow: auto;
-  border: 1px solid var(--g-line-strong);
+  /* The ring is an inset hairline, so the panel's content starts on the grid (4.6, 3.6). */
+  border: 0;
   border-radius: var(--g-radius-12);
   background-color: var(--g-surface-2);
-  box-shadow: var(--g-shadow);
+  box-shadow:
+    inset 0 0 0 1px var(--g-line-strong),
+    var(--g-shadow);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -1824,6 +1827,11 @@ details.setup-install-review[open] > summary::before {
   margin: min(var(--g-space-128), 12vh) auto auto;
   padding: 0;
   overflow: hidden;
+  /* An inset ring in place of the border keeps the rows on the grid. */
+  border: 0;
+  box-shadow:
+    inset 0 0 0 1px var(--g-line-strong),
+    var(--g-shadow);
 }
 
 .command-palette > header {
@@ -1853,7 +1861,7 @@ details.setup-install-review[open] > summary::before {
   gap: var(--g-space-12);
   height: 56px;
   padding: 0 var(--g-space-48) 0 var(--g-space-20);
-  border-bottom: 1px solid var(--g-line);
+  box-shadow: inset 0 -1px var(--g-line);
   color: var(--g-fg-3);
 }
 
@@ -1873,6 +1881,11 @@ details.setup-install-review[open] > summary::before {
   opacity: 1;
 }
 
+/* Reached from the keyboard, the line under the search lights to fg-3: the box is where typing goes. */
+.palette-input:has(input:focus-visible) {
+  box-shadow: inset 0 -1px var(--g-fg-3);
+}
+
 .palette-scopes {
   display: flex;
   flex: none;
@@ -1880,11 +1893,11 @@ details.setup-install-review[open] > summary::before {
   align-items: center;
   gap: var(--g-space-4);
   padding: var(--g-space-8) var(--g-space-16);
-  border-bottom: 1px solid var(--g-line);
+  box-shadow: inset 0 -1px var(--g-line);
 }
 
 .palette-scopes > button {
-  height: 26px;
+  height: 28px;
   padding: 0 var(--g-space-12);
   border-radius: var(--g-radius-pill);
   color: var(--g-fg-2);
@@ -1921,7 +1934,7 @@ details.setup-install-review[open] > summary::before {
 .palette-results {
   flex: 1;
   max-height: min(430px, 50vh);
-  padding: var(--g-space-6);
+  padding: var(--g-space-4);
   overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;

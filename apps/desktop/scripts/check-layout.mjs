@@ -1,6 +1,8 @@
 /**
- * The layout probe: walks every ?preview= mode in Chromium and WebKit at two window sizes and fails
- * on the five things a clean screen never has:
+ * The layout probe: walks every ?preview= mode in Chromium and WebKit at two window sizes, plus the
+ * chat shell's floating layers opened as a person opens them ("settled#picker": the picker, the
+ * palette, the chat and account menus, the other agents, the Changes panel, a typed message), and
+ * fails on the five things a clean screen never has:
  *
  * 1. Horizontal overflow: the page scrolls sideways, or a visible box reaches past the window.
  * 2. Off-grid containers: a padded block container whose offset from its padded parent, or whose
@@ -58,7 +60,29 @@ export const MODES = [
   "settings",
   "setup",
   "agents",
+  // The chat shell's floating layers, opened the way a person opens them.
+  "settled#picker",
+  "settled#palette",
+  "settled#chat-menu",
+  "settled#changes",
+  "settled#other-agents",
+  "settled#account-menu",
+  "thinking#typed",
 ];
+
+/** How each "<mode>#<view>" opens its layer before the probes run. */
+const OPENERS = {
+  picker: (page) => page.keyboard.press("Control+."),
+  palette: (page) => page.keyboard.press("Control+k"),
+  "chat-menu": (page) => page.locator('summary[aria-label="Chat details and controls"]').click(),
+  changes: (page) => page.getByRole("button", { name: "Changes", exact: true }).click(),
+  "other-agents": (page) => page.locator('summary[aria-label$="other agents"]').click(),
+  "account-menu": (page) => page.locator('summary[aria-label="Account menu"]').click(),
+  typed: async (page) => {
+    await page.getByTestId("composer-input").click();
+    await page.keyboard.type("Hi");
+  },
+};
 
 const { values } = parseArgs({
   options: {
@@ -208,8 +232,8 @@ function probe() {
   for (const element of document.body.querySelectorAll("*")) {
     if (hidden(element) || !padded(element) || !visibleBox(element)) continue;
     const box = element.getBoundingClientRect();
-    // Glyph and icon boxes (a mark's letters, a keycap) have their own pixel geometry.
-    if (box.width < 16 || box.height < 16) continue;
+    // Glyph, keycap and chip boxes (under 24px) have Graphite's own pixel geometry.
+    if (box.width < 24 || box.height < 24) continue;
     let parent = element.parentElement;
     while (parent && !(padded(parent) && !hidden(parent))) parent = parent.parentElement;
     const scroller = scrollerOf(element, parent);
@@ -363,7 +387,8 @@ function focusedStyle() {
   const style = getComputedStyle(target);
   const box = target.getBoundingClientRect();
   const name = typeof target.className === "string" ? target.className.trim() : "";
-  const label = target.getAttribute("aria-label");
+  const label =
+    target.getAttribute("aria-label") ?? target.textContent?.trim().replace(/\s+/g, " ") ?? null;
   const key = target.dataset.layoutKey ?? `${Math.random()}`;
   target.dataset.layoutKey = key;
   // A field inside a larger control (the composer's message box) may light its frame instead.
@@ -398,6 +423,9 @@ async function walkFocus(page) {
   await page.mouse.move(1, 1);
   await page.evaluate(() => {
     document.activeElement?.blur?.();
+    // The blur starts transitions back to rest; read the resting styles, not their first frame.
+    for (const animation of document.getAnimations())
+      if (animation.effect?.getTiming().iterations !== Infinity) animation.finish();
     window.__focusBase = new Map();
     const focusable = document.querySelectorAll(
       'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])',
@@ -484,10 +512,15 @@ try {
         });
         const page = await context.newPage();
         for (const mode of modes) {
-          await page.goto(`${url}/?preview=${mode}`);
+          const [preview, view] = mode.split("#");
+          await page.goto(`${url}/?preview=${preview}`);
           await page.waitForLoadState("networkidle").catch(() => {});
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(900);
+          if (view) {
+            await OPENERS[view](page);
+            await page.waitForTimeout(400);
+          }
           const found = await page.evaluate(probe);
           const focus = await walkFocus(page);
           const findings = [...found, ...focus.findings];
