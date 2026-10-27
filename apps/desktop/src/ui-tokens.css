@@ -1,4 +1,5 @@
 /* Chat semantics share the chosen Orbit tokens with the Design Lab and website. */
+@import "@auracode/ui/graphite.css";
 @import "@auracode/ui/orbit-tokens.css";
 @import "@auracode/ui/orbit.css";
 
