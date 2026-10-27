@@ -63,65 +63,22 @@ export const FRAME_FIELD: FieldSettings = {
 
 /**
  * The stage's clearings at the 1440px desktop layout, used until the copy is measured: one around
- * the headline, lead and buttons, one along the product frame's top edge and one that fades the
+ * the headline, lead and button, one along the product frame's top edge and one that fades the
  * field out toward the stage's bottom edge.
  */
 export const STAGE_CLEARING: readonly FieldClearing[] = [
-  { x: 0.5, y: 0.23, rx: 0.347, ry: 0.223 },
-  { x: 0.5, y: 0.476, rx: 0.625, ry: 0.142 },
-  { x: 0.5, y: 1, rx: 1, ry: 0.149 },
+  { x: 0.5, y: 0.212, rx: 0.301, ry: 0.205 },
+  { x: 0.5, y: 0.436, rx: 0.625, ry: 0.16 },
+  { x: 0.5, y: 1, rx: 1, ry: 0.168 },
 ];
 
 export const STAGE_FALLBACK: FieldFallback = {
   file: "images/dither-stage.png",
   width: 1440,
-  height: 1480,
+  height: 1312,
   clearing: STAGE_CLEARING,
   sprites: HERO_CREATURES,
 };
-
-/** The band behind the closing statement: dark, so its two creatures are the brightest thing in it. */
-export const CLOSING_FIELD: FieldSettings = {
-  cell: 4,
-  density: 0.5,
-  accent: 0.006,
-  palette: "standard",
-  seed: 0x3c6ef372,
-  ceiling: 0.55,
-};
-
-/** Calm behind the statement, and fading out toward the band's top and bottom edges. */
-export const CLOSING_CLEARING: readonly FieldClearing[] = [
-  { x: 0.5, y: 0.5, rx: 0.4, ry: 0.7 },
-  { x: 0.5, y: 0, rx: 1, ry: 0.2 },
-  { x: 0.5, y: 1, rx: 1, ry: 0.2 },
-];
-
-/** On a phone the statement spans the width, so the calm does too. */
-export const CLOSING_CLEARING_COMPACT: readonly FieldClearing[] = [
-  { x: 0.5, y: 0.5, rx: 0.95, ry: 0.42 },
-  { x: 0.5, y: 0, rx: 1, ry: 0.14 },
-  { x: 0.5, y: 1, rx: 1, ry: 0.14 },
-];
-
-export const CLOSING_FALLBACK: FieldFallback = {
-  file: "images/dither-closing.png",
-  width: 1440,
-  height: 560,
-  clearing: CLOSING_CLEARING,
-  sprites: CLOSING_CREATURES,
-};
-/** The dim grain inside the recessed tiles; each tile takes its own seed from GRAIN_SEEDS. */
-export const GRAIN_FIELD: FieldSettings = {
-  cell: 4,
-  density: 0.72,
-  accent: 0,
-  palette: "quiet",
-  seed: 0x1f83d9ab,
-  ceiling: 0.42,
-};
-
-export const GRAIN_SEEDS = [0x1f83d9ab, 0x9b05688c, 0x71374491] as const;
 
 /** The dimmed field behind the replayed turn in the film card. */
 export const FILM_FIELD: FieldSettings = {
@@ -133,28 +90,41 @@ export const FILM_FIELD: FieldSettings = {
   ceiling: 0.5,
 };
 
-/** The giant numerals, each condensing out of its own field as the section scrolls in. */
-export const NUMERAL_FIELD: FieldSettings = {
+/**
+ * The closing panel: a dark field, so its turtle and seal are the brightest things in it, calm
+ * behind the statement and thinning toward the panel's top and bottom edges.
+ */
+export const CLOSING_FIELD: FieldSettings = {
   cell: 4,
-  density: 0.22,
-  accent: 0.012,
-  palette: "bright",
-  seed: 0x428a2f98,
+  density: 0.5,
+  accent: 0.006,
+  palette: "standard",
+  seed: 0x3c6ef372,
+  ceiling: 0.55,
 };
 
-export const NUMERAL_SEEDS = [0x428a2f98, 0xe9b5dba5, 0x3956c25b] as const;
-
-/**
- * Each numeral's noise gathers in the middle of its box and thins toward the sides and top, so it
- * never shows as a rectangle before it condenses. Clearings calm only the noise, never the figure.
- */
-export const NUMERAL_CLEARING: readonly FieldClearing[] = [
-  { x: 0, y: 0.5, rx: 0.32, ry: 1.2 },
-  { x: 1, y: 0.5, rx: 0.32, ry: 1.2 },
-  { x: 0.5, y: 0, rx: 1.2, ry: 0.3 },
+export const CLOSING_CLEARING: readonly FieldClearing[] = [
+  { x: 0.5, y: 0.5, rx: 0.36, ry: 0.62 },
+  { x: 0.5, y: 0, rx: 1, ry: 0.16 },
+  { x: 0.5, y: 1, rx: 1, ry: 0.16 },
 ];
 
-/** The giant footer wordmark, formed from a bright field. */
+/** On a phone the statement spans the width, so the calm does too. */
+export const CLOSING_CLEARING_COMPACT: readonly FieldClearing[] = [
+  { x: 0.5, y: 0.5, rx: 0.95, ry: 0.36 },
+  { x: 0.5, y: 0, rx: 1, ry: 0.12 },
+  { x: 0.5, y: 1, rx: 1, ry: 0.12 },
+];
+
+export const CLOSING_FALLBACK: FieldFallback = {
+  file: "images/dither-closing.png",
+  width: 1120,
+  height: 480,
+  clearing: CLOSING_CLEARING,
+  sprites: CLOSING_CREATURES,
+};
+
+/** The giant footer logo, formed from a bright field. */
 export const FOOTER_FIELD: FieldSettings = {
   cell: 4,
   density: 0.34,
@@ -162,6 +132,16 @@ export const FOOTER_FIELD: FieldSettings = {
   palette: "bright",
   seed: 0xa54ff53a,
 };
+
+/**
+ * Before it forms, the footer logo's noise gathers in the middle of its box and thins toward the
+ * edges, so it never reads as a square. Clearings calm only the noise, never the formed logo.
+ */
+export const FOOTER_CLEARING: readonly FieldClearing[] = [
+  { x: 0, y: 0.5, rx: 0.28, ry: 1.2 },
+  { x: 1, y: 0.5, rx: 0.28, ry: 1.2 },
+  { x: 0.5, y: 0, rx: 1.2, ry: 0.24 },
+];
 
 /** The 404 numerals. */
 export const ERROR_FIELD: FieldSettings = {

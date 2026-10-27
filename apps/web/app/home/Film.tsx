@@ -2,10 +2,11 @@ import { AgentMark, DitherField, Keycap } from "@auracode/ui/graphite";
 import { useEffect, useRef, useState } from "react";
 import { FILM_FIELD } from "../fields";
 import { useInView, usePageVisible, useReducedMotion } from "../motion";
-import { Stat } from "./minis";
 
 /*
- * x.ai's film card, with one turn of the real app replayed from Graphite fragments instead of a
+ * x.ai's film card ("The SpaceXAI team runs on Grok Bot": a centred one-line heading over one
+ * rounded card, Play and a caption at its left), with one turn of the real app replayed from
+ * Graphite fragments instead of a
  * video: the prompt types in, the agent thinks, tool rows land, an approval card resolves, the diff
  * appears and a receipt closes the turn. Times are milliseconds from the start of the replay.
  */
@@ -40,6 +41,16 @@ function captionAt(t: number): string {
   let text = CAPTIONS[0]?.[1] ?? "";
   for (const [at, caption] of CAPTIONS) if (t >= at) text = caption;
   return text;
+}
+
+/** A diffstat: lines added in green, removed in red, in mono. */
+function Stat({ added, removed }: { added: number; removed: number }) {
+  return (
+    <span className="mini-stat">
+      <span className="mini-add">+{added}</span>
+      <span className="mini-del">−{removed}</span>
+    </span>
+  );
 }
 
 function PlayIcon({ playing }: { playing: boolean }) {
@@ -165,9 +176,9 @@ function Replay({ t }: { t: number }) {
       ) : (
         <div className="film-composer">
           {t < SENT && typed > 0 ? (
-            <span className="film-typed">
+            <span className="mini-typed">
               {PROMPT.slice(0, typed)}
-              <span className="film-caret" />
+              <span className="mini-caret" />
             </span>
           ) : (
             <span className="mini-quiet">Message Claude Code</span>
