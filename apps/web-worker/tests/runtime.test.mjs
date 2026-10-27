@@ -108,6 +108,7 @@ test("every public byte is embedded with its MIME and content-addressed cache po
     js: "text/javascript; charset=utf-8",
     css: "text/css; charset=utf-8",
     png: "image/png",
+    svg: "image/svg+xml",
     webp: "image/webp",
     txt: "text/plain; charset=utf-8",
     woff: "font/woff",
