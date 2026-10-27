@@ -2945,3 +2945,12 @@ was fixed in the test without weakening what it asserts.
 The owner chose to skip a further CI run to save Actions spend, and the PR opened without one. The
 only change after 40491964588 that CI has not run is the selection test's delete retry (test code
 only) plus this record. Rerun CI on the PR head before merging if the owner wants that gate closed.
+
+### M2a merged and the website deploys on push (2026-10-27)
+
+#6 merged into `main` as `64f5529` (a merge commit, so #4 shows merged). #5 was closed because
+every commit on it is already in `main`. The merge also removed the old `main` workflow triggers
+(CI on every push and pull request, and the nightly Build schedule), so GitHub Actions now runs only
+when dispatched by hand. Pushes now deploy the website through Workers Builds: `main` goes to
+`auracode.si` and to preview, and other branches go to preview. Settings and the first verified
+build are in `infra/README.md`.
