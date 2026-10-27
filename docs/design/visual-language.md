@@ -1101,7 +1101,7 @@ their rows. Agent rows (36px, radius 12): the 16px mark, the name 14/20 500, the
 fg-3, a white check on the current one; only one usable variant per product, as in the dock.
 Model rows (44px): the name 500 over a one-line description 12/16 fg-3, a check on the current
 one. Then two compact fields, the name at the left in 14/20 fg-2 (an 88px column) and the control
-at the right: Effort as Graphite's quiet segmented control, and Autonomy as a 32px select with the
+at the right: Effort as a quiet segmented track (32px, 24px levels 4px in), and Autonomy as a 32px select with the
 level's ticks inside. The checkpoint note sits under them in 12/16 fg-3, and "More options" folds
 the agent's other settings. Keys: up and down move within a part, left and right between parts,
 Enter chooses, digits set the effort, letters jump to agents. Opens over 200ms (opacity, scale
@@ -1157,7 +1157,7 @@ strip on surface-1 with 1px fg-3 ticks per tool call and fg-4 blocks for thinkin
 ### 6.15 Command palette and menus
 
 ⌘K: the large dialog (760 wide) at y 120, surface-2, radius 16, the shadow; a 56px input (prose
-15/24) with the close button at its end; scope chips (All, Chats, Projects, Files, Commands; 26px,
+15/24) with the close button at its end; scope chips (All, Chats, Projects, Files, Commands; 28px,
 the selected one a surface-3 pill); 48px two-line result rows, the active one with the ↵ keycap and
 the 2px rail; no key legend. With a chat open, its header menu's actions are commands by name (Show
 changes, Git workspace, Terminal and editor, Conversation history, Export chat, Copy debug bundle,
