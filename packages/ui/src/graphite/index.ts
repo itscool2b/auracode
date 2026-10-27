@@ -52,6 +52,7 @@ export {
   GRAPHITE_COLORS,
   GRAPHITE_DURATIONS,
   GRAPHITE_EASINGS,
+  GRAPHITE_STAGGERS,
   type GraphiteColor,
   relativeLuminance,
 } from "./tokens";

@@ -144,7 +144,7 @@ function StateShape({ indicator, size }: { readonly indicator: Indicator; readon
           <rect
             key={`${rect.x}-${rect.y}`}
             className="g-agent-mark-check"
-            style={{ animationDelay: `${i * 45}ms` }}
+            style={{ animationDelay: `${i * 50}ms` }}
             x={rect.x}
             y={rect.y}
             width={rect.w}

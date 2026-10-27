@@ -72,7 +72,7 @@ describe("AgentMark", () => {
   it("draws the done check once, a pixel at a time, through CSS rather than a frame loop", () => {
     const html = mark({ agent: "claude", state: "done", size: 32 });
     const delays = [...html.matchAll(/animation-delay:(\d+)ms/g)].map((m) => Number(m[1]));
-    expect(delays).toEqual([0, 45, 90, 135, 180]);
+    expect(delays).toEqual([0, 50, 100, 150, 200]);
   });
 
   it("keeps unknown agents visible with their own letters and clamps invalid sizes", () => {

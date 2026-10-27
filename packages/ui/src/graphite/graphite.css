@@ -823,7 +823,7 @@
   color: var(--g-fg-3);
 }
 
-/* Live labels: grey on grey, solid stops, one sweep per 1.6s. Static under reduced motion. */
+/* Live labels (X Money, measured): grey on grey, one sweep per 1.4s, static when reduced. */
 .g-shimmer {
   color: var(--g-fg-2);
   background-image: linear-gradient(
@@ -866,12 +866,16 @@
   background-color: var(--g-bg);
 }
 
-/* A 13px "+" whose centre lands on a 1px line; corner classes sit on the grid's outer border. */
+/*
+ * Vercel's registration mark, measured: a 21px "+" of 1px lines whose centre lands on a 1px rule.
+ * The corner classes centre it on the grid's outer border; elsewhere set left and top to the
+ * intersection minus 10px.
+ */
 .g-crosshair {
   position: absolute;
   z-index: 1;
-  width: 13px;
-  height: 13px;
+  width: 21px;
+  height: 21px;
   pointer-events: none;
 }
 
@@ -879,41 +883,41 @@
 .g-crosshair::after {
   content: "";
   position: absolute;
-  background-color: var(--g-fg-4);
+  background-color: var(--g-fg-3);
 }
 
 .g-crosshair::before {
   top: 0;
-  left: 6px;
+  left: 10px;
   width: 1px;
-  height: 13px;
+  height: 21px;
 }
 
 .g-crosshair::after {
-  top: 6px;
+  top: 10px;
   left: 0;
-  width: 13px;
+  width: 21px;
   height: 1px;
 }
 
 .g-crosshair-tl {
-  top: -7px;
-  left: -7px;
+  top: -11px;
+  left: -11px;
 }
 
 .g-crosshair-tr {
-  top: -7px;
-  right: -7px;
+  top: -11px;
+  right: -11px;
 }
 
 .g-crosshair-bl {
-  bottom: -7px;
-  left: -7px;
+  bottom: -11px;
+  left: -11px;
 }
 
 .g-crosshair-br {
-  right: -7px;
-  bottom: -7px;
+  right: -11px;
+  bottom: -11px;
 }
 
 /* A recessed square tile that holds miniature real UI (X Money). */
@@ -940,7 +944,7 @@
 /* Accordion: the open item becomes a tinted well (X Money's FAQ). */
 .g-disclosure {
   border-radius: var(--g-radius-12);
-  transition: background-color var(--g-dur-base) var(--g-ease);
+  transition: background-color var(--g-dur-panel) var(--g-ease-quint);
 }
 
 .g-disclosure:where([open]) {
@@ -967,8 +971,10 @@
 .g-disclosure > summary::after {
   content: "+";
   flex: none;
-  width: 16px;
+  width: 20px;
   color: var(--g-fg-2);
+  font-size: 20px;
+  line-height: 20px;
   font-weight: 400;
   text-align: center;
 }
@@ -1081,7 +1087,7 @@
 }
 
 .g-dialog:where([open]) {
-  animation: g-sheet-in var(--g-dur-panel) var(--g-ease-out);
+  animation: g-sheet-in var(--g-dur-panel) var(--g-ease-quint);
 }
 
 @keyframes g-sheet-in {
@@ -1095,9 +1101,13 @@
   }
 }
 
-/* ------------------------------------------------------------ entrances (3.8, 5.2) */
+/* ------------------------------------------------------------ entrances (3.8, 4.12) */
 
-/* The rotating word's rule, with one volt glint across it per mount. Re-key to replay. */
+/*
+ * The rotating word's underline (x.ai, measured): a 3px rule 4px below the word at 60px type,
+ * scaled with the type, in fg-4 (x.ai's white at 25%). A volt band sweeps it once, 3000ms linear,
+ * starting 400ms after each swap. Re-key the element to replay.
+ */
 .g-glint {
   position: relative;
   display: inline-block;
@@ -1107,38 +1117,48 @@
   content: "";
   position: absolute;
   right: 0;
-  bottom: -0.04em;
+  bottom: calc(-1 * max(3px, 0.066em));
   left: 0;
-  height: max(2px, 0.045em);
-  background-color: var(--g-line-strong);
-  background-image: linear-gradient(var(--g-volt), var(--g-volt));
+  height: max(2px, 0.05em);
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-fg-4);
+  background-image: linear-gradient(
+    90deg,
+    transparent 46%,
+    var(--g-volt) 46%,
+    var(--g-volt) 54%,
+    transparent 54%
+  );
   background-repeat: no-repeat;
-  background-size: 30% 100%;
-  background-position: -45% 0;
-  animation: g-glint var(--g-dur-glint) var(--g-ease-out) both;
+  background-size: 400% 100%;
+  background-position: 150% 0;
+  animation: g-glint var(--g-dur-glint) linear 400ms both;
 }
 
 @keyframes g-glint {
   from {
-    background-position: -45% 0;
+    background-position: 150% 0;
   }
   to {
-    background-position: 145% 0;
+    background-position: -150% 0;
   }
 }
 
-/* Per-word rise (X Money's flip-up). Set --g-rise-index on each word for the stagger. */
+/*
+ * Per-word flip-up (X Money and x.ai, identical): from translateY(45%) rotateX(-40deg) in a 1200px
+ * perspective, 650ms ease-out-quint, 100ms then 55ms per word. Set --g-rise-index on each word.
+ */
 .g-rise {
   display: inline-block;
-  transform-origin: 50% 100%;
-  animation: g-rise var(--g-dur-reveal) var(--g-ease-out) both;
-  animation-delay: calc(var(--g-rise-index, 0) * var(--g-stagger));
+  backface-visibility: hidden;
+  animation: g-rise var(--g-dur-headline) var(--g-ease-quint) both;
+  animation-delay: calc(100ms + var(--g-rise-index, 0) * var(--g-stagger));
 }
 
 @keyframes g-rise {
   from {
     opacity: 0;
-    transform: perspective(600px) translateY(0.4em) rotateX(-35deg);
+    transform: perspective(1200px) translateY(45%) rotateX(-40deg);
   }
   to {
     opacity: 1;
@@ -1146,15 +1166,94 @@
   }
 }
 
+/* Rows and cards entering (Aside, measured): 8px rise, 340ms, 70ms apart. Set --g-row-index. */
+.g-enter {
+  animation: g-enter var(--g-dur-row) var(--g-ease-reveal) both;
+  animation-delay: calc(var(--g-row-index, 0) * var(--g-stagger-row));
+}
+
+@keyframes g-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Lines drawing in from their start (x.ai's underline): 800ms ease-out, delay --g-draw-delay. */
+.g-draw-x,
+.g-draw-y {
+  animation: g-draw-x var(--g-dur-reveal) var(--g-ease-out) both;
+  animation-delay: var(--g-draw-delay, 0ms);
+}
+
+.g-draw-x {
+  transform-origin: 0 50%;
+}
+
+.g-draw-y {
+  transform-origin: 50% 0;
+  animation-name: g-draw-y;
+}
+
+@keyframes g-draw-x {
+  from {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes g-draw-y {
+  from {
+    opacity: 0;
+    transform: scaleY(0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Hovering one child dims its siblings: tiles to half opacity (X Money), nav text to fg-3 (Harvey). */
+.g-dim-group > * {
+  transition: opacity var(--g-dur-dim) var(--g-ease-smooth);
+}
+
+.g-dim-group:where(:hover) > :where(:not(:hover)) {
+  opacity: 0.5;
+}
+
+.g-dim-text > * {
+  transition: color var(--g-dur-settle) var(--g-ease-soft);
+}
+
+.g-dim-text:where(:hover) > :where(:not(:hover)) {
+  color: var(--g-fg-3);
+}
+
 /* --------------------------------------------------------------- reduced motion (3.8) */
 
 @media (prefers-reduced-motion: reduce) {
   .g-shimmer,
   .g-glint::after,
-  .g-rise,
+  .g-enter,
+  .g-draw-x,
+  .g-draw-y,
   .g-agent-mark-check,
   .g-dialog {
     animation: none;
+  }
+
+  /* Words still arrive, by a 150ms fade with no transform (the reference sites' own fallback). */
+  .g-rise {
+    animation: g-fade var(--g-dur-fast) linear both;
   }
 
   .g-shimmer {
@@ -1171,9 +1270,22 @@
   }
 }
 
+@keyframes g-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 :root:is([data-motion="reduced"], [data-motion="off"])
-  :where(.g-shimmer, .g-rise, .g-agent-mark-check, .g-dialog) {
+  :where(.g-shimmer, .g-enter, .g-draw-x, .g-draw-y, .g-agent-mark-check, .g-dialog) {
   animation: none;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) :where(.g-rise) {
+  animation: g-fade var(--g-dur-fast) linear both;
 }
 
 :root:is([data-motion="reduced"], [data-motion="off"]) :where(.g-shimmer) {

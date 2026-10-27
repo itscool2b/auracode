@@ -16,6 +16,7 @@ import {
   GRAPHITE_COLORS,
   GRAPHITE_DURATIONS,
   GRAPHITE_EASINGS,
+  GRAPHITE_STAGGERS,
   relativeLuminance,
 } from "./tokens";
 import tokensCss from "./tokens.css?raw";
@@ -132,29 +133,47 @@ describe("Graphite colour tokens", () => {
 });
 
 describe("Graphite motion tokens", () => {
-  it("mirrors the durations and easings", () => {
+  it("mirrors the durations, staggers and easings", () => {
     for (const [name, ms] of Object.entries(GRAPHITE_DURATIONS)) {
       expect(token(`dur-${name}`), name).toBe(`${ms}ms`);
     }
-    const css = (curve: readonly number[]) => `cubic-bezier(${curve.join(", ")})`;
-    expect(token("ease")).toBe(css(GRAPHITE_EASINGS.ease));
-    expect(token("ease-out")).toBe(css(GRAPHITE_EASINGS.out));
-    expect(token("ease-in")).toBe(css(GRAPHITE_EASINGS.in));
-    expect(token("ease-settle")).toBe(css(GRAPHITE_EASINGS.settle));
+    expect(token("stagger")).toBe(`${GRAPHITE_STAGGERS.word}ms`);
+    expect(token("stagger-letter")).toBe(`${GRAPHITE_STAGGERS.letter}ms`);
+    expect(token("stagger-row")).toBe(`${GRAPHITE_STAGGERS.row}ms`);
+    for (const [name, curve] of Object.entries(GRAPHITE_EASINGS)) {
+      const property = name === "ease" ? "ease" : `ease-${name}`;
+      expect(token(property).split(" /*")[0], property).toBe(`cubic-bezier(${curve.join(", ")})`);
+    }
+  });
+
+  it("uses the values measured on the reference sites", () => {
+    expect(GRAPHITE_EASINGS.ease).toEqual([0.4, 0, 0.2, 1]);
+    expect(GRAPHITE_EASINGS.quint).toEqual([0.23, 1, 0.32, 1]);
+    expect(GRAPHITE_DURATIONS.headline).toBe(650);
+    expect(GRAPHITE_STAGGERS.word).toBe(55);
+    expect(GRAPHITE_DURATIONS.shimmer).toBe(1400);
+    expect(GRAPHITE_DURATIONS.tick).toBe(1100);
+    expect(GRAPHITE_DURATIONS.timer).toBe(7500);
   });
 
   it("stops movement under the OS setting and under the app's own setting alike", () => {
     const [mediaPart = "", appPart = ""] = reducedPart.split(':root:is([data-motion="reduced"]');
     const media = declarations(mediaPart);
     const app = declarations(appPart);
-    for (const name of ["panel", "settle", "reveal", "glint"]) {
+    const moving = ["letter", "panel", "row", "step", "headline", "reveal", "count", "glint"];
+    for (const name of moving) {
       expect(media.get(`--g-dur-${name}`), `media ${name}`).toBe("0ms");
       expect(app.get(`--g-dur-${name}`), `app ${name}`).toBe("0ms");
     }
-    expect(media.get("--g-stagger")).toBe("0ms");
-    expect(app.get("--g-stagger")).toBe("0ms");
-    // Colour changes are not motion: hover fades survive.
-    expect(media.has("--g-dur-micro")).toBe(false);
+    for (const name of ["stagger", "stagger-letter", "stagger-row"]) {
+      expect(media.get(`--g-${name}`), `media ${name}`).toBe("0ms");
+      expect(app.get(`--g-${name}`), `app ${name}`).toBe("0ms");
+    }
+    // Colour and opacity are not motion: hover fades, the button settle and sibling dims survive.
+    for (const name of ["micro", "fast", "base", "settle", "dim", "shimmer"]) {
+      expect(media.has(`--g-dur-${name}`), name).toBe(false);
+      expect(app.has(`--g-dur-${name}`), name).toBe(false);
+    }
     expect(graphiteCss).toContain(REDUCED);
     expect(graphiteCss).toContain('[data-motion="off"]');
   });
@@ -223,7 +242,7 @@ describe("Graphite stylesheet rules", () => {
       tokensSource,
     };
     for (const [name, text] of Object.entries(sources)) {
-      expect(text.includes("—"), name).toBe(false);
+      expect(text.includes(String.fromCharCode(0x2014)), name).toBe(false);
     }
   });
 });

@@ -172,21 +172,41 @@
   --g-app-header: 44px;
   --g-app-panel: 380px;
 
-  /* Motion. No springs, no bounce, nothing idles. Provisional: see section 3.8 of the spec. */
-  --g-ease: cubic-bezier(0.2, 0, 0, 1);
-  --g-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --g-ease-in: cubic-bezier(0.4, 0, 1, 1);
-  --g-ease-settle: cubic-bezier(0, 0.7, 0.3, 1);
+  /*
+   * Motion, measured on the reference sites (target/design-research/motion.md). No springs, no
+   * bounce, nothing idles. Only --g-ease-in and --g-dur-exit are not yet measured.
+   */
+  --g-ease: cubic-bezier(0.4, 0, 0.2, 1); /* hover colour and fill: x.ai, X Money, Vercel, Aside */
+  --g-ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* letters, underline and line draws: x.ai */
+  --g-ease-quint: cubic-bezier(0.23, 1, 0.32, 1); /* headlines, panels, accordion: X Money */
+  --g-ease-smooth: cubic-bezier(0.32, 0.72, 0, 1); /* sibling dim, blur-free reveals: X Money */
+  --g-ease-settle: cubic-bezier(0, 0.7, 0.3, 1); /* button hover with a slow tail: Harvey */
+  --g-ease-soft: cubic-bezier(0.3, 0.3, 0.3, 1); /* nav sibling dim: Harvey */
+  --g-ease-step: cubic-bezier(0.7, 0, 0.7, 0.7); /* word wheel step: Harvey */
+  --g-ease-in-out: cubic-bezier(0.7, 0, 0.3, 1); /* tab switch, crossfades: Harvey */
+  --g-ease-reveal: cubic-bezier(0.22, 1, 0.36, 1); /* rows entering: Aside, x.ai */
+  --g-ease-in: cubic-bezier(0.4, 0, 1, 1); /* exits */
   --g-dur-micro: 100ms;
   --g-dur-fast: 150ms;
   --g-dur-base: 200ms;
-  --g-dur-panel: 280ms;
+  --g-dur-letter: 250ms;
+  --g-dur-panel: 300ms;
   --g-dur-settle: 300ms;
+  --g-dur-row: 340ms;
+  --g-dur-dim: 500ms;
+  --g-dur-step: 600ms;
+  --g-dur-headline: 650ms;
   --g-dur-reveal: 800ms;
+  --g-dur-count: 950ms;
+  --g-dur-tick: 1100ms;
+  --g-dur-shimmer: 1400ms;
+  --g-dur-glint: 3000ms;
+  --g-dur-cycle: 3000ms;
+  --g-dur-timer: 7500ms;
   --g-dur-exit: 120ms;
-  --g-dur-shimmer: 1600ms;
-  --g-dur-glint: 900ms;
-  --g-stagger: 40ms;
+  --g-stagger: 55ms;
+  --g-stagger-letter: 25ms;
+  --g-stagger-row: 70ms;
 }
 
 /*
@@ -195,18 +215,30 @@
  */
 @media (prefers-reduced-motion: reduce) {
   :root {
+    --g-dur-letter: 0ms;
     --g-dur-panel: 0ms;
-    --g-dur-settle: 0ms;
+    --g-dur-row: 0ms;
+    --g-dur-step: 0ms;
+    --g-dur-headline: 0ms;
     --g-dur-reveal: 0ms;
+    --g-dur-count: 0ms;
     --g-dur-glint: 0ms;
     --g-stagger: 0ms;
+    --g-stagger-letter: 0ms;
+    --g-stagger-row: 0ms;
   }
 }
 
 :root:is([data-motion="reduced"], [data-motion="off"]) {
+  --g-dur-letter: 0ms;
   --g-dur-panel: 0ms;
-  --g-dur-settle: 0ms;
+  --g-dur-row: 0ms;
+  --g-dur-step: 0ms;
+  --g-dur-headline: 0ms;
   --g-dur-reveal: 0ms;
+  --g-dur-count: 0ms;
   --g-dur-glint: 0ms;
   --g-stagger: 0ms;
+  --g-stagger-letter: 0ms;
+  --g-stagger-row: 0ms;
 }

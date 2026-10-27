@@ -34,25 +34,43 @@ export const GRAPHITE_COLORS = {
 
 export type GraphiteColor = keyof typeof GRAPHITE_COLORS;
 
-/** Durations in ms, mirroring `--g-dur-*`. */
+/** Durations in ms, mirroring `--g-dur-*` (measured; see docs/design/visual-language.md 3.8). */
 export const GRAPHITE_DURATIONS = {
   micro: 100,
   fast: 150,
   base: 200,
-  panel: 280,
+  letter: 250,
+  panel: 300,
   settle: 300,
+  row: 340,
+  dim: 500,
+  step: 600,
+  headline: 650,
   reveal: 800,
+  count: 950,
+  tick: 1100,
+  shimmer: 1400,
+  glint: 3000,
+  cycle: 3000,
+  timer: 7500,
   exit: 120,
-  shimmer: 1600,
-  glint: 900,
 } as const;
+
+/** Staggers in ms, mirroring `--g-stagger*`. */
+export const GRAPHITE_STAGGERS = { word: 55, letter: 25, row: 70 } as const;
 
 /** Cubic-bezier control points, mirroring `--g-ease*`. */
 export const GRAPHITE_EASINGS = {
-  ease: [0.2, 0, 0, 1],
+  ease: [0.4, 0, 0.2, 1],
   out: [0.16, 1, 0.3, 1],
-  in: [0.4, 0, 1, 1],
+  quint: [0.23, 1, 0.32, 1],
+  smooth: [0.32, 0.72, 0, 1],
   settle: [0, 0.7, 0.3, 1],
+  soft: [0.3, 0.3, 0.3, 1],
+  step: [0.7, 0, 0.7, 0.7],
+  "in-out": [0.7, 0, 0.3, 1],
+  reveal: [0.22, 1, 0.36, 1],
+  in: [0.4, 0, 1, 1],
 } as const satisfies Record<string, readonly [number, number, number, number]>;
 
 /**
