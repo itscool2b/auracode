@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { CodeForm } from "../code-form";
-import { Arrow } from "../ui";
 
 export const meta = () => [{ title: "Sign in · auracode" }, { name: "robots", content: "noindex" }];
 
+/**
+ * Sign in and the invitation landing: a centred 480px column with the two-tone title, one line
+ * about access and the form in one recessed panel. One action per step.
+ */
 export function AuthPage({ signup = false }: { signup?: boolean }) {
   const [email, setEmail] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<string | null>(null);
@@ -16,23 +19,19 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
         <div className="auth-column">
           <div className="auth-shell">
             <header className="auth-head" data-reveal="">
-              <h1 className="auth-title">
-                {signup ? "Your invitation." : "Sign in."}{" "}
-                <span>{signup ? "Starts here." : "With a one-time code."}</span>
+              <h1 className="page-title">
+                {signup ? "Invited sign-in." : "Sign in."}{" "}
+                <span>{signup ? "Your invitation starts here." : "With a one-time code."}</span>
               </h1>
               <p className="auth-intro">
-                <strong>
-                  Cloud accounts, encrypted sync and transfers are invite-only during the private
-                  preview.
-                </strong>{" "}
-                The{" "}
+                Hosted accounts and sync are invite-only during the private preview. The{" "}
                 <a className="auth-inline-link" href="/download">
-                  Local desktop app
+                  desktop app
                 </a>{" "}
-                is free and works offline without an account.
+                is free and works offline without one.
               </p>
             </header>
-            <section className="auth-panel" aria-labelledby="auth-panel-title">
+            <section className="auth-panel" aria-label={email ? "Signed in" : "Sign-in form"}>
               <noscript>
                 <p className="note">
                   JavaScript is required for secure code verification. Downloads and public
@@ -42,9 +41,7 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
               {email ? (
                 <>
                   <div>
-                    <h2 className="auth-panel-title" id="auth-panel-title">
-                      You’re signed in.
-                    </h2>
+                    <h2 className="auth-panel-title">You’re signed in.</h2>
                     <p className="auth-panel-copy">
                       Open auracode to connect this device and set up encryption. This link shares
                       only your email address.
@@ -61,22 +58,9 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
                       Manage your account
                     </a>
                   </div>
-                  <div className="auth-links">
-                    <a className="text-link" href="/download">
-                      Download auracode <Arrow />
-                    </a>
-                  </div>
                 </>
               ) : (
                 <>
-                  <div>
-                    <h2 className="auth-panel-title" id="auth-panel-title">
-                      Invited sign-in
-                    </h2>
-                    <p className="auth-panel-copy">
-                      Use the email address on your invitation. We’ll send a one-time code.
-                    </p>
-                  </div>
                   {prefill !== null ? (
                     <CodeForm initialEmail={prefill} onSuccess={setEmail} />
                   ) : (
@@ -85,9 +69,9 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
                     </p>
                   )}
                   <p className="auth-terms">
-                    Already have an account? You can still sign in to manage or export it if your
-                    cloud preview access has ended. By continuing, you agree to the{" "}
-                    <a href="/terms">Terms</a> and acknowledge the{" "}
+                    Use the email address on your invitation. If your preview access has ended, you
+                    can still sign in to manage or export your account. By continuing, you agree to
+                    the <a href="/terms">Terms</a> and acknowledge the{" "}
                     <a href="/privacy">Privacy notice</a>.
                   </p>
                 </>
