@@ -9,8 +9,6 @@
  * dither, not the noise, supplies the fine texture. That keeps a full-width hero near 2ms a frame.
  */
 
-import { type DitherSprite, paintSprites } from "./sprites";
-
 /** Palette index written for a lit volt pixel; greys are 0 (black) to levels - 1. */
 export const VOLT = 255;
 
@@ -188,6 +186,10 @@ export function fieldFloor(density: number): number {
 /** Width of the ramp from black to the brightest grey, in field units. */
 const RAMP = 0.24;
 
+/** With full `edges`, the floor rises this much in the middle and falls EDGE_SPAN by the sides. */
+const EDGE_RISE = 0.12;
+const EDGE_SPAN = 0.32;
+
 /** Plateaus in the shaped field, and the share of each step spent on its soft edge. */
 const TERRACES = 4;
 const TERRACE_EDGE = 0.2;
@@ -342,13 +344,26 @@ export interface FrameSettings {
   /** Whether resolved target cells may light up in volt too (at a fifth of the accent). */
   readonly targetSparks: boolean;
   readonly lens: DitherLens | null;
-  /** An ellipse, in cell units, where the field thins out to black so text over it stays clear. */
-  readonly clearing?: DitherClearing | null;
+  /**
+   * Ellipses, in cell units, where the field thins out to black so text over them stays clear.
+   * Several multiply, so each one keeps its own calm.
+   */
+  readonly clearing?: DitherClearing | readonly DitherClearing[] | null;
   /**
    * Sprite luminance per cell from paintSprites: below 0 leaves the field, 0 to 1 replaces it before
    * the threshold, so sprites dither like the field. Inside a clearing they fade to black too.
    */
   readonly overlay?: Float32Array | null;
+  /**
+   * How far the field gathers toward the left and right edges, 0 (even, the default) to 1: the floor
+   * rises in the middle and drops toward the sides, so a centred headline sits in calm.
+   */
+  readonly edges?: number;
+  /**
+   * The brightest the field itself may get, 0 to 1 (default 1). Below 1 its plateaus dither between
+   * the top two greys instead of filling solid, and sprites keep the full range, so they stand out.
+   */
+  readonly ceiling?: number;
 }
 
 /** An elliptical clearing in cell units: centre and radii. */
@@ -369,12 +384,21 @@ export function clearingKeep(d2: number): number {
   return t * t * (3 - 2 * t);
 }
 
+function isClearingList(
+  value: DitherClearing | readonly DitherClearing[] | null | undefined,
+): value is readonly DitherClearing[] {
+  return Array.isArray(value);
+}
+
 /** Writes one palette index per cell into `buffers.levels`, from the sampled coarse grid. */
 export function renderLevels(buffers: FieldBuffers, settings: FrameSettings): Uint8Array {
   const { cols, rows, coarse, coarseCols, columnIndex, columnWeight, thresholds, sparks, levels } =
     buffers;
   const top = Math.max(1, Math.min(254, Math.floor(settings.levels) - 1));
   const low = fieldFloor(settings.density);
+  const edges = Math.min(1, Math.max(0, settings.edges ?? 0));
+  const ceiling = Math.min(1, Math.max(0, settings.ceiling ?? 1));
+  const mid = Math.max(1, (cols - 1) / 2);
   const accent = Math.min(1, Math.max(0, settings.accent));
   const targetAccent = settings.targetSparks ? accent * 0.2 : -1;
   const progress = Math.min(1, Math.max(0, settings.progress));
@@ -385,10 +409,10 @@ export function renderLevels(buffers: FieldBuffers, settings: FrameSettings): Ui
   const texture = Math.min(1, Math.max(0, settings.texture));
   const lens = settings.lens && settings.lens.strength > 0 ? settings.lens : null;
   const lensR2 = lens ? lens.radius * lens.radius : 0;
-  const clearing =
-    settings.clearing && settings.clearing.rx > 0 && settings.clearing.ry > 0
-      ? settings.clearing
-      : null;
+  const given = settings.clearing;
+  const clearings = (isClearingList(given) ? given : given ? [given] : []).filter(
+    (area) => area.rx > 0 && area.ry > 0,
+  );
   const overlay =
     settings.overlay && settings.overlay.length >= cols * rows ? settings.overlay : null;
   for (let y = 0; y < rows; y++) {
@@ -398,7 +422,6 @@ export function renderLevels(buffers: FieldBuffers, settings: FrameSettings): Ui
     const rowA = y0 * coarseCols;
     const rowB = rowA + coarseCols;
     const ty = (y & 7) << 3;
-    const cy = clearing ? (y - clearing.y) / clearing.ry : 0;
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x;
       const x0 = columnIndex[x] ?? 0;
@@ -410,14 +433,20 @@ export function renderLevels(buffers: FieldBuffers, settings: FrameSettings): Ui
       const upper = a + (b - a) * fx;
       const raw = upper + (c + (d - c) * fx - upper) * fy;
 
-      let base = Math.min(1, Math.max(0, (raw - low) / RAMP));
+      let floor = low;
+      if (edges > 0) {
+        const side = Math.min(1, Math.abs(x - mid) / mid);
+        floor += edges * (EDGE_RISE - EDGE_SPAN * side * side * (3 - 2 * side));
+      }
+      let base = Math.min(1, Math.max(0, (raw - floor) / RAMP));
       base = terrace(base * base * (3 - 2 * base));
       let keep = 1;
-      if (clearing) {
-        const cx = (x - clearing.x) / clearing.rx;
-        keep = clearingKeep(cx * cx + cy * cy);
-        base *= keep;
+      for (const area of clearings) {
+        const cx = (x - area.x) / area.rx;
+        const cy = (y - area.y) / area.ry;
+        keep *= clearingKeep(cx * cx + cy * cy);
       }
+      base *= keep;
       let s = base;
       if (lens) {
         const dx = x - lens.x;
@@ -427,12 +456,14 @@ export function renderLevels(buffers: FieldBuffers, settings: FrameSettings): Ui
           const k = 1 - Math.sqrt(d2) / lens.radius;
           const pull = k * k * lens.strength;
           // The lens develops what lies under the black: a lower floor and more contrast.
-          let lifted = Math.min(1, Math.max(0, (raw - (low - 0.16 * pull)) / RAMP));
+          let lifted = Math.min(1, Math.max(0, (raw - (floor - 0.16 * pull)) / RAMP));
           lifted = terrace(lifted * lifted * (3 - 2 * lifted));
           // The clearing still holds under the lens, so text over it stays legible.
           s = Math.min(1, Math.max(0, 0.5 + (lifted - 0.5) * (1 + 0.6 * pull))) * keep;
         }
       }
+
+      if (s > ceiling) s = ceiling;
 
       // Volt comes from the field's own peaks, never from the lens.
       let spark = base > PEAK && (sparks[i] ?? 1) < accent;
@@ -489,25 +520,25 @@ export interface DitherFrameOptions {
   readonly target?: Float32Array | null;
   readonly texture?: number;
   readonly order?: DissolveOrder;
-  readonly clearing?: DitherClearing | null;
-  /** Sprites drawn into the field at `time`, exactly where the live engine draws them. */
-  readonly sprites?: readonly DitherSprite[];
+  readonly clearing?: DitherClearing | readonly DitherClearing[] | null;
+  /**
+   * Sprites painted at the same `time` with paintSprites (sprites.ts), so the frame shows them
+   * exactly where the live engine draws them.
+   */
+  readonly overlay?: Float32Array | null;
+  /** How far the field gathers toward the left and right edges, 0 to 1. Default 0. */
+  readonly edges?: number;
+  /** The brightest the field itself may get, 0 to 1. Default 1. */
+  readonly ceiling?: number;
 }
 
 /** Renders one frame from scratch: for tests and for writing the static fallback image. */
 export function renderDitherFrame(options: DitherFrameOptions): Uint8Array {
   const seed = options.seed ?? DEFAULT_SEED;
-  const cellPx = options.cellPx ?? 4;
-  const time = options.time ?? 0;
   const buffers = createFieldBuffers(options.cols, options.rows, seed, options.order ?? "scatter");
-  sampleField(buffers, createValueNoise3(seed), cellPx, time);
-  let overlay: Float32Array | null = null;
-  if (options.sprites && options.sprites.length > 0) {
-    overlay = new Float32Array(buffers.cols * buffers.rows);
-    paintSprites(overlay, buffers.cols, buffers.rows, options.sprites, time, cellPx);
-  }
+  sampleField(buffers, createValueNoise3(seed), options.cellPx ?? 4, options.time ?? 0);
   return renderLevels(buffers, {
-    overlay,
+    overlay: options.overlay ?? null,
     levels: options.levels ?? 4,
     density: options.density ?? 0.5,
     accent: options.accent ?? DEFAULT_ACCENT,
@@ -517,6 +548,8 @@ export function renderDitherFrame(options: DitherFrameOptions): Uint8Array {
     targetSparks: false,
     lens: null,
     clearing: options.clearing ?? null,
+    edges: options.edges ?? 0,
+    ceiling: options.ceiling ?? 1,
   });
 }
 

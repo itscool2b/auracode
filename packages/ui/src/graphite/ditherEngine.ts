@@ -68,9 +68,14 @@ export interface DitherEngineOptions {
   readonly seed: number;
   readonly fps: number;
   readonly reduced: boolean;
-  readonly clearing: DitherClearingArea | null;
+  /** Where the field thins to black; several multiply. */
+  readonly clearing: readonly DitherClearingArea[];
   /** Shapes drawn into the field's luminance; none by default. */
   readonly sprites?: readonly DitherSprite[];
+  /** How far the field gathers toward the left and right edges, 0 to 1. */
+  readonly edges?: number;
+  /** The brightest the field itself may get, 0 to 1; sprites keep the full range. */
+  readonly ceiling?: number;
 }
 
 /**
@@ -359,7 +364,6 @@ export function createDitherEngine(
       options.interactive && lens.strength > 0.01
         ? { x: lens.x, y: lens.y, radius: LENS_PX / cssCell, strength: lens.strength }
         : null;
-    const area = options.clearing;
     // Sprites ride the field's own clock, so they freeze where it freezes and pause where it does.
     let spriteOverlay: Float32Array | null = null;
     const sprites = options.sprites;
@@ -369,24 +373,25 @@ export function createDitherEngine(
       paintSprites(overlay, buffers.cols, buffers.rows, sprites, time, cssCell, activeLens);
       spriteOverlay = overlay;
     }
+    const { cols, rows } = buffers;
     const out = renderLevels(buffers, {
       overlay: spriteOverlay,
       levels: levels(),
       density: options.density,
+      edges: options.edges ?? 0,
+      ceiling: options.ceiling ?? 1,
       accent: options.accent,
       progress: options.progress,
       target,
       texture,
       targetSparks,
       lens: activeLens,
-      clearing: area
-        ? {
-            x: (area.x ?? 0.5) * buffers.cols,
-            y: (area.y ?? 0.5) * buffers.rows,
-            rx: area.rx * buffers.cols,
-            ry: area.ry * buffers.rows,
-          }
-        : null,
+      clearing: options.clearing.map((area) => ({
+        x: (area.x ?? 0.5) * cols,
+        y: (area.y ?? 0.5) * rows,
+        rx: area.rx * cols,
+        ry: area.ry * rows,
+      })),
     });
     for (let i = 0; i < out.length; i++) pixels[i] = lut[out[i] ?? 0] ?? 0;
     context.putImageData(image, 0, 0);

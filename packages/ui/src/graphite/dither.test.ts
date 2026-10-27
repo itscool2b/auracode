@@ -265,6 +265,48 @@ describe("frames", () => {
     }
   });
 
+  it("clears several ellipses at once, and one listed ellipse matches the single form", () => {
+    const single = { x: 20, y: 20, rx: 12, ry: 10 };
+    const other = { x: 70, y: 34, rx: 12, ry: 10 };
+    const both = renderDitherFrame({
+      cols,
+      rows,
+      density: 1,
+      accent: 0,
+      clearing: [single, other],
+    });
+    for (const area of [single, other]) {
+      for (let y = area.y - 2; y <= area.y + 2; y++) {
+        for (let x = area.x - 3; x <= area.x + 3; x++) expect(both[y * cols + x]).toBe(0);
+      }
+    }
+    expect(renderDitherFrame({ cols, rows, clearing: [single] })).toEqual(
+      renderDitherFrame({ cols, rows, clearing: single }),
+    );
+  });
+
+  it("gathers the field toward the left and right edges when asked", () => {
+    const wide = 240;
+    const share = (frame: Uint8Array, from: number, to: number) => {
+      let lit = 0;
+      let all = 0;
+      for (let y = 0; y < rows; y++) {
+        for (let x = from; x < to; x++) {
+          all++;
+          if ((frame[y * wide + x] ?? 0) > 0) lit++;
+        }
+      }
+      return lit / all;
+    };
+    const even = renderDitherFrame({ cols: wide, rows, density: 0.5 });
+    expect(renderDitherFrame({ cols: wide, rows, density: 0.5, edges: 0 })).toEqual(even);
+    const gathered = renderDitherFrame({ cols: wide, rows, density: 0.5, edges: 1 });
+    const sides = (frame: Uint8Array) => (share(frame, 0, 30) + share(frame, wide - 30, wide)) / 2;
+    const middle = (frame: Uint8Array) => share(frame, wide / 2 - 30, wide / 2 + 30);
+    expect(sides(gathered)).toBeGreaterThan(sides(even));
+    expect(middle(gathered)).toBeLessThan(middle(even));
+  });
+
   it("develops the field under the lens without inventing volt there", () => {
     const buffers = createFieldBuffers(cols, rows, DEFAULT_SEED);
     sampleField(buffers, createValueNoise3(DEFAULT_SEED), 4, 0);

@@ -146,10 +146,10 @@ describe("sprites in the field", () => {
   };
   const solid = sprite({ frames: [["9999", "9999", "9999"]], halo: 1 });
 
-  it("leaves the field unchanged without sprites", () => {
-    expect(renderDitherFrame({ cols, rows })).toEqual(
-      renderDitherFrame({ cols, rows, sprites: [] }),
-    );
+  it("leaves the field unchanged when no sprite lands", () => {
+    const overlay = new Float32Array(cols * rows);
+    paintSprites(overlay, cols, rows, [], 0, 4);
+    expect(renderDitherFrame({ cols, rows, overlay })).toEqual(renderDitherFrame({ cols, rows }));
   });
 
   it("dithers sprites in the field's own cells, with no volt on them", () => {
@@ -184,11 +184,23 @@ describe("sprites in the field", () => {
   });
 
   it("puts sprites into a still frame exactly where the engine draws them at time 0", () => {
-    const sprites = [solid];
-    const a = renderDitherFrame({ cols, rows, sprites, accent: 0 });
-    const b = renderDitherFrame({ cols, rows, sprites, accent: 0 });
-    expect(a).toEqual(b);
+    const overlay = new Float32Array(cols * rows);
+    paintSprites(overlay, cols, rows, [solid], 0, 4);
+    const a = renderDitherFrame({ cols, rows, overlay, accent: 0 });
+    expect(a).toEqual(renderDitherFrame({ cols, rows, overlay, accent: 0 }));
     expect(a).not.toEqual(renderDitherFrame({ cols, rows, accent: 0 }));
     expect(a[16 * cols + 31]).toBe(3);
+  });
+
+  it("keeps sprites bright under a ceiling that dims the field", () => {
+    const buffers = createFieldBuffers(cols, rows, DEFAULT_SEED);
+    sampleField(buffers, createValueNoise3(DEFAULT_SEED), 4, 0);
+    const overlay = new Float32Array(cols * rows);
+    paintSprites(overlay, cols, rows, [solid], 0, 4);
+    const frame = renderLevels(buffers, { ...base, accent: 0, density: 1, overlay, ceiling: 0.5 });
+    expect(frame[16 * cols + 31]).toBe(3);
+    const field = [...frame].filter((_, i) => (overlay[i] ?? -1) < 0);
+    expect(field.includes(3)).toBe(false);
+    expect(field.includes(2)).toBe(true);
   });
 });

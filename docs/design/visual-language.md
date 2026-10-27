@@ -618,10 +618,11 @@ makes uneven cells; past 240,000 cells the cell grows. Each frame:
    grid targets.
 
 **Props.** `className`, `style`; `children` (real content under the field); `cell` 4; `speed` 1
-(0 holds); `density` 0.5; `accent` 0.02; `interactive` false; `target`; `progress` (0, or 1 when
-only a target is set); `reveal` false; `order` "scatter"; `palette` "standard" (or 2 to 4 greys);
-`transparent` false (black cells clear, to layer over a surface); `clearing`; `fallbackSrc`;
-`still` false; `seed` `0x6a09e667`; `fps` 30; `sprites` (none); `label` (otherwise `aria-hidden`).
+(0 holds); `density` 0.5; `edges` 0; `ceiling` 1; `accent` 0.02; `interactive` false; `target`;
+`progress` (0, or 1 when only a target is set); `reveal` false; `order` "scatter"; `palette`
+"standard" (or 2 to 4 greys); `transparent` false (black cells clear, to layer over a surface);
+`clearing`; `fallbackSrc`; `still` false; `seed` `0x6a09e667`; `fps` 30; `sprites` (none); `label`
+(otherwise `aria-hidden`).
 
 - **Lens** (`interactive`, fine pointers with hover only): within 120 CSS px of the pointer the
   field develops: the floor drops by up to 0.16 and contrast rises by up to 60%, both falling off
@@ -639,8 +640,13 @@ only a target is set); `reveal` false; `order` "scatter"; `palette` "standard" (
 - **Reveal**: with `reveal`, at progress 1 the canvas fades out over 800ms `--g-ease-out` and stops
   drawing, showing `children`; it returns if progress drops. Under reduced motion it reveals at
   once.
-- **Clearing**: an ellipse in fractions of the field (`{ x 0.5, y 0.5, rx, ry }`) where the field
-  thins to black a pixel at a time, so a headline set over it stays readable.
+- **Clearing**: an ellipse in fractions of the field (`{ x 0.5, y 0.5, rx, ry }`), or a list of them
+  that multiply, where the field thins to black a pixel at a time, so a headline set over it stays
+  readable.
+- **Edges** (0 to 1): the floor rises by up to 0.12 in the middle and falls by up to 0.2 at the left
+  and right edges, so the field gathers at the sides of a centred layout.
+- **Ceiling** (0 to 1): the brightest the field itself may get. Below 1 its plateaus dither between
+  the top two greys instead of filling solid; sprites keep the full range and read against it.
 - **Sprites** (opt-in, none by default): small luminance grids with 2 to 4 frames (`.` empty, `0`
   to `9` ninths of full brightness), drawn into the field's luminance before the threshold, so they
   dither in the same cells and greys as the noise. Each drifts in CSS px a second with an optional
@@ -658,10 +664,11 @@ hero at 4px cells, lens and clearing included.
 **Server, no JS, no canvas.** Server rendering emits the wrapper, the optional fallback `<img>` and
 an empty canvas, touching no browser API. The fallback shows until the first frame lands and stays
 if the canvas is unavailable. For a field without a target, `renderDitherFrame({ cols, rows,
-cellPx, seed, density, accent, clearing, sprites })` (clearing in cells, time 0) renders the
-identical first frame in Node, sprites included, so a build step can write the fallback PNG at one
-pixel per cell and the hand-off is seamless. With `children` and no scripting, the field steps
-aside (`@media (scripting: none)`). Give the field a size; it fills its box.
+cellPx, seed, density, accent, edges, ceiling, clearing, overlay })` (clearing in cells, time 0,
+the overlay from `paintSprites`) renders the identical first frame in Node, sprites included, so a
+build step can write the fallback PNG at one pixel per cell and the hand-off is seamless. With
+`children` and no scripting, the field steps aside (`@media (scripting: none)`). Give the field a
+size; it fills its box.
 
 ---
 

@@ -27,6 +27,16 @@ export interface DitherFieldProps {
   readonly speed?: number;
   /** How much of the field lights up, 0 to 1. Default 0.5. */
   readonly density?: number;
+  /**
+   * How far the field gathers toward the left and right edges, 0 to 1: denser at the sides, calmer
+   * in the middle. Default 0, an even field.
+   */
+  readonly edges?: number;
+  /**
+   * The brightest the field itself may get, 0 to 1: below 1 its brightest areas dither instead of
+   * filling solid, and sprites keep the full range. Default 1.
+   */
+  readonly ceiling?: number;
   /** Chance that a peak cell is volt, 0 to 1. Default 0.02: a few dozen pixels on a hero. */
   readonly accent?: number;
   /** A lens that follows a fine pointer and develops the field under it. Default false. */
@@ -53,9 +63,10 @@ export interface DitherFieldProps {
   readonly fps?: number;
   /**
    * An ellipse, as fractions of the field, where the field thins to black a pixel at a time, so a
-   * headline set over it stays readable: `{ rx: 0.34, ry: 0.3, y: 0.42 }`. Default none.
+   * headline set over it stays readable: `{ rx: 0.34, ry: 0.3, y: 0.42 }`. Several ellipses multiply.
+   * Default none.
    */
-  readonly clearing?: DitherClearingArea;
+  readonly clearing?: DitherClearingArea | readonly DitherClearingArea[];
   /**
    * Small shapes that drift through the field, drawn into its luminance so they dither like it.
    * Pass a stable array (a module constant); a new array each render restarts nothing but costs a
@@ -67,6 +78,12 @@ export interface DitherFieldProps {
 }
 
 const NO_SPRITES: readonly DitherSprite[] = [];
+
+function isAreaList(
+  value: DitherClearingArea | readonly DitherClearingArea[] | undefined,
+): value is readonly DitherClearingArea[] {
+  return Array.isArray(value);
+}
 
 /**
  * Graphite's signature: a live ordered-dither field on a 2D canvas, rendered at one canvas pixel per
@@ -80,6 +97,8 @@ export function DitherField({
   cell = 4,
   speed = 1,
   density = 0.5,
+  edges = 0,
+  ceiling = 1,
   accent = DEFAULT_ACCENT,
   interactive = false,
   target,
@@ -106,6 +125,8 @@ export function DitherField({
     cell: finite(cell, 4, 1, 64),
     speed: finite(speed, 1, 0, 8),
     density: finite(density, 0.5, 0, 1),
+    edges: finite(edges, 0, 0, 1),
+    ceiling: finite(ceiling, 1, 0, 1),
     accent: finite(accent, DEFAULT_ACCENT, 0, 1),
     interactive,
     target,
@@ -118,14 +139,12 @@ export function DitherField({
     seed: Number.isFinite(seed) ? Math.trunc(seed) : DEFAULT_SEED,
     fps: finite(fps, 30, 1, 60),
     reduced,
-    clearing: clearing
-      ? {
-          x: finite(clearing.x ?? 0.5, 0.5, -1, 2),
-          y: finite(clearing.y ?? 0.5, 0.5, -1, 2),
-          rx: finite(clearing.rx, 0, 0, 4),
-          ry: finite(clearing.ry, 0, 0, 4),
-        }
-      : null,
+    clearing: (isAreaList(clearing) ? clearing : clearing ? [clearing] : []).map((area) => ({
+      x: finite(area.x ?? 0.5, 0.5, -1, 2),
+      y: finite(area.y ?? 0.5, 0.5, -1, 2),
+      rx: finite(area.rx, 0, 0, 4),
+      ry: finite(area.ry, 0, 0, 4),
+    })),
   };
   const options: DitherEngineOptions = { ...settings, sprites };
   const latest = useRef(options);
