@@ -61,38 +61,6 @@
   padding-bottom: 16px;
 }
 
-/*
- * The virtualizer spaces rows 16px apart. A tool opened from a group pulls up into that gap, so
- * the group's calls read as one list on a spine (6.4): rows 2px apart, the line on x 11.
- */
-.chat-segment[data-in-group] {
-  position: relative;
-  margin-top: -14px;
-}
-
-.chat-segment[data-in-group]::before {
-  content: "";
-  position: absolute;
-  top: -2px;
-  bottom: 0;
-  left: 10px;
-  width: 1px;
-  background-color: var(--ui-line);
-}
-
-/* Calls inside a group step one gutter in from the spine. */
-.chat-segment[data-in-group] .chat-tool-head {
-  padding-left: calc(var(--ui-gutter) + 16px);
-}
-
-.chat-segment[data-in-group] .chat-tool-head > .chat-gutter {
-  left: 16px;
-}
-
-.chat-segment[data-in-group] .chat-tool-well {
-  margin-left: calc(var(--ui-gutter) + 16px);
-}
-
 .chat-marker {
   margin: 0;
   color: var(--ui-text-muted);
@@ -268,8 +236,8 @@
   transition: transform var(--g-dur-base) var(--g-ease);
 }
 
-.chat-thought[open] > summary .chat-disclosure,
-.chat-tool-group-toggle[aria-expanded="true"] .chat-disclosure {
+.chat-tool-group-toggle[aria-expanded="true"] .chat-disclosure,
+.chat-thought[open] > summary .chat-disclosure {
   transform: rotate(90deg);
 }
 
@@ -412,6 +380,38 @@
     inset 0 0 0 1px var(--ui-line);
 }
 
+/*
+ * The virtualizer spaces rows 16px apart. A tool opened from a group pulls up into that gap, so
+ * the group's calls read as one list on a spine (6.4): rows 2px apart, the line on x 11.
+ */
+.chat-segment[data-in-group] {
+  position: relative;
+  margin-top: -14px;
+}
+
+.chat-segment[data-in-group]::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  bottom: 0;
+  left: 10px;
+  width: 1px;
+  background-color: var(--ui-line);
+}
+
+/* Calls inside a group step one gutter in from the spine. */
+.chat-segment[data-in-group] .chat-tool-head {
+  padding-left: calc(var(--ui-gutter) + 16px);
+}
+
+.chat-segment[data-in-group] .chat-tool-head > .chat-gutter {
+  left: 16px;
+}
+
+.chat-segment[data-in-group] .chat-tool-well {
+  margin-left: calc(var(--ui-gutter) + 16px);
+}
+
 .chat-tool-group {
   display: flex;
   flex-direction: column;
@@ -463,6 +463,16 @@
   font-weight: 500;
 }
 
+/* A settled group, like a finished call, says nothing at its end; screen readers still hear it. */
+.chat-tool-group-result[data-done] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .chat-locations {
   display: flex;
   flex-direction: column;
@@ -496,10 +506,6 @@
   line-height: var(--g-leading-meta);
 }
 
-.chat-command > .chat-output-actions {
-  flex: 0 0 auto;
-}
-
 .chat-output-actions,
 .chat-receipt-actions {
   display: inline-flex;
@@ -507,6 +513,10 @@
   justify-content: flex-end;
   gap: 2px;
   margin-left: auto;
+}
+
+.chat-command > .chat-output-actions {
+  flex: 0 0 auto;
 }
 
 .chat-command > .ui-row .ui-button,
@@ -2105,6 +2115,7 @@
 
 /* ---------- New chat (6.13) ---------- */
 
+/* Centred, then lifted by the extra space below so the sentence sits near 38% of the pane (6.13). */
 .chat-new-form {
   display: flex;
   flex-direction: column;
@@ -2113,7 +2124,7 @@
   width: 100%;
   max-width: 600px;
   margin: auto;
-  padding: 40px 24px;
+  padding: 40px 24px max(40px, 12vh);
   overflow-y: auto;
 }
 
@@ -2123,6 +2134,10 @@
   align-items: flex-start;
   gap: 20px;
   padding-bottom: 8px;
+}
+
+.chat-welcome-glyph {
+  color: var(--ui-text-primary);
 }
 
 /* Two tones at one size and weight: names in ink, the connective words and the next step grey. */
@@ -2155,8 +2170,7 @@
   padding: 16px 18px;
 }
 
-.chat-new-card > .ui-field + .ui-field,
-.chat-new-card > .chat-new-details {
+.chat-new-card > .ui-field + .ui-field {
   border-top: 1px solid var(--ui-line);
 }
 
@@ -2169,7 +2183,8 @@
   flex-wrap: nowrap;
 }
 
-.chat-new-card [data-testid="new-chat-folder"] {
+/* The chosen folder's path beside "Choose folder". */
+.chat-new-card .ui-row > .ui-mono {
   min-width: 0;
   overflow: hidden;
   color: var(--ui-text-secondary);
@@ -2185,6 +2200,7 @@
 
 .chat-new-card > .chat-new-details {
   padding: 0 18px;
+  border-top: 1px solid var(--ui-line);
 }
 
 .chat-new-details > summary {

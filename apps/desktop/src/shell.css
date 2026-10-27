@@ -298,8 +298,9 @@
     border-color var(--g-dur-fast) var(--g-ease);
 }
 
-.chat-app input[type="radio"],
-.chat-modal input[type="radio"] {
+/* Radios repeat the shared selector's weight (the :not() included) so their own rules win. */
+.chat-app input[type="radio"]:not([role="switch"]),
+.chat-modal input[type="radio"]:not([role="switch"]) {
   border-radius: var(--g-radius-pill);
 }
 
@@ -314,8 +315,8 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='%23000' stroke-width='1.75'%3E%3Cpath d='m2 5.25 2 2 4-4.5'/%3E%3C/svg%3E");
 }
 
-.chat-app input[type="radio"]:checked,
-.chat-modal input[type="radio"]:checked {
+.chat-app input[type="radio"]:not([role="switch"]):checked,
+.chat-modal input[type="radio"]:not([role="switch"]):checked {
   box-shadow: inset 0 0 0 4px var(--ui-primary);
   background-color: var(--ui-text-on-primary);
 }
@@ -777,18 +778,14 @@
     color var(--g-dur-micro) var(--g-ease);
 }
 
-.chat-row-container:has(> .chat-row[aria-current="true"]) > .chat-row-menu {
-  background-color: var(--ui-surface-raised);
-}
-
-.chat-row-container:is(:hover, :focus-within) > .chat-row-menu,
-.chat-project-heading:is(:hover, :focus-within) > .chat-row-menu {
+.chat-project-heading:is(:hover, :focus-within) > .chat-row-menu,
+.chat-row-container:is(:hover, :focus-within) > .chat-row-menu {
   opacity: 1;
 }
 
-/* The row's trailing status gives way to its menu (6.2). */
-.chat-row-container:is(:hover, :focus-within):has(> .chat-row-menu) .chat-row-status {
-  visibility: hidden;
+/* On the open chat the menu button takes the lifted row's fill, so the title ends cleanly. */
+.chat-row-container:has(> .chat-row[aria-current="true"]) > .chat-row-menu {
+  background-color: var(--ui-surface-raised);
 }
 
 .chat-row-status {
@@ -798,6 +795,11 @@
   justify-content: center;
   min-width: 12px;
   height: 12px;
+}
+
+/* The row's trailing status gives way to its menu (6.2). */
+.chat-row-container:is(:hover, :focus-within):has(> .chat-row-menu) .chat-row-status {
+  visibility: hidden;
 }
 
 .chat-pin-mark {
@@ -844,18 +846,6 @@
 /* An idle or missing agent's tile already shows its code; the code under it shows with a state. */
 .chat-agent-popover > summary > .g-agent-mark:is([data-state="idle"], [data-ghost]) + span {
   visibility: hidden;
-}
-
-.chat-agent-popover > .chat-popover-panel {
-  bottom: calc(100% + 8px);
-  left: -4px;
-  width: 280px;
-}
-
-.chat-agent-popover > .chat-popover-panel > strong {
-  font-size: var(--g-text-heading);
-  line-height: var(--g-leading-heading);
-  font-weight: 600;
 }
 
 .chat-agent-actions {
@@ -1006,7 +996,8 @@
   line-height: var(--g-leading-meta);
 }
 
-.chat-header-menu [data-testid="chat-usage"] {
+/* The context and cost line under the agent. */
+.chat-header-menu .chat-popover-panel > .ui-muted {
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-variant-numeric: tabular-nums;
@@ -1163,6 +1154,19 @@
     opacity: 1;
     transform: none;
   }
+}
+
+/* The agent card opens upward from the dock (6.2). */
+.chat-agent-popover > .chat-popover-panel {
+  bottom: calc(100% + 8px);
+  left: -4px;
+  width: 280px;
+}
+
+.chat-agent-popover > .chat-popover-panel > strong {
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 600;
 }
 
 /* ---------- Banners (6.8) ---------- */

@@ -70,7 +70,11 @@ export function ToolGroup({
         <span className="chat-tool-group-summary">
           {running ? running.title || "Working" : summary}
         </span>
-        <span className="chat-tool-group-result" data-failed={failed > 0}>
+        <span
+          className="chat-tool-group-result"
+          data-failed={failed > 0}
+          data-done={!running && !failed && !stopped ? "" : undefined}
+        >
           {running
             ? `${tools.length} calls`
             : failed
