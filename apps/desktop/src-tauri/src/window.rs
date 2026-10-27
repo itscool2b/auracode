@@ -205,7 +205,36 @@ pub fn create_main(
         builder = builder.no_redirection_bitmap(plan.transparent);
     }
 
+    #[cfg(all(windows, debug_assertions))]
+    if let Some(arguments) = automation_browser_args() {
+        builder = builder.additional_browser_args(&arguments);
+    }
+
     Ok(builder.build()?)
+}
+
+/// The switches wry gives every WebView2 environment unless the app sets its own.
+#[cfg(all(windows, debug_assertions))]
+const WRY_BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required";
+
+/// Edge WebDriver enables remote debugging through `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`, but
+/// WebView2 ignores that variable once an app passes its own arguments, and wry always does. Only
+/// debug builds launched for WebDriver automation keep wry's switches and add the driver's, so the
+/// external Windows gate can attach. Release builds never read the variable.
+#[cfg(all(windows, debug_assertions))]
+fn automation_browser_args() -> Option<String> {
+    automation_args(
+        std::env::var("TAURI_WEBVIEW_AUTOMATION").ok().as_deref(),
+        std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS")
+            .ok()
+            .as_deref(),
+    )
+}
+
+#[cfg(all(windows, debug_assertions))]
+fn automation_args(automation: Option<&str>, driver: Option<&str>) -> Option<String> {
+    let driver = driver.map(str::trim).filter(|args| !args.is_empty())?;
+    (automation == Some("true")).then(|| format!("{WRY_BROWSER_ARGS} {driver}"))
 }
 
 /// Shows and focuses the main window the first time it is called (later calls do nothing, so a
@@ -374,6 +403,24 @@ fn leave_for_browser(app: &AppHandle, url: &Url) {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(all(windows, debug_assertions))]
+    #[test]
+    fn only_webdriver_automation_adds_the_drivers_switches_to_wrys_own() {
+        use super::{WRY_BROWSER_ARGS, automation_args};
+        let driver = Some("--remote-debugging-port=0 --enable-automation");
+        assert_eq!(
+            automation_args(Some("true"), driver).as_deref(),
+            Some(
+                format!("{WRY_BROWSER_ARGS} --remote-debugging-port=0 --enable-automation")
+                    .as_str()
+            )
+        );
+        assert_eq!(automation_args(None, driver), None);
+        assert_eq!(automation_args(Some("1"), driver), None);
+        assert_eq!(automation_args(Some("true"), None), None);
+        assert_eq!(automation_args(Some("true"), Some("   ")), None);
+    }
+
     #[test]
     fn webview_visibility_retries_failed_changes_and_restores_after_minimize() {
         let state = super::WebviewVisibility::default();
