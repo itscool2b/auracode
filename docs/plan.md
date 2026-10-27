@@ -3,8 +3,8 @@
 ## Current authority
 The owner revised the architecture on 2026-10-26: Rust owns backend logic, all application cloud
 infrastructure lives on Cloudflare, and the root `AGENTS.md` and `CLAUDE.md` stay byte-identical.
-Orbit supersedes the original Aura visuals. `docs/progress.md` records implementation status and
-`infra/README.md` records provisioned resources. Historical machine facts below are not current discovery.
+Graphite (2026-10-26) supersedes Orbit, which superseded the original Aura visuals.
+`docs/progress.md` records implementation status and `infra/README.md` records provisioned resources. Historical machine facts below are not current discovery.
 The owner narrowed the current release to Windows and macOS and deferred Linux/WSL. CI is now
 reserved for a few deliberate integration checkpoints and the final verification, with failure
 fixes rerun as needed. Visual implementation must be checked against the exact original Mobbin
@@ -70,22 +70,24 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
 3. No hidden instructions. The only thing auracode adds to a prompt is the visible handoff block when you
    switch agents or devices. (The "let the agent chill" philosophy.)
 4. Local-first; cloud only for accounts and sync.
-5. Every animation means something: the orb and the aura are live state, not decoration.
+5. Every animation means something: agent marks and live labels show real state, not decoration.
 
 ## UX spec: app
-The chosen **Orbit** specification in [visual-language.md](design/visual-language.md) defines every
-surface, token, type size, state, animation, and accessibility requirement. Use the working Orbit
-Design Lab prototype as the visual reference, adapted to the live protocol rather than M0 fixtures.
+The **Graphite** specification in [visual-language.md](design/visual-language.md) defines every
+surface, token, type size, state, animation, and accessibility requirement. Its references are the
+owner's Mobbin and live-site set (SpaceXAI, X Money, Harvey, Aside, Vercel, and the AI in Design
+Report 2026 as the bar for uniqueness), adapted to the live protocol.
 
-- Dark-only surfaces, Geist and Geist Mono, solid panes on a neutral tray, hairline divisions.
-  Orange means attention, green success/addition, red failure/deletion; ink carries other states.
-  No decorative gradients, glow, serif, italic, agent colors, or accent picker.
-- Native material only under the sidebar and its titlebar strip, with opaque platform fallbacks.
+- Dark-only, pure black canvas, Geist and Geist Mono at integer weights, solid panes, hairline
+  divisions. Volt lime means look here, green success/addition, red failure/deletion; white and
+  greys carry other states. No space imagery, gradients, glow, glass, serif, italic, agent colors,
+  accent picker, or eyebrow labels.
+- Panes paint opaque; no native material shows through the interface.
 - Collapsible project/chat sidebar, Needs you inbox, agent dock, account menu, main transcript,
   composer, and a right panel for Changes, Files, Plan, and Session information.
-- Agent-specific SVG Orbit marks use state-driven motion. Pause offscreen and when inactive;
-  reduced motion communicates state through static geometry and text. Do not require WebGL.
-- Inverted user blocks, plain agent prose, collapsible thinking/tool rows, diffs, terminal output,
+- Agent marks (monochrome tiles with a pixel loader, needs-you square, done check) show state.
+  Only live marks animate; pause offscreen and when inactive; reduced motion is static. No WebGL.
+- Raised user blocks, plain agent prose, collapsible thinking/tool rows, diffs, terminal output,
   and receipts with duration, usage, cost when known, and changed files. Virtualize large histories.
 - Permission/question cards occupy the composer when needed, with keyboard answers and visible
   request scope. Never offer an unsupported permission choice or auto-answer an always-ask request.
@@ -96,7 +98,7 @@ Design Lab prototype as the visual reference, adapted to the live protocol rathe
   inability to ask is explicit. Never turn a generic automatic approval into a persistent rule.
 - Titles come from the agent or first user line, never a hidden title-generation prompt.
 
-**Boot and onboarding.** A skippable 1.6 to 2 second globe-to-dock boot, shortened on warm launch and
+**Boot and onboarding.** A skippable 1.6 to 2 second dither-to-mark intro, shortened on warm launch and
 skipped for links, notifications, and reduced motion. Show the hidden window after first paint;
 use cached detection and reconcile without blocking startup. Onboarding is keyboard-driven,
 resumable, re-runnable, and entirely skippable: welcome, discovery, account, motion preference,
@@ -105,10 +107,11 @@ The account step stays disabled until M6; encrypted device approval/recovery and
 with M7. No screen promises sync before it works.
 
 ## UX spec: website (auracode.si)
-Share Orbit components and typography with the app. React/TypeScript renders interfaces;
+Share Graphite tokens, components and typography with the app. React/TypeScript renders interfaces;
 prerender public pages and serve static assets through Cloudflare. Rust owns API behavior.
 
-- /: globe, rotating agent name in "One window for [Claude Code].", OS-aware Download and Create account.
+- /: dither field, rotating agent name in "One window for [Claude Code].", OS-aware Download and
+  invited sign-in. Hosted accounts stay invite-only, so the site never offers account creation.
 - /download: every OS/architecture, version, notes, SHA-256 checksums, requirements and unsigned-build
   installation instructions. Works without JavaScript; always permits a different OS choice.
 - /signup and /signin: email, six-digit code, resend cooldown, Turnstile, clear expiry/delivery errors.
@@ -117,7 +120,7 @@ prerender public pages and serve static assets through Cloudflare. Rust owns API
 - /privacy, /terms, /changelog: accurate processor, retention, export and deletion information.
   Legal copy needs review before public release; a domain suffix alone does not establish jurisdiction.
 - The auracode://signin link prefills email only, never tokens. Display Download beside Open auracode.
-- Reduced motion, keyboard access, and a static globe fallback are required.
+- Reduced motion, keyboard access, and a static dither fallback without JavaScript are required.
 
 ## Projects, chats, agent switching
 - **Project** = name + colour + 1..n folders + optional default agent/model. Folders have a portable
@@ -160,15 +163,15 @@ auracode/                        Cargo workspace + pnpm workspace
     desktop/src/                 React UI
     web/                         (M6) auracode.si: React Router 7 on Cloudflare Workers
   services/api/                  (M6) Rust Cloudflare Worker: accounts, devices, sync, email delivery
-  packages/ui/                   TS Orbit design system shared by app + site: tokens, marks, motion
+  packages/ui/                   TS Graphite design system shared by app + site: tokens, marks, motion
   packages/api-types/            TS types generated from aura-protocol (shared by app, site, API)
   infra/                         Wrangler configs, SQL migrations for D1, release scripts
 ```
 - **Processes.** One Tauri process runs aura-core on tokio (`panic = "unwind"` in release; panics contained
   per task). aura-core doesn't depend on Tauri, so a headless daemon can reuse it later for remote access.
-- **Shell.** Tauri 2.12.x: sidebar-scoped native material with Orbit's neutral tint, sidebar vibrancy
-  on macOS and Mica on Windows 11; opaque fallbacks elsewhere. All content panes stay solid. The
-  existing M0 full-window effects are migrated in M2a. Overlay titlebar + `trafficLightPosition`
+- **Shell.** Tauri 2.12.x: the window keeps its platform material plan (vibrancy on macOS, Mica on
+  Windows 11, opaque elsewhere), but Graphite paints every surface opaque black, so no material
+  shows through. Overlay titlebar + `trafficLightPosition`
   on macOS; Windows titlebar decided by
   an M0 spike (custom controls lose Snap Layouts, so native caption buttons are the default). Plugins:
   single-instance, deep-link (`auracode://`), notification, window-state, updater, dialog, opener.
@@ -200,9 +203,9 @@ auracode/                        Cargo workspace + pnpm workspace
     Development uses local/emulated or separately named resources, never production test data.
   - Structured diagnostics omit codes, tokens, credentials, account emails and plaintext sync data.
 
-- **Engines.** WKWebView (Safari 26/27) on macOS, WebView2 on Windows, WebKitGTK on Linux. Native
-  material is restricted to the sidebar; CSS `backdrop-filter` is limited to toasts and never animated.
-  Repeat the M0 idle-power measurements after migrating production surfaces to Orbit.
+- **Engines.** WKWebView (Safari 26/27) on macOS, WebView2 on Windows, WebKitGTK on Linux. Graphite
+  paints every surface opaque and uses no `backdrop-filter`. Repeat the M0 idle-power measurements
+  after migrating production surfaces to Graphite.
 - **Catalog vs drivers.** The catalog is data (per agent: binaries + known dirs per OS, version command,
   channel rules, latest-version source, vendor update command, auth-status command, launch spec, config dir,
   brand, last-verified version). Drivers are per protocol: ACP, Claude stream-json, Codex app-server, Pi RPC
@@ -418,7 +421,7 @@ to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The z
   (Antigravity, Cursor, Grok, oh-my-pi, OpenCode) + agy/grok fallbacks.
 - **M1e Catalog.** Detection on macOS/Windows, channels, versions, vendor updates,
   last-verified badges, auth status. Done when `aura-cli smoke <agent>` passes for every installed agent.
-- **M2a Design system + transcript.** Dark-only Orbit tokens, fonts, state-driven SVG marks,
+- **M2a Design system + transcript.** Dark-only Graphite tokens, fonts, state-driven agent marks,
   transcript components and accessibility against live protocol fixtures. Retire legacy shader/serif
   dependencies only when no retained Design Lab direction uses them.
 - **M2b App shell with real agents.** Sidebar, projects, chats, persistence, titles, edit/retry/fork,
