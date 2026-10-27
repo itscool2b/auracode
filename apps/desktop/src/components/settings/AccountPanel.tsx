@@ -13,6 +13,7 @@ import { type VerificationOrigin, verificationOrigin } from "../../lib/accountVe
 import { errorMessage } from "../../lib/errors";
 import { switchProfile } from "../../lib/profiles";
 import { Modal } from "../chat/Modal";
+import { syncStatusLabel } from "../chat/ProfileStatus";
 import { AccountVault } from "./AccountVault";
 import { AccountVerification } from "./AccountVerification";
 import { KeepAsLocalPanel } from "./KeepAsLocalPanel";
@@ -300,14 +301,19 @@ export function AccountPanel({
           : "Signed out on this device. Remote sign-out could not be confirmed; reconnect to revoke that session.",
       );
     });
+  // Sign-in errors belong to the field they are about: one red line under it, not a separate well.
+  const inlineError =
+    signedOut && error ? (
+      <p className="settings-field-error" role="alert">
+        {error}
+      </p>
+    ) : null;
   const sync = status?.sync;
+  // The sidebar's words for the sync state, then when it last synced.
   const syncSummary = sync
     ? [
-        sync.state === "inactive"
-          ? "Profile not active"
-          : `${sync.state.charAt(0).toUpperCase()}${sync.state.slice(1)}`,
-        `Last synced ${time(sync.last_sync_at).replace(/^Not yet$/, "not yet")}`,
-        sync.pending_changes !== null ? `${sync.pending_changes} waiting to sync` : null,
+        sync.state === "inactive" ? "Profile not active" : syncStatusLabel(sync),
+        sync.last_sync_at !== null ? `Last synced ${time(sync.last_sync_at)}` : null,
       ]
         .filter(Boolean)
         .join(" · ")
@@ -364,11 +370,13 @@ export function AccountPanel({
                       required
                       value={code}
                       disabled={locked}
+                      aria-invalid={inlineError ? true : undefined}
                       onChange={(event) =>
                         setCode(event.currentTarget.value.replace(/\D/g, "").slice(0, 6))
                       }
                     />
                   </label>
+                  {inlineError}
                   <p className="settings-note">
                     {challenge.expiresAt <= now
                       ? "This code expired. Request a new one."
@@ -419,6 +427,7 @@ export function AccountPanel({
                       onChange={(event) => setEmail(event.currentTarget.value)}
                     />
                   </label>
+                  {inlineError}
                   {origin ? (
                     <Verification key={verificationAttempt} origin={origin} onToken={setProof} />
                   ) : (
@@ -746,7 +755,7 @@ export function AccountPanel({
             {notice}
           </p>
         ) : null}
-        {error ? (
+        {error && !inlineError ? (
           <div className="settings-error" role="alert">
             <p>{error}</p>
             {!status ? (
@@ -795,7 +804,9 @@ export function AccountPanel({
             {devices?.map((device) => (
               <li className="settings-row" key={device.id}>
                 <div className="settings-row-text">
-                  <Laptop size={16} aria-hidden="true" />
+                  <span className="account-badge" aria-hidden="true">
+                    <Laptop size={16} />
+                  </span>
                   <div>
                     <strong>
                       {device.name}

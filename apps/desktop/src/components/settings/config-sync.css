@@ -26,7 +26,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--g-space-8);
-  margin-top: var(--g-space-6);
+  margin-top: var(--g-space-4);
   color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);

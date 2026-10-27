@@ -745,6 +745,15 @@ h1 + .settings-group {
   margin-top: var(--g-space-8);
 }
 
+/* The reason under an invalid field, in 12/16 red (4.2). */
+.settings-field-error {
+  margin: 0;
+  color: var(--g-red);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
 .settings-alert {
   margin: 0;
   color: var(--g-red);

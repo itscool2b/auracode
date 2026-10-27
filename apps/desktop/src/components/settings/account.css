@@ -61,7 +61,7 @@ textarea.account-secret {
   font-variant-numeric: tabular-nums;
 }
 
-/* Grok's avatar circle, here a state: approved (a check) or locked (a lock). */
+/* Grok's avatar circle: a profile, a device, or the account's state (approved, locked). */
 .account-badge {
   display: grid;
   flex: none;
@@ -204,7 +204,8 @@ textarea.account-secret {
   overflow: hidden;
   border-radius: var(--g-radius-8);
   background-color: var(--g-surface-1);
-  box-shadow: inset 0 0 0 1px var(--g-line);
+  /* Outside the frame: an inset ring would sit under the iframe. */
+  box-shadow: 0 0 0 1px var(--g-line);
 }
 
 .account-verification-frame {

@@ -70,7 +70,9 @@ export function ProfilePicker({
           return (
             <li className="settings-row" key={profile.id}>
               <div className="settings-row-text">
-                <Icon size={16} aria-hidden="true" />
+                <span className="account-badge" aria-hidden="true">
+                  <Icon size={16} />
+                </span>
                 <div>
                   <strong>{profile.display_name}</strong>
                   <p>
