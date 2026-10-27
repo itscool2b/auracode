@@ -30,7 +30,7 @@ export async function checkAccountVerification(browser, desktopUrl, out, engine)
       if (url.origin === "https://challenges.cloudflare.com")
         return route.fulfill({
           contentType: "text/javascript",
-          body: `window.turnstile={render(node,options){ const button=document.createElement('button'); button.className='button'; button.textContent='Complete synthetic verification'; button.onclick=()=>options.callback('synthetic-proof'); node.append(button); return 'fixture'; },remove(){}};`,
+          body: `window.turnstile={render(node,options){ const button=document.createElement('button'); button.className='g-button g-button-outline g-button-36'; button.textContent='Complete synthetic verification'; button.onclick=()=>options.callback('synthetic-proof'); node.append(button); return 'fixture'; },remove(){}};`,
         });
       if (url.origin !== "https://auracode.si") return route.abort();
       if (url.pathname === "/api/v1/config")
