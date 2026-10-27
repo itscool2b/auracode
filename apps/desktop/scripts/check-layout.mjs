@@ -1,8 +1,9 @@
 /**
- * The layout probe: walks every ?preview= mode in Chromium and WebKit at two window sizes, plus the
- * chat shell's floating layers opened as a person opens them ("settled#picker": the picker, the
- * palette, the chat and account menus, the other agents, the Changes panel, a typed message), and
- * fails on the five things a clean screen never has:
+ * The layout probe: walks every ?preview= mode (and library.html, the fixture with its own page) in
+ * Chromium and WebKit at two window sizes, plus the chat shell's floating layers opened as a person
+ * opens them ("settled#picker": the picker, the palette, the chat and account menus, the other
+ * agents, the Changes panel, a typed message) and other screens' states ("library.html#library-item"),
+ * and fails on the five things a clean screen never has:
  *
  * 1. Horizontal overflow: the page scrolls sideways, or a visible box reaches past the window.
  * 2. Off-grid containers: a padded block container whose offset from its padded parent, or whose
@@ -64,6 +65,10 @@ export const MODES = [
   "agents",
   "chat-options",
   "chat-options#busy-folder",
+  // The Library's three-pane frame, a fixture page of its own.
+  "library.html",
+  "library.html#library-item",
+  "library.html#library-history",
   "steering#queued",
   "steering#queue-edit",
   // A message typed during a turn: Steer beside the Queue disc, or, for an agent without
@@ -106,6 +111,14 @@ const OPENERS = {
   defaults: async (page) => {
     await page.getByLabel("Default agent").selectOption("codex");
     await page.getByLabel("Default model").waitFor();
+  },
+  "library-item": async (page) => {
+    await page.getByRole("button", { name: /Review changes Claude/ }).click();
+    await page.getByLabel("Copy destination").waitFor();
+  },
+  "library-history": async (page) => {
+    await page.getByRole("button", { name: /^Copy history/ }).click();
+    await page.locator(".library-history").waitFor();
   },
   queued: (page) => queueTwo(page),
   "queue-edit": async (page) => {
@@ -555,7 +568,10 @@ try {
         const page = await context.newPage();
         for (const mode of modes) {
           const [preview, view] = mode.split("#");
-          await page.goto(`${url}/?preview=${preview}`);
+          // A fixture with its own page (library.html) is opened by name.
+          await page.goto(
+            preview.endsWith(".html") ? `${url}/${preview}` : `${url}/?preview=${preview}`,
+          );
           await page.waitForLoadState("networkidle").catch(() => {});
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(900);
