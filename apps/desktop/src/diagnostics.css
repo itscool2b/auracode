@@ -1,61 +1,208 @@
+/*
+ * Diagnostics and the stress view, consistent with Graphite: the sidebar on black, a surface-1 pane
+ * inset 8px like the chat, and surface-2 panels inside it. No glass, no glow.
+ */
+
 .diagnostics-shell {
-  --aura-text-1: var(--o-text-1);
-  --aura-text-2: var(--o-text-2);
-  --aura-text-3: var(--o-text-3);
-  --aura-danger: var(--o-red);
-  background: var(--o-pane);
-  color: var(--o-text-1);
-  font-family: var(--o-sans);
+  --aura-text-1: var(--g-fg-1);
+  --aura-text-2: var(--g-fg-2);
+  --aura-text-3: var(--g-fg-3);
+  --aura-danger: var(--g-red);
+  background: var(--g-bg);
+  color: var(--g-fg-1);
+  font-family: var(--g-sans);
 }
+
+.diagnostics-shell .main {
+  margin: 8px 8px 8px 0;
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius-12);
+  background: var(--g-surface-1);
+}
+
+.diagnostics-shell .main-scroll {
+  padding: 40px 40px 40px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-line-strong) transparent;
+}
+
 .diagnostics-title {
   margin: 0;
-  font: 500 32px / 1.2 var(--o-sans);
-  letter-spacing: -1.2px;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-title);
+  line-height: var(--g-leading-title);
+  font-weight: 500;
+  letter-spacing: var(--g-tracking-title);
 }
+
+.diagnostics-title > span {
+  display: block;
+  color: var(--g-fg-3);
+}
+
 .diagnostics-shell .lede {
-  color: var(--o-text-2);
-  font: 13px / 1.8 var(--o-sans);
+  margin: 4px 0 0;
 }
-.diagnostics-shell .sidebar {
-  background: var(--o-tray-tint);
-  border-right: 1px solid var(--o-line-strong);
-  box-shadow: none;
-}
-.diagnostics-shell .wordmark {
-  font: 500 19px var(--o-sans);
-  letter-spacing: -0.6px;
-}
+
 .diagnostics-panel {
-  border: 1px solid var(--o-line-strong);
-  border-radius: 10px;
-  background: var(--o-raised);
+  border-radius: var(--g-radius-12);
+  background: var(--g-surface-2);
 }
-.diagnostics-shell :is(.panel-title, .eyebrow) {
-  color: var(--o-text-2);
-  font-family: var(--o-sans);
+
+.diagnostics-alert {
+  margin: 0;
+  color: var(--g-red);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
 }
-.diagnostics-shell :is(.btn, select) {
-  color: var(--o-text-1);
-  background: var(--o-raised-2);
-  border: 1px solid var(--o-line-strong);
-  box-shadow: none;
-  border-radius: 6px;
-  font: 12px var(--o-sans);
+
+.diagnostics-home {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 1180px;
+  height: 100%;
+  margin: 0 auto;
 }
-.diagnostics-shell .btn-primary {
-  color: var(--o-on-ink);
-  background: var(--o-ink);
+
+.diagnostics-grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  align-items: start;
+  gap: 16px;
+  min-height: 0;
 }
-.diagnostics-shell .btn-quiet {
-  border-color: transparent;
-  background: transparent;
+
+.diagnostics-demo {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 420px;
 }
-.diagnostics-shell .btn:hover:not(:disabled) {
-  background: var(--o-hover);
-  color: var(--o-text-1);
+
+.info-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
 }
-.diagnostics-shell .agent-chip {
-  border: 1px solid var(--o-line-strong);
-  background: var(--o-raised);
-  box-shadow: none;
+
+.demo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  padding: 20px;
+}
+
+.demo-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.demo-panel-phase {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.demo-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.demo-panel-rate {
+  margin-left: auto;
+}
+
+.demo-panel-stress {
+  align-self: flex-start;
+  margin-left: -14px;
+}
+
+.demo-panel-stress svg {
+  color: var(--g-fg-3);
+}
+
+.demo-panel-idle {
+  margin: 0;
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.demo-panel-transcript {
+  flex: 1;
+  min-height: 0;
+}
+
+.stress-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: 100%;
+}
+
+.stress-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.stress-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.stress-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+
+.stress-back {
+  margin-left: -8px;
+}
+
+.stress-run {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.stress-config-label {
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+}
+
+.stress-config-input {
+  width: 300px;
+}
+
+.stress-stream {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  user-select: text;
+}
+
+.stress-empty {
+  margin: 0;
+  font-size: var(--g-text-ui);
+}
+
+@media (max-width: 1180px) {
+  .diagnostics-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

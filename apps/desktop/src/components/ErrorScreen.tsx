@@ -1,5 +1,6 @@
-import { OrbitMark } from "@auracode/ui/orbit";
+import { AgentMark, CopyButton } from "@auracode/ui/graphite";
 import { DataPath, Notices } from "./InfoCard";
+import "./ErrorScreen.css";
 
 /**
  * Shown instead of the app when startup could not complete: what happened, in aura-core's own
@@ -19,27 +20,25 @@ export function ErrorScreen({
   readonly notices?: readonly string[];
 }) {
   return (
-    <main
-      className="diagnostics-shell orbit-theme relative flex h-full items-center justify-center p-10"
-      data-theme="dark"
-    >
-      <div className="drag-strip" data-tauri-drag-region="" />
-      <section className="diagnostics-panel flex w-full max-w-[600px] flex-col gap-5 p-8">
-        <OrbitMark agent="generic" state="error" size={48} label="auracode could not start" />
-        <div className="flex flex-col gap-3">
-          <h1 className="diagnostics-title">{title}</h1>
-          <p role="alert" className="m-0 text-[15px] text-(--aura-text-1) select-text">
-            {message}
-          </p>
+    <main className="error-screen g-root">
+      <div className="error-drag" data-tauri-drag-region="" />
+      <section className="error-panel">
+        <AgentMark agent="generic" state="error" size={48} label="auracode could not start" />
+        <div className="error-message">
+          <h1>{title}</h1>
+          <p role="alert">{message}</p>
         </div>
         {dataDir ? (
-          <div className="flex flex-col gap-1">
-            <span className="eyebrow">Data folder</span>
+          <div className="error-well">
+            <div className="error-well-head">
+              <span>Data folder</span>
+              <CopyButton text={dataDir} label="Copy data folder path" />
+            </div>
             <DataPath path={dataDir} os={os} prominent />
           </div>
         ) : null}
         {notices.length > 0 ? <Notices notices={notices} /> : null}
-        <p className="muted m-0 text-sm">
+        <p className="error-note">
           Nothing was deleted. Fix the problem above, then quit and reopen auracode.
         </p>
       </section>

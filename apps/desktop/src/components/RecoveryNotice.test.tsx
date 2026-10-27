@@ -131,9 +131,7 @@ describe("dismissing the database repair notice", () => {
 
     const html = view(lastOf(states));
     expect(html).toContain(NOTICE);
-    expect(html).toContain(
-      `<span role="alert" class="wrap-anywhere text-xs text-(--aura-danger)">${message}</span>`,
-    );
+    expect(html).toContain(`<span role="alert" class="notice-problem">${message}</span>`);
     expect(html).toMatch(ENABLED_BUTTON);
   });
 

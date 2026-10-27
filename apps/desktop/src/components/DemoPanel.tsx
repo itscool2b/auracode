@@ -36,18 +36,18 @@ export function DemoPanel({
   };
 
   return (
-    <section className="diagnostics-panel flex min-h-0 flex-col gap-4 p-5">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="panel-title m-0">Demo stream</h2>
-        <span className="text-xs text-(--aura-text-3)" aria-live="polite">
+    <section className="diagnostics-panel demo-panel">
+      <div className="demo-panel-head">
+        <h2 className="panel-title">Demo stream</h2>
+        <span className="demo-panel-phase" aria-live="polite">
           {PHASE_LABEL[snapshot.phase]}
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="demo-panel-actions">
         <button
           type="button"
-          className="btn btn-primary"
+          className="g-button g-button-primary"
           disabled={running}
           onClick={() => run(() => store.start({ type: "demo" }, rate))}
         >
@@ -55,7 +55,7 @@ export function DemoPanel({
         </button>
         <button
           type="button"
-          className="btn"
+          className="g-button"
           disabled={running}
           onClick={() =>
             run(() => store.start({ type: "stress", total_tokens: PANEL_STRESS_TOKENS }, rate))
@@ -65,13 +65,13 @@ export function DemoPanel({
         </button>
         <button
           type="button"
-          className="btn"
+          className="g-button"
           disabled={!running}
           onClick={() => run(() => store.stop())}
         >
           Stop
         </button>
-        <div className="field ml-auto">
+        <div className="field demo-panel-rate">
           <label htmlFor={rateId}>Tokens/s</label>
           <input
             id={rateId}
@@ -87,24 +87,28 @@ export function DemoPanel({
       </div>
 
       {/* A button, not a checkbox: it opens another screen rather than switching a setting. */}
-      <button type="button" className="btn btn-quiet -ml-3 w-fit" onClick={onOpenStress}>
+      <button
+        type="button"
+        className="g-button g-button-ghost demo-panel-stress"
+        onClick={onOpenStress}
+      >
         Stress view <span className="muted">(orbs, aura, fast stream, frame rate)</span>
         <ChevronIcon width={12} height={12} />
       </button>
 
       {(problem ?? snapshot.error) ? (
-        <p role="alert" className="m-0 text-sm text-(--aura-danger)">
+        <p role="alert" className="diagnostics-alert">
           {problem ?? snapshot.error}
         </p>
       ) : null}
 
       {snapshot.phase === "idle" ? (
-        <p className="muted m-0 text-sm">
+        <p className="muted demo-panel-idle">
           Start a turn to stream the scripted agent through the shell: a thought, two tool calls, a
           plan, and a markdown answer, framed in Rust and rendered here block by block.
         </p>
       ) : (
-        <Transcript snapshot={snapshot} className="min-h-0 flex-1" />
+        <Transcript snapshot={snapshot} className="demo-panel-transcript" />
       )}
     </section>
   );

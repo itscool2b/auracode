@@ -242,7 +242,7 @@ function PlanChecklist({
 }) {
   return (
     <section className="plan" aria-label="Plan">
-      <h3 className="eyebrow m-0">Plan</h3>
+      <h3 className="plan-title">Plan</h3>
       <ol>
         {entries.map((entry, index) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: a plan update replaces the whole list.

@@ -17,16 +17,15 @@ export function Home({
   readonly onRecoveryDismissed: () => void;
 }) {
   return (
-    <div className="mx-auto flex h-full max-w-[1180px] flex-col gap-8">
-      <header className="flex flex-col gap-3 pt-6">
-        <p className="eyebrow m-0">Workspace / Diagnostics</p>
+    <div className="diagnostics-home">
+      <header className="diagnostics-header">
         <h1 className="diagnostics-title">Diagnostics</h1>
-        <p className="lede m-0">
+        <p className="lede">
           Check this device and try a local sample stream. No agent request is sent.
         </p>
       </header>
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_340px] items-start gap-5 max-[1180px]:grid-cols-1">
-        <div className="flex h-full min-h-[420px] flex-col">
+      <div className="diagnostics-grid">
+        <div className="diagnostics-demo">
           <DemoPanel store={store} onOpenStress={onOpenStress} />
         </div>
         <InfoCard info={info} onRecoveryDismissed={onRecoveryDismissed} />
