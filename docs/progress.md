@@ -2804,3 +2804,10 @@ switches, never the driver's remote-debugging ones, because WebView2 ignores
 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` when an app passes its own and wry always does. Debug
 builds launched with `TAURI_WEBVIEW_AUTOMATION=true` now keep wry's switches and append the
 driver's; release builds never read the variable.
+
+### Session pause
+
+The owner paused before final verification. CI 40424725320 on 10a045c was cancelled before
+results, so the WebKit focus fix and the WebDriver automation fix are verified locally only (the
+WebDriver fix not at all). Build 40424751752 was left running. One final CI run, the production API
+route, live invited sign-in and device acceptance remain. No PR is open.
