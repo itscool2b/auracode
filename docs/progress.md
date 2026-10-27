@@ -2842,5 +2842,58 @@ references, and lock the type.
 
 Verified locally: all workspace typechecks, Biome clean for `apps/web` and `packages/ui`, website
 static, browser (Chromium and WebKit, axe zero) and release tests, notices tests, Worker build and
-runtime tests. Not run: CI, deploys, the owner's hand walkthrough. Biome still reports a format
-error and warnings in `apps/desktop` files this round did not touch.
+runtime tests. Not run: CI, deploys, the owner's hand walkthrough. The `apps/desktop` format error
+Biome reported at the time is fixed in the integration below.
+
+### Graphite redesign: integration and local verification
+
+On 2026-10-26 the owner rejected the Orbit look of the website and the app and asked for a full
+restyle from their Mobbin and live-site references (SpaceXAI, X Money, Harvey, Aside, Vercel, with
+the AI in Design Report 2026 as the bar for uniqueness). Graphite replaces Orbit: dark only, pure
+black, Geist and Geist Mono at integer weights, one volt lime accent, a live ordered-dither field as
+the signature, no space imagery and no eyebrow labels. `docs/design/visual-language.md` is the spec;
+`@auracode/ui/graphite` holds the tokens, `DitherField`, `AgentMark`, `PixelMark` and the shared
+controls. The Orbit module stays only for the Design Lab.
+
+- **Chat shell.** Sidebar, header, transcript, composer, cards, right panel, palette and pickers are
+  restyled; every `OrbitMark` is an `AgentMark`. Measured in Chromium with 4x CPU throttling
+  (`target/shell-perf/` in the shell worktree): thinking went from 83% to 7% main-thread busy and 60
+  to 0 layouts per second; streaming from about 9 to 47 frames per second, median frame 100 to 16.7
+  ms, long tasks 56 (4.4 s) to 0; scrolling 500 turns, p95 frame 33 to 17 ms. The causes were
+  OrbitMark re-rendering its SVG every frame and the agent picker re-rendering on every streamed
+  chunk; the Markdown fade-in is gone.
+- **Secondary screens.** Onboarding replaces the globe with a dither intro that forms the pixel mark
+  and an agent roster pane; settings, account and profile panels, Library, dialogs, error, recovery
+  and Diagnostics are Graphite. The app icon is the white pixel "a" with one volt pixel, regenerated
+  with the Tauri CLI; `icon.ico` uses a full-bleed source so it reads at 16 px.
+- **Integration fixes.**
+  - Two notice input digests had been recorded from CRLF copies; they are the LF digests again.
+  - The dither lens now keeps a clearing dark, so text over the hero stays legible under the
+    pointer.
+  - `graphite.css` brings Geist and Geist Mono itself; neither app ships Instrument Serif. The
+    `orbit-theme` scope and Orbit imports are gone from the desktop.
+  - A ghost agent mark's code is fg-3, since it is text and must meet AA.
+  - The website's product images are a fresh capture of the Graphite desktop preview, which now
+    passes a Local profile.
+  - The virtual transcript no longer throws a reader back to the end. WebKit can deliver a scroll
+    event a frame after the write; if a row grew in that gap, the virtualizer retried a clamped
+    correction from its stale bottom offset. Writes now wait while a reader's scroll gesture is in
+    flight. Its gesture listeners moved to the document, because the old ones were attached before
+    the scroller existed and never fired on first mount. This was `check-orbit`'s WebKit failure
+    (about four runs in five on Windows), present before the redesign.
+  - Test fixes, none weakening an assertion: the synthetic Turnstile button uses the Graphite pill;
+    the website browser test and the chat sign-in check, like the other desktop checks, audit only
+    once finite animations and transitions end; `check-orbit` waits up to 3 s for an old row to
+    unmount; `check-settings.mjs` is formatted.
+  - Small polish: the agent dock keeps room above the profile row, and the transcript's waiting row
+    keeps its volt mark with quiet text.
+
+Verified locally on the integrated branch: `pnpm lint` (instruction check and Biome, warnings only),
+`pnpm typecheck`, `pnpm test` (ui 273, desktop 348 with 19 skipped, design lab 352, web 4), website
+browser tests in Chromium and WebKit, website release tests, Worker build and 5 runtime tests,
+`cargo fmt --check` and Clippy for `auracode-desktop` with warnings denied, and every desktop
+browser check CI runs (Orbit, settings with its sub-checks, Library, configuration recovery, account
+vault, setup actions, profile status, chat sign-in, setup) plus account reset, workspace removal,
+agent installations, folder resolution and repository publication, in Chromium and WebKit. Not
+verified yet: CI, the native Tauri window, real Safari and macOS WebKit, and the owner's
+walkthrough. Playwright WebKit on Windows draws Geist lighter than macOS does.
