@@ -1844,7 +1844,10 @@
   --g-button-h: 32px;
 }
 
-/* While a turn runs, Steer and Queue are one pill: Steer in words, Queue as the white disc. */
+/*
+ * While a turn runs, Steer and Queue are one 32px pill: Steer in words, Queue as the white disc,
+ * both 24px and 4px in, on the grid.
+ */
 .chat-send-group {
   display: inline-flex;
   align-items: center;
@@ -1852,17 +1855,17 @@
 }
 
 .chat-send-group[data-split] {
-  gap: var(--g-space-2);
-  padding: var(--g-space-2);
+  gap: var(--g-space-4);
+  padding: var(--g-space-4);
   background-color: var(--g-surface-3);
 }
 
 .chat-send-group[data-split] > .chat-send {
-  --g-button-h: 28px;
+  --g-button-h: 24px;
 }
 
 .chat-steer {
-  height: 28px;
+  height: 24px;
   padding: 0 var(--g-space-12);
   border-radius: var(--g-radius-pill);
   color: var(--g-fg-1);
@@ -1881,6 +1884,17 @@
 .chat-steer:disabled {
   color: var(--g-fg-4);
   cursor: not-allowed;
+}
+
+/* Where Steer sits for an agent that takes messages between turns: words, not a control. */
+.chat-after-turn {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--g-space-8) 0 var(--g-space-12);
+  color: var(--g-fg-2);
+  white-space: nowrap;
+  cursor: default;
 }
 
 .chat-composer > .ui-error {

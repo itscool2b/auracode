@@ -1090,10 +1090,11 @@ x 16); the agent chip (32px ghost pill: "Claude Code" 500 fg-1, the model in fg-
 ticks in fg-1, a chevron; surface-3 under the hand and while open); then at the right one send
 control. Send: empty, a 32px surface-3 disc with an fg-4 arrow; ready, the white disc. While a
 turn runs and the box is empty, the white disc is Stop (a black square, Esc). With a message
-typed, Stop steps back to a soft disc and the send control becomes one surface-3 pill holding
-"Steer" in words and Queue as the white disc (Enter); without steering, Queue alone. Cancelling:
-the red "Force stop" pill. `@` mentions a project file and `/` lists commands; both open menus above
-the shell.
+typed, Stop steps back to a soft disc and the send control becomes one 32px surface-3 pill holding
+"Steer" in words and Queue as the white disc (Enter), both 24px and 4px in. An agent that takes
+messages only between turns (Claude Code, Pi) has "After this turn" in fg-2 words where Steer
+would be, never a dead control; the disc still queues. Cancelling: the red "Force stop" pill.
+`@` mentions a project file and `/` lists commands; both open menus above the shell.
 
 ### 6.10 Pickers (agent, model, effort)
 
@@ -1122,9 +1123,11 @@ agent's own mode when it reports one. Switching mid-chat logs "Full auto from he
 
 One segment over the composer, its width and radius 16 (surface-2, 1px line ring): "2 queued" in
 12/16 500 fg-3 on a 32px head, then each waiting message on a 32px row (fg-1, one line) with a
-24px remove icon at its end. Held messages (after a stop, an error or a restart) add "· held" to
-the head, a "held" chip on their rows, "Send queued" (24px soft) at the head's end and one 12/16
-fg-3 line saying why they wait.
+24px remove icon at its end; Edit, Move up and Move down (24px ghost icons) sit before it, shown
+under the hand or with focus in the row. Edit opens the words in a field in place (Enter saves,
+Esc cancels without touching the turn). Held messages (after a stop, an error or a restart) add
+"· held" to the head, a "held" chip on their rows, "Send queued" (24px soft) at the head's end and
+one 12/16 fg-3 line saying why they wait.
 
 ### 6.13 Empty state
 

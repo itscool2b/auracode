@@ -244,32 +244,14 @@ export function Composer({
             quiet={!empty && status !== "cancelling"}
           />
           {working && empty ? null : (
-            // While a turn runs, a typed message is queued, or steered into the turn: one pill.
-            <span className="chat-send-group" data-split={steerable ? "" : undefined}>
-              {steerable ? (
-                <button
-                  type="button"
-                  className="chat-steer"
-                  data-testid="composer-steer"
-                  disabled={sending || context.busy || blocked || empty}
-                  onClick={() => void send(true)}
-                  title="Send this message into the running turn"
-                >
-                  Steer
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="g-button g-button-primary g-button-icon chat-send"
-                data-testid="composer-send"
-                disabled={sending || context.busy || blocked || empty}
-                onClick={() => void send()}
-                aria-label={working ? "Queue message" : "Send message"}
-                title={working ? "Queue message (Enter)" : "Send message (Enter)"}
-              >
-                <ArrowUp size={16} strokeWidth={2.25} />
-              </button>
-            </span>
+            <SendControls
+              status={status}
+              steerable={steerable}
+              disabled={sending || context.busy || blocked || empty}
+              agentName={agentName}
+              onSend={() => void send()}
+              onSteer={() => void send(true)}
+            />
           )}
         </div>
       </div>
@@ -288,6 +270,75 @@ export function Composer({
         </button>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The send control. Idle: the send disc. While a turn runs, a typed message goes in one pill: an
+ * agent that steers (Codex) offers "Steer" beside the Queue disc; one that takes messages only
+ * between turns (Claude Code, Pi) says "After this turn" there instead, calm text and no dead
+ * control, and the Queue disc is what Enter does.
+ */
+export function SendControls({
+  status,
+  steerable,
+  disabled,
+  agentName,
+  onSend,
+  onSteer,
+}: {
+  readonly status: SessionStatus;
+  readonly steerable: boolean;
+  readonly disabled: boolean;
+  readonly agentName: string;
+  readonly onSend: () => void;
+  readonly onSteer: () => void;
+}) {
+  const after = useId();
+  const working = status === "running" || status === "starting";
+  const afterTurn = status === "running" && !steerable;
+  return (
+    <span className="chat-send-group" data-split={steerable || afterTurn ? "" : undefined}>
+      {steerable ? (
+        <button
+          type="button"
+          className="chat-steer"
+          data-testid="composer-steer"
+          disabled={disabled}
+          onClick={onSteer}
+          title="Send this message into the running turn"
+        >
+          Steer
+        </button>
+      ) : afterTurn ? (
+        <span
+          id={after}
+          className="chat-after-turn"
+          data-testid="composer-after-turn"
+          title={`${agentName} takes messages after the current turn, not during it.`}
+        >
+          After this turn
+        </span>
+      ) : null}
+      <button
+        type="button"
+        className="g-button g-button-primary g-button-icon chat-send"
+        data-testid="composer-send"
+        disabled={disabled}
+        onClick={onSend}
+        aria-label={working ? "Queue message" : "Send message"}
+        aria-describedby={afterTurn ? after : undefined}
+        title={
+          afterTurn
+            ? `Queue for ${agentName} after this turn (Enter)`
+            : working
+              ? "Queue message (Enter)"
+              : "Send message (Enter)"
+        }
+      >
+        <ArrowUp size={16} strokeWidth={2.25} />
+      </button>
+    </span>
   );
 }
 

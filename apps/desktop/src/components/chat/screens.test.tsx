@@ -19,7 +19,7 @@ import { dockAgents, dockState } from "./AgentDock";
 import { Banners, envBanner, RecoveryBannerView, storageBanner } from "./Banners";
 import { ChatList, projectName, projectsOf } from "./ChatList";
 import { StillWorking } from "./ChatView";
-import { StopButton } from "./Composer";
+import { SendControls, StopButton } from "./Composer";
 import { Header } from "./Header";
 import { downloadNote, InstallationStatus, NewChat } from "./NewChat";
 import { Pickers } from "./Pickers";
@@ -542,6 +542,35 @@ describe("the queue and the composer's stop button", () => {
     expect(label("cancelling")).toEqual(["Force stop"]);
     expect(label("ready")).toEqual([]);
     expect(label("stopped")).toEqual([]);
+  });
+
+  it("says an agent that cannot steer takes a typed message after the turn", () => {
+    const controls = (status: "running" | "starting" | "ready", steerable: boolean) =>
+      renderToStaticMarkup(
+        <SendControls
+          status={status}
+          steerable={steerable}
+          disabled={false}
+          agentName="Claude Code"
+          onSend={noop}
+          onSteer={noop}
+        />,
+      );
+    // Claude Code and Pi during a turn: calm words where Steer would be, Queue as the action.
+    const claude = controls("running", false);
+    expect(claude).toContain('data-testid="composer-after-turn"');
+    expect(claude).toContain(">After this turn</span>");
+    expect(claude).not.toContain("composer-steer");
+    expect(buttons(claude)).toEqual([{ label: "Queue message", disabled: false }]);
+    expect(claude).toMatch(/aria-describedby="[^"]+"/);
+    expect(claude).toContain("Queue for Claude Code after this turn (Enter)");
+    // Codex steers: Steer in words beside the Queue disc, and no after-turn note.
+    const codex = controls("running", true);
+    expect(buttons(codex).map((b) => b.label)).toEqual(["Steer", "Queue message"]);
+    expect(codex).not.toContain("After this turn");
+    // While the agent starts nothing can steer yet, and idle the disc simply sends.
+    expect(controls("starting", false)).not.toContain("After this turn");
+    expect(buttons(controls("ready", false))).toEqual([{ label: "Send message", disabled: false }]);
   });
 
   it("still_working_indicator: counts the minutes and offers Stop", () => {

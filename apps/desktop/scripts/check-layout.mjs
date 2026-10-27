@@ -64,6 +64,10 @@ export const MODES = [
   "chat-options#busy-folder",
   "steering#queued",
   "steering#queue-edit",
+  // A message typed during a turn: Steer beside the Queue disc, or, for an agent without
+  // steering, "After this turn" there instead.
+  "steering#typed",
+  "steering&case=unsupported#typed",
   // The chat shell's floating layers, opened the way a person opens them.
   "settled#picker",
   "settled#palette",
