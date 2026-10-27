@@ -40,61 +40,17 @@ impl GitWorkspaces {
             return Err(GitError::Message(source.view.blockers.join(" ")));
         }
         let transfer = if input.bring_changes {
-            let root = source.root.clone();
-            let files = source.view.files.clone();
-            let protected = git
-                .protected
-                .iter()
-                .cloned()
-                .chain(self.root.parent().map(Path::to_path_buf))
-                .collect::<Vec<_>>();
-            Some(
-                tokio::task::spawn_blocking(move || transfer::snapshot(&root, &files, &protected))
-                    .await
-                    .map_err(|_| invalid("Could not inspect working-file contents."))??,
-            )
+            Some(self.snapshot_changes(&git, &source).await?)
         } else {
             None
         };
-        // The stable app-data worktree lives outside the original repository and watcher tree.
-        let storage = self.root.canonicalize()?;
-        if storage.starts_with(&source.root) {
-            return Err(invalid(
-                "The application data directory is inside this repository. Choose an external app-data directory before isolation.",
-            ));
-        }
-        let branches = git
-            .run(
-                &source.root,
-                args(&[
-                    "for-each-ref",
-                    "--format=%(refname:short)",
-                    "refs/heads/aura/",
-                ]),
-                1024 * 1024,
-            )
-            .await?;
-        let names = text(&branches)?
-            .lines()
+        let names = local_branches(&git, &source.root, "refs/heads/aura/")
+            .await?
+            .into_iter()
             .map(|line| line.to_ascii_lowercase())
             .collect::<HashSet<_>>();
         let branch = unique_branch(&slug, &names)?;
-        let id = crate::ids::new_id();
-        let leaf = id
-            .rsplit('-')
-            .next()
-            .ok_or_else(|| invalid("Could not allocate a worktree identifier."))?;
-        let path = git::path_argument(&storage.join(leaf));
-        if cfg!(windows) && path.to_string_lossy().encode_utf16().count() > 200 {
-            return Err(invalid(
-                "The application data path is too long for a safe Windows worktree. Choose a shorter data directory.",
-            ));
-        }
-        if path.try_exists()? {
-            return Err(invalid(
-                "The proposed worktree directory is already occupied. Review a new preview.",
-            ));
-        }
+        let (id, path) = self.allocate_path(&source.root)?;
         let mut warnings = Vec::new();
         if let Some(transfer) = &transfer {
             warnings.push("Reviewed working-file contents, deletions and nonignored untracked files are copied as unstaged changes. The source files and index are preserved; source staging is not recreated.".into());
@@ -113,25 +69,19 @@ impl GitWorkspaces {
                 .into(),
         );
         let now = crate::time::now_millis();
-        let record = ManagedWorktree {
+        let record = creating_record(
             id,
-            chat_id: chat_id.into(),
-            source: source.view.root.clone(),
-            path: path.to_string_lossy().into_owned(),
-            branch: branch.clone(),
-            base_commit: source
+            chat_id,
+            &source,
+            &path,
+            branch.clone(),
+            source
                 .view
                 .head
                 .clone()
                 .ok_or_else(|| invalid("The source commit is unavailable."))?,
-            state: WorktreeState::Creating,
-            detail: Some(
-                "Creation is recorded before Git starts. An interrupted operation requires review."
-                    .into(),
-            ),
-            created_at: now,
-            recovery: Some(WorktreeRecovery::Create),
-        };
+            now,
+        );
         let token = crate::ids::new_id();
         let preview = IsolationPreview {
             token: token.clone(),
@@ -191,31 +141,101 @@ impl GitWorkspaces {
                 "The repository changed after the preview. Review a new preview before creating isolation.",
             ));
         }
-        let contents = if let Some(snapshot) = prepared.transfer {
-            let root = current.root.clone();
-            let files = current.view.files.clone();
-            let protected = git
-                .protected
-                .iter()
-                .cloned()
-                .chain(self.root.parent().map(Path::to_path_buf))
-                .collect::<Vec<_>>();
-            Some(
-                tokio::task::spawn_blocking(move || {
-                    if transfer::snapshot(&root, &files, &protected)? != snapshot {
-                        return Err(invalid(
-                            "Working-file contents changed after preview. Review isolation again.",
-                        ));
-                    }
-                    transfer::contents(&root, &snapshot)
-                })
-                .await
-                .map_err(|_| invalid("Could not capture the reviewed working-file contents."))??,
-            )
-        } else {
-            None
+        let contents = match prepared.transfer {
+            Some(snapshot) => Some(self.capture_changes(&git, &current, snapshot).await?),
+            None => None,
         };
-        let mut record = prepared.record;
+        let record = self
+            .add_worktree(&git, &current, prepared.record, contents)
+            .await?;
+        let warning=(record.state!=WorktreeState::Ready).then(||"Creation did not complete cleanly. The recorded path and branch were preserved for recovery.".into());
+        Ok(IsolationResult {
+            worktree: record,
+            warning,
+        })
+    }
+
+    /// Reads the reviewed working files of `source` for a later copy into a new worktree.
+    pub(super) async fn snapshot_changes(
+        &self,
+        git: &git::Git,
+        source: &Inspection,
+    ) -> Result<transfer::Snapshot> {
+        let root = source.root.clone();
+        let files = source.view.files.clone();
+        let protected = self.protected(git);
+        tokio::task::spawn_blocking(move || transfer::snapshot(&root, &files, &protected))
+            .await
+            .map_err(|_| invalid("Could not inspect working-file contents."))?
+    }
+
+    /// Captures the reviewed bytes only when the working files still match `snapshot`.
+    pub(super) async fn capture_changes(
+        &self,
+        git: &git::Git,
+        current: &Inspection,
+        snapshot: transfer::Snapshot,
+    ) -> Result<transfer::Contents> {
+        let root = current.root.clone();
+        let files = current.view.files.clone();
+        let protected = self.protected(git);
+        tokio::task::spawn_blocking(move || {
+            if transfer::snapshot(&root, &files, &protected)? != snapshot {
+                return Err(invalid(
+                    "Working-file contents changed after preview. Review isolation again.",
+                ));
+            }
+            transfer::contents(&root, &snapshot)
+        })
+        .await
+        .map_err(|_| invalid("Could not capture the reviewed working-file contents."))?
+    }
+
+    fn protected(&self, git: &git::Git) -> Vec<PathBuf> {
+        git.protected
+            .iter()
+            .cloned()
+            .chain(self.root.parent().map(Path::to_path_buf))
+            .collect()
+    }
+
+    /// Reserves a new identifier and an unoccupied app-owned path outside the source repository.
+    pub(super) fn allocate_path(&self, source_root: &Path) -> Result<(String, PathBuf)> {
+        // The stable app-data worktree lives outside the original repository and watcher tree.
+        let storage = self.root.canonicalize()?;
+        if storage.starts_with(source_root) {
+            return Err(invalid(
+                "The application data directory is inside this repository. Choose an external app-data directory before isolation.",
+            ));
+        }
+        let id = crate::ids::new_id();
+        let leaf = id
+            .rsplit('-')
+            .next()
+            .ok_or_else(|| invalid("Could not allocate a worktree identifier."))?;
+        let path = git::path_argument(&storage.join(leaf));
+        if cfg!(windows) && path.to_string_lossy().encode_utf16().count() > 200 {
+            return Err(invalid(
+                "The application data path is too long for a safe Windows worktree. Choose a shorter data directory.",
+            ));
+        }
+        if path.try_exists()? {
+            return Err(invalid(
+                "The proposed worktree directory is already occupied. Review a new preview.",
+            ));
+        }
+        Ok((id, path))
+    }
+
+    /// Journals `record` as Creating, runs `git worktree add -b`, verifies the result and copies the
+    /// reviewed contents. Failures are journaled as RecoveryRequired on the returned record.
+    pub(super) async fn add_worktree(
+        &self,
+        git: &git::Git,
+        current: &Inspection,
+        mut record: ManagedWorktree,
+        contents: Option<transfer::Contents>,
+    ) -> Result<ManagedWorktree> {
         if Path::new(&record.path)
             .parent()
             .map(std::fs::canonicalize)
@@ -231,19 +251,7 @@ impl GitWorkspaces {
                 "The worktree path is now occupied. Review a new preview.",
             ));
         }
-        let branch_check = git
-            .output(
-                &current.root,
-                vec![
-                    "show-ref".into(),
-                    "--verify".into(),
-                    "--quiet".into(),
-                    format!("refs/heads/{}", record.branch).into(),
-                ],
-                4096,
-            )
-            .await?;
-        if branch_check.exit.as_ref().and_then(|exit| exit.code) != Some(1) {
+        if branch_exists(git, &current.root, &record.branch).await? {
             return Err(invalid(
                 "The proposed branch already exists or could not be checked. Review a new preview.",
             ));
@@ -270,21 +278,19 @@ impl GitWorkspaces {
         ];
         let created = git.run(&current.root, command, 64 * 1024).await;
         let mut verified = match created {
-            Ok(_) => inspect(&git, Path::new(&record.path))
-                .await
-                .and_then(|new| {
-                    if new.common == current.common
-                        && new.view.branch.as_deref() == Some(&record.branch)
-                        && new.view.head.as_deref() == Some(&record.base_commit)
-                        && new.view.files.is_empty()
-                    {
-                        Ok(())
-                    } else {
-                        Err(invalid(
-                            "The created worktree does not match the reviewed branch and commit.",
-                        ))
-                    }
-                }),
+            Ok(_) => inspect(git, Path::new(&record.path)).await.and_then(|new| {
+                if new.common == current.common
+                    && new.view.branch.as_deref() == Some(&record.branch)
+                    && new.view.head.as_deref() == Some(&record.base_commit)
+                    && new.view.files.is_empty()
+                {
+                    Ok(())
+                } else {
+                    Err(invalid(
+                        "The created worktree does not match the reviewed branch and commit.",
+                    ))
+                }
+            }),
             Err(error) => Err(error),
         };
         if verified.is_ok()
@@ -296,7 +302,7 @@ impl GitWorkspaces {
                 let (contents, baseline) = tokio::task::spawn_blocking(move || {
                     transfer::destination(&checked_root, &contents).map(|baseline| (contents, baseline))
                 }).await.map_err(|_| invalid("Could not inspect the new worktree before copying."))??;
-                let clean = inspect(&git, &root).await?;
+                let clean = inspect(git, &root).await?;
                 if clean.common != current.common || clean.view.head.as_deref() != Some(&record.base_commit)
                     || clean.view.branch.as_deref() != Some(&record.branch) || !clean.view.files.is_empty()
                     || !clean.view.blockers.is_empty() {
@@ -305,7 +311,7 @@ impl GitWorkspaces {
                 let copied_root = root.clone();
                 tokio::task::spawn_blocking(move || transfer::apply(&copied_root, &contents, &baseline)).await
                     .map_err(|_| invalid("The file copy stopped unexpectedly. Inspect its retained recovery files."))??;
-                let after = inspect(&git, &root).await?;
+                let after = inspect(git, &root).await?;
                 if after.common != current.common || after.view.head.as_deref() != Some(&record.base_commit)
                     || after.view.branch.as_deref() != Some(&record.branch) || !after.view.blockers.is_empty() {
                     return Err(invalid("The new worktree's Git state changed during copying. Review its preserved files and branch."));
@@ -327,15 +333,88 @@ impl GitWorkspaces {
             *saved = record.clone();
         }
         self.write_records(records)?;
-        let warning=(record.state!=WorktreeState::Ready).then(||"Creation did not complete cleanly. The recorded path and branch were preserved for recovery.".into());
-        Ok(IsolationResult {
-            worktree: record,
-            warning,
-        })
+        Ok(record)
     }
 }
 
-fn slug(value: &str) -> Result<String> {
+/// A Creating journal entry. Creation is recorded before Git starts.
+pub(super) fn creating_record(
+    id: String,
+    chat_id: &str,
+    source: &Inspection,
+    path: &Path,
+    branch: String,
+    base_commit: String,
+    now: aura_protocol::Millis,
+) -> ManagedWorktree {
+    ManagedWorktree {
+        id,
+        chat_id: chat_id.into(),
+        source: source.view.root.clone(),
+        path: path.to_string_lossy().into_owned(),
+        branch,
+        base_commit,
+        state: WorktreeState::Creating,
+        detail: Some(
+            "Creation is recorded before Git starts. An interrupted operation requires review."
+                .into(),
+        ),
+        created_at: now,
+        recovery: Some(WorktreeRecovery::Create),
+    }
+}
+
+/// Local branch names under `prefix` (a `refs/heads/` path), most recently committed first. Full
+/// names are stripped explicitly: `refname:short` may add `heads/` when a tag has the same name.
+pub(super) async fn local_branches(
+    git: &git::Git,
+    root: &Path,
+    prefix: &str,
+) -> Result<Vec<String>> {
+    let branches = git
+        .run(
+            root,
+            args(&[
+                "for-each-ref",
+                "--sort=-committerdate",
+                "--format=%(refname)",
+                prefix,
+            ]),
+            1024 * 1024,
+        )
+        .await?;
+    Ok(text(&branches)?
+        .lines()
+        .filter_map(|line| line.strip_prefix("refs/heads/"))
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect())
+}
+
+/// Whether `refs/heads/<branch>` exists. An unclear answer is an error, never "absent".
+pub(super) async fn branch_exists(git: &git::Git, root: &Path, branch: &str) -> Result<bool> {
+    let check = git
+        .output(
+            root,
+            vec![
+                "show-ref".into(),
+                "--verify".into(),
+                "--quiet".into(),
+                format!("refs/heads/{branch}").into(),
+            ],
+            4096,
+        )
+        .await?;
+    match check.exit.as_ref().and_then(|exit| exit.code) {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => Err(invalid(
+            "The proposed branch already exists or could not be checked. Review a new preview.",
+        )),
+    }
+}
+
+pub(super) fn slug(value: &str) -> Result<String> {
     let value = value.trim().to_ascii_lowercase();
     if value.is_empty()
         || value.len() > 36
@@ -352,7 +431,7 @@ fn slug(value: &str) -> Result<String> {
     Ok(value)
 }
 
-fn unique_branch(slug: &str, names: &HashSet<String>) -> Result<String> {
+pub(super) fn unique_branch(slug: &str, names: &HashSet<String>) -> Result<String> {
     for suffix in 1..=1000 {
         let branch = if suffix == 1 {
             format!("aura/{slug}")

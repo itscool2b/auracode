@@ -171,6 +171,7 @@ impl SessionManager {
                 chat_id: chat_id.into(),
                 source,
                 save,
+                folder_id: None,
             })
             .await
             .map_err(|error| storage_error(&error))

@@ -1,5 +1,53 @@
 # Auracode implementation progress
 
+## 2026-10-27: M4 one-step worktree chats and recreating deleted worktrees
+
+Backend only; the redesigned interface is built separately.
+
+A new chat can now start in its own app-owned worktree in one reviewed step, modeled on the
+Codex app's Worktree mode. `worktree_chat_preview` takes a project folder, agent, optional local
+starting branch (default: the source's current branch), optional branch name, title,
+bring-changes and run-setup. Generated names are unique `aura/<slug>` names from the title or a
+short ID, with a numeric suffix on collision. Typed names must pass `git check-ref-format --branch`
+and a portable character set, and may not reuse or overlap an existing branch, ignoring case. The
+preview returns the source, starting commit, branch, destination, recent local branches, the saved
+setup recipe that will run, warnings and a compact chip (mode, starting branch, branch, label).
+A plain folder, or a folder inside another repository that is not its root, returns
+`not_git_repository` so the UI can fall back to Direct. `worktree_chat_apply` reuses the isolation
+create path (now shared helpers in `create.rs`), saves the chat in the source's project with the
+worktree registered as its folder exactly as relocation does, so Merge/PR/Discard, handoff and
+folder context work unchanged. It then copies the reviewed setup files and returns the setup command
+token for the existing owned-terminal start. The agent starts right away only when no setup command
+is pending. Without bring-changes the source folder is not reserved: Git only adds a branch and a
+worktree registration, so a busy source chat does not block a parallel one. Bringing changes is
+allowed only from the source's current commit and reserves the source like isolation does.
+
+Failure behavior: a stale token, a moved starting branch or a branch created after preview is
+refused before Git runs. If creation fails or the chat cannot be saved, the new folder is removed
+with `git worktree remove` and the branch with `update-ref -d <branch> <starting commit>`, only while
+both are exactly as created (no new commits, no unexpected edits, our lock). Otherwise the record
+stays RecoveryRequired with the reason and the error names the retained path and branch. The
+user's index, HEAD and other branches are never changed. Limits: a record whose chat was never
+saved is not yet surfaced in the UI, and the existing setup command start still reserves the
+source folder, so it waits for chats there to stop.
+
+`worktree_recreate_preview`/`worktree_recreate_apply` recreate an active worktree whose folder was
+deleted by hand, separately from recovery review. Preview requires both owned paths to be missing,
+the source to inspect, `refs/heads/<branch>` to exist and the branch not to be checked out in any
+other registration. Apply journals Creating, runs `git worktree add -f -f --lock --reason
+"auracode <id>"`, rechecks the lock, branch and commit, and records Ready. A real-Git test verifies
+that a single `-f` cannot replace the locked missing registration and double force does. Only the
+two owned paths are reserved. The preview warns that uncommitted files from the deleted folder are
+gone and everything committed on the branch is kept.
+
+Verification on Windows: `cargo test -p aura-core --lib` passed (429), including eight new real-Git
+worktree chat tests, three recreate tests, five session tests and the folder-scoped setup read.
+`cargo clippy -p aura-core -p aura-protocol -p auracode-desktop --all-targets -- -D warnings`,
+`cargo fmt --check`, `export_bindings` and `pnpm typecheck` passed. One freshly built proc-macro DLL
+was refused by Smart App Control (Code Integrity 3077/3033); a normal clean rebuild of that crate
+was accepted. The vendored OpenSSL build used the existing local Strawberry Perl via
+`OPENSSL_SRC_PERL`. Account-sync feature tests, macOS and the UI were not run.
+
 ## 2026-10-26: profile configuration transaction engine
 
 Added a read-only managed-profile transition planner and a bounded transactional apply/restore

@@ -24,7 +24,7 @@ pub(super) struct Snapshot {
     pub(super) warnings: Vec<String>,
 }
 
-type Contents = BTreeMap<String, Option<(Fingerprint, Vec<u8>)>>;
+pub(super) type Contents = BTreeMap<String, Option<(Fingerprint, Vec<u8>)>>;
 type Destination = BTreeMap<String, Option<Fingerprint>>;
 
 fn invalid(message: &str) -> GitError {

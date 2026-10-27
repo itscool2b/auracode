@@ -11,6 +11,7 @@ mod steering;
 mod sync_history;
 mod workspace;
 mod workspace_removal;
+mod worktree_chat;
 mod worktree_guards;
 
 use std::sync::Mutex;
