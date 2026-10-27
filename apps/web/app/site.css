@@ -2492,7 +2492,7 @@ html:not(.js) .footer-mark-field {
 }
 
 .auth-shell {
-  width: min(100%, 420px);
+  width: min(100%, 480px);
 }
 
 .auth-head {
@@ -2501,10 +2501,10 @@ html:not(.js) .footer-mark-field {
 
 .auth-title {
   color: var(--g-fg-1);
-  font-size: 36px;
-  line-height: 40px;
+  font-size: var(--site-h2);
+  line-height: var(--site-h2-leading);
   font-weight: 500;
-  letter-spacing: -0.03em;
+  letter-spacing: var(--site-h2-tracking);
 }
 
 .auth-title > span {
@@ -2513,10 +2513,10 @@ html:not(.js) .footer-mark-field {
 }
 
 .auth-intro {
-  margin-top: 16px;
+  margin-top: 20px;
   color: var(--g-fg-3);
-  font-size: 15px;
-  line-height: 24px;
+  font-size: var(--g-web-body);
+  line-height: var(--g-web-body-leading);
 }
 
 .auth-intro strong {
@@ -2544,7 +2544,6 @@ html:not(.js) .footer-mark-field {
   display: grid;
   gap: 20px;
   padding: 28px;
-  border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-16);
   background-color: var(--g-surface-1);
 }
@@ -2675,7 +2674,7 @@ html:not(.js) .footer-mark-field {
   min-height: 0;
 }
 
-/* Account: settings groups on hairlines, a section list at left. */
+/* Account: settings groups separated by space, a section list at left; lists keep row rules. */
 .account {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
@@ -2730,14 +2729,12 @@ html:not(.js) .footer-mark-field {
   display: grid;
   grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
   gap: 32px;
-  padding: 40px 0;
-  border-top: 1px solid var(--g-line);
+  padding: 48px 0;
   scroll-margin-top: 96px;
 }
 
 .account-block:first-child {
   padding-top: 0;
-  border-top: 0;
 }
 
 .account-block-head > h2 {
@@ -3034,8 +3031,6 @@ html:not(.js) .footer-mark-field {
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr);
   gap: 32px;
-  padding-top: 32px;
-  border-top: 1px solid var(--g-line);
 }
 
 .release-meta {
@@ -3054,8 +3049,6 @@ html:not(.js) .footer-mark-field {
 
 .release-body > h2 {
   margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
 }
 
 .release-body > h3 {

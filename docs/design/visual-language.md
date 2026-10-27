@@ -58,11 +58,11 @@ photography or fonts. "Measured" means read from the live capture of 2026-10-26.
 |---|---|---|
 | Centred two-line hero; one word rotates every 3000ms, letters leave up 14px and arrive from 14px below 25ms apart (250ms, `cubic-bezier(0.16, 1, 0.3, 1)`); a 3px underline 4px below draws in over 800ms; a glint sweeps it in 3000ms linear, 400ms after each swap (measured; recoloured to one volt band) | Hero headline with the agent name rotating (5.3) | Empty state agent switch (6.13) |
 | Load choreography: pill 320ms at 320, words from 100 plus 55 per word, lead 380ms at 580, CTAs 380ms at 700, tiles 1250ms at 760, all `cubic-bezier(0.22, 1, 0.36, 1)` (measured) | Hero entrance (5.3) | None |
-| Announcement pill: chip, sentence, arrow coin | Release pill above the hero (5.3) | None |
-| White primary pill beside a dark secondary pill; colour 150ms `cubic-bezier(0.4, 0, 0.2, 1)`, no scale on press (measured) | Hero and closing CTAs (5.3, 5.10) | Primary and outline buttons (4.1) |
-| Three product tiles with a quiet "Explore" corner label | Feature tiles in the hairline cells (5.7) | None |
-| Terminal card: mono, line numbers, "Thought for 4.1s"; 2x3 dot loader on a 660ms cycle (measured) | Product fragments in tiles (5.7) | Code wells, the thinking line, `PixelLoader` (4.5, 6.4) |
-| Sparse footer, dashed rule between brand and link columns | Footer (5.11) | None |
+| Announcement pill: chip, sentence, arrow coin | **Not taken** until a release is published (5.3) | None |
+| White primary pill beside a dark secondary pill; colour 150ms `cubic-bezier(0.4, 0, 0.2, 1)`, no scale on press (measured) | Hero and closing CTAs (5.3, 5.12) | Primary and outline buttons (4.1) |
+| Film card: a centred one-line heading, a large rounded card, "Play" and a caption line in large type | Film card replaying one turn (5.7) | None |
+| Terminal card: mono, line numbers, "Thought for 4.1s"; 2x3 dot loader on a 660ms cycle (measured) | Product fragments in the film card and tiles (5.7, 5.8) | Code wells, the thinking line, `PixelLoader` (4.5, 6.4) |
+| Sparse footer | Footer, without the dashed rule (5.13) | None |
 
 ### 2.2 X Money (money.x.com): two tones, tiles, FAQ, shimmer
 
@@ -70,9 +70,9 @@ photography or fonts. "Measured" means read from the live capture of 2026-10-26.
 |---|---|---|
 | Two-tone stacked heading, same size and weight, second line grey | Every section heading (5) | Empty state, settings titles, onboarding (6) |
 | Per-word flip-up: from `translateY(45%) rotateX(-40deg)` in a 1200px perspective, 650ms `cubic-bezier(0.23, 1, 0.32, 1)`, 100ms then 55ms per word (measured, identical at x.ai) | `.g-rise` on the hero and section headings (4.12) | Onboarding headings (6.17) |
-| Recessed square tiles holding miniature real UI; hovering one dims the others to 0.5 over 500ms `cubic-bezier(0.32, 0.72, 0, 1)` (measured) | Feature cells (5.7) | Settings usage tiles (6.16) |
-| Hairlines across the full column between sections | Section edges (5.1) | Settings groups (6.16) |
-| FAQ accordion: 300ms ease-out-quint, the open row's tinted well slides between rows in about 270ms, the icon turns 90 degrees in 200ms (measured) | FAQ (5.9) | Advanced settings, expanded tool rows (6.4) |
+| Recessed square tiles holding miniature real UI, the text set against each tile's bottom edge, one wide tile with a two-way toggle; hovering one dims the others to 0.5 over 500ms `cubic-bezier(0.32, 0.72, 0, 1)` (measured) | Staggered tiles with the checkpoint toggle (5.8) | Settings usage tiles (6.16) |
+| Hairlines across the full column between sections | **Not taken**: sections are separated by space (5.1) | Settings groups (6.16) |
+| FAQ accordion: 300ms ease-out-quint, the open row's tinted well slides between rows in about 270ms, the icon turns 90 degrees in 200ms (measured) | FAQ (5.11) | Advanced settings, expanded tool rows (6.4) |
 | Grey-on-grey text shimmer: 100deg band, 250% wide, 1400ms linear (measured) | None | Thinking, running, live verbs (4.12) |
 | Success check drawn in 250ms (measured) | None | `AgentMark` done check (4.13) |
 
@@ -80,9 +80,10 @@ photography or fonts. "Measured" means read from the live capture of 2026-10-26.
 
 | Trait | Lands on the website | Lands in the app |
 |---|---|---|
-| Timer-driven vertical word wheel: one 62.4px row step every 1100ms (600ms move on `cubic-bezier(0.7, 0, 0.7, 0.7)`, 500ms hold), 7 visible rows, opacity by distance 1, 0.6, 0.3, 0.1 (measured from the archived source) | Agent wheel (5.5), as solid greys | None |
-| Stats with a rule above each number (Harvey's is 2px with 32px above the numeral) | Stats row (5.8), as a hairline | Usage settings (6.16) |
-| Capability list whose active item's 2px rule fills as a timer: 7500ms linear by `translateX(-100%)` to 0, paused on hover, switch 300ms `cubic-bezier(0.7, 0, 0.3, 1)` (measured) | Capability band (5.6) | Plan strip progress (6.5) |
+| Timer-driven vertical word wheel: one row step every 1100ms (600ms move on `cubic-bezier(0.7, 0, 0.7, 0.7)`, 500ms hold), 7 visible rows, opacity by distance 1, 0.6, 0.3, 0.1 (measured from the archived source) | Agent wheel in the first triptych tile (5.6), as solid greys | None |
+| "Top performers" triptych: three tall textured tiles, a sentence-case title and grey paragraph under each | Triptych (5.6) | None |
+| Stats with a rule above each number (Harvey's is 2px with 32px above the numeral) | **Not taken**: the numerals keep one rule (5.10) | Usage settings (6.16) |
+| Capability list whose active item's 2px rule fills as a timer: 7500ms linear by `translateX(-100%)` to 0, paused on hover, switch 300ms `cubic-bezier(0.7, 0, 0.3, 1)` (measured) | **Not taken** on the website: the film card tells the turn (5.7) | Plan strip progress (6.5) |
 | Nav hover dims the siblings over 300ms `cubic-bezier(0.3, 0.3, 0.3, 1)` (measured) | Nav (5.2) | None |
 | Slow-settling button hover: 300ms `cubic-bezier(0, 0.7, 0.3, 1)`, 90% by 120ms, settled near 240ms (measured) | All buttons (4.1) | All buttons (4.1) |
 | Harvey's serif | **Not taken.** Graphite is one grotesk | Not taken |
@@ -91,21 +92,21 @@ photography or fonts. "Measured" means read from the live capture of 2026-10-26.
 
 | Trait | Lands on the website | Lands in the app |
 |---|---|---|
-| Content column framed by full-height 1px side rules (1248px column, measured) | Page frame (5.1) | None |
+| Content column framed by full-height 1px side rules (1248px column, measured) | **Not taken**: no column rules (5.1) | None |
 | Bold lead sentence, grey continuation, one paragraph | Feature copy, intro paragraphs (4.12) | Settings descriptions, onboarding (6) |
 | Rows entering: 8px rise, 340ms `cubic-bezier(0.22, 1, 0.36, 1)`, 70ms apart (measured) | `.g-enter` on rows (4.12) | Ledger and roster rows (6.13, 6.17) |
-| Rows on hairlines with a segmented control | Download and account pages (5.12) | Settings, right panel tabs (6.14, 6.16) |
-| Airy footer | Footer spacing (5.11) | None |
+| Rows on hairlines with a segmented control | Spec rows on the download cards, account lists (5.14) | Settings, right panel tabs (6.14, 6.16) |
+| Airy footer | Footer spacing (5.13) | None |
 | Composer control row of quiet text controls | None | Composer (6.9) |
 
 ### 2.5 Vercel: grid frames, cells, real fragments
 
 | Trait | Lands on the website | Lands in the app |
 |---|---|---|
-| Hairline grid frames with "+" crosshairs on the corners: 21px crosses with 10px arms in `#878787`, guides at white 9% (measured) | Hero frame and feature cells (5.7) | None |
-| Feature cells divided by lines, not cards | Feature cells (5.7) | Settings agent roster (6.16) |
-| Mocks built from real UI fragments: timelines, agent tables, status dots | Tiles (5.7) | The same components, live (6) |
-| Geist everywhere; command pill with copy | Install command (5.12) | Code blocks (4.8) |
+| Hairline grid frames with "+" crosshairs on the corners: 21px crosses with 10px arms in `#878787`, guides at white 9% (measured) | **Not taken**: no guides or crosshairs (5.1) | None |
+| One frame of joined panels divided by its own rule | The strip (5.9) | Settings agent roster (6.16) |
+| Mocks built from real UI fragments: timelines, agent tables, status dots | The strip (5.9) | The same components, live (6) |
+| Geist everywhere; command pill with copy | Geist everywhere (5.1) | Code blocks (4.8) |
 | Dark buttons `#0A0A0A` to `#1F1F1F` in 150ms; footer links in 100ms (measured) | `--g-dur-fast`, `--g-dur-micro` (3.8) | Rows and icon buttons |
 
 ### 2.6 AI in Design Report 2026: uniqueness bar, not copied
@@ -113,7 +114,8 @@ photography or fonts. "Measured" means read from the live capture of 2026-10-26.
 The report sets the bar for distinctiveness: giant edge-to-edge type, dithered and pixel imagery,
 big numerals split by rules, numerals counting up in about 950ms (measured). We copy none of its
 artwork or layout; its dither is a baked video, ours is drawn live. Our answers to the bar are the
-dither field (4.15), the giant dithered footer wordmark (5.11) and the stats row (5.8).
+dither field (4.15) with its seals and turtles (5.4), the giant Geist Pixel numerals condensing
+out of the field (5.10) and the giant dithered footer wordmark (5.13).
 
 ### 2.7 What we leave behind
 
@@ -674,148 +676,181 @@ size; it fills its box.
 
 ## 5. Website composition (auracode.si)
 
-### 5.1 Frame
+### 5.1 Page and type
 
 Black page, `.g-root` on `<html>`, body 16/26. One content column, max 1200px, gutters
-`clamp(16px, 4vw, 40px)`, framed by full-height 1px `--g-line` vertical rules at its edges from
-1024px up (Aside). Sections are separated by full-column hairlines and 160px of space; every
-section heading is a two-tone `.g-web-h2` with no eyebrow above it. Prerendered; works without
-JavaScript: fields fall back to their images, and the entrances are CSS, so they need no script.
+`clamp(16px, 4vw, 40px)`, content inset 40px from 1024px up. Sections are separated by space
+alone (88, 120 and 152px above and below each at phone, tablet and desktop widths), never by
+rules: no column guides, no section or footer hairlines, no crosshairs. A section keeps at most one
+deliberate line system where its reference has one: the strip's frame (5.9), the numerals' rule
+(5.10), spec rows on cards. Prerendered; works without JavaScript: fields fall back to their images
+and the entrances are CSS.
+
+Type is locked to the hero (x.ai's h1 60/60 450 and h2 48/48 500, Aside's hero 48/52 400, measured;
+Graphite rounds the weights to 500). The display style is Geist 500 at -0.04em, for the hero and the
+closing statement. Every section heading, and every inner page title, is one size, `clamp(32px,
+1.75vw + 23px, 48px)` / 1.06 / -0.035em, and two-tone: the statement in fg-1, its continuation in
+fg-3 on its own line (the film card's one-line heading keeps both on one line). One lead (20/30,
+18/28 on phones, fg-3), one body (16/26), and captions as a 16/26 500 fg-1 title over 16/26 fg-3
+text. Geist Pixel sets only the giant numerals (5.10).
 
 ### 5.2 Nav
 
-64px, sticky, black, a 1px line under it once scrolled (150ms). Left: `Wordmark` 16 linking home.
-Centre-left: Download, Changelog, Docs as 14/20 500 fg-2 links in a `.g-dim-text` group (hover
-fg-1; the siblings dim to fg-3 over 300ms `--g-ease-soft`, Harvey). Right: "Sign in" ghost 32 and
-the platform primary 32 ("Download for Windows" or "Download for macOS", detected; a 28px chevron
-segment lists every build). Under 768px the links fold into a 32px menu button opening a
-full-width sheet.
+64px, sticky; transparent over the stage, black once scrolled, with no rule under it. Left:
+`Wordmark` 16 linking home. Download and Changelog as 14/20 500 fg-2 links (hover fg-1; the
+siblings dim to fg-3 over 300ms `--g-ease-soft`, Harvey). Right: "Sign in" and the primary
+"Download". Under 768px the links fold into a menu button opening a full-width sheet.
 
 ### 5.3 Hero
 
-Top padding 120px. A DitherField fills the hero (min height 720, `standard` palette, `interactive`,
-`clearing { rx 0.36, ry 0.42, y 0.38 }`, `fallbackSrc` from `renderDitherFrame`). Centred over it:
+The stage DitherField fills the hero and continues behind the product frame: `standard`, density
+0.4, `edges` 0.5, `ceiling` 0.78, accent 0.012, `interactive`, its own seed. Three clearings: one
+measured around the headline, lead and buttons (1.55 times their half-width across and 1.7 times
+their half-height down; 3 and 1.8 on phones, where the copy fills the width), one along the product
+frame's top edge, and one fading the field out toward the stage's bottom edge, so the field gathers
+at the sides, stays calm behind the copy and never meets the frame in a blob. Seals and turtles swim
+through it (5.4). Centred over it:
 
-- **Announcement pill**: 34px, radius pill, 1px line-strong, black fill, padding 0 14 0 8, a
-  `.g-new` chip, the release sentence in 14/20 fg-1 and the version in fg-3; links to the
-  changelog. Hover: border fg-4, 150ms.
-- **Headline** (`.g-web-hero`, 2 lines, centred, 24px under the pill): "One window for" / "**Claude
-  Code**." The agent name rotates every 3000ms through Codex, Grok Build, Cursor, OpenCode, Pi,
-  Hermes, Antigravity (x.ai's measured rotation, without its blur): the old name's letters leave
-  last-first, 15ms apart, each fading and rising 0.23em in 250ms `--g-ease-out`; when they are gone
-  the new letters arrive from 0.23em below, 25ms apart, 250ms; the slot's width morphs to the new
-  name in 300ms `--g-ease-out` under `clip-path: inset(-4px 0)`, and the underline follows it. The
-  underline is `.g-glint`, re-keyed on every swap, so its volt band sweeps 400ms after each one.
-  Reduced motion: no rotation; "Claude Code" on a static grey rule.
-- **Lead** (`.g-web-lead`, max 560px, 24px under): "auracode drives the coding agents you already
-  use through one chat. Local first. No account needed."
-- **Buttons** (32px under, gap 12): platform primary 44 with a download icon, outline 44 "Create
-  account".
-- **Load choreography** (x.ai, measured): the pill fades and rises 8px over 320ms at 320ms; the
-  headline words flip up (`.g-rise`) from 100ms, 55ms apart; the underline draws (`.g-draw-x`) over
-  800ms at 800ms; the lead fades in over 380ms at 580ms and the buttons at 700ms; the product frame
-  fades in over 1250ms at 760ms; all `--g-ease-reveal` except the words (quint) and the draw (out).
-  The field is live from its first frame. Reduced motion: everything present at first paint, words
-  by the 150ms fade.
+- **Headline** (`--g-web-hero`, line height 1, -0.04em, 500): "One window for" / "Claude Code."
+  The agent name rotates every 3000ms through every designed agent (x.ai, measured): the old
+  letters leave last-first, 15ms apart, each fading and rising 0.23em in 250ms `--g-ease-out`; the
+  new letters arrive from 0.23em below, 25ms apart; the slot's width morphs to the new name in
+  300ms and the underline follows it, its volt glint sweeping 400ms after each swap. The headline
+  never reflows: both lines keep their height and position for every name. Reduced motion: no
+  rotation.
+- **Lead** (20/30, max 600, 32px under): "**The coding agents you already use, together in one
+  chat.** auracode runs each one through its own harness, on your machine. Free, local, and no
+  account needed."
+- **Buttons** (40px under, gap 12): primary 44 "Download", outline 44 "Invited sign-in".
+- **Load choreography** (x.ai, measured): the headline words flip up (`.g-rise`) from 100ms, 55ms
+  apart; the underline draws over 800ms at 800ms; the lead fades in over 380ms at 580ms and the
+  buttons at 700ms; the product frame fades in over 1250ms at 760ms. Reduced motion: everything
+  present at first paint, words by the 150ms fade.
 
-### 5.4 Product frame with the dither dissolve
+### 5.4 Seals and turtles
 
-40px under the hero, a 1200px frame with Vercel crosshairs at its four corners holds the real app
-window (a captured screenshot of the shipped app, 1px line ring, radius 12) inside a DitherField:
-`target { kind: "image", src, fit: "cover" }`, `reveal`, `order "down"`, children = the `<img>`
-with real alt text. Scroll drives `progress` from 0 when the frame's top reaches 85% of the
-viewport to 1 at 35%; the field fades out at 1 and the screenshot remains. Reduced motion or no
-JavaScript: the screenshot shows at once.
+Sprites (4.15) drawn as pixel art in the field's greys: a sea turtle seen from above (31 by 34
+cells, four frames in which the front and rear flippers stroke in turn, 2.5 frames a second) and a
+harbour seal from the side (49 by 15 cells, four frames of body undulation and a fanning tail, 4
+frames a second, now and then a lazy roll). Turtles glide at 8 to 10px a second, seals at 16 to
+24px. The hero carries a seal in the open water above the headline and a turtle and a seal in the
+side wings; on a phone, two seals keep above the headline. The closing band carries a turtle and a
+seal, and on a phone two seals above and below the statement. They fade into the clearings, leave
+one side before returning on the other, ease away from the pointer lens, freeze where they are under
+reduced motion and appear in the fallback images' first frame.
 
-### 5.5 Agent word wheel (Harvey)
+### 5.5 Product frame
 
-Timer-driven, as Harvey's is (measured from its archived source), not scroll-linked. Left (33%):
-"auracode runs" in 20/26 fg-1. Centre: a 7-row window (7 times the pitch, minus the gap: 424.8px)
-of agent names in Geist 48/50.4 500 -0.03em, 12px apart, so the pitch is 62.4px; eight rows render
-(three above the active one, four below). Every 1100ms (`--g-dur-tick`) the column moves up one
-pitch over 600ms `--g-ease-step` (`transform` only), holds 500ms, then the index advances and the
-column snaps back with no transition. Colour by distance from the active row, as solid greys so the
-type stays crisp (Harvey's opacities 1, 0.6, 0.3, 0.1): 0 fg-1, 1 fg-3, 2 fg-4, 3 or more
-line-strong; the colour change rides the same 600ms step. No fade mask: the grey ladder already
-fades the edges. Right: outline 36 "See every agent". It runs only while in view and the page is
-visible. Reduced motion: a static column with the active name in fg-1, changing every 3000ms with
-no movement.
+Under the hero, the real app (a captured screenshot, WebP sources, real alt text) in a 1200px frame,
+radius 12, one 1px line-strong ring and nothing around it. Its own field dissolves into the
+screenshot (`order "down"`, `reveal`): `progress` is already about 0.35 when the page opens, so the
+top of the screenshot has formed at first sight, and reaches 1 when the frame's top is at 55% of the
+viewport. Phones, where a dithered screenshot is too small to read, reduced motion and no
+JavaScript show the screenshot at once.
 
-### 5.6 Capability band with timer tabs (Harvey)
+### 5.6 Triptych (Harvey's top performers)
 
-Full-bleed surface-1 band, 120px padding. Left column (40%): four capabilities ("Run any agent",
-"Approve what matters", "Review every change", "Keep it local"), 24px apart; each item has a 2px
-line-strong track, label row padding 20 0 12, title 20/26 500 fg-3. The active item's title turns
-fg-1 (300ms `--g-ease`), its description (16/26 fg-2, max 440) opens under it (height and fade,
-300ms `--g-ease-in-out`), and a 2px fg-1 bar fills the track in 7500ms linear by `transform:
-translateX(-100%)` to 0; when it completes the next item activates. Hovering the list pauses the
-timer (`animation-play-state: paused`) and fades the bar out over 300ms; leaving resumes it.
-Clicking an item activates it and restarts its timer. Right column: a tile with the matching real
-UI fragment, crossfading over 500ms `--g-ease-in-out`. Reduced motion: no autoplay, the active
-track full and static, switching instant.
+Two-tone heading: "Bring the agents you already use." / "auracode runs each one through its own
+harness." Three 4:5 recessed tiles (surface-1, radius 16) on a dim, still grain field (`quiet`,
+density 0.72, `ceiling` 0.42, transparent), 24px apart, each with a caption under it:
 
-### 5.7 Hairline feature cells
+1. "Your agents, as they are": the agent word wheel (Harvey, measured from its archived source):
+   seven rows of 32px names; every 1100ms the column moves up one pitch over 600ms `--g-ease-step`
+   and holds 500ms; colour by distance as solid greys (fg-1, fg-3, fg-4, line-strong), no fade
+   mask. It runs only in view; reduced motion and no JavaScript show a static list.
+2. "Switch agents mid-chat": two cursor chips, "Claude Code" and "Codex", drifting over a chat card
+   that shows the switch, as Harvey's two cursors share one document.
+3. "Runs where you work": a list of true platform facts (Windows x64, Windows ARM64, macOS on Apple
+   silicon, macOS on Intel, works offline, no account needed, your own agent logins) scrolling
+   upward, 24s a loop.
 
-A `.g-hairline-grid` of three columns (one under 768px) with crosshairs at the outer corners. Each
-cell: padding 32, a 4:3 `.g-tile` showing a live fragment (a tool row group with a loader, the
-permission card, a diff with the diffstat), then a `.g-lead-in` paragraph, max 320px ("**Asks
-before it acts.** Every command waits for you unless you chose full auto."). The cells form a
-`.g-dim-group`: hovering one dims the others to 0.5 over 500ms `--g-ease-smooth` (X Money). An
-"Explore" link with an arrow may sit in the cell's bottom-right in 14/20 fg-3. Cells enter with
-`.g-enter`, 70ms apart. No icons with caps labels, no numbers.
+### 5.7 Film card (x.ai)
 
-### 5.8 Stats with count-up
+Centred one-line heading: "One turn, start to finish." A card (surface-1, radius 24) over a dimmed,
+transparent field (`quiet`, density 0.62, `ceiling` 0.5, calm behind the copy). Left: a Play or
+Pause text button with a pixel icon, and the caption line, both 26 to 32px. Right: a 440px window
+replaying one turn from Graphite fragments over 10.4s: the empty state, the prompt typing into the
+composer, the agent working, Read and Edited tool rows, an approval card for `cargo test` that
+resolves to "Ran cargo test, 14 passed", the diff, and the receipt (48s, 2 files, +59 −12). The
+caption changes with each step. It plays once when 35% in view and then holds the finished turn;
+Play replays it and Pause holds it (a real button named by its visible label). The server render,
+reduced motion and no JavaScript show the finished turn without the button.
 
-Three columns, gap 24, each with a 1px line-strong rule above (Harvey's is 2px; ours stays a
-hairline) and 32px above the numeral: the numeral (72/72 500 -0.04em, tabular) and a 16/26 fg-2
-label ("9 agents supported", "0 accounts required", "2 platforms, Windows and macOS"). When 10% of
-the row is visible each counts from 0 once, over 950ms `--g-ease-out` (AI in Design), digits
-stepping in place (tabular, no reflow). Only true numbers. Reduced motion: final values.
+### 5.8 Staggered tiles (X Money)
 
-### 5.9 FAQ
+Two-tone heading: "Full auto by default." / "Every control within reach." Square recessed tiles
+(surface-1, radius 16) with live miniatures, two pairs to a row, each tile's text block (caption
+style) set against its bottom edge beside it; the middle row's wide tile starts where the first
+pair's text would be, as X Money's does. No numbers. Items: "Full auto, by default" (the autonomy
+menu, its selection walking the three levels every 2400ms), "Queue and steer" (a running turn, two
+messages queued behind it and the hint line), "A checkpoint every turn" (the wide tile: "This turn"
+and "Before it" toggle buttons show the file as the turn left it and as the checkpoint kept it,
+alternating every 3200ms until someone picks a side), "Plans you can read" (the plan card) and
+"Keyboard first" (⌘N, ⌘K, ⌘J, ⌘, and Esc lighting in turn). Tablets set one pair per row; phones
+stack each tile over its text.
 
-Two columns from 1024px: left, a two-tone heading and an outline 36 "See all questions"; right,
-`.g-disclosure` items 4px apart (X Money: 52px closed rows, padding 16 18), summary 16/24 500, body
-16/26 fg-2, one open at a time, the first open on load. Opening: 300ms `--g-ease-quint`, the
-surface-2 well sliding from the previously open row in about 270ms (4.11).
+### 5.9 Strip (Vercel)
 
-### 5.10 Closing CTA
+Two-tone heading: "Run several at once." / "Each chat works on its own.", with a lead at right.
+One framed band (1px line, radius 16, 340px tall), the frame's rule between its three joined
+panels: one turn's tool calls on a timeline (ACP kinds in mono, duration bars growing in turn, the
+running one in fg-1), the sessions running side by side (title, agent, and Running with the loader,
+Waiting on you in volt or Done) scrolling slowly upward, and every supported agent as chips
+drifting in three rows. Under it one row of three notes, each a pixel glyph and a sentence-case
+title over grey text: the Needs you inbox, marks that show state, notifications. Phones stack the
+panels and drop the chips.
 
-Centred: a two-tone `.g-web-h2` ("Bring your agents." / "Keep your keys."), 32px gap, the platform
-primary 44 and outline 44 "All downloads". Behind it a 360px DitherField band, `quiet` palette,
-`clearing { rx 0.3, ry 0.45 }`, `still` until in view.
+### 5.10 Giant numerals (AI in Design)
 
-### 5.11 Footer with the giant dithered wordmark
+Two-tone heading: "Local by default." / "Nothing to sign up for." Three numerals, 9, 2 and 0, in
+Geist Pixel at 340px (128px on phones), each condensing out of its own `bright` field (density
+0.22, a text target, scatter order) as the section scrolls in, left to right; one 1px line-strong
+rule splits them from their captions (title 20/30 500, note 16/26 fg-3): agents supported, plus any
+agent that speaks ACP; platforms, Windows and macOS; accounts needed, to use the app. Phones set
+each numeral beside its caption, without the rule. Reduced motion: the formed frames. No
+JavaScript: the numerals as Geist Pixel text.
 
-Padding 96 0 0. A top row: `Wordmark` 16 and "© 2026 auracode" in 12/16 fg-3 at left, a dashed
-1px line-strong vertical rule, then link columns (Product, Company, Legal) 140px wide, heading
-14/22 500 fg-1, links 14/22 fg-3 (hover fg-1), 12px apart. Then, edge to edge, a DitherField
-`clamp(120px, 20vw, 280px)` tall: `target { kind: "text", text: "auracode", anchor: "bottom", inset
-8 }`, `bright` palette, `order "up"`, progress scroll-linked from 0 as the footer enters to 1 when
-its bottom reaches the viewport's bottom; `still` once formed. The version in mono 12/16 fg-3
-closes the page. Reduced motion: the formed still frame.
+### 5.11 FAQ (X Money)
 
-### 5.12 Inner pages
+Two equal columns from 1024px: left, the two-tone heading "Questions, answered." / "Before you
+install." and an outline 36 "Privacy notice"; right, disclosure rows 4px apart (52px closed rows),
+summary 16/24 500, body 16/26 fg-2, one open at a time, the first open on load, no rules between
+them. Opening: 300ms `--g-ease-quint`, the surface-2 well sliding from the previously open row in
+about 270ms (4.11).
 
-- **Download**: two-tone heading "Download auracode." / "Free, local, no account." A hairline grid
-  of builds (Windows x64, Windows ARM64, macOS universal): name 16/24 500, file name and size in mono
-  13 fg-3, the detected build's primary 36, the rest outline 36. Checksums in a well with
-  `CopyButton`. Requirements as rows on hairlines. Linux is not offered.
-- **Sign in, sign up, verify device**: a centred 400px column on black, a DitherField band 160px tall
-  above (`quiet`, still). Title 24/30 500 two-tone ("Sign in." / "Invite only for now."), the email
-  input at 44px, a full-width primary 44 ("Send code"), the 6-digit code as six 44x52 boxes in mono
-  20/28, Turnstile under the form, errors in 12/16 red under the field that caused them, help in
-  12/16 fg-3. One action per screen.
-- **Account**: settings-style groups (6.16) in a 680px column: email, devices (rows with a status
-  square and last seen), sync, export, and "Delete account" in red text that opens a confirm dialog
-  with the red pill.
-- **Legal** (privacy, terms, third-party notices): 680px column, h1 as `.g-web-h2`, h2 24/30 500,
-  body 16/26 fg-2 with fg-1 emphasis, lists with 4px square bullets in fg-3, tables per 4.7.
-- **Changelog**: one entry per release on hairlines: the version in mono 14/20 fg-1, the date in
-  14/20 fg-3, "New" on the latest only, notes as prose 16/26.
+### 5.12 Closing
+
+Centred: "Your agents." / "Your machine." in the display style (`clamp(44px, 6vw, 80px)`), 40px
+gap, the primary 44 "Download". Behind it a dark band field (`standard` capped by a `ceiling` of
+0.55, calm behind the words and fading out toward the band's top and bottom edges) with a turtle and
+a seal (5.4).
+
+### 5.13 Footer with the giant dithered wordmark
+
+No rules. A top row: `Wordmark` 16 and "One window for your coding agents." in 14/22 fg-3 at left,
+link columns (Product, Account, Legal) at right, heading 14/22 500 fg-1, links 14/22 fg-3 (hover
+fg-1). Then, edge to edge, a DitherField `clamp(120px, 20vw, 280px)` tall: `target { kind: "text",
+text: "auracode", anchor: "bottom", inset 8 }`, `bright` palette, `order "up"`, progress
+scroll-linked from 0 as it enters to 1 when its bottom reaches the viewport's bottom; `still` once
+formed. Reduced motion: the formed still frame. No JavaScript: the word as text.
+
+### 5.14 Inner pages
+
+- **Download**: two-tone title "Download auracode." / "Free, local, no account." Two recessed cards
+  (surface-1, radius 16), one per platform: name, architectures, spec rows on hairlines (the page's
+  one line system), and the action. Linux is not offered.
+- **Sign in, sign up, verify device**: a centred 480px column; the title in the section heading
+  style, two-tone; a recessed panel (surface-1, radius 16, no border) holding the form. One action
+  per screen.
+- **Account**: settings groups separated by space in a narrow column; device and security lists
+  keep their row rules.
+- **Legal** (privacy, terms, third-party notices): 680px column, prose headings separated by space,
+  body 16/26 fg-2 with fg-1 emphasis.
+- **Changelog**: one entry per release, separated by space: the date and status at left, notes as
+  prose 16/26.
 - **404**: a full-viewport DitherField with a text target "404" (`bright`, `still` under reduced
-  motion) and under it a two-tone line "This page does not exist." / "It may have moved." with an
-  outline 44 "Go home".
+  motion) and under it a two-tone line "This page does not exist." / "It may have moved." with a
+  primary 44 "Go home".
 
 ---
 
