@@ -205,3 +205,27 @@ invitation-order build as preview (Wasm `9d545e66…`). All three secrets, D1, R
 the five-minute cron and disabled `workers.dev`/preview URLs are unchanged. It still has no route:
 the zone routes only `auracode.si/*` to the website and the two preview routes. Production D1 has no
 users, sessions or challenges.
+
+## Website deploys on push (2026-10-27)
+
+The website now deploys through Workers Builds, so it uses Cloudflare build minutes rather than
+GitHub Actions. The repository connection is `915b851e-4e7f-4c2d-a416-c130a642f59f`, and every
+trigger runs from the repository root with the account's existing build token.
+
+| Worker | Branches | Deploy command ends with |
+| --- | --- | --- |
+| `auracode-web` | `main` | `wrangler deploy --env production` |
+| `auracode-web-preview` | `main` | `wrangler deploy --env preview` |
+| `auracode-web-preview` | every other branch | `wrangler deploy --env preview` |
+
+The build command installs rustup's stable toolchain with the `wasm32-unknown-unknown` target and
+`worker-build` 0.8.7 (`--locked`), then builds `@auracode/web` and runs `worker-build --release` in
+`apps/web-worker`. The deploy command puts `$HOME/.cargo/bin` on `PATH` and runs
+`pnpm exec wrangler deploy` there; Wrangler runs the checked-in `[build]` command again before
+uploading. Workers Builds installs dependencies with the pinned pnpm 12.15.0 on Node.js 24.
+
+The first build (`f4291adc-2cbf-44b5-a7e1-dd78790f3827`, `main` at `64f5529`, preview) passed in
+about nine and a half minutes, five and a half of them compiling `worker-build`, which ships no
+prebuilt binary. All 55 public files on `preview.auracode.si` matched the local build of the same
+tree byte for byte, with the page, notices, API precedence and missing-asset checks passing. The
+API Workers still deploy by hand, and production API routing remains inactive.

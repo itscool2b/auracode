@@ -6,8 +6,9 @@ import ditherSource from "./dither.ts?raw";
 import engineSource from "./ditherEngine.ts?raw";
 import graphiteCss from "./graphite.css?raw";
 import keycapSource from "./Keycap.tsx?raw";
+import markSource from "./Logo.tsx?raw";
+import logoPathsSource from "./logoPaths.ts?raw";
 import loaderSource from "./PixelLoader.tsx?raw";
-import markSource from "./PixelMark.tsx?raw";
 import pixelsSource from "./pixels.ts?raw";
 import statusSource from "./StatusDot.tsx?raw";
 import {
@@ -235,6 +236,7 @@ describe("Graphite stylesheet rules", () => {
       graphiteCss,
       keycapSource,
       loaderSource,
+      logoPathsSource,
       markSource,
       pixelsSource,
       statusSource,

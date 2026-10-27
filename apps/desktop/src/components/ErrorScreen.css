@@ -26,6 +26,10 @@
   width: min(100%, 600px);
 }
 
+.error-logo {
+  color: var(--g-fg-2);
+}
+
 .error-message h1 {
   margin: 0;
   color: var(--g-fg-1);

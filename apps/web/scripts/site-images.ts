@@ -1,11 +1,17 @@
 // Build glue for the site's generated images, written as small palette PNGs: each dither field's
 // no-JavaScript fallback, drawn by the same renderer the browser uses (renderDitherFrame) at one
-// image pixel per cell, creatures included, and the favicon, the pixel "a" on black (visual
-// language 4.14).
+// image pixel per cell, creatures included; and the logo images (favicons, the home-screen icon
+// and the social card), rasterised here from the logo's own path (visual language 4.14).
 import { deflateSync } from "node:zlib";
 import type { Plugin } from "vite";
 import { renderDitherFrame, VOLT } from "../../../packages/ui/src/graphite/dither.ts";
-import { PIXEL_MARK_GRID } from "../../../packages/ui/src/graphite/pixels.ts";
+import {
+  LOGO_PATH,
+  LOGO_SMALL_MAX,
+  LOGO_SMALL_PATH,
+  LOGO_VIEWBOX,
+  logoSvg,
+} from "../../../packages/ui/src/graphite/logoPaths.ts";
 import { paintSprites } from "../../../packages/ui/src/graphite/sprites.ts";
 import { DITHER_PALETTES, GRAPHITE_COLORS } from "../../../packages/ui/src/graphite/tokens.ts";
 import { FIELD_FALLBACKS, type FieldFallback, type FieldSettings } from "../app/fields.ts";
@@ -99,20 +105,161 @@ export function fallbackPng(fallback: FieldFallback, field: FieldSettings): Buff
   return indexedPng(cols, rows, indices, [GRAPHITE_COLORS.bg, ...greys, GRAPHITE_COLORS.volt]);
 }
 
-/** The favicon: the 6x6 glyph in fg-1 on black, padded by an eighth, on whole pixels. */
-export function faviconPng(size = 32): Buffer {
-  const cell = Math.floor((size * 0.75) / 6);
-  const offset = Math.floor((size - cell * 6) / 2);
-  const indices = new Uint8Array(size * size);
-  PIXEL_MARK_GRID.forEach((line, gy) => {
-    for (let gx = 0; gx < line.length; gx++) {
-      if (line[gx] !== "#") continue;
-      for (let dy = 0; dy < cell; dy++)
-        for (let dx = 0; dx < cell; dx++)
-          indices[(offset + gy * cell + dy) * size + offset + gx * cell + dx] = 1;
+/** A path's absolute M, L, C and Z commands, flattened into closed polygons. */
+export function flatten(d: string, steps = 16): number[][] {
+  const tokens = d.match(/[MLCZ]|-?\d+(?:\.\d+)?/g) ?? [];
+  const polygons: number[][] = [];
+  let current: number[] = [];
+  let x = 0;
+  let y = 0;
+  let i = 0;
+  const next = () => Number(tokens[i++]);
+  while (i < tokens.length) {
+    const command = tokens[i++];
+    if (command === "M") {
+      if (current.length > 4) polygons.push(current);
+      x = next();
+      y = next();
+      current = [x, y];
+    } else if (command === "L") {
+      x = next();
+      y = next();
+      current.push(x, y);
+    } else if (command === "C") {
+      const [x1, y1, x2, y2, x3, y3] = [next(), next(), next(), next(), next(), next()];
+      for (let k = 1; k <= steps; k++) {
+        const t = k / steps;
+        const u = 1 - t;
+        current.push(
+          u * u * u * x + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3,
+          u * u * u * y + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3,
+        );
+      }
+      x = x3;
+      y = y3;
+    } else if (command === "Z") {
+      if (current.length > 4) polygons.push(current);
+      current = [];
     }
+  }
+  if (current.length > 4) polygons.push(current);
+  return polygons;
+}
+
+/**
+ * Even-odd coverage, 0 to 1 per pixel, of polygons placed at (x, y) and scaled by `scale`, from a
+ * 4x4 grid of samples per pixel.
+ */
+export function coverage(
+  polygons: readonly number[][],
+  width: number,
+  height: number,
+  place: { readonly x: number; readonly y: number; readonly scale: number },
+): Float32Array {
+  const samples = 4;
+  const out = new Float32Array(width * height);
+  const crossings: number[] = [];
+  for (let sy = 0; sy < height * samples; sy++) {
+    const vy = ((sy + 0.5) / samples - place.y) / place.scale;
+    crossings.length = 0;
+    for (const polygon of polygons) {
+      const n = polygon.length / 2;
+      for (let a = 0; a < n; a++) {
+        const b = (a + 1) % n;
+        const ay = polygon[a * 2 + 1] ?? 0;
+        const by = polygon[b * 2 + 1] ?? 0;
+        if (ay <= vy === by <= vy) continue;
+        const ax = polygon[a * 2] ?? 0;
+        const bx = polygon[b * 2] ?? 0;
+        crossings.push(place.x + (ax + ((vy - ay) / (by - ay)) * (bx - ax)) * place.scale);
+      }
+    }
+    crossings.sort((p, q) => p - q);
+    const row = Math.floor(sy / samples) * width;
+    for (let k = 0; k + 1 < crossings.length; k += 2) {
+      const from = Math.max(0, Math.ceil((crossings[k] ?? 0) * samples - 0.5));
+      const to = Math.min(width * samples - 1, Math.floor((crossings[k + 1] ?? 0) * samples - 0.5));
+      for (let sx = from; sx <= to; sx++) {
+        const at = row + Math.floor(sx / samples);
+        out[at] = (out[at] ?? 0) + 1 / (samples * samples);
+      }
+    }
+  }
+  return out;
+}
+
+/** `steps` greys from black to fg-1: the anti-aliased logo's palette. */
+function inkRamp(steps: number): string[] {
+  const from = rgb(GRAPHITE_COLORS.bg);
+  const to = rgb(GRAPHITE_COLORS["fg-1"]);
+  return Array.from({ length: steps }, (_, i) => {
+    const t = i / (steps - 1);
+    const channel = (c: number) => {
+      const value = (from[c] ?? 0) + ((to[c] ?? 0) - (from[c] ?? 0)) * t;
+      return Math.round(value).toString(16).padStart(2, "0");
+    };
+    return `#${channel(0)}${channel(1)}${channel(2)}`;
   });
-  return indexedPng(size, size, indices, [GRAPHITE_COLORS.bg, GRAPHITE_COLORS["fg-1"]]);
+}
+
+/** Where the logo lands: `fill` of the shorter side, centred. */
+function logoPlace(fill: number, width: number, height: number) {
+  const [vw, vh] = LOGO_VIEWBOX;
+  const scale = (Math.min(width, height) * fill) / Math.max(vw, vh);
+  return { x: (width - vw * scale) / 2, y: (height - vh * scale) / 2, scale };
+}
+
+/**
+ * The logo in fg-1 on a black square, anti-aliased: favicons and the home-screen icon (iOS rounds
+ * the corners itself). Rasters up to 32px draw the small variant: without hinting, the full
+ * logo's gaps blur shut at a tab icon's size.
+ */
+export function logoPng(size: number, fill = 0.82): Buffer {
+  const path = size <= Math.max(32, LOGO_SMALL_MAX) ? LOGO_SMALL_PATH : LOGO_PATH;
+  const ink = coverage(flatten(path), size, size, logoPlace(fill, size, size));
+  const indices = Uint8Array.from(ink, (value) => Math.round(Math.min(1, value) * 15));
+  return indexedPng(size, size, indices, inkRamp(16));
+}
+
+/**
+ * The social card, 1200x630: a still dither field thinning to black around the logo in fg-1, so a
+ * shared link shows the same signature as the site's hero.
+ */
+export function socialPng(): Buffer {
+  const width = 1200;
+  const height = 630;
+  const cell = 6;
+  const cols = Math.ceil(width / cell);
+  const rows = Math.ceil(height / cell);
+  const greys = DITHER_PALETTES.standard;
+  const levels = renderDitherFrame({
+    cols,
+    rows,
+    cellPx: cell,
+    levels: greys.length + 1,
+    density: 0.5,
+    accent: 0.01,
+    edges: 0,
+    ceiling: 1,
+    clearing: [{ x: cols / 2, y: rows / 2, rx: cols * 0.42, ry: rows * 0.95 }],
+  });
+  const ink = coverage(flatten(LOGO_PATH), width, height, logoPlace(0.5, width, height));
+  const field = [GRAPHITE_COLORS.bg, ...greys, GRAPHITE_COLORS.volt];
+  const ramp = inkRamp(10).slice(1);
+  const indices = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const at = y * width + x;
+      const value = Math.min(1, ink[at] ?? 0);
+      if (value > 0.05) {
+        indices[at] = field.length + Math.max(0, Math.round(value * ramp.length) - 1);
+        continue;
+      }
+      const level = levels[Math.floor(y / cell) * cols + Math.floor(x / cell)] ?? 0;
+      indices[at] = level === VOLT ? greys.length + 1 : level;
+    }
+  }
+  return indexedPng(width, height, indices, [...field, ...ramp]);
 }
 
 /** Emits the generated images into the build and serves them from the dev server. */
@@ -121,12 +268,23 @@ export function siteImagesPlugin(): Plugin {
     ...FIELD_FALLBACKS.map(
       (entry) => [`/${entry.file}`, () => fallbackPng(entry, entry.field)] as const,
     ),
-    ["/favicon.png", () => faviconPng(32)],
+    ["/favicon.png", () => logoPng(32)],
+    ["/apple-touch-icon.png", () => logoPng(180, 0.72)],
+    ["/og.png", () => socialPng()],
+  ]);
+  const svgs = new Map<string, () => string>([
+    ["/favicon.svg", () => logoSvg({ size: 24, padding: 0.06, radius: 0.2 })],
   ]);
   return {
     name: "auracode-site-images",
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
+        const svg = svgs.get(request.url ?? "");
+        if (svg) {
+          response.setHeader("Content-Type", "image/svg+xml");
+          response.end(svg());
+          return;
+        }
         const render = images.get(request.url ?? "");
         if (!render) return next();
         response.setHeader("Content-Type", "image/png");
@@ -135,6 +293,8 @@ export function siteImagesPlugin(): Plugin {
     },
     generateBundle() {
       for (const [path, render] of images)
+        this.emitFile({ type: "asset", fileName: path.slice(1), source: render() });
+      for (const [path, render] of svgs)
         this.emitFile({ type: "asset", fileName: path.slice(1), source: render() });
     },
   };

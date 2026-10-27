@@ -23,5 +23,6 @@ import { AgentMark, DitherField, Keycap, Wordmark } from "@auracode/ui/graphite"
 - `@auracode/ui/graphite-tokens.css` declares only the `--g-*` variables on `:root`; `@auracode/ui/graphite.css` adds the base layer (opt in with `.g-root`) and the primitives. Every primitive is one class with its states inside `:where()`, so one app class loaded later always wins.
 - `DitherField` renders on a 2D canvas at one canvas pixel per cell, scaled up pixelated. It draws from the shared frame clock at 30fps at most, only while on screen and while the page is visible, and holds one still frame under reduced motion (the OS setting or `setMotionPreference`). Give it a size. Server rendering emits the fallback image and an empty canvas; `renderDitherFrame()` renders the same deterministic frame in Node for that fallback.
 - `AgentMark` replaces `OrbitMark` with the same props. Idle, hidden, offscreen and reduced-motion marks own no animation frame.
-- `PIXEL_MARK_GRID` and `pixelMarkSvg()` are the source of the app icon and favicons.
+- `LOGO_PATH`, `LOGO_SMALL_PATH` and `logoSvg()` are the source of the logo, the app icons and
+  the favicons.
 - Checks: `pnpm --filter @auracode/ui test`, `pnpm --filter @auracode/ui typecheck`, `pnpm exec biome check packages/ui`.

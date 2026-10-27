@@ -26,23 +26,28 @@ export {
   VOLT,
 } from "./dither";
 export { Keycap, type KeycapProps } from "./Keycap";
+export { Logo, type LogoProps, Wordmark, type WordmarkProps } from "./Logo";
+export {
+  LOGO_PATH,
+  LOGO_SMALL_MAX,
+  LOGO_SMALL_PATH,
+  LOGO_VIEWBOX,
+  type LogoSvgOptions,
+  logoSvg,
+} from "./logoPaths";
 export {
   type LoaderTempo,
   type LoaderTone,
   PixelLoader,
   type PixelLoaderProps,
 } from "./PixelLoader";
-export { PixelMark, type PixelMarkProps, Wordmark, type WordmarkProps } from "./PixelMark";
 export {
   gridPath,
   gridRects,
   LOADER_ORDER,
   LOADER_STEP_MS,
   loaderFrame,
-  PIXEL_MARK_GRID,
-  type PixelMarkSvgOptions,
   type PixelRect,
-  pixelMarkSvg,
 } from "./pixels";
 export { StatusDot, type StatusDotProps, type StatusTone } from "./StatusDot";
 export {
