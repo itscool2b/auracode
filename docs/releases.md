@@ -256,7 +256,7 @@ notarization and stapling, then prepare the stage from those final bytes.
 | Gate | Required evidence before calling it complete |
 |---|---|
 | macOS universal | Inspect both architecture slices, install and launch on Apple Silicon and Intel; verify configured minimum OS, signature, notarization and staple; retain existing Local and Account data across upgrade |
-| Windows x64 and ARM64 | Install, launch, upgrade and uninstall on each architecture; verify Authenticode and WebView2 behavior, including missing-runtime behavior; retain user data and unrelated vendor processes |
+| Windows x64 and ARM64 | Install, launch, upgrade and uninstall on each architecture; verify Authenticode and WebView2 behavior, including missing-runtime behavior; an upgrade retains user data, an uninstall deletes it as [uninstall.md](uninstall.md) describes, and both leave unrelated vendor processes running |
 | Actual updater | Older staging build downloads and installs a newer staged signed package; tampering and wrong-version signatures refuse installation; interrupted download retries; agents, PTYs, setup/Git work and unsaved drafts prevent unsafe install |
 | Release route | Only the dedicated release bucket is public; stable and staging prefixes stay separate; content types, downloads, immutable version objects and short-lived latest manifests behave as reviewed |
 | Final visuals and power | Real Windows/macOS screenshots, accessibility and keyboard review against the chosen references; unlocked native visible/minimized/background power measurements and warm-launch timing |
