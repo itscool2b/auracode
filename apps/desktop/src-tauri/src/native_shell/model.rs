@@ -119,7 +119,10 @@ pub fn tooltip(counts: Counts) -> String {
                 "chats need"
             }
         ),
-        (active, attention) => format!("auracode: {active} active, {attention} need attention"),
+        (active, attention) => format!(
+            "auracode: {active} active, {attention} {} attention",
+            if attention == 1 { "needs" } else { "need" }
+        ),
     }
 }
 
@@ -135,6 +138,23 @@ mod tests {
             title: None,
             updated_at: 1,
         }
+    }
+
+    /// The tray read "1 active, 1 need attention".
+    #[test]
+    fn the_tooltip_agrees_in_number() {
+        let counts = |active, attention| Counts { active, attention };
+        assert_eq!(tooltip(counts(0, 0)), "auracode");
+        assert_eq!(tooltip(counts(1, 0)), "auracode: 1 active chat");
+        assert_eq!(tooltip(counts(0, 2)), "auracode: 2 chats need attention");
+        assert_eq!(
+            tooltip(counts(1, 1)),
+            "auracode: 1 active, 1 needs attention"
+        );
+        assert_eq!(
+            tooltip(counts(3, 2)),
+            "auracode: 3 active, 2 need attention"
+        );
     }
 
     #[test]
