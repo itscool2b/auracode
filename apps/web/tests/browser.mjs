@@ -102,6 +102,36 @@ try {
       await page.keyboard.press("Enter");
       assert.equal(new URL(page.url()).hash, "#main");
       await page.evaluate(() => document.activeElement?.blur());
+      // Shallows: no dither canvas anywhere and no film Pause button.
+      assert.equal(await page.locator("canvas").count(), 0);
+      assert.equal(await page.getByRole("button", { name: /pause|play/i }).count(), 0);
+      // The capabilities panel: six tabs, each view clean under axe once shown.
+      const tabs = page.getByRole("tab");
+      assert.equal(await tabs.count(), 6);
+      for (let i = 0; i < 6; i++) {
+        await tabs.nth(i).click();
+        assert.equal(await tabs.nth(i).getAttribute("aria-selected"), "true");
+        await settled(page);
+        axe = await new AxeBuilder({ page })
+          .include(".caps")
+          .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+          .analyze();
+        assert.deepEqual(
+          axe.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })),
+          [],
+          `capability ${i}`,
+        );
+      }
+      // Arrow keys move the selection and the focus; Home and End jump to the ends.
+      await tabs.first().focus();
+      await page.keyboard.press("ArrowDown");
+      assert.equal(await tabs.nth(1).getAttribute("aria-selected"), "true");
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "caps-tab-handoff");
+      await page.keyboard.press("End");
+      assert.equal(await tabs.nth(5).getAttribute("aria-selected"), "true");
+      await page.keyboard.press("Home");
+      assert.equal(await tabs.nth(0).getAttribute("aria-selected"), "true");
+      await page.evaluate(() => document.activeElement?.blur());
       await page.setViewportSize({ width: 390, height: 844 });
       await page.screenshot({ path: join(artifacts, `${name}-mobile.png`), fullPage: true });
       assert.ok(

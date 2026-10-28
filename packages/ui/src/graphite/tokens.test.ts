@@ -202,7 +202,13 @@ describe("Graphite stylesheet rules", () => {
   });
 
   it("uses no blur, glow or decorative shadow", () => {
-    expect(graphiteCss).not.toMatch(/backdrop-filter|filter:\s*blur|drop-shadow|text-shadow/);
+    // The one blur is depth: a far swimmer is softened once, at raster time (4.16).
+    const depth =
+      /\.g-swimmer:where\(\[data-far\]\) > \.g-creature \{\s*filter: blur\(calc\(var\(--g-swimmer-depth\) \* [\d.]+px\)\);\s*\}/;
+    expect(graphiteCss).toMatch(depth);
+    expect(graphiteCss.replace(depth, "")).not.toMatch(
+      /backdrop-filter|filter:\s*blur|drop-shadow|text-shadow/,
+    );
     const shadows = [...graphiteCss.matchAll(/box-shadow:([^;]+);/g)].map((m) => m[1]?.trim());
     for (const shadow of shadows) {
       expect(shadow, shadow).toMatch(/^(var\(--g-shadow\)|inset 0 0 0 1px [^,]+|none)$/);

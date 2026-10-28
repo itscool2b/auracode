@@ -1,10 +1,14 @@
-// Build glue for the site's generated images, written as small palette PNGs: each dither field's
-// no-JavaScript fallback, drawn by the same renderer the browser uses (renderDitherFrame) at one
-// image pixel per cell, creatures included; and the logo images (favicons, the home-screen icon
-// and the social card), rasterised here from the logo's own path (visual language 4.14).
+// Build glue for the site's generated images: the favicons and the home-screen icon as small
+// palette PNGs, and the social card in Shallows, all rasterised here from the logo's and the
+// creatures' own paths (visual language 4.14, 4.16).
 import { deflateSync } from "node:zlib";
 import type { Plugin } from "vite";
-import { renderDitherFrame, VOLT } from "../../../packages/ui/src/graphite/dither.ts";
+import {
+  SEAL_PATH,
+  SEAL_VIEWBOX,
+  TURTLE_PATH,
+  TURTLE_VIEWBOX,
+} from "../../../packages/ui/src/graphite/creaturePaths.ts";
 import {
   LOGO_PATH,
   LOGO_SMALL_MAX,
@@ -12,9 +16,7 @@ import {
   LOGO_VIEWBOX,
   logoSvg,
 } from "../../../packages/ui/src/graphite/logoPaths.ts";
-import { paintSprites } from "../../../packages/ui/src/graphite/sprites.ts";
-import { DITHER_PALETTES, GRAPHITE_COLORS } from "../../../packages/ui/src/graphite/tokens.ts";
-import { FIELD_FALLBACKS, type FieldFallback, type FieldSettings } from "../app/fields.ts";
+import { GRAPHITE_COLORS } from "../../../packages/ui/src/graphite/tokens.ts";
 
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
   let c = n;
@@ -72,37 +74,6 @@ export function indexedPng(
     chunk("IDAT", deflateSync(raw, { level: 9 })),
     chunk("IEND", new Uint8Array()),
   ]);
-}
-
-/** The first frame of a field at its fallback layout, exactly as the live engine draws it. */
-export function fallbackPng(fallback: FieldFallback, field: FieldSettings): Buffer {
-  const cols = Math.ceil(fallback.width / field.cell);
-  const rows = Math.ceil(fallback.height / field.cell);
-  const greys = DITHER_PALETTES[field.palette];
-  // The creatures where the live field draws them in its first frame.
-  const overlay = new Float32Array(cols * rows);
-  paintSprites(overlay, cols, rows, fallback.sprites ?? [], 0, field.cell);
-  const levels = renderDitherFrame({
-    cols,
-    rows,
-    cellPx: field.cell,
-    seed: field.seed,
-    levels: greys.length + 1,
-    density: field.density,
-    accent: field.accent,
-    edges: field.edges ?? 0,
-    ceiling: field.ceiling ?? 1,
-    clearing: fallback.clearing.map((area) => ({
-      x: area.x * cols,
-      y: area.y * rows,
-      rx: area.rx * cols,
-      ry: area.ry * rows,
-    })),
-    overlay,
-  });
-  const volt = greys.length + 1;
-  const indices = Uint8Array.from(levels, (level) => (level === VOLT ? volt : level));
-  return indexedPng(cols, rows, indices, [GRAPHITE_COLORS.bg, ...greys, GRAPHITE_COLORS.volt]);
 }
 
 /** A path's absolute M, L, C and Z commands, flattened into closed polygons. */
@@ -221,53 +192,95 @@ export function logoPng(size: number, fill = 0.82): Buffer {
   return indexedPng(size, size, indices, inkRamp(16));
 }
 
+/** Encodes 8-bit RGB pixels as a truecolour PNG. */
+export function rgbPng(width: number, height: number, pixels: Uint8Array): Buffer {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.writeUInt8(8, 8); // bit depth
+  header.writeUInt8(2, 9); // truecolour
+  const stride = width * 3;
+  const raw = Buffer.alloc((stride + 1) * height);
+  for (let y = 0; y < height; y++)
+    raw.set(pixels.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(raw, { level: 9 })),
+    chunk("IEND", new Uint8Array()),
+  ]);
+}
+
+/** Mirrors flattened polygons across a viewBox's width, for a creature facing left. */
+const mirror = (polygons: readonly number[][], width: number) =>
+  polygons.map((polygon) => polygon.map((value, i) => (i % 2 === 0 ? width - value : value)));
+
+/** The water's grey at depth `t` (0 at the surface, 1 deep), a smooth step through the tokens. */
+function water(t: number): number[] {
+  const stops = [
+    GRAPHITE_COLORS["water-surface"],
+    GRAPHITE_COLORS["water-shallow"],
+    GRAPHITE_COLORS["water-mid"],
+    GRAPHITE_COLORS["water-low"],
+    GRAPHITE_COLORS["water-deep"],
+  ].map(rgb);
+  const at = Math.min(0.9999, Math.max(0, t)) * (stops.length - 1);
+  const i = Math.floor(at);
+  const k = at - i;
+  const from = stops[i] as number[];
+  const to = stops[i + 1] as number[];
+  return from.map((value, c) => value + ((to[c] ?? 0) - value) * k);
+}
+
 /**
- * The social card, 1200x630: a still dither field thinning to black around the logo in fg-1, so a
- * shared link shows the same signature as the site's hero.
+ * The social card, 1200x630, in Shallows: the lit water falling off from the surface, a turtle and
+ * a seal passing as dark silhouettes, and the logo in fg-1 at the centre. A half-step ordered
+ * dither keeps the dark gradient from banding; it is below one grey level, so it reads as smooth.
  */
 export function socialPng(): Buffer {
   const width = 1200;
   const height = 630;
-  const cell = 6;
-  const cols = Math.ceil(width / cell);
-  const rows = Math.ceil(height / cell);
-  const greys = DITHER_PALETTES.standard;
-  const levels = renderDitherFrame({
-    cols,
-    rows,
-    cellPx: cell,
-    levels: greys.length + 1,
-    density: 0.5,
-    accent: 0.01,
-    edges: 0,
-    ceiling: 1,
-    clearing: [{ x: cols / 2, y: rows / 2, rx: cols * 0.42, ry: rows * 0.95 }],
+  const shade = rgb(GRAPHITE_COLORS["shade-near"]);
+  const ink = rgb(GRAPHITE_COLORS["fg-1"]);
+  const turtleScale = 250 / TURTLE_VIEWBOX[0];
+  const turtle = coverage(flatten(TURTLE_PATH), width, height, {
+    x: 150,
+    y: 300 - (TURTLE_VIEWBOX[1] * turtleScale) / 2,
+    scale: turtleScale,
   });
-  const ink = coverage(flatten(LOGO_PATH), width, height, logoPlace(0.5, width, height));
-  const field = [GRAPHITE_COLORS.bg, ...greys, GRAPHITE_COLORS.volt];
-  const ramp = inkRamp(10).slice(1);
-  const indices = new Uint8Array(width * height);
+  const sealScale = 320 / SEAL_VIEWBOX[0];
+  const seal = coverage(mirror(flatten(SEAL_PATH), SEAL_VIEWBOX[0]), width, height, {
+    x: 760,
+    y: 150,
+    scale: sealScale,
+  });
+  const logo = coverage(flatten(LOGO_PATH), width, height, logoPlace(0.36, width, height));
+  const pixels = new Uint8Array(width * height * 3);
   for (let y = 0; y < height; y++) {
+    const base = water(y / (height * 0.86));
     for (let x = 0; x < width; x++) {
       const at = y * width + x;
-      const value = Math.min(1, ink[at] ?? 0);
-      if (value > 0.05) {
-        indices[at] = field.length + Math.max(0, Math.round(value * ramp.length) - 1);
-        continue;
+      const dx = (x - width / 2) / (width * 0.62);
+      const dy = y / (height * 0.5);
+      const light = Math.max(0, 1 - dx * dx - dy * dy) * 0.045 * 255;
+      const dither = ((((x * 7 + y * 13) % 16) + 0.5) / 16 - 0.5) * 0.9;
+      const creature = Math.min(1, (turtle[at] ?? 0) + (seal[at] ?? 0));
+      const mark = Math.min(1, logo[at] ?? 0);
+      for (let c = 0; c < 3; c++) {
+        const lit = (base[c] ?? 0) + light * (1 - (base[c] ?? 0) / 255);
+        const under = lit + ((shade[c] ?? 0) - lit) * creature;
+        pixels[at * 3 + c] = Math.round(
+          Math.min(255, Math.max(0, under + ((ink[c] ?? 0) - under) * mark + dither)),
+        );
       }
-      const level = levels[Math.floor(y / cell) * cols + Math.floor(x / cell)] ?? 0;
-      indices[at] = level === VOLT ? greys.length + 1 : level;
     }
   }
-  return indexedPng(width, height, indices, [...field, ...ramp]);
+  return rgbPng(width, height, pixels);
 }
 
 /** Emits the generated images into the build and serves them from the dev server. */
 export function siteImagesPlugin(): Plugin {
   const images = new Map<string, () => Buffer>([
-    ...FIELD_FALLBACKS.map(
-      (entry) => [`/${entry.file}`, () => fallbackPng(entry, entry.field)] as const,
-    ),
     ["/favicon.png", () => logoPng(32)],
     ["/apple-touch-icon.png", () => logoPng(180, 0.72)],
     ["/og.png", () => socialPng()],

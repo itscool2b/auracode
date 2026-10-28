@@ -90,6 +90,24 @@
   --g-project-sage: #8c9c88;
   --g-project-clay: #a88e80;
 
+  /*
+   * Shallows (4.16): the lit water. One vertical falloff from the surface's grey to the deep grey,
+   * a soft light at the top and a faint rim; the silhouettes sit a few steps darker than the water
+   * they cross, the far ones closer to its grey.
+   */
+  --g-water-surface: #1e1e1e;
+  --g-water-shallow: #161616;
+  --g-water-mid: #0d0d0d;
+  --g-water-low: #080808;
+  --g-water-deep: #050505;
+  --g-water-light: rgb(255 255 255 / 0.045);
+  --g-water-caustic: rgb(255 255 255 / 0.028);
+  --g-water-rim: rgb(255 255 255 / 0.05);
+  --g-shade-near: #080808;
+  --g-shade-far: #121212;
+  --g-shallows-radius: 28px;
+  --g-shallows-radius-compact: 20px;
+
   /* Dither field: black plus three greys, lit pixels in volt */
   --g-dither-1: #2e2e2e;
   --g-dither-2: #4d4d4d;

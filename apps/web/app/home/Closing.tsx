@@ -1,46 +1,53 @@
-import { DitherField } from "@auracode/ui/graphite";
-import { CLOSING_CREATURES, CLOSING_CREATURES_COMPACT } from "../creatures";
-import {
-  CLOSING_CLEARING,
-  CLOSING_CLEARING_COMPACT,
-  CLOSING_FALLBACK,
-  CLOSING_FIELD,
-} from "../fields";
-import { useMedia } from "../motion";
+import { Shallows, type SwimmerSpec, Swimmers } from "@auracode/ui/graphite";
+
+/** A turtle crossing low and a seal passing high, both slower than in the hero. */
+const CLOSING_SWIMMERS: readonly SwimmerSpec[] = [
+  {
+    kind: "turtle",
+    x: 0.14,
+    y: 0.62,
+    size: "clamp(88px, 12vw, 172px)",
+    tilt: -8,
+    speed: 7,
+    phase: 6,
+  },
+  {
+    kind: "seal",
+    x: 0.84,
+    y: 0.3,
+    size: "clamp(120px, 16vw, 232px)",
+    heading: "left",
+    depth: 0.25,
+    speed: 11,
+    phase: 2,
+  },
+];
 
 /**
- * Aside's closing panel ("Crafted for both human and agent. Start using today."): one rounded panel
- * in the content column, a centred two-line statement and one primary action. Behind it a dark
- * dither field that thins to black behind the words, with a turtle and a seal crossing it; on a
- * phone, where the words fill the width, two seals keep above and below them.
+ * Aside's closing panel in Shallows: one lit panel on the column, a centred two-line statement, one
+ * line of plain facts and one Download, with a turtle and a seal crossing behind them.
  */
 export function Closing() {
-  const compact = useMedia("(max-width: 767px)");
   return (
     <section className="section closing" aria-labelledby="closing-title">
       <div className="wrap">
-        <div className="closing-panel" data-reveal="">
-          <DitherField
-            className="closing-field site-field"
-            cell={CLOSING_FIELD.cell}
-            density={CLOSING_FIELD.density}
-            ceiling={CLOSING_FIELD.ceiling}
-            accent={CLOSING_FIELD.accent}
-            palette={CLOSING_FIELD.palette}
-            seed={CLOSING_FIELD.seed}
-            clearing={compact ? CLOSING_CLEARING_COMPACT : CLOSING_CLEARING}
-            sprites={compact ? CLOSING_CREATURES_COMPACT : CLOSING_CREATURES}
-            transparent
-          />
-          <noscript>
-            <img className="field-fallback" src={`/${CLOSING_FALLBACK.file}`} alt="" />
-          </noscript>
-          <h2 id="closing-title" className="title closing-title">
-            Your agents. <span>Your machine.</span>
-          </h2>
-          <a className="g-button g-button-primary g-button-44" href="/download">
-            Download
-          </a>
+        <div data-reveal="">
+          <Shallows className="closing-panel" shimmer>
+            <Swimmers swimmers={CLOSING_SWIMMERS} className="closing-swimmers" />
+            <h2 id="closing-title" className="title title-stack">
+              Your agents. <span>Your machine.</span>
+            </h2>
+            <p className="closing-note">Free for Windows and macOS. No account needed.</p>
+            <div className="closing-actions">
+              <a
+                className="g-button g-button-primary g-button-44"
+                href="/download"
+                data-magnetic=""
+              >
+                <span className="magnetic-label">Download</span>
+              </a>
+            </div>
+          </Shallows>
         </div>
       </div>
     </section>
