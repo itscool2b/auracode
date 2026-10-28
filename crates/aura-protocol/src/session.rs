@@ -160,6 +160,19 @@ pub struct HistoryPage {
     pub unsaved_from: Option<u32>,
     /// Rows that did not parse (written by a newer build).
     pub skipped: u32,
+    /// The agent that ran each turn with rows in the page, so an earlier turn keeps its agent
+    /// after the chat switches agents. A turn missing here is the chat's current agent's.
+    #[serde(default)]
+    pub turn_agents: Vec<TurnAgent>,
+}
+
+/// The agent one turn ran on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct TurnAgent {
+    pub turn_id: String,
+    pub agent_id: String,
+    /// The agent's display name ("Claude Code").
+    pub agent_name: String,
 }
 
 /// One stored event and where it sits.
@@ -471,6 +484,11 @@ mod tests {
                 cut_turn_id: None,
                 unsaved_from: Some(40),
                 skipped: 1,
+                turn_agents: vec![TurnAgent {
+                    turn_id: "t".into(),
+                    agent_id: "claude".into(),
+                    agent_name: "Claude Code".into(),
+                }],
             },
         };
         assert_eq!(round_trip(&attach), attach);

@@ -95,7 +95,7 @@ fn title_source_str(source: TitleSource) -> &'static str {
 /// that path on this device; otherwise a project named after the folder, a local folder whose origin
 /// is this device, and its location here.
 pub(crate) fn create_chat(conn: &Connection, new: &NewChat) -> rusqlite::Result<ChatRecord> {
-    let path = new.folder.to_string_lossy().into_owned();
+    let path = super::stored_path(&new.folder);
     let existing: Option<(String, String)> = conn
         .prepare_cached(
             "SELECT fl.folder_id, pf.project_id FROM folder_locations fl \

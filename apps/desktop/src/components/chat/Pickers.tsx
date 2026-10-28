@@ -9,8 +9,8 @@ import type {
   SessionLists,
   SessionStatus,
 } from "../../bindings";
+import { agentLineup } from "../../lib/chat/agentLineup";
 import { AUTONOMIES, autonomyLabel, orderedOptions, pendingLabel } from "../../lib/chat/present";
-import { dockAgents } from "./AgentDock";
 import { focusPickerChoice, movePickerFocus, PickerChoices } from "./PickerChoices";
 import { closePopover, Popover } from "./Popover";
 
@@ -110,10 +110,10 @@ export function Pickers({
   // The agents worth offering: one per product, plus the chat's own agent wherever it stands.
   const offered = agents?.length
     ? [
-        ...(agent && !dockAgents(agents).shown.some((entry) => entry.id === agent.id)
+        ...(agent && !agentLineup(agents).products.some((entry) => entry.id === agent.id)
           ? [agent]
           : []),
-        ...dockAgents(agents).shown,
+        ...agentLineup(agents).products,
       ]
     : [];
   return (

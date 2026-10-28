@@ -59,7 +59,7 @@ test("browser gates have explicit deadlines and retain standalone evidence", () 
   for (const artifact of [
     "setup-browser",
     "setup-actions-browser",
-    "profile-status-browser",
+    "sidebar-footer-browser",
     "chat-auth-browser",
   ]) {
     assert.ok(ci.includes(`target/${artifact}`), `Missing browser evidence: ${artifact}`);

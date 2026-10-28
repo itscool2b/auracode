@@ -420,7 +420,10 @@ pub(super) async fn checked_folder(path: &str) -> Result<PathBuf, SessionError> 
     }
     tokio::task::spawn_blocking(move || {
         check_new_folder(&path)?;
+        // Windows canonical paths are verbatim (`\\?\C:\...`); store and show the plain spelling
+        // whenever it names the same folder.
         std::fs::canonicalize(path)
+            .map(|path| crate::fsutil::plain_path(&path))
             .map_err(|error| invalid(&format!("Cannot resolve this folder: {error}")))
     })
     .await

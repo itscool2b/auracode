@@ -58,8 +58,8 @@ export function Transcript({
   const last = segments.at(-1);
   const status = state.session?.status ?? state.chat?.status ?? "stopped";
   const activity = chatActivity(state);
-  const agentId = state.chat?.agent_id ?? "generic";
-  const agentName = state.session?.agent_name ?? state.chat?.agent_name ?? "Agent";
+  const chatAgentId = state.chat?.agent_id ?? "generic";
+  const chatAgentName = state.session?.agent_name ?? state.chat?.agent_name ?? "Agent";
   const pendingLabel =
     activity === "waiting"
       ? "Waiting on you"
@@ -113,6 +113,13 @@ export function Transcript({
       </div>
     );
   for (const segment of segments) {
+    // Each turn keeps the agent that ran it, after the chat switches agents too.
+    const turnAgent = segment.turnId === null ? undefined : state.turnAgents.get(segment.turnId);
+    const agentId = turnAgent?.agent_id ?? chatAgentId;
+    const agentName =
+      turnAgent === undefined || turnAgent.agent_id === chatAgentId
+        ? chatAgentName
+        : turnAgent.agent_name;
     const active = status === "running" && segment === last && segment.end === null;
     let prompt: TranscriptRow["prompt"];
     const addItem = (index: number, item: RenderedItem, grouped = false) =>
@@ -226,8 +233,8 @@ export function Transcript({
       content: (
         <NowRow
           key={`${last?.key ?? "new"}:${pendingLabel}`}
-          agentId={agentId}
-          agentName={agentName}
+          agentId={chatAgentId}
+          agentName={chatAgentName}
           label={pendingLabel}
           activity={activity}
           delay={

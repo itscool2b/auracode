@@ -1244,6 +1244,11 @@ export type HistoryPage = {
 	unsaved_from: number | null,
 	/**  Rows that did not parse (written by a newer build). */
 	skipped: number,
+	/**
+	 *  The agent that ran each turn with rows in the page, so an earlier turn keeps its agent
+	 *  after the chat switches agents. A turn missing here is the chat's current agent's.
+	 */
+	turn_agents?: TurnAgent[],
 };
 
 /**  How the installed binary is managed. Unknown and bundled installations cannot be updated here. */
@@ -2031,6 +2036,14 @@ export type ToolUpdate = {
 export type Truncation = {
 	total_bytes: number,
 	blob: string | null,
+};
+
+/**  The agent one turn ran on. */
+export type TurnAgent = {
+	turn_id: string,
+	agent_id: string,
+	/**  The agent's display name ("Claude Code"). */
+	agent_name: string,
 };
 
 /**  The answer to a [`UiRequest`], matching its [`UiPrompt`] (`Notify` takes none). */

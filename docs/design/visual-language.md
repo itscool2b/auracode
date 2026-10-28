@@ -32,9 +32,15 @@ only colour is the thing that needs you.
 1. **Type does the work.** Geist at integer weights (400, 500, 600), solid colours, two-tone
    headlines at one size. Geist Mono only for what a machine made.
 2. **Pixels are the ornament.** Everything decorative is square pixels on whole CSS pixels: the
-   dither field, the 2x3 loader, the pixel check, status squares. No curves for decoration, no
-   glow, no gradient, no glass, no blur. The logo (4.14) is the one curved shape, and it is a
-   mark, not decoration.
+   dither field, the 2x3 loader, the pixel check. No curves for decoration, no glow, no gradient,
+   no glass, no blur. The logo (4.14) is one curved shape and status dots are the other: a flat
+   circle on whole pixels says a state, never decorates.
+
+**Status dots are circles (owner decision, 2026-10-28).** Wherever this document says a volt, red,
+green, white or grey square marks a state (needs you, failed, running, found, not installed, a
+project, an attention mark on a control), read a dot: the same size, a flat circle centred on whole
+pixels, no ring or glow (an empty "not installed" mark is a 1px ring). Pixels, loader cells, the
+pixel check, diffstat squares, list bullets, plan nodes and the Stop square stay square.
 3. **One accent, one meaning.** Volt marks needs-you, live and new, the glint and rare lit pixels
    in the field. It is never a fill larger than a chip and never a button.
 4. **Structure from hairlines and value steps** (Vercel, X Money, Aside), not from cards and
@@ -282,7 +288,7 @@ and below each section).
 
 `--g-radius-4` keycaps, inline code, "New"; `-6` chips, icon buttons, tooltips; `-8` inputs,
 rows, wells, menu items; `-12` panes, menus, tiles, accordion wells; `-16` composer, dialogs,
-docked cards; `-pill` buttons, segmented controls, switches. Pixels, status squares, loader cells
+docked cards; `-pill` buttons, segmented controls, switches, status dots. Pixels, loader cells
 and crosshairs are square (0). Nested radius: inner equals outer minus padding (a 12px menu with
 4px padding has 8px items). Nothing exceeds 16 except pills.
 
@@ -437,9 +443,9 @@ apart. Buttons, menus, cards and hint lines show keycaps wherever a key works.
 
 ### 4.5 Status: `StatusDot` and `PixelLoader`
 
-`StatusDot` is a square, never a circle and never a glow: 6px default (4 to 32), tone neutral fg-2,
-volt, green or red; decorative unless `label` is set, since the text beside it speaks. `live`
-swaps the square for the loader at twice the size (at least 12px) with the head in the tone.
+`StatusDot` is a flat circle, never a glow: 6px default (4 to 32), tone neutral fg-2, volt, green
+or red; decorative unless `label` is set, since the text beside it speaks. `live` swaps the dot
+for the loader at twice the size (at least 12px) with the head in the tone.
 
 `PixelLoader` is six square pixels in a 2x3 grid with a light walking the perimeter clockwise
 (order 0, 1, 3, 5, 4, 2) and a two-cell trail: head fg-1 (or the tone), trail fg-3 then fg-4, rest
@@ -573,11 +579,11 @@ glyph's place**; the agent's name always sits beside the mark.
 
 | State | Inside the tile |
 |---|---|
-| idle | The agent's code in Geist, fg-2: one letter under 24px at `0.56 * size`, two letters from 24px at `0.38 * size`; weight 500, or 600 below a 12px glyph |
+| idle | The agent's two-letter code in Geist, fg-2, at every size (one letter would make Claude Code and Codex both C): `0.5 * size` under 24px, never under 7px, and `0.38 * size` from 24px; a one-character code ("?") at `0.56 * size`; weight 500, or 600 below a 12px glyph |
 | thinking, streaming, tool | The 2x3 pixel loader (4.5) at its state's tempo |
-| waiting | A solid volt square, `0.375 * size` (parity-adjusted to centre on whole pixels) |
+| waiting | A solid volt dot, `0.375 * size` across (parity-adjusted to centre on whole pixels) |
 | done | A white pixel check (cells `max(2, round(size / 8))`), drawn once a pixel at a time, 50ms apart (about 250ms, X Money's check), by CSS |
-| error | A solid red square, same geometry as waiting |
+| error | A solid red dot, same geometry as waiting |
 | ghost (any state) | Transparent tile, 1px dashed line-strong outline, the code in fg-3 (it is text, so it keeps AA contrast) |
 
 Codes: CC Claude Code, CX Codex, PI Pi, MP oh-my-pi, AG Antigravity, HM Hermes, CU Cursor, GB
@@ -590,7 +596,7 @@ in luminance as well as hue (17.9:1 against 6.9:1 on black), and the label and t
 the mark always say the state.
 
 Sizes in use: 14 (composer pill, event chips), 16 (header, bylines, live gutter, pickers, menus),
-24 (onboarding roster, agent dock, library), 32 (Agents, settings), 48 (settings), 56 (empty
+24 (onboarding roster, New chat, library), 32 (Agents, settings), 48 (settings), 56 (empty
 state).
 
 ### 4.14 `Logo`, `Wordmark` and the app icon
@@ -931,8 +937,8 @@ width the panel floats over the chat with the shadow.
 words at x 44; rows sit 4px apart. One row style: 14/20 fg-2 at rest, a surface-2 fill and fg-1
 under the hand, surface-3 while pressed.
 
-1. Band (52px, drags the window): the 24px logo (fg-1) at x 20, or at x 84 on macOS, clear of the
-   traffic lights (`data-os` on the app); the 28px collapse toggle at the right (⌘\).
+1. Band (52px, drags the window): only the 28px collapse toggle at the right (⌘\), Grok's; the
+   band's left stays empty for the macOS traffic lights. The logo lives in the footer.
 2. Utility rows (32px, radius 8): Search (⌘ K) and New chat (⌘ N) with 16px fg-3 icons. Their
    keycaps show only while the row is under the hand or the keyboard.
 3. **Needs you** (only while a chat waits): "Needs you" in 14/20 500 fg-2 with the count in volt.
@@ -952,27 +958,16 @@ under the hand, surface-3 while pressed.
    (⌘Z); Delete asks in a dialog. ⌘⌫ archives the open chat unless the caret is in text. Arrow
    keys move a surface-4 row with the 2px rail; Enter opens. "Show 12 more" in fg-3 ends long
    lists.
-6. **Agent dock** (above the account row, no line): one 28px `AgentMark` tile per usable product,
-   4px apart from x 20. A product is a brand (Claude Code and its ACP adapter are one); its tile is
-   the first ready variant in catalog order, which lists native before adapters. Missing, broken and
-   alternate variants, and the scripted demo while a real agent is usable, wait behind a dashed
-   "+N" tile whose menu starts a chat with a usable variant or opens the Agents screen to install
-   one. Each state has its own look and one small motion: detecting, a dashed open tile with the
-   code in fg-3 and a 1px fg-3 line scanning it top to bottom (1400ms, linear); found, the filled
-   tile settles in once (opacity and scale 0.86 to 1, 250ms `--g-ease-out`); a sign-in or an update,
-   a 4px fg-1 square on the corner; working, the walking loader; needs you, the volt square, arriving
-   once and never pulsing. Under the hand the ring and code step up to fg over Harvey's 300ms settle.
-   Reduced motion holds every tile still. Graphite's tooltip names the agent, state and version
-   after 500ms. Click opens the agent card (296px): 32px mark, name 16/22 600, version and state in
-   mono 12 fg-3, one line about it, "New chat with Claude Code" (soft 28), "Agent settings" (ghost),
-   then the verified install's actions.
-7. **Account row** (44px, after Vercel's user row and Grok's avatar): a 28px round avatar with the
-   profile's initials (surface-3, line-strong ring, 12/16 600 fg-1), the name 14/20 500 fg-1 over its
-   storage or sync state in 12/16 fg-3, and a 28px kebab that opens a 220px menu: Settings (⌘ ,),
-   Agents, Diagnostics.
+6. **Footer** (44px, Grok's calm foot, owner decision 2026-10-28): the 24px logo (fg-1) at x 20
+   and one 28px ghost Settings button (16px gear, fg-3) under the band's toggle, with Graphite's
+   tooltip "Settings (⌘ ,)". Nothing else: no agent tiles, no profile row, no status text. Agents
+   live on the Agents screen (Settings and the palette's Open agents), profiles and sync on
+   Settings' Account page, Diagnostics in the palette. One exception says where to look: an account
+   whose sync is paused or failing puts a 6px fg-1 dot on the button's corner, cut out of the black,
+   and the button's name says why ("Open settings, sync paused · 3 pending").
 
-Collapsed rail: 72px (⌘\ or the toggle): the toggle, then Search and New chat as 32px icon rows;
-the logo, the projects, the dock and the account row step aside until it opens again.
+Collapsed rail: 72px (⌘\ or the toggle): the toggle, then Search and New chat as 32px icon rows,
+and Settings at the foot; the logo and the projects step aside until it opens again.
 
 ### 6.3 Chat header
 
@@ -1364,6 +1359,8 @@ reviewed command as rows, a status line led by its mark (a still green square wh
 white check or red square after), the terminal well at 144px until Start and full height after,
 and Copy selection beside the one Start.
 
+**Quit auracode?** (sm width, in the window, never the light system dialog): the window comes forward, one fg-2 sentence per fact (active chats, open terminals, unsaved messages, an unconfirmed draft), then Keep auracode open (soft, focused, so Enter keeps it) and the explicit red pill ("Stop agents and quit"). Esc, the scrim and the close button keep auracode open. Only when the page cannot show it within 3 s does the system dialog ask, Keep open first and default.
+
 **Recreate the deleted folder?** (the Git workspace dialog's missing worktree, sm width): Rust's
 sentence that uncommitted files from the deleted folder are gone and everything committed is kept,
 then Branch, Commit (12 characters) and Folder as 36px rows on inset hairlines with their values in
@@ -1462,7 +1459,7 @@ Every screen ships only when all of these hold.
       sparkle icons, no 3D.
 - [ ] Two-tone headings at one size and weight; no serif, no italic, no gradient text.
 - [ ] Structure from hairlines and value steps; cards only for things that float or dock.
-- [ ] Pixels are square and crisp; status is a square, never a glowing dot.
+- [ ] Pixels are square and crisp; status is a flat circle, never a glow.
 - [ ] Nothing idles, breathes, pulses or parallaxes; motion starts with an event and ends with it;
       reduced motion is honoured from the OS and from `data-motion`, and content is never hidden.
 - [ ] Concrete copy: verbs, objects and numbers ("Ran pnpm test · 19 passed · 4.2s"); no hype words,

@@ -245,6 +245,7 @@
   height: 6px;
   margin-left: auto;
   background-color: var(--g-volt);
+  border-radius: var(--g-radius-pill);
 }
 
 .library-sources {

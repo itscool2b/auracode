@@ -6,6 +6,7 @@ import { orbitClock, createFrameClock as orbitCreateFrameClock } from "../orbit/
 import { CopyButton as OrbitCopyButton } from "../orbit/index";
 import { CopyButton } from "./CopyButton";
 import { DitherField } from "./DitherField";
+import graphiteCss from "./graphite.css?raw";
 import * as graphite from "./index";
 import { Keycap } from "./Keycap";
 import { Logo, Wordmark } from "./Logo";
@@ -76,7 +77,7 @@ describe("server rendering", () => {
     expect(renderToString(createElement(Wordmark, { mark: false }))).not.toContain("<svg");
   });
 
-  it("renders status dots as squares and live ones as the loader", () => {
+  it("renders status dots as circles and live ones as the loader", () => {
     const dot = renderToString(createElement(StatusDot, { tone: "volt" }));
     expect(dot).toContain('data-tone="volt"');
     expect(dot).toContain('aria-hidden="true"');
@@ -86,6 +87,8 @@ describe("server rendering", () => {
     expect(live).toContain("g-loader g-status-live");
     expect(live.match(/<rect/g)).toHaveLength(6);
     expect(live).toContain("g-px-green");
+    // Every still status dot is a flat circle, the owner's call on 2026-10-28.
+    expect(graphiteCss).toMatch(/.g-status-dot {[^}]*border-radius: 50%;/);
   });
 
   it("renders a loader's six cells at their static pattern", () => {

@@ -4,11 +4,11 @@ import { createRoot } from "react-dom/client";
 import fullAuto from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-full-auto.events.json";
 import thinking from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-thinking.events.json";
 import type { AgentEntry, AuraEvent, EventBatch, SessionStatus } from "../bindings";
-import { AgentDock } from "../components/chat/AgentDock";
 import { ChatList } from "../components/chat/ChatList";
 import { SidebarBand } from "../components/chat/ChatsScreen";
 import { ChatView } from "../components/chat/ChatView";
 import { CommandPalette, type PaletteCommand } from "../components/chat/CommandPalette";
+import { SidebarFooter } from "../components/chat/SidebarFooter";
 import { createXtermRuntime } from "../components/chat/terminalRuntime";
 import {
   attachResult,
@@ -51,52 +51,6 @@ const AGENT: AgentEntry = {
   installation: null,
   latest_release: null,
 };
-
-/** The catalog as a real machine might report it: native and adapter twins, one still detecting. */
-const DOCK_AGENTS: AgentEntry[] = [
-  AGENT,
-  {
-    ...AGENT,
-    id: "claude-acp",
-    name: "Claude Code (ACP)",
-    description: "Claude Code through its ACP adapter",
-  },
-  {
-    ...AGENT,
-    id: "codex",
-    name: "Codex",
-    description: "Your installed Codex CLI",
-    availability: { state: "ready", version: "0.164.0", path: "Recorded protocol fixture" },
-  },
-  {
-    ...AGENT,
-    id: "codex-acp",
-    name: "Codex (ACP)",
-    description: "Codex through its ACP adapter",
-    availability: { state: "missing", reason: "codex-acp is not installed." },
-  },
-  {
-    ...AGENT,
-    id: "pi",
-    name: "Pi",
-    description: "Your installed Pi coding agent",
-    availability: { state: "checking" },
-  },
-  {
-    ...AGENT,
-    id: "cursor",
-    name: "Cursor",
-    description: "Cursor CLI through ACP",
-    availability: { state: "missing", reason: "cursor-agent is not installed." },
-  },
-  {
-    ...AGENT,
-    id: "mock",
-    name: "Demo agent (scripted, no AI)",
-    description: "A scripted demo with no AI",
-    availability: { state: "ready", version: null, path: "built in" },
-  },
-];
 
 /** Driver golden events receive only the actor's turn boundaries needed by the real chat store. */
 function recorded(source: { events: readonly { type: string; data: unknown }[] }): AuraEvent[] {
@@ -745,16 +699,9 @@ function Preview() {
           onSelect={() => setSelected("preview")}
           onNewChat={() => setSelected(null)}
         />
-        <AgentDock
-          agents={DOCK_AGENTS}
-          chats={[chat]}
+        <SidebarFooter
           profile={{ id: "local", kind: "local", display_name: "Local", created_at: 1 }}
-          onChoose={() => setSelected(null)}
-          onAgents={() => alert("This is a development-only protocol fixture. No agents run here.")}
           onSettings={() =>
-            alert("This is a development-only protocol fixture. No agents run here.")
-          }
-          onDiagnostics={() =>
             alert("This is a development-only protocol fixture. No agents run here.")
           }
         />
