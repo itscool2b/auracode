@@ -81,9 +81,7 @@ export function AgentGroup({
       <div className="settings-row config-sync-agent-head">
         <div className="settings-row-text">
           <div>
-            <strong id={headingId} className="config-sync-name">
-              {name}
-            </strong>
+            <strong id={headingId}>{name}</strong>
             <p>
               {items.length} {items.length === 1 ? "item" : "items"}
               {readyCount ? ` · ${readyCount} ready` : ""}

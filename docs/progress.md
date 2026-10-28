@@ -3705,7 +3705,9 @@ warnings` and `cargo clippy -p aura-core --features account-sync --lib --tests -
 `cargo test` for aura-config (117), aura-agents (97, with fake CLIs on temporary homes),
 aura-protocol (26), aura-core lib with account-sync (566) and the desktop lib (210, bindings
 regenerated). In Chromium and WebKit: `check-plugin-library`, `check-settings` (with
-`check-config-sync`), `check-setup` and `check-agent-installations`, axe clean. Sheets beside the
+`check-config-sync`), `check-setup` and `check-agent-installations`, axe clean; `check-layout`
+296 of 296 views clean, run against this branch's own dev server (another worktree held the
+probe's default port). Sheets beside the
 Vercel references are the ignored `target/design-research/sheets/app-plugins-*.png`. Not done: the
 hand walkthrough of the built app, real listings against the owner's own homes (only sandboxed
 homes were used), and the Windows and macOS CI run.
