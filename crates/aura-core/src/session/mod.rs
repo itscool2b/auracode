@@ -166,9 +166,11 @@ pub struct NewChatDefaults {
 impl NewChatDefaults {
     /// The model a never-started chat of `agent_id` starts on, unless its project names one.
     pub(crate) fn model_for(&self, agent_id: &str) -> Option<String> {
-        self.model
-            .clone()
-            .filter(|_| self.agent.as_deref() == Some(agent_id))
+        self.model.clone().filter(|_| {
+            self.agent.as_deref().is_some_and(|agent| {
+                aura_agents::agent_of(agent) == aura_agents::agent_of(agent_id)
+            })
+        })
     }
 }
 
@@ -542,6 +544,25 @@ impl SessionManager {
         self.deps().detector.detect_all(refresh).await
     }
 
+    /// An agent's Connection setting on this device (`None`: Automatic), then every agent as
+    /// [`agents`](Self::agents) reports it. Applies to new sessions: a chat's saved session keeps
+    /// resuming through the connection that made it.
+    pub async fn set_agent_connection(
+        &self,
+        agent_id: &str,
+        connection: Option<&str>,
+    ) -> Result<Vec<AgentEntry>, SessionError> {
+        let detector = &self.deps().detector;
+        if detector.agent(agent_id).is_none() {
+            return Err(SessionError::UnknownAgent(agent_id.to_owned()));
+        }
+        detector
+            .set_connection(agent_id, connection)
+            .await
+            .map_err(SessionError::AgentUnavailable)?;
+        Ok(detector.cached())
+    }
+
     pub async fn agent_maintenance(
         &self,
         agent_id: &str,
@@ -688,7 +709,7 @@ impl SessionManager {
         let agent_name = self
             .deps()
             .detector
-            .spec(&record.agent_id)
+            .agent(&record.agent_id)
             .map_or_else(|| record.agent_id.clone(), |spec| spec.name.to_owned());
         let agent_name = aura_agents::hosts::display_name(&agent_name, &record.agent_host);
         // The list never reads a folder (that is what a macOS privacy prompt guards), so a refusal
@@ -748,9 +769,11 @@ impl SessionManager {
             return Err(SessionError::AgentUnavailable(reason));
         }
         let detector = &self.deps().detector;
-        if detector.spec(agent_id).is_none() {
+        if detector.agent(agent_id).is_none() {
             return Err(SessionError::UnknownAgent(agent_id.to_owned()));
         }
+        // A chat names its agent; its first start picks the connection.
+        let agent_id = aura_agents::agent_of(agent_id);
         if let Some(entry) = detector
             .cached()
             .into_iter()

@@ -3,6 +3,7 @@ use crate::chatstore::conversation::{
     ApplyContinuation, ConversationCommand, ConversationReply, ConversationSnapshot,
     PendingContinuation,
 };
+use aura_agents::agent_of;
 use aura_drivers::driver::NativeStartOptions;
 use aura_protocol::{
     PromptPart,
@@ -172,16 +173,22 @@ impl SessionManager {
                 |turn| turn.agent_id.clone(),
             )
         });
-        let spec = self
+        // Chats name agents; a saved session names the connection that made it, which decides
+        // whether it can fork natively.
+        let agent = self
             .deps()
             .detector
-            .spec(&agent_id)
+            .agent(&agent_id)
             .ok_or_else(|| SessionError::UnknownAgent(agent_id.clone()))?;
+        let agent_id = agent_of(&agent_id).to_owned();
         let switch = matches!(action, ContinuationAction::SwitchAgent { .. });
         let creates_chat = matches!(action, ContinuationAction::Fork { .. });
         let session = snapshot.target_session.as_ref().filter(|session| {
             session.host == snapshot.chat.agent_host && session.cwd == snapshot.chat.folder
         });
+        let spec = session
+            .and_then(|session| self.deps().detector.spec(&session.agent_id))
+            .unwrap_or(agent);
         let resumes_native = relocation.is_none()
             && !snapshot.remote_history
             && switch
@@ -383,6 +390,9 @@ impl SessionManager {
                 force_fresh: !resumes_native && !uses_native_fork,
                 resume_source: uses_native_fork
                     .then(|| session.and_then(|session| session.native_session_id.clone()))
+                    .flatten(),
+                connection: uses_native_fork
+                    .then(|| session.map(|session| session.agent_id.clone()))
                     .flatten(),
                 native_start: if uses_native_fork {
                     NativeStartOptions {

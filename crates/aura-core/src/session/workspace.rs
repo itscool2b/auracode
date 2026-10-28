@@ -260,7 +260,7 @@ impl SessionManager {
         request: ProjectChatCreate,
     ) -> Result<WorkspaceChat, SessionError> {
         bounded(&request.agent_id, "Agent ID", 128)?;
-        if self.deps().detector.spec(&request.agent_id).is_none() {
+        if self.deps().detector.agent(&request.agent_id).is_none() {
             return Err(SessionError::UnknownAgent(request.agent_id));
         }
         let _guard = self.shared().organization.lock().await;
@@ -277,7 +277,7 @@ impl SessionManager {
             .organization(OrganizationCommand::CreateChat {
                 id: chat_id.clone(),
                 folder_id: request.folder_id,
-                agent_id: request.agent_id,
+                agent_id: aura_agents::agent_of(&request.agent_id).to_owned(),
             })
             .await?;
         let _ = self
@@ -306,7 +306,7 @@ impl SessionManager {
         }
         if let Some(agent) = &input.default_agent {
             bounded(agent, "Default agent", 128)?;
-            if self.deps().detector.spec(agent).is_none() {
+            if self.deps().detector.agent(agent).is_none() {
                 return Err(SessionError::UnknownAgent(agent.clone()));
             }
         }

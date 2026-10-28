@@ -33,13 +33,12 @@ impl NativeSessionScope {
         launch: &LaunchSpec,
         folder: &Path,
     ) -> Self {
-        let (provider, config) = match agent_id {
-            "claude" | "claude-acp" => ("claude", Some(("CLAUDE_CONFIG_DIR", ".claude"))),
-            "codex" | "codex-acp" => ("codex", Some(("CODEX_HOME", ".codex"))),
-            "opencode" | "opencode-v2" => ("opencode", None),
-            "antigravity" | "agy-stream" => ("antigravity", None),
-            "grok" | "grok-stream" => ("grok", None),
-            other => (other, None),
+        // Every connection of one agent shares its transcript store.
+        let provider = aura_agents::agent_of(agent_id);
+        let config = match provider {
+            "claude" => Some(("CLAUDE_CONFIG_DIR", ".claude")),
+            "codex" => Some(("CODEX_HOME", ".codex")),
+            _ => None,
         };
         // Only configuration-path variables are consulted. Credential files and values are
         // neither inspected nor added to the claim key.

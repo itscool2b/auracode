@@ -384,7 +384,10 @@ fn snapshot(
                 id: row.get(0)?,
                 name: row.get(1)?,
                 color: row.get(2)?,
-                default_agent: row.get(3)?,
+                // A default saved as a connection (`codex-acp`) names its agent.
+                default_agent: row
+                    .get::<_, Option<String>>(3)?
+                    .map(|agent| aura_agents::agent_of(&agent).to_owned()),
                 default_model: row.get(4)?,
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,

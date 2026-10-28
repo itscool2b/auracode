@@ -448,7 +448,7 @@ async fn missing_module_forgets_install() {
         errors(&h.stored(&chat.id).await),
         [(
             ErrorKind::AgentExited,
-            "The Claude Code (ACP) adapter's files are damaged. Press Retry to download it again."
+            "The Claude Code adapter's files are damaged. Press Retry to download it again."
                 .to_owned()
         )]
     );

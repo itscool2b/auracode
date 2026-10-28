@@ -154,6 +154,8 @@ fn turn_agents(
         if agent_id.is_empty() {
             continue;
         }
+        // A turn names its agent, not the connection its session ran through.
+        let agent_id = aura_agents::agent_of(&agent_id).to_owned();
         let agent_name = aura_agents::get(&agent_id)
             .map_or_else(|| agent_id.clone(), |spec| spec.name.to_owned());
         agents.push(TurnAgent {

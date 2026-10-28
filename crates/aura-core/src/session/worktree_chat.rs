@@ -43,7 +43,7 @@ impl SessionManager {
         input: WorktreeChatInput,
     ) -> Result<WorktreeChatPreview, SessionError> {
         bounded(&input.agent_id, "Agent ID", 128)?;
-        if self.deps().detector.spec(&input.agent_id).is_none() {
+        if self.deps().detector.agent(&input.agent_id).is_none() {
             return Err(SessionError::UnknownAgent(input.agent_id));
         }
         let title = present(&input.title);
@@ -137,7 +137,7 @@ impl SessionManager {
                 chat_id,
                 folder_id: input.folder_id,
                 source,
-                agent_id: input.agent_id,
+                agent_id: aura_agents::agent_of(&input.agent_id).to_owned(),
                 title: title.map(str::to_owned),
                 bring_changes: input.bring_changes,
                 setup,
@@ -186,7 +186,7 @@ impl SessionManager {
             .ok_or_else(|| {
                 invalid("This worktree chat preview expired or was already used. Review it again.")
             })?;
-        if self.deps().detector.spec(&prepared.agent_id).is_none() {
+        if self.deps().detector.agent(&prepared.agent_id).is_none() {
             return Err(SessionError::UnknownAgent(prepared.agent_id));
         }
         let folder = self.chat_create_preview(&prepared.folder_id).await?;

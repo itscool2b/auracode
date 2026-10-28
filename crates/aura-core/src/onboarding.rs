@@ -358,6 +358,7 @@ impl OnboardingStore {
                 if let Some(agent) = &agent_id {
                     identifier(agent, 128, "The agent identifier is invalid.")?;
                 }
+                let agent_id = agent_id.map(|agent| aura_agents::agent_of(&agent).to_owned());
                 let general = &mut next.preferences.general;
                 if general.default_agent != agent_id {
                     general.default_model = None;
@@ -437,6 +438,11 @@ fn fill_defaults(mut value: serde_json::Value) -> serde_json::Value {
     if let Some(general) = general.as_object_mut() {
         for (key, default) in defaults {
             general.entry(key).or_insert(default);
+        }
+        // A default saved as a connection (`claude-acp`) names its agent.
+        if let Some(serde_json::Value::String(agent)) = general.get_mut("default_agent") {
+            let canonical = aura_agents::agent_of(agent).to_owned();
+            *agent = canonical;
         }
     }
     value
@@ -690,6 +696,39 @@ mod tests {
                 Err(SetupError::Invalid(_))
             ));
         }
+    }
+
+    /// A default saved as "Claude Code (ACP)" from before agents had one entry each is Claude
+    /// Code, with its model; choosing an adapter id now saves the agent.
+    #[test]
+    fn a_default_agent_saved_as_a_connection_reads_as_its_agent() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("onboarding.json"),
+            br#"{"version":1,"boot_seen":true,"preferences":{"revision":3,"step":"project","motion":"full","completed":true,"first_project_id":null,"general":{"default_agent":"codex-acp","default_model":"gpt-6"}}}"#,
+        )
+        .unwrap();
+        let store = OnboardingStore::open(dir.path()).unwrap();
+        let general = store.snapshot().unwrap().preferences.general;
+        assert_eq!(general.default_agent.as_deref(), Some("codex"));
+        assert_eq!(general.default_model.as_deref(), Some("gpt-6"));
+        // The same agent through its other id keeps the model.
+        let same = store
+            .apply(
+                3,
+                SetupAction::DefaultAgent {
+                    agent_id: Some("codex-acp".into()),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            same.preferences.general.default_agent.as_deref(),
+            Some("codex")
+        );
+        assert_eq!(
+            same.preferences.general.default_model.as_deref(),
+            Some("gpt-6")
+        );
     }
 
     #[test]
