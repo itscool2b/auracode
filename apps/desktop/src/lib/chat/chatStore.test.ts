@@ -914,6 +914,49 @@ describe("prompts and the session", () => {
     expect(store.getSnapshot().queue).toEqual([]);
     expect(store.getSnapshot().actionError).toBeNull();
   });
+
+  it("Send now takes the shell's exact queue, and the session's word on why the rest waits", async () => {
+    const row = (prompt_id: string, preview: string, held = false) => ({
+      prompt_id,
+      preview,
+      held,
+      created_at: 1,
+    });
+    let gone = false;
+    const fake = new FakeTransport({
+      sendNow: async (_chat, id) =>
+        gone
+          ? Promise.reject(new CommandError("request_not_pending", "gone"))
+          : id === "p2"
+            ? [row("p2", "two"), row("p1", "one")]
+            : Promise.reject(new CommandError("invalid_argument", "Wait for the chat change.")),
+    });
+    const store = await opened(fake, historyPage(CHAT, []), 0, {
+      queue: [row("p1", "one"), row("p2", "two", true)],
+      session: sessionInfo({
+        status: "running",
+        queue_held: true,
+        queue_wait: { reason: "working" },
+      }),
+    });
+    expect(store.getSnapshot().session?.queue_wait).toEqual({ reason: "working" });
+    await store.sendNow("p2");
+    expect(store.getSnapshot().queue).toEqual([row("p2", "two"), row("p1", "one")]);
+    expect(fake.callsOf("sendNow")).toEqual([[CHAT, "p2"]]);
+    // The interrupt that follows says the turn is stopping; the header carries the new wait.
+    fake
+      .lastAttach()
+      .onFrame(
+        frame(CHAT, 0, [ev.session({ status: "cancelling", queue_wait: { reason: "stopping" } })]),
+      );
+    expect(store.getSnapshot().session?.queue_wait).toEqual({ reason: "stopping" });
+    // A refusal says why in the header; a prompt that already went is simply dropped.
+    await store.sendNow("p1");
+    expect(store.getSnapshot().actionError).toBe("Wait for the chat change.");
+    gone = true;
+    await store.sendNow("p1");
+    expect(store.getSnapshot().queue).toEqual([row("p2", "two")]);
+  });
 });
 
 describe("cards and questions", () => {

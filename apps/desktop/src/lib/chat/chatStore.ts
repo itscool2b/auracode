@@ -864,6 +864,18 @@ export class ChatStore {
     return this.#act(() => this.#transport.resumeQueue(this.chatId));
   }
 
+  /**
+   * "Send now": the prompt goes next, released if it was held; a running turn is interrupted
+   * first. The shell's answer is the exact queue after the change.
+   */
+  async sendNow(promptId: string): Promise<void> {
+    try {
+      this.#queueChanged(await this.#transport.sendNow(this.chatId, promptId));
+    } catch (error) {
+      this.#queueActionFailed(promptId, error);
+    }
+  }
+
   start(fresh: boolean): Promise<void> {
     return this.#act(() => this.#transport.start(this.chatId, fresh));
   }

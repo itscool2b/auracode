@@ -1,9 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { AgentEntry, ConfigOption } from "../../bindings";
+import type { AgentEntry, ConfigOption, QueueWait } from "../../bindings";
 import { agentLineup } from "../../lib/chat/agentLineup";
 import { agentChoice, NewChatDraft } from "../../lib/chat/appStore";
 import { type ChatState, ChatStore } from "../../lib/chat/chatStore";
+import { queueWaitView } from "../../lib/chat/queueWait";
 import {
   attachResult,
   chatSummary,
@@ -686,6 +687,110 @@ describe("the queue and the composer's stop button", () => {
     const two = renderToStaticMarkup(<StillWorking minutes={2} onStop={noop} />);
     expect(two).toContain("Still working (no output for 2 minutes)");
     expect(buttons(two).map((b) => b.label)).toEqual(["Stop"]);
+    // With a message waiting behind the quiet turn, it also offers to send that one now.
+    const waiting = renderToStaticMarkup(
+      <StillWorking minutes={1} onStop={noop} onSendNow={noop} />,
+    );
+    expect(buttons(waiting).map((b) => b.label)).toEqual(["Send now", "Stop"]);
+  });
+
+  it("says why queued messages wait, with the one action that helps", () => {
+    const queue = [
+      { prompt_id: "p1", preview: "first", held: false, created_at: 1 },
+      { prompt_id: "p2", preview: "second", held: false, created_at: 2 },
+    ];
+    const render = (wait: QueueWait, context = { canInterrupt: true, canRecreate: false }) =>
+      renderToStaticMarkup(
+        <QueueList
+          queue={queue}
+          held={false}
+          wait={queueWaitView(wait, "Claude Code", context)}
+          onRemove={noop}
+          onSendQueued={noop}
+          onSendNow={noop}
+          onStart={noop}
+          onRecreate={noop}
+        />,
+      );
+    const working = render({ reason: "working" });
+    expect(working).toContain('data-test-reason="working"');
+    expect(working).toContain("Claude Code is still working");
+    expect(working).toContain(" · 2 queued");
+    expect(buttons(working).map((b) => b.label)).toEqual([
+      "Send now",
+      "Remove from the queue",
+      "Remove from the queue",
+    ]);
+    const starting = render({ reason: "starting" });
+    expect(starting).toContain("Starting Claude Code");
+    expect(starting).not.toMatch(/>2 queued</);
+    expect(buttons(starting).map((b) => b.label)).not.toContain("Send now");
+    const finishing = render({ reason: "finishing_turn", since: 1, sends_at: 15_001 });
+    expect(finishing).toContain("Waiting for Claude Code to finish its turn");
+    expect(buttons(finishing)[0]?.label).toBe("Send now");
+    expect(render({ reason: "needs_answer", question: false })).toContain(
+      "Answer the permission request first",
+    );
+    const failed = render({ reason: "start_failed" });
+    expect(failed).toContain("data-failed");
+    expect(buttons(failed)[0]?.label).toBe("Retry");
+    expect(buttons(render({ reason: "stopped" }))[0]?.label).toBe("Start");
+    const missing = render({ reason: "folder_missing" }, { canInterrupt: true, canRecreate: true });
+    expect(missing).toContain("This worktree&#x27;s folder is missing");
+    expect(buttons(missing)[0]?.label).toBe("Recreate folder");
+    // An agent that cannot interrupt gets no Send now while it works.
+    expect(
+      buttons(render({ reason: "working" }, { canInterrupt: false, canRecreate: false })).map(
+        (b) => b.label,
+      ),
+    ).not.toContain("Send now");
+  });
+
+  it("says what held the messages and lets one be sent on its own", () => {
+    const html = renderToStaticMarkup(
+      <QueueList
+        queue={[
+          { prompt_id: "p1", preview: "first", held: true, created_at: 1 },
+          { prompt_id: "p2", preview: "second", held: true, created_at: 2 },
+        ]}
+        held={true}
+        wait={queueWaitView({ reason: "held", after: "restart" }, "Grok Build", {
+          canInterrupt: true,
+          canRecreate: false,
+        })}
+        onRemove={noop}
+        onSendQueued={noop}
+        onSendNow={noop}
+      />,
+    );
+    expect(html).toContain("Held after a restart");
+    expect(html).toContain('data-test-reason="held"');
+    // The reason replaces the general note under the list.
+    expect(html).not.toContain("chat-queue-note");
+    expect(buttons(html).map((b) => b.label)).toEqual([
+      "Send queued",
+      "Send this message now",
+      "Remove from the queue",
+      "Send this message now",
+      "Remove from the queue",
+    ]);
+  });
+
+  it("says a message typed while the agent starts goes once it has started", () => {
+    const html = renderToStaticMarkup(
+      <SendControls
+        status="starting"
+        steerable={false}
+        disabled={false}
+        agentName="Grok Build"
+        onSend={noop}
+        onSteer={noop}
+      />,
+    );
+    expect(html).toContain('data-testid="composer-after-start"');
+    expect(html).toContain(">Once started</span>");
+    expect(buttons(html)).toEqual([{ label: "Send once started", disabled: false }]);
+    expect(html).toContain("Send once Grok Build has started (Enter)");
   });
 });
 

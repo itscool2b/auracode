@@ -2,6 +2,7 @@ import { ArrowUp, Paperclip, Square } from "lucide-react";
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { FileMention, SessionStatus, SlashCommand } from "../../bindings";
 import { matchingCommands, slashQuery } from "../../lib/chat/present";
+import { composerPlaceholder } from "../../lib/chat/queueWait";
 import type { ComposerContext, ComposerTransport } from "../../lib/composer";
 import { errorMessage } from "../../lib/errors";
 import { ContextChips, MentionMenu, useComposerContext } from "./ComposerContext";
@@ -153,7 +154,7 @@ export function Composer({
         value={text}
         disabled={!context.ready}
         onBlur={() => void context.flush()}
-        placeholder={working ? `Queue a message for ${agentName}` : `Message ${agentName}`}
+        placeholder={composerPlaceholder(status, agentName)}
         title="Enter sends, Shift+Enter adds a line, / lists commands, @ mentions a file"
         aria-controls={mentionOpen ? mentionId : menuOpen ? menuId : undefined}
         onPaste={(event) => {
@@ -277,7 +278,8 @@ export function Composer({
  * The send control. Idle: the send disc. While a turn runs, a typed message goes in one pill: an
  * agent that steers (Codex) offers "Steer" beside the Queue disc; one that takes messages only
  * between turns (Claude Code, Pi) says "After this turn" there instead, calm text and no dead
- * control, and the Queue disc is what Enter does.
+ * control, and the Queue disc is what Enter does. While the agent starts, the same calm words say
+ * the message goes once it has started, not that it is queued.
  */
 export function SendControls({
   status,
@@ -297,9 +299,22 @@ export function SendControls({
   const after = useId();
   const working = status === "running" || status === "starting";
   const afterTurn = status === "running" && !steerable;
+  const afterStart = status === "starting";
   return (
-    <span className="chat-send-group" data-split={steerable || afterTurn ? "" : undefined}>
-      {steerable ? (
+    <span
+      className="chat-send-group"
+      data-split={steerable || afterTurn || afterStart ? "" : undefined}
+    >
+      {afterStart ? (
+        <span
+          id={after}
+          className="chat-after-turn"
+          data-testid="composer-after-start"
+          title={`${agentName} is starting. Your message goes once it is ready.`}
+        >
+          Once started
+        </span>
+      ) : steerable ? (
         <button
           type="button"
           className="chat-steer"
@@ -326,14 +341,16 @@ export function SendControls({
         data-testid="composer-send"
         disabled={disabled}
         onClick={onSend}
-        aria-label={working ? "Queue message" : "Send message"}
-        aria-describedby={afterTurn ? after : undefined}
+        aria-label={afterStart ? "Send once started" : working ? "Queue message" : "Send message"}
+        aria-describedby={afterTurn || afterStart ? after : undefined}
         title={
-          afterTurn
-            ? `Queue for ${agentName} after this turn (Enter)`
-            : working
-              ? "Queue message (Enter)"
-              : "Send message (Enter)"
+          afterStart
+            ? `Send once ${agentName} has started (Enter)`
+            : afterTurn
+              ? `Queue for ${agentName} after this turn (Enter)`
+              : working
+                ? "Queue message (Enter)"
+                : "Send message (Enter)"
         }
       >
         <ArrowUp size={16} strokeWidth={2.25} />
