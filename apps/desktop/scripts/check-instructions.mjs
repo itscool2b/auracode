@@ -230,11 +230,17 @@ try {
       await page.getByRole("status").filter({ hasText: "Saved" }).waitFor();
       assert.equal(await page.getByText("Edited copy for Pi").count(), 0);
       // An agent installed later reads nothing yet; Set up reviews one file again, nothing more.
+      const before = (await calls()).length;
       await page.getByRole("button", { name: "Set up Grok Build", exact: true }).click();
       await dialog("Use one file for every agent").waitFor();
-      assert.equal((await calls()).at(-1), "review:universal:source");
+      // StrictMode asks twice in development and cancels the stale review; nothing is applied.
+      const since = (await calls()).slice(before);
+      assert.ok(since.includes("review:universal:source"), since.join(", "));
+      assert.equal(since.includes("apply"), false);
       await page.getByRole("button", { name: "Cancel", exact: true }).click();
-      await page.waitForFunction(() => window.instructionsFixture.calls().at(-1) === "cancel");
+      await dialog("Use one file for every agent").waitFor({ state: "detached" });
+      const after = (await calls()).slice(before);
+      assert.ok(after.includes("cancel") && !after.includes("apply"), after.join(", "));
 
       // Size limits show beside the text, per agent that reads it.
       await open("instructions-large");
