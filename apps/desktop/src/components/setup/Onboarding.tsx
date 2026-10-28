@@ -338,7 +338,7 @@ export function Onboarding({
   const headings: Record<SetupStep, [string, string]> = {
     welcome: ["Welcome to auracode.", "Your agents, one window."],
     agents: agentsHeading,
-    account: ["Accounts are optional.", "auracode works without one."],
+    account: ["Accounts are optional.", "And invite-only for now."],
     motion: ["Add a first project.", "Any folder works."],
     project: ["Add a first project.", "Any folder works."],
   };
@@ -409,8 +409,8 @@ export function Onboarding({
             </h1>
             {step === "welcome" ? (
               <p className="setup-lead">
-                Run the coding agents already on this computer in one chat window. Each keeps its
-                own sign-in, and nothing leaves this machine.
+                Run the coding agents already on this computer in one window. Each keeps its own
+                sign-in, and auracode itself needs no account or network.
               </p>
             ) : null}
             {step === "agents" ? (
@@ -441,9 +441,8 @@ export function Onboarding({
             {step === "account" ? (
               <>
                 <p className="setup-lead">
-                  auracode runs on this computer, offline, with no account. Sync between your
-                  devices is invite-only for now: if you have an invitation, sign in with that
-                  email.
+                  auracode needs no account and no network. Your chats, projects and agents stay on
+                  this computer. With an invitation, an account adds sync between your devices.
                 </p>
                 <button type="button" className="g-button g-button-outline" onClick={onAccount}>
                   Open Account

@@ -161,6 +161,12 @@ try {
         `${engine} discovery accessibility`,
       );
       await page.getByRole("button", { name: "Continue", exact: true }).click();
+      // The account step says plainly that accounts are optional and invite-only, and that
+      // auracode needs neither an account nor the network.
+      await page
+        .getByRole("heading", { name: /^Accounts are optional\.\s*And invite-only for now\.$/ })
+        .waitFor();
+      await page.getByText("auracode needs no account and no network.", { exact: false }).waitFor();
       await page.getByRole("button", { name: "Open Account", exact: true }).click();
       await page.getByRole("heading", { name: "Account settings" }).waitFor();
       await assertNoVendorCalls();
