@@ -229,6 +229,9 @@ pub struct AgentEntry {
     pub installation: Option<crate::agents::AgentInstallation>,
     #[serde(default)]
     pub latest_release: Option<crate::agents::LatestRelease>,
+    /// The installed version against its latest known release, computed by detection.
+    #[serde(default)]
+    pub harness: Option<crate::plugins::HarnessStatus>,
 }
 
 /// Whether an agent can start here.
@@ -531,6 +534,7 @@ mod tests {
             last_verified: "auracode".into(),
             installation: None,
             latest_release: None,
+            harness: None,
         };
         assert_eq!(round_trip(&entry), entry);
         let env = EnvStatus {

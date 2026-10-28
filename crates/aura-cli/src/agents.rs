@@ -98,6 +98,7 @@ mod tests {
             last_verified: "1.0.0".into(),
             installation: None,
             latest_release: None,
+            harness: None,
         };
         let lines = render(
             &env,
