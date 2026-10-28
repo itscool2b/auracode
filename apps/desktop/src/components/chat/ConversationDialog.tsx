@@ -287,7 +287,7 @@ export function ConversationDialog({
           ) : null}
           <button
             type="button"
-            className="g-button"
+            className="g-button g-button-primary"
             disabled={busy}
             onClick={() => void editPreview()}
           >

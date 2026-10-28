@@ -27,6 +27,9 @@
   user-select: text;
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
+  /* Room for the scrollbar on both edges from the start, so the column never jumps sideways when
+     an answer first outgrows the pane, and stays centred. */
+  scrollbar-gutter: stable both-edges;
 }
 
 .chat-transcript-inner {

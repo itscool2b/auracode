@@ -261,8 +261,34 @@
   overflow-wrap: anywhere;
 }
 
-.changes-result summary {
+.changes-result summary,
+.changes-warnings > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-6);
+  width: fit-content;
+  list-style: none;
   cursor: pointer;
+}
+
+:is(.changes-result summary, .changes-warnings > summary)::-webkit-details-marker {
+  display: none;
+}
+
+/* Graphite's quiet chevron in place of the browser's triangle (New chat's), turning down open. */
+:is(.changes-result summary, .changes-warnings > summary)::before {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background-color: var(--g-fg-3);
+  -webkit-mask: var(--ui-chevron) center / 12px no-repeat;
+  mask: var(--ui-chevron) center / 12px no-repeat;
+  transition: transform var(--g-dur-base) var(--g-ease-quint);
+}
+
+:is(.changes-result details, .changes-warnings)[open] > summary::before {
+  transform: rotate(90deg);
 }
 
 .changes-panel-footer {
