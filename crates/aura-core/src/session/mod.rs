@@ -41,6 +41,7 @@ mod tests;
 mod workspace;
 mod workspace_folders;
 mod workspace_removal;
+mod worktree_chat;
 mod worktree_setup;
 
 pub use config_library::LibraryRoots;
@@ -281,11 +282,15 @@ pub(crate) struct Shared {
     continuations: Mutex<HashMap<String, conversation::PreparedContinuation>>,
     project_tools: Mutex<HashMap<String, project_tools::PreparedTools>>,
     removals: Mutex<HashMap<String, workspace_removal::Prepared>>,
+    worktree_chats: Mutex<HashMap<String, worktree_chat::Prepared>>,
     #[cfg(feature = "account-sync")]
     preservation: Mutex<HashMap<String, preservation::Prepared>>,
     /// Tests: checks of this folder take this long (a hung network mount); they are counted.
     #[cfg(test)]
     slow_folder: Mutex<Option<(PathBuf, Duration, Arc<AtomicU64>)>>,
+    /// Tests: the next worktree chat record fails to save after its worktree exists.
+    #[cfg(test)]
+    fail_worktree_chat_save: AtomicBool,
 }
 
 impl Shared {
@@ -401,8 +406,11 @@ impl SessionManager {
                     continuations: Mutex::new(HashMap::new()),
                     project_tools: Mutex::new(HashMap::new()),
                     removals: Mutex::new(HashMap::new()),
+                    worktree_chats: Mutex::new(HashMap::new()),
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
+                    #[cfg(test)]
+                    fail_worktree_chat_save: AtomicBool::new(false),
                 }),
                 actors: Mutex::new(HashMap::new()),
                 next_actor: AtomicU64::new(1),

@@ -6,10 +6,17 @@ mod git;
 mod identity;
 mod initialize;
 mod inspect;
+mod new_chat;
+pub(crate) use new_chat::{NewChatPlan, NewChatRequest};
+#[cfg(test)]
+mod new_chat_tests;
 mod publication;
 mod publish;
 mod records;
 mod recovery;
+mod recreate;
+#[cfg(test)]
+mod recreate_tests;
 pub(crate) mod setup;
 pub(crate) use identity::FolderIdentity;
 mod setup_files;
@@ -47,6 +54,8 @@ pub struct GitWorkspaces {
     prepared: std::sync::Mutex<HashMap<String, create::Prepared>>,
     actions: std::sync::Mutex<HashMap<String, actions::PreparedAction>>,
     recoveries: std::sync::Mutex<HashMap<String, recovery::PreparedRecovery>>,
+    new_chats: std::sync::Mutex<HashMap<String, new_chat::Prepared>>,
+    recreations: std::sync::Mutex<HashMap<String, recreate::Prepared>>,
     pull_requests: std::sync::Mutex<HashMap<String, publish::PreparedPullRequest>>,
     setups: std::sync::Mutex<HashMap<String, setup::Prepared>>,
     initializations: std::sync::Mutex<HashMap<String, initialize::Prepared>>,
@@ -132,6 +141,8 @@ impl GitWorkspaces {
             prepared: std::sync::Mutex::new(HashMap::new()),
             actions: std::sync::Mutex::new(HashMap::new()),
             recoveries: std::sync::Mutex::new(HashMap::new()),
+            new_chats: std::sync::Mutex::new(HashMap::new()),
+            recreations: std::sync::Mutex::new(HashMap::new()),
             pull_requests: std::sync::Mutex::new(HashMap::new()),
             setups: std::sync::Mutex::new(HashMap::new()),
             initializations: std::sync::Mutex::new(HashMap::new()),

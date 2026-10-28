@@ -28,14 +28,14 @@ fn invalid(message: &str) -> GitError {
 }
 
 impl GitWorkspaces {
-    fn recovery_record(&self, chat_id: &str, id: &str) -> Result<ManagedWorktree> {
+    pub(super) fn recovery_record(&self, chat_id: &str, id: &str) -> Result<ManagedWorktree> {
         self.read_records()?
             .into_iter()
             .find(|record| record.id == id && record.chat_id == chat_id)
             .ok_or_else(|| invalid("This chat does not own that worktree."))
     }
 
-    fn recovery_paths(&self, record: &ManagedWorktree) -> Result<(PathBuf, PathBuf)> {
+    pub(super) fn recovery_paths(&self, record: &ManagedWorktree) -> Result<(PathBuf, PathBuf)> {
         let identifier = uuid::Uuid::parse_str(&record.id)
             .map_err(|_| invalid("The saved worktree identifier is invalid."))?
             .to_string();
@@ -350,7 +350,12 @@ async fn verify_recovery_ref(
     Ok(())
 }
 
-async fn ensure_locked(git: &git::Git, source: &Path, folder: &Path, id: &str) -> Result<()> {
+pub(super) async fn ensure_locked(
+    git: &git::Git,
+    source: &Path,
+    folder: &Path,
+    id: &str,
+) -> Result<()> {
     let git_dir = text(
         &git.run(folder, args(&["rev-parse", "--absolute-git-dir"]), 8192)
             .await?,
@@ -429,7 +434,7 @@ fn read_metadata_text(path: &Path, limit: usize) -> Result<String> {
         .map_err(|_| invalid("The Git ownership metadata cannot be represented."))
 }
 
-fn owned_directory(path: &Path) -> Result<bool> {
+pub(super) fn owned_directory(path: &Path) -> Result<bool> {
     match std::fs::symlink_metadata(path) {
         Ok(meta) if linked(&meta) || !meta.is_dir() => Err(invalid(
             "An owned recovery path was replaced with a link or another file type.",

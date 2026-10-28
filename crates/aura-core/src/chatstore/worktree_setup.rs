@@ -6,6 +6,9 @@ pub(crate) struct Command {
     pub chat_id: String,
     pub source: String,
     pub save: Option<WorktreeSetupInput>,
+    /// Reads the recipe of this project folder directly, for a chat that does not exist yet.
+    /// `source` must still be this device's path of the folder. Saving is not allowed this way.
+    pub folder_id: Option<String>,
 }
 
 impl Command {
@@ -27,10 +30,17 @@ pub(crate) fn execute(
             "The setup source no longer belongs to this chat's project on this device.".into(),
         )
     };
-    let folder: String = conn.query_row(
-        "SELECT pf.id FROM project_folders pf JOIN folder_locations fl ON fl.folder_id=pf.id JOIN chats c ON c.project_id=pf.project_id WHERE c.id=?1 AND c.deleted=0 AND pf.deleted=0 AND fl.device_id=?2 AND fl.path=?3 ORDER BY pf.id LIMIT 1",
-        params![command.chat_id, device, command.source], |row| row.get(0)
-    ).optional()?.ok_or_else(invalid)?;
+    let folder: String = match &command.folder_id {
+        Some(_) if command.save.is_some() => return Err(invalid()),
+        Some(folder_id) => conn.query_row(
+            "SELECT pf.id FROM project_folders pf JOIN projects p ON p.id=pf.project_id JOIN folder_locations fl ON fl.folder_id=pf.id WHERE pf.id=?1 AND pf.deleted=0 AND p.deleted=0 AND fl.device_id=?2 AND fl.path=?3",
+            params![folder_id, device, command.source], |row| row.get(0)
+        ).optional()?,
+        None => conn.query_row(
+            "SELECT pf.id FROM project_folders pf JOIN folder_locations fl ON fl.folder_id=pf.id JOIN chats c ON c.project_id=pf.project_id WHERE c.id=?1 AND c.deleted=0 AND pf.deleted=0 AND fl.device_id=?2 AND fl.path=?3 ORDER BY pf.id LIMIT 1",
+            params![command.chat_id, device, command.source], |row| row.get(0)
+        ).optional()?,
+    }.ok_or_else(invalid)?;
     let input = if let Some(input) = command.save {
         crate::gitworkspaces::setup::validate(&input).map_err(|_| {
             rusqlite::Error::InvalidParameterName("The setup recipe is invalid.".into())
@@ -77,6 +87,7 @@ mod tests {
             chat_id: chat_id.into(),
             source: source.into(),
             save,
+            folder_id: None,
         };
         execute(
             db.conn(),
@@ -99,6 +110,29 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
+        // A chat that does not exist yet reads its source folder's recipe by folder ID only.
+        let by_folder = |source: &str, save| Command {
+            chat_id: String::new(),
+            source: source.into(),
+            save,
+            folder_id: Some(folder.clone()),
+        };
+        assert_eq!(
+            execute(db.conn(), "dev", 2, by_folder("/workspace", None))
+                .unwrap()
+                .input,
+            input
+        );
+        assert!(execute(db.conn(), "dev", 2, by_folder("/other", None)).is_err());
+        assert!(
+            execute(
+                db.conn(),
+                "dev",
+                2,
+                by_folder("/workspace", Some(WorktreeSetupInput::default()))
+            )
+            .is_err()
+        );
         db.conn().execute("INSERT INTO folder_locations(folder_id,device_id,path) VALUES (?1,'second','/workspace')",[folder]).unwrap();
         assert_eq!(
             execute(db.conn(), "second", 2, request(&chat, "/workspace", None))

@@ -316,7 +316,7 @@ impl SessionManager {
         Ok(())
     }
 
-    async fn organization(
+    pub(super) async fn organization(
         &self,
         command: OrganizationCommand,
     ) -> Result<Organization, SessionError> {
@@ -350,7 +350,7 @@ impl SessionManager {
             .ok_or_else(missing)
     }
 
-    async fn workspace_view(&self, mut organization: Organization) -> WorkspaceSnapshot {
+    pub(super) async fn workspace_view(&self, mut organization: Organization) -> WorkspaceSnapshot {
         let paths = organization
             .projects
             .iter()
@@ -403,7 +403,7 @@ impl SessionManager {
     }
 }
 
-fn bounded(value: &str, label: &str, max: usize) -> Result<(), SessionError> {
+pub(super) fn bounded(value: &str, label: &str, max: usize) -> Result<(), SessionError> {
     if value.trim().is_empty() || value.len() > max || value.chars().any(char::is_control) {
         return Err(invalid(&format!(
             "{label} must contain 1 to {max} bytes without control characters."
@@ -412,7 +412,7 @@ fn bounded(value: &str, label: &str, max: usize) -> Result<(), SessionError> {
     Ok(())
 }
 
-async fn checked_folder(path: &str) -> Result<PathBuf, SessionError> {
+pub(super) async fn checked_folder(path: &str) -> Result<PathBuf, SessionError> {
     bounded(path, "Folder path", 32_768)?;
     let path = PathBuf::from(path);
     if !path.is_absolute() {
@@ -427,7 +427,7 @@ async fn checked_folder(path: &str) -> Result<PathBuf, SessionError> {
     .map_err(|_| SessionError::Internal("Checking the folder failed.".into()))?
 }
 
-fn usable(folder: &ProjectFolder) -> Result<&str, SessionError> {
+pub(super) fn usable(folder: &ProjectFolder) -> Result<&str, SessionError> {
     if folder.folder_state != FolderState::Ok || folder.unavailable_reason.is_some() {
         return Err(invalid(
             folder
@@ -442,7 +442,7 @@ fn usable(folder: &ProjectFolder) -> Result<&str, SessionError> {
         .ok_or_else(|| invalid("Locate this folder on this device."))
 }
 
-fn missing() -> SessionError {
+pub(super) fn missing() -> SessionError {
     invalid("The project, folder, or chat no longer exists.")
 }
 fn invalid(message: &str) -> SessionError {

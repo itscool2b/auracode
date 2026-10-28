@@ -59,6 +59,15 @@ pub(crate) enum OrganizationCommand {
         folder_id: String,
         agent_id: String,
     },
+    /// A chat whose primary folder is a new worktree of `source_folder_id`. The worktree path is
+    /// registered in the same project, as a relocation into a worktree does.
+    CreateWorktreeChat {
+        id: String,
+        source_folder_id: String,
+        path: PathBuf,
+        agent_id: String,
+        title: Option<String>,
+    },
 }
 
 impl OrganizationCommand {
@@ -114,6 +123,19 @@ impl OrganizationCommand {
                 folder_id,
                 agent_id,
             } => id.len() + folder_id.len() + agent_id.len(),
+            Self::CreateWorktreeChat {
+                id,
+                source_folder_id,
+                path,
+                agent_id,
+                title,
+            } => {
+                id.len()
+                    + source_folder_id.len()
+                    + path.as_os_str().len()
+                    + agent_id.len()
+                    + title.as_ref().map_or(0, String::len)
+            }
         }
     }
 }
@@ -257,6 +279,18 @@ pub(crate) fn execute(
         } => {
             let project_id: String = conn.query_row("SELECT pf.project_id FROM project_folders pf JOIN projects p ON p.id=pf.project_id JOIN folder_locations fl ON fl.folder_id=pf.id AND fl.device_id=?2 WHERE pf.id=?1 AND pf.deleted=0 AND p.deleted=0", params![folder_id,device], |row| row.get(0))?;
             conn.execute("INSERT INTO chats (id,project_id,folder_id,active_agent,created_at,updated_at,device_id,agent_host) VALUES (?1,?2,?3,?4,?5,?5,?6,'{\"type\":\"native\"}')", params![id,project_id,folder_id,agent_id,now,device])?;
+            id
+        }
+        OrganizationCommand::CreateWorktreeChat {
+            id,
+            source_folder_id,
+            path,
+            agent_id,
+            title,
+        } => {
+            let project_id: String = conn.query_row("SELECT pf.project_id FROM project_folders pf JOIN projects p ON p.id=pf.project_id JOIN folder_locations fl ON fl.folder_id=pf.id AND fl.device_id=?2 WHERE pf.id=?1 AND pf.deleted=0 AND p.deleted=0", params![source_folder_id,device], |row| row.get(0))?;
+            let folder_id = add_folder(conn, device, now, &project_id, &path)?;
+            conn.execute("INSERT INTO chats (id,project_id,folder_id,title,title_source,active_agent,created_at,updated_at,device_id,agent_host) VALUES (?1,?2,?3,?4,CASE WHEN ?4 IS NULL THEN NULL ELSE 'manual' END,?5,?6,?6,?7,'{\"type\":\"native\"}')", params![id,project_id,folder_id,title,agent_id,now,device])?;
             id
         }
     };
