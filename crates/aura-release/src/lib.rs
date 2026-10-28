@@ -14,6 +14,8 @@ use minisign_verify::{PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+pub mod publish;
+
 const MAX_PLAN: u64 = 64 * 1024;
 const MAX_SIGNATURE: u64 = 4096;
 const MAX_ARTIFACT: u64 = 512 * 1024 * 1024;
@@ -473,6 +475,18 @@ pub fn prepare(plan: &ReleasePlan, artifacts: &Path, destination: &Path) -> Resu
 
 /// Re-verifies staged bytes and every generated manifest before any external publication step.
 pub fn verify(destination: &Path, expected_public_key: &str) -> Result<()> {
+    verify_stage(destination, expected_public_key).map(|_| ())
+}
+
+/// A stage as `verify` checked it: the manifests regenerated from the exact artifact bytes read,
+/// so publication can trust these values instead of reading the files a second time.
+pub(crate) struct VerifiedStage {
+    pub(crate) plan: ReleasePlan,
+    pub(crate) payload: std::path::PathBuf,
+    pub(crate) manifests: BTreeMap<String, Vec<u8>>,
+}
+
+pub(crate) fn verify_stage(destination: &Path, expected_public_key: &str) -> Result<VerifiedStage> {
     ensure!(
         !expected_public_key.trim().is_empty(),
         "An independently pinned updater public key is required"
@@ -493,17 +507,22 @@ pub fn verify(destination: &Path, expected_public_key: &str) -> Result<()> {
         payload.starts_with(&root),
         "Payload resolves outside the stage"
     );
-    for (name, expected) in assemble(&plan, &payload, None)? {
+    let manifests = assemble(&plan, &payload, None)?;
+    for (name, expected) in &manifests {
         ensure!(
-            bounded(&root, &name, MAX_PLAN)? == expected,
+            &bounded(&root, name, MAX_PLAN)? == expected,
             "Generated {name} no longer matches the verified artifacts"
         );
         if name == "SHA256SUMS" {
             ensure!(
-                bounded(&payload, &name, MAX_PLAN)? == expected,
+                &bounded(&payload, name, MAX_PLAN)? == expected,
                 "Versioned checksums changed"
             );
         }
     }
-    Ok(())
+    Ok(VerifiedStage {
+        plan,
+        payload,
+        manifests,
+    })
 }
