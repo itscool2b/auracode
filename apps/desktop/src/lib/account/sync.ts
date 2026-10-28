@@ -77,3 +77,29 @@ export function observeAccountSync(
     stop();
   };
 }
+
+/** An account profile's sync state in a few words ("Synced", "Sync paused · 3 pending"). */
+export function syncStatusLabel(status: AccountSyncStatus | null | undefined): string {
+  if (status === undefined) return "Sync status loading";
+  if (status === null) return "Sync status unavailable";
+  const pending = status.pending_changes;
+  const count = pending ? ` · ${pending} pending` : "";
+  switch (status.state) {
+    case "idle":
+      return pending
+        ? `${pending} ${pending === 1 ? "change" : "changes"} pending`
+        : status.last_sync_at === null
+          ? "Sync ready"
+          : "Synced";
+    case "syncing":
+      return `Syncing${count}`;
+    case "offline":
+      return `Offline${count}`;
+    case "paused":
+      return `Sync paused${count}`;
+    case "error":
+      return `Sync needs attention${count}`;
+    case "inactive":
+      return `Sync inactive${count}`;
+  }
+}

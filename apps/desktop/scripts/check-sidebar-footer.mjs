@@ -1,4 +1,8 @@
-/** The production sidebar row with synthetic native status and delayed responses only. */
+/**
+ * The production sidebar footer (the logo and one Settings button) with synthetic profile switches
+ * and delayed sync status only: no agent dock, no profile row, and a sync dot only while an
+ * account's sync needs a hand.
+ */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
@@ -19,7 +23,7 @@ const settled = (page) =>
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const origin = "http://127.0.0.1:1470";
-const out = resolve(app, "../../target/profile-status-browser");
+const out = resolve(app, "../../target/sidebar-footer-browser");
 const server = spawn(
   process.execPath,
   [
@@ -59,47 +63,65 @@ try {
       await page.route("**/*", (route) =>
         new URL(route.request().url()).hostname === "127.0.0.1" ? route.continue() : route.abort(),
       );
-      await page.goto(`${origin}/scripts/fixtures/profile-status.html`);
-      await page.getByRole("status").filter({ hasText: "Stored on this device" }).waitFor();
-      const calls = () => page.evaluate(() => window.profileStatusFixture.calls());
+      await page.goto(`${origin}/scripts/fixtures/sidebar-footer.html`);
+      const sidebar = page.getByRole("complementary", { name: "Sidebar" });
+      const settings = sidebar.getByTestId("sidebar-settings");
+      const named = (name) =>
+        page.waitForFunction(
+          (expected) =>
+            document
+              .querySelector('[data-testid="sidebar-settings"]')
+              ?.getAttribute("aria-label") === expected,
+          name,
+        );
+      await named("Open settings");
+      const calls = () => page.evaluate(() => window.sidebarFooterFixture.calls());
       assert.deepEqual(await calls(), []);
-      await page.screenshot({ path: resolve(out, `${engine}-local.png`) });
-      await page.getByRole("button", { name: "Work account", exact: true }).click();
-      await page.getByRole("status").filter({ hasText: "Sync status loading" }).waitFor();
-      await page.evaluate(() => window.profileStatusFixture.resolve(0, "work"));
-      await page.getByRole("status").filter({ hasText: "Synced" }).waitFor();
-      await page.screenshot({ path: resolve(out, `${engine}-account.png`) });
-      await page.evaluate(() => window.profileStatusFixture.event("work", "paused", 3));
-      await page.getByRole("status").filter({ hasText: "Sync paused · 3 pending" }).waitFor();
+      // Only the logo and Settings: no agent tiles, no profile row, no status text.
+      assert.equal(await sidebar.locator(".g-agent-mark").count(), 0);
+      assert.equal(await sidebar.getByRole("status").count(), 0);
+      assert.equal(await sidebar.locator(".chat-sidebar-footer-logo").count(), 1);
+      assert.equal(await sidebar.locator("button, summary, a").count(), 1);
+      assert.equal(await settings.getAttribute("aria-keyshortcuts"), "Control+, Meta+,");
       await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
-      await page.screenshot({ path: resolve(out, `${engine}-paused.png`) });
-      // Settings lives in the account row's menu (Vercel's user row): open it, then choose.
-      await page.locator('summary[aria-label="Account menu"]').click();
-      await page.getByRole("button", { name: "Open settings" }).click();
+      await sidebar.screenshot({ path: resolve(out, `${engine}-local.png`) });
+      await page.getByRole("button", { name: "Work account", exact: true }).click();
+      await page.evaluate(() => window.sidebarFooterFixture.resolve(0, "work"));
+      await named("Open settings");
+      assert.equal(await settings.getAttribute("data-attention"), null);
+      await page.evaluate(() => window.sidebarFooterFixture.event("work", "paused", 3));
+      await named("Open settings, sync paused · 3 pending");
+      assert.equal(await settings.getAttribute("data-attention"), "");
+      await settled(page);
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      await sidebar.screenshot({ path: resolve(out, `${engine}-paused.png`) });
+      await settings.click();
       assert.ok((await calls()).includes("settings"));
+      // Another profile never shows a status cached for the one before it.
       await page.getByRole("button", { name: "Personal account", exact: true }).click();
-      await page.getByRole("status").filter({ hasText: "Sync status loading" }).waitFor();
-      await page.evaluate(() => window.profileStatusFixture.event("work", "error", 9));
-      assert.equal(await page.getByRole("status").textContent(), "Sync status loading");
+      await named("Open settings");
+      await page.evaluate(() => window.sidebarFooterFixture.event("work", "error", 9));
+      assert.equal(await settings.getAttribute("aria-label"), "Open settings");
       await page.getByRole("button", { name: "Local", exact: true }).click();
       await page.evaluate(() => {
-        window.profileStatusFixture.resolve(1, "personal");
-        window.profileStatusFixture.event("personal", "offline", 2);
+        window.sidebarFooterFixture.resolve(1, "personal");
+        window.sidebarFooterFixture.event("personal", "error", 2);
       });
-      await page.getByRole("status").filter({ hasText: "Stored on this device" }).waitFor();
+      await named("Open settings");
+      assert.equal(await settings.getAttribute("data-attention"), null);
       assert.equal((await calls()).filter((call) => call === "snapshot").length, 2);
       assert.ok((await calls()).includes("stop:personal"));
       await page.getByRole("button", { name: "Work account", exact: true }).click();
       await page.evaluate(() => {
-        window.profileStatusFixture.event("work", "syncing", 1);
-        window.profileStatusFixture.resolve(2, "work");
+        window.sidebarFooterFixture.event("work", "syncing", 1);
+        window.sidebarFooterFixture.resolve(2, "work");
       });
-      await page.getByRole("status").filter({ hasText: "Syncing · 1 pending" }).waitFor();
+      await named("Open settings");
       await page.setViewportSize({ width: 390, height: 700 });
       assert.equal(
-        await page
-          .locator(".chat-account-row")
+        await sidebar
+          .locator(".chat-sidebar-footer")
           .evaluate((node) => node.scrollWidth <= node.clientWidth),
         true,
       );
@@ -108,7 +130,7 @@ try {
       await page.screenshot({ path: resolve(out, `${engine}-narrow.png`) });
       assert.deepEqual(errors, []);
       console.log(
-        `${engine}: Local, Account, paused, cached/event ordering, profile switch cleanup and accessibility passed`,
+        `${engine}: logo and Settings only, sync dot on paused, cached/event ordering, profile switch cleanup and accessibility passed`,
       );
     } finally {
       await browser.close();

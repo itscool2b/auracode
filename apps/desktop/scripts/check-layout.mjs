@@ -1,8 +1,8 @@
 /**
  * The layout probe: walks every ?preview= mode (and library.html, the fixture with its own page) in
  * Chromium and WebKit at two window sizes, plus the chat shell's floating layers opened as a person
- * opens them ("settled#picker": the picker, the palette, the chat and account menus, the other
- * agents, the Changes panel, a typed message) and other screens' states ("library.html#library-item"),
+ * opens them ("settled#picker": the picker, the palette, the chat menu, the Changes panel, a
+ * typed message) and other screens' states ("library.html#library-item"),
  * and fails on the five things a clean screen never has:
  *
  * 1. Horizontal overflow: the page scrolls sideways, or a visible box reaches past the window.
@@ -85,8 +85,6 @@ export const MODES = [
   "settled#palette",
   "settled#chat-menu",
   "settled#changes",
-  "settled#other-agents",
-  "settled#account-menu",
   "thinking#typed",
   // The worktree chip's popover, Local chosen, a refused branch name, the setup terminal after
   // Create, and the recreate dialog for a deleted worktree folder.
@@ -136,8 +134,6 @@ const OPENERS = {
   palette: (page) => page.keyboard.press("Control+k"),
   "chat-menu": (page) => page.locator('summary[aria-label="Chat details and controls"]').click(),
   changes: (page) => page.getByRole("button", { name: "Changes", exact: true }).click(),
-  "other-agents": (page) => page.locator('summary[aria-label$="other agents"]').click(),
-  "account-menu": (page) => page.locator('summary[aria-label="Account menu"]').click(),
   "busy-folder": async (page) => {
     await page.getByLabel("Move to project").selectOption({ label: "Website" });
     await page.getByTestId("move-folder").selectOption("folder-site");

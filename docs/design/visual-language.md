@@ -583,7 +583,7 @@ in luminance as well as hue (17.9:1 against 6.9:1 on black), and the label and t
 the mark always say the state.
 
 Sizes in use: 14 (composer pill, event chips), 16 (header, bylines, live gutter, pickers, menus),
-24 (onboarding roster, agent dock, library), 32 (Agents, settings), 48 (settings), 56 (empty
+24 (onboarding roster, New chat, library), 32 (Agents, settings), 48 (settings), 56 (empty
 state).
 
 ### 4.14 `Logo`, `Wordmark` and the app icon
@@ -904,8 +904,8 @@ width the panel floats over the chat with the shadow.
 words at x 44; rows sit 4px apart. One row style: 14/20 fg-2 at rest, a surface-2 fill and fg-1
 under the hand, surface-3 while pressed.
 
-1. Band (52px, drags the window): the 24px logo (fg-1) at x 20, or at x 84 on macOS, clear of the
-   traffic lights (`data-os` on the app); the 28px collapse toggle at the right (⌘\).
+1. Band (52px, drags the window): only the 28px collapse toggle at the right (⌘\), Grok's; the
+   band's left stays empty for the macOS traffic lights. The logo lives in the footer.
 2. Utility rows (32px, radius 8): Search (⌘ K) and New chat (⌘ N) with 16px fg-3 icons. Their
    keycaps show only while the row is under the hand or the keyboard.
 3. **Needs you** (only while a chat waits): "Needs you" in 14/20 500 fg-2 with the count in volt.
@@ -925,27 +925,16 @@ under the hand, surface-3 while pressed.
    (⌘Z); Delete asks in a dialog. ⌘⌫ archives the open chat unless the caret is in text. Arrow
    keys move a surface-4 row with the 2px rail; Enter opens. "Show 12 more" in fg-3 ends long
    lists.
-6. **Agent dock** (above the account row, no line): one 28px `AgentMark` tile per usable product,
-   4px apart from x 20. A product is a brand (Claude Code and its ACP adapter are one); its tile is
-   the first ready variant in catalog order, which lists native before adapters. Missing, broken and
-   alternate variants, and the scripted demo while a real agent is usable, wait behind a dashed
-   "+N" tile whose menu starts a chat with a usable variant or opens the Agents screen to install
-   one. Each state has its own look and one small motion: detecting, a dashed open tile with the
-   code in fg-3 and a 1px fg-3 line scanning it top to bottom (1400ms, linear); found, the filled
-   tile settles in once (opacity and scale 0.86 to 1, 250ms `--g-ease-out`); a sign-in or an update,
-   a 4px fg-1 square on the corner; working, the walking loader; needs you, the volt square, arriving
-   once and never pulsing. Under the hand the ring and code step up to fg over Harvey's 300ms settle.
-   Reduced motion holds every tile still. Graphite's tooltip names the agent, state and version
-   after 500ms. Click opens the agent card (296px): 32px mark, name 16/22 600, version and state in
-   mono 12 fg-3, one line about it, "New chat with Claude Code" (soft 28), "Agent settings" (ghost),
-   then the verified install's actions.
-7. **Account row** (44px, after Vercel's user row and Grok's avatar): a 28px round avatar with the
-   profile's initials (surface-3, line-strong ring, 12/16 600 fg-1), the name 14/20 500 fg-1 over its
-   storage or sync state in 12/16 fg-3, and a 28px kebab that opens a 220px menu: Settings (⌘ ,),
-   Agents, Diagnostics.
+6. **Footer** (44px, Grok's calm foot, owner decision 2026-10-28): the 24px logo (fg-1) at x 20
+   and one 28px ghost Settings button (16px gear, fg-3) under the band's toggle, with Graphite's
+   tooltip "Settings (⌘ ,)". Nothing else: no agent tiles, no profile row, no status text. Agents
+   live on the Agents screen (Settings and the palette's Open agents), profiles and sync on
+   Settings' Account page, Diagnostics in the palette. One exception says where to look: an account
+   whose sync is paused or failing puts a 6px fg-1 dot on the button's corner, cut out of the black,
+   and the button's name says why ("Open settings, sync paused · 3 pending").
 
-Collapsed rail: 72px (⌘\ or the toggle): the toggle, then Search and New chat as 32px icon rows;
-the logo, the projects, the dock and the account row step aside until it opens again.
+Collapsed rail: 72px (⌘\ or the toggle): the toggle, then Search and New chat as 32px icon rows,
+and Settings at the foot; the logo and the projects step aside until it opens again.
 
 ### 6.3 Chat header
 
