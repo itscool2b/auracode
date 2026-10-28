@@ -167,3 +167,35 @@ fn passphrase_wrong_key_tamper_and_account_substitution_preserve_the_saved_file(
         Err(VaultError::Corrupt)
     ));
 }
+
+#[test]
+fn the_sweep_removes_only_auracode_entries_from_a_keychain_store() {
+    // keyring-core's process-memory mock only; it matches services by substring, as a loose store
+    // might, so the lookalike service proves the exact second check.
+    let mock = keyring_core::mock::Store::new().unwrap();
+    let make = |service: &str, user: &str| {
+        let entry = mock.build(service, user, None).unwrap();
+        entry.set_secret(b"synthetic").unwrap();
+        entry
+    };
+    let first = make(SERVICE, &format!("{SERVICE}:first"));
+    let second = make(SERVICE, &format!("{SERVICE}:second"));
+    let vendor = make("Claude Code-credentials", "someone");
+    let lookalike = make("x-auracode.sync.v1", "x-auracode.sync.v1:third");
+    let foreign_user = make(SERVICE, "not-ours");
+    let store: Arc<keyring_core::CredentialStore> = mock.clone();
+    assert_eq!(sweep_by_service(store.as_ref()).unwrap(), 2);
+    assert!(matches!(
+        first.get_secret(),
+        Err(keyring_core::Error::NoEntry)
+    ));
+    assert!(matches!(
+        second.get_secret(),
+        Err(keyring_core::Error::NoEntry)
+    ));
+    assert_eq!(vendor.get_secret().unwrap(), b"synthetic");
+    assert_eq!(lookalike.get_secret().unwrap(), b"synthetic");
+    assert_eq!(foreign_user.get_secret().unwrap(), b"synthetic");
+    // A second sweep is a no-op.
+    assert_eq!(sweep_by_service(store.as_ref()).unwrap(), 0);
+}

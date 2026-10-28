@@ -34,6 +34,9 @@ zeroize = { version = "1.9.1", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-native-keyring-store = { version = "1.1.0", default-features = false }
+# The data cleanup's sweep of auracode's own Credential Manager targets (vault.rs). Raw bindings,
+# already in the tree; the keyring store's own search would read every credential's metadata.
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
 rusqlite = { workspace = true, optional = true, features = ["bundled-sqlcipher-vendored-openssl"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
