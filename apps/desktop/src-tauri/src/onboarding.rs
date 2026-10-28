@@ -46,6 +46,15 @@ impl SetupService {
         })
     }
 
+    /// One reviewed preference change at the given revision, for commands outside setup.
+    pub(crate) fn apply_action(
+        &self,
+        revision: u32,
+        action: SetupAction,
+    ) -> Result<SetupSnapshot, AppError> {
+        self.run(Some((revision, action)))
+    }
+
     /// The saved preferences, without marking the boot seen (that is the interface's to do).
     pub fn preferences(&self) -> Result<SetupPreferences, AppError> {
         self.with_store(|store| Ok(store.preferences()))

@@ -86,7 +86,8 @@ where
 {
     let account = state.account_config()?;
     let sessions = state.sessions()?;
-    let (scanner, notices) = sessions.config_sync_scanner().await?;
+    let paused = crate::plugin_library::paused_agents(state);
+    let (scanner, notices) = sessions.config_sync_scanner_for(&paused).await?;
     let guard = Arc::clone(&library.mutation).lock_owned().await;
     let runtime = tokio::runtime::Handle::current();
     let manager = (*sessions).clone();
@@ -201,7 +202,8 @@ pub async fn config_sync_preview(
             }
         }
         let preview = review.preview.clone();
-        if preview.can_apply {
+        // A declaration the agent must install stays reviewable until its installer finishes.
+        if preview.can_apply || !preview.vendor_steps.is_empty() {
             service
                 .pending
                 .lock()
@@ -281,6 +283,88 @@ pub async fn config_sync_apply(
             review,
             pending.files,
             pending.claim.as_ref(),
+        ))
+    })
+    .await
+}
+
+/// The agent's own installer ran for a reviewed declaration (`succeeded` and `exit_code` come
+/// from its terminal). Success that produced exactly the reviewed declaration is acknowledged;
+/// anything else restores that declaration and keeps every other item as it was.
+#[tauri::command]
+#[specta::specta]
+pub async fn config_sync_vendor_finish(
+    state: State<'_, AppState>,
+    library: State<'_, Arc<LibraryService>>,
+    service: State<'_, Arc<ConfigSyncService>>,
+    token: String,
+    succeeded: bool,
+    exit_code: Option<i32>,
+) -> Result<ConfigSyncOutcome, AppError> {
+    service.prune();
+    let pending = service
+        .pending
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .remove(&token)
+        .ok_or_else(|| {
+            AppError::new(
+                AppErrorCode::InvalidArgument,
+                "This configuration review expired or was already used. Review the item again.",
+            )
+        })?;
+    run(&state, &library, move |work, account| {
+        if !pending.generation.is_current() {
+            return Err(ConfigPortError::Stale);
+        }
+        let failure = (!succeeded).then(|| match exit_code {
+            Some(code) => format!("The install exited with code {code}."),
+            None => "The install was stopped before it finished.".into(),
+        });
+        work.runtime.block_on(pending.review.finish_vendor(
+            account.port.as_ref(),
+            &work.scanner,
+            account.journal.as_ref(),
+            succeeded,
+            failure,
+        ))
+    })
+    .await
+}
+
+/// Apply all for one agent: each ready item is its own transaction; one failure keeps the rest.
+#[tauri::command]
+#[specta::specta]
+pub async fn config_sync_apply_agent(
+    state: State<'_, AppState>,
+    library: State<'_, Arc<LibraryService>>,
+    service: State<'_, Arc<ConfigSyncService>>,
+    agent_id: String,
+) -> Result<Vec<ConfigSyncOutcome>, AppError> {
+    let provider = match agent_id.as_str() {
+        "claude" => aura_config::Provider::Claude,
+        "codex" => aura_config::Provider::Codex,
+        "pi" => aura_config::Provider::Pi,
+        _ => {
+            return Err(AppError::new(
+                AppErrorCode::InvalidArgument,
+                "Configuration sync covers Claude Code, Codex and Pi.",
+            ));
+        }
+    };
+    service.prune();
+    let reviewed: BTreeSet<_> = crate::sync::lock(&service.pending)
+        .values()
+        .map(|item| item.review.preview.item.id.clone())
+        .collect();
+    run(&state, &library, move |work, account| {
+        work.runtime.block_on(aura_config::sync::automatic::apply_agent(
+            account.port.as_ref(),
+            &work.scanner,
+            account.journal.as_ref(),
+            account.managed.as_ref(),
+            provider,
+            &reviewed,
         ))
     })
     .await
