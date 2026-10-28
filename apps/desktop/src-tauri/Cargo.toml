@@ -68,9 +68,10 @@ tauri-plugin-notification = "=2.7.0"
 # build 22000+) without the compatibility shims that make GetVersionEx lie.
 windows-version = "0.1.7"
 # The data cleanup mode (uninstall.rs): its dialogs, attaching to a terminal, waiting for the app
-# to exit. Raw bindings, already in the tree.
+# to exit; and the window caption's colours (window.rs). Raw bindings, already in the tree.
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Dwm",
     "Win32_System_Console",
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
