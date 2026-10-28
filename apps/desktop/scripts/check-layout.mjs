@@ -85,6 +85,8 @@ export const MODES = [
   "settled#palette",
   "settled#chat-menu",
   "settled#changes",
+  // The quit question, in the window's own dialog over the chat.
+  "settled&quit#quit",
   "thinking#typed",
   // The worktree chip's popover, Local chosen, a refused branch name, the setup terminal after
   // Create, and the recreate dialog for a deleted worktree folder.
@@ -134,6 +136,7 @@ const OPENERS = {
   palette: (page) => page.keyboard.press("Control+k"),
   "chat-menu": (page) => page.locator('summary[aria-label="Chat details and controls"]').click(),
   changes: (page) => page.getByRole("button", { name: "Changes", exact: true }).click(),
+  quit: (page) => page.getByTestId("quit-keep").waitFor(),
   "busy-folder": async (page) => {
     await page.getByLabel("Move to project").selectOption({ label: "Website" });
     await page.getByTestId("move-folder").selectOption("folder-site");

@@ -1312,6 +1312,8 @@ reviewed command as rows, a status line led by its mark (a still green square wh
 white check or red square after), the terminal well at 144px until Start and full height after,
 and Copy selection beside the one Start.
 
+**Quit auracode?** (sm width, in the window, never the light system dialog): the window comes forward, one fg-2 sentence per fact (active chats, open terminals, unsaved messages, an unconfirmed draft), then Keep auracode open (soft, focused, so Enter keeps it) and the explicit red pill ("Stop agents and quit"). Esc, the scrim and the close button keep auracode open. Only when the page cannot show it within 3 s does the system dialog ask, Keep open first and default.
+
 **Recreate the deleted folder?** (the Git workspace dialog's missing worktree, sm width): Rust's
 sentence that uncommitted files from the deleted folder are gone and everything committed is kept,
 then Branch, Commit (12 characters) and Folder as 36px rows on inset hairlines with their values in

@@ -911,6 +911,27 @@ details.setup-install-review[open] > summary::before {
   left: auto;
 }
 
+/* ---------- Quit question (6.19) ---------- */
+
+/*
+ * "Quit auracode?" in the window's own small dialog: what quitting stops, one fg-2 sentence per
+ * fact, then Keep auracode open (focused) and the red explicit choice.
+ */
+.quit-question-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+  margin: calc(var(--g-space-8) * -1) 0 var(--g-space-20);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.quit-question-body > p {
+  margin: 0;
+}
+
 /* ---------- Collapsed rail ---------- */
 
 .chat-app[data-sidebar-collapsed="true"] .chat-sidebar-toggle {
