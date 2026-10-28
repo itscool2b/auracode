@@ -307,3 +307,42 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* One agent's items under its name, with its switch and Apply all on the heading row. */
+.config-sync-agent + .config-sync-agent {
+  box-shadow: inset 0 1px 0 var(--g-line);
+}
+
+.config-sync-agent-head {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--g-space-12);
+}
+
+/* The installer steps a plugin or package declaration needs here, in order. */
+.config-sync-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+  margin: var(--g-space-12) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.config-sync-steps li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-12);
+  min-height: 44px;
+  padding: var(--g-space-8) var(--g-space-8) var(--g-space-8) var(--g-space-16);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-1);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.config-sync-steps code {
+  color: var(--g-fg-1);
+  font-family: var(--g-mono);
+}

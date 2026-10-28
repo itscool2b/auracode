@@ -116,6 +116,7 @@ pub async fn config_sync_inventory(
     after: Option<String>,
 ) -> Result<ConfigSyncInventory, AppError> {
     let notice = crate::sync::lock(&service.automatic_notice).clone();
+    let paused = crate::plugin_library::paused_agents(&state);
     run(&state, &library, move |work, account| {
         let mut result = work.runtime.block_on(sync::inventory(
             account.port.as_ref(),
@@ -124,6 +125,7 @@ pub async fn config_sync_inventory(
             after.as_deref(),
         ))?;
         result.notices.extend(work.notices);
+        result.paused = paused;
         result.notices.extend(notice);
         let claims = account.managed.load()?.document;
         for item in &mut result.items {
@@ -358,14 +360,15 @@ pub async fn config_sync_apply_agent(
         .map(|item| item.review.preview.item.id.clone())
         .collect();
     run(&state, &library, move |work, account| {
-        work.runtime.block_on(aura_config::sync::automatic::apply_agent(
-            account.port.as_ref(),
-            &work.scanner,
-            account.journal.as_ref(),
-            account.managed.as_ref(),
-            provider,
-            &reviewed,
-        ))
+        work.runtime
+            .block_on(aura_config::sync::automatic::apply_agent(
+                account.port.as_ref(),
+                &work.scanner,
+                account.journal.as_ref(),
+                account.managed.as_ref(),
+                provider,
+                &reviewed,
+            ))
     })
     .await
 }

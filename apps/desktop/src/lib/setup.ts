@@ -46,4 +46,5 @@ export const DEFAULT_GENERAL: GeneralPreferences = {
   notifications: true,
   keep_awake: true,
   close_to_tray: true,
+  config_sync_paused: [],
 };

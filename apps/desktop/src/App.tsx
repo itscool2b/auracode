@@ -6,7 +6,7 @@ import type { AppInfo, StressConfig } from "./bindings";
 import { ChatsScreen } from "./components/chat/ChatsScreen";
 import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
-import { LibraryScreen } from "./components/library/LibraryScreen";
+import { PluginLibraryScreen } from "./components/library/PluginLibraryScreen";
 import { Sidebar } from "./components/Sidebar";
 import { StressView } from "./components/StressView";
 import { AccountPanel } from "./components/settings/AccountPanel";
@@ -425,14 +425,9 @@ export function App({
           />
         ) : null}
         {view === "library" ? (
-          <LibraryScreen
+          <PluginLibraryScreen
             onBack={() => setView("settings")}
-            folders={workspace?.getSnapshot().data?.projects.flatMap((project) =>
-              project.folders.map((folder) => ({
-                id: folder.id,
-                label: `${project.name} / ${folder.display_name}`,
-              })),
-            )}
+            onAgents={() => setView("agents")}
           />
         ) : null}
       </>

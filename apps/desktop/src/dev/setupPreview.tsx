@@ -55,6 +55,17 @@ const agents: AgentEntry[] = [
   launch: id,
   needs_download: false,
   last_verified: "2026-10-26",
+  // Claude Code has a newer release: the Agents page's calm update line and its Update action.
+  harness:
+    id === "claude" && !missing
+      ? {
+          state: "update_available" as const,
+          version: "2.1.310",
+          latest: "2.1.314",
+          source: "npm latest",
+          checked_at: null,
+        }
+      : null,
 }));
 // `?detect` resolves one agent per detection poll, so rows can be seen settling one by one.
 let resolved = params.has("detect") ? 0 : agents.length;

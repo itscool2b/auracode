@@ -17,6 +17,7 @@ import type {
 } from "../../bindings";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
+import { harnessText } from "../../lib/plugins/format";
 import { TerminalSheet } from "../TerminalSheet";
 import { AgentInstallations } from "./AgentInstallations";
 import { InstallAgent } from "./InstallAgent";
@@ -115,6 +116,9 @@ export function verifiedDate(value: string): string {
 
 /** A newer release is known and the installed version does not mention it. */
 function newerRelease(agent: AgentEntry): string | null {
+  // Rust compares versions when detection supplied a harness status.
+  if (agent.harness)
+    return agent.harness.state === "update_available" ? agent.harness.latest : null;
   const latest = agent.latest_release?.version;
   if (!latest || agent.availability.state !== "ready") return null;
   const installed = agent.installation?.version ?? agent.availability.version ?? "";
@@ -486,6 +490,12 @@ export function AgentRow({
           </div>
         )}
       </div>
+      {!compact && agent.harness?.state === "update_available" ? (
+        <p className="agent-row-update" role="status">
+          <StatusDot tone="volt" />
+          <span>{harnessText(agent.name, agent.harness)}</span>
+        </p>
+      ) : null}
       {message || error || busy ? (
         <p
           className="agent-row-note"
@@ -575,6 +585,12 @@ function AgentDetail({
             </dd>
             <dt>Installed with</dt>
             <dd>{channelLabel(installation)}</dd>
+          </>
+        ) : null}
+        {agent.harness ? (
+          <>
+            <dt>Updates</dt>
+            <dd>{harnessText(agent.name, agent.harness)}</dd>
           </>
         ) : null}
         {release?.version ? (

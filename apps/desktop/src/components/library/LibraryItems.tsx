@@ -1,37 +1,26 @@
-import { AgentMark } from "@auracode/ui/graphite";
-import { ArrowLeft, RefreshCw, Search } from "lucide-react";
-import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
-import { vendorApi as nativeVendorApi, type VendorApi } from "../../lib/config-vendor/api";
+import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "../../lib/errors";
-import { type LibraryApi, libraryApi } from "../../lib/library/api";
+import type { LibraryApi } from "../../lib/library/api";
 import type {
   LibraryCopyPreview,
   LibraryCopyReceipt,
-  LibraryInventory,
   LibraryItem,
   LibraryItemKind,
   LibraryItemPreview,
   LibrarySourceStatus,
 } from "../../lib/library/bindings";
 import { Modal } from "../chat/Modal";
-import { VendorDialog } from "./VendorDialog";
 import "./library.css";
 
-const LABELS = { claude: "Claude", codex: "Codex", pi: "Pi", shared: "Shared" };
+const LABELS = { claude: "Claude Code", codex: "Codex", pi: "Pi", shared: "Shared" };
 const KINDS = [
   { value: "all", label: "Everything" },
   { value: "skill", label: "Skills" },
-  { value: "instructions", label: "Instructions" },
   { value: "mcp_server", label: "MCP servers" },
   { value: "plugin", label: "Plugins" },
   { value: "package", label: "Packages" },
 ] as const;
 
-export interface LibraryFolder {
-  readonly id: string;
-  readonly label: string;
-}
-const itemKey = (item: LibraryItem) => JSON.stringify(item.item);
 const sourceLabel = (source: LibrarySourceStatus) =>
   `${LABELS[source.provider]} · ${source.scope === "user" ? "Personal" : "Project"}${source.id.endsWith(":claude-mcp") ? " MCP" : ""}`;
 const kindLabel = (kind: LibraryItemKind) =>
@@ -42,313 +31,11 @@ const sourceName = (sources: readonly LibrarySourceStatus[], id: string) => {
 };
 
 /**
- * The Library (Vercel's project pages): the views on the left, what the agents use as rows on
- * hairlines, and the chosen item with its file in a well. Copies and restores are reviewed in a
- * dialog before anything changes an agent's files.
+ * One Library item's preview with its reviewed copy to another agent, and the copy history with
+ * its reviewed restores. The Plugin library opens both in dialogs; nothing changes an agent's
+ * files before its review.
  */
-export function LibraryScreen({
-  onBack,
-  initialFolderId = null,
-  folders = [],
-  api = libraryApi,
-  vendorApi = nativeVendorApi,
-}: {
-  readonly onBack: () => void;
-  readonly initialFolderId?: string | null;
-  readonly folders?: readonly LibraryFolder[];
-  readonly api?: LibraryApi;
-  readonly vendorApi?: VendorApi;
-}) {
-  const [folder, setFolder] = useState(initialFolderId);
-  const [generation, setGeneration] = useState(0);
-  const [inventory, setInventory] = useState<LibraryInventory | null>(null);
-  const [receipts, setReceipts] = useState<LibraryCopyReceipt[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [kind, setKind] = useState<LibraryItemKind | "all">("all");
-  const [provider, setProvider] = useState("all");
-  const [selected, setSelected] = useState<string | null>(null);
-  const [history, setHistory] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const [vendor, setVendor] = useState<{ item: LibraryItem | null } | null>(null);
-  const attention = useId();
-  const refresh = () => setGeneration((value) => value + 1);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: generation is the explicit Refresh action.
-  useEffect(() => {
-    let current = true;
-    setLoading(true);
-    setError(null);
-    setInventory(null);
-    setReceipts([]);
-    setSelected(null);
-    void Promise.allSettled([api.snapshot(folder), api.history(folder)]).then(([items, copies]) => {
-      if (!current) return;
-      if (items.status === "fulfilled") setInventory(items.value);
-      else setError(errorMessage(items.reason));
-      if (copies.status === "fulfilled") setReceipts(copies.value);
-      else setError(`Copy history could not be read. ${errorMessage(copies.reason)}`);
-      setLoading(false);
-    });
-    return () => {
-      current = false;
-    };
-  }, [api, folder, generation]);
-  const visible = (inventory?.items ?? []).filter(
-    (item) =>
-      (kind === "all" || item.item.kind === kind) &&
-      (provider === "all" || item.provider === provider) &&
-      `${item.label} ${item.relative_path} ${LABELS[item.provider]}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-  );
-  const chosen = visible.find((item) => itemKey(item) === selected) ?? null;
-  const recovery = receipts.some((receipt) => receipt.state === "recovery_required");
-  const unavailable = inventory?.sources.filter((source) => !source.available) ?? [];
-  const complete = (message: string) => {
-    setStatus(message);
-    refresh();
-  };
-  return (
-    <main className="library-screen g-root">
-      <div className="library-drag" data-tauri-drag-region="" />
-      <header className="library-topbar">
-        <button type="button" className="g-button g-button-ghost g-button-28" onClick={onBack}>
-          <ArrowLeft size={14} aria-hidden="true" /> Back
-        </button>
-      </header>
-      <div className="library-heading">
-        <div>
-          <h1>Library</h1>
-          <p>The instructions and tools your agents use.</p>
-        </div>
-        <div className="library-heading-actions">
-          <button
-            type="button"
-            className="g-button g-button-ghost g-button-icon"
-            aria-label="Refresh Library"
-            title="Refresh"
-            onClick={refresh}
-            disabled={loading}
-          >
-            <RefreshCw size={16} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="g-button g-button-outline"
-            onClick={() => setVendor({ item: null })}
-          >
-            Manage integrations
-          </button>
-        </div>
-      </div>
-      <div className="library-toolbar">
-        <label className="library-search">
-          <Search size={16} aria-hidden="true" />
-          <input
-            className="g-input"
-            aria-label="Search Library"
-            type="search"
-            placeholder="Find a skill, instruction or tool…"
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-          />
-        </label>
-        <select
-          className="g-select library-select"
-          aria-label="Project configuration source"
-          value={folder ?? ""}
-          onChange={(event) => setFolder(event.currentTarget.value || null)}
-        >
-          <option value="">Personal configuration</option>
-          {initialFolderId && !folders.some((item) => item.id === initialFolderId) ? (
-            <option value={initialFolderId}>Selected project</option>
-          ) : null}
-          {folders.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <select
-          className="g-select library-select"
-          aria-label="Filter by agent"
-          value={provider}
-          onChange={(event) => setProvider(event.currentTarget.value)}
-        >
-          <option value="all">All agents</option>
-          {Object.entries(LABELS).map(([id, label]) => (
-            <option key={id} value={id}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </div>
-      {error ? (
-        <p className="library-feedback" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {status ? (
-        <p className="library-feedback" role="status">
-          {status}
-        </p>
-      ) : null}
-      <div className="library-body">
-        <nav className="library-categories" aria-label="Library categories">
-          {KINDS.map(({ value, label }) => (
-            <button
-              type="button"
-              key={value}
-              aria-current={!history && kind === value ? "page" : undefined}
-              onClick={() => {
-                setKind(value);
-                setHistory(false);
-              }}
-            >
-              <span>{label}</span>
-              <small>
-                {inventory?.items.filter((item) => value === "all" || item.item.kind === value)
-                  .length ?? 0}
-              </small>
-            </button>
-          ))}
-          <hr />
-          <button
-            type="button"
-            aria-current={history ? "page" : undefined}
-            aria-describedby={recovery ? attention : undefined}
-            onClick={() => setHistory(true)}
-          >
-            <span>Copy history</span>
-            {recovery ? <span className="library-attention" aria-hidden="true" /> : null}
-          </button>
-          {recovery ? (
-            <span id={attention} hidden>
-              A copy needs review.
-            </span>
-          ) : null}
-          {inventory?.sources.length ? (
-            <details className="library-sources">
-              <summary>
-                Sources
-                <small>
-                  {unavailable.length
-                    ? `${unavailable.length} unavailable`
-                    : `${inventory.sources.length} available`}
-                </small>
-              </summary>
-              {inventory.sources.map((source) => (
-                <p key={source.id}>
-                  {sourceLabel(source)}
-                  <small>
-                    {source.available ? "Available" : (source.message ?? "Unavailable")}
-                  </small>
-                </p>
-              ))}
-            </details>
-          ) : null}
-        </nav>
-        {history ? (
-          <HistoryView
-            key={`${folder}:${generation}`}
-            api={api}
-            folder={folder}
-            receipts={receipts}
-            sources={inventory?.sources ?? []}
-            complete={complete}
-          />
-        ) : (
-          <>
-            <section className="library-items" aria-label="Library items">
-              {loading ? (
-                <p className="library-empty" role="status">
-                  Reading configuration…
-                </p>
-              ) : visible.length === 0 ? (
-                <div className="library-empty">
-                  <h2>{query ? "No matching items" : "Nothing here yet"}</h2>
-                  <p>
-                    {query
-                      ? "Try a different name or agent."
-                      : "Items appear when these sources hold supported files."}
-                  </p>
-                </div>
-              ) : (
-                <ul>
-                  {visible.map((item, index) => (
-                    <li
-                      key={itemKey(item)}
-                      className="g-enter"
-                      style={{ "--g-row-index": Math.min(index, 8) } as CSSProperties}
-                    >
-                      <button
-                        type="button"
-                        aria-pressed={selected === itemKey(item)}
-                        onClick={() => setSelected(itemKey(item))}
-                      >
-                        <span className="library-mark" aria-hidden="true">
-                          <AgentMark agent={item.provider} size={24} />
-                        </span>
-                        <span>
-                          <strong>{item.label}</strong>
-                          <small>
-                            {LABELS[item.provider]} ·{" "}
-                            {item.scope === "user" ? "Personal" : "Project"}
-                            {kind === "all" ? ` · ${kindLabel(item.item.kind)}` : ""}
-                          </small>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {inventory?.notices.length ? (
-                <details className="library-notices">
-                  <summary>
-                    {inventory.notices.length}{" "}
-                    {inventory.notices.length === 1 ? "source notice" : "source notices"}
-                  </summary>
-                  {inventory.notices.map((notice) => (
-                    <p key={notice}>{notice}</p>
-                  ))}
-                </details>
-              ) : null}
-            </section>
-            {chosen ? (
-              <ItemDetail
-                key={`${folder}:${generation}:${itemKey(chosen)}`}
-                api={api}
-                folder={folder}
-                item={chosen}
-                sources={inventory?.sources ?? []}
-                complete={complete}
-                manage={() => setVendor({ item: chosen })}
-              />
-            ) : (
-              <section className="library-detail library-unselected" aria-label="Item preview">
-                <h2>No item selected</h2>
-                <p>Choose an item to read it and review a copy.</p>
-              </section>
-            )}
-          </>
-        )}
-      </div>
-      {vendor ? (
-        <VendorDialog
-          api={vendorApi}
-          initial={vendor.item}
-          onClose={() => {
-            setVendor(null);
-            refresh();
-          }}
-        />
-      ) : null}
-    </main>
-  );
-}
-
-function ItemDetail({
+export function ItemDetail({
   api,
   folder,
   item,
@@ -600,7 +287,7 @@ function ItemDetail({
   );
 }
 
-function HistoryView({
+export function HistoryView({
   api,
   folder,
   receipts,

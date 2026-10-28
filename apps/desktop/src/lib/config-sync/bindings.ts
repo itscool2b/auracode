@@ -46,6 +46,8 @@ export type ConfigSyncInventory = {
 	notices: string[],
 	/**  The account could not be reached: items are local only and nothing is applied. */
 	offline: boolean,
+	/**  Agents whose sync is off on this device (`claude`, `codex`, `pi`). Filled by the host. */
+	paused: string[],
 };
 
 export type ConfigSyncItem = {

@@ -27,5 +27,14 @@ export const configSyncApi = {
     call<void>("config_sync_device_only", { id, deviceOnly }),
   history: () => call<ConfigSyncReceipt[]>("config_sync_history"),
   rollback: (id: string) => call<ConfigSyncOutcome>("config_sync_rollback", { id }),
+  /** Apply all for one agent: each ready item is its own transaction. */
+  applyAgent: (agentId: string) =>
+    call<ConfigSyncOutcome[]>("config_sync_apply_agent", { agentId }),
+  /** After the agent's own installer ran for a reviewed declaration. */
+  vendorFinish: (token: string, succeeded: boolean, exitCode: number | null) =>
+    call<ConfigSyncOutcome>("config_sync_vendor_finish", { token, succeeded, exitCode }),
+  /** Turns sync on or off for one agent on this device. */
+  setAgentSync: (agentId: string, enabled: boolean) =>
+    call<string[]>("plugin_sync_set", { agentId, enabled }),
 };
 export type ConfigSyncApi = typeof configSyncApi;

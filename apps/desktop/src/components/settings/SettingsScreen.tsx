@@ -6,8 +6,8 @@ import {
   CircleUser,
   Info,
   Keyboard,
-  LibraryBig,
   type LucideIcon,
+  Puzzle,
   RefreshCcw,
   SlidersHorizontal,
 } from "lucide-react";
@@ -173,8 +173,8 @@ export function SettingsScreen({
           </button>
           {onLibrary ? (
             <button type="button" onClick={onLibrary}>
-              <LibraryBig size={16} aria-hidden="true" />
-              <span className="settings-nav-label">Library</span>
+              <Puzzle size={16} aria-hidden="true" />
+              <span className="settings-nav-label">Plugin library</span>
               <ArrowUpRight size={14} aria-hidden="true" />
             </button>
           ) : null}

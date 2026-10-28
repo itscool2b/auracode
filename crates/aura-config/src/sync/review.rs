@@ -100,6 +100,8 @@ pub struct ConfigSyncInventory {
     pub notices: Vec<String>,
     /// The account could not be reached: items are local only and nothing is applied.
     pub offline: bool,
+    /// Agents whose sync is off on this device (`claude`, `codex`, `pi`). Filled by the host.
+    pub paused: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type)]
@@ -205,6 +207,7 @@ pub async fn inventory(
             .map(|item| format!("{:?}: {}", item.provider, item.reason))
             .collect(),
         offline: false,
+        paused: Vec::new(),
     };
     for id in ids.iter().take(PAGE_SIZE) {
         let item = match context(port, scanner, id, scan.items.get(id)).await {
@@ -724,7 +727,7 @@ fn describe(
                 .remote
                 .as_ref()
                 .is_some_and(|remote| remote.content.is_none()),
-        hold,
+        hold: hold.clone(),
         id: id.into(),
         label: label(&context.identity),
         provider: Some(context.identity.provider),
@@ -740,6 +743,8 @@ fn describe(
                 .device
                 .as_ref()
                 .and_then(|state| state.skipped.clone())
+        } else if let Some(hold) = &hold {
+            Some(hold_sentence(hold))
         } else if decision.operation == ConfigOperation::Wait {
             Some("Waiting for this agent, its configuration or a complete download.".into())
         } else {
@@ -1077,6 +1082,7 @@ fn offline(scan: &ConfigScan, after: Option<&str>) -> ConfigSyncInventory {
         next_cursor,
         notices: vec![hold_sentence(&ConfigHold::Offline)],
         offline: true,
+        paused: Vec::new(),
     }
 }
 
