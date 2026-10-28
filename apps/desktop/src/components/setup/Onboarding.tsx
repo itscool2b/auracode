@@ -1,8 +1,8 @@
 import { usePrefersReducedMotion } from "@auracode/ui";
 import { DitherField, Keycap, Wordmark } from "@auracode/ui/graphite";
 import { listen } from "@tauri-apps/api/event";
-import { ArrowRight, Check, FolderOpen, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { ArrowRight, Check, FolderOpen, GitBranch, RefreshCw } from "lucide-react";
+import { type RefObject, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   AgentEntry,
   ProjectSummary,
@@ -15,10 +15,12 @@ import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
 import { inTauri } from "../../lib/ipc";
 import { type SetupApi, setMotionPreference, setupApi } from "../../lib/setup";
+import { type CloneApi, cloneApi } from "../../lib/setup-actions/api";
+import type { CloneDraft } from "../../lib/setup-actions/clone";
 import type { WorkspaceStore } from "../../lib/workspace";
 import { projectName } from "../chat/ChatList";
 import { AgentRoster } from "./AgentsScreen";
-import { CloneProject } from "./CloneProject";
+import { CloneBody, cloneHeading, useClone } from "./CloneProject";
 import { type IntroMode, SetupIntro } from "./SetupIntro";
 import "./setup.css";
 
@@ -65,6 +67,7 @@ export function Onboarding({
   onDemo,
   onAccount,
   api = setupApi,
+  clone,
 }: {
   readonly app: AppStore;
   readonly transport: Transport;
@@ -74,6 +77,8 @@ export function Onboarding({
   readonly onDemo: () => void;
   readonly onAccount: () => void;
   readonly api?: SetupApi;
+  /** The clone's commands, and a form to open the project step on (previews). */
+  readonly clone?: { readonly api?: CloneApi; readonly draft?: CloneDraft };
 }) {
   const reduced = usePrefersReducedMotion();
   const [width, setWidth] = useState(() => window.innerWidth);
@@ -95,6 +100,8 @@ export function Onboarding({
   const [folder, setFolder] = useState("");
   const [name, setName] = useState("");
   const [existing, setExisting] = useState<readonly ProjectSummary[]>([]);
+  // The project step's clone, in place of the folder choice until it is added or left.
+  const [cloning, setCloning] = useState(clone?.draft !== undefined);
   const heading = useRef<HTMLHeadingElement>(null);
   const started = useRef<Promise<SetupSnapshot> | null>(null);
   const lock = useRef(false);
@@ -161,8 +168,9 @@ export function Onboarding({
   }, [saved, cinematic, onDone]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Moving to a different step must announce its heading.
   useEffect(() => {
-    if (!cinematic) heading.current?.focus();
-  }, [step, cinematic]);
+    // The clone form opens on its address field instead.
+    if (!cinematic && !cloning) heading.current?.focus();
+  }, [step, cinematic, cloning]);
   useEffect(() => {
     if (!cinematic) return;
     const skip = (event: KeyboardEvent) => {
@@ -194,7 +202,7 @@ export function Onboarding({
     };
   }, [step, workspace, saved?.preferences.first_project_id]);
   useEffect(() => {
-    if (step !== "project" || !inTauri()) return;
+    if (step !== "project" || cloning || !inTauri()) return;
     let live = true;
     let unlisten: (() => void) | undefined;
     void listen<{ paths: string[] }>("tauri://drag-drop", (event) => {
@@ -222,7 +230,7 @@ export function Onboarding({
       live = false;
       unlisten?.();
     };
-  }, [step]);
+  }, [step, cloning]);
 
   const run = async (operation: () => Promise<void>) => {
     if (lock.current) return;
@@ -261,27 +269,38 @@ export function Onboarding({
         setProject(null);
       }
     });
-  const saveProject = () =>
+  const addProject = (path: string, title: string, created: ProjectSummary | null) =>
     void run(async () => {
       if (!workspace || !saved) return;
       // Keep the created project in memory if saving setup subsequently fails. Retrying cannot
       // create a second project, and the existing-project list makes it recoverable after restart.
       const selected =
-        project ??
+        created ??
         (await workspace.api.createProject({
-          folder,
-          project: { name, color: null, default_agent: null, default_model: null },
+          folder: path,
+          project: { name: title, color: null, default_agent: null, default_model: null },
         }));
       setProject(selected);
       await apply({ type: "project", project_id: selected.id });
       await workspace.refresh();
     });
+  const saveProject = () => addProject(folder, name, project);
+  // A finished clone becomes the first project at once: the folder is new, so there is nothing
+  // to choose. A failure leaves the folder and name chosen, with Add project to retry.
+  const cloned = (path: string, title: string) => {
+    setFolder(path);
+    setName(title);
+    setProject(null);
+    setCloning(false);
+    addProject(path, title, null);
+  };
   const roster = primaryAgents(agents);
   const installed = roster.filter((agent) => agent.availability.state === "ready").length;
   const looking = roster.filter((agent) => agent.availability.state === "checking").length;
   const absent = roster.length - installed - looking;
   useEffect(() => {
-    if (cinematic || busy || !saved) return;
+    // The clone has its own primary (Clone) and must not finish setup under a running Git.
+    if (cinematic || busy || !saved || cloning) return;
     const next = (event: KeyboardEvent) => {
       if (
         event.key !== "Enter" ||
@@ -371,197 +390,213 @@ export function Onboarding({
             ))}
           </ol>
         </nav>
-        <div className="setup-content" key={step}>
-          <h1 ref={heading} tabIndex={-1} className="setup-heading">
-            {headings[step][0]}
-            <span>{headings[step][1]}</span>
-          </h1>
-          {step === "welcome" ? (
-            <p className="setup-lead">
-              Run the coding agents already on this computer in one chat window. Each keeps its own
-              sign-in, and nothing leaves this machine.
-            </p>
-          ) : null}
-          {step === "agents" ? (
-            <>
-              <AgentRoster
-                agents={roster}
-                transport={transport}
-                onRefresh={() => void app.refreshAgents()}
-              />
-              <div className="setup-inline">
-                {installed === 0 && agentsState.agents !== null && looking === 0 ? (
-                  <button type="button" className="g-button g-button-outline" onClick={onDemo}>
-                    Explore the local demo <ArrowRight size={14} aria-hidden="true" />
+        {step === "project" && cloning ? (
+          <div className="setup-content" key="clone">
+            <ProjectClone
+              heading={heading}
+              api={clone?.api ?? cloneApi}
+              draft={clone?.draft}
+              pickParent={() => transport.pickFolder()}
+              onBack={() => setCloning(false)}
+              onCloned={cloned}
+            />
+          </div>
+        ) : (
+          <div className="setup-content" key={step}>
+            <h1 ref={heading} tabIndex={-1} className="setup-heading">
+              {headings[step][0]}
+              <span>{headings[step][1]}</span>
+            </h1>
+            {step === "welcome" ? (
+              <p className="setup-lead">
+                Run the coding agents already on this computer in one chat window. Each keeps its
+                own sign-in, and nothing leaves this machine.
+              </p>
+            ) : null}
+            {step === "agents" ? (
+              <>
+                <AgentRoster
+                  agents={roster}
+                  transport={transport}
+                  onRefresh={() => void app.refreshAgents()}
+                />
+                <div className="setup-inline">
+                  {installed === 0 && agentsState.agents !== null && looking === 0 ? (
+                    <button type="button" className="g-button g-button-outline" onClick={onDemo}>
+                      Explore the local demo <ArrowRight size={14} aria-hidden="true" />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="g-button g-button-ghost g-button-28 setup-refresh"
+                    disabled={agentsState.agentsRefreshing}
+                    onClick={() => void app.refreshAgents()}
+                  >
+                    <RefreshCw size={14} aria-hidden="true" />
+                    {agentsState.agentsRefreshing ? "Refreshing…" : "Refresh"}
                   </button>
-                ) : null}
+                </div>
+              </>
+            ) : null}
+            {step === "account" ? (
+              <>
+                <p className="setup-lead">
+                  auracode runs on this computer, offline, with no account. Sync between your
+                  devices is invite-only for now: if you have an invitation, sign in with that
+                  email.
+                </p>
+                <button type="button" className="g-button g-button-outline" onClick={onAccount}>
+                  Open Account
+                </button>
+              </>
+            ) : null}
+            {step === "project" ? (
+              <>
+                <p className="setup-lead">
+                  Choose a folder, drop one here or clone a repository. Files stay where they are.
+                </p>
                 <button
                   type="button"
-                  className="g-button g-button-ghost g-button-28 setup-refresh"
-                  disabled={agentsState.agentsRefreshing}
-                  onClick={() => void app.refreshAgents()}
-                >
-                  <RefreshCw size={14} aria-hidden="true" />
-                  {agentsState.agentsRefreshing ? "Refreshing…" : "Refresh"}
-                </button>
-              </div>
-            </>
-          ) : null}
-          {step === "account" ? (
-            <>
-              <p className="setup-lead">
-                auracode runs on this computer, offline, with no account. Sync between your devices
-                is invite-only for now: if you have an invitation, sign in with that email.
-              </p>
-              <button type="button" className="g-button g-button-outline" onClick={onAccount}>
-                Open Account
-              </button>
-            </>
-          ) : null}
-          {step === "project" ? (
-            <>
-              <p className="setup-lead">
-                Choose a folder, drop one into this window or clone one from GitHub. Its files stay
-                where they are.
-              </p>
-              <button
-                type="button"
-                className="setup-folder"
-                data-chosen={folder ? true : undefined}
-                disabled={busy || !workspace}
-                onClick={pick}
-              >
-                <FolderOpen size={20} aria-hidden="true" />
-                <span>
-                  <strong>{folder ? projectName(folder) : "Choose a folder"}</strong>
-                  <small className={folder ? "setup-path" : undefined}>
-                    {folder || "or drop it here"}
-                  </small>
-                </span>
-              </button>
-              {folder ? (
-                <form
-                  className="setup-project-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    saveProject();
-                  }}
-                >
-                  <label className="setup-field">
-                    Project name
-                    <input
-                      className="g-input"
-                      required
-                      maxLength={128}
-                      value={name}
-                      disabled={busy}
-                      onChange={(event) => setName(event.currentTarget.value)}
-                    />
-                  </label>
-                  <button
-                    type="submit"
-                    className="g-button g-button-outline g-button-36"
-                    disabled={busy || !name.trim()}
-                  >
-                    {project ? "Save selection" : "Add project"}
-                  </button>
-                </form>
-              ) : null}
-              {saved?.preferences.first_project_id && project ? (
-                <p role="status" className="setup-project-saved">
-                  <Check size={14} aria-hidden="true" /> {project.name} is ready.
-                </p>
-              ) : null}
-              <div className="setup-project-more">
-                <CloneProject
+                  className="setup-folder"
+                  data-chosen={folder ? true : undefined}
                   disabled={busy || !workspace}
-                  pickParent={() => transport.pickFolder()}
-                  onFolder={(path) => {
-                    setFolder(path);
-                    setName(projectName(path));
-                    setProject(null);
-                  }}
-                />
-                {existing.length > 0 ? (
-                  <select
-                    className="g-select setup-existing"
-                    aria-label="Or choose a project"
-                    disabled={busy}
-                    value={project?.id ?? ""}
-                    onChange={(event) => {
-                      const selected = existing.find(
-                        (item) => item.id === event.currentTarget.value,
-                      );
-                      if (selected) {
-                        setProject(selected);
-                        setFolder("");
-                        void run(() => apply({ type: "project", project_id: selected.id }));
-                      }
+                  onClick={pick}
+                >
+                  <FolderOpen size={20} aria-hidden="true" />
+                  <span>
+                    <strong>{folder ? projectName(folder) : "Choose a folder"}</strong>
+                    <small className={folder ? "setup-path" : undefined}>
+                      {folder || "or drop it here"}
+                    </small>
+                  </span>
+                </button>
+                {folder ? (
+                  <form
+                    className="setup-project-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      saveProject();
                     }}
                   >
-                    <option value="">Or choose a project</option>
-                    {existing.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
+                    <label className="setup-field">
+                      Project name
+                      <input
+                        className="g-input"
+                        required
+                        maxLength={128}
+                        value={name}
+                        disabled={busy}
+                        onChange={(event) => setName(event.currentTarget.value)}
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      className="g-button g-button-outline g-button-36"
+                      disabled={busy || !name.trim()}
+                    >
+                      {project ? "Save selection" : "Add project"}
+                    </button>
+                  </form>
                 ) : null}
+                {saved?.preferences.first_project_id && project ? (
+                  <p role="status" className="setup-project-saved">
+                    <Check size={14} aria-hidden="true" /> {project.name} is ready.
+                  </p>
+                ) : null}
+                <div className="setup-project-more">
+                  <button
+                    type="button"
+                    className="g-button g-button-ghost g-button-28 setup-clone"
+                    disabled={busy || !workspace}
+                    onClick={() => {
+                      setError(null);
+                      setCloning(true);
+                    }}
+                  >
+                    <GitBranch size={14} aria-hidden="true" />
+                    Clone a repository
+                  </button>
+                  {existing.length > 0 ? (
+                    <select
+                      className="g-select setup-existing"
+                      aria-label="Or choose a project"
+                      disabled={busy}
+                      value={project?.id ?? ""}
+                      onChange={(event) => {
+                        const selected = existing.find(
+                          (item) => item.id === event.currentTarget.value,
+                        );
+                        if (selected) {
+                          setProject(selected);
+                          setFolder("");
+                          void run(() => apply({ type: "project", project_id: selected.id }));
+                        }
+                      }}
+                    >
+                      <option value="">Or choose a project</option>
+                      {existing.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+            {saved?.notice ? (
+              <p className="setup-footnote" role="status">
+                {saved.notice}
+              </p>
+            ) : null}
+            {error ? (
+              <div className="setup-error" role="alert">
+                <p>{error}</p>
+                <div>
+                  <button
+                    type="button"
+                    className="g-button g-button-ghost g-button-28"
+                    onClick={() =>
+                      void run(async () => {
+                        const value = await api.snapshot();
+                        setSaved(value);
+                        setMotionPreference(value.preferences.motion);
+                      })
+                    }
+                  >
+                    Reload saved setup
+                  </button>
+                  <button
+                    type="button"
+                    className="g-button g-button-ghost g-button-28"
+                    onClick={onDone}
+                  >
+                    Continue without saving setup
+                  </button>
+                </div>
               </div>
-            </>
-          ) : null}
-          {saved?.notice ? (
-            <p className="setup-footnote" role="status">
-              {saved.notice}
-            </p>
-          ) : null}
-          {error ? (
-            <div className="setup-error" role="alert">
-              <p>{error}</p>
-              <div>
-                <button
-                  type="button"
-                  className="g-button g-button-ghost g-button-28"
-                  onClick={() =>
-                    void run(async () => {
-                      const value = await api.snapshot();
-                      setSaved(value);
-                      setMotionPreference(value.preferences.motion);
-                    })
-                  }
-                >
-                  Reload saved setup
-                </button>
-                <button
-                  type="button"
-                  className="g-button g-button-ghost g-button-28"
-                  onClick={onDone}
-                >
-                  Continue without saving setup
-                </button>
-              </div>
+            ) : null}
+            <div className="setup-actions">
+              <button
+                type="button"
+                className="g-button g-button-primary g-button-36"
+                disabled={busy || !saved}
+                onClick={advance}
+              >
+                {busy
+                  ? "Saving…"
+                  : step === "welcome"
+                    ? "Get started"
+                    : step === "project"
+                      ? "Open auracode"
+                      : "Continue"}
+                <span className="setup-enter" aria-hidden="true">
+                  <Keycap>↵</Keycap>
+                </span>
+              </button>
             </div>
-          ) : null}
-          <div className="setup-actions">
-            <button
-              type="button"
-              className="g-button g-button-primary g-button-36"
-              disabled={busy || !saved}
-              onClick={advance}
-            >
-              {busy
-                ? "Saving…"
-                : step === "welcome"
-                  ? "Get started"
-                  : step === "project"
-                    ? "Open auracode"
-                    : "Continue"}
-              <span className="setup-enter" aria-hidden="true">
-                <Keycap>↵</Keycap>
-              </span>
-            </button>
           </div>
-        </div>
+        )}
       </section>
       {introGone ? null : (
         <SetupIntro mode={introMode} leaving={cinematic ? false : skipped ? "fast" : "slow"} />
@@ -579,6 +614,42 @@ export function Onboarding({
         </button>
       ) : null}
     </main>
+  );
+}
+
+/** The project step's clone: its two-tone heading follows Git, then the form or the progress. */
+function ProjectClone({
+  heading,
+  api,
+  draft,
+  pickParent,
+  onBack,
+  onCloned,
+}: {
+  readonly heading: RefObject<HTMLHeadingElement | null>;
+  readonly api: CloneApi;
+  readonly draft?: CloneDraft;
+  readonly pickParent: () => Promise<string | null>;
+  readonly onBack: () => void;
+  readonly onCloned: (path: string, name: string) => void;
+}) {
+  const { controller, view } = useClone(api, draft);
+  const [title, rest] = cloneHeading(view);
+  return (
+    <>
+      <h1 ref={heading} tabIndex={-1} className="setup-heading">
+        {title}
+        <span>{rest}</span>
+      </h1>
+      <CloneBody
+        controller={controller}
+        view={view}
+        pickParent={pickParent}
+        layout="inline"
+        onBack={onBack}
+        onCloned={onCloned}
+      />
+    </>
   );
 }
 

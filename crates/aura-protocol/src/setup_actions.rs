@@ -15,20 +15,58 @@ pub struct AgentInstallReview {
     pub notices: Vec<String>,
 }
 
+/// What the person typed into the clone form. Rust checks every part; nothing here is trusted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct CloneInput {
+    /// The repository address as pasted: an https:// or SSH address.
     pub remote: String,
-    pub parent: String,
-    pub name: String,
+    /// The folder the new folder goes into, once chosen.
+    pub parent: Option<String>,
+    /// The new folder's name. Absent or empty means the repository's own name.
+    pub name: Option<String>,
 }
 
+/// The part of the clone form a problem belongs to, so it can be shown beside that field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum CloneField {
+    Remote,
+    Parent,
+    Name,
+    Git,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct CloneProblem {
+    pub field: CloneField,
+    pub message: String,
+}
+
+/// The answer to a clone form: what was understood, and either a startable review or the first
+/// problem in the form. Checking never creates a folder or runs Git.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct CloneCheck {
+    /// "owner/repository", once the address is understood.
+    pub repository: Option<String>,
+    /// The new folder's name: the one typed, or the repository's own.
+    pub name: Option<String>,
+    pub review: Option<CloneReview>,
+    pub problem: Option<CloneProblem>,
+}
+
+/// One startable clone: the exact Git program and arguments that Start runs, and where.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct CloneReview {
     pub id: String,
     pub remote: String,
+    pub repository: String,
     pub parent: String,
     pub destination: String,
-    pub notices: Vec<String>,
+    /// The Git executable found on this computer.
+    pub program: String,
+    pub arguments: Vec<String>,
+    /// The command as a person would type it: `git clone --progress -- <address> <folder>`.
+    pub command: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -38,17 +76,35 @@ pub enum CloneState {
     Ready,
     Canceled,
     Failed,
-    Interrupted,
+    /// Git is being stopped; the unfinished folder waits until the stop is confirmed.
     CleanupPending,
+}
+
+/// Git's own progress report, parsed from `git clone --progress`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct CloneProgress {
+    /// Git's stage, as Git names it: "Receiving objects", "Resolving deltas".
+    pub stage: String,
+    pub stage_percent: u8,
+    /// The whole clone, weighting Git's stages.
+    pub percent: u8,
+    /// How much has arrived, as Git prints it: "12.40 MiB".
+    pub received: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct CloneRecord {
     pub id: String,
+    /// Grows with every change, so a watcher can wait for the next one.
+    pub revision: u32,
     pub remote: String,
-    pub parent: String,
+    pub repository: String,
     pub destination: String,
-    pub journal: String,
     pub state: CloneState,
     pub detail: String,
+    pub progress: Option<CloneProgress>,
+    /// Git's last lines that are not progress, kept for a failed clone. Never logged.
+    pub output: Vec<String>,
+    /// auracode removed the unfinished folder it created.
+    pub removed: bool,
 }

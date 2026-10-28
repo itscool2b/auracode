@@ -37,36 +37,49 @@ Fresh Node/npm installation and vendor authentication are separate user actions.
 use synthetic packages, fake browser replies and a harmless local terminal child, never a real
 installer or sign-in command.
 
-## GitHub clone
+## Cloning a repository
 
-The first-project step accepts GitHub HTTPS repository URLs and GitHub SSH URLs with the `git`
-user. Validation rejects credentials, query text, custom ports, branch paths, other hosts and
-external transports. The user chooses a parent with the native folder picker and supplies a new
-portable folder name. A one-use review lasts ten minutes and belongs to its originating window.
+Setup's first-project step and New project both offer Clone a repository. The person pastes an
+address, chooses the folder it goes into and sees the exact command before anything runs:
+`git clone --progress -- <address> <folder>`, with the Git executable found on this computer.
 
-Start atomically creates the destination. Existing paths, even empty folders or links, are refused.
-Before that create, an immutable started record is flushed in a new sibling
-`.auracode-clone-<uuid>` directory. A collision after the record is written can therefore leave an
-interrupted receipt without having created its target. A receipt never authorizes deletion or
-claims that every file in its destination belongs to auracode. There is no destructive recovery
-operation. Interrupted, canceled and failed folders stay for inspection; retry requires another
-explicit new name. Selecting the same parent shows bounded recovery history. A completed clone can
-be selected as the first project without cloning it again after a database-save failure.
+**Addresses.** Rust accepts `https://host[:port]/path`, `ssh://[user@]host[:port]/path` and
+scp-like `user@host:path` (git@github.com:owner/repository.git); a pasted `github.com/owner/repo`
+gets its `https://`. Everything else is refused with its reason in one sentence: `http://` and
+`git://` are unencrypted, `file://` and local paths belong to Choose a folder, transports such as
+`ext::` and `fd::` run commands, a user name or token in an https address would be stored in the
+clone's configuration, `?` and `#` parts and GitHub pages inside a repository (`/tree/main`) are
+not repositories, and hosts or paths that start with a hyphen could be read as options. The folder
+name defaults to the repository's own (Git's choice) and must be one portable name.
 
-Rust runs Git through the production raw owned-process spawner with a fifteen-second startup limit
-and ten-minute operation limit. Cancel, page reload and ordinary quit reach the owned job. Folder
-reservations remain held through process-tree cleanup and durable outcome recording. An
-unconfirmed shutdown is reported as cleanup pending, with explicit process-layer confirmation
-retries. It is never treated as successful cleanup just because the leader exited.
+**Checking is inert.** Every change to the form asks Rust again (typing waits 200ms) and Rust
+answers with the first problem beside its field (address, folder, name or Git) or a review that
+holds the exact program, arguments and destination for ten minutes. Answers for an older form are
+dropped and their reviews released; each window keeps at most eight. No folder is created and
+Git does not run until Clone.
 
-Git receives an isolated global/system configuration, empty hook/template directories, no inherited
-Git environment, no submodule recursion and only HTTPS/SSH transports. HTTPS cloning is public-only
-because credential helpers and prompts are disabled. Private clones can use SSH access already
-configured in the user's tools, with batch mode and strict host-key checking. Auracode does not
-read keys, credential files or GitHub CLI authentication, and never changes authentication. Git
-output is unlogged, bounded and reduced to authentication/network/disk/other failure messages.
+**The person's own Git.** Git runs with the person's own configuration, credential helpers, SSH
+keys and agent, exactly as in their terminal. auracode never reads, stores or passes credentials.
+It removes only the variables that would point Git at another repository (`GIT_DIR`,
+`GIT_WORK_TREE` and the like) and sets `GIT_TERMINAL_PROMPT=0`, because no terminal is attached:
+a helper with its own window (Git Credential Manager, the macOS keychain) still answers, and a
+missing sign-in fails with a reason instead of waiting forever.
 
-The Git behavior follows the official [clone documentation](https://git-scm.com/docs/git-clone),
-[configuration isolation variables](https://git-scm.com/docs/git) and
-[transport policy](https://git-scm.com/docs/git-config#Documentation/git-config.txt-protocolallow).
-Development fixtures use temporary directories and synthetic replies, with no remote clone.
+**The one folder auracode owns.** Start creates the destination itself, atomically, so an
+existing folder of that name, even an empty one, is refused and never reused. Git clones into
+it. Progress streams from Git's `--progress` lines (stage, the whole clone's percentage and what
+has arrived) through a long poll that answers at each change. Cancel, closing the form, the page
+going away or quitting stops Git's whole process tree; only after the stop is confirmed does Rust
+remove the unfinished folder, and only while the parent is still the chosen folder and the name
+still holds the folder created at start. A failed clone is removed the same way, and keeps Git's
+last eight lines (never logged) under a plain reason: sign-in, not found, untrusted SSH host,
+unreachable server, full disk, path too long or unwritable folder. A finished clone is checked
+to hold `.git` and becomes the project: at once in setup, through Create project in New project.
+A clone still running after two hours is stopped. If auracode itself ends mid-clone, the
+unfinished folder stays; the next clone with that name says the folder already exists.
+
+The Git behavior follows the official [clone documentation](https://git-scm.com/docs/git-clone)
+and [environment variables](https://git-scm.com/docs/git#_environment_variables). Rust tests
+clone a local bare repository through a `file://` URL with an empty Git configuration (the form
+itself refuses `file://`), fail on a missing repository, cancel against a server that never
+answers, and remove a folder holding read-only pack files while keeping one put in its place.

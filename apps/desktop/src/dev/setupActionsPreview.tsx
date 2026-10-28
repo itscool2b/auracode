@@ -9,7 +9,7 @@ import type { TerminalChunk } from "../bindings";
 import { CloneProject } from "../components/setup/CloneProject";
 import { InstallAgent } from "../components/setup/InstallAgent";
 import type { CloneApi, InstallApi } from "../lib/setup-actions/api";
-import type { CloneRecord } from "../lib/setup-actions/bindings";
+import { cloneFixture } from "./cloneFixture";
 
 if (import.meta.env.DEV) {
   const calls: string[] = [];
@@ -65,61 +65,16 @@ if (import.meta.env.DEV) {
       },
     }),
   };
-  let clone: CloneRecord | null = null;
-  const cloneApi: CloneApi = {
-    review: async (input) => {
-      calls.push("clone-review");
-      if (new URLSearchParams(location.search).has("existing"))
-        throw new Error(
-          "The destination already exists. Choose another new folder name; its contents were left unchanged.",
-        );
-      return {
-        id: "clone-id",
-        remote: input.remote,
-        parent: input.parent,
-        destination: `${input.parent}/${input.name}`,
-        notices: [
-          "Creates a new folder. Existing folders are refused.",
-          "No sign-in runs here. Partial files are retained if canceled.",
-        ],
-      };
-    },
-    cancelReview: async () => {
-      calls.push("clone-cancel-review");
-    },
-    start: async () => {
-      calls.push("clone-start");
-      clone = {
-        id: "clone-id",
-        remote: "https://github.com/owner/repo",
-        parent: "C:/fixture",
-        destination: "C:/fixture/repo",
-        journal: "C:/fixture/.auracode-clone-id",
-        state: "running",
-        detail: "Cloning the repository.",
-      };
-      return { ...clone };
-    },
-    status: async () => {
-      if (!clone) throw new Error("No fixture clone.");
-      if (new URLSearchParams(location.search).has("ready")) {
-        clone.state = "ready";
-        clone.detail = "Repository cloned. Choose Use this folder to add it to your project.";
-      }
-      return { ...clone };
-    },
-    cancel: async () => {
-      calls.push("clone-cancel");
-      if (clone) {
-        clone.state = "canceled";
-        clone.detail = "Clone canceled. Its partial folder and recovery record were retained.";
-      }
-    },
-    history: async () => {
-      calls.push("clone-history");
-      return [];
-    },
-  };
+  const params = new URLSearchParams(location.search);
+  const cloneApi: CloneApi = cloneFixture(
+    params.has("ready") ? "ready" : params.has("error") ? "error" : "running",
+    calls,
+  );
+  try {
+    localStorage.removeItem("auracode.clone.parent");
+  } catch {
+    /* The fixture starts without a remembered folder either way. */
+  }
   Object.assign(window, { setupActionsFixture: { calls: () => [...calls] } });
   function Preview() {
     const [mounted, setMounted] = useState(true);
@@ -139,7 +94,7 @@ if (import.meta.env.DEV) {
         </button>
         <CloneProject
           api={cloneApi}
-          pickParent={async () => "C:/fixture"}
+          pickParent={async () => "C:\\Users\\fixture\\code"}
           onFolder={() => calls.push("clone-use-folder")}
         />
       </main>

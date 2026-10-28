@@ -229,6 +229,36 @@ try {
       await page.getByRole("button", { name: "Get started" }).waitFor();
       await page.getByRole("button", { name: "Skip setup", exact: true }).click();
       await page.getByRole("heading", { name: "Workspace ready" }).waitFor();
+      // Clone as the first project, by keyboard: the form shows the exact command first; Enter
+      // clones, and the new folder becomes the project at once. Escape leaves the form.
+      const cloning = await context.newPage();
+      cloning.on("pageerror", (error) => errors.push(error.message));
+      await cloning.goto(`${url}/?preview=clone`);
+      await cloning.getByRole("heading", { name: /^Clone a repository\./ }).waitFor();
+      await cloning
+        .getByText(
+          "git clone --progress -- https://github.com/auracode/orbit C:\\Users\\fixture\\code\\orbit",
+          { exact: true },
+        )
+        .waitFor();
+      assert.deepEqual(await cloning.evaluate(() => window.setupFixture.cloneCalls()), [
+        "clone-check",
+      ]);
+      await settled(cloning);
+      assert.deepEqual(
+        (await new AxeBuilder({ page: cloning }).analyze()).violations,
+        [],
+        `${engine} clone form accessibility`,
+      );
+      await cloning.getByRole("textbox", { name: "Repository" }).press("Enter");
+      await cloning.getByText("orbit is ready.", { exact: true }).waitFor();
+      assert.deepEqual(await cloning.evaluate(() => window.setupFixture.folders()), [
+        "C:\\Users\\fixture\\code\\orbit",
+      ]);
+      await cloning.getByRole("button", { name: "Clone a repository", exact: true }).click();
+      await cloning.getByRole("textbox", { name: "Repository" }).press("Escape");
+      await cloning.getByRole("heading", { name: /^Add a first project\./ }).waitFor();
+      await cloning.close();
       const empty = await context.newPage();
       await empty.goto(`${url}/?preview=setup&missing`);
       await empty.getByRole("button", { name: "Get started" }).click();
@@ -256,7 +286,7 @@ try {
       await intro.close();
       assert.deepEqual(errors, [], `${engine} page errors`);
       console.log(
-        `${engine}: setup persistence, restart/skip, storage retry without duplicate project, retired-step resume, centred layout, Agents menu keyboard, local demo, passive detection and accessibility passed`,
+        `${engine}: setup persistence, restart/skip, storage retry without duplicate project, retired-step resume, centred layout, clone by keyboard into a first project, Agents menu keyboard, local demo, passive detection and accessibility passed`,
       );
     } finally {
       await browser.close();
