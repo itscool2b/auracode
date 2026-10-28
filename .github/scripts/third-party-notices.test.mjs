@@ -68,6 +68,14 @@ test("locked catalogue includes complete font notices and explicit native source
     assert.ok(!catalogue.records.some((r) => r.name === name), name);
 });
 
+test("both outputs say the agent marks are their owners' trademarks and point at their sources", () => {
+  for (const distribution of ["web", "desktop"]) {
+    const text = renderText(verifiedCatalogue(), distribution);
+    assert.match(text, /Agent marks: .*trademarks of their respective owners/);
+    assert.match(text, /third-party\/brand-marks\.md/);
+  }
+});
+
 test("website output contains frontend notices, not desktop native dependencies", () => {
   const text = renderText(verifiedCatalogue(), "web");
   assert.match(text, /@fontsource-variable\/geist/);

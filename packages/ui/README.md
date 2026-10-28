@@ -20,7 +20,7 @@ import { AgentMark, Keycap, Wordmark } from "@auracode/ui/graphite";
 ```
 
 - `@auracode/ui/graphite-tokens.css` declares only the `--g-*` variables on `:root`; `@auracode/ui/graphite.css` adds the base layer (opt in with `.g-root`) and the primitives. Every primitive is one class with its states inside `:where()`, so one app class loaded later always wins.
-- `AgentMark` replaces `OrbitMark` with the same props. Idle, hidden, offscreen and reduced-motion marks own no animation frame.
+- `AgentMark` replaces `OrbitMark` with the same props. Idle, it shows the agent's own published logo (`agent-logos/`, sources and terms in `third-party/brand-marks.md`), or its two-letter code where the maker allows no logo use; `AgentLogo` draws a mark alone. The marks are their owners' trademarks and are not covered by auracode's license. Idle, hidden, offscreen and reduced-motion marks own no animation frame.
 - `LOGO_PATH`, `LOGO_SMALL_PATH` and `logoSvg()` are the source of the logo, the app icons and
   the favicons.
 
