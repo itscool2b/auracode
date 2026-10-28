@@ -14,6 +14,7 @@ import type {
   SessionLists,
   SessionStatus,
   StorageStatus,
+  TurnAgent,
   UiAnswer,
   UsageInfo,
 } from "../../bindings";
@@ -80,6 +81,11 @@ export interface ChatState {
   readonly auth: AuthPrompt | null;
   readonly storage: StorageStatus | null;
   readonly transcript: Transcript;
+  /**
+   * The agent that ran each turn, by turn id: from history pages, and from the chat's agent when a
+   * turn starts live. A turn missing here is the chat's current agent's.
+   */
+  readonly turnAgents: ReadonlyMap<string, TurnAgent>;
   readonly hasMore: boolean;
   readonly loadingEarlier: boolean;
   /** Advances only when an older page arrives, independently of live output. */
@@ -135,6 +141,7 @@ function initialState(chatId: string): ChatState {
     auth: null,
     storage: null,
     transcript: emptyTranscript(),
+    turnAgents: new Map(),
     hasMore: false,
     loadingEarlier: false,
     historyRevision: 0,
@@ -151,6 +158,28 @@ function initialState(chatId: string): ChatState {
     actionError: null,
     stillWorkingMinutes: null,
   };
+}
+
+/** `agents` with the agents a history page names for its turns. */
+function withTurnAgents(
+  agents: ReadonlyMap<string, TurnAgent>,
+  page: HistoryPage,
+): ReadonlyMap<string, TurnAgent> {
+  const named = page.turn_agents ?? [];
+  if (named.length === 0) return agents;
+  const next = new Map(agents);
+  for (const agent of named) next.set(agent.turn_id, agent);
+  return next;
+}
+
+/** A turn that starts live runs on the chat's agent of that moment, which it keeps. */
+function withLiveTurnAgent(state: ChatState, turnId: string): ReadonlyMap<string, TurnAgent> {
+  if (state.turnAgents.has(turnId) || state.chat === null) return state.turnAgents;
+  return new Map(state.turnAgents).set(turnId, {
+    turn_id: turnId,
+    agent_id: state.chat.agent_id,
+    agent_name: state.session?.agent_name ?? state.chat.agent_name,
+  });
 }
 
 function isCode(error: unknown, code: string): boolean {
@@ -389,6 +418,7 @@ export class ChatStore {
       auth: snapshot.auth,
       storage: snapshot.storage,
       transcript: applyEntries(emptyTranscript(this.#cut), this.#entries),
+      turnAgents: withTurnAgents(new Map(), history),
       hasMore: history.has_more,
       loadingEarlier: false,
       earlierError: null,
@@ -454,7 +484,11 @@ export class ChatStore {
   #applyLive(state: ChatState, event: AuraEvent): ChatState {
     switch (event.type) {
       case "turn_started":
-        return { ...state, openTurnId: event.turn_id };
+        return {
+          ...state,
+          openTurnId: event.turn_id,
+          turnAgents: withLiveTurnAgent(state, event.turn_id),
+        };
       case "turn_ended":
         return state.openTurnId === event.turn_id ? { ...state, openTurnId: null } : state;
       case "session_updated": {
@@ -568,6 +602,7 @@ export class ChatStore {
     this.#set({
       ...this.#state,
       transcript: applyEntries(emptyTranscript(this.#cut), this.#entries),
+      turnAgents: withTurnAgents(this.#state.turnAgents, page),
       hasMore: page.has_more,
       loadingEarlier: false,
       historyRevision: this.#state.historyRevision + 1,

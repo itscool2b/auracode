@@ -5,6 +5,7 @@ import { BLOB_PAGE, ChatStore, LISTS_DEBOUNCE_MS, STILL_WORKING_MS } from "./cha
 import {
   attachResult,
   autonomyState,
+  chatSummary,
   ev,
   FakeTransport,
   frame,
@@ -204,6 +205,56 @@ describe("joining a chat (the join protocol)", () => {
     fake.lastAttach().resolve(attachResult(CHAT, 5, historyPage(CHAT, [])));
     await opening;
     expect(fake.callsOf("detach")).toEqual([["sub-c1-5"]]);
+  });
+});
+
+describe("the agent of each turn", () => {
+  it("keeps the agent that ran each turn after the chat switches agents, through a reload", async () => {
+    const fake = new FakeTransport();
+    const page = historyPage(
+      CHAT,
+      items(
+        numbered([
+          ["t1", ev.turnStarted("t1")],
+          ["t1", ev.turnEnded("t1", "refusal")],
+        ]),
+      ),
+      {
+        turn_agents: [{ turn_id: "t1", agent_id: "claude", agent_name: "Claude Code" }],
+      },
+    );
+    // The chat now runs Codex: the failed Claude Code turn keeps its own agent.
+    const store = await opened(fake, page, 2, {
+      chat: chatSummary(CHAT, { agent_id: "codex", agent_name: "Codex" }),
+      session: sessionInfo({ agent_name: "Codex" }),
+    });
+    expect(store.getSnapshot().turnAgents.get("t1")?.agent_name).toBe("Claude Code");
+    // A turn that starts live runs on the chat's agent of that moment.
+    fake.lastAttach().onFrame(frame(CHAT, 2, [ev.turnStarted("t2")]));
+    expect(store.getSnapshot().turnAgents.get("t2")).toEqual({
+      turn_id: "t2",
+      agent_id: "codex",
+      agent_name: "Codex",
+    });
+    expect(store.getSnapshot().turnAgents.get("t1")?.agent_id).toBe("claude");
+  });
+
+  it("adds the agents an older page names without losing the newer ones", async () => {
+    const older = historyPage(CHAT, items(numbered([["t1", ev.turnStarted("t1")]])), {
+      turn_agents: [{ turn_id: "t1", agent_id: "claude", agent_name: "Claude Code" }],
+    });
+    const fake = new FakeTransport({ history: () => Promise.resolve(older) });
+    const newest = historyPage(CHAT, items(numbered([["t2", ev.turnStarted("t2")]], 5)), {
+      has_more: true,
+      before_seq: 5,
+      turn_agents: [{ turn_id: "t2", agent_id: "codex", agent_name: "Codex" }],
+    });
+    const store = await opened(fake, newest, 6);
+    await store.loadEarlier();
+    const agents = store.getSnapshot().turnAgents;
+    expect([...agents.keys()].sort()).toEqual(["t1", "t2"]);
+    expect(agents.get("t1")?.agent_name).toBe("Claude Code");
+    expect(agents.get("t2")?.agent_name).toBe("Codex");
   });
 });
 

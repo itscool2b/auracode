@@ -694,6 +694,43 @@ describe("turns and the transcript", () => {
     expect(html.indexOf("Load earlier")).toBeLessThan(html.indexOf("Earlier part of this turn"));
   });
 
+  it("labels each turn with the agent that ran it after the chat switched agents", async () => {
+    const page = historyPage(
+      "c1",
+      items(
+        numbered([
+          ["t1", ev.turnStarted("t1")],
+          ["t1", ev.message("t1.m1", "Claude Code answered")],
+          ["t1", ev.turnEnded("t1")],
+          ["t2", ev.turnStarted("t2")],
+          ["t2", ev.message("t2.m1", "Codex answered")],
+          ["t2", ev.turnEnded("t2")],
+        ]),
+      ),
+      {
+        turn_agents: [
+          { turn_id: "t1", agent_id: "claude", agent_name: "Claude Code" },
+          { turn_id: "t2", agent_id: "codex", agent_name: "Codex" },
+        ],
+      },
+    );
+    const state = await stateWith(page, {
+      chat: chatSummary("c1", { agent_id: "codex", agent_name: "Codex" }),
+      session: sessionInfo({ agent_name: "Codex" }),
+    });
+    const html = renderToStaticMarkup(
+      <Transcript state={state} live={true} actions={ACTIONS} onLoadEarlier={noop} />,
+    );
+    // Each turn's byline names its own agent.
+    const bylines = [
+      ...html.matchAll(/data-test-turn-id="(t\d)"[^>]*><span class="sr-only">([^<]+)</g),
+    ].map((match) => [match[1], match[2]]);
+    expect(bylines).toEqual([
+      ["t1", "Claude Code"],
+      ["t2", "Codex"],
+    ]);
+  });
+
   it("unsaved_marker_and_reattach: marks the unsaved rows where they are missing", async () => {
     const page = historyPage("c1", items(numbered([[null, ev.notice("saved before the pause")]])), {
       unsaved_from: 1,
