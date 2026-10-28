@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import { createContext } from "react";
 import type { TerminalTransport } from "../terminal";
 import { terminalTransport } from "../terminal";
-import type { AgentInstallReview, CloneInput, CloneRecord, CloneReview } from "./bindings";
+import type { AgentInstallReview, CloneCheck, CloneInput, CloneRecord } from "./bindings";
 
 async function call<T>(command: string, args: Record<string, unknown>): Promise<T> {
   try {
@@ -19,6 +20,9 @@ export interface InstallApi {
   terminal(review: AgentInstallReview): TerminalTransport;
 }
 
+/** Where install buttons find Rust's installer; previews provide a synthetic one. */
+export const InstallApiContext = createContext<InstallApi | null>(null);
+
 export const installApi: InstallApi = {
   review: (agentId) => call("agent_install_review", { agentId }),
   terminal: (review) => ({
@@ -35,18 +39,18 @@ export const installApi: InstallApi = {
 };
 
 export interface CloneApi {
-  review(input: CloneInput): Promise<CloneReview>;
+  /** Reads the form: the exact command when it is complete, or the first problem. */
+  check(input: CloneInput): Promise<CloneCheck>;
   cancelReview(id: string): Promise<void>;
   start(id: string): Promise<CloneRecord>;
   cancel(id: string): Promise<void>;
-  status(id: string): Promise<CloneRecord>;
-  history(parent: string): Promise<CloneRecord[]>;
+  /** With `after`, resolves at the next revision (or within ten seconds). */
+  status(id: string, after: number | null): Promise<CloneRecord>;
 }
 export const cloneApi: CloneApi = {
-  review: (input) => call("clone_review", { input }),
+  check: (input) => call("clone_check", { input }),
   cancelReview: (id) => call("clone_cancel_review", { id }),
   start: (id) => call("clone_start", { id }),
   cancel: (id) => call("clone_cancel", { id }),
-  status: (id) => call("clone_status", { id }),
-  history: (parent) => call("clone_history", { parent }),
+  status: (id, after) => call("clone_status", { id, after }),
 };

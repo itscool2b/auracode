@@ -594,6 +594,9 @@ pub(crate) struct ChatActor {
     last_activity: Instant,
     quitting: bool,
     shutdown_reply: Option<oneshot::Sender<()>>,
+    /// The quit was answered: everything was handed to the store, which closes next. From now on
+    /// every message that would queue store work is refused instead of being queued and lost.
+    sealed: bool,
     /// A start (fresh or not) to begin once the live driver stopped.
     pending_start: Option<bool>,
     /// The current start is a Start fresh.
@@ -703,6 +706,7 @@ impl ChatActor {
             last_activity: Instant::now(),
             quitting: false,
             shutdown_reply: None,
+            sealed: false,
             pending_start: None,
             starting_fresh: false,
             conflict: false,
@@ -838,6 +842,22 @@ impl ChatActor {
     // ---- IPC messages -------------------------------------------------------------------------
 
     fn on_msg(&mut self, msg: ChatMsg) {
+        if self.sealed {
+            match msg {
+                // Answered from memory, nothing reaches the store.
+                ChatMsg::Detach { .. }
+                | ChatMsg::DropOwner { .. }
+                | ChatMsg::ReleaseGit { .. }
+                | ChatMsg::Lists { .. }
+                | ChatMsg::FolderContext { .. } => {}
+                // A second quit is answered at once by `refuse`; anything else would queue work
+                // for a store that is closing.
+                _ => {
+                    msg.refuse(SessionError::ShuttingDown);
+                    return;
+                }
+            }
+        }
         #[cfg(feature = "account-sync")]
         if self.sync_importing {
             match msg {
@@ -2837,7 +2857,10 @@ impl ChatActor {
         self.flush();
     }
 
-    /// Replies to a quit once the driver ended and everything was handed to the store.
+    /// Replies to a quit once the driver ended and everything was handed to the store. Work still
+    /// in flight (a page read, an option's answer, a process winding down) can queue more ops when
+    /// it completes, so the reply waits for it too; `shutdown_all`'s deadline bounds the wait.
+    /// After the reply the actor is sealed (see [`Self::on_msg`]).
     fn finish_shutdown(&mut self) {
         if self.shutdown_reply.is_none()
             || self.steering_pending
@@ -2845,6 +2868,7 @@ impl ChatActor {
             || self.checkpointing.is_some()
             || self.driver.is_some()
             || self.preparing.is_some()
+            || !self.in_flight.is_empty()
             || !self.outbox.is_empty()
         {
             return;
@@ -2856,6 +2880,7 @@ impl ChatActor {
             }
         }
         if let Some(reply) = self.shutdown_reply.take() {
+            self.sealed = true;
             let _ = reply.send(());
         }
     }
@@ -4196,12 +4221,32 @@ impl ChatActor {
         self.flush();
     }
 
+    /// The store closed with ops still here. A quit drains every actor before closing the store,
+    /// so this happens only when a deadline ran out (or the store failed). Each op is named: a
+    /// lost write at error level with the count kept for the quit's summary, a read (its waiter
+    /// learns the store closed) at warn level.
     fn store_closed(&mut self) {
-        let dropped = self.outbox.len();
-        self.outbox.clear();
+        let dropped = DroppedOps::of(self.outbox.drain(..));
         self.outbox_bytes = 0;
-        if dropped > 0 {
-            tracing::error!(chat_id = %self.chat_id, dropped, "auracode's database closed with ops still waiting; they are lost");
+        if !dropped.writes.is_empty() {
+            self.shared.lost_writes.fetch_add(
+                u64::try_from(dropped.writes.len()).unwrap_or(u64::MAX),
+                std::sync::atomic::Ordering::AcqRel,
+            );
+            tracing::error!(
+                chat_id = %self.chat_id,
+                writes = dropped.writes.len(),
+                ops = %dropped.writes.join(", "),
+                "auracode's database closed before these writes were saved; they are lost"
+            );
+        }
+        if !dropped.reads.is_empty() {
+            tracing::warn!(
+                chat_id = %self.chat_id,
+                reads = dropped.reads.len(),
+                ops = %dropped.reads.join(", "),
+                "auracode's database closed before these reads ran; their callers were told it closed"
+            );
         }
     }
 
@@ -4793,6 +4838,28 @@ fn elapsed_ms(started: Instant) -> u64 {
     u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
+/// The ops an actor still held when the store closed, by name, split into lost writes and reads
+/// (whose waiters learn the store closed, so no data goes with them).
+#[derive(Debug, Default, PartialEq, Eq)]
+struct DroppedOps {
+    writes: Vec<&'static str>,
+    reads: Vec<&'static str>,
+}
+
+impl DroppedOps {
+    fn of(ops: impl IntoIterator<Item = Op>) -> DroppedOps {
+        let mut dropped = DroppedOps::default();
+        for op in ops {
+            if op.is_read() {
+                dropped.reads.push(op.name());
+            } else {
+                dropped.writes.push(op.name());
+            }
+        }
+        dropped
+    }
+}
+
 /// The FORCE chain on one process of a retired `generation`.
 fn force_chain(generation: u64, control: ProcessControl) -> BoxFuture<'static, Done> {
     async move {
@@ -4935,6 +5002,41 @@ async fn check_folder(folder: PathBuf) -> Result<(), StartFailure> {
             ),
             folder: Some(FolderState::NotAllowed),
         }),
+    }
+}
+
+#[cfg(test)]
+mod dropped_ops_tests {
+    use super::{DroppedOps, Op};
+
+    #[test]
+    fn dropped_ops_are_named_and_reads_are_told_apart_from_lost_writes() {
+        let (page, _) = tokio::sync::oneshot::channel();
+        let (barrier, _) = tokio::sync::oneshot::channel();
+        let dropped = DroppedOps::of([
+            Op::QueueHoldAll {
+                chat_id: "c".into(),
+            },
+            Op::ReadPage {
+                chat_id: "c".into(),
+                before_seq: 7,
+                max_bytes: 1024,
+                reply: page,
+            },
+            Op::TouchChat {
+                chat_id: "c".into(),
+                at: 1,
+            },
+            Op::Barrier(barrier),
+        ]);
+        assert_eq!(
+            dropped,
+            DroppedOps {
+                writes: vec!["queue_hold_all", "touch_chat"],
+                reads: vec!["read_page", "barrier"],
+            }
+        );
+        assert_eq!(DroppedOps::of([]), DroppedOps::default());
     }
 }
 

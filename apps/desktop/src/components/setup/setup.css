@@ -432,7 +432,7 @@
   color: var(--g-fg-2);
 }
 
-/* ------------------------------------------------- dialogs: clone and its rows */
+/* ---------------------------------------------------------- dialogs and rows */
 
 /* One sentence under the title (Vercel's dialog), then the fields or rows. */
 .setup-dialog-lead {
@@ -440,68 +440,6 @@
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-}
-
-.setup-clone-dialog form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--g-space-16);
-}
-
-.setup-clone-dialog form > .setup-dialog-lead {
-  margin-bottom: var(--g-space-4);
-}
-
-.setup-dialog-actions {
-  margin-top: var(--g-space-24);
-}
-
-.setup-clone-dialog form > .setup-dialog-actions {
-  margin-top: var(--g-space-8);
-}
-
-/* A folder choice that reads as a field: the same height, ring and fill as an input. */
-.setup-picker {
-  display: flex;
-  align-items: center;
-  gap: var(--g-space-12);
-  width: 100%;
-  min-height: 36px;
-  padding: var(--g-space-8) var(--g-space-12);
-  border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-1);
-  color: var(--g-fg-3);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color var(--g-dur-fast) var(--g-ease),
-    background-color var(--g-dur-fast) var(--g-ease);
-}
-
-@media (hover: hover) {
-  .setup-picker:hover:not(:disabled) {
-    border-color: var(--g-fg-4);
-  }
-}
-
-.setup-picker:disabled {
-  color: var(--g-fg-4);
-  cursor: not-allowed;
-}
-
-.setup-picker > span {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.setup-picker strong {
-  color: var(--g-fg-1);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 400;
 }
 
 /* Key and value rows on hairlines, as Vercel's transfer dialog lists what moves. */
@@ -533,87 +471,266 @@
   overflow-wrap: anywhere;
 }
 
-.setup-notices {
-  margin: var(--g-space-16) 0 0;
-  padding: 0;
+/* ------------------------------------------------------------------------ clone */
+
+/*
+ * Clone a repository, in setup's column or a dialog (X Money's one question per screen): the
+ * address, where it goes (Vercel's scope and name, joined like a path), the exact command in a
+ * well, then Git's progress over a 2px bar, or the failure with Git's own last lines.
+ */
+.clone-form,
+.clone-running,
+.clone-failed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-20);
+  animation: setup-open var(--g-dur-panel) var(--g-ease-quint) both;
+}
+
+.setup-clone-dialog :is(.clone-form, .clone-running, .clone-failed) {
+  gap: var(--g-space-16);
+}
+
+.clone-running:focus,
+.clone-failed:focus {
+  outline: none;
+}
+
+.clone-notice {
+  margin: 0;
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  list-style: none;
 }
 
-.setup-notices li {
-  position: relative;
-  padding-left: var(--g-space-16);
+.clone-problem {
+  margin: 0;
+  color: var(--g-red);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 400;
+  overflow-wrap: anywhere;
 }
 
-.setup-notices :where(li + li) {
-  margin-top: var(--g-space-6);
-}
-
-.setup-notices li::before {
-  content: "";
-  position: absolute;
-  top: 7px;
-  left: 0;
-  width: 6px;
-  height: 6px;
-  background-color: var(--g-fg-4);
-}
-
-.setup-clone-status {
-  margin: 0 0 var(--g-space-16);
+.clone-git a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-2);
   color: var(--g-fg-1);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-}
-
-.setup-clone-history {
-  margin-top: var(--g-space-24);
-}
-
-.setup-clone-history h3 {
-  margin: 0 0 var(--g-space-8);
-  color: var(--g-fg-1);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
   font-weight: 500;
 }
 
-.setup-clone-history ul {
-  margin: 0;
+/* "Clone into" groups the folder and the name; the fieldset draws nothing of its own. */
+.clone-fieldset {
+  min-width: 0;
   padding: 0;
-  border-top: 1px solid var(--g-line);
-  list-style: none;
+  border: 0;
 }
 
-.setup-clone-history li {
+.clone-fieldset > legend {
+  float: left;
+  width: 100%;
+  margin: 0 0 var(--g-space-8);
+  padding: 0;
+}
+
+.clone-fieldset > legend + * {
+  clear: both;
+}
+
+.clone-place {
   display: flex;
   align-items: center;
-  gap: var(--g-space-16);
-  padding: var(--g-space-12) 0;
-  border-bottom: 1px solid var(--g-line);
-}
-
-.setup-clone-history li > div {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--g-space-2);
+  gap: var(--g-space-8);
   min-width: 0;
 }
 
-.setup-clone-history strong {
+/* The parent folder reads as a field: an input's height, ring and fill, and its name. */
+.clone-parent {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-width: 0;
+  max-width: 55%;
+  height: 36px;
+  padding: 0 var(--g-space-12);
+  border: 1px solid var(--g-line-strong);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-1);
+  color: var(--g-fg-1);
+  font: inherit;
+  font-weight: 400;
+  cursor: pointer;
+  transition:
+    border-color var(--g-dur-fast) var(--g-ease),
+    background-color var(--g-dur-fast) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .clone-parent:hover:not(:disabled) {
+    border-color: var(--g-fg-4);
+    background-color: var(--g-surface-2);
+  }
+}
+
+.clone-parent:active:not(:disabled) {
+  background-color: var(--g-surface-3);
+  transition-duration: 0ms;
+}
+
+.clone-parent:disabled {
+  color: var(--g-fg-4);
+  cursor: not-allowed;
+}
+
+.clone-parent[aria-invalid="true"] {
+  border-color: var(--g-red);
+}
+
+.clone-parent > svg {
+  flex: none;
+  color: var(--g-fg-3);
+}
+
+.clone-parent > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clone-separator {
+  flex: none;
+  color: var(--g-fg-3);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+}
+
+.clone-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.clone-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+}
+
+/* The exact command in a code well (4.8): one step below the column or the dialog. */
+.clone-command {
+  padding: var(--g-space-12) var(--g-space-16);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+}
+
+.setup-clone-dialog .clone-command {
+  background-color: var(--g-bg);
+}
+
+.clone-command-text {
+  display: block;
+  color: var(--g-code-fg);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  font-variant-ligatures: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.clone-command-text[data-dim] {
+  color: var(--g-fg-3);
+}
+
+/* Progress: Git's stage and the whole clone's figure, then a 2px bar that only scales. */
+.clone-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+}
+
+.clone-status {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
-  font-weight: 500;
 }
 
-.setup-clone-history small {
+.clone-status > .g-loader {
+  flex: none;
+}
+
+.clone-stage {
+  flex: 1;
+  min-width: 0;
+}
+
+.clone-percent {
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A 2px track in a 4px box, so what follows stays on the grid. */
+.clone-bar {
+  box-sizing: border-box;
+  height: 4px;
+  padding: 1px 0;
+  overflow: hidden;
+  background-color: var(--g-line-strong);
+  background-clip: content-box;
+}
+
+.clone-bar > span {
+  display: block;
+  height: 100%;
+  background-color: var(--g-fg-1);
+  transform-origin: left center;
+  transition: transform var(--g-dur-base) var(--g-ease-out);
+}
+
+.clone-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-space-4) var(--g-space-12);
+  margin: 0;
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.clone-error {
+  margin: 0;
+}
+
+.clone-output {
+  max-height: 144px;
+  margin: var(--g-space-8) 0 0;
+  overflow-y: auto;
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-ligatures: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* In setup the actions follow the form's own gap: Clone at the column's edge, then Back. */
+:is(.clone-form, .clone-running, .clone-failed) > .setup-actions {
+  margin-top: var(--g-space-12);
+}
+
+.clone-back {
+  color: var(--g-fg-2);
 }
 
 /* ------------------------------------------------------- reviewed installation */
@@ -627,17 +744,18 @@
   line-height: var(--g-leading-ui);
 }
 
+/* Hairlines drawn inset, so every row stays on the 4px grid. */
 .setup-install-review dl {
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
   margin: 0;
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-line);
 }
 
 .setup-install-review :is(dt, dd) {
   margin: 0;
   padding: var(--g-space-8) 0;
-  border-bottom: 1px solid var(--g-line);
+  box-shadow: inset 0 -1px 0 var(--g-line);
 }
 
 .setup-install-review dt {
@@ -648,6 +766,8 @@
 
 .setup-install-review dd {
   min-width: 0;
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
 }
 
 .setup-install-review code {

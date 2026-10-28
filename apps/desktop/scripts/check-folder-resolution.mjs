@@ -78,9 +78,10 @@ try {
         assert.equal(await page.getByRole("button", { name: "Use on this device" }).count(), 0);
       }
       await page.getByRole("button", { name: "Clone this repository" }).click();
-      const remote = page.getByRole("textbox", { name: "GitHub repository" });
+      // The project's own repository is fixed: shown, read only.
+      const remote = page.getByRole("textbox", { name: "Repository" });
       assert.equal(await remote.inputValue(), "https://github.com/fixture/project");
-      assert.equal(await remote.isDisabled(), true);
+      assert.equal(await remote.isEditable(), false);
       await page.getByRole("button", { name: "Close clone" }).click();
       await settled(page);
       assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);

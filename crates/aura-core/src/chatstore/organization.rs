@@ -198,7 +198,7 @@ pub(crate) fn execute(
             expected_path,
             identity,
         } => {
-            let _: i64=conn.query_row("SELECT 1 FROM project_folders pf JOIN projects p ON p.id=pf.project_id JOIN folder_locations fl ON fl.folder_id=pf.id AND fl.device_id=?2 WHERE pf.id=?1 AND pf.deleted=0 AND p.deleted=0 AND pf.kind='local' AND fl.path=?3",params![folder_id,device,expected_path.to_string_lossy()],|row|row.get(0))?;
+            let _: i64=conn.query_row("SELECT 1 FROM project_folders pf JOIN projects p ON p.id=pf.project_id JOIN folder_locations fl ON fl.folder_id=pf.id AND fl.device_id=?2 WHERE pf.id=?1 AND pf.deleted=0 AND p.deleted=0 AND pf.kind='local' AND fl.path=?3",params![folder_id,device,super::stored_path(&expected_path)],|row|row.get(0))?;
             update_identity(conn, device, now, &folder_id, Some(&identity))?;
             folder_id
         }
@@ -350,7 +350,7 @@ pub(super) fn add_folder(
     project: &str,
     path: &std::path::Path,
 ) -> rusqlite::Result<String> {
-    let shown = path.to_string_lossy();
+    let shown = super::stored_path(path);
     let existing = conn.query_row("SELECT pf.id FROM project_folders pf JOIN folder_locations fl ON fl.folder_id=pf.id AND fl.device_id=?2 WHERE pf.project_id=?1 AND pf.deleted=0 AND fl.path=?3 LIMIT 1", params![project,device,shown], |row| row.get::<_,String>(0)).optional()?;
     if let Some(id) = existing {
         return Ok(id);
@@ -359,7 +359,7 @@ pub(super) fn add_folder(
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy())
-        .unwrap_or_else(|| shown.clone());
+        .unwrap_or_else(|| shown.as_str().into());
     conn.execute("INSERT INTO project_folders (id,project_id,display_name,kind,origin_device_id,created_at,updated_at,device_id) VALUES (?1,?2,?3,'local',?4,?5,?5,?4)", params![id,project,name,device,now])?;
     conn.execute(
         "INSERT INTO folder_locations (folder_id,device_id,path,last_seen_at) VALUES (?1,?2,?3,?4)",

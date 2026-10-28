@@ -4,7 +4,9 @@ import type { AgentEntry, ProjectSummary, WorkspaceRemovalTarget } from "../../b
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
 import { inTauri } from "../../lib/ipc";
+import type { CloneApi } from "../../lib/setup-actions/api";
 import type { WorkspaceStore } from "../../lib/workspace";
+import { CloneProject } from "../setup/CloneProject";
 import { FolderResolver } from "../setup/FolderResolver";
 import { projectName } from "./ChatList";
 import { Modal } from "./Modal";
@@ -29,7 +31,10 @@ export function ProjectDialog({
   profileId,
   onLocated,
   onInstructions,
+  cloneApi,
 }: {
+  /** The clone's commands; previews pass a synthetic service. */
+  readonly cloneApi?: CloneApi;
   readonly project: ProjectSummary | null;
   readonly store: WorkspaceStore;
   readonly transport: Transport;
@@ -198,6 +203,20 @@ export function ProjectDialog({
                   ? "Change folder"
                   : "Choose folder"}
           </button>
+          {current ? null : (
+            // A new project can start from a repository: Git clones it into a new folder,
+            // which becomes this project's folder.
+            <CloneProject
+              className="g-button chat-project-clone"
+              api={cloneApi}
+              disabled={picking || state.busy}
+              pickParent={() => transport.pickFolder()}
+              onFolder={(path, cloned) => {
+                setFolder(path);
+                if (!name.trim()) setName(cloned);
+              }}
+            />
+          )}
         </section>
         <label className="ui-field">
           Default agent

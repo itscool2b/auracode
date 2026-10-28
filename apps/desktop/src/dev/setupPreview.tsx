@@ -2,12 +2,18 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AgentEntry, ProjectSummary, SetupSnapshot } from "../bindings";
+import { ProjectDialog } from "../components/chat/ProjectDialog";
 import { AgentsScreen } from "../components/setup/AgentsScreen";
 import { Onboarding } from "../components/setup/Onboarding";
 import { AppStore } from "../lib/chat/appStore";
 import { FakeTransport } from "../lib/chat/testing";
 import { DEFAULT_GENERAL, type SetupApi } from "../lib/setup";
+import { InstallApiContext } from "../lib/setup-actions/api";
 import { WorkspaceStore } from "../lib/workspace";
+import { cloneFixture } from "./cloneFixture";
+import { installFixture } from "./installFixture";
+
+const install = installFixture();
 
 const params = new URLSearchParams(location.search);
 const missing = params.has("missing");
@@ -69,22 +75,42 @@ const transport = new FakeTransport({
   pickFolder: async () => "C:/fixture/Orbit",
 });
 const app = new AppStore(transport);
+// `?preview=clone`, `clone-running` and `clone-error` open the first-project step on the clone,
+// filled in, and started for the last two; `setup` clones to completion when asked.
+const mode = params.get("preview") ?? "setup";
+const cloneMode = mode.startsWith("clone");
+const cloneCalls: string[] = [];
+const clone = {
+  api: cloneFixture(
+    mode === "clone-running" ? "running" : mode === "clone-error" ? "error" : "ready",
+    cloneCalls,
+  ),
+  draft: cloneMode
+    ? {
+        remote: "https://github.com/auracode/orbit",
+        parent: "C:\\Users\\fixture\\code",
+        start: mode !== "clone",
+      }
+    : undefined,
+};
 const initial: SetupSnapshot = {
-  cold_start: true,
+  cold_start: !cloneMode,
   notice: null,
   preferences: {
     revision: 0,
-    step: "welcome",
+    step: cloneMode ? "project" : "welcome",
     motion: "full",
     completed: false,
     first_project_id: null,
     general: { ...DEFAULT_GENERAL },
   },
 };
+// Each clone preview starts from its own saved setup, apart from the walk-through's.
+const storageKey = cloneMode ? `setup-fixture-${mode}` : "setup-fixture";
 let stored: SetupSnapshot = JSON.parse(
-  sessionStorage.getItem("setup-fixture") ?? JSON.stringify(initial),
+  sessionStorage.getItem(storageKey) ?? JSON.stringify(initial),
 );
-const persist = () => sessionStorage.setItem("setup-fixture", JSON.stringify(stored));
+const persist = () => sessionStorage.setItem(storageKey, JSON.stringify(stored));
 const api: SetupApi = {
   snapshot: async () => {
     const value = structuredClone(stored);
@@ -150,12 +176,36 @@ const workspace = new WorkspaceStore({
   createChat: unsupported,
 });
 Object.assign(window, {
-  setupFixture: { methods: () => transport.methods(), projects: () => projects.length },
+  setupFixture: {
+    methods: () => transport.methods(),
+    projects: () => projects.length,
+    folders: () => projects.map((project) => project.folders[0]?.path),
+    cloneCalls: () => [...cloneCalls],
+  },
 });
 
 function Preview() {
-  const [view, setView] = useState(params.get("preview") === "agents" ? "agents" : "setup");
+  const [view, setView] = useState(
+    mode === "agents" || mode === "agents-installing"
+      ? "agents"
+      : mode === "new-project"
+        ? "new-project"
+        : "setup",
+  );
   const [restart, setRestart] = useState(false);
+  if (view === "new-project")
+    return (
+      <main className="setup-shell g-root">
+        <ProjectDialog
+          project={null}
+          store={workspace}
+          transport={transport}
+          agents={agents}
+          cloneApi={clone.api}
+          onClose={() => setView("done")}
+        />
+      </main>
+    );
   if (view === "account")
     return (
       <main className="setup-shell">
@@ -200,6 +250,7 @@ function Preview() {
       transport={transport}
       workspace={workspace}
       restart={restart}
+      clone={clone}
       onDone={() => setView("done")}
       onDemo={() => setView("demo")}
       onAccount={() => {
@@ -209,10 +260,29 @@ function Preview() {
     />
   );
 }
+/** Waits for a button by its accessible name, as a person would find it, then presses it. */
+async function press(name: string) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const button = [...document.querySelectorAll("button")].find(
+      (node) => (node.getAttribute("aria-label") ?? node.textContent?.trim()) === name,
+    );
+    if (button && !button.disabled) {
+      button.click();
+      return;
+    }
+    await new Promise((done) => setTimeout(done, 50));
+  }
+}
+
 export function mountSetupPreview(container: HTMLElement): void {
   createRoot(container).render(
     <StrictMode>
-      <Preview />
+      <InstallApiContext.Provider value={install}>
+        <Preview />
+      </InstallApiContext.Provider>
     </StrictMode>,
   );
+  // `?preview=agents-installing`: Grok Build's reviewed install, started, with npm at work.
+  if (mode === "agents-installing")
+    void press("Install Grok Build").then(() => press("Start installation"));
 }

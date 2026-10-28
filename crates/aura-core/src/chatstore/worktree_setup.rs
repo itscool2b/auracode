@@ -36,11 +36,11 @@ pub(crate) fn execute(
         Some(_) if command.save.is_some() && !command.folder_save => return Err(invalid()),
         Some(folder_id) => conn.query_row(
             "SELECT pf.id FROM project_folders pf JOIN projects p ON p.id=pf.project_id JOIN folder_locations fl ON fl.folder_id=pf.id WHERE pf.id=?1 AND pf.deleted=0 AND p.deleted=0 AND fl.device_id=?2 AND fl.path=?3",
-            params![folder_id, device, command.source], |row| row.get(0)
+            params![folder_id, device, super::stored_path_text(&command.source)], |row| row.get(0)
         ).optional()?,
         None => conn.query_row(
             "SELECT pf.id FROM project_folders pf JOIN folder_locations fl ON fl.folder_id=pf.id JOIN chats c ON c.project_id=pf.project_id WHERE c.id=?1 AND c.deleted=0 AND pf.deleted=0 AND fl.device_id=?2 AND fl.path=?3 ORDER BY pf.id LIMIT 1",
-            params![command.chat_id, device, command.source], |row| row.get(0)
+            params![command.chat_id, device, super::stored_path_text(&command.source)], |row| row.get(0)
         ).optional()?,
     }.ok_or_else(invalid)?;
     let input = if let Some(input) = command.save {

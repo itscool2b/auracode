@@ -1,5 +1,62 @@
 # Auracode implementation progress
 
+## 2026-10-28: M3 setup, clone and agents
+
+Branch `m3-onboarding` (from `app-integrated`).
+
+- **Setup:** the account step says it plainly ("Accounts are optional." / "And invite-only for
+  now."): auracode needs no account and no network, everything stays on this computer, and an
+  account with an invitation only adds sync. Welcome says the same in one line. Every step stays
+  skippable, the step is saved on every move, motion stays out of the steps and the intro (the
+  dither field forming the seal and turtle) keeps its skip rules.
+- **Clone a repository** (Rust, `aura-core::cloning`, replacing the isolated GitHub-only clone):
+  the form is read by Rust on every change (typing waits 200ms) and answers with the first
+  problem beside its field or the exact `git clone --progress -- <address> <folder>`. Only
+  https:// and SSH addresses are accepted; everything else is refused with its reason. Git runs
+  with the person's own configuration, credential helpers and SSH setup (only variables that
+  point Git at another repository are removed, and `GIT_TERMINAL_PROMPT=0` since no terminal is
+  attached); auracode never reads or stores credentials. Start creates the destination
+  atomically; Cancel, a failure, closing the form or quitting stops Git's process tree and then
+  removes only that folder, while it is still the one created. Progress streams from Git's own
+  lines through a long poll (`clone_status` with `after`). Setup opens the clone in place on the
+  first-project step (X Money's one question per screen) and a finished clone becomes the first
+  project; New project offers the same clone in a dialog beside Choose folder. The journal
+  folders beside clones and the history view are gone. Decision: the owner's brief (the
+  person's own Git and helpers, Cancel removes the partial folder) replaces the earlier isolated
+  design; an app crash mid-clone leaves the unfinished folder, and the next clone with that name
+  says it exists.
+- **Agents:** a reviewed one-click install for Grok Build (`@xai-official/grok@1.0.70`, xAI's
+  documented npm distribution, published and signed by xAI's npm account). Sign in now runs the
+  vendor's own login for Cursor (`cursor-agent login`), Grok Build (`grok login`), OpenCode
+  (`opencode auth login`) and Hermes (`hermes auth`), beside Claude Code and Codex. Cursor,
+  Hermes, oh-my-pi, OpenCode 2 and Antigravity keep their guides, each with its reason in
+  `docs/setup-actions.md`; Pi, oh-my-pi and Antigravity sign in inside their own interface.
+- **Fixtures and checks:** `?preview=clone`, `clone-running`, `clone-error`, `new-project` and
+  `agents-installing`; `check-layout.mjs` probes them and the clone dialog; `check-setup.mjs`
+  adds a keyboard clone into a first project and the account copy; `check-setup-actions.mjs`
+  covers the clone dialog (command before start, refused address, cancel, finish, failure and
+  retry, taken name). The install review's rows now sit on the 4px grid.
+
+Verified locally on Windows: `pnpm lint` (37 warnings, all pre-existing CSS specificity),
+`pnpm typecheck`, `pnpm test` (root scripts 22, ui 276, desktop 5 node and 441 with 19 skipped,
+design lab 352, web 4; 15 new desktop tests for the clone controller and its markup). Rust in
+the shared target after cleaning the workspace crates: `aura-core` cloning 11 passed (real Git:
+a clone from a local bare repository through a file URL, a failed clone, a cancel against a
+server that never answers, removal of read-only pack files), `aura-agents` lib 51 passed,
+`aura-protocol` 23 plus its export tests; the desktop `export_bindings` (no change from the
+committed bindings); Clippy with `-D warnings` on aura-protocol, aura-core and aura-agents (all
+targets) and auracode-desktop (lib and tests); `cargo fmt --check`. Chromium and WebKit:
+`check-setup`, `check-setup-actions`, `check-folder-resolution`, `check-agent-installations` and
+`check-layout`, 280 of 280 views clean. One real install, as the brief allows for an agent not
+already on this PC: the reviewed argv (`node npm-cli.js install --global
+@xai-official/grok@1.0.70`) installed Grok Build into npm's user prefix, and `grok --version`
+reports 1.0.70; it stays installed. No login was started and Claude Code, Codex, Pi and OpenCode
+were not touched. Sheets beside their references, at 1440x900 and 1024x700 (ignored):
+`target/design-research/sheets/app-m3-*.png`. Not run: a real remote clone or sign-in through the
+built app, the WebDriver smoke, macOS, the hand walkthrough and CI. Hermes cannot start on this PC
+(Application Control blocks its bundled `_sqlite3`), so its `hermes auth` was checked in its
+source, not run.
+
 ## 2026-10-27: M4 parallel work: terminal panel, merge conflicts, more editors, missing folders
 
 Branch `m4-panel` (from `m4-worktree-ui`).
@@ -3469,3 +3526,110 @@ and `cargo clippy -p aura-core --features account-sync --lib --tests -- -D warni
 checkpoints, conversation and gitworkspaces (83); desktop Vitest (403, 19 skipped), `tsc` and Biome
 (37 warnings, none new). The browser `check-*` scripts, the full aura-core suite and CI were not
 run. Bindings were unchanged by the merge.
+
+### Open pull requests merged and the production API switched on (2026-10-28)
+
+The owner granted full merge autonomy. PRs #8 to #18 were merged in order on one branch, each
+with its own merge commit, verified together and pushed to `main` once (01ede50). GitHub marks
+all eleven merged. Conflicts were confined to this log (both sides kept), the notice catalogue
+(regenerated), the Agents page (the redesign's version, which already offers the OpenCode install)
+and three files where the earlier integration merges' resolutions applied unchanged.
+
+Checks on the merged tree:
+- `pnpm lint`, `pnpm typecheck` and `pnpm test` pass: desktop 426 plus 5, ui 276, design lab 352,
+  web 4, scripts 22.
+- `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D warnings` pass.
+- Rust suites: aura-config 102, the desktop lib 208, and aura-core lib with account-sync 551 of
+  552 (the failure is the account test race fixed below).
+- The website's browser tests pass in Chromium and WebKit, and the worker builds and passes 5
+  runtime tests.
+- Application Control blocked the aura-agents lib test binary (4551), so it runs in the final CI.
+
+`auracode.si` served the merged build about 15 minutes after the push. Every route answers, and
+the home page shows the new landing.
+
+**Production API.** The zone route `auracode.si/api/*` now points to `auracode-api`, the staged
+build with the invitation-order fix, as the owner pre-approved for M6. Verified live:
+- `health` and `config` return 200, with the production Turnstile key.
+- `auth/session`, `devices` and `account` return 401 without a session.
+- A sign-in challenge with an invalid Turnstile token gets 403, and so does a foreign origin. No
+  email is sent, and the allowlist and Turnstile secrets are present.
+- `/signin` renders the real Turnstile widget.
+
+One live invited sign-in remains for the owner, because it needs the emailed code.
+
+**Account test race.** `accounts::tests::reset_detaches_old_profile_durably...` failed with
+InvalidState in about one run in five. Account writes are ordered per vault entry across the
+process, and every account test uses the same origin and account ID, so a restore in one test made
+another test's account stale. The tests now take turns with that entry. The result: 0 failures in
+20 runs of `accounts::`, against 3 in 15 before. Production code is unchanged.
+
+### Windows native acceptance fixes (2026-10-28)
+
+Branch `native-fixes` (from local `app-integrated`: the redesigned app with the worktree flow, the
+M2b/M2c gaps, the M4 panel and the first acceptance fixes). The merge needed no bindings change.
+Each item is its own commit (the sidebar foot and the agent count share one).
+
+- **Lost writes on quit:** both drops came right as the store closed, after every chat had
+  answered its quit (`took_ms=1`): an answered actor still took messages and queued store work,
+  and a chat without a running actor could start one after the quit began. A quit's answer now
+  also waits for work in flight (page reads, an option's answer, a process winding down), bounded
+  by `shutdown_all`'s deadline; after it the actor is sealed and refuses store work with
+  `ShuttingDown`, and no actor starts once the quit began. If the store still closes with ops
+  waiting (a deadline ran out), each is named: lost writes at error level and counted, reads at
+  warn level.
+- **Verbatim paths:** a Windows verbatim path takes its plain spelling (`C:\...`,
+  `\\server\share`) when that names the same folder: it fits MAX_PATH (259 UTF-16 units) and no
+  part needs the prefix (`.`, `..`, a trailing dot or space, a DOS device name, a character Win32
+  rejects, an empty part); volume GUID paths and anything unsafe keep it. New folder locations are
+  saved that way, every `folder_locations.path` comparison binds the same spelling, worktree
+  previews show it, and the interface's folder comparison accepts both. Migration 14 rewrites saved
+  rows with the same Rust rule after the usual pre-migration backup.
+- **Each turn keeps its agent:** history pages name each turn's agent (`turn_agents`, by the rule
+  conversation and sync use), a live turn takes the chat's agent of that moment, and the transcript
+  labels each turn with its own agent, through reloads.
+- **Agent marks:** every `AgentMark` shows its two-letter code (CC, CX, OC, PI) at every size.
+- **Sidebar foot and one agent count (owner request 2026-10-28):** the sidebar ends with the logo
+  and one Settings button (Ctrl+,); the agent dock and the profile row are gone, and the band keeps
+  only the collapse toggle, so the logo shows once. Settings has Account and Agents, and the
+  palette gains Open agents. An account whose sync is paused or failing puts a small dot on the
+  Settings button and names it. One lineup (`lib/chat/agentLineup.ts`) feeds New chat's choices,
+  its "Other agents" count and the composer's picker. `check-profile-status` became
+  `check-sidebar-footer` (CI renamed with it); `check-layout` dropped the two dock menus.
+- **Status dots are circles (owner request 2026-10-28):** `StatusDot`, an `AgentMark`'s waiting and
+  failed states and every hand-drawn status mark in the app; pixels, loader cells, the pixel check,
+  diffstat squares, bullets and plan nodes stay square. The tray badge was already round.
+- **Quit question:** the window comes forward and asks in its own Graphite dialog, Keep auracode
+  open focused (Enter, Esc, the scrim and the close button keep it open), the red "Stop agents and
+  quit" as the explicit choice; it hides only once quitting goes ahead. If the page does not show
+  the question within 3 s, the system dialog asks, Keep open first and default.
+- **Account verification in the development build:** not a product bug. `/verify-device` lets
+  only the installed app's origins embed it (`frame-ancestors` and the parents it answers), and the
+  development build runs at `http://localhost:1420`. Such a build now says so at once and loads no
+  frame; the installed app keeps the frame and its 30 s "could not load" message.
+- **Hidden rendering:** the chat store applies every frame as it arrives but, while the page is
+  hidden, does not tell the view; it renders once, with everything, when the page shows again.
+
+Verified locally on Windows: `pnpm lint` (Biome 28 warnings, no errors), `pnpm typecheck`, `pnpm
+test` (root scripts 22, ui 278, desktop 5 node and 441 with 19 skipped, design lab 352, web 4);
+`cargo fmt --all --check`; `cargo clippy -p aura-protocol -p aura-core -p auracode-desktop
+--all-targets -- -D warnings` and the account-sync clippy; `cargo test -p aura-core --lib` (459),
+with `--features account-sync` (554), `-p aura-protocol --lib` (23) and `-p auracode-desktop --lib`
+(210, bindings regenerated with `turn_agents`), after cleaning the workspace crates in the shared
+target. In Chromium and WebKit every `apps/desktop/scripts/check-*.mjs` passed with its axe audits:
+`check-layout` (all 252 views clean, the quit dialog among them), `check-sidebar-footer`,
+`check-chat`, `check-settings` (with the fourteen checks it runs), `check-setup`,
+`check-setup-actions`, `check-library`, `check-new-chat-worktree`, `check-terminal-panel`,
+`check-chat-auth`, `check-agent-installations`, `check-config-recovery`,
+`check-folder-resolution`, `check-repository-publication`, `check-workspace-removal`,
+`check-account-reset` and `check-account-vault`. Sheets are the ignored
+`target/design-research/sheets/app-fixes-{sidebar,quit,marks,dots}.png`.
+
+Not done: the minimized CPU was not measured again (it needs the native debug build, whose exe in
+the shared target the owner may run, and Vite's port 1420 was held by another session), so the
+hidden-page change rests on Vitest; the quit question was seen in the browser preview, not the
+running app. Application Control (4551) blocked several freshly linked binaries; relinking let each
+run and nothing was bypassed. `.github/scripts/acceptance-gates.test.mjs` (outside `pnpm test`)
+already failed on `app-integrated`: `check-layout`, `check-new-chat-worktree` and
+`check-terminal-panel` are missing from the CI workflow. CI and the hand walkthrough of the built
+app were not run.

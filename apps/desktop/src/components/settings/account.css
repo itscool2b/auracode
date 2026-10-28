@@ -252,6 +252,7 @@ textarea.account-secret {
   height: 6px;
   margin: 0 var(--g-space-2);
   background-color: var(--g-fg-3);
+  border-radius: var(--g-radius-pill);
 }
 
 .account-verification[data-phase="failed"] .account-verification-square {

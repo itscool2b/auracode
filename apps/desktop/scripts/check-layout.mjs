@@ -1,8 +1,8 @@
 /**
  * The layout probe: walks every ?preview= mode (and library.html, the fixture with its own page) in
  * Chromium and WebKit at two window sizes, plus the chat shell's floating layers opened as a person
- * opens them ("settled#picker": the picker, the palette, the chat and account menus, the other
- * agents, the Changes panel, a typed message) and other screens' states ("library.html#library-item"),
+ * opens them ("settled#picker": the picker, the palette, the chat menu, the Changes panel, a
+ * typed message) and other screens' states ("library.html#library-item"),
  * and fails on the five things a clean screen never has:
  *
  * 1. Horizontal overflow: the page scrolls sideways, or a visible box reaches past the window.
@@ -85,8 +85,8 @@ export const MODES = [
   "settled#palette",
   "settled#chat-menu",
   "settled#changes",
-  "settled#other-agents",
-  "settled#account-menu",
+  // The quit question, in the window's own dialog over the chat.
+  "settled&quit#quit",
   "thinking#typed",
   // The worktree chip's popover, Local chosen, a refused branch name, the setup terminal after
   // Create, and the recreate dialog for a deleted worktree folder.
@@ -105,6 +105,14 @@ export const MODES = [
   // A chat whose worktree folder was deleted: its start error, and Recreate folder from it.
   "missing-worktree",
   "missing-worktree#recreate",
+  // Setup's clone: the form with its exact command, Git running, and a failed clone; the same
+  // clone from New project's dialog; and an agent's reviewed install with npm running.
+  "clone",
+  "clone-running",
+  "clone-error",
+  "new-project",
+  "new-project#clone-dialog",
+  "agents-installing",
   // Instructions in Settings: one file, per agent with its file tabs, the choice between
   // different texts, a hand-edited managed copy, size warnings, a save's review, and the
   // worktree question for an untracked file.
@@ -147,8 +155,7 @@ const OPENERS = {
   palette: (page) => page.keyboard.press("Control+k"),
   "chat-menu": (page) => page.locator('summary[aria-label="Chat details and controls"]').click(),
   changes: (page) => page.getByRole("button", { name: "Changes", exact: true }).click(),
-  "other-agents": (page) => page.locator('summary[aria-label$="other agents"]').click(),
-  "account-menu": (page) => page.locator('summary[aria-label="Account menu"]').click(),
+  quit: (page) => page.getByTestId("quit-keep").waitFor(),
   "busy-folder": async (page) => {
     await page.getByLabel("Move to project").selectOption({ label: "Website" });
     await page.getByTestId("move-folder").selectOption("folder-site");
@@ -218,6 +225,15 @@ const OPENERS = {
     await page.getByText("Combine them", { exact: true }).click();
     await page.getByRole("dialog", { name: "Use one file for every agent" }).waitFor();
     await page.getByTestId("diff-block").first().waitFor();
+  },
+  "clone-dialog": async (page) => {
+    await page.getByRole("button", { name: "Clone a repository", exact: true }).click();
+    await page
+      .getByRole("textbox", { name: "Repository" })
+      .fill("https://github.com/auracode/orbit");
+    // The folder button reads "Choose a folder", or names the folder a clone used last.
+    await page.locator(".clone-parent").click();
+    await page.locator(".clone-command-text").waitFor();
   },
   resized: async (page) => {
     await terminalReady(page);

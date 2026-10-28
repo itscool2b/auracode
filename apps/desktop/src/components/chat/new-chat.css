@@ -2,7 +2,7 @@
  * New chat, after Grok's start screen (docs/design/visual-language.md, 6.13): the logo, one display
  * line, one quiet hint, and one composer card. Agents are pills whose mark carries their state:
  * the walking loader while auracode looks for them, their code once found (settling in once), the
- * volt square while one waits on a sign-in. One alignment axis runs through the card: the agent
+ * volt dot while one waits on a sign-in. One alignment axis runs through the card: the agent
  * marks, the folder icon and every line under the card start 16px in (12px padding + 4px), and
  * the agent names and the path share the next column.
  */
@@ -285,7 +285,7 @@
   color: var(--g-red);
 }
 
-/* A folder with running chats: a calm well, one volt square, the names, and an explicit consent. */
+/* A folder with running chats: a calm well, one volt dot, the names, and an explicit consent. */
 .new-chat-busy {
   display: flex;
   flex-direction: column;
@@ -313,6 +313,7 @@
   width: 6px;
   height: 6px;
   background-color: var(--g-volt);
+  border-radius: var(--g-radius-pill);
 }
 
 .new-chat-busy p {
@@ -435,7 +436,7 @@
   color: var(--g-fg-2);
 }
 
-/* A sign-in the agent asks for: the one volt square on the line. */
+/* A sign-in the agent asks for: the one volt dot on the line. */
 .new-chat-auth[data-state="sign-in"] {
   display: flex;
   align-items: center;
@@ -449,6 +450,7 @@
   width: 6px;
   height: 6px;
   background-color: var(--g-volt);
+  border-radius: var(--g-radius-pill);
 }
 
 .new-chat-unavailable {
@@ -547,12 +549,13 @@
   color: var(--g-fg-2);
 }
 
-/* A change Rust refused: one red square on the chip until it is fixed or undone. */
+/* A change Rust refused: one red dot on the chip until it is fixed or undone. */
 .new-chat-worktree-flag {
   flex: none;
   width: 6px;
   height: 6px;
   background-color: var(--g-red);
+  border-radius: var(--g-radius-pill);
 }
 
 /* The first review and the later ones: the loader in the icon's 16px slot, nothing moves. */

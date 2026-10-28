@@ -1,4 +1,4 @@
-/** Synthetic profile switches and cached status. No native account service or network. */
+/** The production sidebar footer with synthetic profile switches and cached sync status only. */
 import "../styles.css";
 import "../ui-tokens.css";
 import "../chat.css";
@@ -6,7 +6,7 @@ import "../shell.css";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { ProfileMeta } from "../bindings";
-import { ProfileStatus } from "../components/chat/ProfileStatus";
+import { SidebarFooter } from "../components/chat/SidebarFooter";
 import type { AccountSyncStatus } from "../lib/account/bindings";
 import type { AccountSyncSource } from "../lib/account/sync";
 
@@ -38,7 +38,7 @@ const status = (state: AccountSyncStatus["state"], pending = 0): AccountSyncStat
     state === "paused" ? "Sign in again to resume sync. Saved work remains on this device." : null,
 });
 Object.assign(window, {
-  profileStatusFixture: {
+  sidebarFooterFixture: {
     calls: () => [...calls],
     resolve: (index: number, id: string) => reads[index]?.([id, status("idle")]),
     event: (id: string, state: AccountSyncStatus["state"], pending: number) => {
@@ -54,17 +54,18 @@ function Fixture() {
       className="g-root"
       data-theme="dark"
       style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 32,
         padding: 40,
         minHeight: "100vh",
-        background: "var(--g-surface-1)",
+        boxSizing: "border-box",
+        background: "var(--g-bg)",
         color: "var(--g-fg-1)",
       }}
     >
-      <h1>Workspace identity</h1>
-      <section
-        aria-label="Synthetic profile selection"
-        style={{ display: "flex", gap: 8, marginBottom: 32 }}
-      >
+      <h1>Sidebar footer</h1>
+      <section aria-label="Synthetic profile selection" style={{ display: "flex", gap: 8 }}>
         {profiles.map((value) => (
           <button
             key={value.id}
@@ -77,14 +78,15 @@ function Fixture() {
         ))}
       </section>
       <aside
-        aria-label="Workspace sidebar"
-        style={{ width: 264, background: "var(--g-surface-2)", padding: 12, borderRadius: 12 }}
+        className="chat-sidebar"
+        aria-label="Sidebar"
+        style={{ width: 264, height: 160, boxSizing: "border-box", paddingTop: 0 }}
       >
-        <ProfileStatus
+        <div style={{ flex: 1 }} />
+        <SidebarFooter
           profile={profile}
           source={source}
           onSettings={() => calls.push("settings")}
-          onDiagnostics={() => calls.push("diagnostics")}
         />
       </aside>
     </main>

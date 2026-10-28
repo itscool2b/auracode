@@ -1,15 +1,23 @@
-//! Explicit GitHub clones. Reviews are inert; every write belongs to a fresh directory and journal.
-//! Recovery never deletes, replaces or resumes writes into an interrupted destination.
+//! Cloning a repository into a new folder with the person's own Git.
+//!
+//! A check is inert: it reads the form, finds Git and answers with the exact command, or the first
+//! problem, beside the field it belongs to. Start creates the destination itself, atomically, so
+//! auracode knows which folder is its own; a canceled or failed clone removes that folder and only
+//! that folder. Git runs with the person's own configuration, credential helpers and SSH setup:
+//! auracode never reads, stores or passes credentials.
 mod files;
 mod process;
+mod progress;
 mod validate;
 
 use aura_process::{EnvKey, ResolvedEnv, find_exe};
-use aura_protocol::setup_actions::{CloneInput, CloneRecord, CloneReview, CloneState};
+use aura_protocol::setup_actions::{
+    CloneCheck, CloneField, CloneInput, CloneProblem, CloneRecord, CloneReview, CloneState,
+};
 use cap_std::fs::Dir;
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, MutexGuard},
     time::{Duration, Instant},
 };
@@ -20,9 +28,7 @@ type Result<T> = std::result::Result<T, CloneError>;
 pub enum CloneError {
     #[error("{0}")]
     Message(String),
-    #[error(
-        "The clone folder or recovery record could not be accessed. Its existing contents were retained."
-    )]
+    #[error("The folder could not be read. Nothing was changed.")]
     Io(#[from] std::io::Error),
 }
 impl CloneError {
@@ -31,34 +37,77 @@ impl CloneError {
     }
 }
 
+/// Variables that point Git at another repository. The person's own Git settings
+/// (`GIT_CONFIG_*`, `GIT_SSH_COMMAND`, `GIT_ASKPASS`) pass through untouched.
+const REPOSITORY_VARIABLES: &[&str] = &[
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_NAMESPACE",
+    "GIT_PREFIX",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_GRAFT_FILE",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_SHALLOW_FILE",
+    "GIT_QUARANTINE_PATH",
+    "GIT_INTERNAL_SUPER_PREFIX",
+];
+
+/// Windows clone paths need room for Git's own files under the new folder.
+const WINDOWS_PATH_LIMIT: usize = 220;
+
 pub(crate) struct Prepared {
     pub(crate) view: CloneReview,
     pub(crate) parent: PathBuf,
     parent_handle: Dir,
     name: String,
     program: PathBuf,
+    arguments: Vec<String>,
     env: Arc<ResolvedEnv>,
     expires: Instant,
 }
+
 pub(crate) struct Job {
     owner: String,
     record: Mutex<CloneRecord>,
     canceled: watch::Sender<bool>,
+    changed: watch::Sender<u32>,
 }
 impl Job {
     pub(crate) fn snapshot(&self) -> CloneRecord {
         lock(&self.record).clone()
     }
-    pub(crate) fn finish(&self, state: CloneState, detail: &str) {
-        let mut record = lock(&self.record);
-        record.state = state;
-        record.detail = detail.into();
+    /// Changes the record and wakes every watcher.
+    pub(crate) fn update(&self, change: impl FnOnce(&mut CloneRecord)) {
+        let revision = {
+            let mut record = lock(&self.record);
+            change(&mut record);
+            record.revision = record.revision.wrapping_add(1);
+            record.revision
+        };
+        self.changed.send_replace(revision);
     }
+    pub(crate) fn finish(&self, state: CloneState, detail: &str) {
+        self.update(|record| {
+            record.state = state;
+            record.detail = detail.into();
+        });
+    }
+}
+
+struct Pending {
+    owner: String,
+    prepared: Prepared,
+    created: Instant,
 }
 
 #[derive(Default)]
 pub struct Clones {
-    pending: Mutex<HashMap<String, (String, Prepared)>>,
+    pending: Mutex<HashMap<String, Pending>>,
     jobs: Mutex<HashMap<String, Arc<Job>>>,
 }
 impl Drop for Clones {
@@ -67,29 +116,55 @@ impl Drop for Clones {
     }
 }
 impl Clones {
-    pub async fn review(
+    /// Reads the form and, when it is complete, keeps a startable review for ten minutes. Typing
+    /// asks again on every change, so only the newest reviews per window are kept.
+    pub async fn check(
         &self,
         owner: &str,
         input: CloneInput,
         env: Arc<ResolvedEnv>,
-    ) -> Result<CloneReview> {
-        let prepared = tokio::task::spawn_blocking(move || prepare(input, env))
+    ) -> Result<CloneCheck> {
+        let (check, prepared) = tokio::task::spawn_blocking(move || prepare(&input, &env))
             .await
-            .map_err(|_| CloneError::message("Clone inspection failed."))??;
-        let mut pending = lock(&self.pending);
-        pending.retain(|_, (_, value)| value.expires > Instant::now());
-        if pending.len() >= 8 {
-            return Err(CloneError::message(
-                "Close another clone review before preparing one.",
-            ));
+            .map_err(|_| CloneError::message("The clone form could not be checked."))?;
+        if let Some(prepared) = prepared {
+            let mut pending = lock(&self.pending);
+            pending.retain(|_, value| value.prepared.expires > Instant::now());
+            while pending
+                .values()
+                .filter(|value| value.owner == owner)
+                .count()
+                >= 8
+            {
+                let oldest = pending
+                    .iter()
+                    .filter(|(_, value)| value.owner == owner)
+                    .min_by_key(|(_, value)| value.created)
+                    .map(|(id, _)| id.clone());
+                match oldest {
+                    Some(id) => pending.remove(&id),
+                    None => break,
+                };
+            }
+            if pending.len() >= 64 {
+                return Err(CloneError::message(
+                    "Too many clone forms are open. Close one and try again.",
+                ));
+            }
+            pending.insert(
+                prepared.view.id.clone(),
+                Pending {
+                    owner: owner.into(),
+                    prepared,
+                    created: Instant::now(),
+                },
+            );
         }
-        let view = prepared.view.clone();
-        pending.insert(view.id.clone(), (owner.into(), prepared));
-        Ok(view)
+        Ok(check)
     }
     pub fn cancel_review(&self, owner: &str, id: &str) {
         let mut pending = lock(&self.pending);
-        if pending.get(id).is_some_and(|(known, _)| known == owner) {
+        if pending.get(id).is_some_and(|value| value.owner == owner) {
             pending.remove(id);
         }
     }
@@ -97,62 +172,66 @@ impl Clones {
         let mut pending = lock(&self.pending);
         if !pending
             .get(id)
-            .is_some_and(|(known, value)| known == owner && value.expires > Instant::now())
+            .is_some_and(|value| value.owner == owner && value.prepared.expires > Instant::now())
         {
             return Err(CloneError::message(
-                "This clone review expired or belongs to another window.",
+                "This clone form is out of date. Check the address and folder again.",
             ));
         }
         let mut jobs = lock(&self.jobs);
-        if jobs
-            .values()
-            .filter(|job| {
-                matches!(
-                    job.snapshot().state,
-                    CloneState::Running | CloneState::CleanupPending
-                )
-            })
-            .count()
-            >= 2
-        {
+        let active = |job: &Arc<Job>| {
+            matches!(
+                job.snapshot().state,
+                CloneState::Running | CloneState::CleanupPending
+            )
+        };
+        if jobs.values().filter(|job| active(job)).count() >= 2 {
             return Err(CloneError::message(
-                "Wait for an existing clone to stop before starting another.",
+                "Two clones are already running. Wait for one to finish.",
             ));
         }
         if jobs.len() >= 32 {
-            jobs.retain(|_, job| {
-                matches!(
-                    job.snapshot().state,
-                    CloneState::Running | CloneState::CleanupPending
-                )
-            });
+            jobs.retain(|_, job| active(job));
         }
-        let (_, prepared) = pending
-            .remove(id)
-            .ok_or_else(|| CloneError::message("Review the clone again."))?;
+        let Some(Pending { prepared, .. }) = pending.remove(id) else {
+            return Err(CloneError::message("Check the clone form again."));
+        };
         let record = CloneRecord {
             id: id.into(),
+            revision: 0,
             remote: prepared.view.remote.clone(),
-            parent: prepared.view.parent.clone(),
+            repository: prepared.view.repository.clone(),
             destination: prepared.view.destination.clone(),
-            journal: prepared
-                .parent
-                .join(format!(".auracode-clone-{id}"))
-                .to_string_lossy()
-                .into_owned(),
             state: CloneState::Running,
-            detail: "Preparing the owned clone.".into(),
+            detail: "Starting Git.".into(),
+            progress: None,
+            output: Vec::new(),
+            removed: false,
         };
         let job = Arc::new(Job {
             owner: owner.into(),
             record: Mutex::new(record),
             canceled: watch::channel(false).0,
+            changed: watch::channel(0).0,
         });
         jobs.insert(id.into(), Arc::clone(&job));
         Ok((prepared, job))
     }
-    pub fn status(&self, owner: &str, id: &str) -> Result<CloneRecord> {
-        lock(&self.jobs).get(id).filter(|job| job.owner == owner).map(|job| job.snapshot()).ok_or_else(|| CloneError::message("This clone is no longer open. Choose its parent folder to inspect retained recovery records."))
+    /// The clone's record. With `after`, waits up to ten seconds for a newer revision first, so
+    /// a window can follow Git's progress without polling.
+    pub async fn status(&self, owner: &str, id: &str, after: Option<u32>) -> Result<CloneRecord> {
+        let job = lock(&self.jobs)
+            .get(id)
+            .filter(|job| job.owner == owner)
+            .cloned()
+            .ok_or_else(|| CloneError::message("This clone is no longer open."))?;
+        if let Some(after) = after {
+            let mut changed = job.changed.subscribe();
+            if *changed.borrow_and_update() == after {
+                let _ = tokio::time::timeout(Duration::from_secs(10), changed.changed()).await;
+            }
+        }
+        Ok(job.snapshot())
     }
     pub fn cancel(&self, owner: &str, id: &str) {
         self.cancel_review(owner, id);
@@ -161,7 +240,7 @@ impl Clones {
         }
     }
     pub fn drop_owner(&self, owner: &str) {
-        lock(&self.pending).retain(|_, (known, _)| known != owner);
+        lock(&self.pending).retain(|_, value| value.owner != owner);
         for job in lock(&self.jobs).values().filter(|job| job.owner == owner) {
             job.canceled.send_replace(true);
         }
@@ -172,76 +251,188 @@ impl Clones {
             job.canceled.send_replace(true);
         }
     }
-    pub async fn history(&self, parent: PathBuf) -> Result<Vec<CloneRecord>> {
-        let mut records = tokio::task::spawn_blocking(move || files::history(&parent))
-            .await
-            .map_err(|_| CloneError::message("Clone recovery inspection failed."))??;
-        let jobs = lock(&self.jobs);
-        for record in &mut records {
-            if let Some(job) = jobs.get(&record.id) {
-                *record = job.snapshot();
-            }
+}
+
+fn problem(field: CloneField, message: impl Into<String>) -> Option<CloneProblem> {
+    Some(CloneProblem {
+        field,
+        message: message.into(),
+    })
+}
+
+/// Reads the form in order (address, name, folder, Git) and stops at the first problem.
+fn prepare(input: &CloneInput, env: &ResolvedEnv) -> (CloneCheck, Option<Prepared>) {
+    let mut check = CloneCheck {
+        repository: None,
+        name: None,
+        review: None,
+        problem: None,
+    };
+    let remote = match validate::remote(&input.remote) {
+        Ok(remote) => remote,
+        Err(message) => {
+            check.problem = problem(CloneField::Remote, message);
+            return (check, None);
         }
-        Ok(records)
+    };
+    check.repository = Some(remote.repository.clone());
+    let name = input
+        .name
+        .as_deref()
+        .filter(|name| !name.is_empty())
+        .unwrap_or(&remote.name)
+        .to_owned();
+    check.name = Some(name.clone());
+    if let Err(message) = validate::name(&name) {
+        check.problem = problem(CloneField::Name, message);
+        return (check, None);
+    }
+    match plan(remote, name, input.parent.as_deref(), env) {
+        Ok(prepared) => {
+            check.review = Some(prepared.view.clone());
+            (check, Some(prepared))
+        }
+        Err(found) => {
+            check.problem = Some(found);
+            (check, None)
+        }
     }
 }
 
-fn prepare(input: CloneInput, env: Arc<ResolvedEnv>) -> Result<Prepared> {
-    let remote = validate::remote(&input.remote)?;
-    validate::name(&input.name)?;
-    let raw = PathBuf::from(&input.parent);
+fn plan(
+    remote: validate::Remote,
+    name: String,
+    parent: Option<&str>,
+    env: &ResolvedEnv,
+) -> std::result::Result<Prepared, CloneProblem> {
+    let fail = |field, message: &str| CloneProblem {
+        field,
+        message: message.into(),
+    };
+    let Some(raw) = parent.filter(|parent| !parent.is_empty()) else {
+        return Err(fail(CloneField::Parent, "Choose a folder to clone into."));
+    };
+    let raw = PathBuf::from(raw);
     if !raw.is_absolute() {
-        return Err(CloneError::message("Choose an absolute parent folder."));
+        return Err(fail(CloneField::Parent, "Choose a folder to clone into."));
     }
-    let parent = std::fs::canonicalize(raw)?;
-    if parent.to_str().is_none() {
-        return Err(CloneError::message(
-            "Choose a parent folder whose path can be displayed without replacement characters.",
+    let unavailable = "That folder is not available any more. Choose another.";
+    let parent = std::fs::canonicalize(&raw).map_err(|_| fail(CloneField::Parent, unavailable))?;
+    if !parent.is_dir() {
+        return Err(fail(CloneField::Parent, unavailable));
+    }
+    let shown = plain_path(&parent);
+    let Some(shown_text) = shown.to_str().map(str::to_owned) else {
+        return Err(fail(
+            CloneField::Parent,
+            "This folder's path has characters Git cannot be given. Choose another.",
+        ));
+    };
+    let parent_handle = Dir::open_ambient_dir(&parent, cap_std::ambient_authority())
+        .map_err(|_| fail(CloneField::Parent, unavailable))?;
+    match files::absent(&parent_handle, &name) {
+        Ok(true) => {}
+        Ok(false) => {
+            return Err(CloneProblem {
+                field: CloneField::Name,
+                message: format!("{shown_text} already has a {name} folder. Choose another name."),
+            });
+        }
+        Err(_) => return Err(fail(CloneField::Parent, unavailable)),
+    }
+    let destination = shown.join(&name);
+    let destination_text = destination.to_string_lossy().into_owned();
+    if cfg!(windows) && destination_text.encode_utf16().count() > WINDOWS_PATH_LIMIT {
+        return Err(fail(
+            CloneField::Name,
+            "This path is too long for Windows. Choose a shorter name or a folder nearer the drive.",
         ));
     }
-    let parent_handle = Dir::open_ambient_dir(&parent, cap_std::ambient_authority())?;
-    files::absent(&parent_handle, &input.name)?;
-    let destination = parent.join(&input.name);
-    if cfg!(windows)
-        && destination
-            .as_os_str()
-            .to_string_lossy()
-            .encode_utf16()
-            .count()
-            > 220
-    {
-        return Err(CloneError::message(
-            "Choose a shorter parent folder or name. Windows clone paths need room for Git's files.",
+    let mut env = env.clone();
+    for key in REPOSITORY_VARIABLES {
+        env.vars.remove(&EnvKey::from(*key));
+    }
+    let Some(program) = find_exe("git", &env.vars) else {
+        return Err(fail(
+            CloneField::Git,
+            "Install Git to clone repositories. auracode uses the Git on this computer.",
         ));
-    }
-    let mut env = (*env).clone();
-    env.vars.retain(|key, _| {
-        !key.as_os_str()
-            .to_string_lossy()
-            .to_ascii_uppercase()
-            .starts_with("GIT_")
-    });
-    for key in ["SSH_ASKPASS", "SSH_ASKPASS_REQUIRE"] {
-        env.vars.remove(&EnvKey::from(key));
-    }
-    let program = find_exe("git", &env.vars).ok_or_else(|| {
-        CloneError::message("Install Git and refresh the environment before cloning.")
-    })?;
-    let view = CloneReview { id: uuid::Uuid::now_v7().to_string(), remote, parent: parent.to_string_lossy().into_owned(), destination: destination.to_string_lossy().into_owned(), notices: vec![
-        "Creates a new folder. Any existing destination, including an empty folder, is refused.".into(),
-        "HTTPS supports public repositories. Private repositories require SSH access already configured in your own tools. No login or credential prompt runs here.".into(),
-        "Git uses isolated configuration and no hooks, templates, submodule recursion or custom filters. SSH keeps strict host verification and cannot ask for a password.".into(),
-        "The clone stops after ten minutes or when canceled. Partial files and a recovery record stay in the chosen parent; retry uses a new folder.".into(),
-    ] };
+    };
+    let arguments = vec![
+        "clone".to_owned(),
+        "--progress".to_owned(),
+        "--".to_owned(),
+        remote.url.clone(),
+        destination_text.clone(),
+    ];
+    let command = std::iter::once("git".to_owned())
+        .chain(arguments.iter().map(|argument| quoted(argument)))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let view = CloneReview {
+        id: uuid::Uuid::now_v7().to_string(),
+        remote: remote.url,
+        repository: remote.repository,
+        parent: shown_text,
+        destination: destination_text,
+        program: program.to_string_lossy().into_owned(),
+        arguments: arguments.clone(),
+        command,
+    };
     Ok(Prepared {
         view,
         parent,
         parent_handle,
-        name: input.name,
+        name,
         program,
+        arguments,
         env: Arc::new(env),
         expires: Instant::now() + Duration::from_secs(600),
     })
+}
+
+/// Display quoting only: the argument vector is passed to Git as is, never through a shell.
+fn quoted(argument: &str) -> String {
+    if argument.is_empty() || argument.contains(|c: char| c.is_whitespace() || c == '"') {
+        format!("\"{}\"", argument.replace('"', "\\\""))
+    } else {
+        argument.to_owned()
+    }
+}
+
+/// `\\?\C:\code` as `C:\code`, the form people and Git recognise. Other paths are unchanged.
+pub(crate) fn plain_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        use std::ffi::OsString;
+        use std::path::{Component, Prefix};
+        let mut parts = path.components();
+        let base = match parts.next() {
+            Some(Component::Prefix(prefix)) => match prefix.kind() {
+                Prefix::VerbatimDisk(drive) => {
+                    Some(PathBuf::from(format!("{}:\\", char::from(drive))))
+                }
+                Prefix::VerbatimUNC(server, share) => {
+                    let mut base = OsString::from("\\\\");
+                    base.push(server);
+                    base.push("\\");
+                    base.push(share);
+                    Some(PathBuf::from(base))
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(mut base) = base {
+            for part in parts {
+                if !matches!(part, Component::RootDir) {
+                    base.push(part.as_os_str());
+                }
+            }
+            return base;
+        }
+    }
+    path.to_path_buf()
 }
 
 fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -253,62 +444,4 @@ fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
 pub(crate) use process::execute;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[tokio::test]
-    async fn review_is_inert_one_use_owner_scoped_and_cancel_can_precede_start() {
-        let temp = tempfile::tempdir().unwrap();
-        let git = temp
-            .path()
-            .join(if cfg!(windows) { "git.exe" } else { "git" });
-        std::fs::write(&git, "synthetic executable, never run").unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o700)).unwrap();
-        }
-        let mut vars = aura_process::EnvMap::new();
-        vars.insert("PATH".into(), temp.path().as_os_str().to_owned());
-        let env = Arc::new(ResolvedEnv {
-            vars,
-            source: aura_process::EnvSource::Fallback {
-                reason: "test".into(),
-            },
-            warnings: vec![],
-            resolved_at_ms: 0,
-        });
-        let service = Clones::default();
-        let input = CloneInput {
-            remote: "https://github.com/owner/repo".into(),
-            parent: temp.path().to_string_lossy().into(),
-            name: "repo".into(),
-        };
-        let review = service
-            .review("main", input.clone(), Arc::clone(&env))
-            .await
-            .unwrap();
-        assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 1);
-        assert!(service.take("other", &review.id).is_err());
-        service.cancel("main", &review.id);
-        assert!(service.take("main", &review.id).is_err());
-        let review = service.review("main", input, env).await.unwrap();
-        let (prepared, job) = service.take("main", &review.id).unwrap();
-        assert!(service.take("main", &review.id).is_err());
-        service.drop_owner("main");
-        execute(
-            prepared,
-            Arc::clone(&job),
-            aura_process::Spawner::new(
-                aura_process::LeftoverRegistry::disabled(),
-                tokio::runtime::Handle::current(),
-            ),
-        )
-        .await;
-        assert_eq!(job.snapshot().state, CloneState::Canceled);
-        assert_eq!(
-            std::fs::read_dir(temp.path()).unwrap().count(),
-            1,
-            "no process or destination after canceled admission"
-        );
-    }
-}
+mod tests;

@@ -1,20 +1,20 @@
 use super::*;
 use crate::cloning::{CloneError, Clones};
 use aura_process::{LeftoverRegistry, Spawner};
-use aura_protocol::setup_actions::{CloneInput, CloneRecord, CloneReview, CloneState};
+use aura_protocol::setup_actions::{CloneCheck, CloneInput, CloneRecord, CloneState};
 
 impl SessionManager {
-    pub async fn clone_review(
+    pub async fn clone_check(
         &self,
         service: &Clones,
         owner: &str,
         input: CloneInput,
-    ) -> Result<CloneReview, SessionError> {
+    ) -> Result<CloneCheck, SessionError> {
         if self.shared().is_shutting_down() {
             return Err(SessionError::ShuttingDown);
         }
         service
-            .review(owner, input, self.deps().env.get().await)
+            .check(owner, input, self.deps().env.get().await)
             .await
             .map_err(clone_error)
     }

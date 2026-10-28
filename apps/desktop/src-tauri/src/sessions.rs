@@ -748,9 +748,9 @@ pub enum QuitOutcome {
 }
 
 /// The quit flow first drains owned file/vendor work without closing storage, keeping the app open
-/// on timeout. Once drained: hide the window; when saving is
-/// paused with unsaved data or work is active, ask first (keeping auracode open shows the window again and ends the
-/// quit); then stop every session within 8 s, commit and close the store within 5 s, delete the
+/// on timeout. Once drained: when saving is paused with unsaved data or work is active, ask first,
+/// in the window, which comes forward for it (keeping auracode open ends the quit); then hide the
+/// window, stop every session within 8 s, commit and close the store within 5 s, delete the
 /// registry file, and exit with `code`. The next exit request passes ([`Quit::on_exit_requested`]).
 ///
 /// The window is hidden and every other exit request waits for this flow, so a step that overruns
@@ -779,7 +779,6 @@ pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutco
     let drafts_saved = tokio::time::timeout(Duration::from_secs(3), host.flush_drafts())
         .await
         .unwrap_or(false);
-    host.hide_window();
     let mut question = quit_question_with_work(&host.storage(), host.active_work_count());
     let terminals = host.project_terminal_count();
     if terminals > 0 {
@@ -827,6 +826,7 @@ pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutco
         tracing::info!("kept auracode open after the quit question");
         return QuitOutcome::Kept;
     }
+    host.hide_window();
     if terminals > 0
         && !tokio::time::timeout(
             QUIT_SESSIONS_DEADLINE,
@@ -984,27 +984,56 @@ impl QuitHost for AppQuitHost<'_> {
     }
 
     async fn ask_to_quit_unsaved(&self, question: QuitQuestion) -> bool {
-        use tauri_plugin_dialog::{DialogExt as _, MessageDialogButtons, MessageDialogKind};
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.app
-            .dialog()
-            .message(question.message)
-            .title("auracode")
-            .kind(MessageDialogKind::Warning)
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                question.quit,
-                question.keep,
-            ))
-            .show(move |quit| {
-                // Nobody waits any more only when the quit task itself is gone.
-                let _ = tx.send(quit);
-            });
-        match rx.await {
-            Ok(quit) => quit,
-            Err(_) => {
-                // The dialog never answered: keeping auracode open loses nothing.
-                tracing::warn!("the quit question was not answered; keeping auracode open");
-                false
+        use tauri::{Emitter as _, Listener as _};
+        // The window comes forward and asks with its own dark dialog, Keep open focused.
+        crate::window::focus_main(self.app);
+        let token = aura_core::ids::new_id();
+        let (shown_tx, shown) = tokio::sync::oneshot::channel();
+        let (answer_tx, answer) = tokio::sync::oneshot::channel();
+        let shown_tx = Mutex::new(Some(shown_tx));
+        let answer_tx = Mutex::new(Some(answer_tx));
+        let expected = token.clone();
+        let shown_listener = self.app.listen(QUIT_QUESTION_SHOWN_EVENT, move |event| {
+            if token_of(event.payload()).as_deref() == Some(expected.as_str())
+                && let Some(tx) = lock(&shown_tx).take()
+            {
+                let _ = tx.send(());
+            }
+        });
+        let expected = token.clone();
+        let answer_listener = self.app.listen(QUIT_ANSWER_EVENT, move |event| {
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(event.payload()) else {
+                return;
+            };
+            if value["token"].as_str() == Some(expected.as_str())
+                && let Some(tx) = lock(&answer_tx).take()
+            {
+                let _ = tx.send(value["quit"].as_bool() == Some(true));
+            }
+        });
+        let sent = self
+            .app
+            .emit_to(
+                crate::window::MAIN_WINDOW,
+                QUIT_QUESTION_EVENT,
+                serde_json::json!({
+                    "token": token,
+                    "message": question.message,
+                    "quit": question.quit,
+                    "keep": question.keep,
+                }),
+            )
+            .is_ok();
+        let in_app = ask_in_app(sent, shown, answer, QUIT_QUESTION_SHOWN_WITHIN).await;
+        self.app.unlisten(shown_listener);
+        self.app.unlisten(answer_listener);
+        match in_app {
+            Some(quit) => quit,
+            None => {
+                tracing::warn!(
+                    "the window did not show the quit question in time; asking with the system dialog"
+                );
+                self.ask_natively(question).await
             }
         }
     }
@@ -1029,6 +1058,80 @@ impl QuitHost for AppQuitHost<'_> {
     fn exit(&self, code: i32) {
         self.app.exit(code);
     }
+}
+
+impl AppQuitHost<'_> {
+    /// The fallback when the window cannot ask: the system dialog, Keep open first and default, so
+    /// Enter, Esc and closing it all keep auracode open; only the quit button quits.
+    async fn ask_natively(&self, question: QuitQuestion) -> bool {
+        use tauri_plugin_dialog::{DialogExt as _, MessageDialogButtons, MessageDialogKind};
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let quit_label = question.quit.clone();
+        self.app
+            .dialog()
+            .message(question.message)
+            .title("auracode")
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                question.keep,
+                question.quit,
+            ))
+            .show_with_result(move |result| {
+                // Nobody waits any more only when the quit task itself is gone.
+                let _ = tx.send(native_quit_choice(&result, &quit_label));
+            });
+        match rx.await {
+            Ok(quit) => quit,
+            Err(_) => {
+                // The dialog never answered: keeping auracode open loses nothing.
+                tracing::warn!("the quit question was not answered; keeping auracode open");
+                false
+            }
+        }
+    }
+}
+
+/// The window's quit question: Rust sends it, the page answers that it shows it, then the choice.
+pub const QUIT_QUESTION_EVENT: &str = "auracode-quit-question";
+pub const QUIT_QUESTION_SHOWN_EVENT: &str = "auracode-quit-question-shown";
+pub const QUIT_ANSWER_EVENT: &str = "auracode-quit-answer";
+/// How long the page has to show the question before the system dialog asks instead. The person
+/// then takes as long as they like to choose.
+pub const QUIT_QUESTION_SHOWN_WITHIN: Duration = Duration::from_secs(3);
+
+fn token_of(payload: &str) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(payload)
+        .ok()?
+        .get("token")?
+        .as_str()
+        .map(str::to_owned)
+}
+
+/// The in-app question's outcome: `None` when it was not sent or the page did not show it within
+/// `within` (not loaded, hung), so the system dialog asks; otherwise the choice, waited for as long
+/// as it takes. An answer channel that closes without a choice keeps auracode open.
+pub async fn ask_in_app(
+    sent: bool,
+    shown: tokio::sync::oneshot::Receiver<()>,
+    answer: tokio::sync::oneshot::Receiver<bool>,
+    within: Duration,
+) -> Option<bool> {
+    if !sent {
+        return None;
+    }
+    match tokio::time::timeout(within, shown).await {
+        Ok(Ok(())) => Some(answer.await.unwrap_or(false)),
+        Ok(Err(_)) | Err(_) => None,
+    }
+}
+
+/// The system dialog's buttons are Keep (first, the default) and the quit label: only that label
+/// quits. Closing the dialog, Esc and Enter keep auracode open.
+pub fn native_quit_choice(
+    result: &tauri_plugin_dialog::MessageDialogResult,
+    quit_label: &str,
+) -> bool {
+    matches!(result, tauri_plugin_dialog::MessageDialogResult::Custom(label) if label == quit_label)
 }
 
 /// `RunEvent::Exit`, the synchronous last resort: Tauri runs it on the main thread outside any
@@ -1805,15 +1908,17 @@ mod tests {
             host.project_terminals = 1;
             let result = run_quit(&quit, &host, 0).await;
             let calls = host.calls();
-            assert!(matches!(&calls[1],Call::Ask(message) if message.contains("project terminal")));
+            // The question comes first, in the window; it hides only once quitting goes ahead.
+            assert!(matches!(&calls[0],Call::Ask(message) if message.contains("project terminal")));
             if confirmed {
                 assert!(matches!(result, QuitOutcome::Exited { .. }));
+                assert_eq!(calls[1], Call::Hide);
                 assert_eq!(calls[2], Call::CloseProjectTerminals);
                 assert!(matches!(calls[3], Call::StopSessions(_)));
             } else {
                 assert_eq!(result, QuitOutcome::Kept);
-                assert_eq!(calls.len(), 3);
-                assert_eq!(calls[2], Call::Show);
+                assert_eq!(calls.len(), 2);
+                assert_eq!(calls[1], Call::Show);
             }
         }
         let quit = Quit::default();
@@ -1864,7 +1969,7 @@ mod tests {
         host.drafts_saved = false;
         assert_eq!(run_quit(&quit, &host, 0).await, QuitOutcome::Kept);
         assert!(
-            matches!(host.calls().as_slice(), [Call::Hide, Call::Ask(message), Call::Show] if message.contains("unsent draft"))
+            matches!(host.calls().as_slice(), [Call::Ask(message), Call::Show] if message.contains("unsent draft"))
         );
         assert!(!quit.is_quitting());
     }
@@ -1881,6 +1986,69 @@ mod tests {
         assert_eq!(host.calls(), [Call::Show, Call::OwnedWorkBlocked]);
         assert!(!quit.store_closed());
         assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+    }
+
+    /// The window's own dialog answers when the page shows it in time, however long the choice
+    /// takes; a page that never shows it, or a question that could not be sent, falls back to the
+    /// system dialog; a page that goes away mid-question keeps auracode open.
+    #[tokio::test(start_paused = true)]
+    async fn the_quit_question_asks_in_the_window_and_falls_back_to_the_system_dialog() {
+        use tokio::sync::oneshot;
+        let within = QUIT_QUESTION_SHOWN_WITHIN;
+
+        let (shown_tx, shown) = oneshot::channel();
+        let (answer_tx, answer) = oneshot::channel();
+        let asking = tokio::spawn(ask_in_app(true, shown, answer, within));
+        shown_tx.send(()).unwrap();
+        // Long after the show deadline the person still decides.
+        tokio::time::sleep(within * 20).await;
+        answer_tx.send(true).unwrap();
+        assert_eq!(asking.await.unwrap(), Some(true));
+
+        let (shown_tx, shown) = oneshot::channel();
+        let (answer_tx, answer) = oneshot::channel();
+        shown_tx.send(()).unwrap();
+        answer_tx.send(false).unwrap();
+        assert_eq!(ask_in_app(true, shown, answer, within).await, Some(false));
+
+        // Shown, then the page is gone without a choice: keep auracode open.
+        let (shown_tx, shown) = oneshot::channel();
+        let (answer_tx, answer) = oneshot::channel::<bool>();
+        shown_tx.send(()).unwrap();
+        drop(answer_tx);
+        assert_eq!(ask_in_app(true, shown, answer, within).await, Some(false));
+
+        // Never shown: the system dialog asks, after exactly the deadline.
+        let (_shown_tx, shown) = oneshot::channel::<()>();
+        let (_answer_tx, answer) = oneshot::channel::<bool>();
+        let started = tokio::time::Instant::now();
+        assert_eq!(ask_in_app(true, shown, answer, within).await, None);
+        assert_eq!(started.elapsed(), within);
+
+        let (_shown_tx, shown) = oneshot::channel::<()>();
+        let (_answer_tx, answer) = oneshot::channel::<bool>();
+        assert_eq!(
+            ask_in_app(false, shown, answer, within).await,
+            None,
+            "not sent"
+        );
+    }
+
+    /// The system dialog lists Keep first, its default: only the quit label quits.
+    #[test]
+    fn the_system_dialog_quits_only_on_its_quit_button() {
+        use tauri_plugin_dialog::MessageDialogResult as Result;
+        let quit = "Stop agents and quit";
+        assert!(native_quit_choice(&Result::Custom(quit.into()), quit));
+        for kept in [
+            Result::Custom("Keep auracode open".into()),
+            Result::Cancel,
+            Result::Ok,
+            Result::Yes,
+            Result::No,
+        ] {
+            assert!(!native_quit_choice(&kept, quit), "{kept:?}");
+        }
     }
 
     #[tokio::test]
@@ -1929,7 +2097,7 @@ mod tests {
         assert_eq!(run_quit(&quit, &host, 0).await, QuitOutcome::Kept);
         let calls = host.calls();
         assert!(
-            matches!(calls.as_slice(), [Call::Hide, Call::Ask(message), Call::Show] if message.contains("2 chats"))
+            matches!(calls.as_slice(), [Call::Ask(message), Call::Show] if message.contains("2 chats"))
         );
         assert!(!quit.is_quitting());
         assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
@@ -1968,7 +2136,6 @@ mod tests {
         assert_eq!(
             host.calls(),
             [
-                Call::Hide,
                 Call::Ask(
                     "auracode can't save its latest messages because the disk is full. If you quit now, they are lost."
                         .into()
@@ -1987,9 +2154,10 @@ mod tests {
         ));
         let calls = host.calls();
         assert!(
-            matches!(&calls[1], Call::Ask(message) if message.contains("database is busy")),
+            matches!(&calls[0], Call::Ask(message) if message.contains("database is busy")),
             "{calls:?}"
         );
+        assert_eq!(calls[1], Call::Hide, "hidden only once quitting goes ahead");
         assert_eq!(
             calls[2..],
             [

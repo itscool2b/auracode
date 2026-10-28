@@ -558,9 +558,11 @@
 
 /* ------------------------------------------------------------------ status (4.5) */
 
+/* A status dot is a flat circle on whole pixels (owner, 2026-10-28): no glow, no ring. */
 .g-status-dot {
   display: inline-block;
   flex: none;
+  border-radius: 50%;
   background-color: var(--g-fg-2);
 }
 

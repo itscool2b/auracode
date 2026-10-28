@@ -6,48 +6,73 @@ revision checked and acknowledged after an atomic write. Invalid data is preserv
 future formats are left unchanged. A failed save remains visible and can be retried or bypassed
 without claiming success. Re-running setup preserves the user's motion and project selection.
 
-The desktop loads cached detection while presenting the boot scene. The first scene lasts 1.8 seconds,
-a warm boot 240 ms. Escape, Enter or Skip intro ends it early; reduced motion and notification chat
-navigation bypass it. Smoke/stress launches do not enter setup. No vendor login, install, update,
-credential inspection or model prompt is triggered by opening setup or Agents. Explicit status and
-maintenance buttons use the existing Rust vendor commands; Sign in opens the existing terminal sheet
-whose Start action is separately explicit.
+The desktop loads cached detection while presenting the intro: a full-window dither field that
+condenses into the seal and turtle logo, with "auracode" rising under it. The first scene lasts
+1.8 seconds, a warm boot 240 ms. Escape, Enter or Skip intro ends it early; reduced motion holds
+one still frame of the formed mark and notification chat navigation bypasses it. Smoke/stress
+launches do not enter setup. No vendor login, install, update, credential inspection or model
+prompt is triggered by opening setup or Agents. Explicit status and maintenance buttons use the
+existing Rust vendor commands; Sign in opens the existing terminal sheet whose Start action is
+separately explicit.
 
-Setup is four skippable steps (Welcome, Your agents, Account, First project) in one calm, centred
-column after Grok's start screen, over Graphite's dither field gathered at the window's sides as on
-the website hero (docs/design/visual-language.md, 4.15 and 6.17). Motion is no longer a step: Full
-already follows the system's reduced motion and Settings changes it; a setup saved at the motion
-step resumes at First project. The account step says that accounts are optional and invite-only.
-Agent rows resolve in place. Keyboard focus moves to each step's heading. Enter advances except
-inside controls, editable content, menus and dialogs. Motion preferences also stop the shared frame
-clock, rather than merely hiding its animation with CSS.
+Setup is four steps (Welcome, Your agents, Account, First project) in one calm, centred column
+after Grok's start screen, over Graphite's dither field gathered at the window's sides as on the
+website hero (docs/design/visual-language.md, 4.15 and 6.17). Every step is skippable: Continue
+never requires anything, the progress pixels visit any step and Skip setup finishes from
+anywhere. The step is saved on every move, so quitting halfway resumes there. Motion is not a
+step: Full already follows the system's reduced motion and Settings changes it; a setup saved at
+the retired motion step resumes at First project. Keyboard focus moves to each step's heading.
+Enter advances except inside controls, editable content, menus and dialogs. Motion preferences
+also stop the shared frame clock, rather than merely hiding its animation with CSS.
+
+The Account step says it plainly: "Accounts are optional." / "And invite-only for now." auracode
+needs no account and no network; chats, projects and agents stay on this computer, and an account
+with an invitation only adds sync between devices. Open Account is there for someone who has one.
+
+First project offers a folder (chosen or dropped), an existing project, or Clone a repository,
+which replaces the step's content in place, X Money style: "Clone a repository." / "Git copies it
+into a new folder.", the address, where it goes (the parent folder and the new folder's name,
+joined like a path), the exact `git clone` command in a well, then Clone (Enter) and Back
+(Escape). While Git runs the heading says "Cloning owner/repository." / "Cancel leaves nothing
+behind.", with Git's stage, the whole clone's percentage on a 2px bar, what has arrived and Cancel
+clone (Escape). A finished clone becomes the first project at once. A failure says why in one
+sentence and keeps Git's own last lines, with Try again (Enter) and Edit (Escape). New project
+offers the same clone in a dialog beside Choose folder. The rules (addresses accepted and refused,
+the person's own Git and credential helpers, the one folder auracode owns and removes) are in
+docs/setup-actions.md.
+
+Project selection reuses Rust workspace validation. Folder drops only select a path; Add project
+performs the write. A project created before a setup-save failure is reused on retry. Existing
+projects are available after reload. The no-agent path opens the existing local demo screen.
 
 Agents (6.17a) is one list: a row per harness with its status, version and verified date, at most
 one action (Install for the one-click installers, Update when a newer release is known, Sign in
 after a check found it needed) and a menu for the rest. Opening Agents looks up maintenance
 metadata for installed agents; it never checks sign-in, updates or installs by itself.
-
-Project selection reuses Rust workspace validation. Folder drops only select a path; Add project
-performs the write. A project created before a setup-save failure is reused on retry. Existing
-projects are available after reload. Clone remains unavailable until the owned Git clone destination
-and failure contract are implemented. The account step remains local-only until the deployment and
-desktop account flow are enabled. The no-agent path opens the existing local demo screen.
-
-Missing agents link to their vendor's installation instructions, checked 2026-10-26:
+One-click installs are reviewed, version-pinned npm commands for Claude Code, Codex, Pi, OpenCode 1
+and Grok Build. Sign in runs the vendor's own login for Claude Code, Codex, Cursor, Grok Build,
+OpenCode and Hermes. The other agents keep their official guides, each for a stated reason in
+docs/setup-actions.md:
 
 - [Claude Code](https://code.claude.com/docs/en/setup), [Codex](https://developers.openai.com/codex/cli),
   [Cursor](https://cursor.com/docs/cli/installation), [Pi](https://pi.dev/docs/latest/quickstart).
 - [Grok Build](https://docs.x.ai/build/overview), [oh-my-pi](https://github.com/can1357/oh-my-pi),
-  [OpenCode](https://opencode.ai/docs), [Antigravity](https://antigravity.google/download),
+  [OpenCode](https://opencode.ai/docs), [OpenCode 2](https://opencode.ai/v2/docs),
+  [Antigravity](https://antigravity.google/download),
   [Hermes](https://hermes-agent.nousresearch.com/docs/getting-started/installation).
 
-These links are guidance, not an implemented installer. New vendor installation, native macOS/Windows
-folder-drop and terminal acceptance, final globe-to-dock boot polish, and the enabled account and
-clone flows remain acceptance work. No real account or agent was used in development checks.
+Still open for acceptance: native macOS/Windows folder-drop and terminal walks through the built
+app, a real clone and a real sign-in through the built app, and the enabled account flow. No real
+account was used in development checks.
 
 `node apps/desktop/scripts/check-setup.mjs` runs the production React components in Chromium and
 WebKit against synthetic command responses. It covers the centred layout at two window sizes,
 passive detection and the roster, keyboard progression, resume (including the retired motion step),
-completion/restart/skip, a failed setup save after project creation, minimum viewport,
-reduced-motion intro bypass, warm startup, and accessibility. Core unit tests independently verify
-the actual storage behavior. Screenshots are written to `target/setup-browser/`.
+completion/restart/skip, a failed setup save after project creation, a keyboard clone that becomes
+the first project, minimum viewport, reduced-motion intro bypass, warm startup, and accessibility.
+`check-setup-actions.mjs` covers installs and the clone dialog (the command before start, a
+refused address, cancel, finish, failure and retry, a taken name). Core unit tests independently
+verify the actual storage behavior and real clones against a local bare repository. Screenshots
+are written to `target/setup-browser/` and `target/setup-actions-browser/`. `?preview=clone`,
+`clone-running`, `clone-error`, `new-project` and `agents-installing` show each state for
+`check-layout.mjs`.

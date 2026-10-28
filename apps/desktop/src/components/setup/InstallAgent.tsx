@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { type InstallApi, installApi } from "../../lib/setup-actions/api";
+import { useContext, useEffect, useRef, useState } from "react";
+import { type InstallApi, InstallApiContext, installApi } from "../../lib/setup-actions/api";
 import type { AgentInstallReview } from "../../lib/setup-actions/bindings";
 import type { TerminalTransport } from "../../lib/terminal";
 import { TerminalSheet } from "../TerminalSheet";
@@ -8,7 +8,7 @@ export function InstallAgent({
   agentId,
   agentName,
   onRefresh,
-  api = installApi,
+  api: given,
   label = "Review installation",
   ariaLabel,
   className = "g-button g-button-outline g-button-28",
@@ -25,6 +25,8 @@ export function InstallAgent({
   /** Where a failed review is reported; without it the reason shows under the button. */
   readonly onError?: (message: string) => void;
 }) {
+  const provided = useContext(InstallApiContext);
+  const api = given ?? provided ?? installApi;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [review, setReview] = useState<{

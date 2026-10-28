@@ -1,4 +1,3 @@
-import { Logo } from "@auracode/ui/graphite";
 import { PanelLeft } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppInfo, InstructionsTarget, ProjectSummary } from "../../bindings";
@@ -8,7 +7,6 @@ import { navigationTarget } from "../../lib/nativeNavigation";
 import { preselectAgent, type SetupApi, setupApi } from "../../lib/setup";
 import { TerminalPanels } from "../../lib/terminalPanel";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
-import { AgentDock } from "./AgentDock";
 import { Banners } from "./Banners";
 import { ChatActionsDialog } from "./ChatActionsDialog";
 import { ChatList, projectName } from "./ChatList";
@@ -16,14 +14,15 @@ import { ChatView } from "./ChatView";
 import { CommandPalette, type PaletteCommand } from "./CommandPalette";
 import { NewChat } from "./NewChat";
 import { ProjectDialog } from "./ProjectDialog";
+import { SidebarFooter } from "./SidebarFooter";
 import { createXtermRuntime } from "./terminalRuntime";
 
 const noSubscribe = () => () => {};
 const emptyWorkspace = () => EMPTY_WORKSPACE;
 
 /**
- * The sidebar's top band (Grok): the logo at the left and the collapse toggle at the right. The
- * band drags the window; on macOS the logo sits clear of the traffic lights (`data-os` on the app).
+ * The sidebar's top band: the collapse toggle at the right (Grok's). The band drags the window and
+ * leaves the left to the macOS traffic lights; the logo sits in the footer beside Settings.
  */
 export function SidebarBand({
   collapsed,
@@ -35,7 +34,6 @@ export function SidebarBand({
   return (
     <>
       <div className="chat-drag" data-tauri-drag-region="" />
-      <Logo size={24} className="chat-sidebar-logo" />
       <button
         type="button"
         className="g-button g-button-ghost g-button-icon g-button-28 chat-sidebar-toggle"
@@ -214,22 +212,7 @@ export function ChatsScreen({
             setDraft(new NewChatDraft(transport));
           }}
         />
-        <AgentDock
-          profile={info.profile}
-          transport={transport}
-          onRefresh={() => void app.refreshAgents()}
-          agents={snapshot.agents}
-          chats={snapshot.chats}
-          onDiagnostics={onDiagnostics}
-          onAgents={onAgents}
-          onSettings={onSettings}
-          onChoose={(agentId) => {
-            const next = new NewChatDraft(transport);
-            next.chooseAgent(agentId);
-            setDraft(next);
-            setSelected(null);
-          }}
-        />
+        <SidebarFooter profile={info.profile} onSettings={onSettings} />
       </aside>
       <main className="chat-main">
         <div className="chat-drag" data-tauri-drag-region="" />
@@ -349,6 +332,16 @@ export function ChatsScreen({
                     title: archived ? "Show active chats" : "Show archived chats",
                     detail: "Change the sidebar view",
                     run: () => setArchived((value) => !value),
+                  },
+                ]
+              : []),
+            ...(onAgents
+              ? [
+                  {
+                    id: "manage-agents",
+                    title: "Open agents",
+                    detail: "Install, update and sign in to agents",
+                    run: onAgents,
                   },
                 ]
               : []),

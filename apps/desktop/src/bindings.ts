@@ -135,12 +135,16 @@ export const commands = {
 	agentLoginStart: (terminalId: string, agentId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_login_start", { terminalId, agentId, rows, cols })),
 	agentInstallReview: (agentId: string) => typedError<AgentInstallReview, AppError>(__TAURI_INVOKE("agent_install_review", { agentId })),
 	agentInstallStart: (terminalId: string, agentId: string, revision: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("agent_install_start", { terminalId, agentId, revision, rows, cols })),
-	cloneReview: (input: CloneInput) => typedError<CloneReview, AppError>(__TAURI_INVOKE("clone_review", { input })),
+	/**  Reads the clone form. A complete form comes back with the exact command Start will run. */
+	cloneCheck: (input: CloneInput) => typedError<CloneCheck, AppError>(__TAURI_INVOKE("clone_check", { input })),
 	cloneCancelReview: (id: string) => __TAURI_INVOKE<void>("clone_cancel_review", { id }),
 	cloneStart: (id: string) => typedError<CloneRecord, AppError>(__TAURI_INVOKE("clone_start", { id })),
 	cloneCancel: (id: string) => __TAURI_INVOKE<void>("clone_cancel", { id }),
-	cloneStatus: (id: string) => typedError<CloneRecord, AppError>(__TAURI_INVOKE("clone_status", { id })),
-	cloneHistory: (parent: string) => typedError<CloneRecord[], AppError>(__TAURI_INVOKE("clone_history", { parent })),
+	/**
+	 *  The clone's record; with `after`, the next revision once Git reports progress (or within ten
+	 *  seconds), so the window follows the clone without polling.
+	 */
+	cloneStatus: (id: string, after: number | null) => typedError<CloneRecord, AppError>(__TAURI_INVOKE("clone_status", { id, after })),
 	localImportPreview: () => typedError<LocalImportPreview, AppError>(__TAURI_INVOKE("local_import_preview")),
 	chatExportMarkdown: (chatId: string) => typedError<string | null, AppError>(__TAURI_INVOKE("chat_export_markdown", { chatId })),
 	chatDebugBundle: (chatId: string) => typedError<string, AppError>(__TAURI_INVOKE("chat_debug_bundle", { chatId })),
@@ -842,31 +846,81 @@ export type CheckpointSummary = {
 	warnings: string[],
 };
 
+/**
+ *  The answer to a clone form: what was understood, and either a startable review or the first
+ *  problem in the form. Checking never creates a folder or runs Git.
+ */
+export type CloneCheck = {
+	/**  "owner/repository", once the address is understood. */
+	repository: string | null,
+	/**  The new folder's name: the one typed, or the repository's own. */
+	name: string | null,
+	review: CloneReview | null,
+	problem: CloneProblem | null,
+};
+
+/**  The part of the clone form a problem belongs to, so it can be shown beside that field. */
+export type CloneField = "remote" | "parent" | "name" | "git";
+
+/**  What the person typed into the clone form. Rust checks every part; nothing here is trusted. */
 export type CloneInput = {
+	/**  The repository address as pasted: an https:// or SSH address. */
 	remote: string,
-	parent: string,
-	name: string,
+	/**  The folder the new folder goes into, once chosen. */
+	parent: string | null,
+	/**  The new folder's name. Absent or empty means the repository's own name. */
+	name: string | null,
+};
+
+export type CloneProblem = {
+	field: CloneField,
+	message: string,
+};
+
+/**  Git's own progress report, parsed from `git clone --progress`. */
+export type CloneProgress = {
+	/**  Git's stage, as Git names it: "Receiving objects", "Resolving deltas". */
+	stage: string,
+	stage_percent: number,
+	/**  The whole clone, weighting Git's stages. */
+	percent: number,
+	/**  How much has arrived, as Git prints it: "12.40 MiB". */
+	received: string | null,
 };
 
 export type CloneRecord = {
 	id: string,
+	/**  Grows with every change, so a watcher can wait for the next one. */
+	revision: number,
 	remote: string,
-	parent: string,
+	repository: string,
 	destination: string,
-	journal: string,
 	state: CloneState,
 	detail: string,
+	progress: CloneProgress | null,
+	/**  Git's last lines that are not progress, kept for a failed clone. Never logged. */
+	output: string[],
+	/**  auracode removed the unfinished folder it created. */
+	removed: boolean,
 };
 
+/**  One startable clone: the exact Git program and arguments that Start runs, and where. */
 export type CloneReview = {
 	id: string,
 	remote: string,
+	repository: string,
 	parent: string,
 	destination: string,
-	notices: string[],
+	/**  The Git executable found on this computer. */
+	program: string,
+	arguments: string[],
+	/**  The command as a person would type it: `git clone --progress -- <address> <folder>`. */
+	command: string,
 };
 
-export type CloneState = "running" | "ready" | "canceled" | "failed" | "interrupted" | "cleanup_pending";
+export type CloneState = "running" | "ready" | "canceled" | "failed" | 
+/**  Git is being stopped; the unfinished folder waits until the stop is confirmed. */
+"cleanup_pending";
 
 export type ComposerAttachment = {
 	id: string,
@@ -1196,6 +1250,11 @@ export type HistoryPage = {
 	unsaved_from: number | null,
 	/**  Rows that did not parse (written by a newer build). */
 	skipped: number,
+	/**
+	 *  The agent that ran each turn with rows in the page, so an earlier turn keeps its agent
+	 *  after the chat switches agents. A turn missing here is the chat's current agent's.
+	 */
+	turn_agents?: TurnAgent[],
 };
 
 /**  How the installed binary is managed. Unknown and bundled installations cannot be updated here. */
@@ -2227,6 +2286,14 @@ export type ToolUpdate = {
 export type Truncation = {
 	total_bytes: number,
 	blob: string | null,
+};
+
+/**  The agent one turn ran on. */
+export type TurnAgent = {
+	turn_id: string,
+	agent_id: string,
+	/**  The agent's display name ("Claude Code"). */
+	agent_name: string,
 };
 
 /**  The answer to a [`UiRequest`], matching its [`UiPrompt`] (`Notify` takes none). */

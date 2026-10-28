@@ -8,6 +8,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { installQuitQuestion } from "./components/QuitQuestionDialog";
 import { AppStore } from "./lib/chat/appStore";
 import { tauriTransport } from "./lib/chat/transport";
 import { installDraftQuit } from "./lib/draftQuit";
@@ -21,11 +22,14 @@ const store = new StreamStore({ start: startDemoStream, cancel: cancelDemoStream
 const chats = new AppStore(tauriTransport);
 const workspace = new WorkspaceStore(workspaceApi);
 installDraftQuit();
+installQuitQuestion();
 
 const container = document.getElementById("root");
 if (container) {
   if (import.meta.env.DEV && new URLSearchParams(location.search).has("preview")) {
     const mode = new URLSearchParams(location.search).get("preview");
+    if (new URLSearchParams(location.search).has("quit"))
+      void import("./dev/quitPreview").then(({ mountQuitPreview }) => mountQuitPreview());
     if (mode === "config-sync")
       void import("./dev/configSyncPreview").then(({ mountConfigSyncPreview }) =>
         mountConfigSyncPreview(container),
@@ -80,7 +84,15 @@ if (container) {
       void import("./dev/settingsPreview").then(({ mountSettingsPreview }) =>
         mountSettingsPreview(container),
       );
-    else if (mode === "setup" || mode === "agents")
+    else if (
+      mode === "setup" ||
+      mode === "agents" ||
+      mode === "agents-installing" ||
+      mode === "new-project" ||
+      mode === "clone" ||
+      mode === "clone-running" ||
+      mode === "clone-error"
+    )
       void import("./dev/setupPreview").then(({ mountSetupPreview }) =>
         mountSetupPreview(container),
       );

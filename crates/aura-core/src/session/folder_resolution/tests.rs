@@ -16,9 +16,9 @@ fn discovery_is_bounded_and_does_not_descend_into_repositories_or_hidden_folders
     let (mut found, truncated) = candidates(vec![temp.path().into(), temp.path().join("a")]);
     found.sort();
     let mut expected = vec![
-        temp.path().join("a").canonicalize().unwrap(),
-        temp.path().join("group/b").canonicalize().unwrap(),
-        temp.path().join("group/deep/c").canonicalize().unwrap(),
+        crate::fsutil::plain_path(&temp.path().join("a").canonicalize().unwrap()),
+        crate::fsutil::plain_path(&temp.path().join("group/b").canonicalize().unwrap()),
+        crate::fsutil::plain_path(&temp.path().join("group/deep/c").canonicalize().unwrap()),
     ];
     expected.sort();
     assert_eq!(found, expected);
