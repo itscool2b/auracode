@@ -1172,6 +1172,9 @@ async fn shutdown_all_bounded() {
         h.manager.create_chat(MOCK, &h.folder).await,
         Err(SessionError::ShuttingDown)
     ));
+    // A shut-down manager refuses all new store work, reads included, so check what the shutdown
+    // saved by starting again on the same profile.
+    let h = h.restart(Vec::new(), Options::default()).await;
     let history = h.history(&a.id).await;
     assert!(matches!(
         history.last().map(|item| &item.event),
