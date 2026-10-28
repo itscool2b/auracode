@@ -548,8 +548,8 @@ function ConfigReview({
     token.current = null;
     setBusy(true);
     try {
-      const outcome = await api.vendorFinish(reviewed, exitCode === 0, exitCode);
-      if (alive.current) onComplete(outcome);
+      // Kept until the terminal closes, so its output stays readable.
+      finished.current = await api.vendorFinish(reviewed, exitCode === 0, exitCode);
     } catch (failure) {
       if (alive.current) setError(errorMessage(failure));
     } finally {
@@ -558,6 +558,7 @@ function ConfigReview({
     }
   };
   const consuming = useRef(false);
+  const finished = useRef<ConfigSyncOutcome | null>(null);
   const token = useRef<string | null>(null);
   const alive = useRef(false);
   useEffect(() => {
@@ -727,7 +728,12 @@ function ConfigReview({
                 action: "install",
                 target: preview.vendor_steps[step].target,
               }}
-              onClose={() => setStep(null)}
+              onClose={() => {
+                setStep(null);
+                const outcome = finished.current;
+                finished.current = null;
+                if (outcome) onComplete(outcome);
+              }}
               onFinished={(exitCode) => {
                 // The last step is the install that makes this declaration true here.
                 if (step === preview.vendor_steps.length - 1) void finishVendor(exitCode);

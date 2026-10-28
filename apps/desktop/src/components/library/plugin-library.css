@@ -270,11 +270,12 @@
   pointer-events: none;
 }
 
+/* 60px rows, as on Agents: a 28px action and two lines of text both centre on the grid. */
 .plugins-row {
   display: flex;
   align-items: center;
   gap: var(--g-space-12);
-  min-height: 56px;
+  min-height: 60px;
   padding: var(--g-space-8) var(--g-space-8) var(--g-space-8) var(--g-space-16);
   contain: layout style;
 }
@@ -376,9 +377,14 @@
   margin: 0;
 }
 
+/* The ring is drawn inset, so the items sit 4px in, on the grid. */
 .plugins-menu {
   position: fixed;
   z-index: 50;
+  border: 0;
+  box-shadow:
+    var(--g-shadow),
+    inset 0 0 0 1px var(--g-line-strong);
 }
 
 /* An item's preview and copy, and the copy history, open as one large dialog each. */
