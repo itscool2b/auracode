@@ -43,6 +43,7 @@ const ATTACHMENTS_DIR: &str = "attachments";
 const CHECKPOINTS_DIR: &str = "checkpoints";
 const LOGS_DIR: &str = "logs";
 const BACKUPS_DIR: &str = "backups";
+const WORKTREES_DIR: &str = "worktrees";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
@@ -98,6 +99,12 @@ impl Profile {
     /// `<dir>/checkpoints`
     pub fn checkpoints_dir(&self) -> PathBuf {
         self.dir.join(CHECKPOINTS_DIR)
+    }
+
+    /// `<dir>/worktrees`: the Git worktrees auracode creates for isolated chats, and their
+    /// records.
+    pub fn worktrees_dir(&self) -> PathBuf {
+        self.dir.join(WORKTREES_DIR)
     }
 
     /// `<dir>/logs`

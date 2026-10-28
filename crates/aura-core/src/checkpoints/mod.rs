@@ -36,6 +36,9 @@ pub enum CheckpointError {
 
 pub struct Checkpoints {
     root: PathBuf,
+    /// The profile's own worktrees folder. A chat in one of its worktrees is user code inside the
+    /// otherwise protected profile folder ([`Checkpoints::protected_paths`]).
+    worktrees: PathBuf,
     storage: Storage,
     env: Arc<EnvResolver>,
     registry: Arc<LeftoverRegistry>,
@@ -89,6 +92,7 @@ impl Checkpoints {
     ) -> Arc<Self> {
         Arc::new(Self {
             root: profile.checkpoints_dir(),
+            worktrees: profile.worktrees_dir(),
             storage: if profile.meta.kind == crate::profile::ProfileKind::Account {
                 Storage::Locked
             } else {
@@ -508,14 +512,18 @@ impl Checkpoints {
         scan::paths(&bytes)
     }
 
+    /// Folders a checkpoint never saves or restores. A workspace inside one of them is refused,
+    /// except the profile's own worktrees: auracode creates them inside the profile folder for
+    /// worktree chats, and nothing else of the profile lies within one.
     fn protected_paths(&self, operation: &Operation, root: &Path) -> Result<Vec<PathBuf>> {
+        let profile = self.root.parent().filter(|_| !self.is_owned_worktree(root));
         let mut paths = Vec::new();
         for protected in operation
             .git
             .protected
             .iter()
             .map(PathBuf::as_path)
-            .chain(self.root.parent())
+            .chain(profile)
         {
             let protected = if protected.is_absolute() {
                 protected.to_path_buf()
@@ -529,6 +537,14 @@ impl Checkpoints {
             paths.push(protected);
         }
         Ok(paths)
+    }
+
+    /// Whether `root` (canonical) is a folder inside the profile's worktrees folder, not that
+    /// folder itself, which holds the worktree records.
+    fn is_owned_worktree(&self, root: &Path) -> bool {
+        let worktrees =
+            std::fs::canonicalize(&self.worktrees).unwrap_or_else(|_| self.worktrees.clone());
+        root != worktrees && root.starts_with(&worktrees)
     }
 
     async fn current(&self, operation: &Operation, manifest: &Manifest) -> Result<scan::Scan> {

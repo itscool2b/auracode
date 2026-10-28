@@ -7,6 +7,7 @@ struct Rig {
     _dir: tempfile::TempDir,
     work: PathBuf,
     service: Arc<Checkpoints>,
+    profile: crate::profile::Profile,
     chat: String,
     folder: String,
 }
@@ -39,6 +40,7 @@ fn rig_with_nested_data(depth: usize) -> Rig {
         _dir: dir,
         work,
         service,
+        profile,
         chat: crate::ids::new_id(),
         folder: crate::ids::new_id(),
     }
@@ -467,4 +469,52 @@ async fn agent_config_and_oversized_files_are_excluded_without_becoming_deletion
             .await
             .is_err()
     );
+}
+
+/// A worktree chat runs in a folder auracode created inside the profile's worktrees folder. The
+/// profile folder is protected, so every prompt of such a chat was held before reaching the agent.
+/// The rest of the profile, and the worktrees folder itself, stay refused.
+#[tokio::test]
+async fn the_profiles_own_worktrees_are_checkpoint_workspaces() {
+    let rig = rig();
+    let worktree = rig.profile.worktrees_dir().join("59d4821b8e8c");
+    std::fs::create_dir_all(&worktree).expect("worktree fixture");
+    std::fs::write(
+        worktree.join("math.js"),
+        "export const add = (a, b) => a + b;\n",
+    )
+    .expect("worktree file");
+    let checkpoint = rig
+        .service
+        .capture(&rig.chat, &rig.folder, &worktree, &crate::ids::new_id())
+        .await
+        .expect("a worktree chat checkpoints");
+    assert_eq!(checkpoint.file_count, 1);
+    std::fs::write(worktree.join("math.js"), "changed\n").expect("edit");
+    let changes = rig
+        .service
+        .changes(&rig.chat, &rig.folder, &worktree, &checkpoint.id)
+        .await
+        .expect("changes");
+    assert_eq!(changes.files.len(), 1);
+
+    for refused in [
+        rig.profile.dir.clone(),
+        rig.profile.worktrees_dir(),
+        rig.profile.logs_dir(),
+    ] {
+        std::fs::create_dir_all(&refused).expect("profile folder");
+        let error = rig
+            .service
+            .capture(&rig.chat, &rig.folder, &refused, &crate::ids::new_id())
+            .await
+            .expect_err("a profile folder is never a checkpoint workspace");
+        assert!(
+            error
+                .to_string()
+                .contains("cannot be checkpoint workspaces"),
+            "{}: {error}",
+            refused.display()
+        );
+    }
 }

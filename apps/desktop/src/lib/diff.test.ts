@@ -36,6 +36,16 @@ describe("diffLines", () => {
     expect(next).toEqual(splitLines(AFTER));
   });
 
+  it("shows a changed line as its removal, then its addition", () => {
+    const diff = diffLines("a\nold\nb\n", "a\nnew\nb\n");
+    expect(diff.lines).toEqual([
+      { op: "same", text: "a" },
+      { op: "remove", text: "old" },
+      { op: "add", text: "new" },
+      { op: "same", text: "b" },
+    ]);
+  });
+
   it("treats a new file as all additions", () => {
     const diff = diffLines(null, "a\nb\n");
     expect(diff.added).toBe(2);

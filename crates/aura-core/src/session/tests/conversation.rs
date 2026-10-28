@@ -95,6 +95,14 @@ async fn retry_preserves_source_and_exact_visible_handoff_without_recursive_pref
         }
     );
     status(&rig, &chat.id, SessionStatus::Ready).await;
+    assert_eq!(
+        rig.manager
+            .conversation_pending(&chat.id)
+            .await
+            .expect("pending"),
+        None,
+        "the retried turn delivered the handoff; the next message carries none"
+    );
     let turns = rig
         .manager
         .conversation_turns(&chat.id, None)

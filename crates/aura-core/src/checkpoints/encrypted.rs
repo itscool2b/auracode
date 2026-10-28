@@ -21,6 +21,7 @@ impl Checkpoints {
         let files = EncryptedFiles::open(&root, Purpose::Checkpoint, key)?;
         Ok(Arc::new(Self {
             root,
+            worktrees: profile.worktrees_dir(),
             storage: Storage::Encrypted(files),
             env,
             registry,

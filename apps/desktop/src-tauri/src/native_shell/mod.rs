@@ -370,28 +370,41 @@ const BADGE_ATTENTION: [u8; 4] = [204, 255, 51, 255];
 #[cfg(any(windows, target_os = "macos"))]
 const BADGE_ACTIVE: [u8; 4] = [237, 237, 237, 255];
 
+/// The badge is cut out of the logo by a transparent ring. Without it the fg-1 "working" dot
+/// merged with the off-white logo it overlaps, and a macOS template image (alpha only) drew both
+/// as one shape.
+#[cfg(any(windows, target_os = "macos"))]
+const BADGE_CUTOUT: [u8; 4] = [0, 0, 0, 0];
+
 #[cfg(any(windows, target_os = "macos"))]
 fn badged_icon(base: &tauri::image::Image<'_>, counts: Counts) -> tauri::image::Image<'static> {
     let (width, height) = (base.width(), base.height());
     let mut pixels = base.rgba().to_vec();
     if (counts.active > 0 || counts.attention > 0) && width >= 8 && height >= 8 {
         let radius = width.min(height) / 5;
+        let outer = radius + (width.min(height) / 16).max(1);
         let (cx, cy) = (width - radius - 1, height - radius - 1);
         let color = if counts.attention > 0 {
             BADGE_ATTENTION
         } else {
             BADGE_ACTIVE
         };
-        for y in cy.saturating_sub(radius)..=(cy + radius).min(height - 1) {
-            for x in cx.saturating_sub(radius)..=(cx + radius).min(width - 1) {
+        for y in cy.saturating_sub(outer)..=(cy + outer).min(height - 1) {
+            for x in cx.saturating_sub(outer)..=(cx + outer).min(width - 1) {
                 let (dx, dy) = (i64::from(x) - i64::from(cx), i64::from(y) - i64::from(cy));
-                if dx * dx + dy * dy <= i64::from(radius).pow(2) {
-                    let start = (u64::from(y) * u64::from(width) + u64::from(x)) * 4;
-                    if let Ok(start) = usize::try_from(start)
-                        && let Some(pixel) = pixels.get_mut(start..start.saturating_add(4))
-                    {
-                        pixel.copy_from_slice(&color);
-                    }
+                let distance = dx * dx + dy * dy;
+                let paint = if distance <= i64::from(radius).pow(2) {
+                    color
+                } else if distance <= i64::from(outer).pow(2) {
+                    BADGE_CUTOUT
+                } else {
+                    continue;
+                };
+                let start = (u64::from(y) * u64::from(width) + u64::from(x)) * 4;
+                if let Ok(start) = usize::try_from(start)
+                    && let Some(pixel) = pixels.get_mut(start..start.saturating_add(4))
+                {
+                    pixel.copy_from_slice(&paint);
                 }
             }
         }
@@ -546,6 +559,47 @@ mod switch_tests {
             power: Mutex::new(power),
             switches: Switches::default(),
         }
+    }
+
+    /// The working badge is fg-1 on an off-white logo: a transparent ring keeps it a separate dot.
+    #[test]
+    fn the_tray_badge_is_cut_out_of_the_logo() {
+        let white = [237, 237, 237, 255];
+        let base = tauri::image::Image::new_owned(white.repeat(32 * 32), 32, 32);
+        let pixel = |image: &tauri::image::Image<'_>, x: usize, y: usize| -> [u8; 4] {
+            let start = (y * 32 + x) * 4;
+            image.rgba()[start..start + 4].try_into().expect("pixel")
+        };
+        let idle = badged_icon(&base, Counts::default());
+        assert_eq!(idle.rgba(), base.rgba(), "no badge without work");
+
+        let working = badged_icon(
+            &base,
+            Counts {
+                active: 1,
+                ..Counts::default()
+            },
+        );
+        // Radius 6 around (25, 25), then a ring of 2 cut out to the edge of the logo.
+        assert_eq!(pixel(&working, 25, 25), BADGE_ACTIVE);
+        assert_eq!(
+            pixel(&working, 18, 25),
+            BADGE_CUTOUT,
+            "ring left of the dot"
+        );
+        assert_eq!(pixel(&working, 25, 18), BADGE_CUTOUT, "ring above the dot");
+        assert_eq!(pixel(&working, 16, 25), white, "the logo beyond the ring");
+        assert_eq!(pixel(&working, 0, 0), white);
+
+        let attention = badged_icon(
+            &base,
+            Counts {
+                active: 1,
+                attention: 1,
+            },
+        );
+        assert_eq!(pixel(&attention, 25, 25), BADGE_ATTENTION);
+        assert_eq!(pixel(&attention, 18, 25), BADGE_CUTOUT);
     }
 
     #[test]

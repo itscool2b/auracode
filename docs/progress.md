@@ -3399,3 +3399,73 @@ passed), `check-repository-publication`, `check-workspace-removal`, `check-accou
 `check-account-vault`. Sheets are the ignored `target/design-research/sheets/app-gaps-*.png`. Not
 done: the hand walkthrough of the built app, the WebDriver smoke, the Windows and macOS CI run, and
 the installed-app checks of notifications, tray closing and keep-awake, which have only unit tests.
+
+### Windows native acceptance (2026-10-27)
+
+Branch `native-acceptance` (`m4-worktree-ui` merged with `m2bc-gaps`). The debug app ran by hand on
+Windows 11 (3840x2160 at 150%), driven through Orca and UI Automation, on its own data folder with
+Vite serving the UI. The worktree feature refuses a data folder whose worktree path passes 200
+UTF-16 units, so after the first launches the data folder moved from the scratchpad (167
+characters) to `%TEMP%\auracode-na\d`.
+
+- **First launch: pass.** The intro condenses the dither into the seal and turtle, lights it and
+  raises the word, then fades into Welcome. The steps, Continue and Skip setup (from step 1 and from
+  step 4) work. The shell is crisp at 150%. The 100% system scale was not switched on this shared
+  PC; the UI was checked at WebView2 device scale 1 instead (`TAURI_WEBVIEW_AUTOMATION` with
+  `--force-device-scale-factor=1`) and renders cleanly.
+- **New chat, Demo agent: pass after two fixes.** In a scratch Git repo the chip reads "Worktree
+  from main on aura/<id>" and Create made a locked worktree on that branch; Local in the chip's
+  popover made a chat in the project folder. Streaming, Retry, Edit and Fork (all through the
+  visible handoff review), queue edit and reorder during a running turn, a held queue surviving a
+  quit, and a Changes panel revert that restored the file all worked.
+- **Tray: pass.** The logo tile sits in the notification area overflow; Open, Quit and a left click
+  work; the tooltip counts active and waiting chats; the badge is fg-1 while working and volt when a
+  chat needs you.
+- **Notification: partly verified.** A Demo turn finishing with the window hidden produced "An
+  agent finished its turn" (attributed to Windows PowerShell, as Tauri does for an exe under
+  `target\debug`). Do not disturb was on, so it went straight to the notification centre, where a
+  click is not reported on Windows (plugin limitation); routing to the chat was not observed. Run
+  from any other folder the debug exe sends toasts under the unregistered `si.auracode.desktop` ID
+  and Windows drops them.
+- **Quit guard: pass.** Quitting from the tray during a turn asks "One chat is still active";
+  Keep auracode open leaves the turn and queue running; Stop agents and quit exits with no
+  auracode process or WebView2 child left.
+- **Settings switches: pass.** Keep awake: the system execution state (`CallNtPowerInformation`,
+  no admin; `powercfg /requests` needs admin) shows `ES_SYSTEM_REQUIRED` only while a turn runs,
+  drops at once when the switch goes off mid-turn and returns when it goes on. Keep running in the
+  tray off makes closing the window ask the quit question.
+- **Minimize, CPU of auracode and its 7 WebView2 processes:** idle 0.3% of one core. A `/stress`
+  answer at 120 tokens a second, 10 s windows interleaved: visible 36.9% and 50.0%, minimized
+  23.3% and 24.5%. Minimized, the GPU process drops to 0 (the existing hide-on-minimize works) but
+  the renderer keeps handling the stream at about 20% of a core.
+- **Real agents: blocked.** One Claude Code turn on Haiku 4.5 reached the CLI and was refused by
+  the account's 5-hour limit; the chat shows the error and its log. The switch to Codex shows the
+  visible handoff block for review and in the next prompt. Two Codex turns in that chat ("yo",
+  "whats up") were typed by someone else at the keyboard, on Codex's default model; no Codex prompt
+  was sent by the acceptance run.
+- **Docked items: pass.** Every Settings page, Agents (with a fix), Library, the command palette
+  (files appear under Files only) and Ctrl+1 to Ctrl+3.
+
+Fixed, each with a test where one fits: a launch with its own data folder kept its webview profile
+and window geometry in the installed app's folders; worktree chats held every first prompt because
+checkpoints refused the profile's own worktrees; the "Next message includes a handoff" banner
+stayed after the handoff was delivered; the line diff put a changed line's addition above its
+removal; the tray's working badge merged with the logo and its tooltip said "1 need attention";
+the Agents page's verification text ran under the row menus.
+
+Found and not fixed: quitting with an open session sometimes logs "database closed with ops still
+waiting; they are lost" for one chat (dropped=1, twice), although transcript, queue and turn end
+survived; project folders are stored as `\?\C:\...` and New chat shows that prefix (Claude Code
+and Codex both started in such a folder); after an agent switch every earlier turn is labelled with
+the new agent; the quit question is a light native dialog whose default button is the destructive
+one; the Account page's verification frame fails in the dev build and never leaves "Loading
+verification"; marks under 24px show one letter, so Claude Code and Codex are both "C"; the sidebar
+dock counts 12 other agents where New chat counts 9. Application Control blocked the first two
+builds' new build scripts (4551); a later plain rebuild passed and nothing was bypassed.
+
+Checks on this branch: `cargo clippy -p aura-core -p auracode-desktop --all-targets -- -D warnings`
+and `cargo clippy -p aura-core --features account-sync --lib --tests -- -D warnings`; `cargo test
+-p auracode-desktop --lib` (208); `cargo test -p aura-core --features account-sync --lib` for
+checkpoints, conversation and gitworkspaces (83); desktop Vitest (403, 19 skipped), `tsc` and Biome
+(37 warnings, none new). The browser `check-*` scripts, the full aura-core suite and CI were not
+run. Bindings were unchanged by the merge.

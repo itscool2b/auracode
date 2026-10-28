@@ -123,12 +123,16 @@ pub fn run() {
     {
         builder = builder.plugin(tauri_plugin_notification::init());
     }
-    let app = builder
-        .plugin(
+    // The plugin's file is per bundle identifier, outside any data folder (see
+    // `LaunchOptions::remembers_window_geometry`).
+    if launch.remembers_window_geometry() {
+        builder = builder.plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_state_flags(window::restored_state())
                 .build(),
-        )
+        );
+    }
+    let app = builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .manage(deep_links::SignInLinks::default())
@@ -179,7 +183,8 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
 
     let os = os::OsInfo::detect();
     let plan = glass::plan(os.os, os.version, launch.no_glass);
-    let glass = match create_window(app, &plan, launch.is_smoke()) {
+    let webview_data = launch.webview_data_dir(booted.data_dir.as_deref());
+    let glass = match create_window(app, &plan, launch.is_smoke(), webview_data.as_deref()) {
         Ok(glass) => glass,
         Err(error) => {
             tracing::error!(%error, "auracode could not create its window");
@@ -274,8 +279,9 @@ fn create_window(
     app: &tauri::App,
     plan: &GlassPlan,
     smoke: bool,
+    webview_data: Option<&std::path::Path>,
 ) -> Result<GlassEffect, Box<dyn std::error::Error>> {
-    let error = match window::create_main(app, plan, smoke) {
+    let error = match window::create_main(app, plan, smoke, webview_data) {
         Ok(_) => return Ok(plan.effect),
         Err(error) => error,
     };
@@ -283,7 +289,7 @@ fn create_window(
     match plan.opaque_fallback(webview_runtime.is_ok()) {
         Some(opaque) => {
             tracing::error!(%error, "could not create the window with glass; retrying opaque");
-            window::create_main(app, &opaque, smoke)?;
+            window::create_main(app, &opaque, smoke, webview_data)?;
             Ok(opaque.effect)
         }
         None => {
