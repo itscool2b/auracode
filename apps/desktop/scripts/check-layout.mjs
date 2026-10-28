@@ -671,7 +671,7 @@ try {
         const page = await context.newPage();
         for (const mode of modes) {
           const [preview, view] = mode.split("#");
-          // A fixture with its own page (library.html) is opened by name.
+          // A fixture with its own page (an .html file) is opened by name.
           await page.goto(
             preview.endsWith(".html") ? `${url}/${preview}` : `${url}/?preview=${preview}`,
           );
