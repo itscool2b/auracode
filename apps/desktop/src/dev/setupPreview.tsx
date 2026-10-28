@@ -8,8 +8,12 @@ import { Onboarding } from "../components/setup/Onboarding";
 import { AppStore } from "../lib/chat/appStore";
 import { FakeTransport } from "../lib/chat/testing";
 import { DEFAULT_GENERAL, type SetupApi } from "../lib/setup";
+import { InstallApiContext } from "../lib/setup-actions/api";
 import { WorkspaceStore } from "../lib/workspace";
 import { cloneFixture } from "./cloneFixture";
+import { installFixture } from "./installFixture";
+
+const install = installFixture();
 
 const params = new URLSearchParams(location.search);
 const missing = params.has("missing");
@@ -182,7 +186,11 @@ Object.assign(window, {
 
 function Preview() {
   const [view, setView] = useState(
-    mode === "agents" ? "agents" : mode === "new-project" ? "new-project" : "setup",
+    mode === "agents" || mode === "agents-installing"
+      ? "agents"
+      : mode === "new-project"
+        ? "new-project"
+        : "setup",
   );
   const [restart, setRestart] = useState(false);
   if (view === "new-project")
@@ -252,10 +260,29 @@ function Preview() {
     />
   );
 }
+/** Waits for a button by its accessible name, as a person would find it, then presses it. */
+async function press(name: string) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const button = [...document.querySelectorAll("button")].find(
+      (node) => (node.getAttribute("aria-label") ?? node.textContent?.trim()) === name,
+    );
+    if (button && !button.disabled) {
+      button.click();
+      return;
+    }
+    await new Promise((done) => setTimeout(done, 50));
+  }
+}
+
 export function mountSetupPreview(container: HTMLElement): void {
   createRoot(container).render(
     <StrictMode>
-      <Preview />
+      <InstallApiContext.Provider value={install}>
+        <Preview />
+      </InstallApiContext.Provider>
     </StrictMode>,
   );
+  // `?preview=agents-installing`: Grok Build's reviewed install, started, with npm at work.
+  if (mode === "agents-installing")
+    void press("Install Grok Build").then(() => press("Start installation"));
 }

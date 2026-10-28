@@ -744,17 +744,18 @@
   line-height: var(--g-leading-ui);
 }
 
+/* Hairlines drawn inset, so every row stays on the 4px grid. */
 .setup-install-review dl {
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
   margin: 0;
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-line);
 }
 
 .setup-install-review :is(dt, dd) {
   margin: 0;
   padding: var(--g-space-8) 0;
-  border-bottom: 1px solid var(--g-line);
+  box-shadow: inset 0 -1px 0 var(--g-line);
 }
 
 .setup-install-review dt {
@@ -765,6 +766,8 @@
 
 .setup-install-review dd {
   min-width: 0;
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
 }
 
 .setup-install-review code {

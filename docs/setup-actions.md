@@ -2,10 +2,11 @@
 
 ## Native agents
 
-The Agents and onboarding screens offer reviewed npm installation for missing native Claude,
-Codex and Pi integrations on Windows and macOS. The versions match the catalog's acceptance pins:
-Claude 2.1.310, Codex 0.162.1 and Pi 1.0.2. These are integration pins, not a claim that the full
-current milestone or every platform has passed real-agent acceptance.
+The Agents and onboarding screens offer reviewed npm installation for missing Claude Code, Codex,
+Pi, OpenCode 1 and Grok Build on Windows and macOS. The versions match the catalog's acceptance
+pins: Claude 2.1.310, Codex 0.162.1, Pi 1.0.2, OpenCode 1.19.4 and Grok Build 1.0.70. These are
+integration pins, not a claim that the full current milestone or every platform has passed
+real-agent acceptance.
 
 Reviewing an installation inspects only executable/package metadata. It does not install, sign in,
 read npm configuration or read agent state. Rust resolves Node plus npm's actual `bin/npm-cli.js`,
@@ -21,7 +22,7 @@ only the owned installer tree. A failed or canceled installation can leave a par
 the app preserves npm's files and offers normal refresh/review instead of deleting them. Success
 does not imply authentication or availability until detection has checked the installed agent.
 
-Sources checked 2026-10-26:
+Install sources checked 2026-10-26 and 2026-10-27:
 
 - [Claude installation documentation](https://code.claude.com/docs/en/setup#install-with-npm)
   documents `npm install -g @anthropic-ai/claude-code` and its required optional native packages
@@ -31,12 +32,50 @@ Sources checked 2026-10-26:
 - [Pi 1.0.2 README](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/README.md)
   documents `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`, requiring
   Node 22.19 or newer. Pi keeps that explicit script restriction.
+- [OpenCode documentation](https://opencode.ai/docs) documents `npm install -g opencode-ai`,
+  the package that carries OpenCode 1.x (1.19.4).
+- [Grok Build enterprise setup](https://docs.x.ai/build/enterprise) documents
+  `npm install -g @xai-official/grok` as xAI's npm distribution. The package is published and
+  signed by xAI's own npm account (`xai-security`); 1.0.70 is its `latest` tag and the catalog's
+  minimum. It needs Node 20 or newer.
 
-Other providers retain their official installation guides until a reviewed installer is available.
+The other catalog agents keep their official guides, for these reasons:
+
+- **Cursor**: the [CLI installation](https://cursor.com/docs/cli/installation) is a script
+  (`curl https://cursor.com/install | bash`, `irm 'https://cursor.com/install?win32=true' | iex`)
+  that fetches the latest build with no published checksum; there is no official npm package.
+- **Hermes**: the [installation guide](https://hermes-agent.nousresearch.com/docs/getting-started/installation)
+  offers a script or app installers with no version choice or checksum. Nous's PyPI package lags
+  the GitHub releases and the docs do not mention it.
+- **oh-my-pi**: its package declares the Bun runtime and its CLI starts with `#!/usr/bin/env
+  bun`, so npm with Node cannot run it; its own installer fetches the script live.
+- **OpenCode 2**: it ships as `@opencode/cli`, whose `opencode` command would collide with an
+  OpenCode 1 install from `opencode-ai`, and its [documentation](https://opencode.ai/v2/docs)
+  says Windows package managers are not supported (Windows uses a download).
+- **Antigravity**: Google distributes a desktop app and an `agy` install script; neither offers a
+  pinned version or checksum in the vendor's documentation.
+
+### Sign in
+
+Sign in runs the agent's own documented login command for the detected executable, in the
+owned terminal sheet, after its separate Start. auracode never opens credential files, and the
+vendor's flow (a browser, a device code or a key prompt) happens in that visible terminal:
+
+- Claude Code `claude auth login`, Codex `codex login`;
+- Cursor `cursor-agent login` ([authentication](https://cursor.com/docs/cli/reference/authentication),
+  which opens the browser);
+- Grok Build `grok login` ([CLI reference](https://docs.x.ai/build/cli/reference));
+- OpenCode `opencode auth login` (choose a provider, then sign in or paste its key);
+- Hermes `hermes auth` (its interactive provider sign-in; `hermes login` was removed).
+
+Pi, oh-my-pi and Antigravity sign in inside their own interface (`/login`, or the first run), so
+auracode offers no Sign in for them and says nothing it cannot run. Status checks (Check sign-in)
+stay limited to Claude Code and Codex, whose status commands report a coarse state without
+account data.
+
 Fresh Node/npm installation and vendor authentication are separate user actions. Development tests
 use synthetic packages, fake browser replies and a harmless local terminal child, never a real
-installer or sign-in command.
-
+sign-in command.
 ## Cloning a repository
 
 Setup's first-project step and New project both offer Clone a repository. The person pastes an

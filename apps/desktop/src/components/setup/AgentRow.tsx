@@ -34,14 +34,17 @@ const INSTALL_GUIDES: Readonly<Record<string, string>> = {
   "grok-stream": "https://docs.x.ai/build/overview",
   omp: "https://github.com/can1357/oh-my-pi",
   opencode: "https://opencode.ai/docs",
-  "opencode-v2": "https://opencode.ai/docs",
+  "opencode-v2": "https://opencode.ai/v2/docs",
   antigravity: "https://antigravity.google/download",
   "agy-stream": "https://antigravity.google/download",
   hermes: "https://hermes-agent.nousresearch.com/docs/getting-started/installation",
 };
 
-/** The agents Rust can install with one reviewed command. */
-const ONE_CLICK = ["claude", "codex", "pi", "opencode"];
+/**
+ * The agents Rust can install with one reviewed, version-pinned npm command. The rest keep their
+ * guide, each for its reason in docs/setup-actions.md.
+ */
+const ONE_CLICK = ["claude", "codex", "pi", "opencode", "grok"];
 
 /** Where detection stands for one agent, as the row shows it. */
 export type AgentPhase = "checking" | "ready" | "signin" | "missing" | "broken";

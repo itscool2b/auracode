@@ -106,12 +106,13 @@ export const MODES = [
   "missing-worktree",
   "missing-worktree#recreate",
   // Setup's clone: the form with its exact command, Git running, and a failed clone; the same
-  // clone from New project's dialog.
+  // clone from New project's dialog; and an agent's reviewed install with npm running.
   "clone",
   "clone-running",
   "clone-error",
   "new-project",
   "new-project#clone-dialog",
+  "agents-installing",
 ];
 
 /** Waits until the panel's shell has drawn its prompt. */

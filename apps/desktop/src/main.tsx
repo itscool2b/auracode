@@ -79,6 +79,7 @@ if (container) {
     else if (
       mode === "setup" ||
       mode === "agents" ||
+      mode === "agents-installing" ||
       mode === "new-project" ||
       mode === "clone" ||
       mode === "clone-running" ||

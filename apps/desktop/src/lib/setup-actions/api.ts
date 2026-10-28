@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { createContext } from "react";
 import type { TerminalTransport } from "../terminal";
 import { terminalTransport } from "../terminal";
 import type { AgentInstallReview, CloneCheck, CloneInput, CloneRecord } from "./bindings";
@@ -18,6 +19,9 @@ export interface InstallApi {
   review(agentId: string): Promise<AgentInstallReview>;
   terminal(review: AgentInstallReview): TerminalTransport;
 }
+
+/** Where install buttons find Rust's installer; previews provide a synthetic one. */
+export const InstallApiContext = createContext<InstallApi | null>(null);
 
 export const installApi: InstallApi = {
   review: (agentId) => call("agent_install_review", { agentId }),
