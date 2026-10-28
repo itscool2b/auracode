@@ -1,9 +1,9 @@
 /*
  * Agents and setup's roster (docs/design/visual-language.md, 6.17): one row per harness on
  * hairlines inside one frame, as Vercel lists projects. A row says what detection found in words, a
- * square and a grey ladder; volt appears only when the agent needs you. Detection is the one
- * thing that moves: the mark's pixel loader while an agent is looked for, then the status and
- * version settle once and the green dot arrives.
+ * circle and a grey ladder; volt appears only when the agent needs you. Detection is the one
+ * thing that moves: a soft circular pulse while an agent is looked for, then an eased check, and
+ * the status and version settle once.
  */
 
 /* ----------------------------------------------------------------------- the page */
@@ -59,6 +59,16 @@
 
 .agents-head .g-button {
   flex: none;
+}
+
+/* Refreshing: the detection pulse in the icon's 14px place. */
+.agents-refreshing {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
 }
 
 /* ----------------------------------------------------------------------- the list */
@@ -213,13 +223,17 @@
   color: var(--g-red);
 }
 
+/*
+ * One 16px slot for every state, so the word beside it never moves when detection changes what the
+ * slot holds: the pulse, the check, a 6px dot or a ring.
+ */
 .agent-row-dot {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 6px;
-  height: 6px;
+  width: 16px;
+  height: 16px;
 }
 
 /* Not installed: an empty ring, the same size as the found ones, in the decorative grey. */
@@ -382,7 +396,7 @@
   position: fixed;
   z-index: 50;
   transform-origin: top right;
-  animation: agent-menu-in var(--g-dur-base) var(--g-ease) both;
+  animation: agent-menu-in var(--g-dur-base) var(--g-ease-quint) both;
 }
 
 .agent-menu .g-menu-item {
@@ -518,19 +532,83 @@
 
 /* ------------------------------------------------------------------- detection */
 
-/* Found: the status and the version settle into place once; the green dot arrives last. */
+/*
+ * Looking: the mark waits dimmed and the status slot breathes, a 6px dot whose ring swells out of
+ * it and fades, once every 1.6s. It is the row's one live indicator (section 7); nothing else moves.
+ */
+.agent-row-mark {
+  transition: opacity var(--g-dur-row) var(--g-ease-reveal);
+}
+
+.agent-row[data-phase="checking"] .agent-row-mark {
+  opacity: 0.45;
+}
+
+/* The pulse itself (.ui-pulse) is motion.css's, shared with New chat and the Agents page. */
+
+/*
+ * Found: a green-tinted circle grows into the slot and its check follows it in, both eased out;
+ * the word and the version settle into place once. Under the hand nothing moves again.
+ */
+.agent-row-found {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--g-green-tint);
+  color: var(--g-green);
+  animation: agent-found var(--g-dur-panel) var(--g-ease-out) both;
+}
+
+.agent-row-check {
+  animation: agent-check var(--g-dur-panel) var(--g-ease-out) var(--g-dur-micro) both;
+}
+
 :where(.agent-row-status, .agent-row-version) {
   animation: agent-settle var(--g-dur-row) var(--g-ease-reveal) both;
 }
 
+/* Needs you: the volt dot grows in once. Failed: the red dot only fades in; nothing urgent moves. */
 .agent-row-status .g-status-dot {
   animation: agent-dot var(--g-dur-letter) var(--g-ease-out) var(--g-dur-micro) both;
 }
 
-/*
- * Looking: the mark's pixel loader walks its six cells (AgentMark's thinking state) while the words
- * wait in fg-3. It is the row's one live indicator (section 7), so nothing else in the row moves.
- */
+.agent-row-status[data-phase="broken"] .g-status-dot {
+  animation-name: agent-calm;
+}
+
+@keyframes agent-found {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes agent-check {
+  from {
+    opacity: 0;
+    transform: scale(0.5) rotate(-12deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes agent-calm {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 
 @keyframes agent-settle {
   from {
@@ -564,7 +642,7 @@
 @keyframes agent-menu-in {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+    transform: translateY(-6px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -572,14 +650,20 @@
   }
 }
 
-/* Reduced motion: every state shows at once; the loader holds its still frame (4.5). */
+/* Reduced motion: every state shows at once; the pulse holds a still dot (4.5). */
 @media (prefers-reduced-motion: reduce) {
   .agent-row-status,
   .agent-row-version,
   .agent-row-status .g-status-dot,
+  .agent-row-found,
+  .agent-row-check,
   .agent-detail,
   .agent-menu {
     animation: none;
+  }
+
+  .agent-row-mark {
+    transition: none;
   }
 }
 
@@ -588,6 +672,8 @@
     .agent-row-status,
     .agent-row-version,
     .agent-row-status .g-status-dot,
+    .agent-row-found,
+    .agent-row-check,
     .agent-detail,
     .agent-menu
   ) {

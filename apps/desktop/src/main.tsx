@@ -4,6 +4,7 @@ import "./shell.css";
 import "./chat.css";
 import "./context-panel.css";
 import "./diagnostics.css";
+import "./motion.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
@@ -13,6 +14,7 @@ import { AppStore } from "./lib/chat/appStore";
 import { tauriTransport } from "./lib/chat/transport";
 import { installDraftQuit } from "./lib/draftQuit";
 import { cancelDemoStream, startDemoStream } from "./lib/ipc";
+import { installMagnetic } from "./lib/magnetic";
 import { installProfileEvents } from "./lib/profiles";
 import { StreamStore } from "./lib/session";
 import { WorkspaceStore, workspaceApi } from "./lib/workspace";
@@ -23,6 +25,7 @@ const chats = new AppStore(tauriTransport);
 const workspace = new WorkspaceStore(workspaceApi);
 installDraftQuit();
 installQuitQuestion();
+installMagnetic();
 
 const container = document.getElementById("root");
 if (container) {

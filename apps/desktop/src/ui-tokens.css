@@ -69,4 +69,7 @@
   --ui-ease-glide: cubic-bezier(0.25, 0.5, 0.3, 1);
   /* The card waits for the intro's mark to clear before it rises. */
   --ui-card-in-at: 180ms;
+
+  /* Detection's circular pulse (6.17a): one slow breath, so looking never reads as alarm. */
+  --ui-pulse: 1600ms;
 }
