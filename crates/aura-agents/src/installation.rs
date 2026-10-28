@@ -43,16 +43,10 @@ pub(crate) fn native(
     })
 }
 
-/// Native and alternate transports of the same vendor share one transcript namespace.
+/// Native and alternate transports of the same vendor share one transcript namespace: the agent
+/// the catalog files the connection under.
 pub fn provider_namespace(agent_id: &str) -> &str {
-    match agent_id {
-        "claude" | "claude-acp" => "claude",
-        "codex" | "codex-acp" => "codex",
-        "antigravity" | "agy-stream" => "antigravity",
-        "grok" | "grok-stream" => "grok",
-        "opencode" | "opencode-v2" => "opencode",
-        other => other,
-    }
+    crate::catalog::agent_of(agent_id)
 }
 
 /// Canonical path classification is conservative. A copied or unknown binary stays unknown.

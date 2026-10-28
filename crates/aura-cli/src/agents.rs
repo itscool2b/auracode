@@ -10,9 +10,10 @@ use crate::out::Out;
 use crate::report::Outcome;
 
 pub async fn run(headless: &Headless, out: &Out) -> Result<Outcome, CliError> {
-    // Every detection shares the env resolution and the probes in flight.
-    for entry in headless.detector.cached() {
-        if let Some(spec) = headless.detector.spec(&entry.id) {
+    // Every connection of every agent, so none reads `checking`. Every detection shares the env
+    // resolution and the probes in flight.
+    for connection in aura_agents::catalog() {
+        if let Some(spec) = headless.detector.spec(connection.id) {
             headless.detector.detect(&spec).await;
         }
     }
@@ -56,6 +57,22 @@ pub fn render(env: &EnvStatus, agents: &[AgentEntry]) -> Vec<String> {
             Availability::Broken { reason } => format!("broken: {reason}"),
         };
         lines.push(format!("  {state}"));
+        if let Some(connections) = &agent.connections {
+            let label = |id: &Option<String>| {
+                id.as_ref().and_then(|id| {
+                    connections
+                        .options
+                        .iter()
+                        .find(|option| &option.id == id)
+                        .map(|option| option.label.clone())
+                })
+            };
+            lines.push(format!(
+                "  connection: {}; new sessions use {}",
+                label(&connections.preferred).unwrap_or_else(|| "Automatic".into()),
+                label(&connections.active).unwrap_or_else(|| "none (none can run here)".into())
+            ));
+        }
         lines.push(format!("  starts as: {}", agent.launch));
         lines.push(format!("  last verified with: {}", agent.last_verified));
     }
@@ -99,25 +116,56 @@ mod tests {
             installation: None,
             latest_release: None,
             harness: None,
+            connections: None,
+        };
+        let option = |id: &str, label: &str| aura_protocol::session::AgentConnection {
+            id: id.into(),
+            label: label.into(),
+            description: String::new(),
+            availability: Availability::Checking,
+            launch: String::new(),
+            needs_download: false,
+        };
+        let claude = AgentEntry {
+            connections: Some(aura_protocol::session::AgentConnections {
+                preferred: None,
+                active: Some("claude-acp".into()),
+                options: vec![
+                    option("claude", "Direct"),
+                    option("claude-acp", "ACP adapter"),
+                ],
+            }),
+            ..entry(
+                "claude",
+                Availability::Ready {
+                    version: Some("Claude Code 2.1.310 via claude-agent-acp 0.95.0".into()),
+                    path: "/u/.local/bin/claude".into(),
+                },
+                true,
+            )
+        };
+        let codex = AgentEntry {
+            connections: Some(aura_protocol::session::AgentConnections {
+                preferred: Some("codex-acp".into()),
+                active: None,
+                options: vec![
+                    option("codex", "Direct"),
+                    option("codex-acp", "ACP adapter"),
+                ],
+            }),
+            ..entry(
+                "codex",
+                Availability::Missing {
+                    reason: "Node.js 22 or newer is required (found 20.11.0).".into(),
+                },
+                false,
+            )
         };
         let lines = render(
             &env,
             &[
-                entry(
-                    "claude-acp",
-                    Availability::Ready {
-                        version: Some("Claude Code 2.1.310 via claude-agent-acp 0.95.0".into()),
-                        path: "/u/.local/bin/claude".into(),
-                    },
-                    true,
-                ),
-                entry(
-                    "codex-acp",
-                    Availability::Missing {
-                        reason: "Node.js 22 or newer is required (found 20.11.0).".into(),
-                    },
-                    false,
-                ),
+                claude,
+                codex,
                 entry(
                     "hermes",
                     Availability::Broken {
@@ -142,6 +190,20 @@ mod tests {
             )
         );
         assert!(lines.contains(&"  broken: hermes --version failed".to_owned()));
+        // One entry per agent, with the connection new sessions use.
+        assert!(lines.contains(&"claude (claude name)".to_owned()));
+        assert!(
+            lines.contains(&"  connection: Automatic; new sessions use ACP adapter".to_owned())
+        );
+        assert!(lines.contains(
+            &"  connection: ACP adapter; new sessions use none (none can run here)".to_owned()
+        ));
+        assert!(
+            !lines
+                .iter()
+                .any(|line| line.starts_with("hermes") && line.contains("connection")),
+            "one connection: no line"
+        );
         assert!(lines.contains(&"  starts as: hermes acp".to_owned()));
         let fallback = render(
             &EnvStatus {

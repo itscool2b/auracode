@@ -225,7 +225,9 @@ pub struct AuthCommand {
     pub env: Vec<(String, String)>,
 }
 
-/// An agent auracode can start, as the New chat screen shows it.
+/// An agent auracode can start, as the New chat screen shows it: one entry per agent. For an
+/// agent with several connections, every field but `id` and `name` describes the connection a
+/// new session would use now (or the preferred one while none can run).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct AgentEntry {
     pub id: String,
@@ -245,6 +247,35 @@ pub struct AgentEntry {
     /// The installed version against its latest known release, computed by detection.
     #[serde(default)]
     pub harness: Option<crate::plugins::HarnessStatus>,
+    /// The ways auracode can start this agent, when it has more than one (Claude Code's own
+    /// protocol or its ACP adapter). `None` for an agent with one connection.
+    #[serde(default)]
+    pub connections: Option<AgentConnections>,
+}
+
+/// An agent's connections and the device's Connection setting for it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct AgentConnections {
+    /// The connection chosen in the agent's details; `None` is Automatic: the first connection,
+    /// in `options` order, that can run here.
+    pub preferred: Option<String>,
+    /// The connection a new session uses now. `None` while detection runs or when none can run.
+    /// A chat's saved session keeps resuming through the connection that made it.
+    pub active: Option<String>,
+    pub options: Vec<AgentConnection>,
+}
+
+/// One way auracode can start an agent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct AgentConnection {
+    /// The connection's catalog id (`claude-acp`), which saved native sessions record.
+    pub id: String,
+    /// "Direct", "ACP adapter".
+    pub label: String,
+    pub description: String,
+    pub availability: Availability,
+    pub launch: String,
+    pub needs_download: bool,
 }
 
 /// Whether an agent can start here.
@@ -553,8 +584,34 @@ mod tests {
             installation: None,
             latest_release: None,
             harness: None,
+            connections: None,
         };
         assert_eq!(round_trip(&entry), entry);
+        let claude = AgentEntry {
+            id: "claude".into(),
+            name: "Claude Code".into(),
+            connections: Some(AgentConnections {
+                preferred: Some("claude-acp".into()),
+                active: Some("claude-acp".into()),
+                options: vec![AgentConnection {
+                    id: "claude-acp".into(),
+                    label: "ACP adapter".into(),
+                    description: "d".into(),
+                    availability: Availability::Checking,
+                    launch: "l".into(),
+                    needs_download: true,
+                }],
+            }),
+            ..entry.clone()
+        };
+        assert_eq!(round_trip(&claude), claude);
+        // An entry from a build before connections reads as an agent with one connection.
+        let mut older = serde_json::to_value(&entry).expect("json");
+        older.as_object_mut().expect("object").remove("connections");
+        assert_eq!(
+            serde_json::from_value::<AgentEntry>(older).expect("older entry"),
+            entry
+        );
         let env = EnvStatus {
             state: EnvState::Ready {
                 source: "login shell".into(),

@@ -78,13 +78,13 @@ impl CliError {
     }
 }
 
-/// The error for an agent id the detector does not know, listing the ones it does.
+/// The error for an agent id the detector does not know, listing the ones it does. The CLI
+/// probes and smoke-tests each connection on its own, so it lists connection ids (`claude-acp`).
 pub(crate) fn unknown_agent(headless: &Headless, id: &str) -> CliError {
-    let known: Vec<String> = headless
-        .detector
-        .cached()
-        .into_iter()
-        .map(|entry| entry.id)
+    let known: Vec<&str> = aura_agents::catalog()
+        .iter()
+        .map(|spec| spec.id)
+        .filter(|id| headless.detector.spec(id).is_some())
         .collect();
     CliError::Message(format!(
         "auracode doesn't know an agent called \"{id}\"; the agents are {}",
