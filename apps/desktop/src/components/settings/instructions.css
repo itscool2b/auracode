@@ -87,8 +87,17 @@
 .instructions-files {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--g-space-4);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-12);
   padding: var(--g-space-12) var(--g-space-16) 0;
+}
+
+.instructions-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-space-4);
+  min-width: 0;
 }
 
 .instructions-file-tab {

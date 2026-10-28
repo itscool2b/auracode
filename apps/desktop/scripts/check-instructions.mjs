@@ -62,7 +62,17 @@ try {
   await mkdir(out, { recursive: true });
   let ready = false;
   for (let attempt = 0; attempt < 150; attempt++) {
-    if (server && server.exitCode !== null) throw new Error(output);
+    // Our own server must be the one answering: another worktree's Vite may hold the port.
+    if (server && server.exitCode !== null)
+      throw new Error(
+        /in use/i.test(output)
+          ? "Port 1426 is in use by another dev server. Wait for it to stop and run again."
+          : output,
+      );
+    if (server && !/ready in/i.test(output)) {
+      await new Promise((done) => setTimeout(done, 100));
+      continue;
+    }
     try {
       ready = (await fetch(`${url}/?preview=instructions`)).ok;
     } catch {
@@ -219,6 +229,12 @@ try {
       await page.getByRole("button", { name: "Apply", exact: true }).click();
       await page.getByRole("status").filter({ hasText: "Saved" }).waitFor();
       assert.equal(await page.getByText("Edited copy for Pi").count(), 0);
+      // An agent installed later reads nothing yet; Set up reviews one file again, nothing more.
+      await page.getByRole("button", { name: "Set up Grok Build", exact: true }).click();
+      await dialog("Use one file for every agent").waitFor();
+      assert.equal((await calls()).at(-1), "review:universal:source");
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.waitForFunction(() => window.instructionsFixture.calls().at(-1) === "cancel");
 
       // Size limits show beside the text, per agent that reads it.
       await open("instructions-large");

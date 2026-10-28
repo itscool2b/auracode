@@ -412,20 +412,23 @@ export function InstructionsPanel({
             </p>
             <div className="settings-group instructions-editor">
               {!universal && files.length > 1 ? (
-                <div className="instructions-files" role="tablist" aria-label="Files">
-                  {files.map((option) => (
-                    <button
-                      key={option.key}
-                      type="button"
-                      role="tab"
-                      aria-selected={option.key === file?.key}
-                      className="instructions-file-tab"
-                      data-missing={option.kind === "missing" ? "" : undefined}
-                      onClick={() => setSelected(option.key)}
-                    >
-                      {option.path}
-                    </button>
-                  ))}
+                <div className="instructions-files">
+                  <div className="instructions-tabs" role="tablist" aria-label="Files">
+                    {files.map((option) => (
+                      <button
+                        key={option.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={option.key === file?.key}
+                        className="instructions-file-tab"
+                        data-missing={option.kind === "missing" ? "" : undefined}
+                        onClick={() => setSelected(option.key)}
+                      >
+                        {option.path}
+                      </button>
+                    ))}
+                  </div>
+                  {file ? <span className="instructions-meta">{fileMeta(file)}</span> : null}
                 </div>
               ) : null}
               {file ? (
@@ -716,14 +719,13 @@ function FileEditor({
     });
   return (
     <div className="instructions-file">
-      <div className="instructions-file-head">
-        {tabs ? <span /> : <span className="instructions-path settings-mono">{file.path}</span>}
-        <span className="instructions-meta">
-          {file.kind === "missing"
-            ? "Not created yet"
-            : `${file.lines} ${file.lines === 1 ? "line" : "lines"} · ${formatBytes(file.bytes)}`}
-        </span>
-      </div>
+      {/* With file tabs the tab row names the file and carries its size. */}
+      {tabs ? null : (
+        <div className="instructions-file-head">
+          <span className="instructions-path settings-mono">{file.path}</span>
+          <span className="instructions-meta">{fileMeta(file)}</span>
+        </div>
+      )}
       {notes.length > 0 ? (
         <ul className="instructions-notes" aria-label={`About ${file.path}`}>
           {notes.map((note) => (
@@ -800,6 +802,12 @@ function FileEditor({
       </div>
     </div>
   );
+}
+
+function fileMeta(file: InstructionsFile): string {
+  return file.kind === "missing"
+    ? "Not created yet"
+    : `${file.lines} ${file.lines === 1 ? "line" : "lines"} · ${formatBytes(file.bytes)}`;
 }
 
 export function formatBytes(bytes: number): string {

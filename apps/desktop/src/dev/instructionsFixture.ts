@@ -355,6 +355,9 @@ function globalSnapshot(state: State): InstructionsSnapshot {
             null,
             "Cursor keeps user rules in its settings and in ~/.cursor/rules, not in one file.",
           );
+        case "grok":
+          // Installed after the shared file was set up: it reads nothing yet and offers Set up.
+          return agent(id, "not_set", null, "Reads nothing here yet.", { installed: true });
         default:
           return agent(id, "not_set", null, "Reads nothing here yet.");
       }
