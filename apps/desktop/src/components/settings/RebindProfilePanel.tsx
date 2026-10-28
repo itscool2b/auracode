@@ -70,7 +70,7 @@ export function RebindProfilePanel({
           <label htmlFor={`${id}-profile`}>Existing Account workspace</label>
           <select
             id={`${id}-profile`}
-            className="g-input"
+            className="g-select"
             value={selected}
             disabled={busy || disabled || !!profileId}
             onChange={(event) => setSelected(event.currentTarget.value)}

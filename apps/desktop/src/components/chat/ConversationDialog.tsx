@@ -187,6 +187,7 @@ export function ConversationDialog({
             ? "Edit prompt"
             : "Review continuation"
       }
+      size="lg"
       className="conversation-dialog"
       onClose={() => {
         if (!applying) onClose();
@@ -205,7 +206,7 @@ export function ConversationDialog({
           {!preview && !editable && !completed ? (
             <button
               type="button"
-              className="ui-button"
+              className="g-button"
               disabled={busy}
               onClick={() => setRevision((value) => value + 1)}
             >
@@ -221,7 +222,7 @@ export function ConversationDialog({
               <p>This conversation has new history from another device.</p>
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 disabled={busy}
                 onClick={() => setIntent({ type: "continue_here" })}
               >
@@ -245,7 +246,7 @@ export function ConversationDialog({
                     <button
                       key={type}
                       type="button"
-                      className="ui-button"
+                      className="g-button g-button-28"
                       disabled={busy || turn.status === "running"}
                       onClick={() => setIntent({ type, turn_id: turn.turn_id })}
                     >
@@ -262,7 +263,7 @@ export function ConversationDialog({
           {turns.has_more ? (
             <button
               type="button"
-              className="ui-button"
+              className="g-button"
               disabled={busy}
               onClick={() => void earlier()}
             >
@@ -276,7 +277,7 @@ export function ConversationDialog({
           <label htmlFor="continuation-edit-text">Your prompt</label>
           <textarea
             id="continuation-edit-text"
-            className="ui-textarea"
+            className="g-textarea"
             value={text}
             onChange={(event) => setText(event.currentTarget.value)}
             rows={8}
@@ -286,7 +287,7 @@ export function ConversationDialog({
           ) : null}
           <button
             type="button"
-            className="ui-button"
+            className="g-button"
             disabled={busy}
             onClick={() => void editPreview()}
           >
@@ -336,10 +337,10 @@ export function ConversationDialog({
               Clear the {queued} queued {queued === 1 ? "message" : "messages"} before continuing.
             </p>
           ) : null}
-          <div className="chat-dialog-actions">
+          <div className="g-dialog-actions">
             {live ? (
               <button
-                className="ui-button"
+                className="g-button"
                 type="button"
                 disabled={status === "stopping" || applying}
                 onClick={onStop}
@@ -349,8 +350,7 @@ export function ConversationDialog({
             ) : null}
             <button
               type="button"
-              className="ui-button"
-              data-kind="primary"
+              className="g-button g-button-primary"
               disabled={live || queued > 0 || applying || busy}
               onClick={() => void apply()}
             >

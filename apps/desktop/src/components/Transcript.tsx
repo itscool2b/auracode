@@ -78,14 +78,7 @@ function ThoughtPill({ thought }: { readonly thought: ThoughtBlock }) {
       >
         <span className="thought-dot" aria-hidden="true" />
         <span className="thought-label">{label}</span>
-        <ChevronIcon
-          width={12}
-          height={12}
-          style={{
-            transform: open ? "rotate(90deg)" : "none",
-            transition: "transform var(--aura-duration-fast) var(--aura-ease-standard)",
-          }}
-        />
+        <ChevronIcon width={12} height={12} />
       </button>
       {open ? (
         <p id={detailsId} className="thought-text">
@@ -181,7 +174,7 @@ function ToolRow({ tool, settled }: { readonly tool: ToolBlock; readonly settled
         onClick={() => setOpen((value) => !value)}
       >
         {kindIcon(tool.kind)}
-        <span className="min-w-0 flex-1 truncate">{settledTitle(tool)}</span>
+        <span className="tool-title">{settledTitle(tool)}</span>
         {diff ? (
           <span className="chip">
             <span className="add">+{diff.added}</span>
@@ -300,7 +293,7 @@ function TurnFooter({ snapshot }: { readonly snapshot: StreamSnapshot }) {
   if (cost) parts.push(cost);
   parts.push(`${formatCount(stream.events)} events in ${formatCount(stream.frames)} frames`);
   return (
-    <p className="turn-footer m-0">
+    <p className="turn-footer">
       {parts.map((part) => (
         <span key={part}>{part}</span>
       ))}

@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p .",
     "test": "node --test scripts/build-env.test.mjs && vitest run",
-    "check:orbit": "node scripts/check-orbit.mjs",
+    "check:chat": "node scripts/check-chat.mjs",
     "check:setup": "node scripts/check-setup.mjs",
     "check:settings": "node scripts/check-settings.mjs",
     "tauri": "tauri",
@@ -32,14 +32,12 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
-    "@tailwindcss/vite": "4.3.3",
     "@tauri-apps/cli": "2.12.4",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
     "playwright": "1.63.0",
-    "tailwindcss": "4.3.3",
     "vite": "8.3.5",
     "vitest": "5.0.5"
   }

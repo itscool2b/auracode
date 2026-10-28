@@ -89,10 +89,10 @@ export function DemoPanel({
       {/* A button, not a checkbox: it opens another screen rather than switching a setting. */}
       <button
         type="button"
-        className="g-button g-button-ghost demo-panel-stress"
+        className="g-button g-button-ghost g-button-28 demo-panel-stress"
         onClick={onOpenStress}
       >
-        Stress view <span className="muted">(orbs, aura, fast stream, frame rate)</span>
+        Stress view <span className="muted">(orbs, dither field, fast stream, frame rate)</span>
         <ChevronIcon width={12} height={12} />
       </button>
 

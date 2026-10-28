@@ -90,7 +90,7 @@ export function AgentDock({
               )}
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 disabled={!choice.enabled}
                 onClick={() => onChoose(agent.id)}
               >

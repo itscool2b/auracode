@@ -514,7 +514,7 @@ export function Onboarding({
                     <label className="setup-field">
                       Or choose a project
                       <select
-                        className="g-input"
+                        className="g-select"
                         disabled={busy}
                         value={project?.id ?? ""}
                         onChange={(event) => {

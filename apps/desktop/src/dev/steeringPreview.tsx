@@ -180,16 +180,16 @@ function Preview() {
         aria-label="Fixture outcomes"
         style={{ position: "relative", display: "flex", flexShrink: 0, gap: 12, padding: 12 }}
       >
-        <button type="button" className="ui-button" onClick={() => fixture.answer("accepted")}>
+        <button type="button" className="g-button" onClick={() => fixture.answer("accepted")}>
           Accept
         </button>
-        <button type="button" className="ui-button" onClick={() => fixture.answer("rejected")}>
+        <button type="button" className="g-button" onClick={() => fixture.answer("rejected")}>
           Reject
         </button>
-        <button type="button" className="ui-button" onClick={() => fixture.answer("unconfirmed")}>
+        <button type="button" className="g-button" onClick={() => fixture.answer("unconfirmed")}>
           Lose reply
         </button>
-        <button type="button" className="ui-button" onClick={() => fixture.end()}>
+        <button type="button" className="g-button" onClick={() => fixture.end()}>
           End turn
         </button>
       </nav>

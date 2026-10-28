@@ -210,7 +210,7 @@ function Preview() {
       data-theme="dark"
       style={{ height: "100%", background: "var(--g-bg)" }}
     >
-      <h1 className="settings-sr-only">Git fixture workspace</h1>
+      <h1 className="sr-only">Git fixture workspace</h1>
       {open ? (
         <GitDialog
           chatId="chat"

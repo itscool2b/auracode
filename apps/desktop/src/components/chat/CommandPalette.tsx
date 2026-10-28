@@ -169,7 +169,7 @@ export function CommandPalette({
     "Commands",
   ];
   return (
-    <Modal title="Search and commands" className="command-palette" onClose={onClose}>
+    <Modal title="Search and commands" size="lg" className="command-palette" onClose={onClose}>
       <div className="palette-input">
         <Search size={18} />
         <input

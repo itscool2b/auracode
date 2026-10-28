@@ -84,7 +84,7 @@ export function ResetSyncPanel({
   if (!pending?.pending && !expanded)
     return allowReview ? (
       <button
-        className="g-button g-button-ghost account-reset-toggle"
+        className="g-button g-button-ghost g-button-28 account-reset-toggle"
         type="button"
         disabled={locked}
         onClick={() => setExpanded(true)}
@@ -163,7 +163,7 @@ export function ResetSyncPanel({
           <label htmlFor={`${id}-key`}>New recovery key</label>
           <textarea
             id={`${id}-key`}
-            className="g-input account-secret"
+            className="g-textarea account-secret"
             value={review.recovery_key}
             readOnly
             spellCheck={false}

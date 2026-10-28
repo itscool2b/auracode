@@ -1,8 +1,7 @@
 /*
- * The desktop app's semantic tokens, mapped onto Graphite (docs/design/visual-language.md, section
- * 3). The chat shell's stylesheets (shell.css, chat.css, context-panel.css) read colour through these
- * names and take type sizes, radii and motion straight from the --g-* tokens. Dark only: every text
- * colour is a solid Graphite value, never an alpha.
+ * Graphite for the desktop app (docs/design/visual-language.md, section 3). Every colour, type
+ * size, space, radius and duration is a --g-* token from @auracode/ui; stylesheets read them
+ * directly. The few values below are the app window's own layout, which Graphite does not define.
  */
 @import "@auracode/ui/graphite.css";
 
@@ -10,46 +9,16 @@
   /* Geist with its default glyphs, exactly as the website sets it. */
   font-feature-settings: normal;
 
-  /* Surfaces, back to front. Wells sit one step below their pane. */
-  --ui-surface-window: var(--g-bg);
-  --ui-surface-main: var(--g-surface-1);
-  --ui-surface-raised: var(--g-surface-2);
-  --ui-surface-fill: var(--g-surface-3);
-  --ui-surface-selected: var(--g-surface-4);
-  --ui-surface-well: var(--g-bg);
-  --ui-surface-user: var(--g-surface-3);
-  --ui-surface-scrim: var(--g-scrim);
-
-  /* Text, strongest to faintest. Faint is decorative or disabled only. */
-  --ui-text-primary: var(--g-fg-1);
-  --ui-text-secondary: var(--g-fg-2);
-  --ui-text-muted: var(--g-fg-3);
-  --ui-text-faint: var(--g-fg-4);
-  --ui-text-on-primary: var(--g-on-light);
-
-  /* Lines: hairlines for structure, strong lines for things you can act on. */
-  --ui-line-faint: var(--g-line-faint);
-  --ui-line: var(--g-line);
-  --ui-line-strong: var(--g-line-strong);
-
-  /* The one white object on a screen, and the three signals. Volt only means look here. */
-  --ui-primary: var(--g-primary);
-  --ui-primary-hover: var(--g-primary-hover);
-  --ui-primary-active: var(--g-primary-active);
-  --ui-signal: var(--g-volt);
-  --ui-signal-tint: var(--g-volt-tint);
-  --ui-success: var(--g-green);
-  --ui-danger: var(--g-red);
-  --ui-danger-hover: var(--g-red-hover);
-  --ui-danger-tint: var(--g-red-tint);
-
-  /* Layout (section 3.9 and 6.1). The titlebar band keeps clearing the native window controls. */
-  --ui-sidebar-width: 264px;
+  /* The window frame (6.1, 6.2). The sidebar narrows to the rail when collapsed. */
+  --ui-sidebar-width: var(--g-app-sidebar);
   --ui-rail-width: 72px;
+  /* The band that clears the native window controls and drags the window. */
   --ui-titlebar-height: 52px;
-  --ui-header-height: 44px;
-  --ui-pane-inset: 8px;
-  --ui-column: 720px;
+  /* The gap between the window edge and its panes, and between two panes. */
+  --ui-pane-inset: var(--g-space-8);
+  /* The transcript's lead column: marks and chevrons centre on x 11, words start at x 22 (6.4). */
   --ui-gutter: 22px;
-  --ui-panel-width: 380px;
+
+  /* Over the OS window material (macOS vibrancy, Windows Mica) where a screen leaves it showing. */
+  --ui-window-tint: rgb(7 7 10 / 0.42);
 }

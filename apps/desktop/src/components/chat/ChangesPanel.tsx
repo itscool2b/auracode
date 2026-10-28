@@ -242,7 +242,7 @@ export function ChangesPanel({
         </div>
         <button
           type="button"
-          className="chat-icon-button"
+          className="g-button g-button-ghost g-button-icon g-button-28"
           title="Refresh changes"
           aria-label="Refresh changes"
           disabled={busy || acting}
@@ -252,7 +252,7 @@ export function ChangesPanel({
         </button>
         <button
           type="button"
-          className="chat-icon-button"
+          className="g-button g-button-ghost g-button-icon g-button-28"
           aria-label="Close Changes"
           ref={closeButton}
           onClick={onClose}
@@ -273,7 +273,7 @@ export function ChangesPanel({
             <label className="changes-scope">
               Compare current files with
               <select
-                className="ui-select"
+                className="g-select"
                 value={scope}
                 onChange={(event) => {
                   setScope(event.currentTarget.value);
@@ -398,13 +398,13 @@ export function ChangesPanel({
             <footer className="changes-panel-footer">
               <span>{selected.size ? `${selected.size} selected` : "Select files to revert"}</span>
               {live ? (
-                <button type="button" className="ui-button" onClick={onStop}>
+                <button type="button" className="g-button g-button-28" onClick={onStop}>
                   Stop session to revert
                 </button>
               ) : (
                 <button
                   type="button"
-                  className="ui-button"
+                  className="g-button g-button-28"
                   disabled={!selected.size || busy || acting || error !== null}
                   onClick={() => void review()}
                 >
@@ -439,10 +439,10 @@ export function ChangesPanel({
               {warning}
             </p>
           ))}
-          <div className="chat-dialog-actions">
+          <div className="g-dialog-actions">
             <button
               type="button"
-              className="ui-button"
+              className="g-button"
               disabled={acting}
               onClick={() => setPreview(null)}
             >
@@ -450,8 +450,7 @@ export function ChangesPanel({
             </button>
             <button
               type="button"
-              className="ui-button"
-              data-kind="danger"
+              className="g-button g-button-danger"
               disabled={acting}
               onClick={() => void revert()}
             >

@@ -55,7 +55,7 @@ Object.assign(window, { publicationFixture: { calls: () => [...calls] } });
 const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
-    <Modal title="Repository settings" onClose={() => {}}>
+    <Modal title="Repository settings" size="md" onClose={() => {}}>
       <RepositoryPublisher
         folderId="folder"
         api={api}

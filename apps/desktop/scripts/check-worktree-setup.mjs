@@ -70,7 +70,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     try {
       await checkWorktreeSetup(
         browser,
-        process.env.ORBIT_URL ?? "http://localhost:1426",
+        process.env.CHECK_URL ?? "http://localhost:1426",
         out,
         engine,
       );

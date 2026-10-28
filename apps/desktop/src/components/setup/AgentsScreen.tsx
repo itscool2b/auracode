@@ -113,6 +113,7 @@ export function AgentRoster({
                     agent={agent}
                     transport={transport}
                     onRefresh={onRefresh}
+                    buttonClassName="g-button g-button-outline g-button-28"
                   />
                 ) : (
                   <div className="setup-agent-install">

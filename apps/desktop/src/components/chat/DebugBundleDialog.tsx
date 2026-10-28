@@ -40,7 +40,7 @@ export function DebugBundleDialog({
     }
   };
   return (
-    <Modal title="Copy debug bundle" onClose={onClose}>
+    <Modal title="Copy debug bundle" size="md" onClose={onClose}>
       <div className="chat-export-content">
         <p>
           Prepare a local preview of this chat’s newest saved protocol log and app version. Known
@@ -51,6 +51,7 @@ export function DebugBundleDialog({
           <label className="debug-bundle-preview">
             Bundle preview
             <textarea
+              className="g-textarea debug-bundle-text"
               value={text}
               spellCheck={false}
               onChange={(event) => {
@@ -68,12 +69,12 @@ export function DebugBundleDialog({
           </p>
         ) : null}
         <div className="chat-export-actions">
-          <button type="button" className="ui-button" disabled={busy} onClick={onClose}>
+          <button type="button" className="g-button" disabled={busy} onClick={onClose}>
             {copied ? "Done" : "Cancel"}
           </button>
           <button
             type="button"
-            className="ui-button primary"
+            className="g-button g-button-primary"
             disabled={busy || text === ""}
             onClick={() => void run()}
           >

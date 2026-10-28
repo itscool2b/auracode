@@ -10,7 +10,16 @@ import { projectName } from "./ChatList";
 import { Modal } from "./Modal";
 import { WorkspaceRemovalDialog } from "./WorkspaceRemovalDialog";
 
-const COLORS = ["#8a98a6", "#a59e92", "#8c9c88", "#a88e80"];
+/**
+ * The colours a project can carry, as stored with the project, each drawn by its Graphite tone
+ * (--g-project-*). The stored values are data and must not change.
+ */
+const COLORS = [
+  { value: "#8a98a6", tone: "slate" },
+  { value: "#a59e92", tone: "sand" },
+  { value: "#8c9c88", tone: "sage" },
+  { value: "#a88e80", tone: "clay" },
+] as const;
 export function ProjectDialog({
   project,
   store,
@@ -33,7 +42,7 @@ export function ProjectDialog({
   const [removal, setRemoval] = useState<{ target: WorkspaceRemovalTarget | null } | null>(null);
   const [name, setName] = useState(project?.name ?? "");
   const [folder, setFolder] = useState<string | null>(null);
-  const [color, setColor] = useState(project?.color ?? COLORS[0]);
+  const [color, setColor] = useState<string | null>(project?.color ?? COLORS[0].value);
   const [agent, setAgent] = useState(project?.default_agent ?? "");
   const [model, setModel] = useState(project?.default_model ?? "");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -69,7 +78,7 @@ export function ProjectDialog({
     );
   if (resolving && current) {
     return (
-      <Modal title="Folder on this device" onClose={() => setResolving(null)}>
+      <Modal title="Folder on this device" size="md" onClose={() => setResolving(null)}>
         <FolderResolver
           key={`${profileId}:${resolving}`}
           folderId={resolving}
@@ -79,14 +88,14 @@ export function ProjectDialog({
             await onLocated?.();
           }}
         />
-        <button className="ui-button" type="button" onClick={() => setResolving(null)}>
+        <button className="g-button" type="button" onClick={() => setResolving(null)}>
           Back to project
         </button>
       </Modal>
     );
   }
   return (
-    <Modal title={project ? "Project settings" : "New project"} onClose={onClose}>
+    <Modal title={project ? "Project settings" : "New project"} size="md" onClose={onClose}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -110,7 +119,7 @@ export function ProjectDialog({
         <label className="ui-field">
           Project name
           <input
-            className="ui-input"
+            className="g-input"
             value={name}
             maxLength={128}
             required
@@ -119,8 +128,8 @@ export function ProjectDialog({
         </label>
         <fieldset className="chat-color-choices">
           <legend>Project color</legend>
-          {COLORS.map((value) => (
-            <label key={value} style={{ color: value }}>
+          {COLORS.map(({ value, tone }) => (
+            <label key={value} data-tone={tone}>
               <input
                 type="radio"
                 name="project-color"
@@ -146,13 +155,13 @@ export function ProjectDialog({
               </span>
               <button
                 type="button"
-                className="ui-button"
+                className="g-button"
                 onClick={() => setRemoval({ target: { kind: "folder", id: item.id } })}
               >
                 Remove…
               </button>
               {inTauri() ? (
-                <button type="button" className="ui-button" onClick={() => setResolving(item.id)}>
+                <button type="button" className="g-button" onClick={() => setResolving(item.id)}>
                   {item.path && !item.unavailable_reason
                     ? "Change location"
                     : "Find on this device"}
@@ -163,7 +172,7 @@ export function ProjectDialog({
           {folder ? <p className="ui-mono">{folder}</p> : null}
           <button
             type="button"
-            className="ui-button"
+            className="g-button"
             disabled={picking || state.busy}
             onClick={() => void chooseFolder()}
           >
@@ -180,7 +189,7 @@ export function ProjectDialog({
         <label className="ui-field">
           Default agent
           <select
-            className="ui-select"
+            className="g-select"
             value={agent}
             onChange={(event) => {
               setAgent(event.currentTarget.value);
@@ -198,7 +207,7 @@ export function ProjectDialog({
         <label className="ui-field">
           Default model ID
           <input
-            className="ui-input"
+            className="g-input"
             value={model}
             disabled={!agent}
             maxLength={256}
@@ -219,25 +228,24 @@ export function ProjectDialog({
         <section aria-label="Workspace removal">
           {project ? (
             <button
-              className="ui-button"
+              className="g-button"
               type="button"
               onClick={() => setRemoval({ target: { kind: "project", id: project.id } })}
             >
               Remove project…
             </button>
           ) : null}
-          <button className="ui-button" type="button" onClick={() => setRemoval({ target: null })}>
+          <button className="g-button" type="button" onClick={() => setRemoval({ target: null })}>
             Removed projects and folders
           </button>
         </section>
         <footer>
-          <button type="button" className="ui-button" onClick={onClose}>
+          <button type="button" className="g-button" onClick={onClose}>
             Cancel
           </button>
           <button
             type="submit"
-            className="ui-button"
-            data-kind="primary"
+            className="g-button g-button-primary"
             disabled={state.busy || picking || !name.trim() || (!project && !folder)}
           >
             {state.busy ? "Saving…" : project ? "Save project" : "Create project"}

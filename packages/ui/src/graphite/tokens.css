@@ -81,6 +81,15 @@
   --g-ansi-bright-cyan: #8ae6e6;
   --g-ansi-bright-white: #ededed;
 
+  /*
+   * Project marks: four quiet tones a person can give a project in the app. They mark that
+   * project's own swatch and nothing else; chrome never takes them.
+   */
+  --g-project-slate: #8a98a6;
+  --g-project-sand: #a59e92;
+  --g-project-sage: #8c9c88;
+  --g-project-clay: #a88e80;
+
   /* Dither field: black plus three greys, lit pixels in volt */
   --g-dither-1: #2e2e2e;
   --g-dither-2: #4d4d4d;
@@ -111,6 +120,7 @@
   --g-tracking-display: -0.025em;
   --g-text-code: 13px;
   --g-leading-code: 20px;
+  --g-text-code-inline: 0.9em; /* inline code, relative to the sentence around it */
   --g-text-term: 12.5px;
   --g-leading-term: 18px;
   --g-text-key: 11px;

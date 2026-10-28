@@ -628,7 +628,7 @@ function Preview() {
         <div className="chat-drag" />
         <button
           type="button"
-          className="chat-sidebar-toggle chat-icon-button"
+          className="g-button g-button-ghost g-button-icon g-button-28 chat-sidebar-toggle"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={!collapsed}
           onClick={() => setCollapsed((value) => !value)}

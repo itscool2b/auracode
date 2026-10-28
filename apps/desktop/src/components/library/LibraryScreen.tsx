@@ -165,7 +165,7 @@ export function LibraryScreen({
         <label className="library-select">
           Source
           <select
-            className="g-input"
+            className="g-select"
             aria-label="Project configuration source"
             value={folder ?? ""}
             onChange={(event) => setFolder(event.currentTarget.value || null)}
@@ -184,7 +184,7 @@ export function LibraryScreen({
         <label className="library-select">
           Agent
           <select
-            className="g-input"
+            className="g-select"
             aria-label="Filter by agent"
             value={provider}
             onChange={(event) => setProvider(event.currentTarget.value)}
@@ -512,7 +512,7 @@ function ItemDetail({
             <label>
               Copy to
               <select
-                className="g-input"
+                className="g-select"
                 aria-label="Copy destination"
                 value={target}
                 disabled={busy || !preview}
@@ -539,7 +539,7 @@ function ItemDetail({
         )}
       </div>
       {plan ? (
-        <Modal title="Review copy" className="library-review" onClose={cancel}>
+        <Modal title="Review copy" size="lg" className="library-review" onClose={cancel}>
           <p className="library-review-intro">
             {item.label} <ArrowRight size={14} aria-hidden="true" />{" "}
             {sources.find((source) => source.id === plan.to_source)
@@ -671,6 +671,7 @@ function HistoryView({
       {selected ? (
         <Modal
           title="Restore original files?"
+          size="md"
           className="library-review"
           onClose={() => {
             if (!busy) setSelected(null);

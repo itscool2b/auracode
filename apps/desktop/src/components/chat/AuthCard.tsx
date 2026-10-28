@@ -42,8 +42,7 @@ export function AuthCard({
             <div className="ui-row">
               <button
                 type="button"
-                className="ui-button"
-                data-kind="quiet"
+                className="g-button g-button-ghost"
                 data-testid="auth-copy"
                 onClick={() => {
                   copy(text).then(
@@ -68,14 +67,13 @@ export function AuthCard({
       ) : null}
       <div className="ui-row">
         {onSignIn ? (
-          <button type="button" className="ui-button" onClick={onSignIn}>
+          <button type="button" className="g-button" onClick={onSignIn}>
             Sign in…
           </button>
         ) : null}
         <button
           type="button"
-          className="ui-button"
-          data-kind="primary"
+          className="g-button g-button-primary"
           data-testid="auth-retry"
           onClick={onRetry}
         >

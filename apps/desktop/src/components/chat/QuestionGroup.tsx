@@ -104,7 +104,7 @@ export function QuestionGroupForm({
               <label className="ui-field" htmlFor={`${inputId}-text`}>
                 {question.multi_select ? "Other answer (optional)" : "Or write your own answer"}
                 <input
-                  className="ui-input"
+                  className="g-input"
                   id={`${inputId}-text`}
                   value={draft.text}
                   disabled={busy}
@@ -125,8 +125,7 @@ export function QuestionGroupForm({
       <div className="ui-row">
         <button
           type="submit"
-          className="ui-button"
-          data-kind="primary"
+          className="g-button g-button-primary"
           data-testid="question-submit"
           disabled={busy || answer === null}
         >
@@ -134,8 +133,7 @@ export function QuestionGroupForm({
         </button>
         <button
           type="button"
-          className="ui-button"
-          data-kind="quiet"
+          className="g-button g-button-ghost"
           data-testid="question-dismiss"
           disabled={busy}
           onClick={() => onRespond(null)}

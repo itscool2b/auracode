@@ -453,8 +453,7 @@ export function FullOutput({
     <div className="ui-row">
       <button
         type="button"
-        className="ui-button"
-        data-kind="quiet"
+        className="g-button g-button-ghost g-button-28"
         data-testid="load-full-output"
         disabled={blob?.loading === true}
         onClick={() => onLoadBlob(sha)}
@@ -492,8 +491,7 @@ export function EventDetails({
     <div className="ui-row">
       <button
         type="button"
-        className="ui-button"
-        data-kind="quiet"
+        className="g-button g-button-ghost g-button-28"
         data-testid="show-full-details"
         disabled={blob?.loading === true}
         onClick={() => onLoadBlob(sha)}

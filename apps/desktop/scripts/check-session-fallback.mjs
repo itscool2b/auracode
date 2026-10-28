@@ -81,7 +81,7 @@ export async function checkSessionFallback(browser, url, out, engine) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const { chromium, webkit } = await import("playwright");
-  const url = process.env.ORBIT_URL ?? "http://localhost:1426";
+  const url = process.env.CHECK_URL ?? "http://localhost:1426";
   const out = fileURLToPath(new URL("../../../target/session-fallback-browser/", import.meta.url));
   await mkdir(out, { recursive: true });
   for (const [engine, launcher] of Object.entries({ chromium, webkit })) {

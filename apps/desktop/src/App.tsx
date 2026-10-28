@@ -1,13 +1,7 @@
-import {
-  AGENT_BRANDS,
-  type AgentBrandId,
-  AuraField,
-  type AuraIntensity,
-  brandCssVariables,
-  type OrbState,
-} from "@auracode/ui";
+import type { AgentBrandId, OrbState } from "@auracode/ui";
+import { DitherField } from "@auracode/ui/graphite";
 import { MotionConfig } from "motion/react";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AppInfo, StressConfig } from "./bindings";
 import { ChatsScreen } from "./components/chat/ChatsScreen";
 import { ErrorScreen } from "./components/ErrorScreen";
@@ -351,14 +345,11 @@ export function App({
     );
   };
 
-  const brand = AGENT_BRANDS[brandId];
   const running = isRunning(snapshot);
   const activity = snapshot.phase === "idle" ? "idle" : activityOf(snapshot.stream);
   const orbState: OrbState = activity;
-  const intensity: AuraIntensity = running && activity !== "idle" ? "active" : "calm";
-  const showAura = view === "stress" && stressConfig.aura;
-  // The field drifts only while something streams; idle, it holds still and costs nothing.
-  const auraPaused = !running && view === "diagnostics";
+  // The stress view's ambient field: Graphite's dither, moving only while something streams.
+  const showField = view === "stress" && stressConfig.aura;
 
   if (view === "setup")
     return (
@@ -395,7 +386,7 @@ export function App({
   if (view === "chats" || view === "settings" || view === "library") {
     return (
       <>
-        <div hidden={view !== "chats"} style={{ height: "100%" }}>
+        <div hidden={view !== "chats"} className="app-view">
           <ChatsScreen
             active={view === "chats"}
             workspace={workspace}
@@ -450,11 +441,7 @@ export function App({
 
   return (
     <MotionConfig reducedMotion="user">
-      <div
-        className={`app ${view === "diagnostics" ? "diagnostics-shell" : ""}`}
-        data-theme="dark"
-        style={brandCssVariables(brand) as CSSProperties}
-      >
+      <div className="app diagnostics-shell" data-theme="dark">
         <Sidebar
           brandId={brandId}
           onBrandChange={setBrandId}
@@ -466,7 +453,7 @@ export function App({
           }}
         />
         <main className="main">
-          {showAura ? <AuraField brand={brand} intensity={intensity} paused={auraPaused} /> : null}
+          {showField ? <DitherField className="stress-field" transparent still={!running} /> : null}
           <div className="drag-strip" data-tauri-drag-region="" />
           <div className="main-scroll">
             {view === "diagnostics" ? (

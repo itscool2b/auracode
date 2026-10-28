@@ -10,10 +10,13 @@ export function AgentActions({
   agent,
   transport,
   onRefresh,
+  buttonClassName = "g-button",
 }: {
   readonly agent: AgentEntry;
   readonly transport: Transport;
   readonly onRefresh: () => void;
+  /** The actions' button classes: soft in the agent card, outline 28 on the Agents screen. */
+  readonly buttonClassName?: string;
 }) {
   const [maintenance, setMaintenance] = useState<AgentMaintenance | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,7 +54,7 @@ export function AgentActions({
       {maintenance?.auth_status ? (
         <button
           type="button"
-          className="ui-button"
+          className={buttonClassName}
           disabled={busy}
           onClick={() =>
             void run(async () =>
@@ -63,14 +66,19 @@ export function AgentActions({
         </button>
       ) : null}
       {maintenance?.login_available ? (
-        <button type="button" className="ui-button" disabled={busy} onClick={() => setSignIn(true)}>
+        <button
+          type="button"
+          className={buttonClassName}
+          disabled={busy}
+          onClick={() => setSignIn(true)}
+        >
           Sign in…
         </button>
       ) : null}
       {maintenance?.update_unavailable === null ? (
         <button
           type="button"
-          className="ui-button"
+          className={buttonClassName}
           disabled={busy}
           onClick={() =>
             void run(async () => {

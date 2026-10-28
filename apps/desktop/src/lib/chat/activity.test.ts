@@ -16,7 +16,7 @@ function state(events: AuraEvent[], status: SessionStatus = "running"): ChatStat
   };
 }
 
-describe("live Orbit protocol state", () => {
+describe("live chat protocol state", () => {
   it("shows real thinking, streaming and tools, including withheld thinking text", () => {
     expect(chatActivity(state([ev.turnStarted("t"), ev.thought("a", "")]))).toBe("thinking");
     expect(chatActivity(state([ev.turnStarted("t"), ev.message("a", "Hello")]))).toBe("streaming");

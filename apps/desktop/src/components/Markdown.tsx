@@ -82,7 +82,7 @@ function BlockView({ block }: { readonly block: Block }) {
           // biome-ignore lint/suspicious/noArrayIndexKey: list items are positional within their block.
           key={index}
           className={item.checked === null ? undefined : "task"}
-          style={item.depth > 0 ? { marginLeft: item.depth * 18 } : undefined}
+          data-depth={item.depth > 0 ? Math.min(item.depth, 4) : undefined}
         >
           {item.checked === null ? null : <TaskBox checked={item.checked} />}
           <InlineText text={item.text} />
@@ -109,7 +109,7 @@ function BlockView({ block }: { readonly block: Block }) {
             <tr>
               {block.header.map((cell, index) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: columns are positional.
-                <th key={index} style={{ textAlign: block.align[index] ?? undefined }}>
+                <th key={index} data-align={block.align[index] ?? undefined}>
                   <InlineText text={cell} />
                 </th>
               ))}
@@ -121,7 +121,7 @@ function BlockView({ block }: { readonly block: Block }) {
               <tr key={rowIndex}>
                 {row.map((cell, index) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: columns are positional.
-                  <td key={index} style={{ textAlign: block.align[index] ?? undefined }}>
+                  <td key={index} data-align={block.align[index] ?? undefined}>
                     <InlineText text={cell} />
                   </td>
                 ))}
@@ -144,7 +144,7 @@ function TaskBox({ checked }: { readonly checked: boolean }) {
       viewBox="0 0 14 14"
       role="img"
       aria-label={checked ? "Done" : "Not done"}
-      style={{ display: "inline-block", marginRight: 8, verticalAlign: -2 }}
+      className="md-task-box"
     >
       <rect
         x={0.5}

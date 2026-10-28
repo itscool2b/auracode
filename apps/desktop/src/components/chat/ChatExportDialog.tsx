@@ -49,7 +49,7 @@ export function ChatExportDialog({
           replaced.
         </p>
         {path ? (
-          <p role="status" style={{ overflowWrap: "anywhere" }}>
+          <p role="status" className="wrap-anywhere">
             Saved to {path}
           </p>
         ) : null}
@@ -60,13 +60,13 @@ export function ChatExportDialog({
           </p>
         ) : null}
         <div className="chat-export-actions">
-          <button type="button" className="ui-button" disabled={busy} onClick={onClose}>
+          <button type="button" className="g-button" disabled={busy} onClick={onClose}>
             {path ? "Done" : "Cancel"}
           </button>
           {!path ? (
             <button
               type="button"
-              className="ui-button primary"
+              className="g-button g-button-primary"
               disabled={busy}
               onClick={() => void exportChat()}
             >

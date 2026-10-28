@@ -316,6 +316,7 @@ export function ConfigSyncPanel({
               ? "Recover configuration"
               : "Restore local configuration"
           }
+          size="md"
           onClose={() => setRestore(null)}
           closeDisabled={busy}
         >
@@ -439,6 +440,7 @@ function ConfigReview({
   return (
     <Modal
       title="Review configuration"
+      size="lg"
       onClose={onClose}
       closeDisabled={busy}
       className="config-sync-review"
@@ -449,7 +451,7 @@ function ConfigReview({
           <p>{item.provider ? PROVIDERS[item.provider] : "Agent configuration"}</p>
         </div>
         <fieldset className="g-segmented config-sync-choices">
-          <legend className="settings-sr-only">How to resolve this item</legend>
+          <legend className="sr-only">How to resolve this item</legend>
           {(
             [
               ["automatic", "Merge safely"],

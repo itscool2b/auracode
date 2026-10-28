@@ -1,39 +1,24 @@
-/* The Git workspace dialog on the Graphite dialog shell (shell.css, `.chat-modal`). */
-.git-dialog {
-  width: min(660px, calc(100vw - 32px));
-  padding: 0;
-}
-
-.git-dialog > header {
-  margin: 0;
-  padding: 20px 24px 16px;
-}
-
-.git-dialog-body {
-  max-height: calc(100dvh - 200px);
-  padding: 0 24px 24px;
-  overflow: auto;
-}
+/* The Git workspace dialog: the large dialog (shell.css, `.g-dialog`). */
 
 .git-repository,
 .git-review,
 .git-result {
-  padding: 16px;
+  padding: var(--g-space-16);
   border-radius: var(--g-radius-12);
-  background-color: var(--ui-surface-main);
-  box-shadow: inset 0 0 0 1px var(--ui-line);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
 }
 
 .git-branch {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--g-space-8);
   font-weight: 500;
 }
 
 .git-branch code {
   margin-left: auto;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -41,35 +26,35 @@
 }
 
 .git-path {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
-  line-height: 18px;
+  line-height: var(--g-leading-term);
   overflow-wrap: anywhere;
 }
 
 .git-status {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  color: var(--ui-text-secondary);
+  gap: var(--g-space-12);
+  color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-variant-numeric: tabular-nums;
 }
 
 .git-repository details {
-  margin-top: 16px;
+  margin-top: var(--g-space-16);
 }
 
 .git-repository summary {
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   cursor: pointer;
 }
 
 .git-files {
   max-height: 200px;
-  margin: 8px 0 0;
+  margin: var(--g-space-8) 0 0;
   padding: 0;
   overflow: auto;
   list-style: none;
@@ -78,12 +63,12 @@
 .git-files li {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  padding: 4px 0;
-  color: var(--ui-text-secondary);
+  gap: var(--g-space-12);
+  padding: var(--g-space-4) 0;
+  color: var(--g-fg-2);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
-  line-height: 18px;
+  line-height: var(--g-leading-term);
 }
 
 .git-files code {
@@ -97,20 +82,20 @@
 .git-notice {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 16px;
-  color: var(--ui-text-secondary);
+  gap: var(--g-space-16);
+  margin-bottom: var(--g-space-16);
+  color: var(--g-fg-2);
 }
 
-.git-notice .ui-button {
+.git-notice .g-button {
   flex-shrink: 0;
 }
 
 /* A warning leads with a volt square and says the consequence in words. */
 .git-warning {
   display: flex;
-  gap: 10px;
-  color: var(--ui-text-secondary);
+  gap: var(--g-space-8);
+  color: var(--g-fg-2);
   overflow-wrap: anywhere;
 }
 
@@ -119,20 +104,20 @@
   flex: none;
   width: 6px;
   height: 6px;
-  margin-top: 7px;
-  background-color: var(--ui-signal);
+  margin-top: calc((var(--g-leading-ui) - var(--g-space-6)) / 2);
+  background-color: var(--g-volt);
 }
 
 .git-section,
 .git-review,
 .git-result {
-  margin-top: 20px;
+  margin-top: var(--g-space-20);
 }
 
 .git-section h3,
 .git-review h3,
 .git-result h3 {
-  margin: 0 0 12px;
+  margin: 0 0 var(--g-space-12);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 500;
@@ -141,33 +126,33 @@
 .git-section > p,
 .git-result p,
 .git-note {
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .git-section > p {
-  margin: 0 0 12px;
+  margin: 0 0 var(--g-space-12);
 }
 
 .git-section .ui-field {
-  margin-bottom: 12px;
+  margin-bottom: var(--g-space-12);
 }
 
 .git-copy-option {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  margin: 16px 0;
+  gap: var(--g-space-8);
+  margin: var(--g-space-16) 0;
   cursor: pointer;
 }
 
 .git-copy-option input {
-  margin-top: 2px;
+  margin-top: var(--g-space-2);
 }
 
 .git-copy-option small {
   display: block;
-  margin-top: 4px;
-  color: var(--ui-text-muted);
+  margin-top: var(--g-space-4);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -176,38 +161,38 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
+  gap: var(--g-space-8);
+  margin-top: var(--g-space-16);
 }
 
 .git-review dl {
   display: grid;
   grid-template-columns: 100px 1fr;
-  gap: 10px 16px;
+  gap: var(--g-space-8) var(--g-space-16);
   margin: 0;
 }
 
 .git-review dt {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
 }
 
 .git-review dd {
   margin: 0;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
-  line-height: 20px;
+  line-height: var(--g-leading-code);
   overflow-wrap: anywhere;
 }
 
 .git-review pre {
   max-height: 180px;
   margin: 0;
-  padding: 12px;
+  padding: var(--g-space-12);
   overflow: auto;
   border-radius: var(--g-radius-8);
-  background-color: var(--ui-surface-well);
-  box-shadow: inset 0 0 0 1px var(--ui-line);
+  background-color: var(--g-bg);
+  box-shadow: inset 0 0 0 1px var(--g-line);
   color: var(--g-code-fg);
   font-family: var(--g-mono);
   font-size: var(--g-text-term);
@@ -216,37 +201,37 @@
 }
 
 .git-review h4 {
-  margin: 12px 0 6px;
-  color: var(--ui-text-secondary);
+  margin: var(--g-space-12) 0 var(--g-space-6);
+  color: var(--g-fg-2);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 500;
 }
 
 .git-review .git-conflict-title {
-  color: var(--ui-danger);
+  color: var(--g-red);
 }
 
 .git-review li {
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
-  line-height: 18px;
+  line-height: var(--g-leading-term);
   overflow-wrap: anywhere;
 }
 
 .git-worktrees {
   display: grid;
-  gap: 8px;
-  margin: 16px 0 0;
+  gap: var(--g-space-8);
+  margin: var(--g-space-16) 0 0;
   padding: 0;
   list-style: none;
 }
 
 .git-worktrees > li {
-  padding: 14px 16px;
+  padding: var(--g-space-12) var(--g-space-16);
   border-radius: var(--g-radius-12);
-  background-color: var(--ui-surface-main);
-  box-shadow: inset 0 0 0 1px var(--ui-line);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
 }
 
 .git-worktrees strong {
@@ -254,13 +239,13 @@
 }
 
 .git-worktrees li > p {
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 /* A worktree's state, sentence case beside its name: never a caps tag. */
 .git-state {
   float: right;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -270,9 +255,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 16px 24px;
-  color: var(--ui-text-muted);
+  gap: var(--g-space-16);
+  margin-top: var(--g-space-24);
+  padding: var(--g-space-16) 0 0;
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -282,10 +268,10 @@
   content: "";
   position: absolute;
   top: 0;
-  right: 24px;
-  left: 24px;
+  right: 0;
+  left: 0;
   height: 1px;
-  background-image: linear-gradient(90deg, var(--ui-line-strong) 50%, transparent 0);
+  background-image: linear-gradient(90deg, var(--g-line-strong) 50%, transparent 0);
   background-size: 16px 1px;
 }
 
@@ -295,7 +281,7 @@
 }
 
 .git-result a {
-  color: var(--ui-text-primary);
-  text-decoration-color: var(--ui-text-faint);
+  color: var(--g-fg-1);
+  text-decoration-color: var(--g-fg-4);
   text-underline-offset: 3px;
 }

@@ -2,12 +2,12 @@
  * The chat shell's frame (docs/design/visual-language.md, sections 4 and 6.1 to 6.3, 6.15): the
  * window and its panes, the sidebar, the chat header, the shared controls, popovers, banners,
  * dialogs and the command palette. The conversation itself is in chat.css and the right panel in
- * context-panel.css. Colours come from ui-tokens.css; nothing here is translucent, and only colour,
+ * context-panel.css. Colours are Graphite tokens; nothing here is translucent, and only colour,
  * opacity and transform ever transition.
  *
  * The shell's stylesheets are unlayered, like Graphite's, and load after it: at equal specificity a
- * rule here wins over a Graphite primitive (the global focus ring, a keycap), while Tailwind's layers
- * and the legacy styles.css stay underneath.
+ * rule here wins over a Graphite primitive (the global focus ring, a keycap), while the reset and
+ * base layers in styles.css stay underneath.
  */
 
 /* ---------- Window and panes (6.1) ---------- */
@@ -17,8 +17,8 @@
   display: grid;
   grid-template-columns: var(--ui-sidebar-width) minmax(0, 1fr);
   height: 100%;
-  background-color: var(--ui-surface-window);
-  color: var(--ui-text-primary);
+  background-color: var(--g-bg);
+  color: var(--g-fg-1);
   font-family: var(--g-sans);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -46,12 +46,12 @@
   margin: var(--ui-pane-inset) var(--ui-pane-inset) var(--ui-pane-inset) 0;
   overflow: hidden;
   border-radius: var(--g-radius-12);
-  background-color: var(--ui-surface-main);
-  box-shadow: 0 0 0 1px var(--ui-line);
+  background-color: var(--g-surface-1);
+  box-shadow: 0 0 0 1px var(--g-line);
 }
 
 .chat-main > .chat-drag {
-  height: var(--ui-header-height);
+  height: var(--g-app-header);
   pointer-events: none;
 }
 
@@ -102,11 +102,11 @@
     grid-column: 1;
     grid-row: 1;
     border-radius: var(--g-radius-12) var(--g-radius-12) 0 0;
-    background-color: var(--ui-surface-main);
+    background-color: var(--g-surface-1);
     box-shadow:
-      inset 1px 0 var(--ui-line),
-      inset -1px 0 var(--ui-line),
-      inset 0 1px var(--ui-line);
+      inset 1px 0 var(--g-line),
+      inset -1px 0 var(--g-line),
+      inset 0 1px var(--g-line);
   }
 
   .chat-main:has(.changes-panel) .chat-work-area {
@@ -118,161 +118,75 @@
     grid-row: 2;
     overflow: hidden;
     border-radius: 0 0 var(--g-radius-12) var(--g-radius-12);
-    background-color: var(--ui-surface-main);
+    background-color: var(--g-surface-1);
     box-shadow:
-      inset 1px 0 var(--ui-line),
-      inset -1px 0 var(--ui-line),
-      inset 0 -1px var(--ui-line);
+      inset 1px 0 var(--g-line),
+      inset -1px 0 var(--g-line),
+      inset 0 -1px var(--g-line);
+  }
+
+  .chat-main:has(.changes-panel) .changes-panel {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    border-left: 0;
+    border-radius: var(--g-radius-12);
+    box-shadow: 0 0 0 1px var(--g-line);
+  }
+
+  /* The panel's drag handle fills the gutter between the two panes. */
+  .chat-main:has(.changes-panel) .changes-resizer {
+    left: calc(var(--ui-pane-inset) * -1);
+    width: var(--ui-pane-inset);
   }
 }
 
 .chat-centered {
   margin: auto;
-  padding: 24px;
-  color: var(--ui-text-muted);
+  padding: var(--g-space-24);
+  color: var(--g-fg-3);
   text-align: center;
+}
+
+/* In the transcript a centred line takes more air. */
+.chat-centered.chat-marker,
+.chat-transcript .chat-centered {
+  padding: var(--g-space-48) var(--g-space-24);
 }
 
 /* ---------- Controls (4.1, 4.2) ---------- */
 
-.ui-button {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  box-sizing: border-box;
-  height: 32px;
-  padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: var(--g-radius-pill);
-  background-color: var(--ui-surface-fill);
-  color: var(--ui-text-primary);
-  font-family: var(--g-sans);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
-  transition:
-    background-color var(--g-dur-settle) var(--g-ease-settle),
-    border-color var(--g-dur-settle) var(--g-ease-settle),
-    color var(--g-dur-settle) var(--g-ease-settle);
-}
-
-.ui-button:active:not(:disabled) {
-  background-color: var(--ui-surface-selected);
-  transition-duration: 0ms;
-}
-
-.ui-button:is([data-kind="primary"], .primary, .ui-button-primary) {
-  background-color: var(--ui-primary);
-  color: var(--ui-text-on-primary);
-}
-
-.ui-button:is([data-kind="primary"], .primary, .ui-button-primary):active:not(:disabled) {
-  background-color: var(--ui-primary-active);
-}
-
-.ui-button[data-kind="danger"] {
-  background-color: var(--ui-danger);
-  color: var(--ui-text-on-primary);
-}
-
-.ui-button[data-kind="quiet"] {
-  background-color: transparent;
-  color: var(--ui-text-secondary);
-}
-
-@media (hover: hover) {
-  .ui-button:hover:not(:disabled) {
-    background-color: var(--ui-surface-selected);
-  }
-
-  .ui-button:is([data-kind="primary"], .primary, .ui-button-primary):hover:not(:disabled) {
-    background-color: var(--ui-primary-hover);
-  }
-
-  .ui-button[data-kind="danger"]:hover:not(:disabled) {
-    background-color: var(--ui-danger-hover);
-  }
-
-  .ui-button[data-kind="quiet"]:hover:not(:disabled) {
-    background-color: var(--ui-surface-fill);
-    color: var(--ui-text-primary);
-  }
-}
-
-/* Disabled keeps its pill as a hairline, so it still reads as a button on a raised surface. */
-.ui-button:disabled {
-  border-color: var(--ui-line);
-  background-color: var(--ui-surface-raised);
-  color: var(--ui-text-faint);
-  cursor: not-allowed;
-}
-
-.ui-button svg {
+/*
+ * Buttons are Graphite's .g-button everywhere (soft, primary, outline, ghost, danger; 24, 28, 32,
+ * 36; .g-button-icon for icons). Two app rules only: icons never shrink, and on a raised surface
+ * (surface-2: dialogs, popovers, the dock, the composer, settings groups and setup cards) a disabled
+ * pill steps up one surface so it keeps its shape.
+ */
+.g-button > svg {
   flex: none;
 }
 
-.ui-input,
-.ui-select,
-.ui-textarea {
-  box-sizing: border-box;
-  min-width: 0;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--ui-line-strong);
-  border-radius: var(--g-radius-8);
-  background-color: var(--ui-surface-main);
-  color: var(--ui-text-primary);
-  font-family: var(--g-sans);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 400;
-  user-select: text;
-  transition: border-color var(--g-dur-fast) var(--g-ease);
+:is(
+    .g-dialog,
+    .chat-popover-panel,
+    .chat-permission-dock,
+    .chat-composer,
+    .settings-group,
+    .account-card,
+    .local-import-panel,
+    .config-sync-empty,
+    .setup-agent-detail
+  )
+  .g-button:disabled:not(.g-button-ghost) {
+  background-color: var(--g-surface-3);
 }
 
-.ui-textarea {
-  height: auto;
-  min-height: 72px;
-  padding: 8px 12px;
-  resize: vertical;
-}
-
-/* The chevron is drawn in fg-3 (#858585); an SVG data URL cannot read a custom property. */
-.ui-select {
-  padding-right: 32px;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23858585' stroke-width='1.5'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 12px 12px;
-  text-overflow: ellipsis;
-}
-
-.ui-input::placeholder,
-.ui-textarea::placeholder {
-  color: var(--ui-text-muted);
-  opacity: 1;
-}
-
-@media (hover: hover) {
-  :is(.ui-input, .ui-select, .ui-textarea):hover:not(:disabled) {
-    border-color: var(--ui-text-faint);
-  }
-}
-
-:is(.ui-input, .ui-select, .ui-textarea):focus {
-  border-color: var(--ui-text-muted);
-}
-
-:is(.ui-input, .ui-select, .ui-textarea):disabled {
-  border-color: var(--ui-line);
-  color: var(--ui-text-faint);
-  cursor: not-allowed;
+/*
+ * Fields are Graphite's .g-input, .g-select and .g-textarea. In a row beside a button, a field takes
+ * the room that is left.
+ */
+.ui-row > :is(.g-input, .g-select) {
+  flex: 1 1 200px;
+  width: auto;
 }
 
 /*
@@ -280,15 +194,15 @@
  * Switches (`.g-switch`, role="switch") keep Graphite's own drawing.
  */
 .chat-app :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]),
-.chat-modal :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]) {
+.g-dialog :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]) {
   flex: none;
   box-sizing: border-box;
   width: 16px;
   height: 16px;
   margin: 0;
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-4);
-  background-color: var(--ui-surface-main);
+  background-color: var(--g-surface-1);
   background-position: center;
   background-repeat: no-repeat;
   appearance: none;
@@ -300,29 +214,29 @@
 
 /* Radios repeat the shared selector's weight (the :not() included) so their own rules win. */
 .chat-app input[type="radio"]:not([role="switch"]),
-.chat-modal input[type="radio"]:not([role="switch"]) {
+.g-dialog input[type="radio"]:not([role="switch"]) {
   border-radius: var(--g-radius-pill);
 }
 
 .chat-app :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):checked,
-.chat-modal :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):checked {
-  border-color: var(--ui-primary);
-  background-color: var(--ui-primary);
+.g-dialog :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):checked {
+  border-color: var(--g-primary);
+  background-color: var(--g-primary);
 }
 
 .chat-app input[type="checkbox"]:not([role="switch"]):checked,
-.chat-modal input[type="checkbox"]:not([role="switch"]):checked {
+.g-dialog input[type="checkbox"]:not([role="switch"]):checked {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='none' stroke='%23000' stroke-width='1.75'%3E%3Cpath d='m2 5.25 2 2 4-4.5'/%3E%3C/svg%3E");
 }
 
 .chat-app input[type="radio"]:not([role="switch"]):checked,
-.chat-modal input[type="radio"]:not([role="switch"]):checked {
-  box-shadow: inset 0 0 0 4px var(--ui-primary);
-  background-color: var(--ui-text-on-primary);
+.g-dialog input[type="radio"]:not([role="switch"]):checked {
+  box-shadow: inset 0 0 0 4px var(--g-primary);
+  background-color: var(--g-on-light);
 }
 
 .chat-app :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):disabled,
-.chat-modal :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):disabled {
+.g-dialog :is(input[type="checkbox"]:not([role="switch"]), input[type="radio"]):disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
@@ -330,8 +244,8 @@
 .ui-field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  color: var(--ui-text-primary);
+  gap: var(--g-space-8);
+  color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 500;
@@ -341,16 +255,16 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--g-space-8);
 }
 
 .ui-muted {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-weight: 400;
 }
 
 .ui-error {
-  color: var(--ui-danger);
+  color: var(--g-red);
   font-weight: 400;
   overflow-wrap: anywhere;
 }
@@ -366,11 +280,11 @@
   box-sizing: border-box;
   max-height: 360px;
   margin: 0;
-  padding: 10px 12px;
+  padding: var(--g-space-12) var(--g-space-16);
   overflow: auto;
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--g-line);
   border-radius: var(--g-radius-8);
-  background-color: var(--ui-surface-well);
+  background-color: var(--g-bg);
   color: var(--g-code-fg);
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
@@ -381,43 +295,85 @@
   overflow-wrap: anywhere;
   user-select: text;
   scrollbar-width: thin;
-  scrollbar-color: var(--ui-line-strong) transparent;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
-.chat-icon-button {
+/*
+ * Disclosures in settings, setup and the Library open with a quiet chevron rather than the platform
+ * triangle: an fg-3 fill through a chevron mask, turning a quarter when open.
+ */
+:is(
+    .settings-shell,
+    .locked-profile,
+    .configuration-recovery,
+    .setup-shell,
+    .setup-clone-dialog,
+    .library-screen,
+    .library-review
+  )
+  details
+  > summary,
+details.setup-install-review > summary {
   display: inline-flex;
-  flex: none;
   align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--g-radius-6);
-  background-color: transparent;
-  color: var(--ui-text-muted);
-  cursor: pointer;
-  transition:
-    background-color var(--g-dur-micro) var(--g-ease),
-    color var(--g-dur-micro) var(--g-ease);
+  gap: var(--g-space-6);
+  list-style: none;
 }
 
-@media (hover: hover) {
-  .chat-icon-button:hover:not(:disabled) {
-    background-color: var(--ui-surface-fill);
-    color: var(--ui-text-primary);
-  }
+:is(
+    .settings-shell,
+    .locked-profile,
+    .configuration-recovery,
+    .setup-shell,
+    .setup-clone-dialog,
+    .library-screen,
+    .library-review
+  )
+  details
+  > summary::-webkit-details-marker,
+details.setup-install-review > summary::-webkit-details-marker {
+  display: none;
 }
 
-.chat-icon-button:active:not(:disabled) {
-  background-color: var(--ui-surface-fill);
-  color: var(--ui-text-primary);
+:is(
+    .settings-shell,
+    .locked-profile,
+    .configuration-recovery,
+    .setup-shell,
+    .setup-clone-dialog,
+    .library-screen,
+    .library-review
+  )
+  details
+  > summary::before,
+details.setup-install-review > summary::before {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background-color: var(--g-fg-3);
+  -webkit-mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5'%3E%3Cpath d='m4.5 3 3 3-3 3'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1.5'%3E%3Cpath d='m4.5 3 3 3-3 3'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+  transition: transform var(--g-dur-base) var(--g-ease);
 }
 
-.chat-icon-button:disabled {
-  color: var(--ui-text-faint);
-  cursor: not-allowed;
+:is(
+    .settings-shell,
+    .locked-profile,
+    .configuration-recovery,
+    .setup-shell,
+    .setup-clone-dialog,
+    .library-screen,
+    .library-review
+  )
+  details[open]
+  > summary::before,
+details.setup-install-review[open] > summary::before {
+  transform: rotate(90deg);
 }
 
 /* ---------- Sidebar (6.2) ---------- */
@@ -428,7 +384,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: var(--ui-titlebar-height) 12px 12px;
+  padding: var(--ui-titlebar-height) var(--g-space-12) var(--g-space-12);
 }
 
 .chat-sidebar-toggle {
@@ -441,32 +397,32 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--g-space-16);
   min-height: 0;
 }
 
 .chat-nav-actions {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--g-space-2);
 }
 
 .chat-nav-action {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--g-space-8);
   width: 100%;
   height: 32px;
-  padding: 0 8px;
+  padding: 0 var(--g-space-8);
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   text-align: left;
   transition: color var(--g-dur-micro) var(--g-ease);
 }
 
 .chat-nav-action > svg {
   flex: none;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   transition: color var(--g-dur-micro) var(--g-ease);
 }
 
@@ -482,21 +438,21 @@
 @media (hover: hover) {
   .chat-nav-action:hover,
   .chat-nav-action:hover > svg {
-    color: var(--ui-text-primary);
+    color: var(--g-fg-1);
   }
 }
 
 .chat-keys {
   display: inline-flex;
   flex: none;
-  gap: 4px;
+  gap: var(--g-space-4);
 }
 
 /* The sidebar's shortcut keycaps rest as outlines and fill in when their row is hovered. */
 .chat-nav-action .g-keycap {
   background-color: transparent;
-  box-shadow: inset 0 0 0 1px var(--ui-line);
-  color: var(--ui-text-muted);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+  color: var(--g-fg-3);
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
     box-shadow var(--g-dur-micro) var(--g-ease),
@@ -505,39 +461,39 @@
 
 @media (hover: hover) {
   .chat-nav-action:hover .g-keycap {
-    background-color: var(--ui-surface-fill);
-    box-shadow: inset 0 0 0 1px var(--ui-line-strong);
-    color: var(--ui-text-secondary);
+    background-color: var(--g-surface-3);
+    box-shadow: inset 0 0 0 1px var(--g-line-strong);
+    color: var(--g-fg-2);
   }
 }
 
 .chat-sidebar-search {
   width: 100%;
-  margin-top: 6px;
+  margin-top: var(--g-space-6);
 }
 
 .chat-project-scroll {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--g-space-16);
   min-height: 0;
-  margin: 0 -12px;
-  padding: 0 12px 8px;
+  margin: 0 calc(var(--g-space-12) * -1);
+  padding: 0 var(--g-space-12) var(--g-space-8);
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--ui-line-strong) transparent;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
 /* A quiet sentence-case label, only where a group needs one. Never caps, never mono. */
 .chat-section-label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--g-space-6);
   height: 28px;
   margin: 0;
-  padding: 0 8px;
-  color: var(--ui-text-muted);
+  padding: 0 var(--g-space-8);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-weight: 500;
@@ -547,11 +503,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-.chat-section-label > .chat-icon-button {
-  width: 24px;
-  height: 24px;
+.chat-section-label > .g-button-icon {
+  --g-button-h: 24px;
   margin-left: auto;
-  margin-right: -4px;
+  margin-right: calc(var(--g-space-4) * -1);
 }
 
 .chat-dock-link {
@@ -567,33 +522,33 @@
 
 @media (hover: hover) {
   .chat-dock-link:hover {
-    color: var(--ui-text-primary);
+    color: var(--g-fg-1);
   }
 }
 
 .chat-attention {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--g-space-2);
 }
 
 .chat-attention .chat-section-label {
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .chat-attention .chat-section-label > span {
-  color: var(--ui-signal);
+  color: var(--g-volt);
 }
 
 .chat-attention-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--g-space-8);
   width: 100%;
   height: 32px;
-  padding: 0 8px 0 12px;
+  padding: 0 var(--g-space-8) 0 var(--g-space-12);
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   text-align: left;
 }
 
@@ -605,26 +560,26 @@
 }
 
 .chat-attention-row small {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: inherit;
 }
 
 @media (hover: hover) {
   .chat-attention-row:hover {
-    background-color: var(--ui-surface-raised);
+    background-color: var(--g-surface-2);
   }
 }
 
 .chat-sidebar-empty {
   margin: 0;
-  padding: 0 8px;
-  color: var(--ui-text-muted);
+  padding: 0 var(--g-space-8);
+  color: var(--g-fg-3);
 }
 
 .chat-projects {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--g-space-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -638,12 +593,12 @@
 .chat-project-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--g-space-8);
   width: 100%;
   height: 32px;
-  padding: 0 36px 0 8px;
+  padding: 0 var(--g-space-32) 0 var(--g-space-8);
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
   text-align: left;
 }
@@ -657,7 +612,7 @@
 }
 
 .chat-project-toggle small {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
@@ -671,21 +626,21 @@
   display: grid;
   flex: none;
   place-items: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .chat-project-swatch::before {
   content: "";
   width: 6px;
   height: 6px;
-  background-color: var(--ui-text-muted);
+  background-color: var(--g-fg-3);
 }
 
 .chat-project-swatch > svg {
   position: absolute;
-  inset: 1px;
-  color: var(--ui-text-secondary);
+  inset: 2px;
+  color: var(--g-fg-2);
   opacity: 0;
   transition: transform var(--g-dur-base) var(--g-ease);
 }
@@ -715,8 +670,8 @@
 .chat-chats {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: 2px 0 0;
+  gap: var(--g-space-2);
+  margin: var(--g-space-2) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -724,27 +679,27 @@
 .chat-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--g-space-8);
   width: 100%;
   height: 32px;
-  padding: 0 10px 0 30px;
+  padding: 0 var(--g-space-8) 0 var(--g-space-32);
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   text-align: left;
   transition: color var(--g-dur-micro) var(--g-ease);
 }
 
 @media (hover: hover) {
   .chat-row:hover {
-    color: var(--ui-text-primary);
+    color: var(--g-fg-1);
   }
 }
 
 /* The open chat is lifted one surface step with a hairline ring. */
 .chat-row[aria-current="true"] {
-  background-color: var(--ui-surface-raised);
-  box-shadow: inset 0 0 0 1px var(--ui-line-strong);
-  color: var(--ui-text-primary);
+  background-color: var(--g-surface-2);
+  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  color: var(--g-fg-1);
   font-weight: 500;
 }
 
@@ -758,24 +713,29 @@
 
 .chat-row-flag {
   flex: none;
-  color: var(--ui-danger);
+  color: var(--g-red);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-weight: 500;
 }
 
 .chat-row-menu {
+  --g-button-h: 24px;
   position: absolute;
   top: 4px;
   right: 4px;
-  width: 24px;
-  height: 24px;
-  background-color: var(--ui-surface-window);
+  background-color: var(--g-bg);
   opacity: 0;
   transition:
     opacity var(--g-dur-micro) var(--g-ease),
     background-color var(--g-dur-micro) var(--g-ease),
     color var(--g-dur-micro) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .chat-row-menu:hover:not(:disabled) {
+    background-color: var(--g-surface-3);
+  }
 }
 
 .chat-project-heading:is(:hover, :focus-within) > .chat-row-menu,
@@ -785,7 +745,7 @@
 
 /* On the open chat the menu button takes the lifted row's fill, so the title ends cleanly. */
 .chat-row-container:has(> .chat-row[aria-current="true"]) > .chat-row-menu {
-  background-color: var(--ui-surface-raised);
+  background-color: var(--g-surface-2);
 }
 
 .chat-row-status {
@@ -802,11 +762,12 @@
   visibility: hidden;
 }
 
+/* The pin centres on the project square above it (x 16). */
 .chat-pin-mark {
   position: absolute;
   top: 11px;
-  left: 13px;
-  color: var(--ui-text-muted);
+  left: 11px;
+  color: var(--g-fg-3);
   pointer-events: none;
 }
 
@@ -815,29 +776,29 @@
 .chat-sidebar-footer {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--ui-line);
+  gap: var(--g-space-6);
+  margin-top: var(--g-space-8);
+  padding-top: var(--g-space-8);
+  border-top: 1px solid var(--g-line);
 }
 
 .chat-agent-dock {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px;
-  padding: 0 4px;
-  margin-bottom: 8px;
+  gap: var(--g-space-2);
+  padding: 0 var(--g-space-4);
+  margin-bottom: var(--g-space-8);
 }
 
 .chat-agent-popover > summary {
   flex-direction: column;
   justify-content: center;
-  gap: 4px;
+  gap: var(--g-space-4);
   width: 32px;
   height: 44px;
   min-height: 0;
   padding: 0;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-key);
   line-height: var(--g-leading-key);
@@ -852,7 +813,7 @@
 .chat-agent-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--g-space-8);
 }
 
 .chat-agent-actions > :is(span, p) {
@@ -882,16 +843,16 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: 8px;
-  height: var(--ui-header-height);
-  padding: 0 10px 0 16px;
+  gap: var(--g-space-8);
+  height: var(--g-app-header);
+  padding: 0 var(--g-space-8) 0 var(--g-space-16);
 }
 
 .chat-header-who {
   display: flex;
   flex: 0 1 auto;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--g-space-8);
   min-width: 0;
   overflow: hidden;
 }
@@ -901,7 +862,7 @@
   max-width: 420px;
   min-width: 0;
   overflow: hidden;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -911,7 +872,7 @@
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -928,37 +889,38 @@
   max-width: 280px;
   margin-right: auto;
   overflow: hidden;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .chat-status::before {
   content: "\00b7";
-  margin-right: 8px;
-  color: var(--ui-text-faint);
+  margin-right: var(--g-space-8);
+  color: var(--g-fg-4);
 }
 
 .chat-status[data-status="failed"],
 .chat-status[data-status="auth_required"] {
-  color: var(--ui-danger);
+  color: var(--g-red);
 }
 
 .chat-status[data-activity="waiting"] {
-  color: var(--ui-signal);
+  color: var(--g-volt);
   font-weight: 500;
 }
 
-.chat-header .chat-icon-button[aria-expanded="true"] {
-  background-color: var(--ui-surface-fill);
-  color: var(--ui-text-primary);
+.chat-header .g-button-icon[aria-expanded="true"] {
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
 }
 
+/* The menu trigger matches the header's ghost icon buttons beside it. */
 .chat-header-menu > summary {
   justify-content: center;
   width: 28px;
   padding: 0;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-2);
 }
 
 .chat-header-menu > .chat-popover-panel {
@@ -967,18 +929,19 @@
   bottom: auto;
   left: auto;
   width: 300px;
-  padding: 6px;
+  padding: var(--g-space-6);
   gap: 0;
 }
 
-.chat-header-menu .chat-popover-panel > :not(.ui-row) {
-  padding: 8px 10px;
+/* The session facts line up with the menu items' text (8px in from the panel's padding). */
+.chat-header-menu .chat-popover-panel > :not(.chat-header-actions) {
+  padding: var(--g-space-8);
 }
 
 .chat-session-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--g-space-2);
 }
 
 .chat-session-info strong {
@@ -986,7 +949,7 @@
 }
 
 .chat-session-info > span {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   overflow-wrap: anywhere;
@@ -1004,49 +967,19 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The header menu's actions read as menu items (4.6): 32px rows, highlight on hover. */
-.chat-header-menu .chat-popover-panel > .ui-row {
+/* The header menu's actions are menu items (4.6) under a hairline. */
+.chat-header-actions {
+  display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--ui-line);
-}
-
-.chat-header-menu .chat-popover-panel > .ui-row > .ui-button {
-  justify-content: flex-start;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: var(--g-radius-8);
-  background-color: transparent;
-  color: var(--ui-text-primary);
-  font-weight: 400;
-}
-
-.chat-header-menu .chat-popover-panel > .ui-row > .ui-button[data-kind="primary"] {
-  font-weight: 500;
-}
-
-.chat-header-menu .chat-popover-panel > .ui-row > .ui-button[data-kind="quiet"] {
-  color: var(--ui-text-secondary);
-}
-
-@media (hover: hover) {
-  .chat-header-menu .chat-popover-panel > .ui-row > .ui-button:hover:not(:disabled) {
-    background-color: var(--ui-surface-selected);
-    color: var(--ui-text-primary);
-  }
-}
-
-.chat-header-menu .chat-popover-panel > .ui-row > .ui-button:disabled {
-  color: var(--ui-text-faint);
+  margin-top: var(--g-space-4);
+  padding-top: var(--g-space-4);
+  border-top: 1px solid var(--g-line);
 }
 
 .chat-folder-context {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--g-space-8);
 }
 
 .chat-folder-context section {
@@ -1064,9 +997,9 @@
 
 .chat-folder-context li {
   display: grid;
-  gap: 4px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--ui-line);
+  gap: var(--g-space-4);
+  padding: var(--g-space-8) 0;
+  border-bottom: 1px solid var(--g-line);
 }
 
 .chat-folder-context code {
@@ -1085,11 +1018,11 @@
 .chat-popover > summary {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--g-space-6);
   height: 28px;
-  padding: 0 8px;
+  padding: 0 var(--g-space-8);
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   list-style: none;
   cursor: pointer;
   user-select: none;
@@ -1104,16 +1037,16 @@
 
 @media (hover: hover) {
   .chat-popover > summary:hover {
-    background-color: var(--ui-surface-fill);
-    color: var(--ui-text-primary);
+    background-color: var(--g-surface-3);
+    color: var(--g-fg-1);
   }
 }
 
 /* Open: the fill steps up with a strong ring (surface-4 would drop grey text under 4.5:1). */
 .chat-popover[open] > summary {
-  background-color: var(--ui-surface-fill);
-  box-shadow: inset 0 0 0 1px var(--ui-line-strong);
-  color: var(--ui-text-primary);
+  background-color: var(--g-surface-3);
+  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  color: var(--g-fg-1);
 }
 
 .chat-popover-panel {
@@ -1123,17 +1056,17 @@
   z-index: 30;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--g-space-12);
   box-sizing: border-box;
   width: 280px;
   max-height: min(480px, 65vh);
-  padding: 14px;
+  padding: var(--g-space-16);
   overflow: auto;
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-12);
-  background-color: var(--ui-surface-raised);
+  background-color: var(--g-surface-2);
   box-shadow: var(--g-shadow);
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 400;
@@ -1143,7 +1076,7 @@
 
 .chat-popover-panel p {
   margin: 0;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 @keyframes chat-popover-in {
@@ -1176,21 +1109,21 @@
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--g-space-6);
   margin: 0;
-  padding: 8px 12px 0;
+  padding: var(--g-space-8) var(--g-space-12) 0;
   list-style: none;
 }
 
 .chat-banner {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--g-space-12);
   min-height: 40px;
-  padding: 6px 6px 6px 12px;
-  border: 1px dashed var(--ui-line-strong);
+  padding: var(--g-space-6) var(--g-space-6) var(--g-space-6) var(--g-space-12);
+  border: 1px dashed var(--g-line-strong);
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .chat-banner > span {
@@ -1203,144 +1136,99 @@
   flex: none;
   width: 6px;
   height: 6px;
-  background-color: var(--ui-text-secondary);
+  background-color: var(--g-fg-2);
 }
 
 .chat-banner[data-level="warning"]::before {
-  background-color: var(--ui-signal);
+  background-color: var(--g-volt);
 }
 
 .chat-banner[data-level="error"] {
   border: 0;
   border-radius: 0 var(--g-radius-8) var(--g-radius-8) 0;
-  background-color: var(--ui-surface-well);
+  background-color: var(--g-bg);
   box-shadow:
-    inset 2px 0 var(--ui-danger),
-    inset 0 0 0 1px var(--ui-line);
+    inset 2px 0 var(--g-red),
+    inset 0 0 0 1px var(--g-line);
 }
 
 .chat-banner[data-level="error"]::before {
-  background-color: var(--ui-danger);
+  background-color: var(--g-red);
 }
 
-.chat-banner > .ui-button {
-  height: 28px;
-  padding: 0 12px;
-}
+/* ---------- Dialogs (4.6, 6.19) ---------- */
 
-/* ---------- Dialogs (4.6) ---------- */
-
-.chat-modal {
-  box-sizing: border-box;
-  width: min(480px, calc(100vw - 32px));
-  max-height: calc(100vh - 64px);
+/*
+ * Every dialog is Graphite's .g-dialog: sm 440 (the base), .g-dialog-md 560, .g-dialog-lg 760, a
+ * 16px viewport margin on every side, the title and close button in .g-dialog-header. Long content
+ * scrolls the whole dialog.
+ */
+.g-dialog {
+  max-height: calc(100dvh - var(--g-space-32));
   margin: auto;
-  padding: 24px;
   overflow: auto;
-  border: 1px solid var(--ui-line-strong);
-  border-radius: var(--g-radius-16);
-  background-color: var(--ui-surface-raised);
-  box-shadow: var(--g-shadow);
-  color: var(--ui-text-primary);
-  font-family: var(--g-sans);
-  font-size: var(--g-text-ui);
-  line-height: var(--g-leading-ui);
-  font-weight: 400;
   scrollbar-width: thin;
-  scrollbar-color: var(--ui-line-strong) transparent;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
-.chat-modal[open] {
-  animation: chat-dialog-in var(--g-dur-panel) var(--g-ease-quint);
+/* The close glyph sits on the padding's edge; its ring still fits inside the dialog. */
+.g-dialog-header > .g-button-icon {
+  margin-right: calc(var(--g-space-6) * -1);
 }
 
-.chat-modal::backdrop {
-  background-color: var(--ui-surface-scrim);
-}
-
-@keyframes chat-dialog-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.chat-modal > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.chat-modal > header > h2 {
-  margin: 0;
-  font-size: var(--g-text-title);
-  line-height: var(--g-leading-title);
-  font-weight: 500;
-  letter-spacing: var(--g-tracking-title);
-}
-
-.chat-modal > header > .chat-icon-button {
-  margin: 0 -6px 0 0;
-}
-
-.chat-modal h3 {
-  margin: 0 0 8px;
+.g-dialog h3 {
+  margin: 0 0 var(--g-space-8);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
   font-weight: 500;
 }
 
-.chat-modal form {
+.g-dialog form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--g-space-16);
 }
 
-.chat-modal footer,
-.chat-dialog-actions {
+/* Action rows; a footer's own class can still lay it out differently. */
+.g-dialog :where(footer),
+.g-dialog-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
-  padding-top: 8px;
+  gap: var(--g-space-8);
+  padding-top: var(--g-space-8);
 }
 
-.chat-dialog-section {
+.dialog-section {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 8px;
-  padding-top: 16px;
-  border-top: 1px solid var(--ui-line);
+  gap: var(--g-space-8);
+  padding-top: var(--g-space-16);
+  border-top: 1px solid var(--g-line);
 }
 
-.chat-dialog-section :is(p, .ui-field) {
+.dialog-section :is(p, .ui-field) {
   width: 100%;
 }
 
-.chat-dialog-section p {
+.dialog-section p {
   margin: 0;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
 }
 
 .chat-project-folders {
-  padding: 14px 16px;
+  padding: var(--g-space-12) var(--g-space-16);
   border-radius: var(--g-radius-12);
-  background-color: var(--ui-surface-main);
-  box-shadow: inset 0 0 0 1px var(--ui-line);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
 }
 
 .chat-project-folders > div {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: var(--g-space-8);
+  margin-bottom: var(--g-space-12);
 }
 
 .chat-project-folders > div > span {
@@ -1350,7 +1238,7 @@
 }
 
 .chat-project-folders small {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   word-break: break-all;
@@ -1360,23 +1248,23 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: var(--g-space-12);
   margin: 0;
   padding: 0;
   border: 0;
 }
 
 .chat-color-choices legend {
-  margin-bottom: 8px;
-  color: var(--ui-text-primary);
+  margin-bottom: var(--g-space-8);
+  color: var(--g-fg-1);
   font-weight: 500;
 }
 
 .chat-color-choices label {
   display: flex;
   align-items: center;
-  gap: 6px;
-  color: var(--ui-text-secondary);
+  gap: var(--g-space-6);
+  color: var(--g-fg-2);
 }
 
 .chat-color-choices span {
@@ -1385,42 +1273,42 @@
   background-color: currentColor;
 }
 
-/* ---------- Continuations (retry, edit, fork, switch agent) ---------- */
-
-.chat-modal.conversation-dialog {
-  width: min(640px, calc(100vw - 32px));
+.chat-color-choices [data-tone="slate"] {
+  color: var(--g-project-slate);
 }
 
+.chat-color-choices [data-tone="sand"] {
+  color: var(--g-project-sand);
+}
+
+.chat-color-choices [data-tone="sage"] {
+  color: var(--g-project-sage);
+}
+
+.chat-color-choices [data-tone="clay"] {
+  color: var(--g-project-clay);
+}
+
+/* ---------- Continuations (retry, edit, fork, switch agent) ---------- */
+
 .conversation-notice {
-  margin: 12px 0;
-  color: var(--ui-text-secondary);
+  margin: var(--g-space-12) 0;
+  color: var(--g-fg-2);
 }
 
 .conversation-notice p {
   margin: 0;
 }
 
-.conversation-notice .ui-button {
-  margin-top: 12px;
-}
-
-.chat-dock > .conversation-notice {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  margin: 0;
-}
-
-.chat-dock > .conversation-notice .ui-button {
-  margin-top: 0;
+.conversation-notice .g-button {
+  margin-top: var(--g-space-12);
 }
 
 .conversation-target {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 16px 0;
+  gap: var(--g-space-12);
+  margin: var(--g-space-16) 0;
 }
 
 .conversation-target > div > strong {
@@ -1430,14 +1318,14 @@
 
 .conversation-target > div > span {
   display: block;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .conversation-context {
   overflow: hidden;
   border-radius: var(--g-radius-12);
-  background-color: var(--ui-surface-main);
-  box-shadow: inset 0 0 0 1px var(--ui-line);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
 }
 
 .conversation-context h3 {
@@ -1445,9 +1333,9 @@
   align-items: center;
   height: 32px;
   margin: 0;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--ui-line-faint);
-  color: var(--ui-text-secondary);
+  padding: 0 var(--g-space-16);
+  border-bottom: 1px solid var(--g-line-faint);
+  color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-weight: 500;
@@ -1456,7 +1344,7 @@
 .conversation-context pre {
   max-height: 240px;
   margin: 0;
-  padding: 12px 14px;
+  padding: var(--g-space-12) var(--g-space-16);
   overflow: auto;
   color: var(--g-code-fg);
   font-family: var(--g-mono);
@@ -1468,13 +1356,13 @@
 }
 
 .conversation-context pre + h3 {
-  border-top: 1px solid var(--ui-line);
+  border-top: 1px solid var(--g-line);
 }
 
 .conversation-context p {
   margin: 0;
-  padding: 12px 14px;
-  color: var(--ui-text-secondary);
+  padding: var(--g-space-12) var(--g-space-16);
+  color: var(--g-fg-2);
 }
 
 .conversation-turns {
@@ -1486,14 +1374,14 @@
 }
 
 .conversation-turns li {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--ui-line);
+  padding: var(--g-space-12) 0;
+  border-bottom: 1px solid var(--g-line);
 }
 
 .conversation-turns li > div:first-child {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--g-space-8);
 }
 
 .conversation-turns li > div:first-child > span:not(.g-agent-mark) {
@@ -1505,7 +1393,7 @@
 }
 
 .conversation-turns small {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -1513,24 +1401,19 @@
 .conversation-turn-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.conversation-turn-actions .ui-button {
-  height: 28px;
-  padding: 0 12px;
+  gap: var(--g-space-6);
+  margin-top: var(--g-space-8);
 }
 
 .conversation-edit {
   display: grid;
-  gap: 12px;
-  margin-top: 16px;
-  color: var(--ui-text-secondary);
+  gap: var(--g-space-12);
+  margin-top: var(--g-space-16);
+  color: var(--g-fg-2);
 }
 
 .conversation-edit label {
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
 }
 
@@ -1540,11 +1423,11 @@
 
 /* ---------- Command palette (6.15) ---------- */
 
-.chat-modal.command-palette {
+/* The palette is the large dialog held near the top (y 120), its own rows in place of padding. */
+.g-dialog.command-palette {
   display: flex;
   flex-direction: column;
-  width: min(640px, calc(100vw - 32px));
-  margin: min(120px, 12vh) auto auto;
+  margin: min(var(--g-space-128), 12vh) auto auto;
   padding: 0;
   overflow: hidden;
 }
@@ -1565,7 +1448,7 @@
   white-space: nowrap;
 }
 
-.command-palette > header > .chat-icon-button {
+.command-palette > header > .g-button-icon {
   margin: 0;
 }
 
@@ -1573,11 +1456,11 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: 12px;
+  gap: var(--g-space-12);
   height: 56px;
-  padding: 0 56px 0 20px;
-  border-bottom: 1px solid var(--ui-line);
-  color: var(--ui-text-muted);
+  padding: 0 var(--g-space-48) 0 var(--g-space-20);
+  border-bottom: 1px solid var(--g-line);
+  color: var(--g-fg-3);
 }
 
 .palette-input input {
@@ -1586,13 +1469,13 @@
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-size: var(--g-text-prose);
   line-height: var(--g-leading-prose);
 }
 
 .palette-input input::placeholder {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   opacity: 1;
 }
 
@@ -1601,16 +1484,16 @@
   flex: none;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--ui-line);
+  gap: var(--g-space-4);
+  padding: var(--g-space-8) var(--g-space-16);
+  border-bottom: 1px solid var(--g-line);
 }
 
 .palette-scopes > button {
   height: 26px;
-  padding: 0 10px;
+  padding: 0 var(--g-space-12);
   border-radius: var(--g-radius-pill);
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   font-weight: 500;
@@ -1621,21 +1504,21 @@
 
 @media (hover: hover) {
   .palette-scopes > button:hover {
-    color: var(--ui-text-primary);
+    color: var(--g-fg-1);
   }
 }
 
 .palette-scopes > button[aria-pressed="true"] {
-  background-color: var(--ui-primary);
-  color: var(--ui-text-on-primary);
+  background-color: var(--g-primary);
+  color: var(--g-on-light);
 }
 
 .palette-scopes label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--g-space-6);
   margin-left: auto;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -1643,20 +1526,20 @@
 .palette-results {
   flex: 1;
   max-height: min(430px, 50vh);
-  padding: 6px;
+  padding: var(--g-space-6);
   overflow: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--ui-line-strong) transparent;
+  scrollbar-color: var(--g-line-strong) transparent;
 }
 
 .palette-results > [role="option"] {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--g-space-12);
   min-height: 48px;
-  padding: 6px 12px;
+  padding: var(--g-space-6) var(--g-space-12);
   border-radius: var(--g-radius-8);
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   cursor: default;
 }
 
@@ -1667,8 +1550,8 @@
 /* The highlight and a 2px rail are the focus inside the list (3.7). */
 .palette-results > [aria-selected="true"] {
   position: relative;
-  background-color: var(--ui-surface-fill);
-  color: var(--ui-text-secondary);
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-2);
 }
 
 .palette-results > [aria-selected="true"]::before {
@@ -1678,8 +1561,8 @@
   bottom: 12px;
   left: 0;
   width: 2px;
-  border-radius: 1px;
-  background-color: var(--ui-text-primary);
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-fg-1);
 }
 
 .palette-results > [role="option"] > span {
@@ -1690,7 +1573,7 @@
 .palette-results strong {
   display: block;
   overflow: hidden;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1699,7 +1582,7 @@
 .palette-results small {
   display: block;
   overflow: hidden;
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   text-overflow: ellipsis;
@@ -1707,13 +1590,13 @@
 }
 
 .palette-results > [aria-selected="true"] small {
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .palette-notice {
   margin: 0;
-  padding: 16px 20px;
-  color: var(--ui-text-muted);
+  padding: var(--g-space-16) var(--g-space-20);
+  color: var(--g-fg-3);
 }
 
 .command-palette > footer {
@@ -1721,10 +1604,10 @@
   flex: none;
   flex-wrap: wrap;
   justify-content: flex-start;
-  gap: 16px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--ui-line);
-  color: var(--ui-text-muted);
+  gap: var(--g-space-16);
+  padding: var(--g-space-8) var(--g-space-16);
+  border-top: 1px solid var(--g-line);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
 }
@@ -1732,18 +1615,17 @@
 .command-palette > footer > span {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--g-space-6);
 }
 
 /* ---------- Reduced motion (3.8) ---------- */
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-popover-panel,
-  .chat-modal[open] {
+  .chat-popover-panel {
     animation: none;
   }
 }
 
-:root:is([data-motion="reduced"], [data-motion="off"]) :is(.chat-popover-panel, .chat-modal[open]) {
+:root:is([data-motion="reduced"], [data-motion="off"]) .chat-popover-panel {
   animation: none;
 }

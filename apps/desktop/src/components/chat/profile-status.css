@@ -2,9 +2,9 @@
 .chat-account-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--g-space-8);
   height: 44px;
-  padding: 0 4px;
+  padding: 0 var(--g-space-4);
 }
 
 .chat-account-avatar {
@@ -14,8 +14,8 @@
   width: 28px;
   height: 28px;
   border-radius: var(--g-radius-8);
-  background-color: var(--ui-surface-fill);
-  color: var(--ui-text-secondary);
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-2);
 }
 
 .chat-account-identity {
@@ -27,14 +27,14 @@
 
 .chat-account-identity strong {
   overflow: hidden;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .chat-account-identity small {
-  color: var(--ui-text-muted);
+  color: var(--g-fg-3);
   font-size: var(--g-text-meta);
   line-height: var(--g-leading-meta);
   overflow-wrap: anywhere;

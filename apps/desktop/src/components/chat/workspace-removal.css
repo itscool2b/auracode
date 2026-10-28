@@ -2,12 +2,12 @@
 .workspace-removal-content {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--g-space-16);
 }
 
 .workspace-removal-content p {
   margin: 0;
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
 }
 
 .workspace-removal-content ul {
@@ -20,17 +20,17 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--ui-line);
+  gap: var(--g-space-8);
+  padding: var(--g-space-12) 0;
+  border-bottom: 1px solid var(--g-line);
   overflow-wrap: anywhere;
 }
 
 .workspace-removal-content summary {
-  color: var(--ui-text-secondary);
+  color: var(--g-fg-2);
   cursor: pointer;
 }
 
-.workspace-removal-content > .ui-button {
+.workspace-removal-content > .g-button {
   align-self: flex-start;
 }

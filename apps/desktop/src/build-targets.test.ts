@@ -47,9 +47,9 @@ describe("build targets", () => {
     expect(version(WEBKIT_TARGET)).toEqual(version(shipped ?? ""));
   });
 
-  it("never target a WebKit older than Tailwind 4 supports", () => {
-    // Tailwind 4 emits cascade layers, @property and color-mix(): Safari 16.4 is its floor.
+  it("never target a WebKit older than the stylesheets need", () => {
+    // The app's CSS uses cascade layers, :has() and dynamic viewport units: Safari 15.4 is its floor.
     const [major, minor] = version(WEBKIT_TARGET);
-    expect(major > 16 || (major === 16 && minor >= 4)).toBe(true);
+    expect(major > 15 || (major === 15 && minor >= 4)).toBe(true);
   });
 });

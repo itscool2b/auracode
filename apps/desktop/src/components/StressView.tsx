@@ -11,7 +11,7 @@ import { ArrowLeftIcon } from "./icons";
 import { Answer } from "./Markdown";
 
 /**
- * The worst case the UI must stay smooth under: up to 24 live orbs, the aura field, and a fast
+ * The worst case the UI must stay smooth under: up to 24 live orbs, the dither field, and a fast
  * markdown stream, with the frame rate on screen. `seconds` > 0 streams for that long, in one turn
  * or, past what a turn holds, several back to back; 0 streams turn after turn until stopped (what
  * the power spike measures). `StressRun` sizes the turns.
@@ -122,7 +122,7 @@ export function StressView({
               checked={config.aura}
               onChange={(event) => onConfigChange({ ...config, aura: event.currentTarget.checked })}
             />
-            Aura field
+            Dither field
           </label>
           <div className="stress-run">
             <button
@@ -248,13 +248,13 @@ function ConfigLine({
   };
 
   return (
-    <div className="field flex-wrap">
+    <div className="field">
       <label htmlFor={id} className="stress-config-label">
         AURACODE_STRESS=
       </label>
       <input
         id={id}
-        className="number-input stress-config-input"
+        className="g-input stress-config-input"
         value={draft}
         spellCheck={false}
         aria-invalid={error !== null}

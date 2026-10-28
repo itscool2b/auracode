@@ -7,6 +7,7 @@ import {
   type TerminalTransport,
   terminalTransport,
 } from "../lib/terminal";
+import { DialogClose, dialogClassName } from "./chat/Modal";
 import "@xterm/xterm/css/xterm.css";
 import "./TerminalSheet.css";
 
@@ -225,7 +226,7 @@ export function TerminalSheet({
   const content = (
     <dialog
       ref={dialog}
-      className="g-root terminal-sheet"
+      className={dialogClassName("lg", "terminal-sheet")}
       data-purpose={purpose}
       data-state={state.state}
       data-outcome={outcome}
@@ -236,9 +237,9 @@ export function TerminalSheet({
         close();
       }}
     >
-      <header className="terminal-sheet__header">
+      <header className="g-dialog-header terminal-sheet__header">
         <div>
-          <h2 id={title}>
+          <h2 id={title} className="g-dialog-title">
             {purpose === "installation"
               ? `Install ${agentName}`
               : purpose === "setup"
@@ -257,14 +258,7 @@ export function TerminalSheet({
                   : "Run the agent's own sign-in flow. Terminal output is not saved."}
           </p>
         </div>
-        <button
-          type="button"
-          className="g-button g-button-ghost g-button-28 terminal-sheet__close"
-          onClick={close}
-          aria-label={`Close ${purpose} terminal`}
-        >
-          Close
-        </button>
+        <DialogClose label={`Close ${purpose} terminal`} onClick={close} />
       </header>
       {review}
       <div className="terminal-sheet__status" role="status">

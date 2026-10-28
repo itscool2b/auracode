@@ -41,8 +41,7 @@ export function ErrorCard({
         {actions.retry ? (
           <button
             type="button"
-            className="ui-button"
-            data-kind="primary"
+            className="g-button g-button-primary"
             data-testid="error-retry"
             onClick={onRetry}
           >
@@ -52,7 +51,7 @@ export function ErrorCard({
         {actions.startFresh ? (
           <button
             type="button"
-            className="ui-button"
+            className="g-button"
             data-testid="error-start-fresh"
             onClick={onStartFresh}
           >
@@ -61,8 +60,7 @@ export function ErrorCard({
         ) : null}
         <button
           type="button"
-          className="ui-button"
-          data-kind="quiet"
+          className="g-button g-button-ghost"
           data-testid="error-show-log"
           onClick={onShowLog}
         >

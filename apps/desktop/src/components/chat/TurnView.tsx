@@ -302,8 +302,7 @@ function Footer({
       {end.recovered && end.stopReason === "interrupted" && canResume ? (
         <button
           type="button"
-          className="ui-button"
-          data-kind="quiet"
+          className="g-button g-button-ghost g-button-24"
           data-testid="turn-resume"
           onClick={() => onStart(false)}
         >

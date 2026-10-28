@@ -125,10 +125,10 @@ jobs:
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: pnpm --filter @auracode/desktop exec playwright install --with-deps chromium webkit
 
-      - name: Check Orbit in Chromium and WebKit
+      - name: Check the chat in Chromium and WebKit
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
-        run: pnpm --filter @auracode/desktop check:orbit
+        run: pnpm --filter @auracode/desktop check:chat
 
       - name: Check settings and explicit update controls
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
@@ -191,12 +191,12 @@ jobs:
             target/release-preview-*/*.png
           retention-days: 7
 
-      - name: Keep Orbit browser evidence
+      - name: Keep chat browser evidence
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: orbit-browser
-          path: target/orbit-browser
+          name: chat-browser
+          path: target/chat-browser
           retention-days: 7
 
       - name: Keep settings and Git review evidence

@@ -89,7 +89,7 @@ export function VendorDialog({
       />
     );
   return (
-    <Modal title="Manage integrations" onClose={onClose} className="vendor-dialog">
+    <Modal title="Manage integrations" size="md" onClose={onClose} className="vendor-dialog">
       <p className="vendor-intro">
         Install and manage personal plugins, marketplaces and Pi packages through the agent's own
         commands.
@@ -104,7 +104,7 @@ export function VendorDialog({
           <label>
             Agent
             <select
-              className="g-input"
+              className="g-select"
               value={provider}
               disabled={busy}
               onChange={(event) => {
@@ -125,7 +125,7 @@ export function VendorDialog({
           <label>
             Integration
             <select
-              className="g-input"
+              className="g-select"
               value={kind}
               disabled={busy || provider === "pi"}
               onChange={(event) => {
@@ -147,7 +147,7 @@ export function VendorDialog({
           <label>
             Action
             <select
-              className="g-input"
+              className="g-select"
               value={action}
               disabled={busy}
               onChange={(event) => setAction(event.currentTarget.value as VendorAction)}

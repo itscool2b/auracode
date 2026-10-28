@@ -185,7 +185,7 @@ auracode/                        Cargo workspace + pnpm workspace
   similar/diffy, toml_edit + jsonc-parser, keepawake, keyring, tracing. Our own login-shell env resolver.
 - **IPC.** Commands for request/response; `Channel` for streams; token deltas batched per frame into frames
   under 8 KiB; tool output capped (full output on disk).
-- **App UI stack.** React 19.3, Vite, TypeScript, Tailwind 4.3, Motion 14, shadcn on Base UI (fully
+- **App UI stack.** React 19.3, Vite, TypeScript, plain CSS on the Graphite tokens, Motion 14, shadcn on Base UI (fully
   restyled), Zustand, react-virtuoso + use-stick-to-bottom (no layout animations inside the virtual list),
   Streamdown 2.7 (sanitized, own reduced-motion handling), Shiki 4 in a worker (finished code blocks only,
   throttled while streaming), @pierre/diffs, xterm.js 6 + WebGL (login terminal), OGL, Lucide, Floating UI.

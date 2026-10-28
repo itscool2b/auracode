@@ -1,8 +1,8 @@
 /* Export and debug bundle dialogs on the Graphite dialog shell. */
 .chat-export-content {
   display: grid;
-  gap: 16px;
-  color: var(--ui-text-secondary);
+  gap: var(--g-space-16);
+  color: var(--g-fg-2);
 }
 
 .chat-export-content p {
@@ -10,37 +10,28 @@
 }
 
 .chat-export-content .settings-error {
-  color: var(--ui-danger);
+  color: var(--g-red);
 }
 
 .chat-export-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 4px;
+  gap: var(--g-space-8);
+  margin-top: var(--g-space-4);
 }
 
 .debug-bundle-preview {
   display: grid;
-  gap: 8px;
+  gap: var(--g-space-8);
   min-width: 0;
-  color: var(--ui-text-primary);
+  color: var(--g-fg-1);
   font-weight: 500;
 }
 
-.debug-bundle-preview textarea {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--ui-line-strong);
-  border-radius: var(--g-radius-8);
-  background-color: var(--ui-surface-well);
-  color: var(--g-code-fg);
+/* The bundle is machine output: mono at the terminal size. */
+.debug-bundle-text {
   font-family: var(--g-mono);
-  font-size: var(--g-text-meta);
-  line-height: 18px;
-  font-weight: 400;
-  resize: vertical;
+  font-size: var(--g-text-term);
+  line-height: var(--g-leading-term);
 }

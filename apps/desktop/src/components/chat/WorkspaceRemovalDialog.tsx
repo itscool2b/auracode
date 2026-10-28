@@ -78,7 +78,11 @@ export function WorkspaceRemovalDialog({
     }
   };
   return (
-    <Modal title={target ? "Review removal" : "Removed projects and folders"} onClose={onClose}>
+    <Modal
+      title={target ? "Review removal" : "Removed projects and folders"}
+      size="md"
+      onClose={onClose}
+    >
       <div className="workspace-removal-content">
         {review ? (
           <>
@@ -105,8 +109,7 @@ export function WorkspaceRemovalDialog({
             ) : null}
             <button
               type="button"
-              className="ui-button"
-              data-kind="primary"
+              className="g-button g-button-primary"
               disabled={busy}
               onClick={() => void apply()}
             >
@@ -135,7 +138,7 @@ export function WorkspaceRemovalDialog({
                     </span>
                     {item.restore_unavailable ? <p>{item.restore_unavailable}</p> : null}
                     <button
-                      className="ui-button"
+                      className="g-button"
                       type="button"
                       disabled={busy || item.restore_unavailable !== null}
                       onClick={() => void restore(item)}
@@ -157,7 +160,7 @@ export function WorkspaceRemovalDialog({
           </p>
         ) : null}
         <footer>
-          <button className="ui-button" type="button" onClick={onClose}>
+          <button className="g-button" type="button" onClick={onClose}>
             Close
           </button>
         </footer>

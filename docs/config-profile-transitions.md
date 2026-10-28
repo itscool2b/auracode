@@ -84,7 +84,7 @@ ambiguous startup pointer. The integrated Windows build, exact Tauri export and 
 tests pass, including Local fallback, invalidated A handles and persistent A data after Account B
 fails to open. Three native account-admission tests also pass. No policy workaround was used.
 
-`ConfigurationRecovery` uses the existing dark Orbit shell, exposes only explicit recovery actions
+`ConfigurationRecovery` uses the existing dark Graphite shell, exposes only explicit recovery actions
 and preserves failed-action errors. Its `locked` state disables recovery and accepts selected-account
 unlock controls through children. The App renders it before ordinary LockedProfile or chat controls;
 pending recovery offers no Local switch. Two component regressions and Chromium/WebKit browser tests

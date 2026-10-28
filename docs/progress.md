@@ -3008,3 +3008,41 @@ download page's platform guess, repeated note and changelog link, and the change
 
 Open: the generated third-party notices page has no site chrome; restyling it needs a change in
 `.github/scripts/third-party-notices.mjs`.
+
+### App restyle step 2a: one system (2026-10-27)
+
+Branch `app-one-system` makes the desktop app one system at the stylesheet level. No screen was
+redesigned; visuals changed only where consistency required it.
+
+- **Base:** Tailwind (two devDependencies, the Vite plugin, the import) and the legacy Aura tokens,
+  `AuraField` and `brandCssVariables` are gone from the desktop app. `styles.css` is now a plain
+  reset and document layer in cascade layers under every unlayered stylesheet. The stress view's
+  ambient field is Graphite's dither. `packages/ui`'s legacy modules stay for the Design Lab.
+- **Tokens:** stylesheets read `--g-*` directly. `ui-tokens.css` keeps only the window's own layout
+  values (sidebar and rail, titlebar band, pane inset, transcript gutter, window tint).
+- **Buttons:** `.ui-button` (118 uses), `.chat-icon-button` (12) and the dead `.btn` classes are
+  gone. Every button is `.g-button`; icon buttons are `.g-button-icon` at radius 6, and Graphite
+  gained a 24px size and a ghost that stays unfilled when disabled.
+- **Fields:** `.g-input`, `.g-select` and `.g-textarea` share one Graphite rule; the chat's
+  `.ui-input` family (24 uses), the Library's select chevron and two hand-made fields are gone.
+- **Dialogs:** one shell on `.g-dialog` in three widths (sm 440, md 560, lg 760) with one 16px
+  viewport margin, `.g-dialog-header` and `.g-dialog-actions`. The terminal sheet and the clone
+  dialog use the same classes and close button. Widths 480, 590, 600, 640, 660, 900 and 1040 are
+  gone, as are duplicated selectors across screens.
+- **Scales:** every margin, padding and gap is a `--g-space-*` token; about 160 values off the scale
+  moved onto it, radii of 1, 2 and 10 became pill and 12, raw line heights and sizes became type
+  tokens, and the last raw durations became motion tokens.
+- **Inline styles:** static ones moved into CSS (project swatches now read four
+  `--g-project-*` tones; Markdown depth and alignment are data attributes). Only computed ones stay.
+- **Naming:** `check-orbit.mjs` is `check-chat.mjs` (`pnpm check:chat`, evidence in
+  `target/chat-browser`), checks read `CHECK_URL`, and CI, the release checklist and live docs
+  follow.
+- **Guard:** `.github/scripts/check-styles.mjs` (in `pnpm lint`, its test in `pnpm test`) fails on
+  raw hex, untokenised spacing or radii, raw type, weights other than 400, 500 and 600, and raw
+  durations in `apps/desktop/src/**/*.css`, with a five-entry commented allowlist.
+
+Verified locally on Windows: `pnpm lint`, `pnpm typecheck` and `pnpm test` (root scripts 22, ui
+276, desktop 5 node and 348 with 19 skipped, design lab 352, web 4), and every desktop browser
+check in Chromium and WebKit with no axe violations (`check-settings` needs the website built
+first for its verification fixture). Before and after sheets of every preview mode, fixture and
+main dialog are in the ignored `target/design-research/sheets/app-2a-*.png`.

@@ -184,7 +184,7 @@ bash .github/scripts/export-bindings.sh check target/final-bindings
 pnpm lint
 pnpm typecheck
 pnpm test
-pnpm --filter @auracode/desktop check:orbit
+pnpm --filter @auracode/desktop check:chat
 pnpm --filter @auracode/desktop check:settings
 pnpm --filter @auracode/desktop check:setup
 pnpm --filter @auracode/desktop exec node scripts/check-setup-actions.mjs

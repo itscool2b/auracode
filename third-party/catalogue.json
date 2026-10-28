@@ -7,7 +7,7 @@
     "apps/api/Cargo.toml": "b5757abc6548dd4b1decbe95f23a9f046e142cc150373b49fcb059d952b97b90",
     "apps/api/package.json": "0533f30151df9f8c848039b40a026aa63e3300e20c4603487ab6a8db9946b04d",
     "apps/design-lab/package.json": "639745d0a897328f33f5958410513759a10549231c846bcdeb5a713f518ca3fb",
-    "apps/desktop/package.json": "6dd75fe854c678e3a25527437ac485decc736961337e998a7092d9736b87b484",
+    "apps/desktop/package.json": "ada85d0f130966a250e45a9ab301bbd36bb9689e7dc233998b44cee8454a1924",
     "apps/desktop/src-tauri/Cargo.toml": "a5fb8bfb01b99835ab4fbf3b4385b41aacb68d593ef46d5a9d5e0d2864c9976f",
     "apps/web-worker/Cargo.toml": "b1a95f1bb8377afb2a02c0a31feeda0bdc6971b057febbaee62f63314d6c6fb6",
     "apps/web-worker/package.json": "9bd52b46d1fc2854db835f8b44b456f395436470e095aa1e4ccc43a5a6a8ea76",
@@ -22,7 +22,7 @@
     "crates/aura-release/Cargo.toml": "0c1edf9093c74858f415e3d76a4038b494586e30b18c1f2938115fa3ae7c762e",
     "crates/aura-sync/Cargo.toml": "9a982df7ec9c00b4a66991830feb25fd81f5d61cfb91de62dd16b1eb38ffc594",
     "packages/ui/package.json": "043114b4b99b253594b1879b456e6890b005005fddcb36334bc86d34388001cf",
-    "pnpm-lock.yaml": "0ecc6278c58ee8c1ee0f68378dde6bde25238b5d7d15d5e15419032c57a252c7",
+    "pnpm-lock.yaml": "dad44b4dd658abdc009405ace418c1ee22e7eb372cba98ff090a8fa7d1b69ba0",
     "third-party/overrides.json": "1668ed5256042168b3bfe4c929ca1a12736cd4398d1043f1278195d75704b186"
   },
   "records": [

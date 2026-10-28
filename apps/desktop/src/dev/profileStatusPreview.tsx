@@ -68,7 +68,7 @@ function Fixture() {
         {profiles.map((value) => (
           <button
             key={value.id}
-            className="ui-button"
+            className="g-button"
             type="button"
             onClick={() => setProfile(value)}
           >

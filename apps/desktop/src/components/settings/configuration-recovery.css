@@ -10,7 +10,7 @@
 }
 
 .configuration-recovery .settings-content {
-  padding-top: clamp(72px, 16vh, 160px);
+  padding-top: clamp(var(--g-space-64), 16vh, var(--g-space-160));
 }
 
 .configuration-recovery header > p,
@@ -19,14 +19,14 @@
 }
 
 .configuration-recovery header > p {
-  margin-top: 8px;
+  margin-top: var(--g-space-8);
   color: var(--g-fg-2);
   font-size: var(--g-text-prose);
   line-height: var(--g-leading-prose);
 }
 
 .configuration-recovery-action {
-  padding-top: 20px;
+  padding-top: var(--g-space-20);
   border-top: 1px solid var(--g-line);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
@@ -34,19 +34,19 @@
 }
 
 .configuration-recovery-action > p {
-  margin: 0 0 16px;
+  margin: 0 0 var(--g-space-16);
 }
 
 .configuration-recovery-action > .g-button {
-  margin-bottom: 16px;
+  margin-bottom: var(--g-space-16);
 }
 
 .configuration-recovery-action [role="status"] {
-  margin: 0 0 12px;
+  margin: 0 0 var(--g-space-12);
 }
 
 .configuration-recovery details {
-  margin-top: 32px;
+  margin-top: var(--g-space-32);
   color: var(--g-fg-2);
 }
 
@@ -58,6 +58,6 @@
 
 @media (max-width: 560px) {
   .configuration-recovery .settings-content {
-    padding-inline: 24px;
+    padding-inline: var(--g-space-24);
   }
 }

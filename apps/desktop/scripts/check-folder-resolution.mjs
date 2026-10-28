@@ -91,7 +91,7 @@ try {
         true,
       );
       assert.equal(
-        await page.locator(".chat-modal").evaluate((node) => node.scrollWidth <= node.clientWidth),
+        await page.locator(".g-dialog").evaluate((node) => node.scrollWidth <= node.clientWidth),
         true,
       );
       await page.screenshot({ path: resolve(out, `${engine}-folder-resolution-mobile.png`) });

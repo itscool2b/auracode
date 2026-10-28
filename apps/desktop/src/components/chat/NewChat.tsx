@@ -242,7 +242,7 @@ export function NewChat({
           <div className="ui-row">
             <select
               id={agentId}
-              className="ui-select"
+              className="g-select"
               data-testid="new-chat-agent"
               value={state.agentId ?? ""}
               onChange={(event) => draft.chooseAgent(event.currentTarget.value)}
@@ -261,7 +261,7 @@ export function NewChat({
             </select>
             <button
               type="button"
-              className="ui-button"
+              className="g-button"
               data-testid="new-chat-refresh"
               disabled={refreshing}
               onClick={onRefreshAgents}
@@ -291,7 +291,7 @@ export function NewChat({
                   {state.maintenance?.auth_status ? (
                     <button
                       type="button"
-                      className="ui-button"
+                      className="g-button"
                       disabled={state.maintenanceBusy !== null}
                       onClick={() => void draft.checkAuth()}
                     >
@@ -301,7 +301,7 @@ export function NewChat({
                   {state.maintenance?.update_unavailable === null ? (
                     <button
                       type="button"
-                      className="ui-button"
+                      className="g-button"
                       disabled={state.maintenanceBusy !== null || state.creating}
                       onClick={() => void draft.updateAgent().then(() => onRefreshAgents())}
                     >
@@ -346,7 +346,7 @@ export function NewChat({
           <span>Folder</span>
           {workspace && (organization.data?.projects.length ?? 0) > 0 ? (
             <select
-              className="ui-select"
+              className="g-select"
               aria-label="Project folder"
               value={folderId}
               onChange={(event) => {
@@ -377,7 +377,7 @@ export function NewChat({
           <div className="ui-row">
             <button
               type="button"
-              className="ui-button"
+              className="g-button"
               data-testid="new-chat-pick-folder"
               disabled={state.picking}
               onClick={() => {
@@ -419,8 +419,7 @@ export function NewChat({
       <div className="ui-row chat-new-submit">
         <button
           type="submit"
-          className="ui-button"
-          data-kind="primary"
+          className="g-button g-button-primary"
           data-testid="new-chat-create"
           disabled={!canCreate || (preview !== null && preview.busy_chats.length > 0 && !allowBusy)}
         >

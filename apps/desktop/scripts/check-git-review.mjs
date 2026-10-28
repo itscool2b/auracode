@@ -163,7 +163,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     try {
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       const page = await context.newPage();
-      await checkGitReview(page, process.env.ORBIT_URL ?? "http://localhost:1426", out, engine);
+      await checkGitReview(page, process.env.CHECK_URL ?? "http://localhost:1426", out, engine);
       console.log(`${engine}: reviewed Git workspace and pull request flows passed`);
     } finally {
       await browser.close();
