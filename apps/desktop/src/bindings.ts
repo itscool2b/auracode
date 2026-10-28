@@ -329,6 +329,12 @@ export const commands = {
 	chatMoveQueued: (chatId: string, promptId: string, index: number) => typedError<QueuedPrompt[], AppError>(__TAURI_INVOKE("chat_move_queued", { chatId, promptId, index })),
 	/**  Releases the held prompts ("Send queued"), starting the agent when it is stopped. */
 	chatResumeQueue: (chatId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_resume_queue", { chatId })),
+	/**
+	 *  "Send now": the queued prompt goes next, released if held. A running turn is interrupted
+	 *  first when the agent can interrupt it; a stopped agent starts. Returns the queue after the
+	 *  change.
+	 */
+	chatSendNow: (chatId: string, promptId: string) => typedError<QueuedPrompt[], AppError>(__TAURI_INVOKE("chat_send_now", { chatId, promptId })),
 	/**  Asks the agent to stop the running turn (Esc). While it is already cancelling, this force-stops. */
 	chatInterrupt: (chatId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_interrupt", { chatId })),
 	/**  Ends the agent's processes at once (the second Esc). */
@@ -1482,6 +1488,19 @@ export type HistoryPage = {
 	turn_agents?: TurnAgent[],
 };
 
+/**  What held the queued prompts. */
+export type HoldCause = 
+/**  auracode restarted (or reopened the chat) with prompts still queued. */
+"restart" | 
+/**  The person stopped the turn or the agent. */
+"stop" | 
+/**  A turn failed, the agent crashed, or a checkpoint could not be saved. */
+"error" | 
+/**  The agent asked for its own sign-in. */
+"sign_in" | 
+/**  The chat's project or folder was removed. */
+"workspace_removed";
+
 /**  How the installed binary is managed. Unknown and bundled installations cannot be updated here. */
 export type InstallChannel = { type: "vendor_standalone" } | { type: "npm"; package: string } | { type: "homebrew"; formula: string } | { type: "bundled"; application: string } | { type: "unknown" };
 
@@ -2166,6 +2185,42 @@ export type PullRequestResult = {
 	warning: string | null,
 };
 
+/**
+ *  Why queued prompts wait. The first prompt that is not held goes next; when every prompt is held,
+ *  they wait for the person ([`QueueWait::Held`]).
+ */
+export type QueueWait = 
+/**  The agent is starting or resuming its session. */
+{ reason: "starting" } | 
+/**  The agent is working on a turn. */
+{ reason: "working" } | 
+/**
+ *  The turn ended, but the agent still reports work in progress (its Stop hooks, background
+ *  tasks) since `since`. The next prompt goes when it reports idle, or at `sends_at` without
+ *  that report.
+ */
+{ reason: "finishing_turn"; since: number | null; sends_at: number | null } | 
+/**  A permission request (or, with `question`, a question) waits for the person's answer. */
+{ reason: "needs_answer"; question: boolean } | 
+/**  A checkpoint of the folder is being saved before the next prompt goes. */
+{ reason: "saving_checkpoint" } | 
+/**  The turn is being cancelled, or the agent is stopping. */
+{ reason: "stopping" } | 
+/**  A change to this chat (a move, a revert, a Git action or a worktree setup) is in progress. */
+{ reason: "chat_changing" } | 
+/**  The agent could not start; its error card says why. */
+{ reason: "start_failed" } | 
+/**  The agent needs its own sign-in. */
+{ reason: "sign_in" } | 
+/**  The agent is stopped. */
+{ reason: "stopped" } | 
+/**  The chat's folder is missing. */
+{ reason: "folder_missing" } | 
+/**  The chat's project or folder was removed. */
+{ reason: "workspace_removed" } | 
+/**  Every queued prompt is held, since `after`. */
+{ reason: "held"; after: HoldCause };
+
 export type QueuedPrompt = {
 	prompt_id: string,
 	/**  The prompt's first 256 characters. */
@@ -2303,6 +2358,11 @@ export type SessionInfo = {
 	 *  refetches `chat_lists`.
 	 */
 	revision: number,
+	/**
+	 *  Why the queued prompts are not going to the agent yet, while any are queued. `None` with
+	 *  prompts queued means the next one is on its way.
+	 */
+	queue_wait: QueueWait | null,
 };
 
 /**

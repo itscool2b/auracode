@@ -45,6 +45,7 @@ import {
   chatResumeQueue,
   chatRevealLog,
   chatSend,
+  chatSendNow,
   chatSetAutonomy,
   chatSetOption,
   chatStart,
@@ -108,6 +109,8 @@ export interface Transport {
   /** Moves a queued prompt to `index` (0 goes next); answers the queue after the change. */
   moveQueued(chatId: string, promptId: string, index: number): Promise<QueuedPrompt[]>;
   resumeQueue(chatId: string): Promise<void>;
+  /** "Send now": the queued prompt goes next; answers the queue after the change. */
+  sendNow(chatId: string, promptId: string): Promise<QueuedPrompt[]>;
   interrupt(chatId: string): Promise<void>;
   forceStop(chatId: string): Promise<void>;
   start(chatId: string, fresh: boolean): Promise<void>;
@@ -151,6 +154,7 @@ export const tauriTransport: Transport = {
   editQueued: chatEditQueued,
   moveQueued: chatMoveQueued,
   resumeQueue: chatResumeQueue,
+  sendNow: chatSendNow,
   interrupt: chatInterrupt,
   forceStop: chatForceStop,
   start: chatStart,

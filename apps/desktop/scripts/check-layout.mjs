@@ -148,6 +148,17 @@ export const MODES = [
   "delete-data",
   "delete-data-worktrees",
   "delete-data-macos",
+  // The queue saying why the next message waits: the agent starting, working (and quiet for a
+  // minute), finishing its turn, a permission to answer, held after a restart, a failed start and
+  // a missing worktree folder, each with its one action.
+  "queue-starting",
+  "queue-working",
+  "queue-stalled",
+  "queue-finishing",
+  "queue-answer",
+  "queue-held",
+  "queue-failed",
+  "queue-missing",
 ];
 
 /** Waits until the panel's shell has drawn its prompt. */

@@ -679,7 +679,15 @@ impl Session {
     fn dispatch(&mut self, arrived: Instant, command: DriverCommand) {
         match command {
             DriverCommand::Prompt { turn, parts } => {
-                if !self.ready || self.turn.is_some() || !self.idle {
+                // An open prompt of ours, or a request waiting for its answer, refuses another.
+                // Claude Code's own work after a result (Stop hooks, background agents) does not:
+                // it queues a prompt that arrives meanwhile, and the session sends one then only
+                // after its idle grace or the person's Send now.
+                if !self.ready
+                    || self.turn.is_some()
+                    || !self.approvals.is_empty()
+                    || !self.questions.is_empty()
+                {
                     self.outbox.push_back(DriverEvent::TurnEnded {
                         turn_id: turn.turn_id,
                         stop_reason: StopReason::Error,
@@ -712,6 +720,11 @@ impl Session {
                         return;
                     }
                 };
+                if !self.idle {
+                    tracing::info!(
+                        "Claude Code still reports work in progress; it queues this prompt behind it"
+                    );
+                }
                 self.translator.begin_turn();
                 self.idle = false;
                 self.turn = Some(turn.turn_id.clone());

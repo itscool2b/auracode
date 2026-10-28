@@ -322,6 +322,11 @@ export async function chatResumeQueue(chatId: string): Promise<void> {
   await settle(commands.chatResumeQueue(chatId));
 }
 
+/** "Send now": the queued prompt goes next (interrupting a running turn); answers the queue. */
+export function chatSendNow(chatId: string, promptId: string): Promise<QueuedPrompt[]> {
+  return settle(commands.chatSendNow(chatId, promptId));
+}
+
 export async function chatInterrupt(chatId: string): Promise<void> {
   await settle(commands.chatInterrupt(chatId));
 }

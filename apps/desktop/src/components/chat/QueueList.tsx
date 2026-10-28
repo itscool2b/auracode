@@ -1,15 +1,20 @@
 import { ArrowDown, ArrowUp, Pencil, X } from "lucide-react";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { QueuedPrompt } from "../../bindings";
+import type { QueueWaitView } from "../../lib/chat/queueWait";
 
 /** The row action that keeps focus after a move or an edit re-renders the queue. */
 type RowAction = "edit" | "up" | "down";
 
 /**
  * The prompts waiting behind the running turn (or the start), as one segment over the composer:
- * how many wait, then each message on its own row with its controls. Held ones (queued before
- * a stop, an error or a restart) wait for "Send queued", which shows whenever the session says
- * some are held.
+ * why they wait (or how many wait), then each message on its own row with its controls. Held
+ * ones (queued before a stop, an error or a restart) wait for "Send queued", which shows whenever
+ * the session says some are held, or for their own Send.
+ *
+ * The head says in plain words why the next message waits, with the one action that helps: Send
+ * now while the agent works or finishes its turn, Start after a failed start, Recreate folder for
+ * a missing worktree.
  *
  * A row's words can be edited in place (Enter saves, Esc cancels), and Move up and Move down
  * reorder it from the keyboard as well as the pointer: the controls show under the hand and
@@ -18,8 +23,12 @@ type RowAction = "edit" | "up" | "down";
 export function QueueList({
   queue,
   held,
+  wait = null,
   onRemove,
   onSendQueued,
+  onSendNow,
+  onStart,
+  onRecreate,
   onLoadText,
   onEdit,
   onMove,
@@ -27,8 +36,16 @@ export function QueueList({
   readonly queue: readonly QueuedPrompt[];
   /** Some queued prompts are held (`SessionInfo.queue_held`). */
   readonly held: boolean;
+  /** Why the next message waits (`SessionInfo.queue_wait` in words). */
+  readonly wait?: QueueWaitView | null;
   readonly onRemove: (promptId: string) => void;
   readonly onSendQueued: () => void;
+  /** "Send now" for the next message, and Send for one held message. */
+  readonly onSendNow?: (promptId: string) => void;
+  /** Starts the agent (after a failed start, or a stopped one). */
+  readonly onStart?: () => void;
+  /** Reviews recreating this chat's missing worktree folder. */
+  readonly onRecreate?: () => void;
   /** The prompt's words as typed; `null` when it is gone or could not be read. */
   readonly onLoadText?: (promptId: string) => Promise<string | null>;
   /** Saves new words; answers why they were not saved, or `null`. */
@@ -65,23 +82,76 @@ export function QueueList({
     refocus.current = { id: promptId, action };
     void onMove?.(promptId, index);
   };
+  // A reason that already says the messages are held does not say it twice.
+  const heldNote = held && wait?.reason !== "held" ? " · held" : "";
+  const count = queue.length === 0 ? "Nothing queued" : `${queue.length} queued${heldNote}`;
+  const next = queue.find((row) => !row.held)?.prompt_id ?? null;
+  const action = wait?.action ?? null;
   return (
     <section className="chat-queue-list" aria-label="Queued messages" data-testid="queue">
       <div className="chat-queue-head">
-        <span>
-          {queue.length === 0 ? "Nothing queued" : `${queue.length} queued${held ? " · held" : ""}`}
-        </span>
-        {held ? (
-          <button
-            type="button"
-            className="g-button g-button-24"
-            data-testid="send-queued"
-            title="Held messages wait for you after a stop, an error or a restart."
-            onClick={onSendQueued}
+        {wait ? (
+          <span
+            className="chat-queue-reason"
+            data-testid="queue-reason"
+            data-test-reason={wait.reason}
+            data-failed={wait.failed ? "" : undefined}
+            title={wait.detail ?? undefined}
+            role="status"
           >
-            Send queued
-          </button>
-        ) : null}
+            <span className="chat-queue-dot" aria-hidden="true" />
+            <span className="chat-queue-why">
+              {wait.text}
+              {queue.length > 0 ? <span className="chat-queue-count"> · {count}</span> : null}
+            </span>
+          </span>
+        ) : (
+          <span>{count}</span>
+        )}
+        <span className="chat-queue-head-actions">
+          {action === "send_now" && next !== null && onSendNow ? (
+            <button
+              type="button"
+              className="g-button g-button-24"
+              data-testid="queue-send-now"
+              title={wait?.detail ?? "Send the next message now"}
+              onClick={() => onSendNow(next)}
+            >
+              Send now
+            </button>
+          ) : null}
+          {action === "start" && onStart ? (
+            <button
+              type="button"
+              className="g-button g-button-24"
+              data-testid="queue-start"
+              onClick={onStart}
+            >
+              {wait?.reason === "start_failed" ? "Retry" : "Start"}
+            </button>
+          ) : null}
+          {action === "recreate" && onRecreate ? (
+            <button
+              type="button"
+              className="g-button g-button-24"
+              data-testid="queue-recreate"
+              onClick={onRecreate}
+            >
+              Recreate folder
+            </button>
+          ) : null}
+          {held ? (
+            <button
+              type="button"
+              className="g-button g-button-24"
+              data-testid="send-queued"
+              title="Held messages wait for you after a stop, an error or a restart."
+              onClick={onSendQueued}
+            >
+              Send queued
+            </button>
+          ) : null}
+        </span>
       </div>
       {queue.length > 0 ? (
         <ul className="chat-queue" ref={list}>
@@ -160,6 +230,18 @@ export function QueueList({
                       ) : null}
                     </span>
                   ) : null}
+                  {row.held && onSendNow ? (
+                    <button
+                      type="button"
+                      className="g-button g-button-ghost g-button-24 chat-queue-send"
+                      data-testid="queued-send"
+                      aria-label="Send this message now"
+                      title="Send this message now; the others stay held"
+                      onClick={() => onSendNow(row.prompt_id)}
+                    >
+                      Send
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="g-button g-button-ghost g-button-icon g-button-24"
@@ -176,7 +258,7 @@ export function QueueList({
           ))}
         </ul>
       ) : null}
-      {held ? (
+      {held && wait?.reason !== "held" ? (
         <p className="chat-queue-note">
           Held messages wait for you after a stop, an error or a restart.
         </p>

@@ -10,6 +10,7 @@ import type {
 } from "../../bindings";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
+import { queueWaitView } from "../../lib/chat/queueWait";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
@@ -57,6 +58,7 @@ export function ChatView({
   active = true,
   onCommands,
   terminals = null,
+  now,
 }: {
   readonly chatId: string;
   readonly transport: Transport;
@@ -71,8 +73,10 @@ export function ChatView({
   readonly onCommands?: (commands: readonly PaletteCommand[]) => void;
   /** The chat screen's docked terminals; they outlive this view, so shells survive a chat switch. */
   readonly terminals?: TerminalPanels | null;
+  /** The store's clock (the still-working hint's); the development previews move it. */
+  readonly now?: () => number;
 }) {
-  const [store] = useState(() => new ChatStore(chatId, transport));
+  const [store] = useState(() => new ChatStore(chatId, transport, now ? { now } : {}));
   const terminalOpen = useSyncExternalStore(
     terminals?.subscribe ?? noSubscribe,
     () => terminals?.panel(chatId).open ?? false,
@@ -472,6 +476,17 @@ export function ChatView({
 
   // The session's own word, not the marks: which prompts are held is exact only per snapshot.
   const held = state.session?.queue_held === true;
+  const agentName = agent?.name ?? state.chat.agent_name;
+  // Every real agent can interrupt a turn; until its lists arrive, assume it can.
+  const canInterrupt = state.lists?.capabilities?.interrupt !== false;
+  const wait = queueWaitView(state.session?.queue_wait, agentName, {
+    canInterrupt,
+    canRecreate: missingTree !== null,
+  });
+  const nextQueued = state.queue.find((row) => !row.held)?.prompt_id ?? null;
+  // A quiet turn's line offers Send now itself; the queue's head then just says why it waits.
+  const stallSendsNow = state.stillWorkingMinutes !== null && nextQueued !== null && canInterrupt;
+  const queueWait = stallSendsNow && wait?.action === "send_now" ? { ...wait, action: null } : wait;
   return (
     <div
       className="chat-view"
@@ -597,13 +612,22 @@ export function ChatView({
               <StillWorking
                 minutes={state.stillWorkingMinutes}
                 onStop={() => void store.interrupt()}
+                onSendNow={
+                  stallSendsNow && nextQueued !== null
+                    ? () => void store.sendNow(nextQueued)
+                    : undefined
+                }
               />
             ) : null}
             <QueueList
               queue={state.queue}
               held={held}
+              wait={queueWait}
               onRemove={(promptId) => void store.cancelQueued(promptId)}
               onSendQueued={() => void store.resumeQueue()}
+              onSendNow={(promptId) => void store.sendNow(promptId)}
+              onStart={() => startSession(false)}
+              onRecreate={missingTree ? () => void reviewRecreate() : undefined}
               onLoadText={(promptId) => store.queuedText(promptId)}
               onEdit={(promptId, text) => store.editQueued(promptId, text)}
               onMove={(promptId, index) => store.moveQueued(promptId, index)}
@@ -796,17 +820,34 @@ export function ChatView({
   );
 }
 
-/** A turn quiet for a minute or more: says so and offers Stop. Nothing is ever stopped by itself. */
+/**
+ * A turn quiet for a minute or more: says so and offers Stop, and Send now when a message waits
+ * behind it. Nothing is ever stopped by itself.
+ */
 export function StillWorking({
   minutes,
   onStop,
+  onSendNow,
 }: {
   readonly minutes: number;
   readonly onStop: () => void;
+  /** Stops the turn and sends the next queued message. */
+  readonly onSendNow?: () => void;
 }) {
   return (
     <div className="chat-still" role="status" data-testid="still-working">
       <span>Still working (no output for {minutesLabel(minutes)})</span>
+      {onSendNow ? (
+        <button
+          type="button"
+          className="g-button g-button-28"
+          data-testid="still-working-send-now"
+          title="Stop this turn and send the next message"
+          onClick={onSendNow}
+        >
+          Send now
+        </button>
+      ) : null}
       <button type="button" className="g-button g-button-28" onClick={onStop}>
         Stop
       </button>

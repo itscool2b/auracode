@@ -220,10 +220,16 @@ pub struct SessionTimings {
     pub stop_kill_after: Duration,
     /// `attach` fails after this long.
     pub attach_timeout: Duration,
+    /// An agent that reports work in progress while no prompt of auracode's is open (its Stop
+    /// hooks, background tasks, a lost idle report) counts as idle for the queue after this long.
+    /// Its own result-to-idle gap is milliseconds and Stop hooks take seconds, so 15 s never cuts
+    /// a normal turn short, while a missing report delays the next prompt only briefly. The agent
+    /// queues a prompt that reaches it while it still works.
+    pub idle_grace: Duration,
 }
 
 impl SessionTimings {
-    /// 16 ms, 100 ms, 200 ms, 5 s, 3 s, 2 s, 15 s, 5 s.
+    /// 16 ms, 100 ms, 200 ms, 5 s, 3 s, 2 s, 15 s, 5 s, 15 s.
     pub const STANDARD: SessionTimings = SessionTimings {
         flush_live: Duration::from_millis(16),
         flush_idle: Duration::from_millis(100),
@@ -233,6 +239,7 @@ impl SessionTimings {
         quit_cancel_grace: Duration::from_secs(2),
         stop_kill_after: Duration::from_secs(15),
         attach_timeout: Duration::from_secs(5),
+        idle_grace: Duration::from_secs(15),
     };
 }
 
@@ -992,6 +999,25 @@ impl SessionManager {
     pub async fn resume_queue(&self, chat_id: &str) -> Result<(), SessionError> {
         self.ask(chat_id, |reply| ChatMsg::ResumeQueue { reply })
             .await
+    }
+
+    /// "Send now": the queued prompt goes next, released if it was held. A running turn is
+    /// interrupted first when the agent can interrupt one; an agent that only reports background
+    /// work gets it at once; a stopped agent starts. The other queued prompts keep their place and
+    /// hold. Answers the queue after the change.
+    pub async fn send_now(
+        &self,
+        chat_id: &str,
+        prompt_id: &str,
+    ) -> Result<Vec<aura_protocol::session::QueuedPrompt>, SessionError> {
+        if self.shared().is_shutting_down() {
+            return Err(SessionError::ShuttingDown);
+        }
+        self.ask(chat_id, |reply| ChatMsg::SendNow {
+            prompt_id: prompt_id.to_owned(),
+            reply,
+        })
+        .await
     }
 
     pub async fn interrupt(&self, chat_id: &str) -> Result<(), SessionError> {

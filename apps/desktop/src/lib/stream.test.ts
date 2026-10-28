@@ -301,6 +301,7 @@ describe("applyBatch", () => {
             autonomy: "full_auto",
             queue_held: false,
             revision: 0,
+            queue_wait: null,
           },
           permission("p1", "Run rm?"),
           permission("p2", "Run ls?"),

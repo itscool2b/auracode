@@ -31,7 +31,10 @@
 //!    requests from background work.
 //! 9. A driver with work that outlives a prompt emits `RunState` before `Ready` and on every run
 //!    state change. Its `TurnEnded` finishes the prompt only; `RunState { idle: true }` permits
-//!    another prompt. Drivers that omit `RunState` retain the turn-based readiness contract.
+//!    another prompt. Drivers that omit `RunState` retain the turn-based readiness contract. The
+//!    session also sends the next prompt when the agent reported work in progress, with no prompt
+//!    open, for its idle grace without an idle report, or when the person presses Send now; a
+//!    driver whose agent queues input during such work accepts that prompt.
 //!
 //! Error text crosses raw: a driver holds no session redactor, so it puts stderr tails and the
 //! agent's error text into [`DriverError`] and [`DriverExit::Crashed`] unredacted, and never writes

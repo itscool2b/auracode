@@ -178,6 +178,45 @@ async fn interrupt_cancels_checkpoint_wait_and_holds_the_unsent_prompt() {
     );
 }
 
+/// Every prompt waits for its checkpoint; meanwhile the queue says so, then the prompt goes.
+#[tokio::test]
+async fn a_saving_checkpoint_says_why_the_prompt_waits() {
+    let (driver, handle) = script();
+    let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let service = enable(&mut rig, true);
+    let gate = service.hold_for_test().await;
+    let chat = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("chat");
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    rig.manager
+        .send(&chat.id, "after the checkpoint".into())
+        .await
+        .expect("send");
+    status(&rig, &chat.id, SessionStatus::Running).await;
+    let attached = rig
+        .manager
+        .attach(&chat.id, Arc::new(Sink::default()))
+        .await
+        .expect("state");
+    assert_eq!(attached.snapshot.queue.len(), 1);
+    assert_eq!(
+        attached.snapshot.session.queue_wait,
+        Some(aura_protocol::QueueWait::SavingCheckpoint)
+    );
+    drop(gate);
+    handle.wait_for(CommandMatch::Prompt).await;
+    let attached = rig
+        .manager
+        .attach(&chat.id, Arc::new(Sink::default()))
+        .await
+        .expect("state");
+    assert!(attached.snapshot.queue.is_empty());
+    assert_eq!(attached.snapshot.session.queue_wait, None);
+}
+
 #[tokio::test]
 async fn background_work_started_during_capture_keeps_prompt_queued_until_idle() {
     let (driver, handle) = script();
