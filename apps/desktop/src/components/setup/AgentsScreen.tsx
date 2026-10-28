@@ -122,7 +122,7 @@ export function AgentRoster({
                     </p>
                     <div className="setup-agent-links">
                       {agent.availability.state === "missing" &&
-                      ["claude", "codex", "pi"].includes(agent.id) ? (
+                      ["claude", "codex", "pi", "opencode"].includes(agent.id) ? (
                         <InstallAgent
                           agentId={agent.id}
                           agentName={agent.name}
