@@ -1386,7 +1386,7 @@ details.setup-install-review[open] > summary::before {
 }
 
 /* A row's shortcut sits at its end, as keycaps (Show terminal, Ctrl `). */
-.chat-header-actions .chat-keys {
+.chat-header-actions .g-menu-item .chat-keys {
   margin-left: auto;
 }
 
