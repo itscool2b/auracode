@@ -284,15 +284,17 @@ function Preview() {
     );
   if (view === "agents")
     return (
-      <AgentsScreen
-        app={app}
-        transport={transport}
-        onBack={() => setView("done")}
-        onSetup={() => {
-          setRestart(true);
-          setView("setup");
-        }}
-      />
+      <div className="pane-shell g-root">
+        <AgentsScreen
+          app={app}
+          transport={transport}
+          onBack={() => setView("done")}
+          onSetup={() => {
+            setRestart(true);
+            setView("setup");
+          }}
+        />
+      </div>
     );
   if (view === "done")
     return (

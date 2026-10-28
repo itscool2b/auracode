@@ -737,9 +737,16 @@ h1 + .settings-group {
   left: 84px;
 }
 
+/*
+ * One row style with the chat sidebar (6.2): the fill is a layer under the words that fades in and
+ * grows from 96%, so the hand lands softly; pressed, it steps to surface-3 at once; the open page
+ * keeps a surface-3 fill that settles in under the row it moves to and eases out of the one it
+ * leaves.
+ */
 .settings-back,
 .settings-sidebar nav button {
   position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
@@ -755,9 +762,24 @@ h1 + .settings-group {
   line-height: var(--g-leading-ui);
   text-align: left;
   cursor: pointer;
+  transition: color var(--g-dur-micro) var(--g-ease);
+}
+
+.settings-back::before,
+.settings-sidebar nav button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background-color: var(--g-surface-2);
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none;
   transition:
-    background-color var(--g-dur-micro) var(--g-ease),
-    color var(--g-dur-micro) var(--g-ease);
+    opacity var(--g-dur-fast) var(--g-ease),
+    transform var(--g-dur-panel) var(--g-ease-quint),
+    background-color var(--g-dur-micro) var(--g-ease);
 }
 
 .settings-back svg,
@@ -792,8 +814,13 @@ h1 + .settings-group {
 @media (hover: hover) {
   .settings-back:hover,
   .settings-sidebar nav button:hover {
-    background-color: var(--g-surface-2);
     color: var(--g-fg-1);
+  }
+
+  .settings-back:hover::before,
+  .settings-sidebar nav button:hover::before {
+    opacity: 1;
+    transform: none;
   }
 
   .settings-back:hover svg,
@@ -802,9 +829,11 @@ h1 + .settings-group {
   }
 }
 
-.settings-back:active,
-.settings-sidebar nav button:active {
+.settings-back:active::before,
+.settings-sidebar nav button:active::before {
   background-color: var(--g-surface-3);
+  opacity: 1;
+  transform: none;
   transition-duration: 0ms;
 }
 
@@ -816,13 +845,32 @@ h1 + .settings-group {
 
 /* The open page: Grok's filled pill, ink and 500. */
 .settings-sidebar nav button[aria-current] {
-  background-color: var(--g-surface-3);
   color: var(--g-fg-1);
   font-weight: 500;
 }
 
+.settings-sidebar nav button[aria-current]::before {
+  background-color: var(--g-surface-3);
+  opacity: 1;
+  transform: none;
+}
+
 .settings-sidebar nav button[aria-current] svg {
   color: var(--g-fg-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-back::before,
+  .settings-sidebar nav button::before {
+    transform: none;
+    transition-property: opacity, background-color;
+  }
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"])
+  :is(.settings-back, .settings-sidebar nav button)::before {
+  transform: none;
+  transition: none;
 }
 
 /* The divider before the links out: an 8px band with its hairline 4px down, so the rows after it

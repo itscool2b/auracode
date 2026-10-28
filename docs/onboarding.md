@@ -6,20 +6,21 @@ revision checked and acknowledged after an atomic write. Invalid data is preserv
 future formats are left unchanged. A failed save remains visible and can be retried or bypassed
 without claiming success. Re-running setup preserves the user's motion and project selection.
 
-The desktop loads cached detection while presenting the intro: a full-window dither field that
-condenses into the seal and turtle logo, with "auracode" rising under it. The first scene lasts
-1.8 seconds, a warm boot 240 ms. Escape, Enter or Skip intro ends it early; reduced motion holds
-one still frame of the formed mark and notification chat navigation bypasses it. Smoke/stress
+The desktop loads cached detection while presenting the intro: the window lights up like water
+seen from below (Shallows), a seal and a turtle glide in and shrink into the seal and turtle logo,
+and "auracode" rises under it. The first scene lasts 1.8 seconds, a warm boot 240 ms. Escape, Enter
+or Skip intro ends it early; reduced motion holds the formed mark still on the lit water and
+notification chat navigation bypasses it. Smoke/stress
 launches do not enter setup. No vendor login, install, update, credential inspection or model
 prompt is triggered by opening setup or Agents. Explicit status and maintenance buttons use the
 existing Rust vendor commands; Sign in opens the existing terminal sheet whose Start action is
 separately explicit.
 
 Setup is four steps (Welcome, Your agents, Account, First project) in one calm, centred column
-after Grok's start screen, over Graphite's dither field gathered at the window's sides as on the
-website hero (docs/design/visual-language.md, 4.15 and 6.17). Every step is skippable: Continue
-never requires anything, the progress pixels visit any step and Skip setup finishes from
-anywhere. The step is saved on every move, so quitting halfway resumes there. Motion is not a
+after Grok's start screen, on one card over window-wide lit water with seals and turtles passing
+behind it, as on the website hero (docs/design/visual-language.md, 4.16 and 6.17). Every step is
+skippable: Continue never requires anything, the progress bars visit any step and Skip setup
+finishes from anywhere. The step is saved on every move, so quitting halfway resumes there. Motion is not a
 step: Full already follows the system's reduced motion and Settings changes it; a setup saved at
 the retired motion step resumes at First project. Keyboard focus moves to each step's heading.
 Enter advances except inside controls, editable content, menus and dialogs. Motion preferences

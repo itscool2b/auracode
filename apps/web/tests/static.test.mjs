@@ -18,7 +18,7 @@ test("public pages are prerendered, dark and usable without JavaScript", async (
   assert.match(downloads, /Not published/);
   assert.doesNotMatch(downloads, /href="[^"]+\.(exe|dmg)"/);
   await access(new URL("images/desktop-dark.png", root));
-  for (const width of [480, 960, 1440])
+  for (const width of [480, 960, 1440, 2240])
     await access(new URL(`images/desktop-dark-${width}.webp`, root));
   const home = await readFile(new URL("index.html", root), "utf8");
   assert.match(home, /<picture><source[^>]*type="image\/webp"/);

@@ -1,6 +1,6 @@
 /**
- * The Graphite values code needs as numbers or hex strings: the canvas of a DitherField cannot read
- * CSS custom properties per pixel, and contrast is checked in tests. tokens.css is the source of
+ * The Graphite values code needs as numbers or hex strings: build steps rasterise brand images from
+ * them (the website social card), and contrast is checked in tests. tokens.css is the source of
  * truth for styling; tokens.test.ts fails if the two drift.
  */
 
@@ -34,9 +34,6 @@ export const GRAPHITE_COLORS = {
   "water-deep": "#050505",
   "shade-near": "#080808",
   "shade-far": "#121212",
-  "dither-1": "#2e2e2e",
-  "dither-2": "#4d4d4d",
-  "dither-3": "#858585",
 } as const;
 
 export type GraphiteColor = keyof typeof GRAPHITE_COLORS;
@@ -79,19 +76,6 @@ export const GRAPHITE_EASINGS = {
   reveal: [0.22, 1, 0.36, 1],
   in: [0.4, 0, 1, 1],
 } as const satisfies Record<string, readonly [number, number, number, number]>;
-
-/**
- * Dither palettes: the grey levels painted above black, darkest first. `quiet` sits behind reading
- * content (the desktop intro), `standard` is the website hero, `bright` is for type made of pixels
- * (the footer wordmark), where the top level has to read as ink.
- */
-export const DITHER_PALETTES = {
-  quiet: ["#191919", "#2e2e2e", "#4d4d4d"],
-  standard: ["#2e2e2e", "#4d4d4d", "#858585"],
-  bright: ["#4d4d4d", "#a3a3a3", "#ededed"],
-} as const satisfies Record<string, readonly string[]>;
-
-export type DitherPaletteName = keyof typeof DITHER_PALETTES;
 
 function channel(value: number): number {
   const c = value / 255;

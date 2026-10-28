@@ -5,7 +5,6 @@ import { createFrameClock } from "../frameClock";
 import { orbitClock, createFrameClock as orbitCreateFrameClock } from "../orbit/clock";
 import { CopyButton as OrbitCopyButton } from "../orbit/index";
 import { CopyButton } from "./CopyButton";
-import { DitherField } from "./DitherField";
 import graphiteCss from "./graphite.css?raw";
 import * as graphite from "./index";
 import { Keycap } from "./Keycap";
@@ -15,46 +14,10 @@ import { PixelLoader } from "./PixelLoader";
 import { StatusDot } from "./StatusDot";
 
 /*
- * The website prerenders with React Router, so every component must render on a server: no window,
- * no document, no canvas context. These run in Node, where touching any of them throws.
+ * The website prerenders with React Router, so every component must render on a server: no window
+ * and no document. These run in Node, where touching either throws.
  */
 describe("server rendering", () => {
-  it("renders a decorative DitherField as an empty canvas, hidden from assistive tech", () => {
-    const html = renderToString(createElement(DitherField, { className: "hero-field" }));
-    expect(html).toMatch(/^<div class="g-dither hero-field" aria-hidden="true">/);
-    expect(html).toContain('<canvas class="g-dither-canvas">');
-    expect(html).not.toContain("<img");
-  });
-
-  it("ships the fallback image for no-JS visitors and the first paint", () => {
-    const html = renderToString(
-      createElement(DitherField, { fallbackSrc: "/hero-dither.png", style: { height: 480 } }),
-    );
-    expect(html).toContain('<img class="g-dither-fallback" src="/hero-dither.png" alt=""');
-    expect(html).toContain("height:480px");
-  });
-
-  it("keeps revealed content readable: no aria-hidden, wrapped above the canvas in source", () => {
-    const html = renderToString(
-      createElement(
-        DitherField,
-        { target: { kind: "image", src: "/shot.png" }, progress: 0.4, reveal: true },
-        createElement("img", { src: "/shot.png", alt: "The auracode window" }),
-      ),
-    );
-    expect(html).not.toContain("aria-hidden");
-    expect(html).toContain('data-reveals=""');
-    expect(html).toContain(
-      '<div class="g-dither-content"><img src="/shot.png" alt="The auracode window"/>',
-    );
-  });
-
-  it("names a meaningful field as an image", () => {
-    const html = renderToString(createElement(DitherField, { label: "auracode" }));
-    expect(html).toContain('role="img"');
-    expect(html).toContain('aria-label="auracode"');
-  });
-
   it("renders the logo in currentColor, decorative unless named, small variant at 24px and below", () => {
     const html = renderToString(createElement(Logo, { size: 16 }));
     expect(html).toContain('fill="currentColor"');
@@ -121,14 +84,15 @@ describe("module surface", () => {
     for (const name of [
       "AgentMark",
       "CopyButton",
-      "DitherField",
+      "Creature",
       "Keycap",
       "PixelLoader",
       "Logo",
+      "Shallows",
       "StatusDot",
+      "Swimmers",
       "Wordmark",
       "agentCode",
-      "renderDitherFrame",
       "logoSvg",
       "LOGO_PATH",
       "GRAPHITE_COLORS",
@@ -136,5 +100,12 @@ describe("module surface", () => {
     ]) {
       expect(graphite, name).toHaveProperty(name);
     }
+  });
+
+  it("no longer ships the dither field, its engine or its sprites (Shallows replaced them)", () => {
+    for (const name of ["DitherField", "renderDitherFrame", "paintSprites", "DITHER_PALETTES"]) {
+      expect(graphite, name).not.toHaveProperty(name);
+    }
+    expect(graphiteCss).not.toContain("g-dither");
   });
 });

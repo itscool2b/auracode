@@ -6,8 +6,8 @@ accent, **volt** `#CCFF33`, means look here. **Shallows replaces the dither fiel
 surface on 2026-10-28 (owner decision):** lit water seen from below, with seals and turtles passing
 as dark silhouettes (4.16). The foundation ships in `@auracode/ui/graphite` (tokens, stylesheet,
 `Shallows`, `Swimmers`, `Creature`, `AgentMark`, `Logo`, `Wordmark`, `StatusDot`,
-`PixelLoader`, `Keycap`, `CopyButton`, and `DitherField` until the app no longer uses it). The
-website is built in Shallows; the desktop app moves next. Every number here is meant to be built as written. Motion values are
+`PixelLoader`, `Keycap` and `CopyButton`). The website and the desktop app are built in Shallows.
+Every number here is meant to be built as written. Motion values are
 measured on the reference sites (`target/design-research/motion.md`, captured 2026-10-26); the
 few that are not are marked *provisional*.
 
@@ -24,8 +24,9 @@ and for screens not yet moved.
 **Dither history.** From 2026-10-26 to 2026-10-28 the signature was a live ordered-dither field
 with pixel-art seals and turtles swimming through it. The owner rejected it as a messy background,
 and the creatures glitched as they eased away from the pointer. Shallows keeps the animals and the
-calm and drops the texture: one grey fade, flat silhouettes, transform-only motion. The website no
-longer uses or ships the dither engine (4.15 documents the component while the app still uses it).
+calm and drops the texture: one grey fade, flat silhouettes, transform-only motion. Once neither
+the website nor the app used it, the dither engine (`DitherField`, its renderer, sprites and
+palettes) was deleted from `@auracode/ui` (2026-10-28); 4.15 keeps a one-line note.
 
 ---
 
@@ -186,7 +187,7 @@ surface-4 (4.3:1): selected rows use fg-2 or fg-1.
 
 | Token | Value | Meaning |
 |---|---|---|
-| `--g-volt` | `#CCFF33` (17.9:1 on bg) | Look here: needs you, live, new, the glint, lit dither pixels. Text or a small mark |
+| `--g-volt` | `#CCFF33` (17.9:1 on bg) | Look here: needs you, live, new, the glint. Text or a small mark |
 | `--g-volt-tint` | `rgb(204 255 51 / 0.12)` | Behind "New" and needs-you chips only |
 | `--g-green` | `#3DD68C` (11.2:1) | Passed, allowed, added. Never "done": done is a white check |
 | `--g-green-tint` | `rgb(61 214 140 / 0.12)` | Behind pass chips |
@@ -223,10 +224,6 @@ Comments are dim, never italic. ANSI inverse renders as the hue at 16% behind th
 **Project marks**: `--g-project-slate #8A98A6`, `--g-project-sand #A59E92`,
 `--g-project-sage #8C9C88`, `--g-project-clay #A88E80`. Four quiet tones a person can give a
 project; they colour that project's own swatch and nothing else, never chrome or text.
-
-**Dither palettes** (greys above black, darkest first): `quiet` `#191919 #2E2E2E #4D4D4D`
-(behind reading content), `standard` `#2E2E2E #4D4D4D #858585` (hero), `bright`
-`#4D4D4D #A3A3A3 #EDEDED` (type made of pixels). Lit pixels are volt in every palette.
 
 ### 3.2 Type
 
@@ -332,7 +329,7 @@ Measured on the reference sites (`target/design-research/motion.md`); only the e
 | Easing | Curve | Job | Source |
 |---|---|---|---|
 | `--g-ease` | `cubic-bezier(0.4, 0, 0.2, 1)` | Hover colour and fill, toggles, menus | x.ai, X Money, Vercel, Aside |
-| `--g-ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Letters, underline and line draws, dither reveal | x.ai |
+| `--g-ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Letters, underline and line draws | x.ai |
 | `--g-ease-quint` | `cubic-bezier(0.23, 1, 0.32, 1)` | Headline flip-up, panels, accordion, dialogs | X Money |
 | `--g-ease-smooth` | `cubic-bezier(0.32, 0.72, 0, 1)` | Sibling dims, large media reveals | X Money |
 | `--g-ease-settle` | `cubic-bezier(0, 0.7, 0.3, 1)` | Button hover (fast start, slow tail) | Harvey |
@@ -354,7 +351,7 @@ Measured on the reference sites (`target/design-research/motion.md`); only the e
 | `--g-dur-dim` | 500ms | Sibling dim, media crossfade | X Money, Harvey |
 | `--g-dur-step` | 600ms | One word-wheel step | Harvey |
 | `--g-dur-headline` | 650ms | Per-word flip-up | X Money, x.ai |
-| `--g-dur-reveal` | 800ms | Underline and line draws, dither reveal fade | x.ai |
+| `--g-dur-reveal` | 800ms | Underline and line draws | x.ai |
 | `--g-dur-count` | 950ms | Count-up | AI in Design |
 | `--g-dur-tick` | 1100ms | Word-wheel period | Harvey |
 | `--g-dur-shimmer` | 1400ms | One shimmer sweep, linear, only while live | X Money |
@@ -381,10 +378,8 @@ in components. Movement durations (`letter`, `panel`, `row`, `step`, `headline`,
 transform; the rotating word stops on its first word with a static grey rule and no glint; the word
 wheel and tab timers stop advancing (the active tab shows a full rule); counters show their final
 values; the shimmer becomes static fg-2; rows render in place; the pixel check appears whole;
-loaders hold their static pattern; swimmers hold where they are and the shimmer stops; every
-DitherField renders one still frame and owns no animation frame, and a field that reveals content
-shows the content at once. Content is never hidden waiting
-for motion.
+loaders hold their static pattern; swimmers hold where they are and the shimmer stops. Content is
+never hidden waiting for motion.
 
 ### 3.9 Layout tokens
 
@@ -642,96 +637,18 @@ The website builds:
 - `og.png`, a 1200 x 630 social card: the lit water of Shallows with a turtle and a seal, and the
   logo in fg-1 at the centre.
 
-### 4.15 `DitherField`
+### 4.15 `DitherField` (removed)
 
-No longer the brand surface (2026-10-28): Shallows (4.16) replaced it. The website does not use or
-ship it; the app keeps it on its first-launch intro and onboarding until its Shallows branch lands,
-and the component stays in `@auracode/ui` until nothing uses it.
-
-The signature: a live ordered dither of an evolving field, on a 2D canvas (no WebGL).
-
-**Rendering.** The canvas holds one pixel per cell and is scaled up with `image-rendering:
-pixelated`. A cell is `cell` CSS px (default 4), snapped to whole device pixels
-(`round(cell * devicePixelRatio)`), and the canvas is sized to whole cells, so the upscale never
-makes uneven cells; past 240,000 cells the cell grows. Each frame:
-
-1. **Field.** Seeded 3D value noise (quintic, 256-cell lattice), fbm of 4 octaves rotated about 37
-   degrees and scaled 2.03 per octave so no lattice shows, domain-warped by two 2-octave fbm lookups
-   (strength 2.4). Base wavelength 420 CSS px; sampled every 4 cells and interpolated, because the
-   field is deliberately smooth and the dither supplies the texture. Time moves the third axis at
-   0.03 units a second plus a slow drift, so forms fold and travel without churning.
-2. **Shape.** `density` (default 0.5) sets the floor `0.74 - 0.36 * density`; above it a smooth
-   ramp of 0.24 reaches full; the result is posterised into 4 plateaus with soft 20% edges, so the
-   field reads as drawn areas of tone with patterned transitions rather than fog. About two thirds
-   of a default field is black.
-3. **Dither.** Bayer 8x8 thresholds quantise each cell to black plus the palette's greys
-   (`standard` by default; the palettes are in 3.1).
-4. **Volt.** Where the unlensed field passes 0.72, a fixed per-cell hash below `accent` (default
-   0.02) lights the cell volt: a few dozen pixels on a hero, appearing as peaks pass over them like
-   lit sensor pixels. Never from the lens, never on image targets, a fifth as often inside text and
-   grid targets.
-
-**Props.** `className`, `style`; `children` (real content under the field); `cell` 4; `speed` 1
-(0 holds); `density` 0.5; `edges` 0; `ceiling` 1; `accent` 0.02; `interactive` false; `target`;
-`progress` (0, or 1 when only a target is set); `reveal` false; `order` "scatter"; `palette`
-"standard" (or 2 to 4 greys); `transparent` false (black cells clear, to layer over a surface);
-`clearing`; `fallbackSrc`; `still` false; `seed` `0x6a09e667`; `fps` 30; `sprites` (none); `label`
-(otherwise `aria-hidden`).
-
-- **Lens** (`interactive`, fine pointers with hover only): within 120 CSS px of the pointer the
-  field develops: the floor drops by up to 0.16 and contrast rises by up to 60%, both falling off
-  with the square of distance; the lens eases toward the pointer and fades out when it leaves.
-- **Target**: `{ kind: "text", text, fontFamily, fontWeight 600, fontSize | "fit", tracking
-  -0.06em, align, anchor, inset, texture 0.25 }`, `{ kind: "image", src, fit "cover", texture 0 }`
-  (same-origin images; luminance lifted by a 0.6 gamma so dark UI keeps texture; a tainted image
-  leaves the field as noise and still reveals), `{ kind: "grid", rows, scale }` (a pixel grid,
-  crisp at any size), or `{ kind: "path", d, viewBox, height 0.6, align, anchor, inset, texture
-  0.2 }` (one even-odd SVG path such as `LOGO_PATH`, `height` a fraction of the field's height,
-  capped by its width). Text waits for its font to load and redraws.
-  `texture` lets the live field shade the resolved target.
-- **Dissolve** (`progress` 0 to 1): each cell leaves the field when progress passes its threshold:
-  half a per-cell random value, half a slow noise, so pixels go in ragged islands rather than as
-  salt and pepper; `order` "down", "up" or "radial" adds a direction. Cells crossing the front
-  flash one step brighter for 2.5% of progress.
-- **Reveal**: with `reveal`, at progress 1 the canvas fades out over 800ms `--g-ease-out` and stops
-  drawing, showing `children`; it returns if progress drops. Under reduced motion it reveals at
-  once.
-- **Clearing**: an ellipse in fractions of the field (`{ x 0.5, y 0.5, rx, ry }`), or a list of them
-  that multiply, where the field thins to black a pixel at a time, so a headline set over it stays
-  readable.
-- **Edges** (0 to 1): the floor rises by up to 0.12 in the middle and falls by up to 0.2 at the left
-  and right edges, so the field gathers at the sides of a centred layout.
-- **Ceiling** (0 to 1): the brightest the field itself may get. Below 1 its plateaus dither between
-  the top two greys instead of filling solid; sprites keep the full range and read against it.
-- **Sprites** (opt-in, none by default): small luminance grids with 2 to 4 frames (`.` empty, `0`
-  to `9` ninths of full brightness), drawn into the field's luminance before the threshold, so they
-  dither in the same cells and greys as the noise. Each drifts in CSS px a second with an optional
-  sine bob, a lazy roll and a 1-cell black moat, travels fully off one side before entering from the
-  other, mirrors when swimming left, eases away from the lens, fades to black inside a clearing and
-  never lights volt. They ride the field's clock: frozen in place under reduced motion or `still`,
-  paused whenever the field pauses.
-
-**Performance.** Draws from the shared frame clock, at most `fps` (30) times a second, only while
-the field intersects the viewport (64px margin), the page is visible, motion is allowed, `still`
-is off and it is not revealed; otherwise it renders single frames on demand (resize, target or
-progress change). Measured: about 2.5ms a frame in Chromium and 4.9ms in WebKit for a 1440x720
-hero at 4px cells, lens and clearing included.
-
-**Server, no JS, no canvas.** Server rendering emits the wrapper, the optional fallback `<img>` and
-an empty canvas, touching no browser API. The fallback shows until the first frame lands and stays
-if the canvas is unavailable. For a field without a target, `renderDitherFrame({ cols, rows,
-cellPx, seed, density, accent, edges, ceiling, clearing, overlay })` (clearing in cells, time 0,
-the overlay from `paintSprites`) renders the identical first frame in Node, sprites included, so a
-build step can write the fallback PNG at one pixel per cell and the hand-off is seamless. With
-`children` and no scripting, the field steps aside (`@media (scripting: none)`). Give the field a
-size; it fills its box.
+The live ordered-dither field on a 2D canvas was the brand surface from 2026-10-26 to 2026-10-28.
+Shallows (4.16) replaced it, and its engine, sprites and palettes were deleted from `@auracode/ui`
+on 2026-10-28 once neither the website nor the app used them.
 
 ### 4.16 Shallows, `Swimmers` and `Creature`
 
 The brand surface since 2026-10-28 (owner decision, direction B of three concepts): the sea seen
 from below. One rounded panel lit from the top like the water's surface, and seals and turtles
-passing above as dark silhouettes. It replaced the dither field (4.15), which the owner found
-messy, and the pixel sprites that glitched under the pointer.
+passing above as dark silhouettes. It replaced the dither field (4.15, now removed), which the
+owner found messy, and the pixel sprites that glitched under the pointer.
 
 **`Shallows`** (`as`, `shimmer`, `depth`, and any HTML attributes). One panel, radius
 `--g-shallows-radius` 28px (`--g-shallows-radius-compact` 20px on phones), `overflow: hidden`,
@@ -740,8 +657,9 @@ and a single vertical falloff over `--g-shallows-depth` (default the panel's hei
 `--g-water-low` #080808 at 76%, `--g-water-deep` #050505. A soft light at the top centre
 (`--g-water-light`, white at 4.5%) and a 1px rim (`--g-water-rim`, white at 5%). No texture, no
 noise, no lines. `shimmer` adds one layer of caustic light near the surface (`--g-water-caustic`,
-white at 2.8%) that drifts 3% and scales 1.06 over 26s, alternate, transform only; it stops under
-reduced motion. Direct children sit above the light and the swimmers (`z-index: 1`, overridable).
+white at 2.8%) that drifts 3% and scales 1.06 over 26s, alternate, transform only, in steps of
+about 1/30 s along the ease-in-out curve (sampled at eighths), so between steps the compositor has
+nothing to redraw at any refresh rate; it stops under reduced motion. Direct children sit above the light and the swimmers (`z-index: 1`, overridable).
 A quieter panel overrides the water tokens locally, as the website's capabilities panel does.
 
 **`Creature`** (`kind` "seal" or "turtle", `size`, `small`, `facing`, `label`). Flat silhouettes in
@@ -767,9 +685,16 @@ with a CSS width (`size`), `depth` 0 to 1, `heading`, `speed`, `phase` and `tilt
 - **Performance.** Transform only (`translate3d` and `rotate`) on a `will-change` layer, from the
   shared frame clock, so the compositor moves raster that never repaints. The clock runs only while
   the layer is on screen (64px margin) and the page is visible; a step is capped at 50ms so nothing
-  jumps after a hitch or a hidden tab. The server renders each creature at its anchor, and the first
-  live frame is the same frame. Measured on the website (Chromium, 1440 by 900): 0 frames over 25ms
-  while idle, sweeping the pointer across the creatures, scrolling and switching capabilities.
+  jumps after a hitch or a hidden tab. At rest the creatures step about 30 times a second whatever
+  the display's rate (`cadence.ts`: after each step the layer lets go of the frame clock and asks
+  for the next frame 24ms later); they follow every display frame only while one gives way to the
+  pointer or settles back. The server renders each creature at its anchor, and the first live frame
+  is the same frame. Measured on the website (Chromium, 1440 by 900): 0 frames over 25ms while idle,
+  sweeping the pointer across the creatures, scrolling and switching capabilities. Idle for 10s in
+  headed Chromium on a 168Hz display (2026-10-28, `shallows-finish`): New chat's two swimmers cost
+  3.7% of a core in the renderer and 3.6% in the GPU process (11.3% and 12.2% when they stepped on
+  every frame), the website hero with its shimmer 7.0% and 8.7% (17.3% and 19.6%); a hidden or
+  minimised page asks for no frame.
 - **The pointer.** Hover never flickers and never changes layout. With `giveWay` (default, fine
   pointers only) a creature eases out of the pointer's way through a smooth field, read from the
   layer's parent: zero under the pointer and far from it, at most 22px, eased over a 0.9s time
@@ -839,8 +764,9 @@ Centred over the water, 172px below the panel's top (140 on phones):
 - **Lead** (18/28 fg-2, max 540, 28px under): "The coding agents you already use, together in one
   chat on your machine. Free, with nothing to sign up for."
 - **One button** (36px under): the magnetic primary 44 "Download".
-- **Product** (88px under, 56 on phones): the real app (a captured screenshot, WebP sources, real
-  alt text), up to 1120px wide at 16:10, radius 16 (12 on phones), a white 8% ring and one long soft
+- **Product** (88px under, 56 on phones): the real app (the desktop's `?preview=settled` captured at
+  2x by `apps/web/scripts/product-images.mjs`: WebP at 480, 960, 1440 and 2240 wide, a PNG
+  fallback, real alt text), up to 1120px wide at 16:10, radius 16 (12 on phones), a white 8% ring and one long soft
   shadow, with 96px of deep water below it (40 on phones).
 
 **Entrance** (gated on `.js`): the light fades in over 1400ms; the headline's words rise
@@ -860,10 +786,17 @@ least 600px tall, with one seal drifting low at left.
   default", "Queue and steer", "Several chats at once". Under the active row a 2px timer fills over
   6.5s, and the next row takes over when it is full. Under the rows, the active row's one sentence
   cross-fades (14/22 fg-2).
-- **View** (right): one inset window of the app (#050505, radius 16) built from tokens at the app's
-  own sizes: the agent picker; a chat handed from Claude Code to Codex; a turn with its diff and a
-  checkpoint to restore; the autonomy menu over the composer; a running turn with a message queued;
-  five chats with circular status dots, the one that needs you in volt.
+- **View** (right): the app's inset pane (6.1: surface-1, radius 16, its rim and lit top edge drawn
+  over every scene, the faint light) built from tokens and the app's own marks at its own sizes,
+  each after a preview mode of the app as it is today: New chat on lit water with its agent pills
+  (6.13); a chat whose next message hands it from Claude Code to Codex, the handoff waiting above
+  the composer; the chat beside its Changes panel, one file selected to revert from the turn's
+  checkpoint (6.14); the picker over the composer with Effort and Autonomy (6.10, 6.11); a running
+  turn with a message queued and one typed to steer (6.9, 6.12); and the sidebar beside the open
+  chat, every chat's state at its end in circles, the one that needs you in volt and first under
+  Needs you, the logo and Settings at its foot (6.2). Nothing in a view moves on its own. A view
+  under 640px wide keeps each split's point (the Changes panel, the sidebar); under 480px it
+  tightens for phones.
 - **Motion**: the old view clears in 200ms; the new one rises 14px from 0.985 and fades in from
   120ms (460ms opacity, 820ms transform `--g-ease-out`). Hovering, focusing or clicking a row shows
   its view at once and holds the cycle, the active row's rule full, while the pointer or focus stays
@@ -973,7 +906,10 @@ radius 16 (`--ui-pane-radius`), inset 8px from the window's top, right and botto
 sidebar, with a calm rim drawn outside it (1px `--g-line-faint`, so nothing inside can cover it),
 its top edge lit one step brighter (an inset 1px `--g-line`), and a faint light falling from the
 top under the content (a 2% white radial, 280px deep, never over a word). Settings and Diagnostics
-draw the same pane. With the right panel open the main pane narrows and the panel pane (surface-1,
+draw the same pane. Agents and the Plugin library stand alone in it (`.pane-shell`): the pane 8px in
+from every edge of the black window, no sidebar beside it, their content where it was on black, and
+the fills they drew one step above black (a row under the hand, an open row, a quiet well) one
+surface up on the pane. With the right panel open the main pane narrows and the panel pane (surface-1,
 the same radius and rim, 380 wide, 320 to 560 by dragging the 8px gutter, arrow keys in 20px steps
 while it has focus) sits 8px to its right. The top 52px is the drag region; macOS
 traffic lights at x 18 to 70; Windows caption buttons are 46x52 hit areas with 10px fg-2 glyphs,
@@ -1312,8 +1248,11 @@ Delete), tool row (Re-run, Copy command, Copy output).
 Settings replace the pane (⌘,) and follow Grok's settings rows and X Money's grouped wells. The
 sidebar becomes the settings nav on the chat sidebar's geometry (6.2): the logo in the top band,
 "Back to chats", a "Settings" heading on a 32px line 16px below it, then 32px rows 4px apart of a
-16px fg-3 icon at x 20 and a 14/20 fg-2 label at x 44; hover surface-2 and fg-1; the open page is Grok's filled pill
-(surface-3, fg-1 500); a separator before the links out (Agents, Library). Page: a 680px column, a
+16px fg-3 icon at x 20 and a 14/20 fg-2 label at x 44, in the sidebar's one row style: under the
+hand a surface-2 layer fades in under the words (150ms) and grows from 96% (300ms quint) while the
+words turn fg-1, pressed it steps to surface-3 at once, and the open page is Grok's filled pill
+(surface-3, fg-1 500), its fill settling in under the row it moves to and easing out of the one it
+leaves; a separator before the links out (Agents, Plugin library). Page: a 680px column, a
 `.g-text-title` title and nothing under it. Groups (X Money): an optional heading 16/22 500, at
 most one short 14/20 fg-3 line, then a surface-2 well, radius 12, 12px below; 32px between groups.
 A row is a label 14/20 500 with an optional one-line description 12/16 fg-3 and at most one control
@@ -1435,15 +1374,16 @@ saved at the retired motion step resumes at First project. The one primary is "G
 
 ### 6.17a Agents
 
-Vercel's project list. Back to chats and Run setup again (ghosts) on the top line; "Agents" in
-`.g-text-title` with "3 of 9 installed on this computer." under it and Refresh (outline) at right.
+Vercel's project list, in the inset pane on its own (6.1). Back to chats and Run setup again
+(ghosts) on the top line; "Agents" in `.g-text-title` with "3 of 9 installed on this computer."
+under it and Refresh (outline) at right.
 One frame (a 1px line ring drawn over the rows, radius 12) of 60px rows on hairlines: a 32px `AgentMark`, the name 14/20 500
 over the version in mono 12/16 fg-3, the status in 12/16 (a 16px slot and a word: a green check
 in a green-tinted circle and "Installed", a volt dot and "Needs sign-in", a red dot and
 "Unavailable", an fg-4 ring and fg-3 "Not installed", the pulse and fg-3 "Looking"), the date auracode last verified the integration in 12/16 fg-3
 tabular, at most one outline 28 action (Install, Update or Sign in) and a kebab menu (plain rows,
 one divider) for the rest: Sign in, Check sign-in, Update, Installation guide, Copy path. A row
-opens its details on surface-1: the description, facts on hairlines (runs from, installed with,
+opens its details one surface above the pane (surface-2): the description, facts on hairlines (runs from, installed with,
 latest release, updates, verified) and the executable picker.
 
 **Detection** (setup's roster, Agents and New chat alike; Shallows' small-space motion): while an
@@ -1463,13 +1403,13 @@ OpenCode, Hermes). Every other agent keeps its Installation guide.
 
 ### 6.18 Plugin library
 
-Vercel's project pages: Back, "Plugin library" in `.g-text-title` with one line under it and
-Refresh (ghost icon) at right. Below, a 200px column of agents as plain 32px rows (a 16px
+Vercel's project pages, in the inset pane on its own (6.1): Back, "Plugin library" in
+`.g-text-title` with one line under it and Refresh (ghost icon) at right. Below, a 200px column of agents as plain 32px rows (a 16px
 `AgentMark`, the name, a volt status dot only when an update is available; the current one filled
 surface-3), and the chosen agent as one scrolling page beside it: its 32px mark, name 16/22 600 over
 the version in mono and "Updated 4 minutes ago" in 12/16 fg-3, the page's one primary (Add plugin, or
 Add package for Pi) and a kebab for the rest (Refresh listings, Add marketplace, Copy history, Open
-Agents). Under it the harness line in a surface-1 well (a volt dot and Update when a release is
+Agents). Under it the harness line in a surface-2 well (a volt dot and Update when a release is
 newer, a red dot when the binary failed, plain fg-2 otherwise), the reread notice after a version
 change, the agent's one-sentence summary, and Sync across devices as one settings row with its
 switch. Each feature follows as a 14/20 600 heading with its count, one 12/16 fg-3 line saying where
@@ -1571,8 +1511,7 @@ another chat is open; closing a tab, reloading or quitting stops them. Nothing a
   closing panel and the 404; in the app the first launch intro, setup's window, New chat and an
   empty chat (6.13, 6.17), never behind a transcript with messages in it. The app draws no dither.
 - All animation shares one `requestAnimationFrame` loop (`frameClock()`); offscreen, hidden and
-  reduced-motion elements own no frame; swimmers move by transform only; DitherField caps at
-  30fps.
+  reduced-motion elements own no frame; swimmers move by transform only.
 - Long lists virtualise; rows use `contain: layout style`.
 - Pixel geometry lands on whole CSS pixels and uses `shape-rendering: crispEdges`.
 

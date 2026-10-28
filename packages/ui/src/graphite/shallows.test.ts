@@ -274,7 +274,9 @@ describe("Shallows tokens and styles", () => {
     expect(keyframes).toHaveLength(1);
     for (const block of keyframes) {
       const properties = [...block.matchAll(/^\s*([a-z-]+):/gm)].map((m) => m[1]);
-      expect(new Set(properties)).toEqual(new Set(["transform"]));
+      // Each segment steps (about 30 steps a second), so only transform ever changes.
+      expect(new Set(properties)).toEqual(new Set(["transform", "animation-timing-function"]));
+      expect(block).toContain("steps(98, jump-none)");
     }
     expect(section).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation: none/);
     expect(section).toContain("pointer-events: none");

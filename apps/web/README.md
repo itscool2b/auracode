@@ -36,7 +36,12 @@ bar for uniqueness, not copied. Timings come from the live sites, not from stati
 third-party reference image, font or script is shipped.
 
 The product image is a capture of the real desktop interface in its local preview mode, not a
-fabricated mock. Regenerate it from the integrated desktop whenever the app changes visibly. The
+fabricated mock. Regenerate it whenever the app changes visibly with
+`node apps/web/scripts/product-images.mjs`: it captures the desktop's `?preview=settled` at 1440 by
+900 and 2x and writes the WebP sources (480, 960, 1440 and 2240 wide) and the PNG fallback. The
+capabilities panel's views are drawn from tokens after the app's own preview modes (New chat, a
+pending handoff, the Changes panel, the picker, the queue and the sidebar); update them with the
+app. The
 favicons and the social card are generated at build time by `scripts/site-images.ts` from the
 logo's and the creatures' own paths; the social card is drawn in Shallows. The site is built in
 Shallows (`Shallows`, `Swimmers` and `Creature` from `@auracode/ui/graphite`) and ships no dither

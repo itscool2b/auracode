@@ -80,7 +80,7 @@ export function Hero() {
         <picture>
           <source
             type="image/webp"
-            srcSet="/images/desktop-dark-480.webp 480w, /images/desktop-dark-960.webp 960w, /images/desktop-dark-1440.webp 1440w"
+            srcSet="/images/desktop-dark-480.webp 480w, /images/desktop-dark-960.webp 960w, /images/desktop-dark-1440.webp 1440w, /images/desktop-dark-2240.webp 2240w"
             sizes="(max-width: 620px) calc(100vw - 60px), (max-width: 1240px) calc(100vw - 120px), 1120px"
           />
           <img

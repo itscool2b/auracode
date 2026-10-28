@@ -98,7 +98,7 @@ Report 2026 as the bar for uniqueness), adapted to the live protocol.
   inability to ask is explicit. Never turn a generic automatic approval into a persistent rule.
 - Titles come from the agent or first user line, never a hidden title-generation prompt.
 
-**Boot and onboarding.** A skippable 1.6 to 2 second dither-to-mark intro, shortened on warm launch and
+**Boot and onboarding.** A skippable 1.6 to 2 second Shallows intro that forms the mark, shortened on warm launch and
 skipped for links, notifications, and reduced motion. Show the hidden window after first paint;
 use cached detection and reconcile without blocking startup. Onboarding is keyboard-driven,
 resumable, re-runnable, and entirely skippable: welcome, discovery, account, motion preference,
@@ -110,7 +110,7 @@ with M7. No screen promises sync before it works.
 Share Graphite tokens, components and typography with the app. React/TypeScript renders interfaces;
 prerender public pages and serve static assets through Cloudflare. Rust owns API behavior.
 
-- /: dither field, rotating agent name in "One window for [Claude Code].", OS-aware Download and
+- /: Shallows hero (lit water, seals and turtles), rotating agent name in "One window for [Claude Code].", OS-aware Download and
   invited sign-in. Hosted accounts stay invite-only, so the site never offers account creation.
 - /download: every OS/architecture, version, notes, SHA-256 checksums, requirements and unsigned-build
   installation instructions. Works without JavaScript; always permits a different OS choice.
@@ -120,7 +120,8 @@ prerender public pages and serve static assets through Cloudflare. Rust owns API
 - /privacy, /terms, /changelog: accurate processor, retention, export and deletion information.
   Legal copy needs review before public release; a domain suffix alone does not establish jurisdiction.
 - The auracode://signin link prefills email only, never tokens. Display Download beside Open auracode.
-- Reduced motion, keyboard access, and a static dither fallback without JavaScript are required.
+- Reduced motion, keyboard access, and a whole page without JavaScript (swimmers still at their
+  anchors) are required.
 
 ## Projects, chats, agent switching
 - **Project** = name + colour + 1..n folders + optional default agent/model. Folders have a portable
