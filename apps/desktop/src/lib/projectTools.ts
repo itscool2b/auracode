@@ -31,4 +31,11 @@ export const editorName: Record<ProjectEditor, string> = {
   cursor: "Cursor",
   vs_code: "Visual Studio Code",
   vs_code_insiders: "Visual Studio Code Insiders",
+  zed: "Zed",
+  intellij_idea: "IntelliJ IDEA",
+  webstorm: "WebStorm",
+  pycharm: "PyCharm",
+  rustrover: "RustRover",
+  goland: "GoLand",
+  clion: "CLion",
 };

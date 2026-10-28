@@ -177,7 +177,8 @@ export async function checkMergeConflicts(page, url, out, engine) {
   assert.match(text, /\n- src\/orbit\.rs\n- apps\/desktop\/src\/components\/chat\/Sidebar\.tsx\n/);
   assert.match(text, /in C:\/auracode\/worktrees\/owned-one: merge main into/);
   await page.getByRole("button", { name: "Open in Cursor", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Open in Visual Studio Code", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Open in Zed", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Open in RustRover", exact: true }).waitFor();
   await settled(page);
   assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
   await page.screenshot({ path: resolve(out, `${engine}-merge-conflicts.png`) });

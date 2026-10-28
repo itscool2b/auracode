@@ -301,7 +301,7 @@ const projectTools: Pick<ProjectToolsApi, "review" | "openEditor"> = {
       token: `tools-${++reviews}`,
       folder: currentFolder,
       shells: [],
-      editors: params.has("no-editors") ? [] : ["cursor", "vs_code"],
+      editors: params.has("no-editors") ? [] : ["cursor", "zed", "rustrover"],
       expires_at: Date.now() + 600_000,
     };
   },

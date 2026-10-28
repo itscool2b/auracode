@@ -53,6 +53,14 @@ export async function checkProjectTools(page, url, out, engine) {
   await page.goto(`${url}/?preview=project-tools`);
   await page.getByRole("button", { name: "Open in Cursor", exact: true }).click();
   await page.getByRole("status").filter({ hasText: "operating system accepted" }).waitFor();
+  // Zed and the JetBrains IDEs are offered beside the URL-handler editors, each by name.
+  await page.goto(`${url}/?preview=project-tools`);
+  for (const name of ["Zed", "IntelliJ IDEA", "WebStorm", "RustRover"])
+    await page.getByRole("button", { name: `Open in ${name}`, exact: true }).waitFor();
+  await page.screenshot({ path: resolve(out, `${engine}-project-tools-editors.png`) });
+  await page.getByRole("button", { name: "Open in Zed", exact: true }).click();
+  await page.getByRole("status").filter({ hasText: "request for Zed" }).waitFor();
+  assert.deepEqual(await page.evaluate(() => window.projectToolsFixture.calls()), ["editor:zed"]);
   await page.goto(`${url}/?preview=project-tools&stale`);
   await page.getByRole("button", { name: "Review PowerShell terminal", exact: true }).click();
   await start.click();

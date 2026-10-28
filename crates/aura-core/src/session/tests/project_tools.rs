@@ -1,4 +1,8 @@
 use super::*;
+#[cfg(any(windows, target_os = "macos"))]
+use crate::session::EditorOpen;
+#[cfg(any(windows, target_os = "macos"))]
+use aura_protocol::project_tools::ProjectEditor;
 
 fn enable_git(rig: &mut Rig) {
     let env = EnvResolver::fixed(ResolvedEnv {
@@ -145,6 +149,91 @@ async fn several_project_terminals_in_one_folder_each_count_until_they_end() {
     eventually("retired", || !rig.manager.shared().live.contains(&chat.id)).await;
     assert!(rig.manager.shared().live.reserve_folder(&key));
     rig.manager.shared().live.release_folder(&key);
+    let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+    assert!(rig.store.shutdown(Duration::from_secs(5)).await);
+}
+
+/// A synthetic Zed install is offered, opens through its own launcher with the folder as its one
+/// argument, and a launcher replaced after review is refused rather than started.
+#[cfg(any(windows, target_os = "macos"))]
+#[tokio::test]
+async fn a_detected_launcher_editor_opens_the_reviewed_folder_and_refuses_a_replaced_one() {
+    let (driver, _) = ScriptedDriver::new(vec![
+        ready_step("native-editor"),
+        Step::Expect(CommandMatch::Shutdown),
+        Step::Exit(DriverExit::Closed),
+    ]);
+    let install = tempfile::tempdir().unwrap();
+    let mut vars = aura_process::process_env();
+    let launcher = if cfg!(windows) {
+        vars.insert("LOCALAPPDATA".into(), install.path().into());
+        install.path().join("Programs/Zed/Zed.exe")
+    } else {
+        vars.insert("HOME".into(), install.path().into());
+        install
+            .path()
+            .join("Applications/Zed.app/Contents/MacOS/zed")
+    };
+    std::fs::create_dir_all(launcher.parent().unwrap()).unwrap();
+    std::fs::write(&launcher, b"first").unwrap();
+    let mut rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let inner = Arc::get_mut(&mut rig.manager.inner).unwrap();
+    Arc::get_mut(&mut inner.shared).unwrap().deps.env = EnvResolver::fixed(ResolvedEnv {
+        vars,
+        source: EnvSource::Fallback {
+            reason: "synthetic editor install".into(),
+        },
+        warnings: vec![],
+        resolved_at_ms: 0,
+    });
+    let chat = rig.manager.create_chat("mock", &rig.folder).await.unwrap();
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let review = rig.manager.project_tools_review(&chat.id).await.unwrap();
+    assert!(review.editors.contains(&ProjectEditor::Zed));
+    let open = rig
+        .manager
+        .project_editor_open(&chat.id, &review.token, ProjectEditor::Zed)
+        .await
+        .unwrap();
+    let EditorOpen::Launch(launch) = open else {
+        panic!("Zed opens through its launcher");
+    };
+    if cfg!(windows) {
+        assert_eq!(launch.program, launcher);
+        assert_eq!(
+            launch.args,
+            [std::ffi::OsString::from(review.folder.clone())]
+        );
+    } else {
+        assert_eq!(launch.program, PathBuf::from("/usr/bin/open"));
+        assert_eq!(launch.args.last(), Some(&review.folder.clone().into()));
+    }
+    // The review is used up, and a launcher replaced since review is refused.
+    assert!(
+        rig.manager
+            .project_editor_open(&chat.id, &review.token, ProjectEditor::Zed)
+            .await
+            .is_err()
+    );
+    let second = rig.manager.project_tools_review(&chat.id).await.unwrap();
+    std::fs::remove_file(&launcher).unwrap();
+    std::fs::write(&launcher, b"second").unwrap();
+    let refused = rig
+        .manager
+        .project_editor_open(&chat.id, &second.token, ProjectEditor::Zed)
+        .await
+        .err()
+        .expect("a replaced launcher is refused");
+    assert!(refused.to_string().contains("changed after review"));
+    // An editor the review did not offer is refused.
+    let third = rig.manager.project_tools_review(&chat.id).await.unwrap();
+    assert!(!third.editors.contains(&ProjectEditor::CLion));
+    assert!(
+        rig.manager
+            .project_editor_open(&chat.id, &third.token, ProjectEditor::CLion)
+            .await
+            .is_err()
+    );
     let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
     assert!(rig.store.shutdown(Duration::from_secs(5)).await);
 }

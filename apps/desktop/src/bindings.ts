@@ -1437,7 +1437,11 @@ export type ProjectCreate = {
 	folder: string,
 };
 
-export type ProjectEditor = "cursor" | "vs_code" | "vs_code_insiders";
+/**
+ *  Editors detected in their standard install locations. Cursor and the VS Code builds open
+ *  through their OS URL handler; Zed and the JetBrains IDEs through their own detected launcher.
+ */
+export type ProjectEditor = "cursor" | "vs_code" | "vs_code_insiders" | "zed" | "intellij_idea" | "webstorm" | "pycharm" | "rustrover" | "goland" | "clion";
 
 export type ProjectFilePreview = {
 	path: string,

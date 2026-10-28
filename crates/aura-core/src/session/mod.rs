@@ -19,6 +19,7 @@ mod composer;
 mod config_library;
 mod config_vendor;
 mod conversation;
+mod editors;
 mod folder_resolution;
 mod gitworkspaces;
 mod installer;
@@ -46,6 +47,7 @@ mod worktree_setup;
 
 pub use config_library::LibraryRoots;
 pub use config_vendor::{PreparedVendor, VendorLaunch};
+pub use project_tools::{EditorLaunch, EditorOpen};
 pub use worktree_setup::WorktreeSetupLaunch;
 
 use std::collections::HashMap;
