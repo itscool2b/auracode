@@ -1,6 +1,6 @@
 import { PixelLoader, StatusDot } from "@auracode/ui/graphite";
 import { ChevronDown, ChevronRight, Ellipsis, Pin, Plus, Search, SquarePen } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChatSummary, ProjectSummary, WorkspaceSnapshot } from "../../bindings";
 import { folderStateLabel, statusWord } from "../../lib/chat/present";
 import { commandKey, Keys } from "./Keys";
@@ -55,6 +55,50 @@ export function projectName(folder: string): string {
   return parts[parts.length - 1] ?? folder;
 }
 
+/** How long a chat that just appeared keeps its arrival mark: its row's rise, with room to spare. */
+const ARRIVAL_MS = 700;
+
+/**
+ * The chats that appeared after the list first showed, each for ARRIVAL_MS, so their rows rise in
+ * once (motion.css) while the rows already there never move. Measured before paint, so a new row's
+ * first frame is already its arrival's first frame.
+ */
+export function useArrivals(ids: readonly string[] | null): ReadonlySet<string> {
+  const known = useRef<Set<string> | null>(null);
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  const [arrived, setArrived] = useState<ReadonlySet<string>>(() => new Set());
+  const key = ids === null ? null : ids.join("\n");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The ids are read through their key.
+  useLayoutEffect(() => {
+    if (ids === null) return;
+    if (known.current === null) {
+      known.current = new Set(ids);
+      return;
+    }
+    const seen = known.current;
+    const fresh = ids.filter((id) => !seen.has(id));
+    if (fresh.length === 0) return;
+    for (const id of fresh) seen.add(id);
+    setArrived((current) => new Set([...current, ...fresh]));
+    const timer = setTimeout(() => {
+      timers.current.delete(timer);
+      setArrived((current) => {
+        const next = new Set(current);
+        for (const id of fresh) next.delete(id);
+        return next;
+      });
+    }, ARRIVAL_MS);
+    timers.current.add(timer);
+  }, [key]);
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      for (const timer of pending) clearTimeout(timer);
+    };
+  }, []);
+  return arrived;
+}
+
 /**
  * The sidebar's navigation (Grok's order): Search and New chat, the chats waiting on you, then the
  * projects with their chats, and a quiet "Archived chats" row at the end, like Grok's "See all".
@@ -94,6 +138,7 @@ export function ChatList({
   const [sectionFolded, setSectionFolded] = useState(false);
   const search = useRef<HTMLInputElement>(null);
   const all = chats ?? [];
+  const arrived = useArrivals(chats === null ? null : chats.map((chat) => chat.id));
   const filtered = all.filter((chat) =>
     `${chat.title ?? "New chat"} ${chat.folder} ${chat.agent_name}`
       .toLowerCase()
@@ -306,7 +351,11 @@ export function ChatList({
                       {open ? (
                         <ul className="chat-chats">
                           {project.chats.map((chat) => (
-                            <li key={chat.id} className="chat-row-container">
+                            <li
+                              key={chat.id}
+                              className="chat-row-container"
+                              data-arrived={arrived.has(chat.id) ? "" : undefined}
+                            >
                               <ChatRow
                                 chat={chat}
                                 selected={chat.id === selected}

@@ -7,6 +7,7 @@ import { navigationTarget } from "../../lib/nativeNavigation";
 import { preselectAgent, type SetupApi, setupApi } from "../../lib/setup";
 import { TerminalPanels } from "../../lib/terminalPanel";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
+import { PANE_SWIMMERS, Water } from "../Water";
 import { Banners } from "./Banners";
 import { ChatActionsDialog } from "./ChatActionsDialog";
 import { ChatList, projectName } from "./ChatList";
@@ -215,6 +216,7 @@ export function ChatsScreen({
         <SidebarFooter profile={info.profile} onSettings={onSettings} />
       </aside>
       <main className="chat-main">
+        {selected === null ? <Water className="pane-water" swimmers={PANE_SWIMMERS} /> : null}
         <div className="chat-drag" data-tauri-drag-region="" />
         <Banners
           storage={snapshot.storage}

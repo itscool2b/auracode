@@ -10,6 +10,7 @@ import { ChatView } from "../components/chat/ChatView";
 import { CommandPalette, type PaletteCommand } from "../components/chat/CommandPalette";
 import { SidebarFooter } from "../components/chat/SidebarFooter";
 import { createXtermRuntime } from "../components/chat/terminalRuntime";
+import { PANE_SWIMMERS, Water } from "../components/Water";
 import {
   attachResult,
   chatSummary,
@@ -707,6 +708,7 @@ function Preview() {
         />
       </aside>
       <main className="chat-main">
+        {selected === null ? <Water className="pane-water" swimmers={PANE_SWIMMERS} /> : null}
         <div className="chat-drag" />
         {selected === null ? (
           <NewChatPreview

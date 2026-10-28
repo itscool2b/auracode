@@ -70,12 +70,21 @@
 
 /* ---------------------------------------------------------------------------- card */
 
+/*
+ * The card floats over the lit water (Shallows): opaque surface-2, a soft rim that lights along its
+ * top edge, and one long shadow under it. A keyboard inside it brightens the rim a step.
+ */
 .new-chat-card {
   display: flex;
   flex-direction: column;
-  border-radius: var(--g-radius-16);
+  border-radius: var(--ui-card-radius);
   background-color: var(--g-surface-2);
-  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  box-shadow: var(--ui-composer-shadow);
+  transition: box-shadow var(--g-dur-fast) var(--g-ease);
+}
+
+.new-chat-card:has(:focus-visible) {
+  box-shadow: var(--ui-composer-shadow-focus);
 }
 
 .new-chat-row {
@@ -126,7 +135,8 @@
   transition:
     background-color var(--g-dur-micro) var(--g-ease),
     box-shadow var(--g-dur-micro) var(--g-ease),
-    color var(--g-dur-fast) var(--g-ease);
+    color var(--g-dur-fast) var(--g-ease),
+    transform var(--g-dur-fast) var(--g-ease-out);
 }
 
 .new-chat-agent .g-agent-mark,
@@ -355,14 +365,28 @@
   display: none;
 }
 
+/* A 12px chevron that turns down as the line opens, in place of a plus and a minus. */
 .new-chat-more > summary::after {
-  content: "+";
+  content: "";
   flex: none;
-  color: var(--g-fg-3);
+  width: 12px;
+  height: 12px;
+  background-color: var(--g-fg-3);
+  -webkit-mask: var(--ui-chevron) center / 12px no-repeat;
+  mask: var(--ui-chevron) center / 12px no-repeat;
+  transition:
+    transform var(--g-dur-base) var(--g-ease-quint),
+    background-color var(--g-dur-micro) var(--g-ease);
 }
 
 .new-chat-more[open] > summary::after {
-  content: "\2212";
+  transform: rotate(90deg);
+}
+
+@media (hover: hover) {
+  .new-chat-more > summary:hover::after {
+    background-color: var(--g-fg-1);
+  }
 }
 
 .new-chat-more > summary:focus-visible {
@@ -622,13 +646,14 @@
 .new-chat-worktree[data-side="bottom"] .new-chat-worktree-popover > .chat-popover-panel {
   top: calc(100% + 8px);
   bottom: auto;
+  transform-origin: 0 0;
   animation-name: new-chat-worktree-in;
 }
 
 @keyframes new-chat-worktree-in {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+    transform: translateY(-6px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -863,9 +888,31 @@
 
 /* ------------------------------------------------------------------ reduced motion */
 
+/*
+ * Arriving: the hero, the card and what sits under it rise in three soft steps (Aside's rows), once
+ * per New chat. Transform and opacity only, and the last frame is the resting one.
+ */
+.new-chat > :is(.new-chat-hero, .new-chat-card, .new-chat-below) {
+  animation: g-enter var(--g-dur-row) var(--g-ease-reveal) both;
+}
+
+.new-chat > .new-chat-card {
+  animation-delay: var(--g-stagger-row);
+}
+
+.new-chat > .new-chat-below {
+  animation-delay: calc(var(--g-stagger-row) * 2);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .new-chat > :is(.new-chat-hero, .new-chat-card, .new-chat-below),
   .new-chat-agent[data-found] .g-agent-mark {
     animation: none;
+  }
+
+  .new-chat-more > summary::after,
+  .new-chat-card {
+    transition: none;
   }
 
   .new-chat-worktree[data-side] .new-chat-worktree-popover > .chat-popover-panel {
@@ -873,7 +920,11 @@
   }
 }
 
-:root:is([data-motion="reduced"], [data-motion="off"]) .new-chat-agent[data-found] .g-agent-mark {
+:root:is([data-motion="reduced"], [data-motion="off"])
+  :is(
+    .new-chat > :is(.new-chat-hero, .new-chat-card, .new-chat-below),
+    .new-chat-agent[data-found] .g-agent-mark
+  ) {
   animation: none;
 }
 

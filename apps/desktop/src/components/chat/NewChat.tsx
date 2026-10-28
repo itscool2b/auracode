@@ -434,7 +434,9 @@ export function NewChat({
           <div className="new-chat-agents" data-testid="new-chat-agent">
             {agents === null ? (
               <span className="new-chat-scan" role="status">
-                <PixelLoader size={16} tempo="thinking" />
+                <span className="new-chat-scan-pulse" aria-hidden="true">
+                  <span className="ui-pulse" />
+                </span>
                 Looking for agents
               </span>
             ) : available.length === 0 ? (
@@ -461,17 +463,14 @@ export function NewChat({
                         aria-label={`${agent.name}, ${STATE_LABEL[choice]}`}
                         onChange={() => draft.chooseAgent(agent.id)}
                       />
-                      <AgentMark
-                        agent={agent.id}
-                        size={24}
-                        state={
-                          choice === "detecting"
-                            ? "thinking"
-                            : choice === "sign-in"
-                              ? "waiting"
-                              : "idle"
-                        }
-                      />
+                      {/* Still looked for: the mark waits dimmed inside a soft circular pulse. */}
+                      <span className="new-chat-agent-mark">
+                        <AgentMark
+                          agent={agent.id}
+                          size={24}
+                          state={choice === "sign-in" ? "waiting" : "idle"}
+                        />
+                      </span>
                       <span className="new-chat-agent-name">{agent.name}</span>
                     </label>
                   );

@@ -1731,23 +1731,27 @@
  * Queue with Steer beside it while a turn runs). The attach glyph and the text share one left edge
  * (x 16 inside the pill); Send sits as far in from the right.
  */
+/*
+ * Shallows: the pill floats on the pane with New chat's soft rim, lit along its top edge, and one
+ * long shadow. Focus within brightens the rim a step; reached from the keyboard, the message box
+ * lights it to fg-3 (an input's focus, 4.2).
+ */
 .chat-composer {
   position: relative;
   display: flex;
   flex-direction: column;
-  border-radius: var(--g-radius-16);
+  border-radius: var(--ui-card-radius);
   background-color: var(--g-surface-2);
-  box-shadow: inset 0 0 0 1px var(--g-line-strong);
+  box-shadow: var(--ui-composer-shadow);
   transition: box-shadow var(--g-dur-fast) var(--g-ease);
 }
 
 .chat-composer:focus-within {
-  box-shadow: inset 0 0 0 1px var(--g-fg-4);
+  box-shadow: var(--ui-composer-shadow-focus);
 }
 
-/* Reached from the keyboard, the message box lights the pill's ring to fg-3 (an input's focus, 4.2). */
 .chat-composer:has(.g-textarea:focus-visible) {
-  box-shadow: inset 0 0 0 1px var(--g-fg-3);
+  box-shadow: var(--ui-composer-shadow-keyboard);
 }
 
 .chat-composer .g-textarea {
@@ -1756,7 +1760,7 @@
   max-height: 240px;
   padding: var(--g-space-16) var(--g-space-16) var(--g-space-8);
   border: 0;
-  border-radius: var(--g-radius-16) var(--g-radius-16) 0 0;
+  border-radius: var(--ui-card-radius) var(--ui-card-radius) 0 0;
   background: transparent;
   font-size: var(--g-text-prose);
   line-height: var(--g-leading-prose);

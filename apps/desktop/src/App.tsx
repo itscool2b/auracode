@@ -1,5 +1,4 @@
 import type { AgentBrandId, OrbState } from "@auracode/ui";
-import { DitherField } from "@auracode/ui/graphite";
 import { MotionConfig } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { AppInfo, InstructionsTarget, StressConfig } from "./bindings";
@@ -18,6 +17,7 @@ import { LockedProfile } from "./components/settings/LockedProfile";
 import { SettingsScreen } from "./components/settings/SettingsScreen";
 import { AgentsScreen } from "./components/setup/AgentsScreen";
 import { Onboarding } from "./components/setup/Onboarding";
+import { STRESS_SWIMMERS, Water } from "./components/Water";
 import { subscribeAccountSync } from "./lib/account/sync";
 import type { AppStore } from "./lib/chat/appStore";
 import type { Transport } from "./lib/chat/transport";
@@ -354,7 +354,7 @@ export function App({
   const running = isRunning(snapshot);
   const activity = snapshot.phase === "idle" ? "idle" : activityOf(snapshot.stream);
   const orbState: OrbState = activity;
-  // The stress view's ambient field: Graphite's dither, moving only while something streams.
+  // The stress view's ambient water: every swimmer at once, moving only while something streams.
   const showField = view === "stress" && stressConfig.aura;
 
   if (view === "setup")
@@ -476,7 +476,9 @@ export function App({
           }}
         />
         <main className="main">
-          {showField ? <DitherField className="stress-field" transparent still={!running} /> : null}
+          {showField ? (
+            <Water className="stress-water" swimmers={STRESS_SWIMMERS} still={!running} />
+          ) : null}
           <div className="drag-strip" data-tauri-drag-region="" />
           <div className="main-scroll">
             {view === "diagnostics" ? (
