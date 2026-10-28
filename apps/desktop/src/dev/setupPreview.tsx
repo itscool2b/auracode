@@ -17,6 +17,8 @@ const install = installFixture();
 
 const params = new URLSearchParams(location.search);
 const missing = params.has("missing");
+// `?broken` shows Cursor found but unusable, so the calm failure state can be seen.
+const broken = params.has("broken");
 const agents: AgentEntry[] = [
   "hermes",
   "claude",
@@ -43,15 +45,18 @@ const agents: AgentEntry[] = [
     ][index] ?? id,
   description: "Synthetic detection fixture. No vendor command can run here.",
   availability:
-    missing || !["claude", "codex", "pi"].includes(id)
-      ? { state: "missing", reason: "Not installed in this fixture." }
-      : {
-          state: "ready",
-          version:
-            ({ claude: "2.1.310", codex: "0.162.1", pi: "0.70.0" } as Record<string, string>)[id] ??
-            "1.0.0",
-          path: `C:/fixture/${id}`,
-        },
+    broken && id === "cursor"
+      ? { state: "broken", reason: "The cursor-agent found here did not report a version." }
+      : missing || !["claude", "codex", "pi"].includes(id)
+        ? { state: "missing", reason: "Not installed in this fixture." }
+        : {
+            state: "ready",
+            version:
+              ({ claude: "2.1.310", codex: "0.162.1", pi: "0.70.0" } as Record<string, string>)[
+                id
+              ] ?? "1.0.0",
+            path: `C:/fixture/${id}`,
+          },
   launch: id,
   needs_download: false,
   last_verified: "2026-10-26",
