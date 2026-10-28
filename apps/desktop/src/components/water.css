@@ -22,7 +22,8 @@
   pointer-events: none;
 }
 
-.chat-main:has(> .pane-water) > :is(.chat-banners, .new-chat) {
+.chat-main:has(> .pane-water) > :is(.chat-banners, .new-chat),
+.chat-conversation:has(> .pane-water) > :is(.chat-banner, .chat-transcript-shell, .chat-dock) {
   position: relative;
   z-index: 1;
 }
