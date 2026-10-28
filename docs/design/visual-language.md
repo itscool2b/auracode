@@ -32,9 +32,15 @@ only colour is the thing that needs you.
 1. **Type does the work.** Geist at integer weights (400, 500, 600), solid colours, two-tone
    headlines at one size. Geist Mono only for what a machine made.
 2. **Pixels are the ornament.** Everything decorative is square pixels on whole CSS pixels: the
-   dither field, the 2x3 loader, the pixel check, status squares. No curves for decoration, no
-   glow, no gradient, no glass, no blur. The logo (4.14) is the one curved shape, and it is a
-   mark, not decoration.
+   dither field, the 2x3 loader, the pixel check. No curves for decoration, no glow, no gradient,
+   no glass, no blur. The logo (4.14) is one curved shape and status dots are the other: a flat
+   circle on whole pixels says a state, never decorates.
+
+**Status dots are circles (owner decision, 2026-10-28).** Wherever this document says a volt, red,
+green, white or grey square marks a state (needs you, failed, running, found, not installed, a
+project, an attention mark on a control), read a dot: the same size, a flat circle centred on whole
+pixels, no ring or glow (an empty "not installed" mark is a 1px ring). Pixels, loader cells, the
+pixel check, diffstat squares, list bullets, plan nodes and the Stop square stay square.
 3. **One accent, one meaning.** Volt marks needs-you, live and new, the glint and rare lit pixels
    in the field. It is never a fill larger than a chip and never a button.
 4. **Structure from hairlines and value steps** (Vercel, X Money, Aside), not from cards and
@@ -276,7 +282,7 @@ between sections at 1024px and wider, 96px from 640 to 1023, 72px below.
 
 `--g-radius-4` keycaps, inline code, "New"; `-6` chips, icon buttons, tooltips; `-8` inputs,
 rows, wells, menu items; `-12` panes, menus, tiles, accordion wells; `-16` composer, dialogs,
-docked cards; `-pill` buttons, segmented controls, switches. Pixels, status squares, loader cells
+docked cards; `-pill` buttons, segmented controls, switches, status dots. Pixels, loader cells
 and crosshairs are square (0). Nested radius: inner equals outer minus padding (a 12px menu with
 4px padding has 8px items). Nothing exceeds 16 except pills.
 
@@ -430,9 +436,9 @@ apart. Buttons, menus, cards and hint lines show keycaps wherever a key works.
 
 ### 4.5 Status: `StatusDot` and `PixelLoader`
 
-`StatusDot` is a square, never a circle and never a glow: 6px default (4 to 32), tone neutral fg-2,
-volt, green or red; decorative unless `label` is set, since the text beside it speaks. `live`
-swaps the square for the loader at twice the size (at least 12px) with the head in the tone.
+`StatusDot` is a flat circle, never a glow: 6px default (4 to 32), tone neutral fg-2, volt, green
+or red; decorative unless `label` is set, since the text beside it speaks. `live` swaps the dot
+for the loader at twice the size (at least 12px) with the head in the tone.
 
 `PixelLoader` is six square pixels in a 2x3 grid with a light walking the perimeter clockwise
 (order 0, 1, 3, 5, 4, 2) and a two-cell trail: head fg-1 (or the tone), trail fg-3 then fg-4, rest
@@ -568,9 +574,9 @@ glyph's place**; the agent's name always sits beside the mark.
 |---|---|
 | idle | The agent's two-letter code in Geist, fg-2, at every size (one letter would make Claude Code and Codex both C): `0.5 * size` under 24px, never under 7px, and `0.38 * size` from 24px; a one-character code ("?") at `0.56 * size`; weight 500, or 600 below a 12px glyph |
 | thinking, streaming, tool | The 2x3 pixel loader (4.5) at its state's tempo |
-| waiting | A solid volt square, `0.375 * size` (parity-adjusted to centre on whole pixels) |
+| waiting | A solid volt dot, `0.375 * size` across (parity-adjusted to centre on whole pixels) |
 | done | A white pixel check (cells `max(2, round(size / 8))`), drawn once a pixel at a time, 50ms apart (about 250ms, X Money's check), by CSS |
-| error | A solid red square, same geometry as waiting |
+| error | A solid red dot, same geometry as waiting |
 | ghost (any state) | Transparent tile, 1px dashed line-strong outline, the code in fg-3 (it is text, so it keeps AA contrast) |
 
 Codes: CC Claude Code, CX Codex, PI Pi, MP oh-my-pi, AG Antigravity, HM Hermes, CU Cursor, GB
@@ -1404,7 +1410,7 @@ Every screen ships only when all of these hold.
       sparkle icons, no 3D.
 - [ ] Two-tone headings at one size and weight; no serif, no italic, no gradient text.
 - [ ] Structure from hairlines and value steps; cards only for things that float or dock.
-- [ ] Pixels are square and crisp; status is a square, never a glowing dot.
+- [ ] Pixels are square and crisp; status is a flat circle, never a glow.
 - [ ] Nothing idles, breathes, pulses or parallaxes; motion starts with an event and ends with it;
       reduced motion is honoured from the OS and from `data-motion`, and content is never hidden.
 - [ ] Concrete copy: verbs, objects and numbers ("Ran pnpm test · 19 passed · 4.2s"); no hype words,

@@ -1,7 +1,7 @@
 /*
  * The terminal sheet (visual-language.md 6.19) on the dialog pattern: the title and one sentence,
  * the reviewed command as rows, where the process stands, the output in a terminal well, then
- * Copy selection and the one Start. The outcome is a white check or a red square beside its words.
+ * Copy selection and the one Start. The outcome is a white check or a red dot beside its words.
  */
 
 .terminal-sheet__header p {
@@ -27,16 +27,17 @@
   color: var(--g-fg-1);
 }
 
-/* Running: a green square that does not move; the terminal itself shows the activity. */
+/* Running: a green dot that does not move; the terminal itself shows the activity. */
 .terminal-sheet[data-state="running"] .terminal-sheet__status::before {
   content: "";
   flex: none;
   width: 6px;
   height: 6px;
   background-color: var(--g-green);
+  border-radius: var(--g-radius-pill);
 }
 
-/* A failed or non-zero exit: a red square before the words. */
+/* A failed or non-zero exit: a red dot before the words. */
 .terminal-sheet[data-outcome="failed"] .terminal-sheet__status {
   color: var(--g-fg-1);
 }
@@ -47,6 +48,7 @@
   width: 6px;
   height: 6px;
   background-color: var(--g-red);
+  border-radius: var(--g-radius-pill);
 }
 
 /* A clean exit: Graphite's white pixel check, five square cells at 2px. */

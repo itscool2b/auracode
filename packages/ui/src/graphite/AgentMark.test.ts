@@ -79,6 +79,19 @@ describe("AgentMark", () => {
     }
   });
 
+  it("shows waiting and failed as dots centred on whole pixels", () => {
+    for (const [state, size, centre, radius] of [
+      ["waiting", 24, 12, 5],
+      ["error", 16, 8, 3],
+      ["waiting", 14, 7, 3],
+    ] as const) {
+      const html = mark({ agent: "pi", state, size });
+      expect(html, `${state} ${size}`).toContain(`<circle class="g-agent-mark-${state}"`);
+      expect(html).toContain(`cx="${centre}" cy="${centre}" r="${radius}"`);
+      expect(html).not.toContain("<rect");
+    }
+  });
+
   it("renders the loader's static pattern first, which is all reduced motion ever shows", () => {
     const html = mark({ agent: "claude", state: "thinking", size: 24 });
     const classes = [...html.matchAll(/<rect class="([^"]+)"/g)].map((m) => m[1]);

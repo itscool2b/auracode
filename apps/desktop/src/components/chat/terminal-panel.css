@@ -108,13 +108,14 @@
   text-overflow: ellipsis;
 }
 
-/* An ended shell reads as a still square: grey when it exited, red when it failed. */
+/* An ended shell reads as a still dot: grey when it exited, red when it failed. */
 .terminal-panel-tab:is([data-state="finished"], [data-state="failed"])::before {
   content: "";
   flex: none;
   width: 6px;
   height: 6px;
   background-color: var(--g-fg-3);
+  border-radius: var(--g-radius-pill);
 }
 
 .terminal-panel-tab[data-state="failed"]::before {
@@ -224,6 +225,7 @@
   width: 6px;
   height: 6px;
   background-color: var(--g-red);
+  border-radius: var(--g-radius-pill);
 }
 
 .terminal-panel-status > .g-button {

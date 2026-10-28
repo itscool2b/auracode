@@ -392,7 +392,7 @@ details.setup-install-review[open] > summary::before {
 /*
  * Grok's sidebar on black: the logo and the collapse toggle in the top band, Search and New chat,
  * then the projects with their chats, and the agents and the account at the foot. Every row is
- * 32px with its icon or square at x 20 and its words at x 44, so the column has one left edge.
+ * 32px with its icon or dot at x 20 and its words at x 44, so the column has one left edge.
  */
 .chat-sidebar {
   position: relative;
@@ -612,7 +612,7 @@ details.setup-install-review[open] > summary::before {
   color: var(--g-fg-1);
 }
 
-/* The waiting square centres on the project square's axis (x 28), in the same 16px box. */
+/* The waiting dot centres on the project dot's axis (x 28), in the same 16px box. */
 .chat-attention-mark {
   display: grid;
   flex: none;
@@ -682,7 +682,7 @@ details.setup-install-review[open] > summary::before {
   height: 12px;
 }
 
-/* A neutral 6px square marks a project; folded projects and hovered ones show the chevron. */
+/* A neutral 6px dot marks a project; folded projects and hovered ones show the chevron. */
 .chat-project-swatch {
   position: relative;
   display: grid;
@@ -698,6 +698,7 @@ details.setup-install-review[open] > summary::before {
   height: 6px;
   background-color: var(--g-fg-3);
   transition: opacity var(--g-dur-micro) var(--g-ease);
+  border-radius: var(--g-radius-pill);
 }
 
 .chat-project-swatch > svg {
@@ -811,7 +812,7 @@ details.setup-install-review[open] > summary::before {
   visibility: hidden;
 }
 
-/* The pin sits in the gutter, on the project square's axis (x 20). */
+/* The pin sits in the gutter, on the project dot's axis (x 20). */
 .chat-pin-mark {
   position: absolute;
   top: 11px;
@@ -1301,6 +1302,7 @@ details.setup-install-review[open] > summary::before {
   width: 6px;
   height: 6px;
   background-color: var(--g-fg-2);
+  border-radius: var(--g-radius-pill);
 }
 
 .chat-banner[data-level="warning"]::before {
@@ -1417,6 +1419,7 @@ details.setup-install-review[open] > summary::before {
   width: 6px;
   height: 6px;
   background-color: var(--g-volt);
+  border-radius: var(--g-radius-pill);
 }
 
 .chat-move-busy-names {

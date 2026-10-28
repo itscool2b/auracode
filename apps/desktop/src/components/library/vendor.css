@@ -46,7 +46,7 @@
   font-weight: 400;
 }
 
-/* A consequence worth reading before anything starts: one line led by a volt square (6.6). */
+/* A consequence worth reading before anything starts: one line led by a volt dot (6.6). */
 .vendor-warning {
   display: flex;
   align-items: baseline;
@@ -64,6 +64,7 @@
   height: 6px;
   background-color: var(--g-volt);
   transform: translateY(-1px);
+  border-radius: var(--g-radius-pill);
 }
 
 .vendor-actions {
