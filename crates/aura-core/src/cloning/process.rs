@@ -24,7 +24,7 @@ pub(super) async fn execute_within(
     }
     let destination = match tokio::task::spawn_blocking(move || files::begin(prepared)).await {
         Ok(Ok(destination)) => destination,
-        Ok(Err((_, error))) => {
+        Ok(Err(error)) => {
             job.finish(CloneState::Failed, &error.to_string());
             return;
         }

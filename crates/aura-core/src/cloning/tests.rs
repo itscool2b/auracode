@@ -217,7 +217,7 @@ fn the_owned_folder_is_removed_with_read_only_files_and_a_replaced_one_is_kept()
     let env = synthetic_git(temp.path());
     let remote = validate::remote("https://github.com/owner/repo").unwrap();
     let prepared = plan(remote.clone(), "repo".into(), temp.path().to_str(), &env).unwrap();
-    let destination = files::begin(prepared).map_err(|(_, error)| error).unwrap();
+    let destination = files::begin(prepared).unwrap();
     let pack = temp.path().join("repo/.git/objects/pack");
     std::fs::create_dir_all(&pack).unwrap();
     std::fs::write(pack.join("pack-1.pack"), "read-only like Git's packs").unwrap();
@@ -231,7 +231,7 @@ fn the_owned_folder_is_removed_with_read_only_files_and_a_replaced_one_is_kept()
 
     // A folder put in its place is someone else's: it stays.
     let prepared = plan(remote, "repo".into(), temp.path().to_str(), &env).unwrap();
-    let destination = files::begin(prepared).map_err(|(_, error)| error).unwrap();
+    let destination = files::begin(prepared).unwrap();
     if std::fs::rename(temp.path().join("repo"), temp.path().join("moved")).is_ok() {
         std::fs::create_dir(temp.path().join("repo")).unwrap();
         std::fs::write(temp.path().join("repo/user.txt"), "keep").unwrap();

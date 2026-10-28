@@ -31,29 +31,28 @@ pub(super) fn matches(directory: &Dir, path: &Path) -> Result<()> {
 }
 
 /// Creates the destination. An existing path of that name, even an empty folder, is refused.
-pub(super) fn begin(
-    prepared: Prepared,
-) -> std::result::Result<Destination, (Prepared, CloneError)> {
-    if let Err(error) = matches(&prepared.parent_handle, &prepared.parent) {
-        return Err((prepared, error));
-    }
+pub(super) fn begin(prepared: Prepared) -> Result<Destination> {
+    matches(&prepared.parent_handle, &prepared.parent)?;
     match prepared.parent_handle.create_dir(&prepared.name) {
         Ok(()) => {}
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let message = format!(
+            return Err(CloneError::Message(format!(
                 "{} already has a {} folder. Choose another name.",
                 prepared.view.parent, prepared.name
-            );
-            return Err((prepared, CloneError::Message(message)));
+            )));
         }
-        Err(error) => return Err((prepared, error.into())),
+        Err(error) => return Err(error.into()),
     }
     match prepared.parent_handle.open_dir_nofollow(&prepared.name) {
         Ok(directory) => Ok(Destination {
             prepared,
             directory,
         }),
-        Err(error) => Err((prepared, error.into())),
+        Err(error) => {
+            // Only an empty folder is removed this way; anything put in it stays.
+            let _ = prepared.parent_handle.remove_dir(&prepared.name);
+            Err(error.into())
+        }
     }
 }
 
