@@ -85,6 +85,8 @@ export const MODES = [
   "settled#terminal",
   "terminal-panel#shell-menu",
   "terminal-panel#resized",
+  // A worktree chat's merge that conflicts: the files, the message for the agent, Open in.
+  "git-conflict#conflict",
 ];
 
 /** Waits until the panel's shell has drawn its prompt. */
@@ -140,6 +142,10 @@ const OPENERS = {
   "shell-menu": async (page) => {
     await terminalReady(page);
     await page.locator('.terminal-panel-shells > summary[aria-label="New terminal with"]').click();
+  },
+  conflict: async (page) => {
+    await page.getByRole("button", { name: "Review merge", exact: true }).click();
+    await page.getByRole("button", { name: "Open in Cursor", exact: true }).waitFor();
   },
   resized: async (page) => {
     await terminalReady(page);

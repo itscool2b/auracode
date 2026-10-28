@@ -97,6 +97,9 @@ export async function checkGitReview(page, url, out, engine) {
     await page.getByRole("button", { name: "Merge reviewed changes" }).isDisabled(),
     true,
   );
+  // This chat is back in the project folder, so nothing is sent or opened from here.
+  await page.getByText("Move this chat into it", { exact: false }).waitFor();
+  assert.equal(await page.getByTestId("git-ask-agent").count(), 0);
   assert.equal(
     await page.evaluate(() => window.gitFixture.calls().includes("apply-action")),
     false,
@@ -153,6 +156,64 @@ export async function checkGitReview(page, url, out, engine) {
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Open Git workspace" }).waitFor();
   await checkWorktreeRecreate(page, url, out, engine);
+  await checkMergeConflicts(page, url, out, engine);
+}
+
+/**
+ * A worktree chat whose merge conflicts: Merge stays disabled; the exact message the agent would
+ * receive is on screen and is what Ask sends, as the chat's own message; Open in hands the folder
+ * to a detected editor and reviews again for the next; a refused send says why and keeps the
+ * dialog; no detected editor says so. Nothing merges.
+ */
+export async function checkMergeConflicts(page, url, out, engine) {
+  await page.goto(`${url}/?preview=git-conflict`);
+  await page.getByRole("button", { name: "Review merge", exact: true }).click();
+  await page.getByRole("heading", { name: "Conflicts to resolve first" }).waitFor();
+  const merge = page.getByRole("button", { name: "Merge reviewed changes" });
+  assert.equal(await merge.isDisabled(), true);
+  const prompt = page.getByTestId("git-conflict-prompt");
+  const text = await prompt.textContent();
+  assert.match(text, /^Merging aura\/release-readiness into main has conflicts in 2 files:\n/);
+  assert.match(text, /\n- src\/orbit\.rs\n- apps\/desktop\/src\/components\/chat\/Sidebar\.tsx\n/);
+  assert.match(text, /in C:\/auracode\/worktrees\/owned-one: merge main into/);
+  await page.getByRole("button", { name: "Open in Cursor", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Open in Visual Studio Code", exact: true }).waitFor();
+  await settled(page);
+  assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+  await page.screenshot({ path: resolve(out, `${engine}-merge-conflicts.png`) });
+  await page.getByRole("button", { name: "Open in Cursor", exact: true }).click();
+  await page.getByRole("status").filter({ hasText: "accepted the request for Cursor" }).waitFor();
+  await page.getByRole("button", { name: "Open in Cursor", exact: true }).waitFor();
+  assert.equal(await merge.isDisabled(), true);
+  // One open, with the newest review's token (development StrictMode reviews twice on mount), then
+  // a fresh review for the next.
+  const tools = (await page.evaluate(() => window.gitFixture.calls())).filter(
+    (call) => call.startsWith("editor") || call === "review-tools",
+  );
+  const reviewsBefore = tools.indexOf(tools.find((call) => call.startsWith("editor")));
+  assert.deepEqual(tools.slice(reviewsBefore), [
+    `editor:cursor:tools-${reviewsBefore}`,
+    "review-tools",
+  ]);
+  assert.ok(tools.slice(0, reviewsBefore).every((call) => call === "review-tools"));
+  await page.getByRole("button", { name: "Ask Claude Code to resolve", exact: true }).click();
+  await page.getByRole("button", { name: "Open Git workspace" }).waitFor();
+  assert.equal(await page.evaluate(() => window.gitFixture.sent()), text);
+  const calls = await page.evaluate(() => window.gitFixture.calls());
+  assert.equal(calls.filter((call) => call === "ask-agent").length, 1);
+  assert.equal(calls.includes("apply-action"), false);
+
+  await page.goto(`${url}/?preview=git-conflict&refuse-send&no-editors`);
+  await page.getByRole("button", { name: "Review merge", exact: true }).click();
+  await page.getByText("No supported editor was found.", { exact: false }).waitFor();
+  assert.equal(await page.getByRole("button", { name: /^Open in / }).count(), 0);
+  await page.getByRole("button", { name: "Ask Claude Code to resolve", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "this message was not sent" }).waitFor();
+  assert.equal(await merge.isDisabled(), true);
+  assert.equal(await page.evaluate(() => window.gitFixture.sent()), "");
+  await settled(page);
+  assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+  await page.screenshot({ path: resolve(out, `${engine}-merge-conflicts-refused.png`) });
 }
 
 /**
@@ -222,7 +283,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       const page = await context.newPage();
       await checkGitReview(page, process.env.CHECK_URL ?? "http://localhost:1426", out, engine);
       console.log(
-        `${engine}: reviewed Git workspace, pull request and worktree recreation flows passed`,
+        `${engine}: reviewed Git workspace, pull request, worktree recreation and merge conflict flows passed`,
       );
     } finally {
       await browser.close();

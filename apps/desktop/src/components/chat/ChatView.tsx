@@ -658,6 +658,21 @@ export function ChatView({
           title={state.chat?.title ?? "work"}
           api={transport.git}
           live={live}
+          agentName={agent?.name ?? state.chat?.agent_name}
+          // The conflict message goes out as the person's own visible message, exactly as the
+          // composer would send it, and only when the composer could send.
+          onAskAgent={
+            !handoffLoaded || canContinueHere || handoffError !== null || state.steeringPending
+              ? undefined
+              : async (text) => {
+                  if (await store.send(text)) {
+                    setGitOpen(false);
+                    return null;
+                  }
+                  return store.getSnapshot().sendError ?? "The message could not be sent.";
+                }
+          }
+          projectTools={transport.projectTools}
           onStop={() => store.stop()}
           onClose={() => setGitOpen(false)}
           onChanged={() => {

@@ -1313,6 +1313,14 @@ sentence that uncommitted files from the deleted folder are gone and everything 
 then Branch, Commit (12 characters) and Folder as 36px rows on inset hairlines with their values in
 mono fg-1, Rust's other notes in 12/16 fg-3, a refusal in red, and Cancel beside Recreate folder.
 
+**A conflicted merge** (the Git workspace dialog's merge review): "Conflicts to resolve first" in
+red, the paths in mono, one fg-2 line that nothing has changed yet, then, for a chat that works in
+that worktree, "Message to Claude Code" over the exact message in the review's well (both branches,
+the folder, every path up to thirty, and what not to do), and 28px soft pills: Open in each detected
+editor and "Ask Claude Code to resolve", which sends that message as the person's own visible chat
+message and closes the dialog. Merge reviewed changes stays disabled until a new review finds no
+conflicts. A chat outside the worktree gets one line saying where the work happens instead.
+
 ### 6.20 Notifications
 
 Toasts (4.6). In-window agent cards when a chat you are not viewing finishes or starts waiting:
