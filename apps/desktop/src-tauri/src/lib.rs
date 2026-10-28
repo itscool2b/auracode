@@ -216,7 +216,9 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     #[cfg(windows)]
     app.manage(window::WebviewVisibility::default());
     app.manage(Arc::new(config_library::LibraryService::default()));
-    app.manage(Arc::new(instructions_commands::InstructionsService::default()));
+    app.manage(Arc::new(
+        instructions_commands::InstructionsService::default(),
+    ));
     app.manage(Arc::new(config_vendor::VendorService::default()));
     app.manage(Arc::new(config_sync::ConfigSyncService::default()));
     app.manage(Arc::new(aura_core::cloning::Clones::default()));
