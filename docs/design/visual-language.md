@@ -583,25 +583,26 @@ glyph's place**; the agent's name always sits beside the mark.
 
 | State | Inside the tile |
 |---|---|
-| idle, with a logo | The agent's own published mark (owner request 2026-10-28, "the actual logos"), exactly as its maker publishes it for dark backgrounds, centred in a square with an even margin: 2px up to a 16px tile, then `round(0.17 * size)` (12 in 16, 16 in 24, 22 in 32, 36 in 56, `logoSide()`), at its optical scale (uniform only) |
-| idle, without one | The agent's two-letter code in Geist, fg-2, at every size (one letter would make Claude Code and Codex both C): `0.5 * size` under 24px, never under 7px, and `0.38 * size` from 24px; a one-character code ("?") at `0.56 * size`; weight 500, or 600 below a 12px glyph |
+| idle, with a logo | The agent's own published mark (owner request 2026-10-28, "the actual logos"), exactly as its maker publishes it for dark backgrounds, centred in a square with an even margin: 2px up to a 16px tile, then `round(0.17 * size)` (12 in 16, 16 in 24, 22 in 32, 36 in 56, `logoSide()`), at its optical scale (uniform only); a mark in `currentColor` (Grok) takes fg-1; Hermes's wing is turned 45 degrees, as Nous Research's site shows it |
+| idle, without one (a custom agent) | Its two-letter code in Geist, fg-2, at every size: `0.5 * size` under 24px, never under 7px, and `0.38 * size` from 24px; a one-character code ("?") at `0.56 * size`; weight 500, or 600 below a 12px glyph |
 | thinking, streaming, tool | The 2x3 pixel loader (4.5) at its state's tempo |
 | waiting | A solid volt dot, `0.375 * size` across (parity-adjusted to centre on whole pixels) |
 | done | A white pixel check (cells `max(2, round(size / 8))`), drawn once a pixel at a time, 50ms apart (about 250ms, X Money's check), by CSS |
 | error | A solid red dot, same geometry as waiting |
 | ghost (any state) | Transparent tile, 1px dashed line-strong outline; a logo at full strength (the vendors forbid dimming or recolouring their marks, so the dashes and the words beside it say "not installed"), a code in fg-3 (it is text, so it keeps AA contrast) |
 
-**Logos** (`agent-logos/`, `agentLogos.ts`, `AgentLogo` for a mark alone): Codex (the OpenAI
-Blossom), Cursor, OpenCode, Pi and oh-my-pi, each the vendor's own file, flattened to plain shapes
-with no raster, script, style, id or reference. They are their owners' trademarks, not covered by
-auracode's license, used only to say which agent a chat uses and never as or in auracode's own
-branding; `third-party/brand-marks.md` records each source, hash, guideline and term, and the
-notices page says so. A vendor colour in a mark is the vendor's, not an accent: volt still means
-only "look here". **Codes** stay for agents whose makers allow no logo use without approval
-(Claude Code, Antigravity, Hermes), whose official file could not be obtained (Grok Build) and for
-any other agent: CC Claude Code, AG Antigravity, HM Hermes, GB Grok Build; the codes CX, PI, MP, CU
-and OC remain for those agents' text uses (`agentCode()`); any other agent takes the first two
-letters of its id; an empty or generic id shows "?". Root: `span.g-agent-mark[role="img"]` with
+**Logos** (`agent-logos/`, `agentLogos.ts`, `AgentLogo` for a mark alone): every designed agent,
+Claude Code (the Claude spark, in Clay), Codex (the OpenAI Blossom), Pi, Antigravity, Cursor, Grok
+Build (the Grok mark), OpenCode, oh-my-pi and Hermes (its wing), each the vendor's own file or the
+mark its own site draws, flattened to plain shapes with no raster, script, style, id or reference.
+They are their owners' trademarks, not covered by auracode's license, used only to say which
+agent a chat uses and never as or in auracode's own branding; `third-party/brand-marks.md` records
+each source, hash, guideline and term (four are used at the owner's direction while the owner
+handles permissions), and the notices page says so. A vendor colour in a mark is the vendor's,
+not an accent: volt still means only "look here". The wing is legible from 24px; at 14 and 16 it
+is a small blue stroke. **Codes** remain for any other agent, the first two letters of its id (an
+empty or generic id shows "?"), and for the designed agents' text uses (`agentCode()`: CC, CX, PI,
+AG, CU, GB, OC, MP, HM). Root: `span.g-agent-mark[role="img"]` with
 `aria-label` "Claude Code, waiting for approval" (from `ORB_STATE_LABELS`, or `label`),
 `data-agent` (the brand id, "generic" for unknown), `data-state`, `data-ghost`, `data-logo` when a
 logo shows; the drawing inside is hidden from assistive technology and has no title, so it adds
@@ -772,9 +773,9 @@ Centred over the water, 172px below the panel's top (140 on phones):
   name arrives 25ms apart; the slot takes the new width at once and the line glides to its new
   centre by a FLIP transform over 450ms `--g-ease-out`. No underline and no glint. The heading's
   accessible name is "One window for your coding agents". Reduced motion: no rotation. No logo
-  beside the rotating name (considered 2026-10-28): four of the nine agents, Claude Code first,
-  have no usable mark, so the slot would alternate between logos and letters, and OpenAI's terms
-  keep its mark less prominent than auracode's own, which a display-size Blossom would not be.
+  beside the rotating name (decided 2026-10-28, kept when every agent gained its mark): OpenAI's
+  terms keep its mark less prominent than auracode's own, which a display-size Blossom would not
+  be, and the headline stays type.
 - **Lead** (18/28 fg-2, max 540, 28px under): "The coding agents you already use, together in one
   chat on your machine. Free, with nothing to sign up for."
 - **One button** (36px under): the magnetic primary 44 "Download".

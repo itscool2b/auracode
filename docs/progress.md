@@ -4049,3 +4049,30 @@ views per engine, 0 findings). Sheets are the ignored
 Not done: the hand walkthrough of the built app and site; real Safari; approval requests to
 Anthropic, Google and Nous Research and a hand download of xAI's kit, each of which would turn a
 code into a logo; confirming oh-my-pi's canonical mark with its maintainers. CI was not run.
+
+### Every agent's logo (2026-10-28, branch `agent-logos-more`)
+
+The owner asked for real logos on the four agents that kept codes ("many other people are allowed
+to use their logos ... I'm already handling the legal part"). Each mark is the vendor's own, as
+its own site or kit publishes it today; `third-party/brand-marks.md` records the source, hash and
+"used at the owner's direction; the owner is handling permissions with the vendor".
+
+- **Claude Code**: the Claude spark from Anthropic's press kit, in Clay (its only published
+  colour).
+- **Grok Build**: the Grok mark exactly as x.ai's Grok page draws it, in `currentColor` (fg-1
+  here). xAI's logo zip sits behind a bot check, which was not worked around.
+- **Antigravity**: the white icon from Google's Antigravity press page.
+- **Hermes**: the wing that the Hermes Agent site uses as its header logo, turned 45 degrees as
+  that site shows it (the file stays upright). It reads as a wing from 24px; at 14 and 16 it is a
+  small blue stroke. The repository's figure illustrations do not read under 32px.
+
+Only custom ACP agents now show a two-letter code. The hero headline stays text. The notices page
+names all nine marks.
+
+Checks on this branch: `pnpm lint` (26 existing warnings), `pnpm typecheck`, `pnpm test` (scripts
+23, ui 261, desktop 10 node and 488 with 19 skipped, design lab 352, web 4); `test:browser` in
+Chromium and WebKit; `worker:build` and `worker:test` (5 of 5); `check-setup`, `check-chat`,
+`check-plugin-library` and `check-layout` (170 views per engine, 0 findings) in Chromium and WebKit.
+Sheets are the ignored `target/design-research/sheets/agent-logos-more-*.png`.
+
+Not done: the hand walkthrough; the vendor permissions (owner); CI.

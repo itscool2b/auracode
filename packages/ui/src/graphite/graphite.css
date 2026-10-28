@@ -655,12 +655,15 @@
 .g-agent-mark-logo {
   display: block;
   flex: none;
+  /* A mark published in currentColor (Grok's) takes the foreground, as its maker's site does. */
+  color: var(--g-fg-1);
 }
 
 .g-agent-logo {
   display: inline-block;
   flex: none;
   vertical-align: middle;
+  color: var(--g-fg-1);
 }
 
 .g-agent-mark-state {

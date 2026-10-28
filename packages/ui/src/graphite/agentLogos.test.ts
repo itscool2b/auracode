@@ -1,5 +1,8 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AGENT_BRANDS } from "../brand";
+import { AgentLogo } from "./AgentLogo";
 import { AGENT_LOGO_SOURCES, AGENT_LOGOS, agentLogo, parseLogo } from "./agentLogos";
 
 const sources = Object.entries(AGENT_LOGO_SOURCES);
@@ -39,7 +42,8 @@ describe("agent logos", () => {
       ]) {
         expect(svg, `${id} ${banned}`).not.toMatch(banned);
       }
-      expect(svg.length, id).toBeLessThan(12_000);
+      // Hermes's wing is an engraving traced to pixel steps (about 51 KB); the rest are under 3 KB.
+      expect(svg.length, id).toBeLessThan(id === "hermes" ? 64_000 : 12_000);
     }
   });
 
@@ -91,6 +95,18 @@ describe("agent logos", () => {
       viewBox: "0 0 10 10",
       shapes: [{ tag: "path", attributes: { fill: "#fff", d: "M0 0h1" } }],
     });
+  });
+
+  it("turns only the marks their makers show turned, about the stored viewBox's centre", () => {
+    expect(Object.keys(AGENT_LOGOS).filter((id) => AGENT_LOGOS[id as "hermes"]?.turn)).toEqual([
+      "hermes",
+    ]);
+    const html = renderToStaticMarkup(createElement(AgentLogo, { agent: "hermes", size: 32 }));
+    expect(html).toContain('transform="rotate(45 19.55 39.25)"');
+    expect(html).toContain('data-agent-logo="hermes"');
+    expect(renderToStaticMarkup(createElement(AgentLogo, { agent: "codex" }))).not.toContain(
+      "rotate(",
+    );
   });
 
   it("resolves aliases and gives unknown agents no logo", () => {

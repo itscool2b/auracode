@@ -44,11 +44,17 @@ function shapeElement(shape: LogoShape, key: number) {
  * The viewBox that draws the mark at its optical scale, centred in a square: the stored box
  * widened evenly, so the shapes themselves are never moved, stretched or redrawn.
  */
-export function logoViewBox(logo: Pick<AgentLogoData, "viewBox" | "scale">): string {
-  const [x = 0, y = 0, w = 1, h = 1] = logo.viewBox.split(" ").map(Number);
+export function logoViewBox(logo: Pick<AgentLogoData, "viewBox" | "scale" | "turn">): string {
+  const [x = 0, y = 0, w = 1, h = 1] = (logo.turn?.frame ?? logo.viewBox).split(" ").map(Number);
   const side = Math.max(w, h) / logo.scale;
   const round = (value: number) => Math.round(value * 1000) / 1000;
   return [x - (side - w) / 2, y - (side - h) / 2, side, side].map(round).join(" ");
+}
+
+/** A whole-mark turn about the stored viewBox's centre, for a mark its maker shows turned. */
+function turnTransform(viewBox: string, angle: number): string {
+  const [x = 0, y = 0, w = 1, h = 1] = viewBox.split(" ").map(Number);
+  return `rotate(${angle} ${x + w / 2} ${y + h / 2})`;
 }
 
 /** A logo's drawing in a square box: used by AgentLogo and inside AgentMark's tile. */
@@ -75,7 +81,13 @@ export function LogoDrawing({
       focusable="false"
       data-agent-logo={logo.id}
     >
-      {logo.shapes.map(shapeElement)}
+      {logo.turn ? (
+        <g transform={turnTransform(logo.viewBox, logo.turn.angle)}>
+          {logo.shapes.map(shapeElement)}
+        </g>
+      ) : (
+        logo.shapes.map(shapeElement)
+      )}
     </svg>
   );
 }
