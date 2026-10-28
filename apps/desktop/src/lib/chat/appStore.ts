@@ -269,6 +269,15 @@ export class AppStore {
     }
   }
 
+  /**
+   * An agent's Connection setting (`null`: Automatic). Rust answers every agent from the last
+   * detection, so the lists change at once; a failure is thrown for the caller to show.
+   */
+  async setAgentConnection(agentId: string, connection: string | null): Promise<void> {
+    const agents = await this.#transport.agentSetConnection(agentId, connection);
+    this.#set({ ...this.#state, agents });
+  }
+
   /** The env banner's Retry: a new resolution, followed until it ends. */
   async retryEnv(): Promise<void> {
     const run = this.#run;

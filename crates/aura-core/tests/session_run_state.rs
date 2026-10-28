@@ -223,13 +223,29 @@ async fn native_and_acp_chats_cannot_own_the_same_claude_session() {
         .await
         .expect("native chat");
     h.status(&native.id, SessionStatus::Ready).await;
+    // One Claude Code: the second chat reaches the adapter through the Connection setting.
+    h.detector
+        .set_connection("claude", Some("claude-acp"))
+        .await
+        .expect("the adapter is Claude's");
     let acp = h
         .manager
-        .create_chat("claude-acp", &h.folder)
+        .create_chat("claude", &h.folder)
         .await
         .expect("ACP chat");
+    assert_eq!(
+        (native.agent_id.as_str(), acp.agent_id.as_str()),
+        ("claude", "claude")
+    );
     h.status(&acp.id, SessionStatus::Failed).await;
     assert_eq!(second_handle.commands(), [LoggedCommand::Shutdown]);
+    let connections: Vec<String> = h
+        .factory
+        .setups()
+        .iter()
+        .map(|setup| setup.agent_id.clone())
+        .collect();
+    assert_eq!(connections, ["claude", "claude-acp"]);
     // The same namespace applies to a persisted resume id, before its driver is created.
     h.manager.stop(&native.id).await.expect("stop native");
     h.status(&native.id, SessionStatus::Stopped).await;

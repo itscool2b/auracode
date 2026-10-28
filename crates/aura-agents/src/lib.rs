@@ -8,7 +8,11 @@
 //!   first time ([`Detector::prepare_launch`]). Other crates' tests use [`Detector::fixed`], whose
 //!   [`FixedAgent`]s answer as given.
 //!
-//! The catalog includes native Claude, Hermes, the Claude and Codex ACP adapters, and the demo agent.
+//! The catalog lists connections; people see one entry per agent. Claude Code and Codex each have
+//! auracode's own driver and an npm ACP adapter, Antigravity and Grok Build an ACP server and a
+//! restricted text fallback, and OpenCode its 1.x and 2.x lines: [`Detector::cached`] shows each
+//! as one agent, and [`Detector::choose_connection`] picks the connection of a new session
+//! (Automatic, or the agent's Connection setting on this device).
 //! Detection never installs or runs an adapter. Installation has its own timeout and the user's
 //! consent (creating the chat after the download note).
 //!
@@ -17,6 +21,7 @@
 mod candidates;
 pub mod catalog;
 pub mod config_vendor;
+mod connection_choices;
 mod detect;
 pub mod harness;
 pub mod hosts;
@@ -34,7 +39,9 @@ mod shared;
 
 use std::time::Duration;
 
-pub use catalog::{AgentSpec, Recipe, UserBinary, catalog, get, parse_version, version_at_least};
+pub use catalog::{
+    AgentSpec, Recipe, UserBinary, agent_of, catalog, get, parse_version, version_at_least,
+};
 pub use detect::{Detector, FixedAgent, Gate};
 pub use launch::LaunchError;
 

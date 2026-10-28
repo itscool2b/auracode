@@ -519,10 +519,19 @@ async fn an_adapter_ready_names_the_binary_that_will_run() {
         }
     );
     let entries = detector.detect_all(false).await;
+    // The adapter is Claude Code's second connection, not an agent of its own.
+    assert!(!entries.iter().any(|entry| entry.id == "claude-acp"));
     let entry = entries
         .iter()
-        .find(|entry| entry.id == "claude-acp")
-        .expect("entry");
+        .find(|entry| entry.id == "claude")
+        .and_then(|entry| entry.connections.as_ref())
+        .and_then(|connections| {
+            connections
+                .options
+                .iter()
+                .find(|option| option.id == "claude-acp")
+        })
+        .expect("the adapter connection");
     assert!(entry.needs_download, "not installed yet");
     // Detection never installs and never runs an adapter.
     assert!(machine.runs("npm").is_empty());

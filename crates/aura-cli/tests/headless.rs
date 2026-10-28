@@ -197,18 +197,32 @@ mod setup {
             text.contains("Removed by the scrub: CLAUDECODE\n"),
             "{text}"
         );
+        // One entry per agent: an adapter or a text fallback is a connection, not an agent.
+        let mut agents: Vec<&aura_agents::AgentSpec> = Vec::new();
         for spec in aura_agents::catalog() {
+            if !agents.iter().any(|agent| agent.agent == spec.agent) {
+                agents.push(spec);
+            }
+        }
+        for spec in &agents {
             assert!(
-                text.contains(&format!("{} ({})", spec.id, spec.name)),
+                text.contains(&format!("{} ({})\n", spec.agent, spec.name)),
                 "{}: {text}",
-                spec.id
+                spec.agent
             );
         }
+        assert!(!text.contains("claude-acp ("), "{text}");
+        assert!(
+            text.contains(
+                "claude (Claude Code)\n  missing: claude was not found on your PATH.\n  connection: Automatic; new sessions use none (none can run here)\n"
+            ),
+            "{text}"
+        );
         assert!(
             text.contains("mock (Demo agent (scripted, no AI))\n  ready (built in)"),
             "{text}"
         );
-        let external_agents = aura_agents::catalog()
+        let external_agents = agents
             .iter()
             .filter(|spec| !matches!(spec.recipe, aura_agents::Recipe::Builtin))
             .count();

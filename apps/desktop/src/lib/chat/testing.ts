@@ -567,6 +567,11 @@ export class FakeTransport implements Transport {
     return this.handlers.agentUpdate?.(agentId) ?? Promise.resolve();
   }
 
+  agentSetConnection(agentId: string, connection: string | null): Promise<AgentEntry[]> {
+    this.#record("agentSetConnection", [agentId, connection]);
+    return this.handlers.agentSetConnection?.(agentId, connection) ?? Promise.resolve([]);
+  }
+
   envStatus(): Promise<EnvStatus> {
     this.#record("envStatus", []);
     return this.handlers.envStatus?.() ?? Promise.resolve(READY_ENV);

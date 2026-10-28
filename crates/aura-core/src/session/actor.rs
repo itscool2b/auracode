@@ -83,18 +83,18 @@ const OPTION_REPLY_TIMEOUT: Duration = Duration::from_secs(35);
 /// The withdrawals of answered requests are remembered for this many requests.
 const ANSWERED_REMEMBERED: usize = 64;
 
+/// The chat, the folder context of its running agent, and the connection it runs or would start
+/// with (its saved session's, else its agent's current one).
+pub(crate) type FolderContextReply = (
+    ChatRecord,
+    Option<aura_protocol::workspace::ChatFolderContext>,
+    Option<AgentSpec>,
+);
+
 /// A message for a chat's actor. Every reply is a oneshot.
 pub(crate) enum ChatMsg {
     FolderContext {
-        reply: oneshot::Sender<
-            Result<
-                (
-                    ChatRecord,
-                    Option<aura_protocol::workspace::ChatFolderContext>,
-                ),
-                SessionError,
-            >,
-        >,
+        reply: oneshot::Sender<Result<FolderContextReply, SessionError>>,
     },
     #[cfg(feature = "account-sync")]
     ImportSync {
@@ -399,10 +399,32 @@ struct Preparing {
 
 /// What a preparation produces.
 struct Prepared {
+    /// The connection the start uses.
+    spec: Box<AgentSpec>,
     folder_context: aura_protocol::workspace::ChatFolderContext,
     folder_key: PathBuf,
     launch: LaunchSpec,
     env: Arc<ResolvedEnv>,
+}
+
+/// Which connection a start uses: a saved session resumes through the connection that made it; a
+/// new session takes the one its agent's Connection setting picks when the start begins.
+enum StartConnection {
+    Saved(Box<AgentSpec>),
+    New { agent: String },
+}
+
+/// The connection a chat shows before it starts: its saved session's, else the one a new session
+/// of its agent would use now.
+fn chat_connection(
+    detector: &aura_agents::Detector,
+    chat: &ChatRecord,
+    session: Option<&AgentSessionRow>,
+) -> Option<AgentSpec> {
+    match session {
+        Some(session) => detector.spec(&session.agent_id),
+        None => detector.connection_for(&chat.agent_id),
+    }
 }
 
 /// Why a start failed before its driver ran.
@@ -632,7 +654,7 @@ impl ChatActor {
                 "recovered turns a stopped actor left running"
             );
         }
-        let spec = shared.deps.detector.spec(&chat.agent_id);
+        let spec = chat_connection(&shared.deps.detector, &chat, agent_session.as_ref());
         let defaults = lock(&shared.new_chat_defaults).clone();
         let autonomy = agent_session
             .as_ref()
@@ -988,14 +1010,23 @@ impl ChatActor {
                 self.read_page(before_seq, max_bytes, PageFor::History { reply });
             }
             ChatMsg::Lists { reply } => drop(reply.send(Ok(self.lists()))),
-            ChatMsg::FolderContext { reply } => drop(
-                reply.send(Ok((
-                    self.chat.clone(),
-                    self.driver
-                        .as_ref()
-                        .map(|driver| driver.folder_context.clone()),
-                ))),
-            ),
+            ChatMsg::FolderContext { reply } => {
+                // Before any start, follow the agent's current connection.
+                let spec = if self.driver.is_some() || self.agent_session.is_some() {
+                    self.spec.clone()
+                } else {
+                    chat_connection(&self.shared.deps.detector, &self.chat, None)
+                };
+                drop(
+                    reply.send(Ok((
+                        self.chat.clone(),
+                        self.driver
+                            .as_ref()
+                            .map(|driver| driver.folder_context.clone()),
+                        spec,
+                    ))),
+                );
+            }
             ChatMsg::Send { text, parts, reply } => {
                 let ack = self.send(text, parts);
                 drop(reply.send(ack));
@@ -1358,7 +1389,7 @@ impl ChatActor {
             self.agent_session = load.agent_session;
             self.continuation = load.continuation;
             self.replay_check = load.replay_check.filter(|_| !self.continuation.as_ref().is_some_and(|value| value.force_fresh || value.native_start.fork));
-            self.spec = self.shared.deps.detector.spec(&self.chat.agent_id);
+            self.spec = chat_connection(&self.shared.deps.detector, &self.chat, self.agent_session.as_ref());
             let defaults = lock(&self.shared.new_chat_defaults).clone();
             self.autonomy = self.agent_session.as_ref().map_or(defaults.autonomy, |session| session.autonomy);
             let initial_model = load.initial_model.or_else(|| defaults.model_for(&self.chat.agent_id));
@@ -1376,7 +1407,7 @@ impl ChatActor {
             self.auth = None;
             self.conflict = false;
             self.set_status(SessionStatus::Stopped, Some("Continuation saved. The next prompt includes its visible handoff.".into()));
-            self.push(AuraEvent::Notice { level: NoticeLevel::Info, message: format!("Continuing with {}. Earlier messages remain intact; the reviewed context will appear in the next user prompt.",self.chat.agent_id) }, None);
+            self.push(AuraEvent::Notice { level: NoticeLevel::Info, message: format!("Continuing with {}. Earlier messages remain intact; the reviewed context will appear in the next user prompt.",self.agent_label()) }, None);
             self.flush();
             let ack = prompt.map(|(text,parts)| self.send(text,parts)).transpose()?;
             Ok(aura_protocol::conversation::ContinuationResult { chat_id: id, prompt: ack })
@@ -2347,7 +2378,42 @@ impl ChatActor {
             }
             SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired => {}
         }
-        let Some(spec) = self.spec.clone() else {
+        // A saved session resumes through the connection that made it; a new one (a first start,
+        // Start fresh, a switch that cannot resume) takes the agent's Connection setting.
+        // A native fork resumes its source session, so it takes that session's connection.
+        let detector = &self.shared.deps.detector;
+        let fork = self
+            .continuation
+            .as_ref()
+            .filter(|value| value.resume_source.is_some())
+            .and_then(|value| value.connection.clone());
+        let saved = match fork {
+            Some(connection) => Some(connection),
+            None if !fresh => self
+                .agent_session
+                .as_ref()
+                .map(|session| session.agent_id.clone()),
+            None => None,
+        };
+        let connection = match saved {
+            Some(id) => match detector.spec(&id) {
+                Some(spec) => StartConnection::Saved(Box::new(spec)),
+                None => {
+                    let reason = format!(
+                        "This chat's saved session ran through a connection this version of auracode does not have ({id}). Start a fresh session to continue."
+                    );
+                    self.start_failed(ErrorKind::AgentUnavailable, reason, None, false);
+                    return Ok(());
+                }
+            },
+            None => StartConnection::New {
+                agent: self.chat.agent_id.clone(),
+            },
+        };
+        let Some(spec) = (match &connection {
+            StartConnection::Saved(spec) => Some((**spec).clone()),
+            StartConnection::New { agent } => detector.agent(agent),
+        }) else {
             let reason = SessionError::UnknownAgent(self.chat.agent_id.clone()).to_string();
             self.start_failed(ErrorKind::AgentUnavailable, reason, None, false);
             return Ok(());
@@ -2398,7 +2464,7 @@ impl ChatActor {
                 worktrees: deps.worktrees.clone(),
             },
             self.chat.agent_host.clone(),
-            spec.clone(),
+            connection,
             Arc::clone(&deps.detector),
             Arc::clone(&deps.env),
             progress,
@@ -2480,9 +2546,9 @@ impl ChatActor {
     }
 
     fn spawn_driver(&mut self, prepared: Prepared, fresh: bool) {
-        let Some(spec) = self.spec.clone() else {
-            return;
-        };
+        // The connection the preparation chose is the one this start runs and its session records.
+        let spec = (*prepared.spec).clone();
+        self.spec = Some(spec.clone());
         let native_start = self
             .continuation
             .as_ref()
@@ -3465,6 +3531,7 @@ impl ChatActor {
         if let Some(continuation) = &mut self.continuation {
             continuation.force_fresh = false;
             continuation.resume_source = None;
+            continuation.connection = None;
             continuation.native_start = Default::default();
         }
         driver.spawn_id = Some(info.spawn_id.clone());
@@ -4902,14 +4969,15 @@ async fn next_progress(progress: &mut Option<mpsc::UnboundedReceiver<String>>) -
     }
 }
 
-/// A start's preparation: the folder, detection, the adapter install and launch spec, the env. One
+/// A start's preparation: the folder, the connection (a new session's is chosen here, once
+/// detection can say which runs), detection, the adapter install and launch spec, the env. One
 /// task, so dropping it (Esc, force stop, Stop, quit) kills a running install or probe. It begins
 /// once no earlier generation of the chat winds down: a process still being killed holds its native
 /// session, which this start may resume.
 async fn prepare(
     context: super::workspace_folders::LaunchFolders,
     agent_host: aura_protocol::agents::AgentHost,
-    spec: AgentSpec,
+    connection: StartConnection,
     detector: Arc<aura_agents::Detector>,
     env: Arc<aura_process::EnvResolver>,
     progress: mpsc::UnboundedSender<String>,
@@ -4935,11 +5003,54 @@ async fn prepare(
             message: "Resolving the folder failed.".into(),
             folder: None,
         })?;
+    let unavailable = |error: LaunchError| match error {
+        LaunchError::InstallFailed { reason } => StartFailure {
+            kind: ErrorKind::SpawnFailed,
+            message: reason,
+            folder: None,
+        },
+        LaunchError::Missing { reason } | LaunchError::Broken { reason } => StartFailure {
+            kind: ErrorKind::AgentUnavailable,
+            message: reason,
+            folder: None,
+        },
+    };
+    let (spec, saved) = match connection {
+        StartConnection::Saved(spec) => (spec, true),
+        StartConnection::New { agent } => (
+            Box::new(
+                detector
+                    .choose_connection(&agent)
+                    .await
+                    .map_err(unavailable)?,
+            ),
+            false,
+        ),
+    };
     match detector.detect(&spec).await {
         Availability::Missing { reason } | Availability::Broken { reason } => {
+            // A saved session cannot move to another connection, but a fresh session can.
+            let other = if saved {
+                detector
+                    .connection_for(aura_agents::agent_of(spec.id))
+                    .filter(|other| other.id != spec.id)
+            } else {
+                None
+            };
+            let message = match other {
+                Some(other)
+                    if matches!(detector.detect(&other).await, Availability::Ready { .. }) =>
+                {
+                    format!(
+                        "{reason} This chat's saved session uses the {} connection. Start fresh to continue in a new session on the {} connection.",
+                        spec.connection, other.connection
+                    )
+                }
+                _ => reason,
+            };
             return Err(StartFailure {
                 kind: ErrorKind::AgentUnavailable,
-                message: reason,
+                message,
                 folder: None,
             });
         }
@@ -4948,23 +5059,12 @@ async fn prepare(
     let launch = detector
         .prepare_launch(&spec, progress.clone())
         .await
-        .map_err(|error| match error {
-            LaunchError::InstallFailed { reason } => StartFailure {
-                kind: ErrorKind::SpawnFailed,
-                message: reason,
-                folder: None,
-            },
-            LaunchError::Missing { reason } | LaunchError::Broken { reason } => StartFailure {
-                kind: ErrorKind::AgentUnavailable,
-                message: reason,
-                folder: None,
-            },
-        })?;
+        .map_err(unavailable)?;
     let _ = progress.send("Reading your shell environment".into());
     let env = env.get().await;
     let folder_context = super::workspace_folders::resolve(
         context,
-        super::workspace_folders::supported(Some(&spec), &agent_host),
+        super::workspace_folders::supported(Some(&*spec), &agent_host),
     )
     .await
     .map_err(|_| StartFailure {
@@ -4974,6 +5074,7 @@ async fn prepare(
         folder: None,
     })?;
     Ok(Prepared {
+        spec,
         folder_context,
         launch,
         env,

@@ -235,15 +235,15 @@ auracode/                        Cargo workspace + pnpm workspace
 ## Agent integration (researched 2026-10-24)
 | Agent | Path | Notes |
 |---|---|---|
-| Claude Code | Native: own Rust control loop over stream-json; user's `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio`, always with `--permission-mode`, with `--session-id=<uuid>` (new session) or `--resume=<id>`, and with `--allow-dangerously-skip-permissions` where the user's settings allow bypass | Contract and fixtures in the [M0 spike](spikes/claude-control.md) (2.1.310). Own lenient serde types; `claude-codes` crate and the official Python Agent SDK are references, diffed each release. Control: `initialize`, `interrupt`, `set_model`, `set_permission_mode`, `apply_flag_settings` (effort), `get_usage`, `get_context_usage`, `list_models`, `rewind_files`; we answer `can_use_tool`; fork via `--fork-session` (with our `--session-id`) or resume-at. `--permission-mode` is never left out: without it every spawn, resumes included, takes `permissions.defaultMode` from the user's settings, which can be `auto`. `--session-id` gives a new session's native id before its first turn. `bypassPermissions` can be switched on mid-chat only in a process launched with `--allow-dangerously-skip-permissions`. Resume works after a cwd change (the transcript keeps appending under the original folder's project dir), and `--fork-session` with `--session-id` writes the fork under the new folder's. The user's own hooks run inside these sessions (`SessionStart` context, `PermissionRequest` hooks that can answer or delay a prompt), so a tool call may never reach us as `can_use_tool`; principle 3 still holds, since auracode itself adds nothing. `rate_limit_event` feeds the limits meter. Unknown messages logged, never fatal; capabilities from `system/init`; compatibility smoke per new version. Day-one fallback (M1a): ACP via the `claude-agent-acp` npm adapter, installed once per version into `<data root>/adapters` with `npm ci --omit=optional --ignore-scripts` from a lockfile committed for that version, launched as `node <entry>` from there, with the user's `claude` forced through `CLAUDE_CODE_EXECUTABLE`; never `npx` in the chat folder. |
-| Codex | Native: `codex app-server --listen stdio://`, own process | Own serde subset with `#[serde(other)]`, tested against the JSON Schema from `codex app-server generate-json-schema` per supported version. `thread/start/resume/fork/list`, `turn/start` (model, effort, cwd, approvalPolicy, sandboxPolicy, images, mentions), `turn/steer`, `turn/interrupt`, `turn/diff/updated`, approvals, `model/list`, `account/rateLimits/read`, plugin/skill/config APIs (reused by Library + Sync). Never the shared daemon (opt-in later). Day-one fallback (M1a): the `codex-acp` npm adapter, installed and launched like Claude's, with the user's `codex` forced through `CODEX_PATH`. |
+| Claude Code | Native: own Rust control loop over stream-json; user's `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio`, always with `--permission-mode`, with `--session-id=<uuid>` (new session) or `--resume=<id>`, and with `--allow-dangerously-skip-permissions` where the user's settings allow bypass | Contract and fixtures in the [M0 spike](spikes/claude-control.md) (2.1.310). Own lenient serde types; `claude-codes` crate and the official Python Agent SDK are references, diffed each release. Control: `initialize`, `interrupt`, `set_model`, `set_permission_mode`, `apply_flag_settings` (effort), `get_usage`, `get_context_usage`, `list_models`, `rewind_files`; we answer `can_use_tool`; fork via `--fork-session` (with our `--session-id`) or resume-at. `--permission-mode` is never left out: without it every spawn, resumes included, takes `permissions.defaultMode` from the user's settings, which can be `auto`. `--session-id` gives a new session's native id before its first turn. `bypassPermissions` can be switched on mid-chat only in a process launched with `--allow-dangerously-skip-permissions`. Resume works after a cwd change (the transcript keeps appending under the original folder's project dir), and `--fork-session` with `--session-id` writes the fork under the new folder's. The user's own hooks run inside these sessions (`SessionStart` context, `PermissionRequest` hooks that can answer or delay a prompt), so a tool call may never reach us as `can_use_tool`; principle 3 still holds, since auracode itself adds nothing. `rate_limit_event` feeds the limits meter. Unknown messages logged, never fatal; capabilities from `system/init`; compatibility smoke per new version. Second connection (M1a; one agent with the native one since 2026-10-28, see "One entry per agent"): ACP via the `claude-agent-acp` npm adapter, installed once per version into `<data root>/adapters` with `npm ci --omit=optional --ignore-scripts` from a lockfile committed for that version, launched as `node <entry>` from there, with the user's `claude` forced through `CLAUDE_CODE_EXECUTABLE`; never `npx` in the chat folder. |
+| Codex | Native: `codex app-server --listen stdio://`, own process | Own serde subset with `#[serde(other)]`, tested against the JSON Schema from `codex app-server generate-json-schema` per supported version. `thread/start/resume/fork/list`, `turn/start` (model, effort, cwd, approvalPolicy, sandboxPolicy, images, mentions), `turn/steer`, `turn/interrupt`, `turn/diff/updated`, approvals, `model/list`, `account/rateLimits/read`, plugin/skill/config APIs (reused by Library + Sync). Never the shared daemon (opt-in later). Second connection (M1a; one agent with the native one, see "One entry per agent"): the `codex-acp` npm adapter, installed and launched like Claude's, with the user's `codex` forced through `CODEX_PATH`. |
 | Pi | Native RPC `pi --mode rpc` | `prompt`/`steer`/`follow_up`/`abort`, `set_model`, `get_available_models`, `set_thinking_level`, `fork`, `get_session_stats`, `extension_ui_request` (rendered as confirm/select/input). Turn ends on `agent_settled`; split on LF only. |
-| Antigravity | ACP via Google's `agy_acp_server` (registry `antigravity-acp`) | Fallback `agy --input-format stream-json --output-format stream-json`, with visible prompts on stdin (text only, no approvals, interrupt = kill). The persistent input mode drops `-p` prompts. |
+| Antigravity | ACP via Google's `agy_acp_server` (registry `antigravity-acp`) | Second connection, the text fallback: `agy --input-format stream-json --output-format stream-json`, with visible prompts on stdin (text only, no approvals, interrupt = kill). The persistent input mode drops `-p` prompts. |
 | oh-my-pi | ACP `omp acp` | Never set `PI_CODING_AGENT_DIR` globally. |
 | Cursor | ACP through the vendor-named `cursor-agent acp` | Dialect: deferred `cursor/ask_question` / `cursor/create_plan` and activity notifications. Use advertised model/config controls; model switching by restart still needs pinned vendor qualification. Never detect by the name `agent`. |
-| Grok Build | ACP `grok agent stdio` | Fallback `grok -p --output-format streaming-json`. |
+| Grok Build | ACP `grok agent stdio` | Second connection, the text fallback: `grok -p --output-format streaming-json`. |
 | Hermes | ACP `hermes acp` | A viewer of its gateway daemon, where turns run: cancel before kill, with time for the cancel to land. Dialect: legacy `modes` (`default`, `accept_edits`, `dont_ask`) and `models` lists, the untyped `session/set_model`, mode changes only while idle; Full auto = `dont_ask` plus auto-answers for command approvals. Not in the registry; hard-coded. |
-| OpenCode | ACP `opencode acp` | Detect V1 (1.19.x) vs V2 (2.1.x). |
+| OpenCode | ACP `opencode acp` | One agent; V1 (1.19.x) and V2 (2.1.x) are its two connections, qualified separately. |
 | Gemini CLI + registry agents | Generic ACP (registry `cdn.agentclientprotocol.com/registry/v1/latest/registry.json`) | Shown with an "unverified" badge until tested. |
 
 ACP client advertises `fs` and `terminal` as false (agents use their own file I/O and shells), and
@@ -252,6 +252,38 @@ options, told apart by category; `session/set_model` is gone from the schema and
 legacy dialect, for agents that still send a `models` list (Hermes). `session/load|resume`; `usage_update`;
 sign-in through the agent's own terminal command. Unknown agent-to-client requests get JSON-RPC "method not
 found" so agents never hang.
+
+**One entry per agent (owner decision, 2026-10-28).** People see one Claude Code and one Codex. The
+catalog lists *connections* (ways to start an agent) and files each under its agent: Claude Code is
+`claude` (auracode's native driver) and `claude-acp` (the npm ACP adapter); Codex is `codex` and
+`codex-acp`; Antigravity and Grok Build are their ACP server and a restricted text fallback
+(`agy-stream`, `grok-stream`); OpenCode is its 1.x and 2.x lines (`opencode`, `opencode-v2`).
+New chat, the composer's picker, onboarding's count, the Agents page and the Plugin library all list
+the agent once, from the same Rust list.
+- **Automatic (the default):** a new session uses the first connection, in catalog order, that can
+  run here: the native driver when the user's CLI meets its minimum version (Claude Code 2.1.310,
+  Codex 0.162.1), else the adapter when it can run (Node.js 22 or newer, the CLI at the adapter's
+  floor, npm until the adapter is installed). While the preferred connection is still being
+  detected, the agent reads as checking.
+- **Explicit:** each agent's details on the Agents page have a Connection row (Automatic, or one
+  connection). It is device-local (`agent-connections.json` beside `agent-executables.json` in
+  the data root), names catalog ids only, and applies to new sessions. An explicit connection that
+  cannot run makes the agent unavailable with that connection's reason.
+- **None can run:** the agent shows its preferred connection's reason, followed by each other
+  connection's (named by its label) when either is installed but unusable, for example "auracode
+  needs Claude Code 2.1.310 or newer (found 2.1.309). ACP adapter: Node.js 22 or newer is required".
+- **Existing data, no migration:** a chat, project default or New chat default saved as a
+  connection id (`claude-acp`, also from a synced older device) reads as its agent. A native
+  session row keeps the connection that made it, so a chat that ran on the adapter keeps resuming
+  that saved session through the adapter, across handoffs to other agents and back; a fresh
+  session (first start, Start fresh, a switch that cannot resume) takes the Connection setting. A
+  native fork resumes through its source session's connection. A saved session whose connection
+  can no longer run fails with its reason and says Start fresh continues on the other connection.
+- **Actions** on an agent (update, sign-in check, executable choice, Plugin library listings) act
+  on the connection it uses, so a CLI too old for the native driver can still be updated from the
+  row the adapter runs. The adapter's one-time download is stated in the agent's details and in New
+  chat before the first chat that needs it. The developer CLI (`aura-cli probe`, `smoke`) still
+  addresses connections by id.
 
 **Detection + updates.**
 - Env: resolve the login-shell env asynchronously (`$SHELL -ilc` with stdin `/dev/null`, markers, 10s

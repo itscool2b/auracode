@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AgentEntry, ConfigOption } from "../../bindings";
 import { agentLineup } from "../../lib/chat/agentLineup";
-import { NewChatDraft } from "../../lib/chat/appStore";
+import { agentChoice, NewChatDraft } from "../../lib/chat/appStore";
 import { type ChatState, ChatStore } from "../../lib/chat/chatStore";
 import {
   attachResult,
@@ -16,6 +16,7 @@ import {
   sessionInfo,
 } from "../../lib/chat/testing";
 import { applyEntries, emptyTranscript, renderTranscript } from "../../lib/chat/transcript";
+import { primaryAgents } from "../setup/Onboarding";
 import { Banners, envBanner, RecoveryBannerView, storageBanner } from "./Banners";
 import { ChatList, chatShortcutIndex, projectName, projectsOf, visibleChatIds } from "./ChatList";
 import { StillWorking } from "./ChatView";
@@ -85,9 +86,11 @@ describe("New chat", () => {
   it("unavailable_agent_disabled: agents that can't run here are not offered and show their reason", () => {
     const agents = [
       agent("mock", { state: "ready", version: null, path: "built in" }),
-      agent("claude-acp", {
-        state: "missing",
-        reason: "Node.js 22 or newer is required (found 20.11.0).",
+      // Claude Code can run neither way: Rust's one reason names what each connection lacks.
+      agent("claude", {
+        state: "broken",
+        reason:
+          "auracode needs Claude Code 2.1.310 or newer (found 2.1.309). ACP adapter: Node.js 22 or newer is required (found 20.11.0).",
       }),
       agent("hermes", { state: "broken", reason: "hermes --version failed." }),
     ];
@@ -104,11 +107,11 @@ describe("New chat", () => {
     expect(html).toMatch(
       /<input type="radio"(?=[^>]*value="mock")(?=[^>]*aria-label="mock, ready")/,
     );
-    expect(html).not.toContain('value="claude-acp"');
+    expect(html).not.toContain('value="claude"');
     expect(html).not.toContain('value="hermes"');
     expect(html).toContain("Other agents");
     expect(html).toMatch(
-      /data-test-unavailable="claude-acp".*Node\.js 22 or newer is required \(found 20\.11\.0\)\./,
+      /data-test-unavailable="claude".*ACP adapter: Node\.js 22 or newer is required \(found 20\.11\.0\)\./,
     );
     expect(html).toMatch(/data-test-unavailable="hermes".*hermes --version failed\./);
     // Nothing chosen yet: Create waits for an agent and a folder.
@@ -117,14 +120,16 @@ describe("New chat", () => {
   });
 
   it("states the one-time download before the chat that needs it is created", () => {
+    // Claude Code runs through its adapter here (its CLI is too old for the native driver).
     const adapter = agent(
-      "claude-acp",
+      "claude",
       {
         state: "ready",
-        version: "Claude Code 2.1.310 via claude-agent-acp 0.95.0",
+        version: "Claude Code 2.1.309 via claude-agent-acp 0.95.0",
         path: "/usr/local/bin/claude",
       },
       {
+        name: "Claude Code",
         needs_download: true,
         launch: "@agentclientprotocol/claude-agent-acp 0.95.0 with your claude",
       },
@@ -134,7 +139,7 @@ describe("New chat", () => {
     );
     expect(downloadNote({ ...adapter, needs_download: false })).toBeNull();
     const draft = new NewChatDraft(new FakeTransport());
-    draft.chooseAgent("claude-acp");
+    draft.chooseAgent("claude");
     const html = renderToStaticMarkup(
       <NewChat
         agents={[adapter]}
@@ -147,7 +152,9 @@ describe("New chat", () => {
     expect(html).toContain(
       "Creating this chat downloads @agentclientprotocol/claude-agent-acp 0.95.0",
     );
-    expect(html).toContain("Claude Code 2.1.310 via claude-agent-acp 0.95.0");
+    expect(html).toContain("Claude Code 2.1.309 via claude-agent-acp 0.95.0");
+    // One Claude Code, whichever way it runs.
+    expect(html.match(/type="radio"/g)?.length).toBe(1);
     expect(buttons(html).find((b) => b.label === "Refreshing…")?.disabled).toBe(true);
   });
 
@@ -250,34 +257,42 @@ describe("the agent lineup", () => {
   const ready = { state: "ready", version: "1.0.0", path: "/bin/agent" } as const;
   const missing = { state: "missing", reason: "Not installed." } as const;
   const broken = { state: "broken", reason: "Damaged." } as const;
+  const twoWays = (id: string, active: string) => ({
+    connections: {
+      preferred: null,
+      active,
+      options: [id, `${id}-acp`].map((option) => ({
+        id: option,
+        label: option === id ? "Direct" : "ACP adapter",
+        description: "",
+        availability: option === active ? ready : missing,
+        launch: option,
+        needs_download: false,
+      })),
+    },
+  });
+  // As Rust reports them: one entry per agent. Claude Code runs natively and Codex through its
+  // adapter, each still one agent.
   const catalog = [
-    agent("claude", ready),
-    agent("claude-acp", ready),
-    agent("codex", missing),
-    agent("codex-acp", ready),
+    agent("hermes", broken),
+    agent("claude", ready, twoWays("claude", "claude")),
+    agent("codex", ready, twoWays("codex", "codex-acp")),
     agent("pi", { state: "checking" }),
     agent("cursor", missing),
-    agent("hermes", broken),
     agent("mock", ready),
   ];
 
   it("splits the catalog once: usable agents and the others, nothing counted twice", () => {
     const { usable, others } = agentLineup(catalog);
-    expect(usable.map((entry) => entry.id)).toEqual([
-      "claude",
-      "claude-acp",
-      "codex-acp",
-      "pi",
-      "mock",
-    ]);
-    expect(others.map((entry) => entry.id)).toEqual(["codex", "cursor", "hermes"]);
+    expect(usable.map((entry) => entry.id)).toEqual(["claude", "codex", "pi", "mock"]);
+    expect(others.map((entry) => entry.id)).toEqual(["hermes", "cursor"]);
     expect(usable.length + others.length).toBe(catalog.length);
   });
 
-  it("offers one usable variant per product, native first, the demo only alone", () => {
+  it("offers each usable agent once, the demo only alone", () => {
     expect(agentLineup(catalog).products.map((entry) => entry.id)).toEqual([
       "claude",
-      "codex-acp",
+      "codex",
       "pi",
     ]);
     expect(
@@ -287,7 +302,7 @@ describe("the agent lineup", () => {
     ).toEqual(["mock"]);
   });
 
-  it("is what New chat counts under Other agents", () => {
+  it("is what New chat, the picker and onboarding all count", () => {
     const html = renderToStaticMarkup(
       <NewChat
         agents={catalog}
@@ -297,7 +312,17 @@ describe("the agent lineup", () => {
         onCreated={noop}
       />,
     );
-    expect(html).toMatch(/new-chat-more-count">3</);
+    const radios = [...html.matchAll(/type="radio"[^>]*value="([^"]+)"/g)].map((match) => match[1]);
+    expect(radios).toEqual(["claude", "codex", "pi", "mock"]);
+    expect(html).not.toContain("-acp");
+    expect(html).toMatch(/new-chat-more-count">2</);
+    // The picker offers New chat's real agents; onboarding counts the same rows.
+    const { products, others } = agentLineup(catalog);
+    expect(products.map((entry) => entry.id)).toEqual(radios.filter((id) => id !== "mock"));
+    const roster = primaryAgents(catalog);
+    expect(roster.map((entry) => entry.id)).toEqual(["hermes", "claude", "codex", "pi", "cursor"]);
+    expect(roster.filter((entry) => entry.availability.state === "ready").length).toBe(2);
+    expect(roster.filter((entry) => !agentChoice(entry).enabled).length).toBe(others.length);
   });
 });
 

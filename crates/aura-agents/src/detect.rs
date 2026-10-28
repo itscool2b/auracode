@@ -33,6 +33,7 @@ use crate::launch::{self, LaunchError};
 use crate::probe::{self, BUILT_IN, Detection};
 use crate::shared::SharedTask;
 
+mod agents;
 mod selections;
 
 /// Detects agents and prepares their launches.
@@ -41,6 +42,11 @@ pub struct Detector {
     mode: Mode,
     /// The agent of every `forget_install`, in order.
     forgotten: Mutex<Vec<String>>,
+    /// Each agent's Connection setting on this device (agent id to connection id); an agent
+    /// without one is Automatic.
+    connection_choices: Mutex<crate::connection_choices::Choices>,
+    /// Where they are saved: beside the executable choices, for a detector that persists those.
+    connection_path: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -721,7 +727,7 @@ impl Detector {
         let Mode::Live(live) = &self.mode else {
             return unavailable("This agent has no vendor maintenance commands.".into());
         };
-        let Some(spec) = self.spec(id) else {
+        let Some(spec) = self.connection_for(id) else {
             return unavailable("This agent is not in the catalog.".into());
         };
         let Some(installation) = live.detect(&spec).await.installation else {
@@ -758,7 +764,7 @@ impl Detector {
         let Mode::Live(live) = &self.mode else {
             return None;
         };
-        let spec = self.spec(id)?;
+        let spec = self.connection_for(id)?;
         let installation = live.detect(&spec).await.installation?;
         let provider = crate::installation::provider_namespace(id).to_owned();
         if crate::plugins::recipes(&provider).is_empty() {
@@ -795,7 +801,7 @@ impl Detector {
         let Mode::Live(live) = &self.mode else {
             return AgentAuthStatus::Unsupported;
         };
-        let Some(spec) = self.spec(id) else {
+        let Some(spec) = self.connection_for(id) else {
             return AgentAuthStatus::Unsupported;
         };
         let Some(installation) = live.detect(&spec).await.installation else {
@@ -838,7 +844,9 @@ impl Detector {
             .selection_gate
             .try_lock()
             .map_err(|_| MaintenanceError::AlreadyRunning)?;
-        let spec = self.spec(id).ok_or(MaintenanceError::Unsupported)?;
+        let spec = self
+            .connection_for(id)
+            .ok_or(MaintenanceError::Unsupported)?;
         let provider = crate::installation::provider_namespace(id).to_owned();
         if !lock(&live.state).maintenance.insert(provider.clone()) {
             return Err(MaintenanceError::AlreadyRunning);
@@ -926,6 +934,18 @@ impl Detector {
                 Err(error) => state.preference_error = Some(error),
             }
         }
+        let connection_path = preferences
+            .as_ref()
+            .map(|path| path.with_file_name(crate::connection_choices::FILE));
+        let connection_choices = connection_path
+            .as_deref()
+            .map(|path| {
+                crate::connection_choices::read(path).unwrap_or_else(|error| {
+                    tracing::warn!(%error, "connection choices unreadable; every agent uses Automatic");
+                    Default::default()
+                })
+            })
+            .unwrap_or_default();
         let live = Arc::new(Live {
             specs: catalog().to_vec(),
             env,
@@ -945,22 +965,27 @@ impl Detector {
         Arc::new(Detector {
             mode: Mode::Live(live),
             forgotten: Mutex::new(Vec::new()),
+            connection_choices: Mutex::new(connection_choices),
+            connection_path,
         })
     }
 
     /// Tests: these agents, in this order, with fixed answers (see [`FixedAgent`]); no probes, no
-    /// env, no installs.
+    /// env, no installs. Connection settings live in memory only.
     pub fn fixed(agents: Vec<FixedAgent>) -> Arc<Detector> {
         Arc::new(Detector {
             mode: Mode::Fixed {
                 agents: agents.into_iter().map(Fixed::new).collect(),
             },
             forgotten: Mutex::new(Vec::new()),
+            connection_choices: Mutex::new(Default::default()),
+            connection_path: None,
         })
     }
 
-    /// The agent with this id. The session manager looks agents up here, never in `catalog()`, so
-    /// tests can inject their own.
+    /// The connection with exactly this id (what a saved native session records). The session
+    /// manager looks connections and agents up here ([`agent`](Self::agent)), never in
+    /// `catalog()`, so tests can inject their own.
     pub fn spec(&self, id: &str) -> Option<AgentSpec> {
         match &self.mode {
             Mode::Live(live) => live.specs.iter().find(|spec| spec.id == id).cloned(),
@@ -983,15 +1008,16 @@ impl Detector {
         }
     }
 
-    /// Every agent, in catalog order (a fixed detector's in the order given).
+    /// Every agent, one entry each, in catalog order (a fixed detector's in the order given).
     ///
     /// `refresh: false` answers at once with [`cached`](Self::cached), never waiting: an agent whose
     /// first detection has not ended reads `Checking`, and detection runs in the background from
     /// [`new`](Self::new) on, once the env resolves. `refresh: true` resolves the env again, probes
-    /// every agent, and waits for the results; a fixed detector runs `detect` for each agent in
+    /// every connection, and waits for the results; a fixed detector runs `detect` for each agent in
     /// turn.
     pub async fn detect_all(&self, refresh: bool) -> Vec<AgentEntry> {
         if refresh {
+            self.reload_connections().await;
             match &self.mode {
                 Mode::Fixed { agents } => {
                     for fixed in agents {
@@ -1008,12 +1034,11 @@ impl Detector {
         self.cached()
     }
 
-    /// The last results, without waiting: `Checking` until an agent's first detection ends.
+    /// The last results, one entry per agent, without waiting: `Checking` until an agent's first
+    /// detection ends. An agent with several connections shows the one a new session uses (see
+    /// the `agents` module for the rule) and lists them all in `connections`.
     pub fn cached(&self) -> Vec<AgentEntry> {
-        match &self.mode {
-            Mode::Live(live) => live.specs.iter().map(|spec| live.entry(spec)).collect(),
-            Mode::Fixed { agents } => agents.iter().map(Fixed::entry).collect(),
-        }
+        self.agent_entries()
     }
 
     /// Installs an npm adapter when it is not installed (one shared attempt per package; `progress`
@@ -1095,6 +1120,7 @@ fn entry(spec: &AgentSpec, availability: Availability, needs_download: bool) -> 
         installation: None,
         latest_release: None,
         harness: None,
+        connections: None,
     }
 }
 
@@ -1193,15 +1219,28 @@ mod tests {
     async fn a_live_detector_with_an_empty_path_reports_why_each_agent_is_missing() {
         let detector = live();
         let entries = detector.detect_all(true).await;
+        // One entry per agent: the adapters, text fallbacks and OpenCode's 2.x line are
+        // connections of their agents, not agents of their own.
         let ids: Vec<&str> = entries.iter().map(|entry| entry.id.as_str()).collect();
         assert_eq!(
             ids,
-            catalog().iter().map(|spec| spec.id).collect::<Vec<_>>()
+            [
+                "hermes",
+                "claude",
+                "codex",
+                "antigravity",
+                "cursor",
+                "grok",
+                "omp",
+                "opencode",
+                "pi",
+                "mock"
+            ]
         );
         for entry in entries.iter().filter(|entry| {
             matches!(
                 entry.id.as_str(),
-                "antigravity" | "cursor" | "grok" | "omp" | "opencode" | "opencode-v2"
+                "antigravity" | "cursor" | "grok" | "omp" | "opencode"
             )
         }) {
             assert!(
@@ -1213,11 +1252,12 @@ mod tests {
             .filter(|entry| {
                 matches!(
                     entry.id.as_str(),
-                    "hermes" | "claude" | "claude-acp" | "codex" | "codex-acp" | "pi" | "mock"
+                    "hermes" | "claude" | "codex" | "pi" | "mock"
                 )
             })
             .map(|entry| entry.availability.clone())
             .collect();
+        // Nothing is installed: each agent says so with its preferred connection's reason.
         assert_eq!(
             reasons,
             [
@@ -1228,13 +1268,7 @@ mod tests {
                     reason: "claude was not found on your PATH.".into()
                 },
                 Availability::Missing {
-                    reason: "Node.js 22 or newer is required (found none).".into()
-                },
-                Availability::Missing {
                     reason: "codex was not found on your PATH.".into()
-                },
-                Availability::Missing {
-                    reason: "Node.js 22 or newer is required (found none).".into()
                 },
                 Availability::Missing {
                     reason: "pi was not found on your PATH.".into()
@@ -1247,9 +1281,44 @@ mod tests {
         );
         assert!(entries.iter().all(|entry| !entry.needs_download));
         assert_eq!(entries[0].launch, "hermes acp");
+        assert_eq!(entries[0].connections, None, "one connection");
+        let agent = &entries[1];
+        assert_eq!(agent.name, "Claude Code");
+        let connections = agent.connections.as_ref().expect("Claude has two");
         assert_eq!(
-            entries[2].launch,
-            "@agentclientprotocol/claude-agent-acp 0.95.0 with your claude"
+            (
+                connections.preferred.as_deref(),
+                connections.active.as_deref()
+            ),
+            (None, None)
+        );
+        let options: Vec<(&str, &str, &str)> = connections
+            .options
+            .iter()
+            .map(|option| {
+                (
+                    option.id.as_str(),
+                    option.label.as_str(),
+                    option.launch.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            options,
+            [
+                ("claude", "Direct", agent.launch.as_str()),
+                (
+                    "claude-acp",
+                    "ACP adapter",
+                    "@agentclientprotocol/claude-agent-acp 0.95.0 with your claude"
+                ),
+            ]
+        );
+        assert_eq!(
+            connections.options[1].availability,
+            Availability::Missing {
+                reason: "Node.js 22 or newer is required (found none).".into()
+            }
         );
         assert_eq!(detector.cached(), entries);
 

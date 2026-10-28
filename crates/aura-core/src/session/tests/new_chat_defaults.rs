@@ -94,6 +94,19 @@ async fn another_agents_default_model_never_reaches_a_chat() {
     rig.manager.shutdown_all(Duration::from_secs(5)).await;
 }
 
+/// One entry per agent: a default saved for "Codex (ACP)" is Codex's, whichever id names it.
+#[test]
+fn a_default_model_follows_the_agent_whichever_connection_named_it() {
+    let defaults = NewChatDefaults {
+        autonomy: Autonomy::FullAuto,
+        agent: Some("codex-acp".into()),
+        model: Some("gpt-6".into()),
+    };
+    assert_eq!(defaults.model_for("codex").as_deref(), Some("gpt-6"));
+    assert_eq!(defaults.model_for("codex-acp").as_deref(), Some("gpt-6"));
+    assert_eq!(defaults.model_for("claude"), None);
+}
+
 #[tokio::test]
 async fn without_settings_a_chat_starts_in_full_auto() {
     let (rig, seen, _handle) = observed(vec![

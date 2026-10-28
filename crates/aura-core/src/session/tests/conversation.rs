@@ -410,6 +410,131 @@ async fn switching_back_resumes_that_agents_session_and_only_hands_off_the_delta
     assert_eq!(lock(&starts)[2].1.as_deref(), Some("native-a"));
 }
 
+/// A chat saved while Claude Code's ACP adapter was an agent of its own (`active_agent` and its
+/// session both `claude-acp`) reads as Claude Code, keeps resuming its saved session through the
+/// adapter although Automatic now picks the native driver, hands off to Codex and back to that
+/// same adapter session, and only a fresh session follows the Connection setting.
+#[tokio::test]
+async fn a_chat_saved_on_the_adapter_keeps_resuming_through_it_across_handoffs() {
+    let (first, h1) = turn_driver("acp-old", "answer through the adapter");
+    let (second, h2) = turn_driver("codex-1", "answer from Codex");
+    let (third, h3) = turn_driver("acp-old", "back on the adapter");
+    let (fourth, _h4) = turn_driver("native-1", "unused");
+    let starts = Arc::new(Mutex::new(Vec::new()));
+    let factory = Arc::new(RecordingFactory {
+        inner: aura_drivers::testing::ScriptedDriverFactory::new(vec![
+            first, second, third, fourth,
+        ]),
+        starts: Arc::clone(&starts),
+    });
+    let mut rig = rig_with(factory, WriterConfig::STANDARD, Knobs::STANDARD);
+    let connection = |id: &'static str| {
+        let mut spec = aura_agents::get("mock").expect("mock").clone();
+        spec.id = id;
+        FixedAgent::new(
+            spec,
+            aura_protocol::session::Availability::Ready {
+                version: None,
+                path: "fixture".into(),
+            },
+            Some(launch()),
+        )
+    };
+    let shared = &mut Arc::get_mut(&mut rig.manager.inner)
+        .expect("only owner")
+        .shared;
+    Arc::get_mut(shared).expect("no actors").deps.detector = Detector::fixed(vec![
+        connection("claude"),
+        connection("claude-acp"),
+        connection("codex"),
+    ]);
+    // The rows an earlier build wrote for a "Claude Code (ACP)" chat that ran one turn.
+    let path = crate::chatstore::stored_path(&rig.folder);
+    let (seeded, done) = tokio::sync::oneshot::channel();
+    rig.store.with_store(move |store| {
+        store
+            .conn()
+            .execute_batch(&format!(
+                "INSERT INTO projects (id,name,created_at,updated_at,device_id) VALUES ('p','work',1,1,'device');
+                 INSERT INTO project_folders (id,project_id,display_name,kind,origin_device_id,created_at,updated_at,device_id) VALUES ('f','p','work','local','device',1,1,'device');
+                 INSERT INTO folder_locations (folder_id,device_id,path,last_seen_at) VALUES ('f','device','{path}',1);
+                 INSERT INTO chats (id,project_id,folder_id,active_agent,created_at,updated_at,device_id) VALUES ('old','p','f','claude-acp',1,1,'device');
+                 INSERT INTO agent_sessions (id,chat_id,agent_id,native_session_id,autonomy,cwd,created_at,updated_at,device_id,host) VALUES ('s','old','claude-acp','acp-old','full_auto','{path}',1,1,'device','{{\"type\":\"native\"}}');"
+            ))
+            .expect("seed");
+        let _ = seeded.send(());
+    });
+    done.await.expect("seeded");
+    let listed = rig.manager.chats().await.expect("chats");
+    assert_eq!(listed[0].agent_id, "claude", "one Claude Code");
+    rig.manager.start("old", false).await.expect("resume");
+    status(&rig, "old", SessionStatus::Ready).await;
+    turn(&rig, "old", &h1, "after the update").await;
+    stop(&rig, "old").await;
+    let to_codex = rig
+        .manager
+        .continuation_preview(
+            "old",
+            ContinuationAction::SwitchAgent {
+                agent_id: "codex".into(),
+            },
+        )
+        .await
+        .expect("preview Codex");
+    rig.manager
+        .continuation_apply("old", &to_codex.token)
+        .await
+        .expect("switch to Codex");
+    turn(&rig, "old", &h2, "Codex's turn").await;
+    stop(&rig, "old").await;
+    let back = rig
+        .manager
+        .continuation_preview(
+            "old",
+            ContinuationAction::SwitchAgent {
+                agent_id: "claude".into(),
+            },
+        )
+        .await
+        .expect("preview Claude Code");
+    assert!(back.resumes_native, "the adapter's saved session resumes");
+    assert!(back.handoff.contains("Codex's turn") && back.handoff.contains("answer from Codex"));
+    rig.manager
+        .continuation_apply("old", &back.token)
+        .await
+        .expect("switch back");
+    turn(&rig, "old", &h3, "Claude Code again").await;
+    stop(&rig, "old").await;
+    // A fresh session takes the Connection setting: Automatic picks the native driver.
+    rig.manager.start("old", true).await.expect("fresh");
+    status(&rig, "old", SessionStatus::Ready).await;
+    let starts: Vec<(String, Option<String>)> = lock(&starts)
+        .iter()
+        .map(|(agent, resume, _)| (agent.clone(), resume.clone()))
+        .collect();
+    assert_eq!(
+        starts,
+        [
+            ("claude-acp".to_owned(), Some("acp-old".to_owned())),
+            ("codex".to_owned(), None),
+            ("claude-acp".to_owned(), Some("acp-old".to_owned())),
+            ("claude".to_owned(), None),
+        ]
+    );
+    let turns = rig
+        .manager
+        .conversation_turns("old", None)
+        .await
+        .expect("turns")
+        .turns;
+    let agents: Vec<&str> = turns.iter().map(|turn| turn.agent_id.as_str()).collect();
+    assert_eq!(
+        agents,
+        ["claude", "codex", "claude"],
+        "turns name agents, newest first"
+    );
+}
+
 #[tokio::test]
 async fn fork_copies_only_selected_image_metadata_and_missing_metadata_rolls_back() {
     let (first, h1) = turn_driver("image-source", "answer");
@@ -529,15 +654,18 @@ async fn latest_qualified_native_fork_uses_a_distinct_native_id() {
     let shared = &mut Arc::get_mut(&mut rig.manager.inner)
         .expect("only owner")
         .shared;
-    Arc::get_mut(shared).expect("no actors").deps.detector =
-        Detector::fixed(vec![FixedAgent::new(
-            aura_agents::get("claude").expect("catalog").clone(),
+    let ready = |id: &str| {
+        FixedAgent::new(
+            aura_agents::get(id).expect("catalog").clone(),
             aura_protocol::session::Availability::Ready {
                 version: None,
                 path: "fixture".into(),
             },
             Some(launch()),
-        )]);
+        )
+    };
+    Arc::get_mut(shared).expect("no actors").deps.detector =
+        Detector::fixed(vec![ready("claude"), ready("claude-acp")]);
     let chat = rig
         .manager
         .create_chat("claude", &rig.folder)
@@ -546,6 +674,11 @@ async fn latest_qualified_native_fork_uses_a_distinct_native_id() {
     status(&rig, &chat.id, SessionStatus::Ready).await;
     let selected = turn(&rig, &chat.id, &h1, "source prompt").await;
     stop(&rig, &chat.id).await;
+    // New sessions now prefer the adapter, but a native fork resumes its native source.
+    rig.manager
+        .set_agent_connection("claude", Some("claude-acp"))
+        .await
+        .expect("connection");
     let preview = rig
         .manager
         .continuation_preview(&chat.id, ContinuationAction::Fork { turn_id: selected })
@@ -559,7 +692,8 @@ async fn latest_qualified_native_fork_uses_a_distinct_native_id() {
         .expect("fork");
     turn(&rig, &fork.chat_id, &h2, "new fork prompt").await;
     let starts = lock(&starts);
-    let (_, source, options) = &starts[1];
+    let (connection, source, options) = &starts[1];
+    assert_eq!(connection, "claude", "the source session's connection");
     assert_eq!(source.as_deref(), Some("source-native"));
     assert!(options.fork);
     assert!(

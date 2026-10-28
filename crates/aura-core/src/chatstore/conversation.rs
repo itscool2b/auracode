@@ -19,6 +19,11 @@ pub(crate) struct PendingContinuation {
     pub force_fresh: bool,
     pub resume_source: Option<String>,
     pub native_start: NativeStartOptions,
+    /// The connection a native fork resumes `resume_source` through: the source session's, so
+    /// a fork never crosses from an adapter's session to the native driver or back. Absent in
+    /// continuations saved before agents had one entry each.
+    #[serde(default)]
+    pub connection: Option<String>,
 }
 
 impl PendingContinuation {
@@ -28,6 +33,7 @@ impl PendingContinuation {
         self.handoff.is_empty()
             && !self.force_fresh
             && self.resume_source.is_none()
+            && self.connection.is_none()
             && self.native_start == NativeStartOptions::default()
     }
 }
@@ -149,7 +155,7 @@ pub(crate) fn execute(
                     Ok(ConversationTurn {
                         turn_id: row.get(0)?,
                         ordinal: row.get(1)?,
-                        agent_id: row.get(2)?,
+                        agent_id: aura_agents::agent_of(&row.get::<_, String>(2)?).to_owned(),
                         status: row.get(3)?,
                         started_at: row.get(4)?,
                         prompt_preview: String::new(),
@@ -339,7 +345,7 @@ fn read_turn(conn: &Connection, chat_id: &str, turn_id: &str) -> rusqlite::Resul
     Ok(ContextTurn {
         id: turn_id.into(),
         ordinal,
-        agent_id,
+        agent_id: aura_agents::agent_of(&agent_id).to_owned(),
         status,
         prompt,
         parts,

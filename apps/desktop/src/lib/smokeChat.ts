@@ -1,4 +1,5 @@
 import {
+  type AgentEntry,
   type AppInfo,
   SMOKE_AGENT_CHECKS,
   SMOKE_CHAT_CHECKS,
@@ -9,6 +10,7 @@ import {
   type SmokeScenario,
 } from "../bindings";
 import { errorMessage } from "./errors";
+import { agentSetConnection, agentsList } from "./ipc";
 import {
   all,
   attr,
@@ -1172,11 +1174,33 @@ const AGENT_START_TIMEOUT_MS = 11 * 60_000;
 /** A real agent's one-line answer. */
 const AGENT_REPLY_TIMEOUT_MS = 5 * 60_000;
 
+/**
+ * The agent New chat lists for `id`. New chat shows one entry per agent, so a connection id
+ * (`claude-acp`, its ACP adapter) sets that agent's Connection setting in the run's own data folder
+ * and names the agent; an agent's id is used as it is.
+ */
+export async function smokeAgent(
+  id: string,
+  api: {
+    readonly agentsList: () => Promise<readonly AgentEntry[]>;
+    readonly agentSetConnection: (agentId: string, connection: string | null) => Promise<unknown>;
+  },
+): Promise<string> {
+  const agents = await api.agentsList();
+  if (agents.some((agent) => agent.id === id)) return id;
+  const owner = agents.find((agent) =>
+    agent.connections?.options.some((option) => option.id === id),
+  );
+  if (!owner) return id;
+  await api.agentSetConnection(owner.id, id);
+  return owner.id;
+}
+
 async function agentScenario(
   checks: Checks<(typeof SMOKE_AGENT_CHECKS)[number]>,
   plan: SmokePlan,
 ): Promise<void> {
-  const agentId = plan.agent_id ?? "";
+  const agentId = await smokeAgent(plan.agent_id ?? "", { agentsList, agentSetConnection });
   const folder = plan.folder ?? "";
   const prompt = agentId === "mock" ? DEMO_AGENT_PROMPT : AGENT_PROMPT;
 

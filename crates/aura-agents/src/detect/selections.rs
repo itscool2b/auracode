@@ -9,7 +9,9 @@ impl Detector {
         let Mode::Live(live) = &self.mode else {
             return Err("This catalog has no selectable executables.".into());
         };
-        let spec = self.spec(id).ok_or("The agent is not in the catalog.")?;
+        let spec = self
+            .connection_for(id)
+            .ok_or("The agent is not in the catalog.")?;
         let _selection = live.selection_gate.lock().await;
         inventory(live, &spec).await
     }
@@ -24,7 +26,9 @@ impl Detector {
         let Mode::Live(live) = &self.mode else {
             return Err("This catalog has no selectable executables.".into());
         };
-        let spec = self.spec(id).ok_or("The agent is not in the catalog.")?;
+        let spec = self
+            .connection_for(id)
+            .ok_or("The agent is not in the catalog.")?;
         if matches!(spec.recipe, Recipe::Builtin) {
             return Err("The built-in agent has no executable choice.".into());
         }

@@ -29,14 +29,25 @@ fn committed(name: &str) -> String {
     std::fs::read_to_string(path).expect("committed file")
 }
 
+/// Whether the connection `id` still needs its download, as its agent's entry lists it.
 #[cfg(test)]
 fn needs_download(detector: &Detector, id: &str) -> bool {
-    detector
+    let entry = detector
         .cached()
         .into_iter()
-        .find(|entry| entry.id == id)
-        .expect("entry")
-        .needs_download
+        .find(|entry| entry.id == aura_agents::agent_of(id))
+        .expect("entry");
+    match entry.connections {
+        Some(connections) => {
+            connections
+                .options
+                .into_iter()
+                .find(|option| option.id == id)
+                .expect("connection")
+                .needs_download
+        }
+        None => entry.needs_download,
+    }
 }
 
 #[tokio::test]

@@ -318,6 +318,22 @@ pub async fn agent_update(state: State<'_, AppState>, agent_id: String) -> Resul
     Ok(state.sessions()?.update_agent(&agent_id).await?)
 }
 
+/// An agent's Connection setting on this device: one of its connection ids, or `null` for
+/// Automatic. New sessions use it; a chat's saved session keeps its own connection. Answers every
+/// agent as `agents_list` reports them, without probing again.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_set_connection(
+    state: State<'_, AppState>,
+    agent_id: String,
+    connection: Option<String>,
+) -> Result<Vec<AgentEntry>, AppError> {
+    Ok(state
+        .sessions()?
+        .set_agent_connection(&agent_id, connection.as_deref())
+        .await?)
+}
+
 /// Opens a view of a chat: the snapshot and the newest history page, consistent with the frames
 /// `channel` carries from `next_seq` on. Opening a chat never starts its agent. A webview has one
 /// view per chat; attaching again replaces the earlier one.

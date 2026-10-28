@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AppInfo, SmokePlan } from "../bindings";
+import type { AgentEntry, AppInfo, SmokePlan } from "../bindings";
 import { SMOKE_AGENT_CHECKS, SMOKE_CHAT_CHECKS, SMOKE_CHAT_REOPEN_CHECKS } from "../bindings";
 import {
   AGENT_PROMPT,
@@ -11,6 +11,7 @@ import {
   PROMPTS,
   runChatSmoke,
   SEGMENTS,
+  smokeAgent,
 } from "./smokeChat";
 
 const PLAN: SmokePlan = { scenario: "chat", agent_id: "mock", folder: "/tmp/smoke chat" };
@@ -167,6 +168,40 @@ describe("the chat scenario's script", () => {
 });
 
 describe("the agent scenario", () => {
+  it("reaches a connection through its agent's Connection setting", async () => {
+    const ready = { state: "ready", version: null, path: "/bin/claude" } as const;
+    const claude: AgentEntry = {
+      id: "claude",
+      name: "Claude Code",
+      description: "",
+      availability: ready,
+      launch: "claude",
+      needs_download: false,
+      last_verified: "",
+      connections: {
+        preferred: null,
+        active: "claude",
+        options: ["claude", "claude-acp"].map((id) => ({
+          id,
+          label: id,
+          description: "",
+          availability: ready,
+          launch: id,
+          needs_download: false,
+        })),
+      },
+    };
+    const set = vi.fn(async () => [claude]);
+    const api = { agentsList: async () => [claude], agentSetConnection: set };
+    // An agent's id is used as it is; a connection id chooses that connection, then the agent.
+    expect(await smokeAgent("claude", api)).toBe("claude");
+    expect(set).not.toHaveBeenCalled();
+    expect(await smokeAgent("claude-acp", api)).toBe("claude");
+    expect(set).toHaveBeenCalledWith("claude", "claude-acp");
+    // An id no agent lists stays as given, for New chat to report.
+    expect(await smokeAgent("gemini", api)).toBe("gemini");
+  });
+
   it("asks for exactly ok, and takes it in any case, with or without a final period", () => {
     expect(AGENT_PROMPT).toBe("Reply with exactly: ok");
     for (const reply of ["ok", "OK", " Ok. ", "ok!"]) expect(isOk(reply), reply).toBe(true);

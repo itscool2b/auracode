@@ -31,6 +31,64 @@ fn detector(machine: &Machine, env: aura_process::ResolvedEnv) -> Arc<Detector> 
     )
 }
 
+/// The Connection setting survives a restart, beside the executable choices, and only changes
+/// which connection a new session uses.
+#[tokio::test]
+async fn the_connection_setting_persists_beside_the_executable_choices() {
+    let machine = Machine::new();
+    let env = machine.env(&[]);
+    let detector = detector(&machine, env.clone());
+    let entries = detector.detect_all(true).await;
+    let claude = entries
+        .iter()
+        .find(|entry| entry.id == "claude")
+        .expect("one Claude Code");
+    assert!(!entries.iter().any(|entry| entry.id == "claude-acp"));
+    let connections = claude.connections.as_ref().expect("two connections");
+    assert_eq!(connections.preferred, None, "Automatic by default");
+    assert_eq!(connections.active.as_deref(), Some("claude"), "native runs");
+    assert_eq!(
+        detector
+            .choose_connection("claude")
+            .await
+            .map(|spec| spec.id),
+        Ok("claude")
+    );
+    detector
+        .set_connection("claude", Some("claude-acp"))
+        .await
+        .expect("saved");
+    assert!(machine.root.path().join("agent-connections.json").is_file());
+    drop(detector);
+    let restarted = self::detector(&machine, env);
+    let entries = restarted.detect_all(true).await;
+    let connections = entries
+        .iter()
+        .find(|entry| entry.id == "claude")
+        .and_then(|entry| entry.connections.clone())
+        .expect("two connections");
+    assert_eq!(connections.preferred.as_deref(), Some("claude-acp"));
+    assert_eq!(connections.active.as_deref(), Some("claude-acp"));
+    assert_eq!(
+        restarted
+            .choose_connection("claude")
+            .await
+            .map(|spec| spec.id),
+        Ok("claude-acp")
+    );
+    restarted
+        .set_connection("claude", None)
+        .await
+        .expect("Automatic");
+    assert_eq!(
+        restarted
+            .choose_connection("claude")
+            .await
+            .map(|spec| spec.id),
+        Ok("claude")
+    );
+}
+
 #[tokio::test]
 async fn explicit_shadowed_choice_persists_and_never_changes_an_existing_launch() {
     let machine = Machine::new();

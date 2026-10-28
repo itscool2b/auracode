@@ -11,6 +11,8 @@ import {
 import { createPortal } from "react-dom";
 import type {
   AgentAuthStatus,
+  AgentConnection,
+  AgentConnections,
   AgentEntry,
   AgentInstallation,
   AgentMaintenance,
@@ -18,28 +20,101 @@ import type {
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
 import { harnessText } from "../../lib/plugins/format";
+import { Row } from "../settings/SettingsRow";
 import { TerminalSheet } from "../TerminalSheet";
+import "../settings/settings.css";
 import { AgentInstallations } from "./AgentInstallations";
 import { InstallAgent } from "./InstallAgent";
 
 // External help links are presentation content. Rust still owns every install/update command.
-// Sources checked 2026-10-26; no shell instructions are synthesized from executable names.
+// Sources checked 2026-10-26; no shell instructions are synthesized from executable names. One
+// entry per agent: an adapter or a text fallback is a connection of its agent, not a row.
 const INSTALL_GUIDES: Readonly<Record<string, string>> = {
   claude: "https://code.claude.com/docs/en/setup",
-  "claude-acp": "https://code.claude.com/docs/en/setup",
   codex: "https://developers.openai.com/codex/cli",
-  "codex-acp": "https://developers.openai.com/codex/cli",
   pi: "https://pi.dev/docs/latest/quickstart",
   cursor: "https://cursor.com/docs/cli/installation",
   grok: "https://docs.x.ai/build/overview",
-  "grok-stream": "https://docs.x.ai/build/overview",
   omp: "https://github.com/can1357/oh-my-pi",
   opencode: "https://opencode.ai/docs",
-  "opencode-v2": "https://opencode.ai/v2/docs",
   antigravity: "https://antigravity.google/download",
-  "agy-stream": "https://antigravity.google/download",
   hermes: "https://hermes-agent.nousresearch.com/docs/getting-started/installation",
 };
+
+/** A connection that cannot run here: offered disabled, unless it is already the choice. */
+export function connectionUnavailable(option: AgentConnection): boolean {
+  return option.availability.state === "missing" || option.availability.state === "broken";
+}
+
+/** Automatic's option, naming the connection it uses now. */
+export function automaticChoice(connections: AgentConnections): string {
+  const active = connections.options.find((option) => option.id === connections.active);
+  return active ? `Automatic (${active.label})` : "Automatic";
+}
+
+/**
+ * The Connection row's one line: what Automatic does and that chats keep theirs, then the adapter's
+ * one-time download when the connection in use needs it (its install lives here, not in a row).
+ */
+export function connectionDetail(connections: AgentConnections): string {
+  const line = "Automatic uses the first that can run here. A chat keeps the one it started with.";
+  const used = connections.options.find(
+    (option) => option.id === (connections.preferred ?? connections.active),
+  );
+  return used?.needs_download
+    ? `${line} The ${used.label} downloads once, with its first chat.`
+    : line;
+}
+
+/**
+ * An agent's Connection setting, for an agent auracode can run more than one way (Claude Code's
+ * own protocol or its ACP adapter). Automatic is the default; the choice applies to new sessions.
+ */
+export function ConnectionSetting({
+  agent,
+  connections,
+  onConnection,
+  onError,
+}: {
+  readonly agent: AgentEntry;
+  readonly connections: AgentConnections;
+  readonly onConnection: (agentId: string, connection: string | null) => Promise<void>;
+  readonly onError: (message: string | null) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  return (
+    <div className="settings-group agent-connection" data-testid="agent-connection">
+      <Row title="Connection" detail={connectionDetail(connections)}>
+        <select
+          className="g-select settings-control settings-select"
+          aria-label={`${agent.name} connection`}
+          data-test-agent={agent.id}
+          value={connections.preferred ?? ""}
+          disabled={saving}
+          onChange={(event) => {
+            const value = event.currentTarget.value || null;
+            setSaving(true);
+            onError(null);
+            onConnection(agent.id, value)
+              .catch((reason) => onError(errorMessage(reason)))
+              .finally(() => setSaving(false));
+          }}
+        >
+          <option value="">{automaticChoice(connections)}</option>
+          {connections.options.map((option) => (
+            <option
+              key={option.id}
+              value={option.id}
+              disabled={connectionUnavailable(option) && option.id !== connections.preferred}
+            >
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </Row>
+    </div>
+  );
+}
 
 /**
  * The agents Rust can install with one reviewed, version-pinned npm command. The rest keep their
@@ -277,12 +352,15 @@ export function AgentRow({
   agent,
   transport,
   onRefresh,
+  onConnection,
   compact = false,
   index = 0,
 }: {
   readonly agent: AgentEntry;
   readonly transport: Transport;
   readonly onRefresh: () => void;
+  /** The Agents page: the details offer the Connection setting of an agent with several. */
+  readonly onConnection?: (agentId: string, connection: string | null) => Promise<void>;
   /** Setup's roster: no date or menu on the row; the actions sit in the details. */
   readonly compact?: boolean;
   readonly index?: number;
@@ -514,7 +592,13 @@ export function AgentRow({
         </p>
       ) : null}
       {open ? (
-        <AgentDetail agent={agent} maintenance={maintenance} onRefresh={onRefresh}>
+        <AgentDetail
+          agent={agent}
+          maintenance={maintenance}
+          onRefresh={onRefresh}
+          onConnection={onConnection}
+          onError={setError}
+        >
           {compact && (primaryButton || items.length) ? (
             <div className="agent-detail-actions">
               {primaryButton}
@@ -566,11 +650,15 @@ function AgentDetail({
   agent,
   maintenance,
   onRefresh,
+  onConnection,
+  onError,
   children,
 }: {
   readonly agent: AgentEntry;
   readonly maintenance: AgentMaintenance | null;
   readonly onRefresh: () => void;
+  readonly onConnection?: (agentId: string, connection: string | null) => Promise<void>;
+  readonly onError: (message: string | null) => void;
   readonly children?: ReactNode;
 }) {
   const reason =
@@ -624,6 +712,14 @@ function AgentDetail({
           </span>
         </dd>
       </dl>
+      {onConnection && agent.connections ? (
+        <ConnectionSetting
+          agent={agent}
+          connections={agent.connections}
+          onConnection={onConnection}
+          onError={onError}
+        />
+      ) : null}
       {children}
       {agent.id !== "demo" ? <AgentInstallations agentId={agent.id} onChanged={onRefresh} /> : null}
     </div>

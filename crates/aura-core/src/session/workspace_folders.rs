@@ -23,13 +23,12 @@ impl SessionManager {
         &self,
         chat_id: &str,
     ) -> Result<ChatFolderContext, SessionError> {
-        let (chat, active) = self
+        let (chat, active, spec) = self
             .ask(chat_id, |reply| ChatMsg::FolderContext { reply })
             .await?;
         if let Some(active) = active {
             return Ok(active);
         }
-        let spec = self.deps().detector.spec(&chat.agent_id);
         let supports = supported(spec.as_ref(), &chat.agent_host);
         resolve(
             LaunchFolders {

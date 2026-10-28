@@ -1,5 +1,12 @@
 //! The catalog: every agent auracode knows, as data.
 //!
+//! Each entry is one *connection*: one way to start an agent. Most agents have one. Claude Code
+//! and Codex have two (auracode's own driver for the CLI, and an npm ACP adapter), Antigravity and
+//! Grok Build have their ACP server and a restricted text fallback, and OpenCode's 1.x and 2.x
+//! lines are qualified separately. People see one agent ([`AgentSpec::agent`]); which connection
+//! a new session uses is the device's Connection setting, Automatic by default (the first
+//! connection, in catalog order, that can run here). See `docs/plan.md`, "One entry per agent".
+//!
 //! The npm adapters' version floors are the CLI versions they bundle (claude-agent-acp 0.95.0
 //! bundles the Agent SDK with Claude Code 2.1.309; codex-acp 2.2.2 depends on `@openai/codex`
 //! ^0.160.1). auracode always drives the user's own CLI behind an adapter, forced through the
@@ -11,10 +18,17 @@ use std::time::Duration;
 use aura_process::DaemonMatch;
 use aura_protocol::DriverKind;
 
-/// One agent auracode can start.
+/// One way to start an agent (a connection). Its `id` is what a saved native session records, so
+/// a session always resumes through the connection that made it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentSpec {
     pub id: &'static str,
+    /// The agent people see and chats name. The agent's preferred connection has `id == agent`;
+    /// its other connections follow it in the catalog.
+    pub agent: &'static str,
+    /// How this connection reaches the agent, for the Connection setting ("Direct", "ACP adapter").
+    pub connection: &'static str,
+    /// The agent's name, the same for every one of its connections.
     pub name: &'static str,
     pub description: &'static str,
     pub kind: DriverKind,
@@ -83,15 +97,33 @@ pub struct UserBinary {
     pub min_version: &'static str,
 }
 
-/// Every agent auracode knows, in the order the New chat screen lists them. Built once.
+/// Every connection auracode knows, its agents in the order the New chat screen lists them and
+/// each agent's connections in preference order. Built once.
 pub fn catalog() -> &'static [AgentSpec] {
     static CATALOG: LazyLock<Vec<AgentSpec>> = LazyLock::new(build_catalog);
     &CATALOG
 }
 
-/// The agent with this id.
+/// The connection with this id.
 pub fn get(id: &str) -> Option<&'static AgentSpec> {
     catalog().iter().find(|spec| spec.id == id)
+}
+
+/// The agent a stored id names: `"claude-acp"` (a chat or project saved before agents had one
+/// entry each) reads as `"claude"`. An id the catalog does not know names itself, so data from a
+/// newer build keeps its id.
+pub fn agent_of(id: &str) -> &str {
+    get(id).map_or(id, |spec| spec.agent)
+}
+
+/// The connections of the agent `id` names, preferred first; empty for an id the catalog does not
+/// know.
+pub fn connections(id: &str) -> Vec<&'static AgentSpec> {
+    let agent = agent_of(id);
+    catalog()
+        .iter()
+        .filter(|spec| spec.agent == agent)
+        .collect()
 }
 
 const START_TIMEOUT: Duration = Duration::from_secs(60);
@@ -100,6 +132,8 @@ fn build_catalog() -> Vec<AgentSpec> {
     vec![
         AgentSpec {
             id: "hermes",
+            agent: "hermes",
+            connection: "ACP",
             name: "Hermes",
             description: "Hermes Agent through its ACP mode (hermes acp). Its turns run in the Hermes gateway.",
             kind: DriverKind::Acp,
@@ -121,6 +155,8 @@ fn build_catalog() -> Vec<AgentSpec> {
         },
         AgentSpec {
             id: "claude",
+            agent: "claude",
+            connection: "Direct",
             name: "Claude Code",
             description: "Your Claude Code, driven directly through its native control protocol.",
             kind: DriverKind::Claude,
@@ -155,7 +191,9 @@ fn build_catalog() -> Vec<AgentSpec> {
         },
         AgentSpec {
             id: "claude-acp",
-            name: "Claude Code (ACP)",
+            agent: "claude",
+            connection: "ACP adapter",
+            name: "Claude Code",
             description: "Your Claude Code, driven through the claude-agent-acp adapter.",
             kind: DriverKind::Acp,
             dialect: "claude-acp",
@@ -183,6 +221,8 @@ fn build_catalog() -> Vec<AgentSpec> {
         },
         AgentSpec {
             id: "codex",
+            agent: "codex",
+            connection: "Direct",
             name: "Codex",
             description: "Your Codex CLI, driven directly through its native app-server.",
             kind: DriverKind::Codex,
@@ -207,7 +247,9 @@ fn build_catalog() -> Vec<AgentSpec> {
         },
         AgentSpec {
             id: "codex-acp",
-            name: "Codex (ACP)",
+            agent: "codex",
+            connection: "ACP adapter",
+            name: "Codex",
             description: "Your Codex CLI, driven through the codex-acp adapter.",
             kind: DriverKind::Acp,
             dialect: "codex-acp",
@@ -277,30 +319,39 @@ fn build_catalog() -> Vec<AgentSpec> {
             "18.12.6",
             Some(18),
         ),
-        acp_binary(
-            "opencode",
-            "OpenCode V1",
-            "OpenCode 1.x through ACP; qualified separately from V2.",
-            "opencode",
-            "opencode",
-            &["acp"],
-            "1.19.4",
-            Some(1),
-        ),
-        acp_binary(
-            "opencode-v2",
-            "OpenCode V2",
-            "OpenCode 2.x through ACP; qualified separately from V1.",
-            "opencode-v2",
-            "opencode",
-            &["acp"],
-            "2.1.4",
-            Some(2),
-        ),
+        AgentSpec {
+            connection: "OpenCode 1.x",
+            ..acp_binary(
+                "opencode",
+                "OpenCode",
+                "OpenCode 1.x through ACP; qualified separately from 2.x.",
+                "opencode",
+                "opencode",
+                &["acp"],
+                "1.19.4",
+                Some(1),
+            )
+        },
+        AgentSpec {
+            agent: "opencode",
+            connection: "OpenCode 2.x",
+            ..acp_binary(
+                "opencode-v2",
+                "OpenCode",
+                "OpenCode 2.x through ACP; qualified separately from 1.x.",
+                "opencode-v2",
+                "opencode",
+                &["acp"],
+                "2.1.4",
+                Some(2),
+            )
+        },
         AgentSpec {
             id: "agy-stream",
-            name: "Antigravity (text fallback)",
-            description: "Restricted text transport. No interactive approvals; Stop ends the owned process.",
+            agent: "antigravity",
+            connection: "Text fallback",
+            name: "Antigravity",
+            description: "Antigravity's restricted text transport. No interactive approvals; Stop ends the owned process.",
             kind: DriverKind::Headless,
             dialect: "agy-stream",
             recipe: Recipe::QualifiedBinary {
@@ -322,8 +373,10 @@ fn build_catalog() -> Vec<AgentSpec> {
         },
         AgentSpec {
             id: "grok-stream",
-            name: "Grok Build (text fallback)",
-            description: "One owned process per visible prompt. No interactive approvals; Stop ends the process.",
+            agent: "grok",
+            connection: "Text fallback",
+            name: "Grok Build",
+            description: "Grok Build's restricted text transport: one owned process per visible prompt. No interactive approvals; Stop ends the process.",
             kind: DriverKind::Headless,
             dialect: "grok-stream",
             recipe: Recipe::NativeBinary {
@@ -343,6 +396,8 @@ fn build_catalog() -> Vec<AgentSpec> {
         },
         AgentSpec {
             id: "pi",
+            agent: "pi",
+            connection: "Direct",
             name: "Pi",
             description: "Your Pi agent, driven directly through its native RPC protocol.",
             kind: DriverKind::Pi,
@@ -360,6 +415,8 @@ fn build_catalog() -> Vec<AgentSpec> {
         },
         AgentSpec {
             id: "mock",
+            agent: "mock",
+            connection: "Built in",
             name: "Demo agent (scripted, no AI)",
             description: "A scripted agent for trying auracode without an AI: it streams a demo turn, asks for permissions and questions, and can fail on purpose.",
             kind: DriverKind::Mock,
@@ -389,6 +446,8 @@ fn acp_binary(
 ) -> AgentSpec {
     AgentSpec {
         id,
+        agent: id,
+        connection: "ACP server",
         name,
         description,
         kind: DriverKind::Acp,
@@ -468,7 +527,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_catalog_lists_native_claude_before_its_compatibility_adapter() {
+    fn the_catalog_lists_each_connection_once_native_claude_before_its_adapter() {
         let ids: Vec<&str> = catalog().iter().map(|spec| spec.id).collect();
         assert_eq!(
             ids,
@@ -491,9 +550,77 @@ mod tests {
             ]
         );
         assert_eq!(ids.iter().collect::<HashSet<_>>().len(), ids.len());
-        assert_eq!(get("codex-acp").map(|spec| spec.name), Some("Codex (ACP)"));
+        assert_eq!(get("codex-acp").map(|spec| spec.name), Some("Codex"));
         assert!(get("agent").is_none());
         assert!(std::ptr::eq(catalog(), catalog()), "built once");
+    }
+
+    #[test]
+    fn each_agent_is_one_entry_whose_preferred_connection_comes_first() {
+        let mut agents: Vec<&str> = Vec::new();
+        for spec in catalog() {
+            if !agents.contains(&spec.agent) {
+                agents.push(spec.agent);
+            }
+        }
+        assert_eq!(
+            agents,
+            [
+                "hermes",
+                "claude",
+                "codex",
+                "antigravity",
+                "cursor",
+                "grok",
+                "omp",
+                "opencode",
+                "pi",
+                "mock"
+            ]
+        );
+        for agent in &agents {
+            let connections = connections(agent);
+            // The preferred connection carries the agent's own id, and its name is the agent's.
+            assert_eq!(connections[0].id, *agent, "{agent}");
+            let labels: HashSet<&str> = connections.iter().map(|spec| spec.connection).collect();
+            assert_eq!(labels.len(), connections.len(), "{agent}: labels differ");
+            assert!(
+                connections
+                    .iter()
+                    .all(|spec| spec.name == connections[0].name),
+                "{agent}: one name"
+            );
+        }
+        let ids =
+            |agent: &str| -> Vec<&str> { connections(agent).iter().map(|spec| spec.id).collect() };
+        assert_eq!(ids("claude"), ["claude", "claude-acp"]);
+        assert_eq!(ids("codex"), ["codex", "codex-acp"]);
+        assert_eq!(ids("antigravity"), ["antigravity", "agy-stream"]);
+        assert_eq!(ids("grok"), ["grok", "grok-stream"]);
+        assert_eq!(ids("opencode"), ["opencode", "opencode-v2"]);
+        assert_eq!(ids("pi"), ["pi"]);
+        // A connection id names its agent, and so finds the same connections.
+        assert_eq!(ids("claude-acp"), ["claude", "claude-acp"]);
+        for (stored, agent) in [
+            ("claude-acp", "claude"),
+            ("codex-acp", "codex"),
+            ("agy-stream", "antigravity"),
+            ("grok-stream", "grok"),
+            ("opencode-v2", "opencode"),
+            ("claude", "claude"),
+            ("mock", "mock"),
+            // Data from a newer build keeps its id.
+            ("gemini", "gemini"),
+            ("", ""),
+        ] {
+            assert_eq!(agent_of(stored), agent, "{stored}");
+        }
+        assert!(connections("gemini").is_empty());
+        assert_eq!(get("claude").map(|spec| spec.connection), Some("Direct"));
+        assert_eq!(
+            get("claude-acp").map(|spec| spec.connection),
+            Some("ACP adapter")
+        );
     }
 
     #[test]

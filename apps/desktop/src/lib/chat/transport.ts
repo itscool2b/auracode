@@ -24,6 +24,7 @@ import { type GitWorkspaceApi, gitWorkspaceApi } from "../gitWorkspace";
 import {
   agentAuthStatus,
   agentMaintenance,
+  agentSetConnection,
   agentsList,
   agentsRefresh,
   agentUpdate,
@@ -74,6 +75,11 @@ export interface Transport {
   agentMaintenance(agentId: string): Promise<AgentMaintenance>;
   agentAuthStatus(agentId: string): Promise<AgentAuthStatus>;
   agentUpdate(agentId: string): Promise<void>;
+  /**
+   * An agent's Connection setting on this device: one of its connection ids, or `null` for
+   * Automatic. Answers every agent as `agentsList` does.
+   */
+  agentSetConnection(agentId: string, connection: string | null): Promise<AgentEntry[]>;
   agentsList(): Promise<AgentEntry[]>;
   agentsRefresh(): Promise<AgentEntry[]>;
   envStatus(): Promise<EnvStatus>;
@@ -125,6 +131,7 @@ export const tauriTransport: Transport = {
   agentMaintenance,
   agentAuthStatus,
   agentUpdate,
+  agentSetConnection,
   agentsList,
   agentsRefresh,
   envStatus,

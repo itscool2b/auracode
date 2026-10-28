@@ -65,7 +65,11 @@ fn chat_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatRecord> {
         folder_id: row.get(8)?,
         title: row.get(1)?,
         title_source: title_source.as_deref().and_then(parse_title_source),
-        agent_id: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+        // A chat names its agent. One saved before agents had one entry each may name a
+        // connection (`claude-acp`), and so may a row synced from an older build: it reads as
+        // its agent. Its saved sessions keep their connections.
+        agent_id: aura_agents::agent_of(&row.get::<_, Option<String>>(3)?.unwrap_or_default())
+            .to_owned(),
         agent_host: serde_json::from_str(&row.get::<_, String>(7)?)
             .unwrap_or(aura_protocol::agents::AgentHost::Unsupported),
         folder: PathBuf::from(folder.unwrap_or_default()),
@@ -191,7 +195,11 @@ pub(crate) fn load_chat(
     };
     let agent_session = latest_agent_session(conn, chat_id)?;
     let initial_model = if agent_session.is_none() {
-        conn.query_row("SELECT p.default_model FROM chats c JOIN projects p ON p.id=c.project_id WHERE c.id=?1 AND p.deleted=0 AND (p.default_agent IS NULL OR p.default_agent=c.active_agent)",[chat_id],|row| row.get::<_,Option<String>>(0)).optional()?.flatten()
+        // The project's model applies to its default agent's chats, however either id is stored.
+        conn.query_row("SELECT p.default_model,p.default_agent,c.active_agent FROM chats c JOIN projects p ON p.id=c.project_id WHERE c.id=?1 AND p.deleted=0",[chat_id],|row| Ok((row.get::<_,Option<String>>(0)?,row.get::<_,Option<String>>(1)?,row.get::<_,Option<String>>(2)?))).optional()?.and_then(|(model,default,active)| {
+            let same = default.as_deref().is_none_or(|default| aura_agents::agent_of(default) == aura_agents::agent_of(active.as_deref().unwrap_or("")));
+            model.filter(|_| same)
+        })
     } else {
         None
     };
@@ -231,20 +239,25 @@ pub(crate) fn latest_agent_session(
     agent_session_for(conn, chat_id, agent.as_deref().unwrap_or(""))
 }
 
+/// The chat's newest session of the agent `agent_id` names, through any of its connections. A
+/// session records the connection that made it (`claude-acp`), so it resumes through that one.
 pub(crate) fn agent_session_for(
     conn: &Connection,
     chat_id: &str,
     agent_id: &str,
 ) -> rusqlite::Result<Option<AgentSessionRow>> {
-    conn.prepare_cached(
+    let agent = aura_agents::agent_of(agent_id);
+    let mut statement = conn.prepare_cached(
         "SELECT id, chat_id, agent_id, native_session_id, model, effort, autonomy, config_json, cwd, \
-         created_at, updated_at, host, capabilities_json FROM agent_sessions WHERE chat_id = ?1 AND agent_id = ?2 ORDER BY created_at DESC, id DESC LIMIT 1",
-    )?
-    .query_row(params![chat_id, agent_id], |row| {
+         created_at, updated_at, host, capabilities_json FROM agent_sessions WHERE chat_id = ?1 ORDER BY created_at DESC, id DESC",
+    )?;
+    let rows = statement.query_map(params![chat_id], |row| {
         let autonomy: Option<String> = row.get(6)?;
         let cwd: String = row.get(8)?;
         Ok(AgentSessionRow {
-            capabilities: row.get::<_,Option<String>>(12)?.and_then(|json| serde_json::from_str(&json).ok()),
+            capabilities: row
+                .get::<_, Option<String>>(12)?
+                .and_then(|json| serde_json::from_str(&json).ok()),
             host: parse_session_host(&row.get::<_, String>(11)?),
             id: row.get(0)?,
             chat_id: row.get(1)?,
@@ -258,8 +271,14 @@ pub(crate) fn agent_session_for(
             created_at: row.get(9)?,
             updated_at: row.get(10)?,
         })
-    })
-    .optional()
+    })?;
+    for row in rows {
+        let row = row?;
+        if aura_agents::agent_of(&row.agent_id) == agent {
+            return Ok(Some(row));
+        }
+    }
+    Ok(None)
 }
 
 fn parse_session_host(value: &str) -> aura_protocol::agents::AgentHost {
@@ -415,7 +434,7 @@ pub(crate) fn insert_agent_session(
         serde_json::to_string(&row.host).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
         row.capabilities.as_ref().map(serde_json::to_string).transpose().map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?,
     ])?;
-    conn.execute("UPDATE chat_continuations SET pending_json=json_set(pending_json,'$.force_fresh',json('false'),'$.resume_source',NULL,'$.native_start',json('{}')) WHERE chat_id=?1", [&row.chat_id])?;
+    conn.execute("UPDATE chat_continuations SET pending_json=json_set(pending_json,'$.force_fresh',json('false'),'$.resume_source',NULL,'$.connection',NULL,'$.native_start',json('{}')) WHERE chat_id=?1", [&row.chat_id])?;
     Ok(())
 }
 
@@ -917,6 +936,80 @@ pub(crate) mod tests {
                 .as_deref(),
             Some("vendor-model")
         );
+    }
+
+    /// Ids saved before agents had one entry each: a chat or project naming `claude-acp` reads as
+    /// Claude Code, and the project's model still reaches that agent's chats.
+    #[test]
+    fn a_saved_connection_id_reads_as_its_agent() {
+        let db = TestDb::new();
+        let chat = db.chat("/work");
+        let conn = db.conn();
+        conn.execute("UPDATE chats SET active_agent='claude-acp'", [])
+            .unwrap();
+        conn.execute(
+            "UPDATE projects SET default_agent='claude',default_model='opus'",
+            [],
+        )
+        .unwrap();
+        let load = load_chat(conn, "dev", &chat, 0).unwrap().unwrap();
+        assert_eq!(load.chat.agent_id, "claude");
+        assert_eq!(load.initial_model.as_deref(), Some("opus"));
+        conn.execute("UPDATE chats SET active_agent='claude'", [])
+            .unwrap();
+        conn.execute("UPDATE projects SET default_agent='claude-acp'", [])
+            .unwrap();
+        let load = load_chat(conn, "dev", &chat, 0).unwrap().unwrap();
+        assert_eq!(load.initial_model.as_deref(), Some("opus"));
+        // A session made by either connection is the agent's; the newest wins and keeps its own.
+        for (id, agent, native, at) in [
+            ("a1", "claude-acp", "acp-native", 10),
+            ("a2", "codex", "codex-native", 20),
+        ] {
+            insert_agent_session(
+                conn,
+                "dev",
+                &AgentSessionRow {
+                    id: id.into(),
+                    chat_id: chat.clone(),
+                    agent_id: agent.into(),
+                    native_session_id: Some(native.into()),
+                    model: None,
+                    effort: None,
+                    autonomy: Autonomy::FullAuto,
+                    config_json: None,
+                    cwd: PathBuf::from("/work"),
+                    created_at: at,
+                    updated_at: at,
+                    host: aura_protocol::agents::AgentHost::Native,
+                    capabilities: None,
+                },
+            )
+            .unwrap();
+        }
+        let claude = agent_session_for(conn, &chat, "claude")
+            .unwrap()
+            .expect("adapter session");
+        assert_eq!(
+            (
+                claude.agent_id.as_str(),
+                claude.native_session_id.as_deref()
+            ),
+            ("claude-acp", Some("acp-native"))
+        );
+        assert_eq!(
+            agent_session_for(conn, &chat, "claude-acp")
+                .unwrap()
+                .map(|s| s.id),
+            Some("a1".to_owned())
+        );
+        assert_eq!(
+            agent_session_for(conn, &chat, "codex")
+                .unwrap()
+                .map(|s| s.id),
+            Some("a2".to_owned())
+        );
+        assert!(agent_session_for(conn, &chat, "pi").unwrap().is_none());
     }
 
     #[test]
