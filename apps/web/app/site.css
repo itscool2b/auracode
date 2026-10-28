@@ -792,10 +792,6 @@ canvas {
   margin: 0;
 }
 
-.caps-note > .agent-strip {
-  margin-top: 20px;
-}
-
 /*
  * A row of agent marks (AgentStrip): the app's 24px tiles 8px apart. They rise 10px and fade in
  * 24ms apart once seen (under 600ms in all), drift on their own slow periods while on screen (set
@@ -864,6 +860,10 @@ canvas {
   .agent-strip > li:hover .agent-strip-lift::after {
     opacity: 1;
   }
+}
+
+.caps-note > .agent-strip {
+  margin-top: 20px;
 }
 
 /*
