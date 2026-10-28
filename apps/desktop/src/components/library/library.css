@@ -103,10 +103,10 @@
   filter: grayscale(1);
 }
 
+/* Fixed widths keep the search, which takes the rest, on the 4px grid. */
 .library-select {
   flex: none;
-  width: auto;
-  max-width: 240px;
+  width: 200px;
 }
 
 .library-feedback {
@@ -128,23 +128,40 @@
 
 /* -------------------------------------------------- the frame: three hairline panes */
 
+/*
+ * The frame's ring and the panes' dividers are drawn inset, never as borders or gaps, so every
+ * pane starts on the page's 32px column and the grid. The views and the items are fixed widths
+ * and the preview takes the rest, so no column is a fraction of a pixel.
+ */
 .library-body {
+  position: relative;
   display: grid;
   flex: 1;
-  grid-template-columns: 200px minmax(280px, 0.9fr) minmax(360px, 1.1fr);
-  gap: 1px;
+  grid-template-columns: 200px 360px minmax(0, 1fr);
   min-height: 0;
   margin: 0 var(--g-space-32) var(--g-space-24);
   overflow: hidden;
-  border: 1px solid var(--g-line);
   border-radius: var(--g-radius-12);
-  background-color: var(--g-line);
+  background-color: var(--g-bg);
+}
+
+.library-body::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--g-line);
+  pointer-events: none;
 }
 
 .library-body > * {
   min-width: 0;
   min-height: 0;
   background-color: var(--g-bg);
+}
+
+.library-body > * + * {
+  box-shadow: inset 1px 0 0 var(--g-line);
 }
 
 /*
@@ -238,7 +255,12 @@
   line-height: var(--g-leading-meta);
 }
 
+/*
+ * The shell draws disclosures as inline-flex rows with a chevron; on the line's top edge they keep
+ * the line to their own 16px instead of a baseline's 18, so the fold stays on the grid.
+ */
 .library-sources summary {
+  vertical-align: top;
   color: var(--g-fg-2);
   font-weight: 500;
   cursor: pointer;
@@ -273,8 +295,20 @@
   list-style: none;
 }
 
+/* Rows are 56px apart: the hairline under each is drawn over its row's last pixel. */
 .library-items li {
-  border-bottom: 1px solid var(--g-line);
+  position: relative;
+}
+
+.library-items li::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background-color: var(--g-line);
+  pointer-events: none;
 }
 
 .library-items li button {
@@ -382,7 +416,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--g-space-16);
-  margin-bottom: var(--g-space-20);
+  margin-bottom: var(--g-space-24);
 }
 
 .library-detail > header > div {
@@ -405,9 +439,10 @@
   line-height: var(--g-leading-ui);
 }
 
+/* The title, its line and the path stack to 64px (22, 2 and 20, 4 and 16): the well starts on 4. */
 .library-detail :where(header code) {
   display: block;
-  margin-top: var(--g-space-6);
+  margin-top: var(--g-space-4);
   color: var(--g-fg-3);
   font-family: var(--g-mono);
   font-size: var(--g-text-meta);
@@ -420,12 +455,12 @@
   flex: none;
 }
 
-/* The file, in a well: a 36px head with its name and size, then the text. */
+/* The file, in a well: a 36px head with its name and size, then the text. The ring is inset. */
 .library-well {
   overflow: hidden;
-  border: 1px solid var(--g-line);
   border-radius: var(--g-radius-8);
   background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
 }
 
 .library-file-heading {
@@ -472,7 +507,9 @@
   line-height: var(--g-leading-ui);
 }
 
+/* On the line's top edge, like the Sources fold: one 20px line, so what follows stays on 4. */
 .library-file-list summary {
+  vertical-align: top;
   color: var(--g-fg-2);
   font-weight: 500;
   cursor: pointer;
@@ -506,7 +543,7 @@
   gap: var(--g-space-12);
   margin-top: var(--g-space-24);
   padding-top: var(--g-space-20);
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-line);
 }
 
 .library-copy-controls > p {
@@ -530,6 +567,12 @@
 
 .library-copy-controls select {
   width: 100%;
+}
+
+/* A fixed width keeps the destination field, which takes the rest, on the grid. */
+.library-detail .library-copy-controls > .g-button {
+  justify-content: center;
+  width: 128px;
 }
 
 /* Empty states: one title and one line, nothing else (Vercel). */

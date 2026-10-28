@@ -68,6 +68,10 @@ if (container) {
       );
     else if (mode === "git" || mode === "git-missing")
       void import("./dev/gitPreview").then(({ mountGitPreview }) => mountGitPreview(container));
+    else if (mode === "chat-options")
+      void import("./dev/chatOptionsPreview").then(({ mountChatOptionsPreview }) =>
+        mountChatOptionsPreview(container),
+      );
     else if (mode === "settings")
       void import("./dev/settingsPreview").then(({ mountSettingsPreview }) =>
         mountSettingsPreview(container),

@@ -4,8 +4,10 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use aura_core::onboarding::{OnboardingStore, SetupAction, SetupError, SetupSnapshot};
-use tauri::State;
+use aura_core::onboarding::{
+    OnboardingStore, SetupAction, SetupError, SetupPreferences, SetupSnapshot,
+};
+use tauri::{AppHandle, State};
 
 use crate::error::{AppError, AppErrorCode};
 use crate::state::AppState;
@@ -35,6 +37,24 @@ impl SetupService {
     }
 
     fn run(&self, change: Option<(u32, SetupAction)>) -> Result<SetupSnapshot, AppError> {
+        self.with_store(|store| {
+            match change {
+                Some((revision, action)) => store.apply(revision, action),
+                None => store.snapshot(),
+            }
+            .map_err(map_error)
+        })
+    }
+
+    /// The saved preferences, without marking the boot seen (that is the interface's to do).
+    pub fn preferences(&self) -> Result<SetupPreferences, AppError> {
+        self.with_store(|store| Ok(store.preferences()))
+    }
+
+    fn with_store<T>(
+        &self,
+        run: impl FnOnce(&OnboardingStore) -> Result<T, AppError>,
+    ) -> Result<T, AppError> {
         let mut store = self
             .store
             .lock()
@@ -45,11 +65,7 @@ impl SetupService {
         let store = store
             .as_ref()
             .ok_or_else(|| AppError::new(AppErrorCode::Internal, "Setup is unavailable."))?;
-        match change {
-            Some((revision, action)) => store.apply(revision, action),
-            None => store.snapshot(),
-        }
-        .map_err(map_error)
+        run(store)
     }
 }
 
@@ -73,16 +89,25 @@ async fn run(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn setup_snapshot(state: State<'_, AppState>) -> Result<SetupSnapshot, AppError> {
-    run(&state, None).await
+pub async fn setup_snapshot(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<SetupSnapshot, AppError> {
+    let snapshot = run(&state, None).await?;
+    crate::general_preferences::apply(&app, &snapshot.preferences.general);
+    Ok(snapshot)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn setup_apply(
+    app: AppHandle,
     state: State<'_, AppState>,
     revision: u32,
     action: SetupAction,
 ) -> Result<SetupSnapshot, AppError> {
-    run(&state, Some((revision, action))).await
+    let snapshot = run(&state, Some((revision, action))).await?;
+    // Settings' switches take effect at once: new chats, notifications, keep-awake, closing.
+    crate::general_preferences::apply(&app, &snapshot.preferences.general);
+    Ok(snapshot)
 }

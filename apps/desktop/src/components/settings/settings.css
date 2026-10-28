@@ -232,6 +232,11 @@ h1 + .settings-group {
   justify-self: end;
 }
 
+/* A choice from a list (the default agent and model): an input's 36px, 12px in like the track. */
+.settings-select {
+  width: 220px;
+}
+
 /* A whole row that opens something (X Money's chevron rows). */
 .settings-link {
   display: flex;

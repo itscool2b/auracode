@@ -39,6 +39,7 @@ pub mod deep_links;
 pub mod demo;
 pub mod error;
 pub mod folder_resolution_commands;
+pub mod general_preferences;
 pub mod git_commands;
 pub mod glass;
 pub mod integrity;
@@ -213,6 +214,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     app.manage(Arc::new(config_sync::ConfigSyncService::default()));
     app.manage(Arc::new(aura_core::cloning::Clones::default()));
     native_shell::setup(app.handle());
+    general_preferences::refresh(app.handle());
     if accept_sign_in_links {
         deep_links::setup(app.handle());
     }

@@ -262,8 +262,22 @@ export const commands = {
 	 *  its agent.
 	 */
 	chatSend: (chatId: string, text: string) => typedError<PromptAck, AppError>(__TAURI_INVOKE("chat_send", { chatId, text })),
+	/**
+	 *  The models `agent_id` listed the last time one of its chats started in this run, for Settings'
+	 *  default model. Empty until then: agents list their models only from a running session.
+	 */
+	agentModels: (agentId: string) => typedError<ConfigChoice[], AppError>(__TAURI_INVOKE("agent_models", { agentId })),
 	/**  Removes a queued prompt. */
 	chatCancelQueued: (chatId: string, promptId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_cancel_queued", { chatId, promptId })),
+	/**  The words of a queued prompt as typed, for editing it in place. */
+	chatQueuedText: (chatId: string, promptId: string) => typedError<string, AppError>(__TAURI_INVOKE("chat_queued_text", { chatId, promptId })),
+	/**
+	 *  Replaces a queued prompt's words (its attachments, mentions, place and hold stay) and returns
+	 *  the queue after the change.
+	 */
+	chatEditQueued: (chatId: string, promptId: string, text: string) => typedError<QueuedPrompt[], AppError>(__TAURI_INVOKE("chat_edit_queued", { chatId, promptId, text })),
+	/**  Moves a queued prompt to `index` (0 goes next) and returns the queue after the change. */
+	chatMoveQueued: (chatId: string, promptId: string, index: number) => typedError<QueuedPrompt[], AppError>(__TAURI_INVOKE("chat_move_queued", { chatId, promptId, index })),
 	/**  Releases the held prompts ("Send queued"), starting the agent when it is stopped. */
 	chatResumeQueue: (chatId: string) => typedError<null, AppError>(__TAURI_INVOKE("chat_resume_queue", { chatId })),
 	/**  Asks the agent to stop the running turn (Esc). While it is already cancelling, this force-stops. */
@@ -1098,6 +1112,24 @@ export type FolderState = "ok" | "missing" |
 /**  The OS refused access (macOS privacy). */
 "not_allowed";
 
+/**
+ *  Settings' General page: what new chats start with, and how auracode behaves while agents work
+ *  in the background. Full auto stays the default; an agent's own restrictions still apply.
+ */
+export type GeneralPreferences = {
+	/**  The agent New chat selects first. `None`: the person picks each time. */
+	default_agent: string | null,
+	/**  The model new chats with `default_agent` start on. `None`: the agent's own default. */
+	default_model: string | null,
+	default_autonomy: Autonomy,
+	/**  Notify when a background chat finishes, fails or needs you. */
+	notifications: boolean,
+	/**  Keep the computer from idle sleep while an agent works. */
+	keep_awake: boolean,
+	/**  Closing the window keeps auracode running in the tray or menu bar. */
+	close_to_tray: boolean,
+};
+
 export type GitFileState = {
 	path: string,
 	index: string,
@@ -1701,7 +1733,9 @@ export type SessionStatus =
 /**  The agent needs its own sign-in; never a live process. */
 "auth_required";
 
-export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" };
+export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" } | 
+/**  Changing the agent clears the default model, which belongs to the previous agent. */
+{ type: "default_agent"; agent_id: string | null } | { type: "default_model"; model: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "notifications"; enabled: boolean } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean };
 
 export type SetupCommand = {
 	program: string,
@@ -1719,6 +1753,8 @@ export type SetupPreferences = {
 	motion: MotionPreference,
 	completed: boolean,
 	first_project_id: string | null,
+	/**  Files written before these settings existed read their defaults ([`fill_defaults`]). */
+	general: GeneralPreferences,
 };
 
 export type SetupSnapshot = {

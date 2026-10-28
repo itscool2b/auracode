@@ -1117,10 +1117,11 @@ x 16); the agent chip (32px ghost pill: "Claude Code" 500 fg-1, the model in fg-
 ticks in fg-1, a chevron; surface-3 under the hand and while open); then at the right one send
 control. Send: empty, a 32px surface-3 disc with an fg-4 arrow; ready, the white disc. While a
 turn runs and the box is empty, the white disc is Stop (a black square, Esc). With a message
-typed, Stop steps back to a soft disc and the send control becomes one surface-3 pill holding
-"Steer" in words and Queue as the white disc (Enter); without steering, Queue alone. Cancelling:
-the red "Force stop" pill. `@` mentions a project file and `/` lists commands; both open menus above
-the shell.
+typed, Stop steps back to a soft disc and the send control becomes one 32px surface-3 pill holding
+"Steer" in words and Queue as the white disc (Enter), both 24px and 4px in. An agent that takes
+messages only between turns (Claude Code, Pi) has "After this turn" in fg-2 words where Steer
+would be, never a dead control; the disc still queues. Cancelling: the red "Force stop" pill.
+`@` mentions a project file and `/` lists commands; both open menus above the shell.
 
 ### 6.10 Pickers (agent, model, effort)
 
@@ -1149,9 +1150,11 @@ agent's own mode when it reports one. Switching mid-chat logs "Full auto from he
 
 One segment over the composer, its width and radius 16 (surface-2, 1px line ring): "2 queued" in
 12/16 500 fg-3 on a 32px head, then each waiting message on a 32px row (fg-1, one line) with a
-24px remove icon at its end. Held messages (after a stop, an error or a restart) add "· held" to
-the head, a "held" chip on their rows, "Send queued" (24px soft) at the head's end and one 12/16
-fg-3 line saying why they wait.
+24px remove icon at its end; Edit, Move up and Move down (24px ghost icons) sit before it, shown
+under the hand or with focus in the row. Edit opens the words in a field in place (Enter saves,
+Esc cancels without touching the turn). Held messages (after a stop, an error or a restart) add
+"· held" to the head, a "held" chip on their rows, "Send queued" (24px soft) at the head's end and
+one 12/16 fg-3 line saying why they wait.
 
 ### 6.13 Empty state
 
@@ -1239,14 +1242,18 @@ sidebar becomes the settings nav on the chat sidebar's geometry (6.2): the logo 
 most one short 14/20 fg-3 line, then a surface-2 well, radius 12, 12px below; 32px between groups.
 A row is a label 14/20 500 with an optional one-line description 12/16 fg-3 and at most one control
 at right (a 28px outline pill, a segmented control on a 36px track with its 28px choices 4px in,
-or a switch); anything more (a form, a key, a
-list, progress) opens under the row across both columns, starting at the label's column when the
-row leads with an icon or a 32px badge. Rows are at least 60px with 12/16 padding (the label 20 over its line 16, so a 28px control sits
-16px in), on hairlines
-inset 16 on both sides. A row that only opens something is the whole row as a button with a
+a 220px select at an input's 36px for a choice from a list, or a switch); anything more (a form, a
+key, a list, progress) opens under the row across both columns, starting at the label's column
+when the row leads with an icon or a 32px badge. Rows are at least 60px with 12/16 padding (the
+label 20 over its line 16, so a 28px control sits 16px in), on hairlines inset 16 on both sides. A row that only opens something is the whole row as a button with a
 chevron (X Money). Empty states are Vercel's: one 14/20 500 title and one fg-3 line centred in the
-well, and the one way forward. "Applies to new chats" in 12/16 fg-3 under a group when true. Motion is a strong segmented control (Full, Reduced, Off) that
-applies at once. Agents: a roster in a hairline grid (mark, name, version chip, binary path in mono,
+well, and the one way forward. "Applies to new chats" in 12/16 fg-3 under a group when true.
+General is three groups that save at once: New chats (Agent and Model as selects, the Model row
+only once an agent is chosen and only with a select when that agent has listed its models; and
+Autonomy as a strong segmented control, Ask, Auto-edit, Full auto, Full auto by default, with one
+line saying what the level does), While agents work (switches for Notifications, Keep awake and
+Keep running in the tray or menu bar) and App (Motion, a strong segmented control of Full, Reduced
+and Off, Welcome and setup, Data folder). Agents: a roster in a hairline grid (mark, name, version chip, binary path in mono,
 an enable switch, "Update to 0.165.0"). Permissions: default autonomy, Final confirm, tool rules
 (Allow, Ask, Deny; Deny wins) and the access log (mono 13 table: time, agent, tool, target, a white
 check or red square). Usage: per-agent rows with 32/32 tabular figures and a 1px fg-3 sparkline; a

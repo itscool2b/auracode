@@ -28,7 +28,9 @@ impl Power {
         })
     }
 
-    fn start_with<G: 'static>(mut create: impl FnMut() -> Option<G> + Send + 'static) -> Self {
+    pub(super) fn start_with<G: 'static>(
+        mut create: impl FnMut() -> Option<G> + Send + 'static,
+    ) -> Self {
         let (sender, receiver) = channel();
         let thread = std::thread::Builder::new()
             .name("auracode-awake".into())

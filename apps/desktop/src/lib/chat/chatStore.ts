@@ -740,6 +740,62 @@ export class ChatStore {
     );
   }
 
+  /**
+   * The words of a queued prompt as typed, for editing it in place; `null` when it is gone (it
+   * started or was removed meanwhile) or could not be read, which `actionError` then says.
+   */
+  async queuedText(promptId: string): Promise<string | null> {
+    try {
+      const text = await this.#transport.queuedText(this.chatId, promptId);
+      if (this.#state.actionError !== null) this.#set({ ...this.#state, actionError: null });
+      return text;
+    } catch (error) {
+      this.#queueActionFailed(promptId, error);
+      return null;
+    }
+  }
+
+  /**
+   * Saves new words for a queued prompt. Answers why they were not saved (shown under the editor,
+   * which stays open with the words), or `null` once saved or once the prompt is gone.
+   */
+  async editQueued(promptId: string, text: string): Promise<string | null> {
+    try {
+      this.#queueChanged(await this.#transport.editQueued(this.chatId, promptId, text));
+      return null;
+    } catch (error) {
+      if (!isCode(error, "request_not_pending")) return errorMessage(error);
+      this.#queueActionFailed(promptId, error);
+      return null;
+    }
+  }
+
+  /** Moves a queued prompt to `index` (0 goes next). */
+  async moveQueued(promptId: string, index: number): Promise<void> {
+    try {
+      this.#queueChanged(await this.#transport.moveQueued(this.chatId, promptId, index));
+    } catch (error) {
+      this.#queueActionFailed(promptId, error);
+    }
+  }
+
+  /** The shell's answer is the whole queue after the change, held marks included: exact. */
+  #queueChanged(queue: readonly QueuedPrompt[]): void {
+    this.#set({ ...this.#state, queue, actionError: null });
+  }
+
+  #queueActionFailed(promptId: string, error: unknown): void {
+    if (isCode(error, "request_not_pending")) {
+      // It started or was removed meanwhile.
+      this.#set({
+        ...this.#state,
+        queue: this.#state.queue.filter((row) => row.prompt_id !== promptId),
+      });
+      return;
+    }
+    this.#set({ ...this.#state, actionError: errorMessage(error) });
+  }
+
   resumeQueue(): Promise<void> {
     return this.#act(() => this.#transport.resumeQueue(this.chatId));
   }

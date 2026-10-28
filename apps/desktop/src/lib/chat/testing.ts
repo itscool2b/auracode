@@ -16,6 +16,7 @@ import type {
   HistoryItem,
   HistoryPage,
   PromptAck,
+  QueuedPrompt,
   SessionInfo,
   SessionLists,
   StorageStatus,
@@ -652,6 +653,21 @@ export class FakeTransport implements Transport {
   cancelQueued(chatId: string, promptId: string): Promise<void> {
     this.#record("cancelQueued", [chatId, promptId]);
     return this.handlers.cancelQueued?.(chatId, promptId) ?? Promise.resolve();
+  }
+
+  queuedText(chatId: string, promptId: string): Promise<string> {
+    this.#record("queuedText", [chatId, promptId]);
+    return this.handlers.queuedText?.(chatId, promptId) ?? Promise.resolve("");
+  }
+
+  editQueued(chatId: string, promptId: string, text: string): Promise<QueuedPrompt[]> {
+    this.#record("editQueued", [chatId, promptId, text]);
+    return this.handlers.editQueued?.(chatId, promptId, text) ?? Promise.resolve([]);
+  }
+
+  moveQueued(chatId: string, promptId: string, index: number): Promise<QueuedPrompt[]> {
+    this.#record("moveQueued", [chatId, promptId, index]);
+    return this.handlers.moveQueued?.(chatId, promptId, index) ?? Promise.resolve([]);
   }
 
   resumeQueue(chatId: string): Promise<void> {

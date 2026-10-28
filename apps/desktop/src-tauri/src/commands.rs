@@ -16,8 +16,8 @@ use std::time::Duration;
 
 use aura_core::session::SessionError;
 use aura_protocol::session::{
-    AgentEntry, BlobText, ChatAttach, ChatStatusUpdate, ChatSummary, ConfigValue, EnvStatus,
-    HistoryPage, PromptAck, SessionLists, StorageStatus,
+    AgentEntry, BlobText, ChatAttach, ChatStatusUpdate, ChatSummary, ConfigChoice, ConfigValue,
+    EnvStatus, HistoryPage, PromptAck, QueuedPrompt, SessionLists, StorageStatus,
 };
 use aura_protocol::{Autonomy, EventBatch, UiAnswer};
 use tauri::ipc::Channel;
@@ -405,6 +405,59 @@ pub async fn chat_cancel_queued(
     Ok(state
         .sessions()?
         .cancel_queued(&chat_id, &prompt_id)
+        .await?)
+}
+
+/// The models `agent_id` listed the last time one of its chats started in this run, for Settings'
+/// default model. Empty until then: agents list their models only from a running session.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_models(
+    state: State<'_, AppState>,
+    agent_id: String,
+) -> Result<Vec<ConfigChoice>, AppError> {
+    Ok(state.sessions()?.reported_models(&agent_id))
+}
+
+/// The words of a queued prompt as typed, for editing it in place.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_queued_text(
+    state: State<'_, AppState>,
+    chat_id: String,
+    prompt_id: String,
+) -> Result<String, AppError> {
+    Ok(state.sessions()?.queued_text(&chat_id, &prompt_id).await?)
+}
+
+/// Replaces a queued prompt's words (its attachments, mentions, place and hold stay) and returns
+/// the queue after the change.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_edit_queued(
+    state: State<'_, AppState>,
+    chat_id: String,
+    prompt_id: String,
+    text: String,
+) -> Result<Vec<QueuedPrompt>, AppError> {
+    Ok(state
+        .sessions()?
+        .edit_queued(&chat_id, &prompt_id, text)
+        .await?)
+}
+
+/// Moves a queued prompt to `index` (0 goes next) and returns the queue after the change.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_move_queued(
+    state: State<'_, AppState>,
+    chat_id: String,
+    prompt_id: String,
+    index: u32,
+) -> Result<Vec<QueuedPrompt>, AppError> {
+    Ok(state
+        .sessions()?
+        .move_queued(&chat_id, &prompt_id, index as usize)
         .await?)
 }
 
