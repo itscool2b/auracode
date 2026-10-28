@@ -168,6 +168,15 @@ export function InstructionsPanel({
       setPending({ kind: "change", change: { type: "per_agent" } });
       return;
     }
+    reviewUniversal();
+  };
+
+  /**
+   * Reviews one file for every agent: the switch itself, or bringing in an agent that reads
+   * nothing yet. Different texts are chosen first.
+   */
+  const reviewUniversal = () => {
+    if (!snapshot) return;
     const source = snapshot.default_source;
     if (!source) return;
     const universal = (content: InstructionsContent): InstructionsChange => ({
@@ -467,7 +476,7 @@ export function InstructionsPanel({
                   key={agent.id}
                   agent={agent}
                   snapshot={snapshot}
-                  onSetUp={() => switchMode("universal")}
+                  onSetUp={reviewUniversal}
                 />
               ))}
             </ul>
@@ -482,7 +491,7 @@ export function InstructionsPanel({
                       key={agent.id}
                       agent={agent}
                       snapshot={snapshot}
-                      onSetUp={() => switchMode("universal")}
+                      onSetUp={reviewUniversal}
                     />
                   ))}
                 </ul>
