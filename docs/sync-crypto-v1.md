@@ -211,10 +211,12 @@ the account handoff summary reports byte sizes instead of pretending to be a Git
 The ordinary checkpoint constructor refuses Account capture; callers must supply the unlocked file
 key to `new_account`. Existing plaintext checkpoint directories require explicit import.
 
-Explicit revert still mutates the user's chosen working files and preserves race-safe recovery
-copies under `.auracode-revert-<token>` in that working folder. Those are user workspace files, not
-encrypted profile copies. This boundary preserves newer external edits if a file changes during
-rename and is disclosed by the existing revert preview. Account profile snapshots remain encrypted.
+Explicit revert still mutates the user's chosen working files. While it runs, it moves each replaced
+file aside under `.auracode-revert-<token>` in that working folder, which preserves newer external
+edits if a file changes during rename and is disclosed by the existing revert preview. A complete
+revert then removes that folder (a Local profile moves it into its own data folder instead); one that
+stopped partway keeps it there and names it in the result. No plaintext copy goes into the account
+profile, and account profile snapshots remain encrypted.
 
 Small mutable metadata uses the same codec with the separate `metadata` purpose, in the private
 `metadata/` directory. Worktree ownership/recovery uses object `worktree-registry` (8 MiB maximum),

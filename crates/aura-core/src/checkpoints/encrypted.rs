@@ -250,7 +250,15 @@ mod tests {
             std::fs::read(work.join("private-name.txt")).unwrap(),
             before
         );
-        assert!(!result.recovery_paths.is_empty());
+        // No plaintext copy stays in the profile or in the working folder after a complete revert.
+        assert!(result.recovery_paths.is_empty());
+        assert!(std::fs::read_dir(&work).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".auracode-revert-")
+        }));
         assert!(
             service
                 .changes(&chat, &folder, &work, &checkpoint.id)

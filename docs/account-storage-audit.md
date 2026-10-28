@@ -23,9 +23,12 @@ profile ID and a generic Account label rather than persisting sign-in email addr
 manifest. The leftover-process journal records PID/start time, fixed agent labels and reviewed
 daemon matching rules; it does not store prompts, cwd or chat paths.
 
-Explicit worktree checkouts and `.auracode-revert-*` recovery copies are user workspace files. They
-remain ordinary files, under the same visible create/revert controls that protect the user's index
-and preserve newer edits. They are not encrypted account-profile copies.
+Explicit worktree checkouts are user workspace files. They remain ordinary files, under the same
+visible create/revert controls that protect the user's index and preserve newer edits. A revert
+moves the files it replaces aside into a `.auracode-revert-*` folder at the working folder's root
+while it runs; an Account profile then removes that folder after a complete revert and keeps it
+only when the revert stopped partway (it may hold a file's only copy). No plaintext copy goes into
+the account profile.
 
 Before Account activation, a bounded no-follow inventory refuses known plaintext database/setup
 paths, nonempty protocol-log trees and old plaintext dead-letter journals. It preserves all refused

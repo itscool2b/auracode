@@ -319,7 +319,25 @@ async fn revert_restores_exact_bytes_and_retains_original_work_for_recovery() {
         "restore directory"
     );
     assert!(!rig.work.join("added.txt").exists());
+    // The originals live in the profile's data folder; nothing of the revert stays in the folder.
+    assert_eq!(result.recovery_paths.len(), 1);
     let backup = PathBuf::from(&result.recovery_paths[0]);
+    assert!(
+        backup.starts_with(rig.profile.checkpoints_dir().join("reverts")),
+        "{}",
+        backup.display()
+    );
+    assert_eq!(
+        std::fs::read_dir(&rig.work)
+            .expect("folder")
+            .flatten()
+            .filter(|entry| entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".auracode-revert-"))
+            .count(),
+        0
+    );
     assert_eq!(
         std::fs::read_to_string(backup.join("original-0")).expect("new work retained"),
         "new work"
@@ -328,6 +346,17 @@ async fn revert_restores_exact_bytes_and_retains_original_work_for_recovery() {
         std::fs::read_to_string(backup.join("original-1")).expect("edit retained"),
         "external edit"
     );
+    assert!(backup.join("recovery.json").is_file());
+    // The replacements were published and the checkpoint keeps their bytes.
+    assert!(
+        std::fs::read_dir(&backup)
+            .expect("backup")
+            .flatten()
+            .all(|entry| !entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("replacement-"))
+    );
     assert!(
         rig.service
             .changes(&rig.chat, &rig.folder, &rig.work, &checkpoint.id)
@@ -335,6 +364,55 @@ async fn revert_restores_exact_bytes_and_retains_original_work_for_recovery() {
             .expect("changes")
             .files
             .is_empty()
+    );
+}
+
+/// Revert folders an earlier build (or an interrupted revert) left in the working folder move into
+/// the profile's data folder at the next checkpoint, intact. Other names and links stay.
+#[tokio::test]
+async fn leftover_revert_folders_move_into_the_data_folder() {
+    let rig = rig();
+    std::fs::write(rig.work.join("file.txt"), "work").expect("file");
+    let token = crate::ids::new_id();
+    let leftover = rig.work.join(format!(".auracode-revert-{token}"));
+    std::fs::create_dir(&leftover).expect("leftover");
+    std::fs::write(leftover.join("original-0"), "only copy of newer work").expect("original");
+    std::fs::write(leftover.join("recovery.json"), "{}").expect("journal");
+    let unrelated = rig.work.join(".auracode-revert-notes");
+    std::fs::create_dir(&unrelated).expect("unrelated");
+    #[cfg(unix)]
+    let link = {
+        let elsewhere = rig._dir.path().join("elsewhere");
+        std::fs::create_dir(&elsewhere).expect("elsewhere");
+        let link = rig
+            .work
+            .join(format!(".auracode-revert-{}", crate::ids::new_id()));
+        std::os::unix::fs::symlink(&elsewhere, &link).expect("link");
+        link
+    };
+    rig.service
+        .capture(&rig.chat, &rig.folder, &rig.work, &crate::ids::new_id())
+        .await
+        .expect("checkpoint");
+    assert!(!leftover.exists());
+    let moved = rig.profile.checkpoints_dir().join("reverts").join(&token);
+    assert_eq!(
+        std::fs::read_to_string(moved.join("original-0")).expect("moved intact"),
+        "only copy of newer work"
+    );
+    assert!(moved.join("recovery.json").is_file());
+    assert!(unrelated.is_dir(), "a name that is not a revert's stays");
+    #[cfg(unix)]
+    assert!(
+        std::fs::symlink_metadata(&link)
+            .expect("link")
+            .file_type()
+            .is_symlink(),
+        "a link is never followed or moved"
+    );
+    assert_eq!(
+        std::fs::read_to_string(rig.work.join("file.txt")).expect("file"),
+        "work"
     );
 }
 

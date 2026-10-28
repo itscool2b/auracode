@@ -2309,7 +2309,10 @@ export type RevertResult = {
 	applied: string[],
 	/**  A partial failure is explicit; the caller must not report full success. */
 	error: string | null,
-	/**  Original files are preserved here whenever a revert replaces or removes them. */
+	/**
+	 *  Where the replaced or removed originals are kept: the profile's data folder (Local), nothing
+	 *  after an Account profile's complete revert, or the working folder until they can move.
+	 */
 	recovery_paths: string[],
 };
 
