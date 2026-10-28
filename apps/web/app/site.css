@@ -806,18 +806,19 @@ canvas {
   transform: translate3d(0, 14px, 0) scale(0.985);
   visibility: hidden;
   transition:
-    opacity 300ms var(--g-ease),
-    transform 0ms linear 300ms,
-    visibility 0ms linear 300ms;
+    opacity 200ms var(--g-ease),
+    transform 0ms linear 200ms,
+    visibility 0ms linear 200ms;
 }
 
+/* The outgoing view clears in 200ms; the next rises in from 120ms, so they barely overlap. */
 .m-scene.is-active {
   opacity: 1;
   transform: none;
   visibility: visible;
   transition:
-    opacity 480ms var(--g-ease) 100ms,
-    transform 820ms var(--g-ease-out) 100ms,
+    opacity 460ms var(--g-ease) 120ms,
+    transform 820ms var(--g-ease-out) 120ms,
     visibility 0ms;
 }
 
