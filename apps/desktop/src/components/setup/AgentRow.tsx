@@ -465,7 +465,7 @@ export function AgentRow({
           {compact ? null : (
             <span
               className="agent-row-verified"
-              title="The date auracode last verified this integration"
+              title={`Last verified: ${verifiedDate(agent.last_verified)}`}
             >
               <span className="sr-only">Verified </span>
               {verifiedDate(agent.last_verified)}
