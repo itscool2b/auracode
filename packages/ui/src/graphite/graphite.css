@@ -737,7 +737,9 @@
 
 /*
  * The shimmer: soft caustic light drifting near the surface, one layer moved by transform alone,
- * so the compositor animates it without repainting.
+ * so the compositor animates it without repainting. It drifts a few pixels a second, so it moves in
+ * steps of about 1/30 s (98 a segment) along the ease-in-out curve, sampled at eighths: between
+ * steps the compositor has nothing to redraw, whatever the display's refresh rate.
  */
 .g-shallows:where([data-shimmer]) > .g-shallows-light::before {
   content: "";
@@ -753,14 +755,43 @@
     radial-gradient(18% 18% at 46% 22%, var(--g-water-caustic), transparent),
     radial-gradient(12% 26% at 63% 52%, var(--g-water-caustic), transparent),
     radial-gradient(16% 20% at 82% 30%, var(--g-water-caustic), transparent);
-  animation: g-caustic 26s var(--g-ease-in-out) infinite alternate;
+  animation: g-caustic 26s linear infinite alternate;
 }
 
 @keyframes g-caustic {
-  from {
+  0% {
     transform: translate3d(-3%, 0, 0) scale(1);
+    animation-timing-function: steps(98, jump-none);
   }
-  to {
+  12.5% {
+    transform: translate3d(-2.92%, 0.05%, 0) scale(1.0008);
+    animation-timing-function: steps(98, jump-none);
+  }
+  25% {
+    transform: translate3d(-2.63%, 0.25%, 0) scale(1.0037);
+    animation-timing-function: steps(98, jump-none);
+  }
+  37.5% {
+    transform: translate3d(-1.88%, 0.75%, 0) scale(1.0112);
+    animation-timing-function: steps(98, jump-none);
+  }
+  50% {
+    transform: translate3d(0, 2%, 0) scale(1.03);
+    animation-timing-function: steps(98, jump-none);
+  }
+  62.5% {
+    transform: translate3d(1.88%, 3.25%, 0) scale(1.0488);
+    animation-timing-function: steps(98, jump-none);
+  }
+  75% {
+    transform: translate3d(2.63%, 3.75%, 0) scale(1.0563);
+    animation-timing-function: steps(98, jump-none);
+  }
+  87.5% {
+    transform: translate3d(2.92%, 3.95%, 0) scale(1.0592);
+    animation-timing-function: steps(98, jump-none);
+  }
+  100% {
     transform: translate3d(3%, 4%, 0) scale(1.06);
   }
 }

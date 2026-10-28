@@ -52,15 +52,16 @@ const SWIMMERS: readonly SwimmerSpec[] = [
   (`--g-shallows-radius` 28px, `--g-shallows-radius-compact` 20px for phones), one vertical
   falloff from `--g-water-surface` #1e1e1e to `--g-water-deep` #050505 over `depth` (default the
   panel's height), a soft top light, a faint rim. `shimmer` adds one slow caustic layer moved by
-  transform only. Its direct children sit above the light and the swimmers (`z-index: 1`, inside
+  transform only, in steps of about 1/30 s. Its direct children sit above the light and the swimmers (`z-index: 1`, inside
   `:where()` so any class overrides it).
 - `Swimmers` (`swimmers`, `still`, `giveWay`, `className`): absolutely fills its parent and takes
   no pointer events. Each `SwimmerSpec` anchors a creature by fractions of the layer (`x`, `y`) with
   a CSS width (`size`), `depth` 0 near to 1 far (lighter and softened once at raster time),
   `heading`, `speed` px/s, `phase` s and `tilt` degrees. Creatures cruise at an eased speed, sway,
   pitch a few degrees with their path and wrap fully off one side. Transform only, from the shared
-  frame clock; paused off screen and in hidden tabs; held where they are under reduced motion or
-  `still`. The server frame is the first live frame. With `giveWay` (default) they ease up to 22px
+  frame clock, stepping about 30 times a second at rest (every display frame only while one gives
+  way or settles back, `cadence.ts`); paused off screen and in hidden tabs; held where they are
+  under reduced motion or `still`. The server frame is the first live frame. With `giveWay` (default) they ease up to 22px
   out of the pointer's way through a smooth field read from the parent: no flicker, no snap.
 - `Creature` (`kind`, `size`, `small`, `facing`, `label`): the silhouette alone. At 64px
   (`CREATURE_SMALL_MAX`) and below it draws the small variant, whose gaps stay open. The raw paths

@@ -2,6 +2,7 @@ import { type CSSProperties, useEffect, useRef } from "react";
 import { frameClock } from "../frameClock";
 import { usePrefersReducedMotion } from "../motion";
 import { Creature, creatureHeight } from "./Creature";
+import { createCadence } from "./cadence";
 import { CREATURE_SMALL_MAX } from "./creaturePaths";
 import { ease, giveWay, type SwimmerSpec, swimPose } from "./swim";
 
@@ -24,6 +25,8 @@ export interface SwimmersProps {
 const GIVE_TAU = 0.9;
 /** The longest step the clock takes, so a hitch or a resumed tab never makes anyone jump. */
 const MAX_STEP = 1 / 20;
+/** Under this many pixels from where it swims, a creature that gave way has settled back. */
+const SETTLED_PX = 0.05;
 
 /**
  * Seals and turtles swimming through a Shallows panel (visual language 4.16): absolutely placed
@@ -32,7 +35,9 @@ const MAX_STEP = 1 / 20;
  *
  * The server renders every creature at its anchor, and the first live frame is the same frame, so
  * nothing jumps on hydration. The clock runs only while the layer is on screen and the page is
- * visible; reduced motion or `still` holds them where they are. Hover never changes layout and
+ * visible, and at rest it steps about 30 times a second rather than at the display's rate
+ * (cadence.ts): every display frame only while a creature gives way or settles back. Reduced
+ * motion or `still` holds them where they are. Hover never changes layout and
  * never flickers: the layer takes no pointer events, and the optional give-way is eased.
  */
 export function Swimmers({
@@ -62,7 +67,6 @@ export function Swimmers({
     let last: number | null = null;
     let onScreen = typeof IntersectionObserver === "undefined";
     let pointer: { x: number; y: number } | null = null;
-    let unsubscribe: (() => void) | null = null;
 
     const tick = (now: number) => {
       const step = last === null ? 0 : Math.min(MAX_STEP, Math.max(0, (now - last) / 1000));
@@ -93,14 +97,29 @@ export function Swimmers({
       });
     };
 
+    // Something eases while the pointer is in the panel or a creature has not settled back.
+    const easing = () =>
+      pointer !== null ||
+      offsets.some((offset) => Math.abs(offset.x) > SETTLED_PX || Math.abs(offset.y) > SETTLED_PX);
+    const cadence = createCadence(
+      {
+        subscribe: (listener) => frameClock().subscribe(listener),
+        setTimer: (callback, ms) => window.setTimeout(callback, ms),
+        clearTimer: (handle) => window.clearTimeout(handle as number),
+      },
+      tick,
+      easing,
+    );
+    let running = false;
     const reconcile = () => {
       const run = onScreen && document.visibilityState === "visible";
-      if (run && !unsubscribe) {
+      if (run && !running) {
+        running = true;
         last = null;
-        unsubscribe = frameClock().subscribe(tick);
-      } else if (!run && unsubscribe) {
-        unsubscribe();
-        unsubscribe = null;
+        cadence.start();
+      } else if (!run && running) {
+        running = false;
+        cadence.stop();
       }
     };
 
@@ -137,8 +156,10 @@ export function Swimmers({
       typeof window.matchMedia === "function" &&
       window.matchMedia("(hover: hover) and (pointer: fine)").matches;
     const move = (event: PointerEvent) => {
-      if (event.pointerType === "mouse" || event.pointerType === "pen")
+      if (event.pointerType === "mouse" || event.pointerType === "pen") {
         pointer = { x: event.clientX, y: event.clientY };
+        cadence.wake();
+      }
     };
     const leave = () => {
       pointer = null;
@@ -150,7 +171,7 @@ export function Swimmers({
     reconcile();
 
     return () => {
-      unsubscribe?.();
+      cadence.stop();
       sizes?.disconnect();
       seen?.disconnect();
       document.removeEventListener("visibilitychange", reconcile);

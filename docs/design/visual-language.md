@@ -657,8 +657,9 @@ and a single vertical falloff over `--g-shallows-depth` (default the panel's hei
 `--g-water-low` #080808 at 76%, `--g-water-deep` #050505. A soft light at the top centre
 (`--g-water-light`, white at 4.5%) and a 1px rim (`--g-water-rim`, white at 5%). No texture, no
 noise, no lines. `shimmer` adds one layer of caustic light near the surface (`--g-water-caustic`,
-white at 2.8%) that drifts 3% and scales 1.06 over 26s, alternate, transform only; it stops under
-reduced motion. Direct children sit above the light and the swimmers (`z-index: 1`, overridable).
+white at 2.8%) that drifts 3% and scales 1.06 over 26s, alternate, transform only, in steps of
+about 1/30 s along the ease-in-out curve (sampled at eighths), so between steps the compositor has
+nothing to redraw at any refresh rate; it stops under reduced motion. Direct children sit above the light and the swimmers (`z-index: 1`, overridable).
 A quieter panel overrides the water tokens locally, as the website's capabilities panel does.
 
 **`Creature`** (`kind` "seal" or "turtle", `size`, `small`, `facing`, `label`). Flat silhouettes in
@@ -684,9 +685,16 @@ with a CSS width (`size`), `depth` 0 to 1, `heading`, `speed`, `phase` and `tilt
 - **Performance.** Transform only (`translate3d` and `rotate`) on a `will-change` layer, from the
   shared frame clock, so the compositor moves raster that never repaints. The clock runs only while
   the layer is on screen (64px margin) and the page is visible; a step is capped at 50ms so nothing
-  jumps after a hitch or a hidden tab. The server renders each creature at its anchor, and the first
-  live frame is the same frame. Measured on the website (Chromium, 1440 by 900): 0 frames over 25ms
-  while idle, sweeping the pointer across the creatures, scrolling and switching capabilities.
+  jumps after a hitch or a hidden tab. At rest the creatures step about 30 times a second whatever
+  the display's rate (`cadence.ts`: after each step the layer lets go of the frame clock and asks
+  for the next frame 24ms later); they follow every display frame only while one gives way to the
+  pointer or settles back. The server renders each creature at its anchor, and the first live frame
+  is the same frame. Measured on the website (Chromium, 1440 by 900): 0 frames over 25ms while idle,
+  sweeping the pointer across the creatures, scrolling and switching capabilities. Idle for 10s in
+  headed Chromium on a 168Hz display (2026-10-28, `shallows-finish`): New chat's two swimmers cost
+  3.7% of a core in the renderer and 3.6% in the GPU process (11.3% and 12.2% when they stepped on
+  every frame), the website hero with its shimmer 7.0% and 8.7% (17.3% and 19.6%); a hidden or
+  minimised page asks for no frame.
 - **The pointer.** Hover never flickers and never changes layout. With `giveWay` (default, fine
   pointers only) a creature eases out of the pointer's way through a smooth field, read from the
   layer's parent: zero under the pointer and far from it, at most 22px, eased over a 0.9s time
