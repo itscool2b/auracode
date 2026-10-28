@@ -67,6 +67,19 @@ tauri-plugin-notification = "=2.7.0"
 # Already in the tree through tao and window-vibrancy; it reads the real build number (Mica needs
 # build 22000+) without the compatibility shims that make GetVersionEx lie.
 windows-version = "0.1.7"
+# The data cleanup mode (uninstall.rs): its dialogs, attaching to a terminal, waiting for the app
+# to exit. Raw bindings, already in the tree.
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_System_Console",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# "Delete data and move auracode to the Trash" (uninstall.rs): NSFileManager's trashItemAtURL.
+# Already in the tree through Tauri, at this version.
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSError", "NSFileManager", "NSString", "NSURL"] }
 
 [dev-dependencies]
 # The quit, page-load and signal tests run the session manager on fake processes and scripted drivers.

@@ -544,6 +544,7 @@ dependencies = [
  "aura-sync",
  "embed-resource",
  "keepawake",
+ "objc2-foundation",
  "reqwest",
  "serde",
  "serde_json",
@@ -566,6 +567,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "windows-sys 0.61.2",
  "windows-version",
  "zeroize",
 ]

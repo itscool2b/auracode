@@ -557,6 +557,9 @@ pub const EXIT_STORE_DEADLINE: Duration = Duration::from_secs(1);
 pub struct Quit {
     phase: Mutex<QuitPhase>,
     store_closed: AtomicBool,
+    /// The person already agreed to stop everything (the data cleanup's review): the next quit
+    /// does not ask again. Cleared when auracode keeps running.
+    confirmed: AtomicBool,
     /// Signals since auracode last kept running: the second one exits at once.
     signals: AtomicU32,
 }
@@ -617,6 +620,16 @@ impl Quit {
             .saturating_add(1)
     }
 
+    /// The next quit stops agents and terminals without asking: the person already agreed in a
+    /// review that said so (Settings' "Delete all auracode data").
+    pub fn confirm_ahead(&self) {
+        self.confirmed.store(true, Ordering::Release);
+    }
+
+    fn confirmed_ahead(&self) -> bool {
+        self.confirmed.load(Ordering::Acquire)
+    }
+
     /// The quit flow died before it finished: the next exit request passes, and `RunEvent::Exit`
     /// kills and closes whatever is left.
     pub fn abandon(&self) {
@@ -628,6 +641,7 @@ impl Quit {
     fn keep_running(&self) {
         *lock(&self.phase) = QuitPhase::Running;
         self.signals.store(0, Ordering::Release);
+        self.confirmed.store(false, Ordering::Release);
     }
 
     fn finish(&self) {
@@ -819,6 +833,7 @@ pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutco
         }
     }
     if let Some(question) = question
+        && !quit.confirmed_ahead()
         && !host.ask_to_quit_unsaved(question).await
     {
         host.show_window();
@@ -2124,6 +2139,36 @@ mod tests {
         assert_eq!(questions.len(), 1);
         assert!(questions[0].contains("One chat") && questions[0].contains("disk is full"));
         assert!(matches!(calls.get(2), Some(Call::StopSessions(_))));
+    }
+
+    #[tokio::test]
+    async fn a_quit_confirmed_ahead_does_not_ask_again() {
+        let quit = Quit::default();
+        quit.confirm_ahead();
+        assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
+        let mut host = FakeHost::new(paused(PauseReason::DiskFull, 4096), false);
+        host.active_work = 2;
+        assert!(matches!(
+            run_quit(&quit, &host, 0).await,
+            QuitOutcome::Exited { .. }
+        ));
+        let calls = host.calls();
+        assert!(
+            !calls.iter().any(|call| matches!(call, Call::Ask(_))),
+            "{calls:?}"
+        );
+        assert_eq!(calls.first(), Some(&Call::Hide));
+
+        // Kept open for another reason, the next quit asks as usual.
+        let quit = Quit::default();
+        quit.confirm_ahead();
+        let mut host = FakeHost::new(paused(PauseReason::DiskFull, 4096), false);
+        host.project_terminals = 1;
+        host.terminal_cleanup = false;
+        assert_eq!(run_quit(&quit, &host, 0).await, QuitOutcome::Kept);
+        let host = FakeHost::new(paused(PauseReason::DiskFull, 4096), false);
+        assert_eq!(run_quit(&quit, &host, 0).await, QuitOutcome::Kept);
+        assert!(matches!(host.calls().first(), Some(Call::Ask(_))));
     }
 
     #[tokio::test]
