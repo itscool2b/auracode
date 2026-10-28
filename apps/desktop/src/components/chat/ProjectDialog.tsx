@@ -28,6 +28,7 @@ export function ProjectDialog({
   onClose,
   profileId,
   onLocated,
+  onInstructions,
 }: {
   readonly project: ProjectSummary | null;
   readonly store: WorkspaceStore;
@@ -36,6 +37,8 @@ export function ProjectDialog({
   readonly onClose: () => void;
   readonly profileId?: string;
   readonly onLocated?: () => Promise<void>;
+  /** Opens this folder's agent instructions (AGENTS.md, CLAUDE.md) in Settings. */
+  readonly onInstructions?: (folderId: string) => void;
 }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const current = state.data?.projects.find((item) => item.id === project?.id) ?? project;
@@ -165,6 +168,16 @@ export function ProjectDialog({
                   {item.path && !item.unavailable_reason
                     ? "Change location"
                     : "Find on this device"}
+                </button>
+              ) : null}
+              {onInstructions && item.path && !item.unavailable_reason ? (
+                <button
+                  type="button"
+                  className="g-button"
+                  aria-label={`Instructions for ${item.display_name}`}
+                  onClick={() => onInstructions(item.id)}
+                >
+                  Instructions
                 </button>
               ) : null}
             </div>

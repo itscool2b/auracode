@@ -1,0 +1,480 @@
+/*
+ * Instructions in Settings (visual-language 6.16a), on Vercel's settings cards: the scope and mode
+ * rows, the agents as rows with a status word led by a circle, and the text in a card whose footer
+ * holds who reads it and the one primary. Volt marks only what needs the person: an edited copy,
+ * an agent that reads nothing, an override in the way. Only --g-* tokens.
+ */
+
+/* ------------------------------------------------------------------ agent rows */
+
+.instructions-agents .settings-row-text {
+  align-items: flex-start;
+}
+
+.instructions-agents .settings-row-text > svg,
+.instructions-agents .settings-row-text > :first-child:not(div) {
+  flex: none;
+  margin-top: var(--g-space-2);
+}
+
+.instructions-agent-end {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: var(--g-space-12);
+}
+
+.instructions-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-6);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Status is a circle (owner decision, 2026-10-28): fg-3 when all is well, volt when it needs you. */
+.instructions-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--g-fg-3);
+}
+
+.instructions-status[data-tone="volt"] {
+  color: var(--g-fg-1);
+}
+
+.instructions-status[data-tone="volt"] .instructions-dot {
+  background-color: var(--g-volt);
+}
+
+.instructions-status[data-tone="off"] {
+  color: var(--g-fg-3);
+}
+
+.instructions-status[data-tone="off"] .instructions-dot {
+  box-sizing: border-box;
+  border: 1px solid var(--g-fg-3);
+  background-color: transparent;
+}
+
+.instructions-warning {
+  position: relative;
+  padding-left: var(--g-space-12);
+}
+
+.instructions-warning::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--g-volt);
+}
+
+/* ----------------------------------------------------------------------- editor */
+
+.instructions-editor {
+  overflow: visible;
+}
+
+.instructions-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-space-4);
+  padding: var(--g-space-12) var(--g-space-16) 0;
+}
+
+.instructions-file-tab {
+  height: 28px;
+  padding: 0 var(--g-space-12);
+  border: 0;
+  border-radius: var(--g-radius-pill);
+  background-color: transparent;
+  color: var(--g-fg-2);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-ligatures: none;
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-fast) var(--g-ease),
+    color var(--g-dur-fast) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .instructions-file-tab:hover {
+    color: var(--g-fg-1);
+  }
+}
+
+.instructions-file-tab[aria-selected="true"] {
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
+}
+
+.instructions-file-tab[data-missing] {
+  color: var(--g-fg-3);
+}
+
+.instructions-file-tab:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+.instructions-file {
+  display: grid;
+  gap: var(--g-space-12);
+  padding: var(--g-space-16);
+}
+
+.instructions-file-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--g-space-12);
+  min-width: 0;
+}
+
+.instructions-path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instructions-meta {
+  flex: none;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.instructions-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 320px;
+  max-height: 60vh;
+  background-color: var(--g-bg);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-code);
+  font-variant-ligatures: none;
+  tab-size: 2;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.instructions-textarea:read-only {
+  color: var(--g-fg-2);
+}
+
+.instructions-notes {
+  display: grid;
+  gap: var(--g-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.instructions-notes li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--g-space-8);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.instructions-bullet {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--g-fg-3);
+  transform: translateY(-1px);
+}
+
+.instructions-notes li[data-volt] {
+  color: var(--g-fg-2);
+}
+
+.instructions-notes li[data-volt] .instructions-bullet {
+  background-color: var(--g-volt);
+}
+
+/* Vercel's card footer: who reads the file at left, the actions and the one primary at right. */
+.instructions-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-12);
+  margin: 0 calc(-1 * var(--g-space-16)) calc(-1 * var(--g-space-16));
+  padding: var(--g-space-12) var(--g-space-16);
+  border-top: 1px solid var(--g-line);
+}
+
+.instructions-foot > p {
+  flex: 1 1 200px;
+  min-width: 0;
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.instructions-foot .settings-actions {
+  justify-content: flex-end;
+}
+
+.instructions-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--g-space-4);
+  padding: var(--g-space-40) var(--g-space-16);
+  text-align: center;
+}
+
+.instructions-empty strong {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.instructions-empty p {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.instructions-error {
+  color: var(--g-red);
+}
+
+/* -------------------------------------------------------- files in other folders */
+
+.instructions-more > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .instructions-more > summary:hover {
+    color: var(--g-fg-1);
+  }
+}
+
+.instructions-more > summary:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+  border-radius: var(--g-radius-6);
+}
+
+.instructions-more > .settings-group {
+  margin-top: var(--g-space-12);
+}
+
+/* ------------------------------------------------------------------------ review */
+
+.instructions-review {
+  display: grid;
+  gap: var(--g-space-16);
+  min-width: 0;
+}
+
+/* A dialog's sentence: what happens to what, in fg-2 with the variables in fg-1 500 (6.19). */
+.instructions-lead {
+  margin: 0 0 var(--g-space-20);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.instructions-lead strong {
+  color: var(--g-fg-1);
+  font-weight: 500;
+}
+
+.instructions-review .instructions-lead {
+  margin: 0;
+}
+
+.instructions-choices {
+  display: grid;
+  gap: var(--g-space-8);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.instructions-choices > legend {
+  margin-bottom: var(--g-space-8);
+  padding: 0 0 var(--g-space-8);
+}
+
+.instructions-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-space-12);
+  padding: var(--g-space-12) var(--g-space-16);
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+  cursor: pointer;
+}
+
+.instructions-choice:has(input:checked) {
+  box-shadow: inset 0 0 0 1px var(--g-fg-1);
+}
+
+.instructions-choice input {
+  flex: none;
+  margin: var(--g-space-2) 0 0;
+  accent-color: var(--g-fg-1);
+}
+
+.instructions-choice > span {
+  display: grid;
+  min-width: 0;
+}
+
+.instructions-choice strong {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.instructions-choice small {
+  overflow: hidden;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instructions-review-files {
+  display: grid;
+  gap: var(--g-space-16);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.instructions-review-files > li {
+  display: grid;
+  gap: var(--g-space-8);
+  min-width: 0;
+}
+
+.instructions-review-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--g-space-8);
+  min-width: 0;
+}
+
+.instructions-review-action {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+[data-action="remove"] > .instructions-review-file > .instructions-review-action {
+  color: var(--g-red);
+}
+
+.instructions-review-path {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.instructions-review-how {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.instructions-review-note {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.instructions-removals {
+  display: grid;
+  gap: var(--g-space-8);
+  min-inline-size: 0;
+  margin: 0;
+  padding: var(--g-space-12) var(--g-space-16);
+  border: 0;
+  border-radius: var(--g-radius-12);
+  background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+}
+
+.instructions-removals > legend {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--g-space-4);
+  padding: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.instructions-removals label {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  cursor: pointer;
+}
+
+.instructions-review-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-12);
+}
+
+.instructions-review-error p {
+  flex: 1 1 240px;
+  margin: 0;
+  color: var(--g-red);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
