@@ -1,8 +1,8 @@
 /**
- * The layout probe: walks every ?preview= mode (and library.html, the fixture with its own page) in
+ * The layout probe: walks every ?preview= mode in
  * Chromium and WebKit at two window sizes, plus the chat shell's floating layers opened as a person
  * opens them ("settled#picker": the picker, the palette, the chat menu, the Changes panel, a
- * typed message) and other screens' states ("library.html#library-item"),
+ * typed message) and other screens' states ("plugins#plugin-menu"),
  * and fails on the five things a clean screen never has:
  *
  * 1. Horizontal overflow: the page scrolls sideways, or a visible box reaches past the window.
@@ -70,10 +70,17 @@ export const MODES = [
   "git-missing",
   "chat-options",
   "chat-options#busy-folder",
-  // The Library's three-pane frame, a fixture page of its own.
-  "library.html",
-  "library.html#library-item",
-  "library.html#library-history",
+  // The Plugin library, one agent at a time: live listings, an agent without a plugin system, an
+  // update with the reread after a version change, a failed CLI listing, a row menu open and an
+  // item's preview; and configuration sync grouped by agent with every hold.
+  "plugins",
+  "plugins-pi",
+  "plugins-update",
+  "plugins-failed",
+  "plugins#plugin-menu",
+  "plugins#plugin-item",
+  "plugin-sync",
+  "plugin-sync#plugin-steps",
   "steering#queued",
   "steering#queue-edit",
   // A message typed during a turn: Steer beside the Queue disc, or, for an agent without
@@ -154,13 +161,20 @@ const OPENERS = {
     await page.getByLabel("Default agent").selectOption("codex");
     await page.getByLabel("Default model").waitFor();
   },
-  "library-item": async (page) => {
-    await page.getByRole("button", { name: /Review changes Claude/ }).click();
+  "plugin-menu": async (page) => {
+    await page.getByRole("button", { name: "tools actions" }).click();
+    await page.getByRole("menu", { name: "tools actions" }).waitFor();
+  },
+  "plugin-item": async (page) => {
+    // The menu opens with its first item focused; Enter picks it without scrolling the page.
+    await page.getByRole("button", { name: "review-changes actions" }).click();
+    await page.getByRole("menuitem", { name: "Preview and copy…" }).waitFor();
+    await page.keyboard.press("Enter");
     await page.getByLabel("Copy destination").waitFor();
   },
-  "library-history": async (page) => {
-    await page.getByRole("button", { name: /^Copy history/ }).click();
-    await page.locator(".library-history").waitFor();
+  "plugin-steps": async (page) => {
+    await page.getByRole("button", { name: /Review settings.json · enabledPlugins/ }).click();
+    await page.getByLabel("Installer steps").waitFor();
   },
   queued: (page) => queueTwo(page),
   "queue-edit": async (page) => {
@@ -657,7 +671,7 @@ try {
         const page = await context.newPage();
         for (const mode of modes) {
           const [preview, view] = mode.split("#");
-          // A fixture with its own page (library.html) is opened by name.
+          // A fixture with its own page (an .html file) is opened by name.
           await page.goto(
             preview.endsWith(".html") ? `${url}/${preview}` : `${url}/?preview=${preview}`,
           );

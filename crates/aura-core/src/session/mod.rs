@@ -28,6 +28,7 @@ mod live;
 mod local_import;
 mod login;
 mod normalize;
+mod plugin_library;
 mod policy;
 #[cfg(feature = "account-sync")]
 mod preservation;
@@ -47,6 +48,7 @@ mod worktree_setup;
 
 pub use config_library::LibraryRoots;
 pub use config_vendor::{PreparedVendor, VendorLaunch};
+pub use plugin_library::{PluginFacts, assemble as assemble_plugin_library};
 pub use project_tools::{EditorLaunch, EditorOpen};
 pub use worktree_setup::WorktreeSetupLaunch;
 

@@ -24,6 +24,7 @@ pub mod folder_resolution;
 pub mod git;
 mod lenient;
 pub mod local_import;
+pub mod plugins;
 pub mod project_tools;
 pub mod repository_publication;
 pub mod search;

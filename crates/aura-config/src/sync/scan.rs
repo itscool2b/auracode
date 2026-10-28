@@ -24,12 +24,135 @@ pub struct ConfigSource {
     pub source: Source,
     /// Supplied by native agent discovery, never inferred from a leftover config folder.
     pub installed: bool,
+    /// The detected agent version, for feature floors. None: not known.
+    pub version: Option<String>,
+    /// The person turned sync off for this agent on this device. Its items wait, unchanged.
+    pub paused: bool,
 }
 
 pub struct ConfigScanner {
     pub(crate) sources: Vec<ConfigSource>,
     pub(crate) home: PathBuf,
     pub(crate) platform: ConfigScope,
+    /// Whether a bare program name is found on this device's PATH. None: not checked.
+    pub(crate) program_lookup: Option<ProgramLookup>,
+}
+
+/// Resolves a bare program name through the device's own PATH, never as a path.
+pub type ProgramLookup = std::sync::Arc<dyn Fn(&str) -> bool + Send + Sync>;
+
+/// What an MCP command from another device may be checked as. Only `Local` paths and `Bare`
+/// names are ever looked up; everything else is held without touching the filesystem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommandPath {
+    /// A program name resolved through PATH.
+    Bare(String),
+    /// A normalized local absolute path, or one under the home folder.
+    Local(PathBuf),
+    /// UNC and device paths, `..` escapes, another system's absolute form, relative paths, URLs,
+    /// `~user` and control characters. Probing them could reach a network share.
+    Refused,
+}
+
+/// Classifies command text before any filesystem access. `windows` picks the local absolute form
+/// (`C:/...` on Windows, `/...` elsewhere), so both rule sets are tested on every OS.
+pub fn classify_command(command: &str, home: &std::path::Path, windows: bool) -> CommandPath {
+    if command.is_empty()
+        || command.len() > 1024
+        || command.chars().any(|c| c.is_control())
+        || command.trim() != command
+    {
+        return CommandPath::Refused;
+    }
+    // Both separators are one: mixed forms such as `/\host\share` cannot slip past a check.
+    let normalized = command.replace('\\', "/");
+    let parts: Vec<&str> = normalized.split('/').collect();
+    // Every segment after an optional leading root is a plain name: no empty segment (which is how
+    // `//host/share`, `\\?\UNC\...`, `\\.\pipe\...`, `~///host` and `a//b` all look), no `.` or
+    // `..`, and no colon except a drive letter's.
+    let drive = parts[0].len() == 2
+        && parts[0].as_bytes()[0].is_ascii_alphabetic()
+        && parts[0].as_bytes()[1] == b':';
+    let plain =
+        |part: &&str| !part.is_empty() && *part != "." && *part != ".." && !part.contains(':');
+    if parts.len() > 1 && !parts[1..].iter().all(plain) {
+        return CommandPath::Refused;
+    }
+    let first = parts[0];
+    if first == "~" {
+        return home_path(home, &parts[1..]);
+    }
+    if drive && parts.len() > 1 {
+        return if windows {
+            local(PathBuf::from(&normalized), true)
+        } else {
+            CommandPath::Refused
+        };
+    }
+    if first.is_empty() && parts.len() > 1 {
+        // On Windows a rooted path without a drive depends on the current drive.
+        return if windows {
+            CommandPath::Refused
+        } else {
+            local(PathBuf::from(&normalized), false)
+        };
+    }
+    if parts.len() == 1
+        && plain(&first)
+        && first
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-+".contains(&byte))
+    {
+        return CommandPath::Bare(first.to_owned());
+    }
+    // `~user`, relative paths, drive-relative `C:x`, URLs and anything else.
+    CommandPath::Refused
+}
+
+/// `~/<plain segments>`, joined under home and checked again by components: the result must stay
+/// under home with nothing but plain names after it, so no prefix or root can replace home.
+fn home_path(home: &std::path::Path, rest: &[&str]) -> CommandPath {
+    use std::path::Component;
+    if rest.is_empty() || !home.is_absolute() {
+        return CommandPath::Refused;
+    }
+    let joined = rest
+        .iter()
+        .fold(home.to_path_buf(), |path, part| path.join(part));
+    match joined.strip_prefix(home) {
+        Ok(tail)
+            if tail.components().count() == rest.len()
+                && tail
+                    .components()
+                    .all(|part| matches!(part, Component::Normal(_))) =>
+        {
+            CommandPath::Local(joined)
+        }
+        _ => CommandPath::Refused,
+    }
+}
+
+/// An absolute local path, accepted only when its components are a local root (and, on Windows,
+/// a plain drive letter) followed by plain names. Off Windows a drive form never parses as one.
+fn local(path: PathBuf, drive: bool) -> CommandPath {
+    use std::path::Component;
+    let mut components = path.components();
+    let rooted = if drive && cfg!(windows) {
+        matches!(
+            components.next(),
+            Some(Component::Prefix(prefix)) if matches!(prefix.kind(), std::path::Prefix::Disk(_))
+        ) && matches!(components.next(), Some(Component::RootDir))
+    } else if drive {
+        // Tested off Windows: the drive letter is one plain component.
+        matches!(components.next(), Some(Component::Normal(_)))
+    } else {
+        matches!(components.next(), Some(Component::RootDir))
+    };
+    if rooted && components.all(|part| matches!(part, Component::Normal(_))) {
+        CommandPath::Local(path)
+    } else {
+        CommandPath::Refused
+    }
 }
 
 pub struct ConfigScan {
@@ -56,7 +179,10 @@ impl ConfigScanner {
                 .iter()
                 .zip(&other.sources)
                 .all(|(left, right)| {
-                    left.source == right.source && left.installed == right.installed
+                    left.source == right.source
+                        && left.installed == right.installed
+                        && left.version == right.version
+                        && left.paused == right.paused
                 })
     }
 
@@ -86,7 +212,15 @@ impl ConfigScanner {
             sources,
             home,
             platform,
+            program_lookup: None,
         })
+    }
+
+    /// Bare MCP command names are then checked with this PATH lookup.
+    #[must_use]
+    pub fn with_program_lookup(mut self, lookup: ProgramLookup) -> Self {
+        self.program_lookup = Some(lookup);
+        self
     }
 
     pub fn scan(&self) -> ConfigScan {
@@ -103,6 +237,15 @@ impl ConfigScanner {
                     provider,
                     None,
                     "Install this agent to apply its waiting configuration.",
+                );
+                continue;
+            }
+            if source.paused {
+                skip(
+                    &mut scan,
+                    provider,
+                    None,
+                    "Sync is off for this agent on this device. Its items stay here unchanged.",
                 );
                 continue;
             }
@@ -170,7 +313,7 @@ impl ConfigScanner {
         let Some(source) = self.source(identity) else {
             return Ok(LocalSnapshot::Unavailable);
         };
-        if !source.installed {
+        if !source.installed || source.paused {
             return Ok(LocalSnapshot::Unavailable);
         }
         let Ok(root) = inventory::open(&source.source) else {
@@ -203,6 +346,71 @@ impl ConfigScanner {
             return Ok(LocalSnapshot::Unavailable);
         }
         Ok(LocalSnapshot::Present(snapshot))
+    }
+
+    /// The installed source of one provider's main configuration folder, sync on or off.
+    pub(crate) fn provider_source(&self, provider: Provider) -> Option<&ConfigSource> {
+        self.sources
+            .iter()
+            .find(|entry| entry.source.provider == provider && !entry.source.claude_state_only)
+    }
+
+    pub(crate) fn platform(&self) -> ConfigScope {
+        self.platform
+    }
+
+    /// Whether a plugin marketplace is added here: Claude declares it in `settings.json`
+    /// (`extraKnownMarketplaces`) or records it in `plugins/known_marketplaces.json`; Codex keeps
+    /// it under `[marketplaces]` in `config.toml`. None: the folder could not be read.
+    pub(crate) fn has_marketplace(&self, provider: Provider, name: &str) -> Option<bool> {
+        let source = self.provider_source(provider)?;
+        let root = inventory::open(&source.source).ok()?;
+        let contains = |path: &str, format: ConfigFormat, keys: &[&str]| -> Option<bool> {
+            let Some(value) = read_document(&root, path, format).ok()? else {
+                return Some(false);
+            };
+            let mut selected = &value;
+            for key in keys {
+                match selected.get(*key) {
+                    Some(next) => selected = next,
+                    None => return Some(false),
+                }
+            }
+            Some(selected.get(name).is_some())
+        };
+        match provider {
+            Provider::Claude => Some(
+                contains(
+                    "settings.json",
+                    ConfigFormat::Json,
+                    &["extraKnownMarketplaces"],
+                )? || contains("plugins/known_marketplaces.json", ConfigFormat::Json, &[])?,
+            ),
+            Provider::Codex => contains("config.toml", ConfigFormat::Toml, &["marketplaces"]),
+            _ => None,
+        }
+    }
+
+    /// The command of an MCP server another device synchronized, checked only where that is safe:
+    /// a refused form is reported without any filesystem access (`true`), a local absolute or
+    /// home path is checked for existence, and a bare name only through the device's PATH lookup.
+    /// None: present, unchecked, or no command.
+    pub(crate) fn command_problem(&self, value: &Value) -> Option<(String, bool)> {
+        let command = value.get("command").and_then(|command| match command {
+            Value::String(text) => Some(text.as_str()),
+            // OpenCode-style arrays name the program first.
+            Value::Array(items) => items.first().and_then(Value::as_str),
+            _ => None,
+        })?;
+        match classify_command(command, &self.home, cfg!(windows)) {
+            CommandPath::Refused => Some((command.to_owned(), true)),
+            CommandPath::Local(path) => (!path.exists()).then(|| (command.to_owned(), false)),
+            CommandPath::Bare(name) => self
+                .program_lookup
+                .as_ref()
+                .is_some_and(|found| !found(&name))
+                .then(|| (command.to_owned(), false)),
+        }
     }
 
     pub(crate) fn source(&self, identity: &ConfigIdentity) -> Option<&ConfigSource> {

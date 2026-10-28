@@ -15,23 +15,39 @@ import { TerminalSheet } from "../TerminalSheet";
 import "./vendor.css";
 
 const NAMES = { claude: "Claude", codex: "Codex", pi: "Pi" };
+/** A Plugin library row or step that opens this dialog already filled in. */
+export interface VendorPreset {
+  readonly provider: VendorProvider;
+  readonly kind: VendorKind;
+  readonly action: VendorAction;
+  readonly target: string;
+}
+
 export function VendorDialog({
   initial,
+  preset,
   onClose,
+  onFinished,
   api = vendorApi,
 }: {
   readonly initial?: LibraryItem | null;
+  readonly preset?: VendorPreset | null;
   readonly onClose: () => void;
+  /** The reviewed command ended, with its exit code (null when it was stopped). */
+  readonly onFinished?: (exitCode: number | null) => void;
   readonly api?: VendorApi;
 }) {
   const [provider, setProvider] = useState<VendorProvider>(
-    initial?.provider === "pi" ? "pi" : initial?.provider === "codex" ? "codex" : "claude",
+    preset?.provider ??
+      (initial?.provider === "pi" ? "pi" : initial?.provider === "codex" ? "codex" : "claude"),
   );
   const [kind, setKind] = useState<VendorKind>(
-    initial?.item.kind === "package" ? "package" : "plugin",
+    preset?.kind ?? (initial?.item.kind === "package" ? "package" : "plugin"),
   );
-  const [action, setAction] = useState<VendorAction>(initial ? "remove" : "install");
-  const [target, setTarget] = useState(initial?.item.key ?? "");
+  const [action, setAction] = useState<VendorAction>(
+    preset?.action ?? (initial ? "remove" : "install"),
+  );
+  const [target, setTarget] = useState(preset?.target ?? initial?.item.key ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [review, setReview] = useState<{
@@ -86,6 +102,7 @@ export function VendorDialog({
         purpose="setup"
         transport={review.transport}
         onClose={onClose}
+        onFinished={onFinished}
         review={<VendorCommand review={review.value} />}
       />
     );

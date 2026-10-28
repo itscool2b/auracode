@@ -69,6 +69,8 @@ struct Live {
     state: Mutex<LiveState>,
     preferences: Option<PathBuf>,
     selection_gate: tokio::sync::Mutex<()>,
+    /// One Plugin library listing at a time: each runs several vendor commands in turn.
+    listing_gate: tokio::sync::Mutex<()>,
 }
 
 #[derive(Default)]
@@ -79,6 +81,8 @@ struct LiveState {
     configuration_revision: u64,
     release_checks_enabled: bool,
     releases: HashMap<String, aura_protocol::agents::LatestRelease>,
+    /// The last Plugin library listing of each provider, with the version it was read from.
+    listings: HashMap<String, crate::plugins::AgentListings>,
     maintenance: HashSet<String>,
     minimum_generation: HashMap<String, u64>,
     /// Each agent's latest detection, with the generation of the probe that made it.
@@ -254,7 +258,22 @@ impl Live {
             Some(detection) => {
                 let mut entry = entry(spec, detection.availability, detection.needs_download);
                 entry.installation = detection.installation;
-                entry.latest_release = lock(&self.state).releases.get(spec.id).cloned();
+                let state = lock(&self.state);
+                entry.latest_release = state.releases.get(spec.id).cloned();
+                entry.harness = Some(crate::harness::harness_status(
+                    &crate::harness::HarnessFacts {
+                        availability: &entry.availability,
+                        installation: entry.installation.as_ref(),
+                        latest: entry.latest_release.as_ref(),
+                        has_source: entry
+                            .installation
+                            .as_ref()
+                            .and_then(crate::releases::ReleaseSource::for_installation)
+                            .is_some(),
+                        checks_enabled: state.release_checks_enabled,
+                    },
+                ));
+                drop(state);
                 entry
             }
             None => entry(spec, Availability::Checking, false),
@@ -726,6 +745,50 @@ impl Detector {
         }
     }
 
+    /// The Plugin library listings of one agent, read with its own reviewed CLI commands. Cached
+    /// per provider with the version they were read from: a changed installed version (an update
+    /// through any channel, seen by detection) reads them again and reports the change. `None`:
+    /// not installed here, or an agent without reviewed listing commands.
+    pub async fn plugin_listings(
+        &self,
+        id: &str,
+        refresh: bool,
+        now: aura_protocol::Millis,
+    ) -> Option<crate::plugins::AgentListings> {
+        let Mode::Live(live) = &self.mode else {
+            return None;
+        };
+        let spec = self.spec(id)?;
+        let installation = live.detect(&spec).await.installation?;
+        let provider = crate::installation::provider_namespace(id).to_owned();
+        if crate::plugins::recipes(&provider).is_empty() {
+            return None;
+        }
+        let _turn = live.listing_gate.lock().await;
+        let cached = lock(&live.state).listings.get(&provider).cloned();
+        if crate::plugins::cache_answers(cached.as_ref(), &installation.version, refresh) {
+            return cached.map(|cached| crate::plugins::AgentListings {
+                version_change: None,
+                ..cached
+            });
+        }
+        let listings =
+            crate::plugins::run_listings(&installation, live.env.get().await, &live.registry).await;
+        let fresh = crate::plugins::AgentListings {
+            version_change: cached
+                .filter(|cached| cached.version != installation.version)
+                .map(|cached| aura_protocol::plugins::VersionChange {
+                    from: cached.version,
+                    to: installation.version.clone(),
+                }),
+            version: installation.version,
+            updated_at: now,
+            listings,
+        };
+        lock(&live.state).listings.insert(provider, fresh.clone());
+        Some(fresh)
+    }
+
     /// Runs the vendor's local status command and retains only a coarse status, never account data.
     pub async fn auth_status(&self, id: &str) -> aura_protocol::agents::AgentAuthStatus {
         use aura_protocol::agents::AgentAuthStatus;
@@ -872,6 +935,7 @@ impl Detector {
             state: Mutex::new(state),
             preferences,
             selection_gate: tokio::sync::Mutex::new(()),
+            listing_gate: tokio::sync::Mutex::new(()),
         });
         let background = Arc::clone(&live);
         rt.spawn(async move { background.detect_every(false).await });
@@ -1030,6 +1094,7 @@ fn entry(spec: &AgentSpec, availability: Availability, needs_download: bool) -> 
         last_verified: spec.last_verified.to_owned(),
         installation: None,
         latest_release: None,
+        harness: None,
     }
 }
 

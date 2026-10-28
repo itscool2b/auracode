@@ -75,6 +75,8 @@ fn scanner(root: &std::path::Path, provider: Provider, installed: bool) -> Confi
     ConfigScanner::new(
         vec![ConfigSource {
             installed,
+            version: None,
+            paused: false,
             source: Source {
                 id: "fixture".into(),
                 provider,

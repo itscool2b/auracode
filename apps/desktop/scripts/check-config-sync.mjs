@@ -13,7 +13,7 @@ export async function checkConfigSync(browser, url, out, engine) {
     page.on("pageerror", (error) => errors.push(error.message));
     const review = async (scenario = "") => {
       await page.goto(`${url}/?preview=config-sync&case=${scenario}`);
-      await page.getByRole("button", { name: "Review", exact: true }).click();
+      await page.getByRole("button", { name: "Review AGENTS.md", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "Review configuration" });
       await dialog.getByRole("heading", { name: "This device", exact: true }).waitFor();
       assert.equal(

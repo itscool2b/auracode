@@ -62,6 +62,8 @@ pub struct GeneralPreferences {
     pub keep_awake: bool,
     /// Closing the window keeps auracode running in the tray or menu bar.
     pub close_to_tray: bool,
+    /// Agents (`claude`, `codex`, `pi`) whose configuration sync is off on this device.
+    pub config_sync_paused: Vec<String>,
 }
 
 impl Default for GeneralPreferences {
@@ -73,6 +75,7 @@ impl Default for GeneralPreferences {
             notifications: true,
             keep_awake: true,
             close_to_tray: true,
+            config_sync_paused: Vec::new(),
         }
     }
 }
@@ -116,6 +119,11 @@ pub enum SetupAction {
         enabled: bool,
     },
     CloseToTray {
+        enabled: bool,
+    },
+    /// Turns configuration sync on or off for one agent on this device.
+    ConfigSyncAgent {
+        agent_id: String,
         enabled: bool,
     },
 }
@@ -377,6 +385,19 @@ impl OnboardingStore {
             SetupAction::CloseToTray { enabled } => {
                 next.preferences.general.close_to_tray = enabled;
             }
+            SetupAction::ConfigSyncAgent { agent_id, enabled } => {
+                if !matches!(agent_id.as_str(), "claude" | "codex" | "pi") {
+                    return Err(SetupError::Invalid(
+                        "Configuration sync covers Claude Code, Codex and Pi.",
+                    ));
+                }
+                let paused = &mut next.preferences.general.config_sync_paused;
+                paused.retain(|agent| agent != &agent_id);
+                if !enabled {
+                    paused.push(agent_id);
+                    paused.sort();
+                }
+            }
         }
         next.preferences.revision = revision
             .checked_add(1)
@@ -561,6 +582,18 @@ mod tests {
             SetupAction::Notifications { enabled: false },
             SetupAction::KeepAwake { enabled: false },
             SetupAction::CloseToTray { enabled: false },
+            SetupAction::ConfigSyncAgent {
+                agent_id: "pi".into(),
+                enabled: false,
+            },
+            SetupAction::ConfigSyncAgent {
+                agent_id: "codex".into(),
+                enabled: false,
+            },
+            SetupAction::ConfigSyncAgent {
+                agent_id: "pi".into(),
+                enabled: true,
+            },
         ];
         for (revision, action) in actions.into_iter().enumerate() {
             store.apply(revision as u32, action).unwrap();
@@ -578,7 +611,20 @@ mod tests {
                 notifications: false,
                 keep_awake: false,
                 close_to_tray: false,
+                config_sync_paused: vec!["codex".into()],
             }
+        );
+        assert!(
+            store
+                .apply(
+                    store.preferences().revision,
+                    SetupAction::ConfigSyncAgent {
+                        agent_id: "opencode".into(),
+                        enabled: false,
+                    },
+                )
+                .is_err(),
+            "only agents with configuration sync"
         );
     }
 

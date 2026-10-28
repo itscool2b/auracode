@@ -325,6 +325,8 @@ mod tests {
                     claude_state_only: false,
                 },
                 installed: true,
+                version: None,
+                paused: false,
             }],
             path.into(),
             ConfigScope::Windows,

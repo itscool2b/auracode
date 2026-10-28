@@ -130,6 +130,104 @@ pub async fn automatic_batch(
     Ok(result)
 }
 
+/// The person's "Apply all" for one agent: every item of that agent that is ready (no conflict,
+/// no hold, not kept on this device, not open in another review) is applied as its own
+/// transaction. One failure is that item's outcome only: its local change is rolled back by the
+/// apply journal, its base is kept and the others continue.
+pub async fn apply_agent(
+    port: &dyn ConfigSyncPort,
+    scanner: &ConfigScanner,
+    journal: &dyn ConfigApplyJournal,
+    store: &dyn ConfigManagedStore,
+    provider: crate::Provider,
+    reviewed: &BTreeSet<String>,
+) -> Result<Vec<ConfigSyncOutcome>, ConfigPortError> {
+    let mut outcomes = Vec::new();
+    let mut after: Option<String> = None;
+    loop {
+        let page = super::inventory(port, scanner, scanner.scan(), after.as_deref()).await?;
+        if page.offline {
+            return Err(ConfigPortError::Offline);
+        }
+        let unresolved: BTreeSet<String> = scanner
+            .apply_history(journal)?
+            .into_iter()
+            .filter(|record| record.status == ConfigApplyStatus::RecoveryRequired)
+            .filter_map(|record| record.identity.id().ok())
+            .collect();
+        for item in page.items.iter().filter(|item| {
+            item.provider == Some(provider)
+                && !reviewed.contains(&item.id)
+                && !unresolved.contains(&item.id)
+                && !item.device_only
+                && !item.skipped
+                && item.hold.is_none()
+                && matches!(
+                    item.operation,
+                    ConfigOperation::Apply | ConfigOperation::Publish | ConfigOperation::Merge
+                )
+        }) {
+            let outcome = match apply_one(port, scanner, journal, store, &item.id).await {
+                Ok(outcome) => outcome,
+                Err(error) => ConfigSyncOutcome {
+                    item_id: item.id.clone(),
+                    receipt_id: None,
+                    completed: false,
+                    message: error.to_string(),
+                },
+            };
+            outcomes.push(outcome);
+        }
+        match page.next_cursor {
+            Some(cursor) => after = Some(cursor),
+            None => break,
+        }
+    }
+    Ok(outcomes)
+}
+
+async fn apply_one(
+    port: &dyn ConfigSyncPort,
+    scanner: &ConfigScanner,
+    journal: &dyn ConfigApplyJournal,
+    store: &dyn ConfigManagedStore,
+    id: &str,
+) -> Result<ConfigSyncOutcome, ConfigPortError> {
+    let review = prepare_review(port, scanner, id, ConfigChoice::Automatic).await?;
+    let held = |message: String| ConfigSyncOutcome {
+        item_id: id.to_owned(),
+        receipt_id: None,
+        completed: false,
+        message,
+    };
+    if !review.preview.can_apply {
+        return Ok(held(
+            review
+                .preview
+                .warnings
+                .last()
+                .cloned()
+                .unwrap_or_else(|| "This item needs its own review before it can apply.".into()),
+        ));
+    }
+    let desired = review.desired.as_ref().ok_or(ConfigPortError::Invalid)?;
+    let files = if matches!(
+        review.preview.item.operation,
+        ConfigOperation::Apply | ConfigOperation::Merge
+    ) {
+        match scanner.prepare_apply(desired.clone(), &review.local)? {
+            ConfigApplyPreparation::Ready(files) => Some(files),
+            ConfigApplyPreparation::Skipped(skipped) => {
+                review.retain_skipped(port).await?;
+                return Ok(held(skipped.reason));
+            }
+        }
+    } else {
+        None
+    };
+    execute_review(port, scanner, journal, store, &review, files, None).await
+}
+
 /// Shared manual/automatic transaction. A prepared ownership claim precedes every file effect,
 /// publication and base acknowledgment. An ambiguous failure retains its pending claim for review.
 pub async fn execute_review(

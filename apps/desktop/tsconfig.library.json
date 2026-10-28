@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "include": [
-    "src/components/library/**/*.tsx",
-    "src/lib/library/**/*.ts",
-    "src/dev/libraryPreview.tsx",
-    "src/vite-env.d.ts"
-  ]
-}

@@ -282,6 +282,23 @@
   overflow-wrap: anywhere;
 }
 
+/* A newer release: a calm line under the row, its volt dot the only signal; Update is the row's
+   one action. */
+.agent-row-update {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  margin: 0;
+  padding: 0 var(--g-space-16) var(--g-space-12) var(--g-space-64);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.agent-row[data-open] .agent-row-update {
+  background-color: var(--g-surface-1);
+}
+
 .agent-row[data-open] .agent-row-note {
   background-color: var(--g-surface-1);
 }

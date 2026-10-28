@@ -112,6 +112,7 @@ fn run(name: &str, args: &[String]) -> Result<ExitCode> {
             println!("Updated");
             Ok(ExitCode::SUCCESS)
         }
+        ("claude" | "codex", Some("plugin" | "mcp")) | ("pi", Some("list")) => listing(name, args),
         ("npm", _) => npm(&mode),
         (_, Some("--version")) => version(name, &mode),
         ("node", Some(entry)) => {
@@ -131,6 +132,46 @@ fn run(name: &str, args: &[String]) -> Result<ExitCode> {
         }
         _ => Err(format!("no fake behaviour for {name} {args:?}").into()),
     }
+}
+
+/// A listing command reads its answers from `fake-listing.json` in the agent's own config home,
+/// found only through the agent's documented variable, so a test proves the home it was given was
+/// the one used. Each answer is `{"stdout", "stderr", "code", "hang"}`, keyed by the joined args.
+fn listing(name: &str, args: &[String]) -> Result<ExitCode> {
+    let variable = match name {
+        "claude" => "CLAUDE_CONFIG_DIR",
+        "codex" => "CODEX_HOME",
+        _ => "PI_CODING_AGENT_DIR",
+    };
+    let line = serde_json::json!({
+        "argv": args,
+        "home": std::env::var(variable).ok(),
+        "pi_offline": std::env::var("PI_OFFLINE").ok(),
+        "no_color": std::env::var("NO_COLOR").ok(),
+    });
+    let mut log = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(fake_dir()?.join(format!("{name}.listing.log")))?;
+    log.write_all(format!("{line}\n").as_bytes())?;
+    let Some(home) = std::env::var_os(variable) else {
+        eprintln!("{variable} is not set");
+        return Ok(ExitCode::from(3));
+    };
+    let answers: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(Path::new(&home).join("fake-listing.json"))?)?;
+    let Some(answer) = answers.get(args.join(" ")) else {
+        eprintln!("error: unknown option '{}'", args.join(" "));
+        return Ok(ExitCode::from(2));
+    };
+    if answer["hang"] == true {
+        return hang(name);
+    }
+    print!("{}", answer["stdout"].as_str().unwrap_or_default());
+    eprint!("{}", answer["stderr"].as_str().unwrap_or_default());
+    Ok(ExitCode::from(
+        u8::try_from(answer["code"].as_u64().unwrap_or(0)).unwrap_or(1),
+    ))
 }
 
 fn version(name: &str, mode: &str) -> Result<ExitCode> {

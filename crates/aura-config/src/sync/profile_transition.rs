@@ -593,6 +593,8 @@ mod tests {
                     claude_state_only: false,
                 },
                 installed: true,
+                version: None,
+                paused: false,
             }],
             root.into(),
             ConfigScope::Windows,

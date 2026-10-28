@@ -21,6 +21,8 @@ fn scanner(temp: &TempDir, provider: Provider, installed: bool) -> ConfigScanner
                 claude_state_only: false,
             },
             installed,
+            version: None,
+            paused: false,
         }],
         temp.path().join("home"),
         ConfigScope::Windows,
@@ -93,6 +95,8 @@ fn missing_agents_and_unavailable_roots_wait_even_if_old_files_exist() {
                 claude_state_only: false,
             },
             installed: true,
+            version: None,
+            paused: false,
         }],
         temp.path().join("home"),
         ConfigScope::Windows,
@@ -295,7 +299,9 @@ fn shared_skills_are_one_source_and_project_roots_are_refused() {
         ConfigScanner::new(
             vec![ConfigSource {
                 source,
-                installed: true
+                installed: true,
+                version: None,
+                paused: false,
             }],
             temp.path().into(),
             ConfigScope::Windows

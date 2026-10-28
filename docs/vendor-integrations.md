@@ -1,7 +1,7 @@
 # Explicit vendor integrations
 
-Library's Manage integrations action prepares a personal, native CLI command. Review does not
-start a process. Start setup consumes a page/profile-bound token, rechecks executable bytes,
+The Plugin library's actions (Add plugin, Add package, Add marketplace, and each row's Enable,
+Disable, Update and Remove) prepare a personal, native CLI command. Review does not start a process. Start setup consumes a page/profile-bound token, rechecks executable bytes,
 arguments, canonical home/configuration folders and the relevant public declarations, then opens
 the owned terminal. Reviews expire after ten minutes. At most four can be preparing or pending.
 Project rows stay separate. Unsupported commands, private sources, arbitrary URLs, local paths and

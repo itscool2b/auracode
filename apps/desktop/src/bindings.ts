@@ -66,6 +66,24 @@ export const commands = {
 	configSyncDeviceOnly: (id: string, deviceOnly: boolean) => typedError<null, AppError>(__TAURI_INVOKE("config_sync_device_only", { id, deviceOnly })),
 	configSyncHistory: () => typedError<ConfigSyncReceipt[], AppError>(__TAURI_INVOKE("config_sync_history")),
 	configSyncRollback: (id: string) => typedError<ConfigSyncOutcome, AppError>(__TAURI_INVOKE("config_sync_rollback", { id })),
+	/**
+	 *  The agent's own installer ran for a reviewed declaration (`succeeded` and `exit_code` come
+	 *  from its terminal). Success that produced exactly the reviewed declaration is acknowledged;
+	 *  anything else restores that declaration and keeps every other item as it was.
+	 */
+	configSyncVendorFinish: (token: string, succeeded: boolean, exitCode: number | null) => typedError<ConfigSyncOutcome, AppError>(__TAURI_INVOKE("config_sync_vendor_finish", { token, succeeded, exitCode })),
+	/**  Apply all for one agent: each ready item is its own transaction; one failure keeps the rest. */
+	configSyncApplyAgent: (agentId: string) => typedError<ConfigSyncOutcome[], AppError>(__TAURI_INVOKE("config_sync_apply_agent", { agentId })),
+	/**
+	 *  One section per agent. `refresh` is the explicit Refresh: agents are probed again and every
+	 *  listing reruns. Otherwise a listing is reused until its agent's installed version changes.
+	 */
+	pluginLibrarySnapshot: (refresh: boolean) => typedError<PluginLibrary, AppError>(__TAURI_INVOKE("plugin_library_snapshot", { refresh })),
+	/**
+	 *  Turns configuration sync on or off for one agent on this device. Paused agents' items wait
+	 *  unchanged: nothing of theirs is published or applied until sync is on again.
+	 */
+	pluginSyncSet: (agentId: string, enabled: boolean) => typedError<string[], AppError>(__TAURI_INVOKE("plugin_sync_set", { agentId, enabled })),
 	libraryCopyHistory: (folderId: string | null) => typedError<LibraryCopyReceipt[], AppError>(__TAURI_INVOKE("library_copy_history", { folderId })),
 	libraryItemPreview: (folderId: string | null, item: LibraryItemRef, revision: string) => typedError<LibraryItemPreview, AppError>(__TAURI_INVOKE("library_item_preview", { folderId, item, revision })),
 	libraryCopyPreview: (folderId: string | null, item: LibraryItemRef, revision: string, toSource: string) => typedError<LibraryCopyPreview, AppError>(__TAURI_INVOKE("library_copy_preview", { folderId, item, revision, toSource })),
@@ -450,6 +468,8 @@ export type AgentEntry = {
 	/**  Present only after a successful version probe of the user's installation. */
 	installation?: AgentInstallation | null,
 	latest_release?: LatestRelease | null,
+	/**  The installed version against its latest known release, computed by detection. */
+	harness?: HarnessStatus | null,
 };
 
 /**  Where the user's agent runs. Unknown future hosts must never fall back to a local launch. */
@@ -509,6 +529,28 @@ export type AgentMaintenance = {
 	 */
 	update_unavailable: string | null,
 };
+
+/**  One agent's section of the Plugin library. */
+export type AgentPlugins = {
+	/**  The provider namespace (`claude`, `codex`, `pi`, `opencode`), not a launch dialect. */
+	agent_id: string,
+	name: string,
+	installed: boolean,
+	version: string | null,
+	system: PluginSystem,
+	/**  One plain sentence about what this agent supports. */
+	summary: string,
+	features: FeatureListing[],
+	harness: HarnessStatus,
+	/**  When the listing was last read. None: never on this run. */
+	updated_at: number | null,
+	version_change: VersionChange | null,
+	sync: AgentSync,
+	notices: string[],
+};
+
+/**  Configuration sync for this agent on this device. */
+export type AgentSync = { state: "on" } | { state: "off" } | { state: "unsupported"; reason: string };
 
 /**  A command failure, serialized as `{ code, message }`. */
 export type AppError = {
@@ -946,6 +988,38 @@ export type ConfigChoice = {
 	group: string | null,
 };
 
+/**
+ *  Why an item is not applied on this device yet. Each has one defined behaviour: the item keeps
+ *  its last synchronized base, nothing is removed, and the review says what would let it apply.
+ */
+export type ConfigHold = 
+/**  The agent is not installed here. Its items wait until it is. */
+{ kind: "agent_missing" } | 
+/**  The person turned sync off for this agent on this device. */
+{ kind: "sync_paused" } | 
+/**  The installed agent is older than the version this feature needs here. */
+{ kind: "needs_version"; feature: string; minimum: string; found: string | null } | 
+/**
+ *  A plugin's marketplace is not added here. `source` is a GitHub repository to add it from,
+ *  when the other device synchronized one.
+ */
+{ kind: "marketplace_missing"; marketplace: string; source: string | null } | 
+/**  A plugin or package declaration that only the agent's own installer can apply. */
+{ kind: "vendor_install" } | 
+/**  It uses paths of another operating system and stays with devices of that system. */
+{ kind: "device_specific"; platform: ConfigScope } | 
+/**  An MCP command path that does not exist here. It is never written. */
+{ kind: "missing_path"; path: string } | 
+/**
+ *  An MCP command auracode will not look up: a network share, a device path, a `..` escape
+ *  or another system's form. It is kept for the device it came from and never written here.
+ */
+{ kind: "foreign_path"; path: string } | 
+/**  A previous apply or install did not finish; the reason says why. */
+{ kind: "retained"; reason: string } | 
+/**  The account could not be reached. The saved state is kept. */
+{ kind: "offline" };
+
 export type ConfigKind = { type: "select"; current: string; choices: ConfigChoice[] } | { type: "toggle"; current: boolean };
 
 export type ConfigOperation = "in_sync" | "apply" | "publish" | "merge" | "conflict" | "wait";
@@ -983,6 +1057,10 @@ export type ConfigSyncInventory = {
 	items: ConfigSyncItem[],
 	next_cursor: string | null,
 	notices: string[],
+	/**  The account could not be reached: items are local only and nothing is applied. */
+	offline: boolean,
+	/**  Agents whose sync is off on this device (`claude`, `codex`, `pi`). Filled by the host. */
+	paused: string[],
 };
 
 export type ConfigSyncItem = {
@@ -995,6 +1073,9 @@ export type ConfigSyncItem = {
 	device_only: boolean,
 	skipped: boolean,
 	detail: string | null,
+	hold: ConfigHold | null,
+	/**  Another device removed it. Applying removes it here after a confirmed review. */
+	removed_upstream: boolean,
 };
 
 export type ConfigSyncOutcome = {
@@ -1016,6 +1097,8 @@ export type ConfigSyncPreview = {
 	deletes_item: boolean,
 	can_apply: boolean,
 	warnings: string[],
+	/**  The agent's own installer steps, in order, for a declaration it must install itself. */
+	vendor_steps: ConfigVendorStep[],
 };
 
 export type ConfigSyncReceipt = {
@@ -1028,6 +1111,16 @@ export type ConfigSyncReceipt = {
 
 /**  A value for a [`ConfigOption`]: a choice for a select, a flag for a toggle. */
 export type ConfigValue = { type: "choice"; value: string } | { type: "toggle"; value: boolean };
+
+export type ConfigVendorKind = "marketplace" | "plugin" | "package";
+
+/**  One step of the agent's own reviewed installer that would make a declaration true here. */
+export type ConfigVendorStep = {
+	provider: LibraryProvider,
+	kind: ConfigVendorKind,
+	/**  `name@marketplace`, a GitHub `owner/repository` or a package source. */
+	target: string,
+};
 
 export type ContinuationAction = { type: "fresh_session" } | { type: "continue_here" } | { type: "switch_agent"; agent_id: string } | { type: "retry"; turn_id: string } | { type: "edit"; turn_id: string; text: string } | { type: "fork"; turn_id: string };
 
@@ -1144,6 +1237,19 @@ export type EventBatch = {
 	events: AuraEvent[],
 };
 
+/**  One feature of one agent. */
+export type FeatureListing = {
+	feature: PluginFeature,
+	state: ListingState,
+	/**  The exact command that fed this listing, as a person would type it. */
+	command: string | null,
+	entries: PluginEntry[],
+	/**  What the configured marketplaces offer that is not installed, capped. */
+	available: PluginEntry[],
+	/**  How many available entries the agent reported before the cap. */
+	available_total: number,
+};
+
 export type FileMention = {
 	path: string,
 	directory: boolean,
@@ -1187,6 +1293,8 @@ export type GeneralPreferences = {
 	keep_awake: boolean,
 	/**  Closing the window keeps auracode running in the tray or menu bar. */
 	close_to_tray: boolean,
+	/**  Agents (`claude`, `codex`, `pi`) whose configuration sync is off on this device. */
+	config_sync_paused: string[],
 };
 
 export type GitFileState = {
@@ -1219,6 +1327,15 @@ export type GitWorkspace = {
  *  its own opaque background.
  */
 export type GlassEffect = "liquid_glass" | "vibrancy" | "mica" | "none";
+
+/**  The installed harness against its latest known release. */
+export type HarnessStatus = { state: "not_installed" } | 
+/**  Detection or the release check has not finished. */
+{ state: "checking" } | { state: "up_to_date"; version: string; checked_at: number | null } | { state: "update_available"; version: string; latest: string; source: string; checked_at: number | null } | 
+/**  Releases could not be checked (offline, no release source for this channel). */
+{ state: "unknown"; version: string | null; reason: string } | 
+/**  The installed binary did not pass its version check. */
+{ state: "failed"; reason: string };
 
 /**  One stored event and where it sits. */
 export type HistoryItem = {
@@ -1392,6 +1509,17 @@ export type LimitWindow = {
 	resets_at: number | null,
 };
 
+/**  Where one feature's entries came from this time. */
+export type ListingState = 
+/**  Read from the agent's own command (`command`). */
+{ state: "live" } | 
+/**  The agent's command failed. Entries, if any, come from its files instead. */
+{ state: "failed"; reason: string } | 
+/**  The agent has no machine-readable listing for this feature. Entries come from its files. */
+{ state: "files"; reason: string } | 
+/**  Nothing can be listed on this device, for the reason given. */
+{ state: "unavailable"; reason: string };
+
 export type LocalImportPreview = {
 	projects: LocalImportProject[],
 	notices: string[],
@@ -1500,6 +1628,52 @@ export type PlanEntry = {
 export type PlanPriority = "high" | "medium" | "low";
 
 export type PlanStatus = "pending" | "in_progress" | "completed";
+
+/**  One installed, configured or available entry. */
+export type PluginEntry = {
+	/**  The agent's own identifier: `name@marketplace`, a server or skill name, a package source. */
+	key: string,
+	label: string,
+	description: string | null,
+	version: string | null,
+	marketplace: string | null,
+	/**  `user`, `project` or `local` when the agent reports it. */
+	scope: string | null,
+	enabled: boolean | null,
+	/**  False for an entry a marketplace offers that is not installed here. */
+	installed: boolean,
+	/**  Transport or source kind, such as `stdio`, `http`, `github`, `directory` or `npm`. */
+	kind: string | null,
+	/**  Names of the fields this entry keeps on the device (MCP env and headers). Never values. */
+	local_fields: string[],
+	library: PluginLibraryRef | null,
+};
+
+/**  One kind of extension an agent can have. */
+export type PluginFeature = "plugins" | "marketplaces" | "packages" | "skills" | "mcp_servers" | "commands" | "subagents" | "hooks";
+
+export type PluginLibrary = {
+	agents: AgentPlugins[],
+	notices: string[],
+};
+
+/**  A file inventory item a row corresponds to, so the row can open its preview and copy review. */
+export type PluginLibraryRef = {
+	source_id: string,
+	/**  The Library item kind (`skill`, `mcp_server`, `plugin`, `package`). */
+	kind: string,
+	key: string,
+	revision: string,
+};
+
+/**  Whether the agent has a plugin system of its own. */
+export type PluginSystem = 
+/**  Plugins installed from marketplaces. */
+"marketplace" | 
+/**  Packages installed from npm or git, without a marketplace. */
+"packages" | 
+/**  Plugins declared in its configuration and loaded by the agent itself. */
+"declared";
 
 export type ProfileKind = 
 /**  Data that lives only on this machine. */
@@ -1803,7 +1977,9 @@ export type SessionStatus =
 
 export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion"; value: MotionPreference } | { type: "project"; project_id: string } | { type: "finish" } | { type: "restart" } | 
 /**  Changing the agent clears the default model, which belongs to the previous agent. */
-{ type: "default_agent"; agent_id: string | null } | { type: "default_model"; model: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "notifications"; enabled: boolean } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean };
+{ type: "default_agent"; agent_id: string | null } | { type: "default_model"; model: string | null } | { type: "default_autonomy"; value: Autonomy } | { type: "notifications"; enabled: boolean } | { type: "keep_awake"; enabled: boolean } | { type: "close_to_tray"; enabled: boolean } | 
+/**  Turns configuration sync on or off for one agent on this device. */
+{ type: "config_sync_agent"; agent_id: string; enabled: boolean };
 
 export type SetupCommand = {
 	program: string,
@@ -2149,6 +2325,12 @@ export type VendorReview = {
 	revision: string,
 	timeout_seconds: number,
 	notices: string[],
+};
+
+/**  The installed version changed since the previous listing, so the listing was read again. */
+export type VersionChange = {
+	from: string,
+	to: string,
 };
 
 /**  Evidence about this exact installed version, independent of whether its binary can start. */

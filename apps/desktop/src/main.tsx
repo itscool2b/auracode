@@ -30,9 +30,18 @@ if (container) {
     const mode = new URLSearchParams(location.search).get("preview");
     if (new URLSearchParams(location.search).has("quit"))
       void import("./dev/quitPreview").then(({ mountQuitPreview }) => mountQuitPreview());
-    if (mode === "config-sync")
+    if (mode === "config-sync" || mode === "plugin-sync")
       void import("./dev/configSyncPreview").then(({ mountConfigSyncPreview }) =>
-        mountConfigSyncPreview(container),
+        mountConfigSyncPreview(container, mode),
+      );
+    else if (
+      mode === "plugins" ||
+      mode === "plugins-pi" ||
+      mode === "plugins-update" ||
+      mode === "plugins-failed"
+    )
+      void import("./dev/pluginLibraryPreview").then(({ mountPluginLibraryPreview }) =>
+        mountPluginLibraryPreview(container, mode),
       );
     else if (mode === "questions")
       void import("./dev/questionsPreview").then(({ mountQuestionsPreview }) =>

@@ -1,0 +1,395 @@
+/*
+ * The Plugin library in Graphite (docs/design/visual-language.md, 6.18), on Vercel's project
+ * pages: the agents as plain 32px rows in a 200px column, and the chosen agent as one scrolling
+ * page of hairline-framed row lists. The title, its line and Refresh are the Library's own
+ * classes. Every edge sits on the page's 32px column. Only --g-* tokens.
+ */
+
+.plugins-body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--g-space-32);
+  min-height: 0;
+  padding: 0 var(--g-space-32);
+}
+
+/* ------------------------------------------------------------------ the agents */
+
+.plugins-agents {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-4);
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: var(--g-space-24);
+}
+
+.plugins-agents > button {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-8);
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--g-space-8);
+  border: 0;
+  border-radius: var(--g-radius-8);
+  background-color: transparent;
+  color: var(--g-fg-2);
+  font: inherit;
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-fast) var(--g-ease),
+    color var(--g-dur-fast) var(--g-ease);
+}
+
+@media (hover: hover) {
+  .plugins-agents > button:hover {
+    background-color: var(--g-surface-2);
+    color: var(--g-fg-1);
+  }
+}
+
+.plugins-agents > button[aria-current="page"] {
+  background-color: var(--g-surface-3);
+  color: var(--g-fg-1);
+}
+
+.plugins-agents > button:focus-visible {
+  outline: 2px solid var(--g-focus);
+  outline-offset: -2px;
+}
+
+.plugins-agent-mark {
+  display: inline-flex;
+  flex: none;
+}
+
+.plugins-agent-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugins-agent-dot {
+  display: inline-flex;
+  flex: none;
+}
+
+.plugins-agents-note {
+  margin: var(--g-space-12) 0 0;
+  padding: 0 var(--g-space-8);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* ------------------------------------------------------------------ the agent page */
+
+.plugins-main {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: var(--g-space-48);
+}
+
+.plugins-agent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-16);
+  max-width: 880px;
+}
+
+.plugins-agent-head {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
+  min-height: 44px;
+}
+
+.plugins-agent-head-mark {
+  display: inline-flex;
+  flex: none;
+}
+
+.plugins-agent-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.plugins-agent-title h2 {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 600;
+}
+
+.plugins-agent-title p {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.plugins-agent-title code,
+.plugins-note code {
+  font-family: var(--g-mono);
+  color: var(--g-fg-2);
+}
+
+.plugins-agent-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-8);
+}
+
+/* The harness line: a quiet well; volt only marks an update, red a binary that failed. */
+.plugins-harness {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-height: 44px;
+  padding: var(--g-space-8) var(--g-space-8) var(--g-space-8) var(--g-space-16);
+  border-radius: var(--g-radius-8);
+  background-color: var(--g-surface-1);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.plugins-harness > span:not([class]) {
+  flex: 1;
+  min-width: 0;
+}
+
+.plugins-harness[data-tone] {
+  color: var(--g-fg-1);
+}
+
+.plugins-note,
+.plugins-summary {
+  margin: 0;
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.plugins-note {
+  color: var(--g-fg-3);
+}
+
+/* Sync: one settings row, the words at left and the switch at right, on a hairline frame. */
+.plugins-sync {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-16);
+  min-height: 60px;
+  padding: var(--g-space-8) var(--g-space-16);
+  border-radius: var(--g-radius-12);
+  box-shadow: inset 0 0 0 1px var(--g-line);
+}
+
+.plugins-sync > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.plugins-sync strong {
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+}
+
+.plugins-sync span {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* ------------------------------------------------------------------ features and rows */
+
+.plugins-feature {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+  padding-top: var(--g-space-8);
+}
+
+.plugins-feature-head h3,
+.plugins-available-head h4 {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 600;
+}
+
+.plugins-count {
+  color: var(--g-fg-3);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.plugins-source {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.plugins-source[data-failed] {
+  color: var(--g-red);
+}
+
+.plugins-rows {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--g-radius-12);
+}
+
+.plugins-rows::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--g-line);
+  pointer-events: none;
+}
+
+/* 60px rows, as on Agents: a 28px action and two lines of text both centre on the grid. */
+.plugins-row {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
+  min-height: 60px;
+  padding: var(--g-space-8) var(--g-space-8) var(--g-space-8) var(--g-space-16);
+  contain: layout style;
+}
+
+.plugins-row + .plugins-row {
+  box-shadow: inset 0 1px 0 var(--g-line);
+}
+
+.plugins-row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.plugins-row-text strong {
+  overflow: hidden;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugins-row-text small {
+  overflow: hidden;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugins-row-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-8);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.plugins-row-off {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--g-fg-4);
+}
+
+.plugins-row-spacer {
+  flex: none;
+  width: 28px;
+}
+
+.plugins-none {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.plugins-available {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-space-8);
+  padding-top: var(--g-space-8);
+}
+
+.plugins-available-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-16);
+}
+
+.plugins-search {
+  flex: none;
+  width: 280px;
+}
+
+.plugins-empty {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.plugins-empty h2 {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: 600;
+}
+
+.plugins-empty p {
+  margin: 0;
+}
+
+/* The ring is drawn inset, so the items sit 4px in, on the grid. */
+.plugins-menu {
+  position: fixed;
+  z-index: 50;
+  border: 0;
+  box-shadow:
+    var(--g-shadow),
+    inset 0 0 0 1px var(--g-line-strong);
+}
+
+/* An item's preview and copy, and the copy history, open as one large dialog each. */
+.plugins-item-dialog .library-detail,
+.plugins-item-dialog .library-history {
+  padding: 0;
+  overflow: visible;
+}

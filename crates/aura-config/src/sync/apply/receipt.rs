@@ -28,6 +28,8 @@ pub(super) struct Receipt {
     pub identity: ConfigIdentity,
     pub state: State,
     pub restores: Option<String>,
+    /// Restores a plugin or package declaration to its reviewed value after its installer failed.
+    pub vendor_restore: bool,
     pub files: Vec<Mutation>,
 }
 
@@ -41,6 +43,8 @@ struct Header {
     identity: ConfigIdentity,
     state: State,
     restores: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    vendor_restore: bool,
     files: Vec<Entry>,
 }
 #[derive(Serialize, Deserialize)]
@@ -71,6 +75,7 @@ impl Receipt {
             identity: self.identity.clone(),
             state: self.state,
             restores: self.restores.clone(),
+            vendor_restore: self.vendor_restore,
             files: self
                 .files
                 .iter()
@@ -169,6 +174,7 @@ impl Receipt {
             identity: header.identity,
             state: header.state,
             restores: header.restores,
+            vendor_restore: header.vendor_restore,
             files,
         })
     }

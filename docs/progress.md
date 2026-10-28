@@ -3672,3 +3672,42 @@ long tasks); the trace shows 14ms of layout and 52ms of paint in total. Comparis
 Not done here: the desktop app still uses the dither field on its first-launch intro and
 onboarding until its Shallows branch; `StatusDot` itself becomes a circle with the `native-fixes`
 branch (the site styles its own dots). The hand walkthrough before merge and real Safari remain.
+
+### Plugin library per agent (2026-10-28, branch `plugin-library`)
+
+The Library is now the Plugin library (Settings, then Plugin library), one section per agent:
+Claude Code, Codex, Pi and OpenCode. Details, sources and the edge-case table are in
+[plugin-library.md](plugin-library.md).
+
+- **Live from the CLI:** `claude plugin list --json --available`, `claude plugin marketplace list
+  --json`, `codex plugin list --json --available`, `codex plugin marketplace list --json`, `codex mcp
+  list --json` and `pi list` run through the bounded helper launch (20 s, 6 MB). Commands that start
+  MCP servers (`claude mcp list`, `pi mcp list`, `opencode mcp list`) and every OpenCode command
+  (it installs plugins at startup) are never run; those features come from files. A failed command
+  fails only its feature and says why. Codex MCP env and header values are dropped while parsing.
+- **Version awareness:** listings are cached with the version they were read from, and a changed
+  version rereads them. Detection now computes a harness status (not installed, checking, up to
+  date, update available, unknown, failed); an update shows a calm line on the agent's section and
+  on the Agents page with the existing reviewed Update.
+- **Sync per agent:** a per-device switch for Claude Code, Codex and Pi (General preferences), the
+  sync review grouped by agent with Apply all, and a named hold for every edge case: agent missing,
+  sync off, agent too old, marketplace missing (offered from the synced GitHub source in the
+  review), installer needed, another OS, missing command path, foreign command path, retained after
+  a failed install (that declaration restored through the journal), offline, and removed on another
+  device. Synced MCP commands are classified before any filesystem access, so UNC, device, `..` and
+  rooted `~` remainders are never probed (two security review findings, fixed with tests).
+- Instruction files left this surface for the Instructions surface; aura-config keeps their code.
+
+Verified locally on Windows after merging `origin/main`: `pnpm lint` (Biome, 28 warnings),
+`pnpm typecheck`, `pnpm test` (root scripts 22, ui 296, desktop 5 node and 465 with 19 skipped,
+design lab 352, web 4); `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+warnings` and `cargo clippy -p aura-core --features account-sync --lib --tests -- -D warnings`;
+`cargo test` for aura-config (117), aura-agents (97, with fake CLIs on temporary homes),
+aura-protocol (26), aura-core lib with account-sync (566) and the desktop lib (210, bindings
+regenerated). In Chromium and WebKit: `check-plugin-library`, `check-settings` (with
+`check-config-sync`), `check-setup` and `check-agent-installations`, axe clean; `check-layout`
+296 of 296 views clean, run against this branch's own dev server (another worktree held the
+probe's default port). Sheets beside the
+Vercel references are the ignored `target/design-research/sheets/app-plugins-*.png`. Not done: the
+hand walkthrough of the built app, real listings against the owner's own homes (only sandboxed
+homes were used), and the Windows and macOS CI run.

@@ -114,6 +114,7 @@ try {
         notifications: false,
         keep_awake: false,
         close_to_tray: false,
+        config_sync_paused: [],
       });
       // Another agent clears the model, which belonged to Codex; it has not listed its own.
       await page.getByLabel("Default agent").selectOption("claude");

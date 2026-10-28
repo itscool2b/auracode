@@ -30,7 +30,7 @@ Public installer signing is deferred at the owner's request. The repository rema
 the open-source license and publication audit are being discussed. No license change is implied.
 
 Current source includes native agent drivers, the dark Graphite workspace, onboarding, project and Git
-controls, configuration Library, encrypted account sync, local import and readable export. Account
+controls, a per-agent Plugin library, encrypted account sync, local import and readable export. Account
 recovery, explicit passphrase storage, reset sync, device removal and portable folder resolution are
 implemented with focused verification. Final integrated and native acceptance remain pending. The
 milestone notes below describe the earlier merged foundation, not the current branch's full

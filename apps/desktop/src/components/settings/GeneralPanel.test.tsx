@@ -31,6 +31,7 @@ describe("Settings' General defaults", () => {
       notifications: true,
       keep_awake: true,
       close_to_tray: true,
+      config_sync_paused: [],
     });
   });
 

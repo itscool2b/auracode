@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { subscribeAccountSync } from "../../lib/account/sync";
 import { type ConfigSyncApi, configSyncApi } from "../../lib/config-sync/api";
 import type {
+  ConfigHold,
   ConfigOperation,
   ConfigSyncChoice,
   ConfigSyncInventory,
@@ -11,8 +12,11 @@ import type {
   ConfigSyncPreview,
   ConfigSyncReceipt,
 } from "../../lib/config-sync/bindings";
+import type { VendorApi } from "../../lib/config-vendor/api";
+import type { VendorProvider } from "../../lib/config-vendor/bindings";
 import { errorMessage } from "../../lib/errors";
 import { Modal } from "../chat/Modal";
+import { VendorDialog } from "../library/VendorDialog";
 import "./settings.css";
 import "./config-sync.css";
 
@@ -24,7 +28,161 @@ const OPERATIONS: Record<ConfigOperation, string> = {
   conflict: "Needs a decision",
   wait: "Waiting",
 };
-const PROVIDERS = { claude: "Claude", codex: "Codex", pi: "Pi", shared: "Shared" };
+const PROVIDERS = { claude: "Claude Code", codex: "Codex", pi: "Pi", shared: "Shared skills" };
+const ORDER = ["claude", "codex", "pi", "shared"] as const;
+type Provider = (typeof ORDER)[number];
+
+/** Items by agent, in the Plugin library's order; an item still downloading joins its agent. */
+export function groups(items: readonly ConfigSyncItem[]): [Provider, ConfigSyncItem[]][] {
+  return ORDER.map(
+    (provider) =>
+      [provider, items.filter((item) => (item.provider ?? "shared") === provider)] as [
+        Provider,
+        ConfigSyncItem[],
+      ],
+  ).filter(([, entries]) => entries.length > 0);
+}
+
+/** Ready for "Apply all": nothing to decide and nothing held. */
+const ready = (item: ConfigSyncItem) =>
+  !item.hold &&
+  !item.device_only &&
+  !item.skipped &&
+  (item.operation === "apply" || item.operation === "publish" || item.operation === "merge");
+
+/**
+ * One agent's items under its name, with its sync switch for this device and Apply all for what
+ * is ready. Each held item says why in one line.
+ */
+export function AgentGroup({
+  provider,
+  items,
+  paused,
+  busy,
+  onSync,
+  onApplyAll,
+  onDeviceOnly,
+  onReview,
+}: {
+  readonly provider: Provider;
+  readonly items: readonly ConfigSyncItem[];
+  readonly paused: boolean;
+  readonly busy: boolean;
+  readonly onSync: (enabled: boolean) => void;
+  readonly onApplyAll: () => void;
+  readonly onDeviceOnly: (item: ConfigSyncItem, checked: boolean) => void;
+  readonly onReview: (item: ConfigSyncItem) => void;
+}) {
+  const name = PROVIDERS[provider];
+  const readyCount = items.filter(ready).length;
+  const headingId = `config-sync-${provider}`;
+  return (
+    <section className="config-sync-agent" aria-labelledby={headingId}>
+      <div className="settings-row config-sync-agent-head">
+        <div className="settings-row-text">
+          <div>
+            <strong id={headingId}>{name}</strong>
+            <p>
+              {items.length} {items.length === 1 ? "item" : "items"}
+              {readyCount ? ` · ${readyCount} ready` : ""}
+              {paused ? " · Sync is off on this device" : ""}
+            </p>
+          </div>
+        </div>
+        {readyCount ? (
+          <button
+            type="button"
+            className="g-button g-button-outline g-button-28"
+            disabled={busy}
+            onClick={onApplyAll}
+          >
+            Apply all {readyCount}
+          </button>
+        ) : null}
+        {provider !== "shared" ? (
+          <input
+            type="checkbox"
+            role="switch"
+            className="g-switch"
+            aria-label={`Sync ${name} on this device`}
+            aria-checked={!paused}
+            checked={!paused}
+            disabled={busy}
+            onChange={(event) => onSync(event.currentTarget.checked)}
+          />
+        ) : null}
+      </div>
+      {items.map((item) => (
+        <div className="settings-row" key={item.id}>
+          <div className="settings-row-text">
+            <div>
+              <strong className="config-sync-name">{item.label}</strong>
+              <p>
+                {item.scope === "portable"
+                  ? "All devices"
+                  : item.scope === "macos"
+                    ? "macOS"
+                    : item.scope === "windows"
+                      ? "Windows"
+                      : "Awaiting details"}
+              </p>
+              <span
+                className="config-sync-state"
+                data-attention={item.operation === "conflict" || item.skipped || undefined}
+              >
+                {item.device_only
+                  ? "Only on this device"
+                  : item.removed_upstream
+                    ? "Removed on another device"
+                    : item.hold
+                      ? HOLDS[item.hold.kind]
+                      : item.skipped
+                        ? "Previous change needs review"
+                        : OPERATIONS[item.operation]}
+                {item.first_link ? " · First connection" : ""}
+              </span>
+              {item.detail ? <p>{item.detail}</p> : null}
+              <label className="config-sync-local">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-checked={item.device_only}
+                  className="g-switch"
+                  checked={item.device_only}
+                  disabled={busy}
+                  onChange={(event) => onDeviceOnly(item, event.target.checked)}
+                />
+                Keep on this device
+              </label>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="g-button g-button-outline g-button-28"
+            aria-label={`Review ${item.label}`}
+            disabled={busy}
+            onClick={() => onReview(item)}
+          >
+            Review <ArrowRight size={14} aria-hidden="true" />
+          </button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+const HOLDS: Record<ConfigHold["kind"], string> = {
+  agent_missing: "Waiting for the agent",
+  sync_paused: "Sync is off",
+  needs_version: "Needs a newer agent",
+  marketplace_missing: "Marketplace not added",
+  vendor_install: "Install with the agent",
+  device_specific: "Another system only",
+  missing_path: "Command not on this device",
+  foreign_path: "Kept on its own device",
+  retained: "Previous change needs review",
+  offline: "Offline",
+};
 
 /**
  * Configuration sync as settings rows in one well (X Money's groups): each agent file with where it
@@ -37,11 +195,14 @@ export function ConfigSyncPanel({
   profileId = null,
   onAccount,
   api = configSyncApi,
+  vendorApi,
 }: {
   readonly active: boolean;
   readonly profileId?: string | null;
   readonly onAccount: () => void;
   readonly api?: ConfigSyncApi;
+  /** The reviewed installer terminal for plugin steps; the native one by default. */
+  readonly vendorApi?: VendorApi;
 }) {
   const [inventory, setInventory] = useState<ConfigSyncInventory | null>(null);
   const [history, setHistory] = useState<ConfigSyncReceipt[]>([]);
@@ -228,62 +389,42 @@ export function ConfigSyncPanel({
               <p>Add instructions, skills or settings through an installed agent, then refresh.</p>
             </div>
           ) : null}
-          {inventory?.items.map((item) => (
-            <div className="settings-row" key={item.id}>
-              <div className="settings-row-text">
-                <div>
-                  <strong className="config-sync-name">{item.label}</strong>
-                  <p>
-                    {item.provider ? `${PROVIDERS[item.provider]} · ` : ""}
-                    {item.scope === "portable"
-                      ? "All devices"
-                      : item.scope === "macos"
-                        ? "macOS"
-                        : item.scope === "windows"
-                          ? "Windows"
-                          : "Awaiting details"}
-                  </p>
-                  <span
-                    className="config-sync-state"
-                    data-attention={item.operation === "conflict" || item.skipped}
-                  >
-                    {item.device_only
-                      ? "Only on this device"
-                      : item.skipped
-                        ? "Previous change needs review"
-                        : OPERATIONS[item.operation]}
-                    {item.first_link ? " · First connection" : ""}
-                  </span>
-                  {item.detail ? <p>{item.detail}</p> : null}
-                  <label className="config-sync-local">
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      aria-checked={item.device_only}
-                      className="g-switch"
-                      checked={item.device_only}
-                      disabled={busy || loading}
-                      onChange={(event) => {
-                        const checked = event.target.checked;
-                        void action(async () => {
-                          await api.deviceOnly(item.id, checked);
-                          if (alive.current) refresh();
-                        });
-                      }}
-                    />
-                    Keep on this device
-                  </label>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="g-button g-button-outline g-button-28"
-                disabled={busy || loading}
-                onClick={() => setSelected(item)}
-              >
-                Review <ArrowRight size={14} aria-hidden="true" />
-              </button>
-            </div>
+          {groups(inventory?.items ?? []).map(([provider, items]) => (
+            <AgentGroup
+              key={provider}
+              provider={provider}
+              items={items}
+              paused={inventory?.paused.includes(provider) ?? false}
+              busy={busy || loading}
+              onSync={(enabled) =>
+                void action(async () => {
+                  await api.setAgentSync(provider, enabled);
+                  if (alive.current) refresh();
+                })
+              }
+              onApplyAll={() =>
+                void action(async () => {
+                  const outcomes = await api.applyAgent(provider);
+                  const done = outcomes.filter((outcome) => outcome.completed).length;
+                  const failed = outcomes.find((outcome) => !outcome.completed);
+                  completed({
+                    item_id: failed?.item_id ?? "",
+                    receipt_id: null,
+                    completed: !failed,
+                    message: failed
+                      ? `${done} of ${outcomes.length} applied. ${failed.message}`
+                      : `${done} ${done === 1 ? "item" : "items"} applied.`,
+                  });
+                })
+              }
+              onDeviceOnly={(item, checked) =>
+                void action(async () => {
+                  await api.deviceOnly(item.id, checked);
+                  if (alive.current) refresh();
+                })
+              }
+              onReview={setSelected}
+            />
           ))}
           {inventory?.next_cursor ? (
             <button
@@ -322,6 +463,7 @@ export function ConfigSyncPanel({
           key={selected.id}
           item={selected}
           api={api}
+          vendorApi={vendorApi}
           onClose={() => setSelected(null)}
           onComplete={completed}
         />
@@ -380,11 +522,13 @@ export function ConfigSyncPanel({
 function ConfigReview({
   item,
   api,
+  vendorApi,
   onClose,
   onComplete,
 }: {
   readonly item: ConfigSyncItem;
   readonly api: ConfigSyncApi;
+  readonly vendorApi?: VendorApi;
   readonly onClose: () => void;
   readonly onComplete: (outcome: ConfigSyncOutcome) => void;
 }) {
@@ -394,7 +538,25 @@ function ConfigReview({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [step, setStep] = useState<number | null>(null);
+  const finishVendor = async (exitCode: number | null) => {
+    const reviewed = token.current;
+    if (!reviewed || consuming.current) return;
+    consuming.current = true;
+    token.current = null;
+    setBusy(true);
+    try {
+      // Kept until the terminal closes, so its output stays readable.
+      finished.current = await api.vendorFinish(reviewed, exitCode === 0, exitCode);
+    } catch (failure) {
+      if (alive.current) setError(errorMessage(failure));
+    } finally {
+      consuming.current = false;
+      if (alive.current) setBusy(false);
+    }
+  };
   const consuming = useRef(false);
+  const finished = useRef<ConfigSyncOutcome | null>(null);
   const token = useRef<string | null>(null);
   const alive = useRef(false);
   useEffect(() => {
@@ -534,6 +696,47 @@ function ConfigReview({
                 <li key={warning}>{warning}</li>
               ))}
             </ul>
+          ) : null}
+          {preview.vendor_steps.length ? (
+            <ol className="config-sync-steps" aria-label="Installer steps">
+              {preview.vendor_steps.map((entry, index) => (
+                <li key={`${entry.kind}:${entry.target}`}>
+                  <span>
+                    {entry.kind === "marketplace" ? "Add the marketplace " : "Install "}
+                    <code>{entry.target}</code>
+                  </span>
+                  <button
+                    type="button"
+                    className="g-button g-button-outline g-button-28"
+                    disabled={busy}
+                    onClick={() => setStep(index)}
+                  >
+                    {entry.kind === "marketplace" ? "Add…" : "Install…"}
+                  </button>
+                </li>
+              ))}
+            </ol>
+          ) : null}
+          {step !== null && preview.vendor_steps[step] ? (
+            <VendorDialog
+              api={vendorApi}
+              preset={{
+                provider: preview.vendor_steps[step].provider as VendorProvider,
+                kind: preview.vendor_steps[step].kind,
+                action: "install",
+                target: preview.vendor_steps[step].target,
+              }}
+              onClose={() => {
+                setStep(null);
+                const outcome = finished.current;
+                finished.current = null;
+                if (outcome) onComplete(outcome);
+              }}
+              onFinished={(exitCode) => {
+                // The last step is the install that makes this declaration true here.
+                if (step === preview.vendor_steps.length - 1) void finishVendor(exitCode);
+              }}
+            />
           ) : null}
           {preview.deletes_item ? (
             <label className="config-sync-delete">
