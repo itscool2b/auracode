@@ -1229,8 +1229,11 @@ Delete), tool row (Re-run, Copy command, Copy output).
 Settings replace the pane (⌘,) and follow Grok's settings rows and X Money's grouped wells. The
 sidebar becomes the settings nav on the chat sidebar's geometry (6.2): the logo in the top band,
 "Back to chats", a "Settings" heading on a 32px line 16px below it, then 32px rows 4px apart of a
-16px fg-3 icon at x 20 and a 14/20 fg-2 label at x 44; hover surface-2 and fg-1; the open page is Grok's filled pill
-(surface-3, fg-1 500); a separator before the links out (Agents, Library). Page: a 680px column, a
+16px fg-3 icon at x 20 and a 14/20 fg-2 label at x 44, in the sidebar's one row style: under the
+hand a surface-2 layer fades in under the words (150ms) and grows from 96% (300ms quint) while the
+words turn fg-1, pressed it steps to surface-3 at once, and the open page is Grok's filled pill
+(surface-3, fg-1 500), its fill settling in under the row it moves to and easing out of the one it
+leaves; a separator before the links out (Agents, Plugin library). Page: a 680px column, a
 `.g-text-title` title and nothing under it. Groups (X Money): an optional heading 16/22 500, at
 most one short 14/20 fg-3 line, then a surface-2 well, radius 12, 12px below; 32px between groups.
 A row is a label 14/20 500 with an optional one-line description 12/16 fg-3 and at most one control
