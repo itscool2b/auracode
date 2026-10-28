@@ -13,6 +13,7 @@
     "check:chat": "node scripts/check-chat.mjs",
     "check:setup": "node scripts/check-setup.mjs",
     "check:settings": "node scripts/check-settings.mjs",
+    "check:instructions": "node scripts/check-instructions.mjs",
     "tauri": "tauri",
     "bundle": "node scripts/bundle.mjs",
     "signing": "sh scripts/macos-signing.sh",

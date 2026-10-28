@@ -105,6 +105,17 @@ export const MODES = [
   // A chat whose worktree folder was deleted: its start error, and Recreate folder from it.
   "missing-worktree",
   "missing-worktree#recreate",
+  // Instructions in Settings: one file, per agent with its file tabs, the choice between
+  // different texts, a hand-edited managed copy, size warnings, a save's review, and the
+  // worktree question for an untracked file.
+  "instructions",
+  "instructions-per-agent",
+  "instructions-per-agent#include",
+  "instructions-conflict",
+  "instructions-conflict#combine",
+  "instructions-drift",
+  "instructions-large",
+  "instructions-review",
 ];
 
 /** Waits until the panel's shell has drawn its prompt. */
@@ -197,6 +208,16 @@ const OPENERS = {
   conflict: async (page) => {
     await page.getByRole("button", { name: "Review merge", exact: true }).click();
     await page.getByRole("button", { name: "Open in Cursor", exact: true }).waitFor();
+  },
+  include: async (page) => {
+    await page.getByRole("tab", { name: "CLAUDE.md" }).click();
+    await page.getByRole("button", { name: "Copy into new worktree chats", exact: true }).click();
+    await page.getByRole("dialog", { name: "Copy CLAUDE.md into new worktree chats?" }).waitFor();
+  },
+  combine: async (page) => {
+    await page.getByText("Combine them", { exact: true }).click();
+    await page.getByRole("dialog", { name: "Use one file for every agent" }).waitFor();
+    await page.getByTestId("diff-block").first().waitFor();
   },
   resized: async (page) => {
     await terminalReady(page);

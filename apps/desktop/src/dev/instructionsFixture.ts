@@ -207,6 +207,8 @@ function perAgentSnapshot(state: State): InstructionsSnapshot {
   });
   const claude = file("project:CLAUDE.md", "CLAUDE.md", state.claude, {
     readers: ["claude", "cursor", "grok"],
+    git: "untracked",
+    note: "Not committed, so new worktree chats won't have it.",
   });
   const override = file("project:AGENTS.override.md", "AGENTS.override.md", state.override, {
     readers: state.override ? ["codex", "pi", "hermes"] : [],

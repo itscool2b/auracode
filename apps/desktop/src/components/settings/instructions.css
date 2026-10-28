@@ -223,7 +223,8 @@
   gap: var(--g-space-12);
   margin: 0 calc(-1 * var(--g-space-16)) calc(-1 * var(--g-space-16));
   padding: var(--g-space-12) var(--g-space-16);
-  border-top: 1px solid var(--g-line);
+  /* The hairline is an inset shadow, so the footer stays on the 4px grid. */
+  box-shadow: inset 0 1px 0 var(--g-line);
 }
 
 .instructions-foot > p {
