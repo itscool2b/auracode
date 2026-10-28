@@ -518,7 +518,10 @@ export function NewChat({
                 const project = organization.data?.projects.find((item) =>
                   item.folders.some((folder) => folder.id === event.currentTarget.value),
                 );
-                if (project?.default_agent) draft.chooseAgent(project.default_agent);
+                // The project's agent fills an empty choice only: an agent already picked here
+                // stays picked when the folder changes.
+                if (project?.default_agent && draft.getSnapshot().agentId === null)
+                  draft.chooseAgent(project.default_agent);
               }}
             >
               <option value="">Projects</option>
