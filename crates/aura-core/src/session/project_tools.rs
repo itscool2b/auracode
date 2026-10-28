@@ -1,4 +1,5 @@
 //! Explicit project utilities share the native profile and folder admission rules.
+use super::editors::{self, Detected, Platform, Roots};
 use super::*;
 use aura_process::{LaunchSpec, ProcessCwd, ResolvedEnv, SpawnSpec};
 use aura_protocol::git::{GitInitializePreview, GitWorkspace};
@@ -6,7 +7,7 @@ use aura_protocol::project_tools::{
     ProjectEditor, ProjectShell, ProjectShellChoice, ProjectToolsReview,
 };
 use same_file::Handle;
-use std::time::Instant;
+use std::{ffi::OsString, time::Instant};
 
 pub(super) struct PreparedTools {
     chat_id: String,
@@ -14,8 +15,61 @@ pub(super) struct PreparedTools {
     identity: Handle,
     env: Arc<ResolvedEnv>,
     shells: Vec<Shell>,
-    editors: Vec<ProjectEditor>,
+    editors: Vec<PreparedEditor>,
     expires: Instant,
+}
+/// A detected editor bound by the identity of its launcher, as shells are.
+struct PreparedEditor {
+    detected: Detected,
+    identity: Handle,
+}
+
+/// How the desktop opens a reviewed folder in the chosen editor. No `Debug`: the launch carries
+/// the resolved environment, whose values can hold keys.
+pub enum EditorOpen {
+    /// Hand the folder to the editor's registered URL handler.
+    Url { folder: String },
+    /// Run the detected launcher with the folder as its last argument.
+    Launch(EditorLaunch),
+}
+
+/// A detected editor's launcher. The editor belongs to the person: auracode starts it detached,
+/// with the reviewed environment and no inherited handles, and never waits for or stops it.
+pub struct EditorLaunch {
+    pub program: PathBuf,
+    pub args: Vec<OsString>,
+    env: Vec<(OsString, OsString)>,
+}
+
+impl EditorLaunch {
+    /// Starts the launcher. On macOS `open` returns once Launch Services has the request, and its
+    /// status is the receipt; on Windows a started process is the receipt. Blocking.
+    pub fn spawn(&self) -> std::io::Result<()> {
+        let mut command = std::process::Command::new(&self.program);
+        command
+            .args(&self.args)
+            .env_clear()
+            .envs(self.env.iter().map(|(key, value)| (key, value)))
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: no console, and no shared Ctrl+C.
+            command.creation_flags(0x0000_0008 | 0x0000_0200);
+        }
+        let mut child = command.spawn()?;
+        if cfg!(target_os = "macos") {
+            let status = child.wait()?;
+            if !status.success() {
+                return Err(std::io::Error::other(format!(
+                    "Launch Services refused the request ({status})."
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 struct Shell {
     choice: ProjectShellChoice,
@@ -115,75 +169,19 @@ fn shell(env: &ResolvedEnv) -> Vec<Shell> {
         .collect()
 }
 
-// Metadata-only detection of standard native application locations. Custom installs may still be
-// opened manually. A detected application is not a claim that its OS URL handler can dispatch.
-fn editors(env: &ResolvedEnv) -> Vec<ProjectEditor> {
-    let mut candidates = Vec::<(ProjectEditor, PathBuf)>::new();
-    #[cfg(windows)]
-    {
-        for (key, base) in [
-            ("LOCALAPPDATA", "Programs"),
-            ("ProgramFiles", ""),
-            ("ProgramFiles(x86)", ""),
-        ] {
-            if let Some(root) = env
-                .vars
-                .get(&key.into())
-                .map(PathBuf::from)
-                .filter(|root| root.is_absolute())
-            {
-                let root = root.join(base);
-                candidates.extend([
-                    (ProjectEditor::Cursor, root.join("cursor/Cursor.exe")),
-                    (
-                        ProjectEditor::VsCode,
-                        root.join("Microsoft VS Code/Code.exe"),
-                    ),
-                    (
-                        ProjectEditor::VsCodeInsiders,
-                        root.join("Microsoft VS Code Insiders/Code - Insiders.exe"),
-                    ),
-                ]);
-            }
-        }
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let mut roots = vec![PathBuf::from("/Applications")];
-        if let Some(home) = env
-            .vars
-            .get(&"HOME".into())
-            .map(PathBuf::from)
-            .filter(|root| root.is_absolute())
-        {
-            roots.push(home.join("Applications"));
-        }
-        for root in roots {
-            candidates.extend([
-                (
-                    ProjectEditor::Cursor,
-                    root.join("Cursor.app/Contents/MacOS/Cursor"),
-                ),
-                (
-                    ProjectEditor::VsCode,
-                    root.join("Visual Studio Code.app/Contents/MacOS/Electron"),
-                ),
-                (
-                    ProjectEditor::VsCodeInsiders,
-                    root.join("Visual Studio Code - Insiders.app/Contents/MacOS/Electron"),
-                ),
-            ]);
-        }
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    let _ = env;
-    let mut found = Vec::new();
-    for (editor, path) in candidates {
-        if path.is_file() && !found.contains(&editor) {
-            found.push(editor);
-        }
-    }
-    found
+// Metadata-only detection of standard native application locations (editors.rs). Custom installs
+// may still be opened manually. A detected application is not a claim that it can dispatch.
+fn editors(env: &ResolvedEnv) -> Vec<PreparedEditor> {
+    let Some(platform) = Platform::current() else {
+        return Vec::new();
+    };
+    editors::detect(platform, &Roots::from_env(platform, env))
+        .into_iter()
+        .filter_map(|detected| {
+            let identity = Handle::from_path(&detected.file).ok()?;
+            Some(PreparedEditor { detected, identity })
+        })
+        .collect()
 }
 
 impl SessionManager {
@@ -212,7 +210,7 @@ impl SessionManager {
             token: token.clone(),
             folder: display_path(&folder)?,
             shells: shells.iter().map(|item| item.choice.clone()).collect(),
-            editors: editors.clone(),
+            editors: editors.iter().map(|item| item.detected.editor).collect(),
             expires_at: crate::time::now_millis() + 600_000,
         };
         let mut prepared = lock(&self.shared().project_tools);
@@ -312,20 +310,47 @@ impl SessionManager {
         })
     }
 
-    pub async fn project_editor_folder(
+    /// Consumes the review and says how to open its folder in `editor`: the editor must still be
+    /// detected at the same location with the same launcher file it had at review.
+    pub async fn project_editor_open(
         &self,
         chat_id: &str,
         token: &str,
         editor: ProjectEditor,
-    ) -> Result<String, SessionError> {
+    ) -> Result<EditorOpen, SessionError> {
         let _organization = self.shared().organization.lock().await;
         let prepared = self.consume_project_tools(chat_id, token).await?;
-        if !prepared.editors.contains(&editor) || !editors(&prepared.env).contains(&editor) {
+        let gone = || {
+            invalid("This editor is no longer detected. Install it or open the folder manually.")
+        };
+        let reviewed = prepared
+            .editors
+            .iter()
+            .find(|item| item.detected.editor == editor)
+            .ok_or_else(gone)?;
+        let current = editors(&prepared.env)
+            .into_iter()
+            .find(|item| item.detected.editor == editor)
+            .ok_or_else(gone)?;
+        if current.detected != reviewed.detected || current.identity != reviewed.identity {
             return Err(invalid(
-                "This editor is no longer detected. Install it or open the folder manually.",
+                "This editor changed after review. Review the folder again.",
             ));
         }
-        display_path(&prepared.folder)
+        let folder = display_path(&prepared.folder)?;
+        Ok(match editors::command(&reviewed.detected.opener, &folder) {
+            None => EditorOpen::Url { folder },
+            Some((program, args)) => EditorOpen::Launch(EditorLaunch {
+                program,
+                args,
+                env: prepared
+                    .env
+                    .vars
+                    .iter()
+                    .map(|(key, value)| (key.as_os_str().to_owned(), value.clone()))
+                    .collect(),
+            }),
+        })
     }
 
     pub async fn git_initialize_preview(

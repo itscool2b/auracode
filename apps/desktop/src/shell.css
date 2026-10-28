@@ -1385,6 +1385,11 @@ details.setup-install-review[open] > summary::before {
   box-shadow: inset 0 1px var(--g-line);
 }
 
+/* A row's shortcut sits at its end, as keycaps (Show terminal, Ctrl `). */
+.chat-header-actions .g-menu-item .chat-keys {
+  margin-left: auto;
+}
+
 .chat-folder-context {
   display: flex;
   flex-direction: column;
@@ -1993,7 +1998,8 @@ details.setup-install-review[open] > summary::before {
 
 .palette-results {
   flex: 1;
-  max-height: min(430px, 50vh);
+  /* Half the window at most, snapped down to the 4px grid like the palette's offset. */
+  max-height: min(432px, round(down, 50vh, var(--g-space-4)));
   padding: var(--g-space-4);
   overflow: auto;
   scrollbar-width: thin;

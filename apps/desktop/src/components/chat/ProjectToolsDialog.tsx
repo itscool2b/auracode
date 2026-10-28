@@ -150,7 +150,8 @@ export function ProjectToolsDialog({
             <section aria-label="Project editor">
               <h3>Open in editor</h3>
               <p>
-                Open this folder in a detected editor through its operating system link handler.
+                Open this folder in a detected editor: Cursor and Visual Studio Code through their
+                link handler, Zed and JetBrains IDEs through their installed launcher.
               </p>
               <div className="project-tools-options">
                 {review.editors.map((editor) => (

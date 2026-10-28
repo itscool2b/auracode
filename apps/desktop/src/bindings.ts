@@ -195,6 +195,11 @@ export const commands = {
 	gitInitializePreview: (chatId: string, initialBranch: string) => typedError<GitInitializePreview, AppError>(__TAURI_INVOKE("git_initialize_preview", { chatId, initialBranch })),
 	gitInitializeApply: (chatId: string, token: string) => typedError<GitWorkspace, AppError>(__TAURI_INVOKE("git_initialize_apply", { chatId, token })),
 	projectToolsReview: (chatId: string) => typedError<ProjectToolsReview, AppError>(__TAURI_INVOKE("project_tools_review", { chatId })),
+	/**
+	 *  Reserves a project shell for the docked panel or the reviewed sheet. A window may hold several;
+	 *  the app holds at most eight. The shell itself starts only through `project_terminal_start`.
+	 */
+	projectTerminalReserve: () => typedError<string, AppError>(__TAURI_INVOKE("project_terminal_reserve")),
 	projectTerminalStart: (chatId: string, token: string, shell: ProjectShell, terminalId: string, rows: number, cols: number) => typedError<string, AppError>(__TAURI_INVOKE("project_terminal_start", { chatId, token, shell, terminalId, rows, cols })),
 	projectEditorOpen: (chatId: string, token: string, editor: ProjectEditor) => typedError<null, AppError>(__TAURI_INVOKE("project_editor_open", { chatId, token, editor })),
 	managedWorktrees: (chatId: string) => typedError<ManagedWorktree[], AppError>(__TAURI_INVOKE("managed_worktrees", { chatId })),
@@ -1464,7 +1469,11 @@ export type ProjectCreate = {
 	folder: string,
 };
 
-export type ProjectEditor = "cursor" | "vs_code" | "vs_code_insiders";
+/**
+ *  Editors detected in their standard install locations. Cursor and the VS Code builds open
+ *  through their OS URL handler; Zed and the JetBrains IDEs through their own detected launcher.
+ */
+export type ProjectEditor = "cursor" | "vs_code" | "vs_code_insiders" | "zed" | "intellij_idea" | "webstorm" | "pycharm" | "rustrover" | "goland" | "clion";
 
 export type ProjectFilePreview = {
 	path: string,

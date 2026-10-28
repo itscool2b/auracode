@@ -1,5 +1,65 @@
 # Auracode implementation progress
 
+## 2026-10-27: M4 parallel work: terminal panel, merge conflicts, more editors, missing folders
+
+Branch `m4-panel` (from `m4-worktree-ui`).
+
+- **Docked terminal panel:** each chat has a bottom panel of project shells under the composer,
+  toggled by Ctrl+` (Cmd+` on macOS), Ctrl+Shift+` for another, the chat menu (Show or Hide
+  terminal, with keycaps) and the palette (also New terminal). A new tab asks Rust to review the
+  chat's folder (the worktree for a worktree chat) and starts the first shell Rust offers, or the
+  one chosen in the shell menu; the folder shows in mono at the right. Tabs are the right panel's
+  quiet pills (arrows, F2 to rename in 40 characters, Delete or the trash button to close); the top
+  edge resizes on the 4px grid (280 by default, 120 to 800, keeping 240px for the conversation).
+  `TerminalPanels` (`lib/terminalPanel.ts`) lives with the chat screen, and each tab's xterm element
+  moves between the panel and a detached host, so shells keep running while the panel is hidden or
+  another chat is open; closing a tab, reloading or quitting stops them. Focus moves into a shell
+  only on the person's request, and inside a shell every key but Ctrl+` belongs to it (on Windows,
+  Ctrl+C with a selection copies and Ctrl+V pastes). The sheet and the panel share `openXterm`.
+  Decision: the panel's New terminal is itself the explicit start (the reviewed folder and shell
+  are shown in the panel), where the modal sheet keeps its separate Start; nothing runs a command.
+  Rust: project shells get their own pool (`reserve_project`, several per window, eight in the
+  app), apart from the one-per-window, four-per-app vendor terminals, and `start_project` refuses a
+  vendor reservation. The quit question already counted shells by folder use; tests now cover
+  several shells in one folder, cleanup one by one and confirmed quit. The menu's "Terminal and
+  editor" row is now "Open in editor" (the same Project tools dialog).
+- **Merge conflicts:** a conflicted merge review in the Git workspace dialog shows, for a chat that
+  works in that worktree, the exact message its agent would receive (both branches, the folder and
+  every path, thirty listed) with "Ask <agent> to resolve", which sends it through the ordinary send
+  path as the person's own visible message (only when the composer could send) and closes the
+  dialog, and "Open in <editor>" for each detected editor. Merge stays disabled until a new review
+  is clean; a chat outside the worktree gets one line saying where the work happens.
+- **Editors:** Zed, IntelliJ IDEA, WebStorm, PyCharm, RustRover, GoLand and CLion join Cursor and
+  the VS Code builds (`session/editors.rs`, metadata only). Windows: Zed and Toolbox installs under
+  `%LOCALAPPDATA%\Programs`, Zed and standalone JetBrains installs under Program Files (versioned
+  `JetBrains\<IDE> <version>` folders, newest first, lookalikes ignored), and an older Toolbox's
+  `.cmd` script read (8 KiB at most) only for the absolute IDE executable it names, never run.
+  macOS: bundles in `/Applications` and `~/Applications`. They open through the detected launcher
+  with the folder as one argument (the executable on Windows, detached with the reviewed
+  environment; `/usr/bin/open -a <bundle>` on macOS); a review binds the launcher by file identity.
+- **Missing worktree folder:** when the newest start failure is a missing folder and the folder is
+  the chat's own missing worktree, the error card leads with Recreate folder (Retry steps back to
+  soft) and opens the Git dialog's reviewed confirmation; afterwards a dock line says the folder is
+  back and Retry is the way on. Nothing starts by itself.
+- **Fixtures and checks:** `?preview=terminal-panel` (`&tabs`, `&height`, `&refuse`),
+  `git-conflict` and `missing-worktree`; new `check-terminal-panel.mjs`; `check-git-review.mjs`
+  adds the conflict and start-error flows; `check-project-tools.mjs` the new editors;
+  `check-layout.mjs` seven new views. The palette's result list now snaps its cap to the grid.
+
+Verified locally on Windows: `pnpm lint` (37 warnings, all pre-existing CSS specificity), `pnpm
+typecheck`, `pnpm test` (root scripts 22, ui 276, desktop 5 node and 399 with 19 skipped, design
+lab 352, web 4); `cargo test -p aura-core --lib` 439 passed (10 new); `export_bindings` and the
+desktop editor URL test; Clippy with `-D warnings` on aura-core, aura-protocol and
+auracode-desktop; `cargo fmt --check`. Chromium and WebKit: `check-terminal-panel` (7 axe scans
+each), `check-git-review`, `check-project-tools`, `check-chat`, `check-settings`,
+`check-new-chat-worktree` and `check-layout`. Some freshly built build scripts were refused by
+Application Control (4551) in both target folders; a later ordinary rebuild was accepted, nothing
+was bypassed. Chromium's emulated 2x scale draws xterm's WebGL glyphs at twice their cell size
+(its DOM renderer and WebKit's 2x are correct); real high-DPI WebView2 was not checked. Sheets
+(ignored): `target/design-research/sheets/app-m4-panel-terminal.png`, `-conflicts.png`,
+`-editors.png`. Not run: a real shell, editor or agent through the built app, the WebDriver smoke,
+macOS, the hand walkthrough and CI.
+
 ## 2026-10-27: M4 worktree chats in New chat, and recreating deleted folders (interface)
 
 Branch `m4-worktree-ui` (from `app-redesign` with `m4-worktree-backend` merged) builds the interface

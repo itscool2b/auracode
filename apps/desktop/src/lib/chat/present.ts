@@ -140,6 +140,8 @@ export interface ErrorActions {
   readonly retry: boolean;
   /** Review a visible handoff into a fresh native session when continuing the old one failed. */
   readonly startFresh: boolean;
+  /** Review recreating the chat's app-owned worktree folder, deleted outside the app. */
+  readonly recreate: boolean;
 }
 
 /** Start failures offer Retry; turn errors (the session stays ready) and internal ones do not. */
@@ -166,14 +168,24 @@ export function isStartFailure(kind: ErrorKind): boolean {
 /**
  * Only the newest error card acts, and only while the session has no process: an old card's Retry
  * would start an agent for a problem that is gone. Start fresh shows when there is an earlier
- * session that a resume may have failed to continue.
+ * session that a resume may have failed to continue. Recreate folder shows when the start failed
+ * because the folder is missing and that folder is the chat's own worktree, deleted by hand.
  */
 export function errorActions(
   kind: ErrorKind,
-  context: { readonly newest: boolean; readonly live: boolean; readonly resumable: boolean },
+  context: {
+    readonly newest: boolean;
+    readonly live: boolean;
+    readonly resumable: boolean;
+    readonly recreatable?: boolean;
+  },
 ): ErrorActions {
   const retry = isStartFailure(kind) && context.newest && !context.live;
-  return { retry, startFresh: retry && context.resumable };
+  return {
+    retry,
+    startFresh: retry && context.resumable,
+    recreate: retry && kind === "folder_missing" && context.recreatable === true,
+  };
 }
 
 /** A word that must be quoted for a POSIX shell. */

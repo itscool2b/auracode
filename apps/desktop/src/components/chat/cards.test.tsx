@@ -186,7 +186,7 @@ describe("the error card", () => {
       renderToStaticMarkup(
         <ErrorCard
           item={error}
-          actions={{ retry, startFresh }}
+          actions={{ retry, startFresh, recreate: false }}
           onRetry={noop}
           onStartFresh={noop}
           onShowLog={noop}
@@ -198,6 +198,32 @@ describe("the error card", () => {
     expect(full).toContain("hermes: permission denied");
     expect(buttons(full).map((b) => b.label)).toEqual(["Retry", "Start fresh", "Show log"]);
     expect(buttons(render(false, false)).map((b) => b.label)).toEqual(["Show log"]);
+  });
+
+  it("leads with Recreate folder when the chat's worktree folder was deleted", () => {
+    const missing: ErrorItem = {
+      ...error,
+      errorKind: "folder_missing",
+      message: "The chat's folder C:\\worktrees\\sidebar can't be found.",
+    };
+    const render = (onRecreate?: () => void) =>
+      renderToStaticMarkup(
+        <ErrorCard
+          item={missing}
+          actions={{ retry: true, startFresh: false, recreate: true }}
+          onRetry={noop}
+          onStartFresh={noop}
+          onRecreate={onRecreate}
+          onShowLog={noop}
+        />,
+      );
+    const html = render(noop);
+    expect(buttons(html).map((b) => b.label)).toEqual(["Recreate folder", "Retry", "Show log"]);
+    // One primary: Recreate folder; Retry steps back to a soft pill.
+    expect(html.match(/g-button-primary/g)).toHaveLength(1);
+    expect(html).toContain('data-testid="error-recreate-folder"');
+    // Without a way to recreate, the card is the ordinary start failure.
+    expect(buttons(render()).map((b) => b.label)).toEqual(["Retry", "Show log"]);
   });
 });
 

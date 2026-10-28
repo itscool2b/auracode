@@ -75,7 +75,7 @@ const ACTIONS: TurnActions = {
   requests: new Map(),
   onRespondPermission: noop,
   onRespondUi: noop,
-  errorActions: () => ({ retry: false, startFresh: false }),
+  errorActions: () => ({ retry: false, startFresh: false, recreate: false }),
   onStart: noop,
   onShowLog: noop,
   canResume: true,

@@ -982,7 +982,8 @@ when it says something (working, "Waiting on you" in volt, failed or a sign-in i
 Stopped stay for screen readers. Right (gap 4): the Changes panel toggle (28px ghost, surface-3
 while open, ⌘ J) and the chat menu (28px). The menu (288px, plain 32px rows in groups on hairlines)
 starts with the session's facts (agent, the version that runs, its path, context and cost), then
-Git workspace, Terminal and editor, Conversation history; Export chat, Copy debug bundle, Show log;
+Git workspace, Show or Hide terminal (with its keycaps, 6.22), Open in editor, Conversation history;
+Export chat, Copy debug bundle, Show log;
 and the session's lifecycle last (Stop, or Resume and Start fresh). The command palette offers every
 one of them by name. No border at rest.
 
@@ -1097,7 +1098,9 @@ field. Footer: the pager, "Skip" ghost, "Continue" primary (⌘ Enter). Answers 
 - **Turn error** (in the transcript): a well with a 2px red left edge (radius 0 8 8 0), padding 12
   16: a red square, the title 14/20 500 fg-1 ("Claude Code stopped: process exited with code 1"), the
   last stderr line in mono 13 fg-2, then 28px actions "Retry" (soft), "Open log" (ghost), "Continue
-  with Codex" (ghost).
+  with Codex" (ghost). A start that failed because the chat's own worktree folder was deleted
+  leads with "Recreate folder" (the one primary, opening 6.19's confirmation) and Retry steps back to
+  soft; once the folder is back one calm line in the dock says so and Retry is the way on.
 - **Blocking notice** (composer segment, 36px, surface-3): a 6px volt square when it blocks sending,
   the fact in 12/16 fg-2 ("Rate limit reached · resets 5:00 PM"), one 500 fg-1 text action.
 - **Warning** (transcript, 28px, 1px dashed line-strong, radius 8): a volt square, 12/16 fg-2 text,
@@ -1226,8 +1229,8 @@ strip on surface-1 with 1px fg-3 ticks per tool call and fg-4 blocks for thinkin
 15/24) with the close button at its end; scope chips (All, Chats, Projects, Files, Commands; 28px,
 the selected one a surface-3 pill); 48px two-line result rows, the active one with the ↵ keycap and
 the 2px rail; no key legend. With a chat open, its header menu's actions are commands by name (Show
-changes, Git workspace, Terminal and editor, Conversation history, Export chat, Copy debug bundle,
-Show log, Stop or Resume session, Start fresh). Context menus (4.6): message (Copy, Copy as Markdown, Copy receipt; Retry, Edit
+changes, Git workspace, Show or Hide terminal, New terminal, Open in editor, Conversation history,
+Export chat, Copy debug bundle, Show log, Stop or Resume session, Start fresh). Context menus (4.6): message (Copy, Copy as Markdown, Copy receipt; Retry, Edit
 and resend, Fork into new chat; Delete), chat row (Rename, Pin, Move to project, Archive ⌘⌫;
 Delete), tool row (Re-run, Copy command, Copy output).
 
@@ -1346,6 +1349,14 @@ sentence that uncommitted files from the deleted folder are gone and everything 
 then Branch, Commit (12 characters) and Folder as 36px rows on inset hairlines with their values in
 mono fg-1, Rust's other notes in 12/16 fg-3, a refusal in red, and Cancel beside Recreate folder.
 
+**A conflicted merge** (the Git workspace dialog's merge review): "Conflicts to resolve first" in
+red, the paths in mono, one fg-2 line that nothing has changed yet, then, for a chat that works in
+that worktree, "Message to Claude Code" over the exact message in the review's well (both branches,
+the folder, every path up to thirty, and what not to do), and 28px soft pills: Open in each detected
+editor and "Ask Claude Code to resolve", which sends that message as the person's own visible chat
+message and closes the dialog. Merge reviewed changes stays disabled until a new review finds no
+conflicts. A chat outside the worktree gets one line saying where the work happens instead.
+
 ### 6.20 Notifications
 
 Toasts (4.6). In-window agent cards when a chat you are not viewing finishes or starts waiting:
@@ -1364,6 +1375,29 @@ centred 600px column, the 32px logo in fg-2, the title in `.g-text-title`, aura-
 Show in Explorer button, notices as rows, and one line saying nothing was deleted; configuration
 recovery shows what its one action does and that action (the note to unlock the account first is
 volt). Calm: nothing was changed or lost. Recovery notices use the warning row (6.8).
+
+### 6.22 Terminal panel
+
+The bottom of the conversation pane, under the composer, behind one inset hairline: Ctrl+` (⌘` on
+macOS) shows or hides it, Ctrl+Shift+` adds a terminal, and the chat menu and the palette offer the
+same.
+Opening it with no terminal asks Rust to review the chat's folder (a worktree chat's worktree) and
+starts the first shell Rust offers there; nothing else ever runs. Height 280 by default, 120 to 800
+on the 4px grid, never taking the 240px the transcript and the composer keep; the top edge is the
+resizer (a 2px line-strong rule under the hand and the keyboard; arrows step 20, Home and End go to
+the bounds). Padding 0 8 8. A 36px header: the tabs as the right panel's quiet pills (28px, 500 fg-2,
+the open one surface-3 and fg-1, its 12px close mark fg-3; an exited shell leads with a still fg-3
+square, a failed one a red square), scrolling sideways when they outgrow the header; then the
+reviewed folder in mono 12/16 fg-3, right-aligned and cut at its end; then 28px ghost icons: New
+terminal, the shell menu (when Rust offers more than one shell, opening upward), Close the open
+terminal and Hide. The terminal sits flush on surface-1 in the Term type and the ANSI palette (3.1).
+A shell that is not simply running says so in one 28px line ("Starting PowerShell…", "PowerShell
+exited. Output is not saved.", or Rust's refusal with a red square and Try again). Tabs take arrows,
+Home and End, F2 to rename (40 characters) and Delete to close; focus moves into a shell only when
+the person shows the panel, adds a terminal or clicks a tab, never on a chat switch. Escape on the
+panel's own controls hides it; inside a shell every key but Ctrl+` belongs to the shell (on Windows,
+Ctrl+C with a selection copies and Ctrl+V pastes). Shells keep running while the panel is hidden or
+another chat is open; closing a tab, reloading or quitting stops them. Nothing animates.
 
 ---
 

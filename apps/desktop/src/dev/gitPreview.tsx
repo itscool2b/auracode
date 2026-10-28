@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import type { GitWorkspace, ManagedWorktree, WorktreeActionPreview } from "../bindings";
 import { GitDialog } from "../components/chat/GitDialog";
 import type { GitWorkspaceApi } from "../lib/gitWorkspace";
+import type { ProjectToolsApi } from "../lib/projectTools";
 
 const params = new URLSearchParams(location.search);
 const calls: string[] = [];
@@ -18,6 +19,11 @@ const workspace: GitWorkspace = {
 };
 /** `?preview=git-missing`: the chat's worktree folder was deleted by hand; its branch remains. */
 const missing = params.get("preview") === "git-missing";
+/**
+ * `?preview=git-conflict`: a worktree chat whose merge into main conflicts in two files. With
+ * `&no-editors` no editor is detected; with `&refuse-send` the message is not sent.
+ */
+const conflicted = params.get("preview") === "git-conflict";
 let worktrees: ManagedWorktree[] = missing
   ? [
       {
@@ -35,9 +41,24 @@ let worktrees: ManagedWorktree[] = missing
       },
     ]
   : [];
+if (conflicted)
+  worktrees = [
+    {
+      id: "worktree-one",
+      chat_id: "chat",
+      source: workspace.root,
+      path: "C:/auracode/worktrees/owned-one",
+      branch: "aura/release-readiness",
+      base_commit: workspace.head ?? "",
+      state: "ready",
+      detail: null,
+      recovery: null,
+      created_at: 1,
+    },
+  ];
 let preview: WorktreeActionPreview | null = null;
 let sequence = 0;
-let currentFolder = workspace.root;
+let currentFolder = conflicted ? "C:/auracode/worktrees/owned-one" : workspace.root;
 let initialized = !params.has("non-git");
 let relocationTarget = "";
 const makeWorktree = (): ManagedWorktree => ({
@@ -58,7 +79,14 @@ const api: GitWorkspaceApi = {
       throw new Error(
         "This folder is not a Git working tree. Initialize it explicitly before creating isolation.",
       );
-    return { ...structuredClone(workspace), root: currentFolder };
+    return conflicted
+      ? {
+          ...structuredClone(workspace),
+          root: currentFolder,
+          branch: "aura/release-readiness",
+          is_linked_worktree: true,
+        }
+      : { ...structuredClone(workspace), root: currentFolder };
   },
   initializePreview: async (_chat, branch) => {
     calls.push("review-initialize");
@@ -114,7 +142,13 @@ const api: GitWorkspaceApi = {
           ? "src/orbit.rs | 18 +++++++++++++-----\n1 file changed, 13 insertions(+), 5 deletions(-)"
           : "All working files stay in a retained directory.",
       conflicts:
-        action.type === "merge" && sessionStorage.getItem("git-conflict") ? ["src/orbit.rs"] : [],
+        action.type !== "merge"
+          ? []
+          : conflicted
+            ? ["src/orbit.rs", "apps/desktop/src/components/chat/Sidebar.tsx"]
+            : sessionStorage.getItem("git-conflict")
+              ? ["src/orbit.rs"]
+              : [],
       warnings: [
         action.type === "merge"
           ? "The reviewed target branch and files will change."
@@ -257,10 +291,36 @@ const api: GitWorkspaceApi = {
     };
   },
 };
-Object.assign(window, { gitFixture: { calls: () => [...calls] } });
+let sent = "";
+let reviews = 0;
+/** Detected editors for the chat's folder; opening one only records it. */
+const projectTools: Pick<ProjectToolsApi, "review" | "openEditor"> = {
+  review: async () => {
+    calls.push("review-tools");
+    return {
+      token: `tools-${++reviews}`,
+      folder: currentFolder,
+      shells: [],
+      editors: params.has("no-editors") ? [] : ["cursor", "zed", "rustrover"],
+      expires_at: Date.now() + 600_000,
+    };
+  },
+  openEditor: async (_chat, token, editor) => {
+    calls.push(`editor:${editor}:${token}`);
+  },
+};
+Object.assign(window, { gitFixture: { calls: () => [...calls], sent: () => sent } });
 function Preview() {
   const [live, setLive] = useState(params.has("live"));
   const [open, setOpen] = useState(true);
+  const ask = async (text: string) => {
+    calls.push("ask-agent");
+    if (params.has("refuse-send"))
+      return "Saving is paused, so this message was not sent. Try again when saving resumes.";
+    sent = text;
+    setOpen(false);
+    return null;
+  };
   return (
     <main
       className="g-root"
@@ -274,6 +334,9 @@ function Preview() {
           title="Release readiness"
           api={api}
           live={live}
+          agentName="Claude Code"
+          onAskAgent={ask}
+          projectTools={projectTools}
           allowIsolation
           onStop={async () => {
             calls.push("stop");

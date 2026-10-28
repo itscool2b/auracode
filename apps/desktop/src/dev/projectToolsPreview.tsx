@@ -50,7 +50,9 @@ const api: ProjectToolsApi = {
             args: ["-NoLogo", "-NoProfile"],
           },
         ],
-    editors: params.has("missing") ? [] : ["cursor", "vs_code"],
+    editors: params.has("missing")
+      ? []
+      : ["cursor", "vs_code", "zed", "intellij_idea", "webstorm", "rustrover"],
     expires_at: Date.now() + 600000,
   }),
   openEditor: async (_chat, _token, editor) => {

@@ -12,12 +12,26 @@ pub enum ProjectShell {
     Bash,
 }
 
+/// Editors detected in their standard install locations. Cursor and the VS Code builds open
+/// through their OS URL handler; Zed and the JetBrains IDEs through their own detected launcher.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectEditor {
     Cursor,
     VsCode,
     VsCodeInsiders,
+    Zed,
+    IntellijIdea,
+    #[serde(rename = "webstorm")]
+    WebStorm,
+    #[serde(rename = "pycharm")]
+    PyCharm,
+    #[serde(rename = "rustrover")]
+    RustRover,
+    #[serde(rename = "goland")]
+    GoLand,
+    #[serde(rename = "clion")]
+    CLion,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]

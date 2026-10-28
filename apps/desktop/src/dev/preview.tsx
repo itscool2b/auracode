@@ -9,6 +9,7 @@ import { ChatList } from "../components/chat/ChatList";
 import { SidebarBand } from "../components/chat/ChatsScreen";
 import { ChatView } from "../components/chat/ChatView";
 import { CommandPalette, type PaletteCommand } from "../components/chat/CommandPalette";
+import { createXtermRuntime } from "../components/chat/terminalRuntime";
 import {
   attachResult,
   chatSummary,
@@ -21,9 +22,12 @@ import {
   numbered,
   sessionInfo,
 } from "../lib/chat/testing";
+import { TerminalPanels } from "../lib/terminalPanel";
+import { MISSING_FOLDER, missingWorktreeGit } from "./missingWorktreeFixture";
 import { NewChatPreview } from "./newChatPreview";
 import type { NewChatScenario } from "./newChatWorktreeFixture";
 import { withPreviewContext } from "./previewContext";
+import { terminalPanelFixture } from "./terminalPanelFixture";
 
 /**
  * New chat in a project folder, with Rust's worktree review imitated: a Git folder (the default
@@ -285,6 +289,15 @@ function synthetic(mode: string): AuraEvent[] {
     ev.turnEnded("first", "end_turn", { durationMs: 18400 }),
   ];
   if (mode === "settled") return events;
+  // A later start failed: the chat's worktree folder was deleted outside the app.
+  if (mode === "missing-worktree")
+    return [
+      ...events,
+      ev.error(
+        "folder_missing",
+        `The chat's folder ${MISSING_FOLDER} can't be found. Restore it (or reconnect its drive), then press Retry.`,
+      ),
+    ];
   events.push(ev.turnStarted("next"), ev.user("u2", "Check the small window layout too."));
   if (mode === "streaming") return events;
   if (mode === "permission")
@@ -470,10 +483,34 @@ function Preview() {
     "diff",
     "recorded-thinking",
     "recorded-tools",
+    "terminal-panel",
+    "missing-worktree",
     ...Object.keys(NEW_CHAT_SCENARIOS),
   ].includes(requested)
     ? requested
     : "settled";
+  // `?preview=terminal-panel&tabs=2&height=280`: the settled chat with its docked terminals open.
+  const [terminals] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    return new TerminalPanels(
+      terminalPanelFixture({ refuse: params.get("refuse"), failReview: params.get("fail-review") }),
+      createXtermRuntime,
+    );
+  });
+  useEffect(() => {
+    if (mode !== "terminal-panel") return;
+    const params = new URLSearchParams(location.search);
+    const count = Math.max(1, Math.min(8, Number(params.get("tabs") ?? "2") || 1));
+    void (async () => {
+      for (let index = 0; index < count; index++)
+        await terminals.newTab("preview", index % 2 === 1 ? "command_prompt" : "power_shell");
+      const first = terminals.panel("preview").tabs[0];
+      if (first) terminals.select("preview", first);
+      const height = Number(params.get("height"));
+      if (height) terminals.setHeight("preview", height);
+    })();
+    return () => void terminals.dispose();
+  }, [mode, terminals]);
   const scenario = NEW_CHAT_SCENARIOS[mode] ?? null;
   const [palette, setPalette] = useState(false);
   const [chatCommands, setChatCommands] = useState<readonly PaletteCommand[]>([]);
@@ -488,7 +525,7 @@ function Preview() {
     mode === "history-question" ||
     mode === "focus-group"
       ? "running"
-      : mode === "error"
+      : mode === "error" || mode === "missing-worktree"
         ? "failed"
         : "ready";
   const chat = useMemo(
@@ -497,7 +534,8 @@ function Preview() {
         title: "Make the sidebar easier to scan",
         agent_id: "claude",
         agent_name: AGENT.name,
-        folder: "/workspace/auracode",
+        folder: mode === "missing-worktree" ? MISSING_FOLDER : "/workspace/auracode",
+        folder_state: mode === "missing-worktree" ? "missing" : "ok",
         status,
         needs_attention: mode === "permission",
       }),
@@ -557,7 +595,7 @@ function Preview() {
         ? recorded(thinking)
         : mode === "recorded-tools"
           ? recorded(fullAuto)
-          : synthetic(mode);
+          : synthetic(mode === "terminal-panel" ? "settled" : mode);
     let seq = events.length;
     const history = items(numbered(events.map((event) => [null, event] as const)));
     const before =
@@ -621,7 +659,7 @@ function Preview() {
       seq += updates.length;
     };
     publishPreview.current = publish;
-    return withPreviewContext(
+    const context = withPreviewContext(
       new FakeTransport({
         lists: async () => choices,
         setOption: async (_chatId, id, value) => {
@@ -676,6 +714,9 @@ function Preview() {
         },
       }),
     );
+    return mode === "missing-worktree"
+      ? Object.assign(context, { git: missingWorktreeGit() })
+      : context;
   }, [mode, status, chat]);
   return (
     // Mirrors ChatsScreen's frame: the drag bands, the sidebar toggle, the panes.
@@ -729,6 +770,7 @@ function Preview() {
         ) : (
           <ChatView
             onCommands={setChatCommands}
+            terminals={terminals}
             chatId="preview"
             transport={transport}
             listed={chat}

@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import type { AgentEntry, ChatSummary, PendingHandoff, StorageStatus } from "../../bindings";
+import type {
+  AgentEntry,
+  ChatSummary,
+  ManagedWorktree,
+  PendingHandoff,
+  StorageStatus,
+  WorktreeRecreatePreview,
+} from "../../bindings";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
+import { sameFolder } from "../../lib/gitWorkspace";
 import { inTauri } from "../../lib/ipc";
+import type { TerminalPanels } from "../../lib/terminalPanel";
 import { ChangesPanel } from "./ChangesPanel";
 import { ChatAuthCard } from "./ChatAuthCard";
 import { ChatExportDialog } from "./ChatExportDialog";
@@ -20,8 +29,16 @@ import { Pickers } from "./Pickers";
 import { ProjectToolsDialog } from "./ProjectToolsDialog";
 import { QuestionCard } from "./QuestionCard";
 import { QueueList } from "./QueueList";
+import { RecreateWorktreeDialog } from "./RecreateWorktreeDialog";
+import { TerminalPanel } from "./TerminalPanel";
 import { Transcript } from "./Transcript";
 import type { TurnActions } from "./TurnView";
+import { isPanelToggle } from "./terminalRuntime";
+
+const noSubscribe = () => () => {};
+/** Back to the conversation after the terminal panel hides. */
+const focusComposer = () =>
+  document.querySelector<HTMLElement>('[data-testid="composer-input"]')?.focus();
 
 /**
  * One open chat: its store joins the chat when the view mounts and detaches when it unmounts (the
@@ -37,6 +54,7 @@ export function ChatView({
   onOpenChat,
   active = true,
   onCommands,
+  terminals = null,
 }: {
   readonly chatId: string;
   readonly transport: Transport;
@@ -49,8 +67,15 @@ export function ChatView({
   readonly active?: boolean;
   /** The chat's own actions, for the command palette: the header menu's items by name. */
   readonly onCommands?: (commands: readonly PaletteCommand[]) => void;
+  /** The chat screen's docked terminals; they outlive this view, so shells survive a chat switch. */
+  readonly terminals?: TerminalPanels | null;
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport));
+  const terminalOpen = useSyncExternalStore(
+    terminals?.subscribe ?? noSubscribe,
+    () => terminals?.panel(chatId).open ?? false,
+    () => false,
+  );
   const [changesOpen, setChangesOpen] = useState(false);
   const [gitOpen, setGitOpen] = useState(false);
   const [dialog, setDialog] = useState<"tools" | "export" | "debug" | null>(null);
@@ -84,11 +109,27 @@ export function ChatView({
         setChangesOpen((open) => !open);
         return;
       }
+      // Ctrl+` (Cmd+` on macOS) shows or hides the terminal panel; with Shift it adds a terminal.
+      if (
+        terminals &&
+        isPanelToggle(event) &&
+        !event.defaultPrevented &&
+        !document.querySelector("dialog[open]")
+      ) {
+        event.preventDefault();
+        if (event.shiftKey) void terminals.newTab(chatId);
+        else {
+          const hiding = terminals.panel(chatId).open;
+          terminals.toggle(chatId);
+          if (hiding) focusComposer();
+        }
+        return;
+      }
       if (event.key === "Escape" && !event.defaultPrevented) void store.escape();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [store, active]);
+  }, [store, active, terminals, chatId]);
 
   const status = state.session?.status ?? state.chat?.status ?? "stopped";
   useEffect(() => {
@@ -143,6 +184,52 @@ export function ChatView({
     [pendingRequests],
   );
 
+  // A start that failed because the folder is missing, where the folder is this chat's app-owned
+  // worktree deleted by hand: its card offers the Git workspace's Recreate folder review.
+  const newestItem = newestError ? state.transcript.items.get(newestError) : undefined;
+  const chatFolder = (listed ?? state.chat)?.folder ?? null;
+  const folderMissing =
+    (newestItem?.kind === "error" && newestItem.errorKind === "folder_missing") ||
+    listed?.folder_state === "missing";
+  const [missingTree, setMissingTree] = useState<ManagedWorktree | null>(null);
+  const [recreate, setRecreate] = useState<WorktreeRecreatePreview | null>(null);
+  const [recreateNote, setRecreateNote] = useState<{ text: string; failed: boolean } | null>(null);
+  useEffect(() => {
+    const git = transport.git;
+    if (!git || !folderMissing || live || chatFolder === null) {
+      setMissingTree(null);
+      return;
+    }
+    let current = true;
+    git.list(chatId).then(
+      (trees) => {
+        if (current)
+          setMissingTree(
+            trees.find((tree) => tree.state === "missing" && sameFolder(tree.path, chatFolder)) ??
+              null,
+          );
+      },
+      () => {
+        if (current) setMissingTree(null);
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [transport.git, chatId, folderMissing, live, chatFolder]);
+  useEffect(() => {
+    if (live) setRecreateNote(null);
+  }, [live]);
+  const reviewRecreate = useCallback(async () => {
+    if (!transport.git || !missingTree) return;
+    setRecreateNote(null);
+    try {
+      setRecreate(await transport.git.recreatePreview(chatId, missingTree.id));
+    } catch (error) {
+      setRecreateNote({ text: errorMessage(error), failed: true });
+    }
+  }, [transport.git, missingTree, chatId]);
+
   const startSession = useCallback(
     (fresh: boolean) => {
       if (fresh && transport.conversation) setContinuation({ type: "fresh_session" });
@@ -178,12 +265,28 @@ export function ChatView({
             },
           ]
         : []),
+      ...(terminals
+        ? [
+            {
+              id: "chat-terminal",
+              title: terminalOpen ? "Hide terminal" : "Show terminal",
+              detail: "Shells in this chat's folder, docked under the conversation",
+              run: () => terminals.toggle(chatId),
+            },
+            {
+              id: "chat-terminal-new",
+              title: "New terminal",
+              detail: "Another shell in this chat's folder",
+              run: () => void terminals.newTab(chatId),
+            },
+          ]
+        : []),
       ...(desktop
         ? [
             {
               id: "chat-tools",
-              title: "Terminal and editor",
-              detail: "Open this project in a terminal or an editor",
+              title: "Open in editor",
+              detail: "Open this chat's folder in a detected editor",
               run: () => setDialog("tools"),
             },
           ]
@@ -249,7 +352,18 @@ export function ChatView({
           ]),
     ];
     onCommands(commands);
-  }, [onCommands, transport, changesOpen, live, resumable, store, startSession]);
+  }, [
+    onCommands,
+    transport,
+    changesOpen,
+    live,
+    resumable,
+    store,
+    startSession,
+    terminals,
+    terminalOpen,
+    chatId,
+  ]);
   useEffect(() => () => onCommands?.([]), [onCommands]);
 
   const actions = useMemo<TurnActions>(
@@ -261,9 +375,15 @@ export function ChatView({
         void store.respondPermission(requestId, optionId),
       onRespondUi: (requestId, answer) => void store.respondUi(requestId, answer),
       errorActions: (key, kind) =>
-        errorActions(kind, { newest: key === newestError, live, resumable }),
+        errorActions(kind, {
+          newest: key === newestError,
+          live,
+          resumable,
+          recreatable: missingTree !== null,
+        }),
       onStart: startSession,
       onShowLog: () => void store.revealLog(),
+      onRecreateFolder: missingTree ? () => void reviewRecreate() : undefined,
       canResume: !live,
       onContinue: transport.conversation ? (intent) => setContinuation(intent) : undefined,
     }),
@@ -276,6 +396,8 @@ export function ChatView({
       resumable,
       transport.conversation,
       startSession,
+      missingTree,
+      reviewRecreate,
     ],
   );
 
@@ -366,6 +488,8 @@ export function ChatView({
         onHistory={transport.conversation ? () => setContinuation({ type: "history" }) : undefined}
         onGit={transport.git ? () => setGitOpen(true) : undefined}
         onTools={() => setDialog("tools")}
+        onTerminal={terminals ? () => terminals.toggle(chatId) : undefined}
+        terminalOpen={terminalOpen}
         onExport={() => setDialog("export")}
         onDebug={() => setDialog("debug")}
         changesOpen={changesOpen}
@@ -396,6 +520,15 @@ export function ChatView({
             onLoadEarlier={() => void store.loadEarlier()}
           />
           <div className="chat-dock">
+            {recreateNote ? (
+              <p
+                className="conversation-notice"
+                role={recreateNote.failed ? "alert" : "status"}
+                data-testid="recreate-note"
+              >
+                {recreateNote.text}
+              </p>
+            ) : null}
             {canContinueHere ? (
               <div className="conversation-notice" role="status">
                 <p>
@@ -548,6 +681,9 @@ export function ChatView({
               />
             </div>
           </div>
+          {terminals ? (
+            <TerminalPanel chatId={chatId} panels={terminals} onHidden={focusComposer} />
+          ) : null}
         </div>
         {changesOpen && transport.changes ? (
           <ChangesPanel
@@ -591,12 +727,49 @@ export function ChatView({
       {dialog === "debug" ? (
         <DebugBundleDialog key={chatId} chatId={chatId} onClose={() => setDialog(null)} />
       ) : null}
+      {recreate && transport.git ? (
+        <RecreateWorktreeDialog
+          chatId={chatId}
+          review={recreate}
+          api={transport.git}
+          onClose={() => setRecreate(null)}
+          onDone={(value) => {
+            setRecreate(null);
+            setMissingTree(null);
+            setRecreateNote(
+              value.error
+                ? { text: value.error, failed: true }
+                : {
+                    text: `The folder is back on ${value.worktree.branch} at its last commit. Uncommitted files from the deleted folder could not be restored. Retry to start ${agent?.name ?? state.chat?.agent_name ?? "the agent"}.`,
+                    failed: false,
+                  },
+            );
+            // The chat list reads the folder again, so the header stops calling it missing.
+            onOpenChat?.(chatId);
+          }}
+        />
+      ) : null}
       {gitOpen && transport.git ? (
         <GitDialog
           chatId={chatId}
           title={state.chat?.title ?? "work"}
           api={transport.git}
           live={live}
+          agentName={agent?.name ?? state.chat?.agent_name}
+          // The conflict message goes out as the person's own visible message, exactly as the
+          // composer would send it, and only when the composer could send.
+          onAskAgent={
+            !handoffLoaded || canContinueHere || handoffError !== null || state.steeringPending
+              ? undefined
+              : async (text) => {
+                  if (await store.send(text)) {
+                    setGitOpen(false);
+                    return null;
+                  }
+                  return store.getSnapshot().sendError ?? "The message could not be sent.";
+                }
+          }
+          projectTools={transport.projectTools}
           onStop={() => store.stop()}
           onClose={() => setGitOpen(false)}
           onChanged={() => {

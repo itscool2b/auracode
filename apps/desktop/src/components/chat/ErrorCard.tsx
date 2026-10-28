@@ -3,20 +3,23 @@ import type { ErrorItem } from "../../lib/chat/transcript";
 
 /**
  * An error: its message, the redacted detail, and what can be done. Start failures offer Retry
- * (and Start fresh when continuing the earlier session may be what failed); turn errors, where the
- * session stays ready, offer nothing but resending; every card can show the protocol log.
+ * (and Start fresh when continuing the earlier session may be what failed); a start that failed
+ * because the chat's own worktree folder was deleted also offers Recreate folder; turn errors, where
+ * the session stays ready, offer nothing but resending; every card can show the protocol log.
  */
 export function ErrorCard({
   item,
   actions,
   onRetry,
   onStartFresh,
+  onRecreate,
   onShowLog,
 }: {
   readonly item: ErrorItem;
   readonly actions: ErrorActions;
   readonly onRetry: () => void;
   readonly onStartFresh: () => void;
+  readonly onRecreate?: () => void;
   readonly onShowLog: () => void;
 }) {
   return (
@@ -38,10 +41,21 @@ export function ErrorCard({
         </pre>
       ) : null}
       <div className="ui-row">
-        {actions.retry ? (
+        {actions.recreate && onRecreate ? (
           <button
             type="button"
             className="g-button g-button-primary"
+            data-testid="error-recreate-folder"
+            onClick={onRecreate}
+          >
+            Recreate folder
+          </button>
+        ) : null}
+        {actions.retry ? (
+          <button
+            type="button"
+            // One primary: with the folder gone, bringing it back comes before a retry.
+            className={actions.recreate && onRecreate ? "g-button" : "g-button g-button-primary"}
             data-testid="error-retry"
             onClick={onRetry}
           >
