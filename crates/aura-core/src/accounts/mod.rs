@@ -25,6 +25,12 @@ mod removal;
 mod reset;
 pub use audit::audit_profile;
 use index::Index;
+
+/// The secure-store entry that holds `root`'s account and profile index for `origin`, for the
+/// data cleanup (crate::uninstall). `None` when the folder cannot be resolved.
+pub(crate) fn profile_index_entry(origin: &str, root: &std::path::Path) -> Option<VaultEntry> {
+    index::entry(origin, root).ok()
+}
 pub type Result<T> = std::result::Result<T, AccountFailure>;
 
 pub struct Accounts {

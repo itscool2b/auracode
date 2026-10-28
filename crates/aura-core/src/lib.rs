@@ -57,6 +57,8 @@ pub mod store;
 pub mod sync;
 pub mod terminal;
 pub mod time;
+#[cfg(feature = "account-sync")]
+pub mod uninstall;
 
 mod fsutil;
 
