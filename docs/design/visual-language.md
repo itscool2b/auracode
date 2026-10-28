@@ -756,8 +756,9 @@ Centred over the water, 172px below the panel's top (140 on phones):
 - **Lead** (18/28 fg-2, max 540, 28px under): "The coding agents you already use, together in one
   chat on your machine. Free, with nothing to sign up for."
 - **One button** (36px under): the magnetic primary 44 "Download".
-- **Product** (88px under, 56 on phones): the real app (a captured screenshot, WebP sources, real
-  alt text), up to 1120px wide at 16:10, radius 16 (12 on phones), a white 8% ring and one long soft
+- **Product** (88px under, 56 on phones): the real app (the desktop's `?preview=settled` captured at
+  2x by `apps/web/scripts/product-images.mjs`: WebP at 480, 960, 1440 and 2240 wide, a PNG
+  fallback, real alt text), up to 1120px wide at 16:10, radius 16 (12 on phones), a white 8% ring and one long soft
   shadow, with 96px of deep water below it (40 on phones).
 
 **Entrance** (gated on `.js`): the light fades in over 1400ms; the headline's words rise
@@ -777,10 +778,17 @@ least 600px tall, with one seal drifting low at left.
   default", "Queue and steer", "Several chats at once". Under the active row a 2px timer fills over
   6.5s, and the next row takes over when it is full. Under the rows, the active row's one sentence
   cross-fades (14/22 fg-2).
-- **View** (right): one inset window of the app (#050505, radius 16) built from tokens at the app's
-  own sizes: the agent picker; a chat handed from Claude Code to Codex; a turn with its diff and a
-  checkpoint to restore; the autonomy menu over the composer; a running turn with a message queued;
-  five chats with circular status dots, the one that needs you in volt.
+- **View** (right): the app's inset pane (6.1: surface-1, radius 16, its rim and lit top edge drawn
+  over every scene, the faint light) built from tokens and the app's own marks at its own sizes,
+  each after a preview mode of the app as it is today: New chat on lit water with its agent pills
+  (6.13); a chat whose next message hands it from Claude Code to Codex, the handoff waiting above
+  the composer; the chat beside its Changes panel, one file selected to revert from the turn's
+  checkpoint (6.14); the picker over the composer with Effort and Autonomy (6.10, 6.11); a running
+  turn with a message queued and one typed to steer (6.9, 6.12); and the sidebar beside the open
+  chat, every chat's state at its end in circles, the one that needs you in volt and first under
+  Needs you, the logo and Settings at its foot (6.2). Nothing in a view moves on its own. A view
+  under 640px wide keeps each split's point (the Changes panel, the sidebar); under 480px it
+  tightens for phones.
 - **Motion**: the old view clears in 200ms; the new one rises 14px from 0.985 and fades in from
   120ms (460ms opacity, 820ms transform `--g-ease-out`). Hovering, focusing or clicking a row shows
   its view at once and holds the cycle, the active row's rule full, while the pointer or focus stays
