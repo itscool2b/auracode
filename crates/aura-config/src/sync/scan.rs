@@ -64,55 +64,95 @@ pub fn classify_command(command: &str, home: &std::path::Path, windows: bool) ->
     {
         return CommandPath::Refused;
     }
+    // Both separators are one: mixed forms such as `/\host\share` cannot slip past a check.
     let normalized = command.replace('\\', "/");
-    // `\\host\share`, `//host/share`, `\\?\UNC\...`, `\\?\C:\...` and `\\.\pipe\...` all start so.
-    if normalized.starts_with("//") {
-        return CommandPath::Refused;
-    }
     let parts: Vec<&str> = normalized.split('/').collect();
-    if parts.contains(&"..") {
+    // Every segment after an optional leading root is a plain name: no empty segment (which is how
+    // `//host/share`, `\\?\UNC\...`, `\\.\pipe\...`, `~///host` and `a//b` all look), no `.` or
+    // `..`, and no colon except a drive letter's.
+    let drive = parts[0].len() == 2
+        && parts[0].as_bytes()[0].is_ascii_alphabetic()
+        && parts[0].as_bytes()[1] == b':';
+    let plain =
+        |part: &&str| !part.is_empty() && *part != "." && *part != ".." && !part.contains(':');
+    if parts.len() > 1 && !parts[1..].iter().all(plain) {
         return CommandPath::Refused;
     }
-    let bytes = normalized.as_bytes();
-    let drive =
-        bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'/';
-    // A colon anywhere else is a URL, a stream name or a drive-relative path.
-    if normalized
-        .char_indices()
-        .any(|(index, c)| c == ':' && !(drive && index == 1))
-    {
-        return CommandPath::Refused;
+    let first = parts[0];
+    if first == "~" {
+        return home_path(home, &parts[1..]);
     }
-    if let Some(rest) = normalized.strip_prefix("~/") {
-        return CommandPath::Local(home.join(rest));
-    }
-    if normalized.starts_with('~') {
-        return CommandPath::Refused;
-    }
-    if drive {
+    if drive && parts.len() > 1 {
         return if windows {
-            CommandPath::Local(PathBuf::from(&normalized))
+            local(PathBuf::from(&normalized), true)
         } else {
             CommandPath::Refused
         };
     }
-    if normalized.starts_with('/') {
+    if first.is_empty() && parts.len() > 1 {
         // On Windows a rooted path without a drive depends on the current drive.
         return if windows {
             CommandPath::Refused
         } else {
-            CommandPath::Local(PathBuf::from(&normalized))
+            local(PathBuf::from(&normalized), false)
         };
     }
-    if !normalized.contains('/')
-        && normalized
+    if parts.len() == 1
+        && plain(&first)
+        && first
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || b"._-+".contains(&byte))
-        && normalized != "."
     {
-        return CommandPath::Bare(normalized);
+        return CommandPath::Bare(first.to_owned());
     }
+    // `~user`, relative paths, drive-relative `C:x`, URLs and anything else.
     CommandPath::Refused
+}
+
+/// `~/<plain segments>`, joined under home and checked again by components: the result must stay
+/// under home with nothing but plain names after it, so no prefix or root can replace home.
+fn home_path(home: &std::path::Path, rest: &[&str]) -> CommandPath {
+    use std::path::Component;
+    if rest.is_empty() || !home.is_absolute() {
+        return CommandPath::Refused;
+    }
+    let joined = rest
+        .iter()
+        .fold(home.to_path_buf(), |path, part| path.join(part));
+    match joined.strip_prefix(home) {
+        Ok(tail)
+            if tail.components().count() == rest.len()
+                && tail
+                    .components()
+                    .all(|part| matches!(part, Component::Normal(_))) =>
+        {
+            CommandPath::Local(joined)
+        }
+        _ => CommandPath::Refused,
+    }
+}
+
+/// An absolute local path, accepted only when its components are a local root (and, on Windows,
+/// a plain drive letter) followed by plain names. Off Windows a drive form never parses as one.
+fn local(path: PathBuf, drive: bool) -> CommandPath {
+    use std::path::Component;
+    let mut components = path.components();
+    let rooted = if drive && cfg!(windows) {
+        matches!(
+            components.next(),
+            Some(Component::Prefix(prefix)) if matches!(prefix.kind(), std::path::Prefix::Disk(_))
+        ) && matches!(components.next(), Some(Component::RootDir))
+    } else if drive {
+        // Tested off Windows: the drive letter is one plain component.
+        matches!(components.next(), Some(Component::Normal(_)))
+    } else {
+        matches!(components.next(), Some(Component::RootDir))
+    };
+    if rooted && components.all(|part| matches!(part, Component::Normal(_))) {
+        CommandPath::Local(path)
+    } else {
+        CommandPath::Refused
+    }
 }
 
 pub struct ConfigScan {

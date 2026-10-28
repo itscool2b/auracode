@@ -590,8 +590,21 @@ async fn applying_one_agent_is_atomic_per_item_and_a_failure_keeps_the_others() 
 
 #[test]
 fn commands_from_another_device_are_classified_before_any_filesystem_access() {
-    let home = Path::new("C:/Users/person");
+    let temp = std::env::temp_dir();
+    let home = temp.as_path();
     for (command, windows) in [
+        // A home path whose remainder is rooted, a share, a drive or an escape must never let
+        // `Path::join` replace home.
+        ("~///attacker/share/x", true),
+        (r"~/\\attacker\share\x", true),
+        (r"~\\\attacker\share\x", true),
+        ("~/C:/x", true),
+        ("~/../../x", true),
+        ("~/bin/../../x", true),
+        ("~/", true),
+        ("~", true),
+        ("~/bin//tool", false),
+        ("~/./bin", false),
         (r"\\attacker\share\x.exe", true),
         ("//attacker/share/x", true),
         (r"\\?\UNC\attacker\share\x", true),
