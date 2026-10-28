@@ -297,6 +297,11 @@ async fn run(app: tauri::AppHandle, target: Target) -> Result<AppInfo, AppError>
         if let Some(vendor) = app.try_state::<Arc<crate::config_vendor::VendorService>>() {
             vendor.reset_profile();
         }
+        if let Some(instructions) =
+            app.try_state::<Arc<crate::instructions_commands::InstructionsService>>()
+        {
+            instructions.reset_profile();
+        }
         if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
             clones.cancel_all();
         }

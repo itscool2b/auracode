@@ -1,0 +1,318 @@
+/*
+ * The app's micro-motion (docs/design/visual-language.md, 3.8 and 6.1 to 6.20, Shallows): the small
+ * places a hand or an eye lands on settle the way the water moves, softly and once. Only transform
+ * (and `translate`) and opacity ever move; colour may cross-fade, nothing changes layout, nothing
+ * idles, and every rule here stands still under reduced motion (the OS setting or the app's own).
+ *
+ * This sheet loads after the shell's, so at equal specificity it wins over shell.css and chat.css;
+ * component sheets keep their own motion next to their rules.
+ */
+
+/* ------------------------------------------------------------- buttons: press and lean */
+
+/*
+ * Every button gives under the hand: pressed, it settles to 97% at once and eases back on release,
+ * never moving its neighbours. The one white action on a screen (a primary pill, the send disc) is
+ * magnetic: lib/magnetic.ts sets its inline translate as the pointer crosses it, up to 3px at its
+ * edge, and it eases home when the pointer leaves.
+ */
+.g-button {
+  transition:
+    background-color var(--g-dur-settle) var(--g-ease-settle),
+    border-color var(--g-dur-settle) var(--g-ease-settle),
+    color var(--g-dur-settle) var(--g-ease-settle),
+    transform var(--g-dur-fast) var(--g-ease-out),
+    translate var(--g-dur-panel) var(--g-ease-out);
+}
+
+.g-button:active:not(:disabled, [aria-disabled="true"]) {
+  transform: scale(0.97);
+}
+
+/* ------------------------------------------------------------- popovers and dialogs */
+
+/*
+ * Popovers grow out of their trigger: the composer's open upward from its left, the header menu
+ * and the worktree chip's open downward (their own sheets set the origin and the direction), all
+ * with the panel's quint over 200ms from 96%.
+ */
+.chat-popover-panel {
+  transform-origin: 0 100%;
+  animation-timing-function: var(--g-ease-quint);
+}
+
+/* A dialog lifts out of the scrim; the scrim itself fades in under it. */
+.g-dialog[open] {
+  animation: ui-dialog-in var(--g-dur-panel) var(--g-ease-quint) both;
+}
+
+.g-dialog[open]::backdrop {
+  animation: ui-fade-in var(--g-dur-base) var(--g-ease-out) both;
+}
+
+@keyframes ui-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* A tooltip rises 2px as it fades in after the hover's 500ms. */
+:is(.chat-popover > summary, .chat-sidebar-settings)[data-tip]::after {
+  transform: translateY(2px);
+  transition:
+    opacity var(--g-dur-fast) var(--g-ease),
+    transform var(--g-dur-base) var(--g-ease-out);
+}
+
+@media (hover: hover) {
+  .chat-popover:not([open]) > summary[data-tip]:hover::after,
+  .chat-sidebar-settings[data-tip]:hover::after {
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------- banners and notices */
+
+/* A banner or a notice arrives once: a 4px drift and a fade, never a slide across the pane. */
+:is(.chat-banner, .chat-notice, .conversation-notice) {
+  animation: ui-notice-in var(--g-dur-panel) var(--g-ease-quint) both;
+}
+
+@keyframes ui-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------- detection */
+
+/*
+ * Looking for an agent is one soft circular pulse wherever it shows (setup's roster, Agents, New
+ * chat): a 6px fg-3 dot that breathes while a ring swells out of it and fades, once every 1.6s. It
+ * is never a spinner and never fast, so looking reads as patience, not alarm. Reduced motion holds
+ * the dot still and drops the ring.
+ */
+.ui-pulse {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--g-fg-3);
+  animation: ui-breathe var(--ui-pulse) var(--g-ease-in-out) infinite;
+}
+
+.ui-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--g-fg-3);
+  opacity: 0;
+  animation: ui-ripple var(--ui-pulse) var(--g-ease-out) infinite;
+}
+
+@keyframes ui-breathe {
+  0%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes ui-ripple {
+  from {
+    opacity: 0.7;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+/* New chat's agent pill while its agent is still looked for: the mark waits dimmed in a ring. */
+.new-chat-agent-mark {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  border-radius: 50%;
+  transition: opacity var(--g-dur-row) var(--g-ease-reveal);
+}
+
+.new-chat-agent[data-state="detecting"] .new-chat-agent-mark {
+  opacity: 0.5;
+}
+
+.new-chat-agent[data-state="detecting"] .new-chat-agent-mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--g-fg-2);
+  opacity: 0.5;
+  pointer-events: none;
+  animation: ui-ring var(--ui-pulse) var(--g-ease-out) infinite;
+}
+
+@keyframes ui-ring {
+  from {
+    opacity: 0.8;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+/* The search's pulse sits where a mark would, in a 24px place. */
+.new-chat-scan-pulse {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+/* ------------------------------------------------------------------------ chat list */
+
+/*
+ * A chat that appears while the list is open (a new chat, one moved in, one synced from another
+ * device) drops into its place from 6px above and fades in; the rows already there never move.
+ * ChatList marks it for 700ms (useArrivals). Hover and the open chat's fill live in shell.css.
+ */
+.chat-row-container[data-arrived] {
+  animation: ui-row-arrive var(--g-dur-headline) var(--g-ease-quint) both;
+}
+
+@keyframes ui-row-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --------------------------------------------------------------------- pills and chips */
+
+/*
+ * New chat's agent pills (new-chat.css eases them back) and the composer's chips give under the
+ * hand like the buttons do.
+ */
+.chat-popover > summary {
+  transition:
+    background-color var(--g-dur-micro) var(--g-ease),
+    color var(--g-dur-micro) var(--g-ease),
+    transform var(--g-dur-fast) var(--g-ease-out);
+}
+
+:is(.new-chat-agent, .chat-popover > summary):active {
+  transform: scale(0.97);
+}
+
+/* ----------------------------------------------------------------------- send disc */
+
+/* The disc turns white when there is something to send; its arrow lifts into place once. */
+.chat-send:not(:disabled, [data-quiet]) > svg {
+  animation: ui-send-ready var(--g-dur-base) var(--g-ease-out) both;
+}
+
+@keyframes ui-send-ready {
+  from {
+    opacity: 0.4;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --------------------------------------------------------------------- reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  .g-button,
+  :is(.chat-popover > summary, .chat-sidebar-settings)[data-tip]::after {
+    transition-property: background-color, border-color, color, opacity;
+  }
+
+  .g-button:active:not(:disabled, [aria-disabled="true"]),
+  :is(.new-chat-agent, .chat-popover > summary):active {
+    transform: none;
+  }
+
+  :is(.g-button-primary, .chat-send) {
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced motion overrides the inline lean. */
+    translate: none !important;
+  }
+
+  :is(.chat-popover > summary, .chat-sidebar-settings)[data-tip]::after {
+    transform: none;
+  }
+
+  .g-dialog[open],
+  .g-dialog[open]::backdrop,
+  :is(.chat-banner, .chat-notice, .conversation-notice),
+  .chat-row-container[data-arrived],
+  .chat-send:not(:disabled, [data-quiet]) > svg,
+  .ui-pulse,
+  .ui-pulse::after,
+  .new-chat-agent[data-state="detecting"] .new-chat-agent-mark::after {
+    animation: none;
+  }
+
+  .new-chat-agent-mark {
+    transition: none;
+  }
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"])
+  :is(
+    .ui-pulse,
+    .ui-pulse::after,
+    .new-chat-agent[data-state="detecting"] .new-chat-agent-mark::after
+  ) {
+  animation: none;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"])
+  :is(
+    .g-button:active:not(:disabled, [aria-disabled="true"]),
+    :is(.new-chat-agent, .chat-popover > summary):active
+  ) {
+  transform: none;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) :is(.g-button-primary, .chat-send) {
+  /* biome-ignore lint/complexity/noImportantStyles: The app's motion setting overrides the inline lean. */
+  translate: none !important;
+}

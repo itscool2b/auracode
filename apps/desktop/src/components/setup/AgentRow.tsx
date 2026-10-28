@@ -1,5 +1,5 @@
 import { AgentMark, StatusDot } from "@auracode/ui/graphite";
-import { ArrowUpRight, Ellipsis } from "lucide-react";
+import { ArrowUpRight, Check, Ellipsis } from "lucide-react";
 import {
   type CSSProperties,
   type ReactNode,
@@ -521,7 +521,6 @@ export function AgentRow({
             <AgentMark
               agent={agent.id}
               size={compact ? 24 : 32}
-              state={phase === "checking" ? "thinking" : "idle"}
               ghost={phase === "missing" || phase === "broken"}
             />
           </span>
@@ -534,9 +533,17 @@ export function AgentRow({
             ) : null}
           </span>
           <span className="agent-row-status" data-phase={phase} key={phase}>
+            {/*
+              Detection in one slot (agents.css): a soft circular pulse while it looks, an eased
+              check once found, a dot for what needs you or failed, a ring for what is missing.
+            */}
             <span className="agent-row-dot" aria-hidden="true">
-              {phase === "ready" ? (
-                <StatusDot tone="green" />
+              {phase === "checking" ? (
+                <span className="ui-pulse" />
+              ) : phase === "ready" ? (
+                <span className="agent-row-found">
+                  <Check className="agent-row-check" size={10} strokeWidth={2.5} />
+                </span>
               ) : phase === "signin" ? (
                 <StatusDot tone="volt" />
               ) : phase === "broken" ? (

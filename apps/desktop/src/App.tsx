@@ -1,8 +1,7 @@
 import type { AgentBrandId, OrbState } from "@auracode/ui";
-import { DitherField } from "@auracode/ui/graphite";
 import { MotionConfig } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import type { AppInfo, StressConfig } from "./bindings";
+import type { AppInfo, InstructionsTarget, StressConfig } from "./bindings";
 import { ChatsScreen } from "./components/chat/ChatsScreen";
 import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
@@ -18,6 +17,7 @@ import { LockedProfile } from "./components/settings/LockedProfile";
 import { SettingsScreen } from "./components/settings/SettingsScreen";
 import { AgentsScreen } from "./components/setup/AgentsScreen";
 import { Onboarding } from "./components/setup/Onboarding";
+import { STRESS_SWIMMERS, Water } from "./components/Water";
 import { subscribeAccountSync } from "./lib/account/sync";
 import type { AppStore } from "./lib/chat/appStore";
 import type { Transport } from "./lib/chat/transport";
@@ -74,9 +74,15 @@ export function App({
   const viewRef = useRef(view);
   viewRef.current = view;
   const [settingsReturn, setSettingsReturn] = useState<"chats" | "setup">("chats");
-  const [settingsEntry, setSettingsEntry] = useState({
+  const [settingsEntry, setSettingsEntry] = useState<{
+    id: string;
+    page: "general" | "account" | "instructions";
+    email: string;
+    target?: InstructionsTarget;
+    chatLabel?: string;
+  }>({
     id: "initial",
-    page: "general" as "general" | "account",
+    page: "general",
     email: "",
   });
   useEffect(
@@ -348,7 +354,7 @@ export function App({
   const running = isRunning(snapshot);
   const activity = snapshot.phase === "idle" ? "idle" : activityOf(snapshot.stream);
   const orbState: OrbState = activity;
-  // The stress view's ambient field: Graphite's dither, moving only while something streams.
+  // The stress view's ambient water: every swimmer at once, moving only while something streams.
   const showField = view === "stress" && stressConfig.aura;
 
   if (view === "setup")
@@ -402,6 +408,17 @@ export function App({
               setSettingsEntry({ id: "chats", page: "general", email: "" });
               setView("settings");
             }}
+            onInstructions={(target, chatLabel) => {
+              setSettingsReturn("chats");
+              setSettingsEntry({
+                id: `instructions:${Date.now()}`,
+                page: "instructions",
+                email: "",
+                target,
+                chatLabel,
+              });
+              setView("settings");
+            }}
           />
         </div>
         {view === "settings" ? (
@@ -409,6 +426,17 @@ export function App({
             navigationId={settingsEntry.id}
             initialPage={settingsEntry.page}
             initialEmail={settingsEntry.email}
+            instructionsTarget={settingsEntry.target}
+            chatLabel={settingsEntry.chatLabel}
+            instructionFolders={workspace?.getSnapshot().data?.projects.flatMap((project) =>
+              project.folders.map((folder) => ({
+                id: folder.id,
+                label:
+                  project.folders.length > 1
+                    ? `${project.name} / ${folder.display_name}`
+                    : project.name,
+              })),
+            )}
             backLabel={settingsReturn === "setup" ? "Back to setup" : "Back to chats"}
             info={info}
             onImported={async () => {
@@ -448,7 +476,9 @@ export function App({
           }}
         />
         <main className="main">
-          {showField ? <DitherField className="stress-field" transparent still={!running} /> : null}
+          {showField ? (
+            <Water className="stress-water" swimmers={STRESS_SWIMMERS} still={!running} />
+          ) : null}
           <div className="drag-strip" data-tauri-drag-region="" />
           <div className="main-scroll">
             {view === "diagnostics" ? (

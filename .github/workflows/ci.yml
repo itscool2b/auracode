@@ -135,11 +135,12 @@ jobs:
         timeout-minutes: 15
         run: pnpm --filter @auracode/desktop check:settings
 
-      - name: Check the Plugin library, account vault and configuration recovery
+      - name: Check the Plugin library, instructions, account vault and configuration recovery
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
         run: |
           pnpm --filter @auracode/desktop exec node scripts/check-plugin-library.mjs
+          pnpm --filter @auracode/desktop exec node scripts/check-instructions.mjs
           pnpm --filter @auracode/desktop exec node scripts/check-config-recovery.mjs
           pnpm --filter @auracode/desktop exec node scripts/check-account-vault.mjs
           pnpm --filter @auracode/desktop exec node scripts/check-account-reset.mjs

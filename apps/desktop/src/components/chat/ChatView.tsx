@@ -15,6 +15,7 @@ import { errorMessage } from "../../lib/errors";
 import { sameFolder } from "../../lib/gitWorkspace";
 import { inTauri } from "../../lib/ipc";
 import type { TerminalPanels } from "../../lib/terminalPanel";
+import { PANE_SWIMMERS, Water } from "../Water";
 import { ChangesPanel } from "./ChangesPanel";
 import { ChatAuthCard } from "./ChatAuthCard";
 import { ChatExportDialog } from "./ChatExportDialog";
@@ -497,6 +498,10 @@ export function ChatView({
       />
       <div className="chat-work-area">
         <div className="chat-conversation">
+          {/* A chat with nothing in it yet keeps New chat's lit water behind its composer. */}
+          {state.phase === "live" && state.transcript.segments.length === 0 ? (
+            <Water className="pane-water" swimmers={PANE_SWIMMERS} />
+          ) : null}
           {state.phase === "failed" ? (
             <div className="chat-banner" data-level="error">
               <span role="alert" data-testid="chat-attach-error">

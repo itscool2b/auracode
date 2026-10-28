@@ -62,7 +62,7 @@ try {
       await page.getByRole("button", { name: "Get started" }).waitFor();
       await page.waitForFunction(() => !document.querySelector("[data-cinematic]"));
       await page.screenshot({ path: resolve(out, `${engine}-welcome.png`) });
-      // Setup is one centred column over the window-wide dither field; the field covers the
+      // Setup is one centred card over the window-wide lit water; the water covers the
       // window, and the column, the wordmark and Skip setup stay inside it and clear of each other.
       const checkLayout = async () => {
         const layout = await page.evaluate(() => {
@@ -76,11 +76,15 @@ try {
             heading: box(document.querySelector(".setup-heading")),
             top: box(document.querySelector(".setup-top")),
             skip: box(document.querySelector(".setup-skip")),
-            canvas: box(document.querySelector(".setup-backdrop canvas")),
+            water: box(document.querySelector(".setup-water")),
+            swimmers: document.querySelectorAll(".setup-water .g-swimmer").length,
+            dither: document.querySelectorAll(".g-dither, canvas").length,
             overflow: document.documentElement.scrollWidth > innerWidth,
           };
         });
-        const { window, column, heading, top, skip, canvas, overflow } = layout;
+        const { window, column, heading, top, skip, water, swimmers, dither, overflow } = layout;
+        assert.equal(swimmers, 3, `${engine}: the water has its seal and two turtles`);
+        assert.equal(dither, 0, `${engine}: setup still draws the dither field`);
         assert.ok(
           Math.abs(column.left + column.right - window.width) <= 1,
           `${engine}: column is not centred`,
@@ -92,19 +96,18 @@ try {
         assert.ok(heading.top >= top.bottom, `${engine}: heading runs under the top bar`);
         assert.ok(skip.right <= window.width && skip.left >= 0, `${engine}: Skip setup clipped`);
         assert.ok(
-          canvas.left <= 0 &&
-            canvas.top <= 0 &&
-            canvas.right >= window.width &&
-            canvas.bottom >= window.height,
-          `${engine}: field does not cover the window`,
+          water.left <= 0 &&
+            water.top <= 0 &&
+            water.right >= window.width &&
+            water.bottom >= window.height,
+          `${engine}: water does not cover the window`,
         );
         assert.equal(overflow, false, `${engine}: setup scrolls sideways`);
       };
       await checkLayout();
       await page.setViewportSize({ width: 1024, height: 768 });
       await page.waitForFunction(
-        () =>
-          document.querySelector(".setup-backdrop canvas")?.getBoundingClientRect().width >= 1024,
+        () => document.querySelector(".setup-water")?.getBoundingClientRect().width >= 1024,
       );
       await checkLayout();
       await page.screenshot({ path: resolve(out, `${engine}-compact.png`) });

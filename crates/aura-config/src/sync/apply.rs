@@ -215,6 +215,24 @@ impl ConfigScanner {
                 return Err(ConfigPortError::Invalid);
             }
         }
+        // Whatever the review recorded, never write an MCP command that names a network share, a
+        // device path or another system's form: the same refusal as discovery, with no file access.
+        if id.format == ConfigFormat::Mcp
+            && let Some(ConfigContent::Value(value)) = &content
+            && let Some(command) = value.get("command").and_then(|command| match command {
+                serde_json::Value::String(text) => Some(text.as_str()),
+                serde_json::Value::Array(items) => {
+                    items.first().and_then(serde_json::Value::as_str)
+                }
+                _ => None,
+            })
+            && matches!(
+                super::scan::classify_command(command, &self.home, cfg!(windows)),
+                super::scan::CommandPath::Refused
+            )
+        {
+            return Err(ConfigPortError::Invalid);
+        }
         if id.format == ConfigFormat::Mcp {
             // Keep the exact local spelling of unchanged routing fields. Expanding a portable home
             // path must not falsely appear to redirect credentials because of slash differences.

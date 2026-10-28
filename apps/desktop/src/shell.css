@@ -36,18 +36,37 @@
   height: var(--ui-titlebar-height);
 }
 
-/* The main pane: one opaque surface inset from the window, with a hairline ring. */
+/*
+ * The main pane (Shallows, 6.1): one rounded, opaque panel inset from the black window, with a calm
+ * rim lit along its top edge and a faint light falling from the top, as the water's does. The chat
+ * and New chat sit in it (Settings and Diagnostics draw the same pane); the sidebar stays on the
+ * black base. The rim is drawn outside the pane, so nothing inside can cover it.
+ */
 .chat-main {
   position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   margin: var(--ui-pane-inset) var(--ui-pane-inset) var(--ui-pane-inset) 0;
   overflow: hidden;
-  border-radius: var(--g-radius-12);
+  border-radius: var(--ui-pane-radius);
   background-color: var(--g-surface-1);
-  box-shadow: 0 0 0 1px var(--g-line);
+  box-shadow:
+    0 0 0 1px var(--ui-pane-rim),
+    inset 0 1px 0 var(--ui-pane-rim-top);
+}
+
+/* The light: painted under the pane's content, never over a word. */
+.chat-main::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: -1;
+  height: 280px;
+  background-image: radial-gradient(72% 100% at 50% 0, var(--ui-pane-light), transparent);
+  pointer-events: none;
 }
 
 .chat-main > .chat-drag {
@@ -91,6 +110,10 @@
     box-shadow: none;
   }
 
+  .chat-main:has(.changes-panel)::before {
+    content: none;
+  }
+
   .chat-main:has(.changes-panel) > .chat-view {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -101,12 +124,12 @@
   .chat-main:has(.changes-panel) .chat-header {
     grid-column: 1;
     grid-row: 1;
-    border-radius: var(--g-radius-12) var(--g-radius-12) 0 0;
+    border-radius: var(--ui-pane-radius) var(--ui-pane-radius) 0 0;
     background-color: var(--g-surface-1);
     box-shadow:
-      inset 1px 0 var(--g-line),
-      inset -1px 0 var(--g-line),
-      inset 0 1px var(--g-line);
+      inset 1px 0 var(--ui-pane-rim),
+      inset -1px 0 var(--ui-pane-rim),
+      inset 0 1px var(--ui-pane-rim-top);
   }
 
   .chat-main:has(.changes-panel) .chat-work-area {
@@ -117,20 +140,22 @@
     grid-column: 1;
     grid-row: 2;
     overflow: hidden;
-    border-radius: 0 0 var(--g-radius-12) var(--g-radius-12);
+    border-radius: 0 0 var(--ui-pane-radius) var(--ui-pane-radius);
     background-color: var(--g-surface-1);
     box-shadow:
-      inset 1px 0 var(--g-line),
-      inset -1px 0 var(--g-line),
-      inset 0 -1px var(--g-line);
+      inset 1px 0 var(--ui-pane-rim),
+      inset -1px 0 var(--ui-pane-rim),
+      inset 0 -1px var(--ui-pane-rim);
   }
 
   .chat-main:has(.changes-panel) .changes-panel {
     grid-column: 2;
     grid-row: 1 / span 2;
     border-left: 0;
-    border-radius: var(--g-radius-12);
-    box-shadow: 0 0 0 1px var(--g-line);
+    border-radius: var(--ui-pane-radius);
+    box-shadow:
+      0 0 0 1px var(--ui-pane-rim),
+      inset 0 1px 0 var(--ui-pane-rim-top);
   }
 
   /* The panel's drag handle fills the gutter between the two panes. */
@@ -425,12 +450,19 @@ details.setup-install-review[open] > summary::before {
   gap: var(--g-space-4);
 }
 
-/* One row style for every sidebar action: fg-2 at rest, a surface-2 fill and fg-1 under the hand. */
+/*
+ * One row style for every sidebar action: fg-2 at rest, a surface-2 fill and fg-1 under the hand.
+ * The fill is a layer under the words that fades in and grows from 96% (Shallows' small-space
+ * motion), so the hand lands softly and moving down the list ripples nothing; pressed, it steps to
+ * surface-3 at once, and the open chat keeps it.
+ */
 .chat-nav-action,
 .chat-attention-row,
 .chat-project-toggle,
 .chat-row,
 .chat-see-all {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
@@ -440,9 +472,23 @@ details.setup-install-review[open] > summary::before {
   border-radius: var(--g-radius-8);
   color: var(--g-fg-2);
   text-align: left;
+  transition: color var(--g-dur-micro) var(--g-ease);
+}
+
+:is(.chat-nav-action, .chat-attention-row, .chat-project-toggle, .chat-row)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background-color: var(--g-surface-2);
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none;
   transition:
-    background-color var(--g-dur-micro) var(--g-ease),
-    color var(--g-dur-micro) var(--g-ease);
+    opacity var(--g-dur-fast) var(--g-ease),
+    transform var(--g-dur-panel) var(--g-ease-quint),
+    background-color var(--g-dur-micro) var(--g-ease);
 }
 
 .chat-nav-action > svg {
@@ -461,8 +507,12 @@ details.setup-install-review[open] > summary::before {
 
 @media (hover: hover) {
   :is(.chat-nav-action, .chat-attention-row, .chat-project-toggle, .chat-row):hover {
-    background-color: var(--g-surface-2);
     color: var(--g-fg-1);
+  }
+
+  :is(.chat-nav-action, .chat-attention-row, .chat-project-toggle, .chat-row):hover::before {
+    opacity: 1;
+    transform: none;
   }
 
   .chat-nav-action:hover > svg {
@@ -474,8 +524,11 @@ details.setup-install-review[open] > summary::before {
   }
 }
 
-:is(.chat-nav-action, .chat-attention-row, .chat-project-toggle, .chat-row):active {
+:is(.chat-nav-action, .chat-attention-row, .chat-project-toggle, .chat-row):active::before {
   background-color: var(--g-surface-3);
+  opacity: 1;
+  transform: none;
+  transition-duration: 0ms;
 }
 
 /* Inside the sidebar a focused row keeps the ring inside its own box, clear of its neighbours. */
@@ -747,10 +800,25 @@ details.setup-install-review[open] > summary::before {
   padding-left: var(--g-space-32);
 }
 
-/* The open chat is one surface step up, like Grok's selected row: a fill and no ring. */
+/*
+ * The open chat is one surface step up, like Grok's selected row: a fill and no ring. The fill
+ * settles in under the row it moves to and eases out of the one it leaves.
+ */
 .chat-row[aria-current="true"] {
-  background-color: var(--g-surface-3);
   color: var(--g-fg-1);
+}
+
+.chat-row[aria-current="true"]::before {
+  background-color: var(--g-surface-3);
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.chat-nav-action, .chat-attention-row, .chat-project-toggle, .chat-row)::before {
+    transform: none;
+    transition-property: opacity, background-color;
+  }
 }
 
 .chat-row-title {
@@ -1108,13 +1176,14 @@ details.setup-install-review[open] > summary::before {
   max-height: min(560px, calc(100vh - 80px));
   padding: var(--g-space-4);
   gap: 0;
+  transform-origin: 100% 0;
   animation-name: chat-menu-in;
 }
 
 @keyframes chat-menu-in {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+    transform: translateY(-6px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -1281,7 +1350,7 @@ details.setup-install-review[open] > summary::before {
 @keyframes chat-popover-in {
   from {
     opacity: 0;
-    transform: translateY(4px) scale(0.98);
+    transform: translateY(6px) scale(0.96);
   }
   to {
     opacity: 1;

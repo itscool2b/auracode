@@ -7,8 +7,10 @@ pub(crate) struct Command {
     pub source: String,
     pub save: Option<WorktreeSetupInput>,
     /// Reads the recipe of this project folder directly, for a chat that does not exist yet.
-    /// `source` must still be this device's path of the folder. Saving is not allowed this way.
+    /// `source` must still be this device's path of the folder. Saving this way needs
+    /// `folder_save`, an explicit reviewed action (the Instructions surface adding one file).
     pub folder_id: Option<String>,
+    pub folder_save: bool,
 }
 
 impl Command {
@@ -31,7 +33,7 @@ pub(crate) fn execute(
         )
     };
     let folder: String = match &command.folder_id {
-        Some(_) if command.save.is_some() => return Err(invalid()),
+        Some(_) if command.save.is_some() && !command.folder_save => return Err(invalid()),
         Some(folder_id) => conn.query_row(
             "SELECT pf.id FROM project_folders pf JOIN projects p ON p.id=pf.project_id JOIN folder_locations fl ON fl.folder_id=pf.id WHERE pf.id=?1 AND pf.deleted=0 AND p.deleted=0 AND fl.device_id=?2 AND fl.path=?3",
             params![folder_id, device, super::stored_path_text(&command.source)], |row| row.get(0)
@@ -88,6 +90,7 @@ mod tests {
             source: source.into(),
             save,
             folder_id: None,
+            folder_save: false,
         };
         execute(
             db.conn(),
@@ -116,6 +119,7 @@ mod tests {
             source: source.into(),
             save,
             folder_id: Some(folder.clone()),
+            folder_save: false,
         };
         assert_eq!(
             execute(db.conn(), "dev", 2, by_folder("/workspace", None))
@@ -133,6 +137,26 @@ mod tests {
             )
             .is_err()
         );
+        // The Instructions surface saves by folder only with the explicit flag, still bound to
+        // this device's path of the folder.
+        let mut explicit = by_folder(
+            "/workspace",
+            Some(WorktreeSetupInput {
+                files: vec![".env".into(), "AGENTS.md".into()],
+                command: input.command.clone(),
+            }),
+        );
+        explicit.folder_save = true;
+        assert_eq!(
+            execute(db.conn(), "dev", 3, explicit).unwrap().input.files,
+            vec![".env", "AGENTS.md"]
+        );
+        let mut elsewhere = by_folder("/other", Some(WorktreeSetupInput::default()));
+        elsewhere.folder_save = true;
+        assert!(execute(db.conn(), "dev", 3, elsewhere).is_err());
+        let mut back = by_folder("/workspace", Some(input.clone()));
+        back.folder_save = true;
+        execute(db.conn(), "dev", 4, back).unwrap();
         db.conn().execute("INSERT INTO folder_locations(folder_id,device_id,path) VALUES (?1,'second','/workspace')",[folder]).unwrap();
         assert_eq!(
             execute(db.conn(), "second", 2, request(&chat, "/workspace", None))

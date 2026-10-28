@@ -90,6 +90,12 @@ export const commands = {
 	libraryCopyCancel: (id: string) => __TAURI_INVOKE<void>("library_copy_cancel", { id }),
 	libraryCopyApply: (id: string) => typedError<LibraryCopyResult, AppError>(__TAURI_INVOKE("library_copy_apply", { id })),
 	libraryCopyRollback: (folderId: string | null, sourceId: string, id: string) => typedError<LibraryCopyResult, AppError>(__TAURI_INVOKE("library_copy_rollback", { folderId, sourceId, id })),
+	instructionsSnapshot: (target: InstructionsTarget) => typedError<InstructionsSnapshot, AppError>(__TAURI_INVOKE("instructions_snapshot", { target })),
+	instructionsReview: (target: InstructionsTarget, change: InstructionsChange) => typedError<InstructionsReview, AppError>(__TAURI_INVOKE("instructions_review", { target, change })),
+	instructionsCancel: (id: string) => __TAURI_INVOKE<void>("instructions_cancel", { id }),
+	instructionsApply: (id: string) => typedError<InstructionsApplyResult, AppError>(__TAURI_INVOKE("instructions_apply", { id })),
+	instructionsIncludeInWorktrees: (target: InstructionsTarget, path: string) => typedError<WorktreeSetup, AppError>(__TAURI_INVOKE("instructions_include_in_worktrees", { target, path })),
+	instructionsCommit: (target: InstructionsTarget, path: string) => typedError<string, AppError>(__TAURI_INVOKE("instructions_commit", { target, path })),
 	/**
 	 *  Starts a scripted mock-agent turn and streams its frames over `channel` (one `EventBatch` at
 	 *  most every 16 ms, each under 8 KiB). Returns the session id the frames carry, for
@@ -1412,6 +1418,250 @@ export type HistoryPage = {
 
 /**  How the installed binary is managed. Unknown and bundled installations cannot be updated here. */
 export type InstallChannel = { type: "vendor_standalone" } | { type: "npm"; package: string } | { type: "homebrew"; formula: string } | { type: "bundled"; application: string } | { type: "unknown" };
+
+export type InstructionsAction = "create" | "replace" | "remove" | "rename" | 
+/**  Not written; listed because its role changes (a copy stops being managed). */
+"keep";
+
+export type InstructionsAgent = {
+	id: string,
+	name: string,
+	installed: boolean,
+	status: InstructionsAgentStatus,
+	/**  The main file it reads here. */
+	file: string | null,
+	/**  The source an import, link or copy leads to. */
+	via: string | null,
+	/**  Other files it loads with text of their own. */
+	also: string[],
+	/**  Other agents whose main file is the same. */
+	shared_with: string[],
+	detail: string,
+	warnings: string[],
+	/**  An agent-specific override file this agent supports here, for per-agent text. */
+	override_file: string | null,
+};
+
+export type InstructionsAgentStatus = 
+/**  Reads the file itself. */
+"direct" | 
+/**  Reads its own file, which only imports the source. */
+"import" | 
+/**  Reads a link to the source. */
+"link" | 
+/**  Reads a byte-identical copy auracode keeps in sync (or an identical copy it found). */
+"copy" | 
+/**  Reads a copy that was edited by hand or is out of date. */
+"drift" | 
+/**  An override or higher-priority file hides the shared file from this agent. */
+"override" | 
+/**  Reads its own text. */
+"own" | 
+/**  Reads nothing here yet. */
+"not_set" | 
+/**  This agent has no file at this scope. */
+"unsupported";
+
+export type InstructionsApplyResult = {
+	id: string,
+	changed: string[],
+	/**  Every changed file was put back after a failure. */
+	rolled_back: boolean,
+	/**  Some file could not be put back; its backup is kept in the named folder. */
+	recovery_required: boolean,
+	message: string | null,
+	backup: string | null,
+};
+
+export type InstructionsChange = 
+/**  Write the editor's text into one file, creating it when missing. */
+{ type: "save"; file: string; text: string } | 
+/**
+ *  One file every agent reads. `remove` lists overrides or extra files the person chose to
+ *  remove (each is backed up). `agents` limits which agents get a file; `None` means the
+ *  installed ones.
+ */
+{ type: "universal"; source: string; content: InstructionsContent; remove: string[]; agents: string[] | null } | 
+/**
+ *  Separate files: imports become full copies, links become files, managed copies stop
+ *  being managed. Text stays as it is.
+ */
+{ type: "per_agent" } | 
+/**  Put the source's text back into a managed copy that was edited by hand. */
+{ type: "restore"; file: string } | 
+/**  Take a hand-edited copy's text into the source and the other copies. */
+{ type: "adopt"; file: string } | 
+/**  Rename a file spelled with other letter case to the agents' spelling. */
+{ type: "rename"; file: string };
+
+/**  Where a switch to Universal takes the shared text from. */
+export type InstructionsContent = 
+/**  Keep the source file's text. */
+{ type: "source" } | 
+/**  Use this file's text. */
+{ type: "file"; file: string } | 
+/**  Join every distinct text, the source's first. */
+{ type: "combine" };
+
+export type InstructionsEncoding = {
+	bom: boolean,
+	line_ending: InstructionsLineEnding,
+	/**  Mixed files are written with CRLF when CRLF lines are the majority. */
+	crlf_majority: boolean,
+};
+
+export type InstructionsFile = {
+	key: string,
+	/**  Display path: `AGENTS.md`, `~/.codex/AGENTS.md`. */
+	path: string,
+	kind: InstructionsFileKind,
+	/**  The spelling on disk when it differs from the agents' spelling (`agents.md`). */
+	disk_name: string | null,
+	/**  The file a link points to. */
+	link_to: string | null,
+	/**  LF text without a byte order mark; only for editable files. */
+	text: string | null,
+	encoding: InstructionsEncoding | null,
+	bytes: number,
+	lines: number,
+	revision: string | null,
+	read_only: boolean,
+	empty: boolean,
+	editable: boolean,
+	/**  The file only imports this one (`@AGENTS.md`). */
+	import_of: string | null,
+	/**  Every `@path` import, as written. */
+	imports: string[],
+	managed: InstructionsManaged | null,
+	/**  Identical text to this file without being recorded as a managed copy. */
+	copy_of: string | null,
+	/**  Agent ids that load this file here. */
+	readers: string[],
+	git: InstructionsGitState | null,
+	/**  One sentence when the file needs attention or cannot be edited here. */
+	note: string | null,
+};
+
+export type InstructionsFileKind = "missing" | "file" | 
+/**  A symbolic link to another instruction file in the same folder. Edits go to its target. */
+"link" | 
+/**  The same file as another instruction file (a hard link). */
+"hard_link" | 
+/**
+ *  A link that leaves the folder, a linked parent folder, or a link to another kind of file.
+ *  auracode never follows it.
+ */
+"outside" | 
+/**  A link whose target does not exist. Agents read nothing there; auracode never writes it. */
+"dangling" | "directory" | 
+/**  Not UTF-8 text. Copies stay byte-identical; editing happens in another editor. */
+"not_text" | 
+/**  Over 1 MiB, the editor's limit. */
+"too_large" | 
+/**  Two spellings that differ only by case exist side by side. */
+"ambiguous" | "unreadable";
+
+export type InstructionsGitState = "tracked" | 
+/**  Tracked, with changes not committed. New worktrees get the committed version. */
+"modified" | "untracked" | "ignored";
+
+export type InstructionsLineEnding = 
+/**  No line break yet, or only LF. */
+"lf" | "crlf" | 
+/**  Both kinds. A save uses the more common one and the review says so. */
+"mixed";
+
+export type InstructionsManaged = {
+	source: string,
+	/**  The copy no longer matches what auracode wrote. */
+	edited: boolean,
+	/**  The source changed since the copy was written. */
+	source_changed: boolean,
+};
+
+export type InstructionsMode = 
+/**  No agent reads an instruction file here yet. */
+"none" | 
+/**  Every agent that reads something reads the same text. */
+"universal" | 
+/**  Agents read different text. */
+"per_agent";
+
+export type InstructionsNestedFile = {
+	/**  Display path relative to the project folder (`packages/api/AGENTS.md`), or a parent path. */
+	path: string,
+	bytes: number,
+	readers: string[],
+};
+
+export type InstructionsReview = {
+	id: string,
+	title: string,
+	summary: string,
+	files: InstructionsReviewFile[],
+	notes: string[],
+	/**  Overrides or extra files the person may choose to remove (each is backed up). */
+	optional_removals: string[],
+};
+
+export type InstructionsReviewFile = {
+	key: string,
+	path: string,
+	action: InstructionsAction,
+	before: string | null,
+	after: string | null,
+	/**  How this file serves its agents afterwards: "Imports AGENTS.md", "Managed copy of AGENTS.md". */
+	how: string | null,
+	notes: string[],
+	/**  The replaced text is backed up in auracode's data folder. */
+	backup: boolean,
+};
+
+/**  Which folder a snapshot covers. */
+export type InstructionsScope = 
+/**  A project folder (or a worktree chat's worktree). */
+"project" | 
+/**  Each agent's user-level file. */
+"global";
+
+export type InstructionsSnapshot = {
+	scope: InstructionsScope,
+	/**  The project folder as a display path; `None` for the global scope. */
+	folder: string | null,
+	mode: InstructionsMode,
+	/**  The universal source when the mode is universal. */
+	source: string | null,
+	/**  The file a switch to Universal keeps the shared text in. */
+	default_source: string | null,
+	/**  Files that may hold the universal text at this scope. */
+	source_choices: string[],
+	files: InstructionsFile[],
+	agents: InstructionsAgent[],
+	/**  Files with different text that a switch to Universal must reconcile. */
+	conflict: string[],
+	/**  Instruction files in subfolders, shown read-only. */
+	nested: InstructionsNestedFile[],
+	/**  Instruction files in parent folders that agents also load. */
+	parents: InstructionsNestedFile[],
+	notices: string[],
+	git_repository: boolean,
+	/**  The worktree's branch when this folder is a worktree chat's own folder. */
+	worktree_branch: string | null,
+	/**  Hash over every file's state, for refreshing after outside edits. */
+	revision: string,
+};
+
+/**
+ *  What the Instructions surface is open on. The host resolves it to folders; the interface
+ *  never sends a path.
+ */
+export type InstructionsTarget = 
+/**  Each agent's user-level file. */
+{ type: "global" } | 
+/**  A project folder on this device. */
+{ type: "folder"; folder_id: string } | 
+/**  A chat's own folder: its worktree for a worktree chat. */
+{ type: "chat"; chat_id: string };
 
 export type IsolationInput = {
 	slug: string,

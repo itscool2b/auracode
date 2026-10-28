@@ -1,4 +1,3 @@
-import { PixelLoader } from "@auracode/ui/graphite";
 import { ArrowLeft, ChevronDown, RefreshCw } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { AgentEntry } from "../../bindings";
@@ -107,7 +106,9 @@ export function AgentsScreen({
             onClick={refresh}
           >
             {state.agentsRefreshing ? (
-              <PixelLoader size={14} tempo="tool" />
+              <span className="agents-refreshing" aria-hidden="true">
+                <span className="ui-pulse" />
+              </span>
             ) : (
               <RefreshCw size={14} aria-hidden="true" />
             )}
@@ -116,7 +117,7 @@ export function AgentsScreen({
         </div>
         {agents === null ? (
           <div className="agent-list-empty" role="status">
-            <PixelLoader size={16} tempo="thinking" />
+            <span className="ui-pulse" aria-hidden="true" />
             <p>Looking for agents…</p>
           </div>
         ) : (

@@ -692,6 +692,20 @@ async fn network_paths_are_held_unprobed_and_bare_names_use_the_path_lookup() {
                     "{name}: {hold:?}"
                 );
                 assert!(!review.preview.can_apply);
+                // Retaining it as skipped must not lift the command path hold.
+                review.retain_skipped(&port).await.unwrap();
+                let again = prepare_review(&port, &scanner, id, ConfigChoice::Automatic)
+                    .await
+                    .unwrap();
+                assert!(
+                    matches!(
+                        again.preview.item.hold,
+                        Some(ConfigHold::ForeignPath { .. })
+                    ),
+                    "{name} retained: {:?}",
+                    again.preview.item.hold
+                );
+                assert!(!again.preview.can_apply);
             }
             "node" => assert_eq!(hold, None, "{name}"),
             _ => assert!(

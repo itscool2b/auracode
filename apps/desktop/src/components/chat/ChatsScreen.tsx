@@ -1,15 +1,16 @@
 import { PanelLeft } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { AppInfo, ProjectSummary } from "../../bindings";
+import type { AppInfo, InstructionsTarget, ProjectSummary } from "../../bindings";
 import { type AppStore, NewChatDraft } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
 import { navigationTarget } from "../../lib/nativeNavigation";
 import { preselectAgent, type SetupApi, setupApi } from "../../lib/setup";
 import { TerminalPanels } from "../../lib/terminalPanel";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
+import { PANE_SWIMMERS, Water } from "../Water";
 import { Banners } from "./Banners";
 import { ChatActionsDialog } from "./ChatActionsDialog";
-import { ChatList } from "./ChatList";
+import { ChatList, projectName } from "./ChatList";
 import { ChatView } from "./ChatView";
 import { CommandPalette, type PaletteCommand } from "./CommandPalette";
 import { NewChat } from "./NewChat";
@@ -60,6 +61,7 @@ export function ChatsScreen({
   onDiagnostics,
   onAgents,
   onSettings,
+  onInstructions,
   active = true,
   workspace,
   openChatRequest,
@@ -73,6 +75,8 @@ export function ChatsScreen({
   readonly onDiagnostics: () => void;
   readonly onAgents?: () => void;
   readonly onSettings?: () => void;
+  /** Opens Settings' Instructions on a scope: global, a project folder, or a chat's folder. */
+  readonly onInstructions?: (target: InstructionsTarget, chatLabel?: string) => void;
   readonly active?: boolean;
   readonly workspace?: WorkspaceStore;
   readonly openChatRequest?: { id: string };
@@ -212,6 +216,7 @@ export function ChatsScreen({
         <SidebarFooter profile={info.profile} onSettings={onSettings} />
       </aside>
       <main className="chat-main">
+        {selected === null ? <Water className="pane-water" swimmers={PANE_SWIMMERS} /> : null}
         <div className="chat-drag" data-tauri-drag-region="" />
         <Banners
           storage={snapshot.storage}
@@ -277,6 +282,34 @@ export function ChatsScreen({
                     detail: "Preferences and application updates",
                     run: onSettings,
                   },
+                ]
+              : []),
+            ...(onInstructions
+              ? [
+                  {
+                    id: "instructions",
+                    title: "Edit instructions",
+                    detail: "Your user files: one for every agent or one per agent",
+                    run: () => onInstructions({ type: "global" }),
+                  },
+                  ...(selected !== null
+                    ? [
+                        {
+                          id: "chat-instructions",
+                          title: "Edit this chat's instructions",
+                          detail: "AGENTS.md and CLAUDE.md in the chat's folder",
+                          run: () => {
+                            const chat = liveById.get(selected);
+                            onInstructions(
+                              { type: "chat", chat_id: selected },
+                              chat
+                                ? `This chat: ${projectName(chat.folder)}`
+                                : "This chat's folder",
+                            );
+                          },
+                        },
+                      ]
+                    : []),
                 ]
               : []),
             {
@@ -347,6 +380,14 @@ export function ChatsScreen({
           transport={transport}
           agents={snapshot.agents}
           onClose={() => setProjectDialog(null)}
+          onInstructions={
+            onInstructions
+              ? (folderId) => {
+                  setProjectDialog(null);
+                  onInstructions({ type: "folder", folder_id: folderId });
+                }
+              : undefined
+          }
         />
       ) : null}
       {optionsEntry && workspace ? (

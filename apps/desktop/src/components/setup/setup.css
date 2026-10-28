@@ -1,8 +1,8 @@
 /*
- * Setup and its dialogs in Graphite (docs/design/visual-language.md, 6.17). First run is one calm,
- * centred column (Grok's start screen) on black; the live dither field gathers at the window's
- * sides and thins to black behind the column, as on the website's hero. Every colour, size and
- * duration is a --g-* token; text sits only where the field has cleared to black.
+ * Setup and its dialogs in Graphite (docs/design/visual-language.md, 6.17). First run is Shallows:
+ * the window is lit water seen from below, seals and turtles pass behind one calm card (Grok's
+ * start screen, Aside's soft panel), and the card holds every step. Every colour, size and
+ * duration is a --g-* token or a named app value; text sits only on the card's opaque fill.
  */
 
 /* ------------------------------------------------------------------------ shell */
@@ -16,12 +16,6 @@
   background-color: var(--g-bg);
   scrollbar-width: thin;
   scrollbar-color: var(--g-line-strong) transparent;
-}
-
-.setup-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
 }
 
 .setup-drag {
@@ -56,23 +50,46 @@
   visibility: hidden;
 }
 
-/* ------------------------------------------------------------ the centred column */
+/* --------------------------------------------------------------- the card */
 
-/* The heading holds one place on every step; only what follows it changes. */
+/*
+ * One card over the water (Aside's soft panel), its top anchored so the heading holds one place on
+ * every step and only what follows it grows. The fill is opaque, a step under the water's deepest
+ * grey; a hairline rim, a faint lit top edge and one long soft shadow lift it off the water.
+ */
 .setup-column {
   position: relative;
   z-index: 1;
   box-sizing: border-box;
-  width: min(480px, calc(100% - var(--g-space-48)));
-  margin: 0 auto;
-  padding: clamp(var(--g-space-128), 24vh, var(--g-space-160) + var(--g-space-48)) 0
+  width: min(560px, calc(100% - var(--g-space-48)));
+  margin: clamp(var(--g-space-96), 20vh, var(--g-space-160) + var(--g-space-24)) auto
     var(--g-space-64);
+  padding: var(--g-space-40);
+  border-radius: var(--ui-card-radius);
+  background-color: var(--ui-card-fill);
+  box-shadow: var(--ui-card-shadow);
 }
 
-/* Progress: four pixels; the current step stretches into a bar. */
+/* The card rises out of the water as the intro hands over, and when setup opens again. */
+.setup-shell:not([data-cinematic]) .setup-column {
+  animation: setup-card-in var(--g-dur-headline) var(--g-ease-quint) var(--ui-card-in-at) both;
+}
+
+@keyframes setup-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Progress: four soft bars; the steps behind fill grey, the current one fills white. */
 .setup-progress ol {
   display: flex;
-  margin: 0 0 var(--g-space-24);
+  margin: calc(var(--g-space-8) * -1) 0 var(--g-space-24);
   padding: 0;
   list-style: none;
 }
@@ -81,7 +98,7 @@
   display: grid;
   align-items: center;
   justify-items: start;
-  width: 24px;
+  width: 28px;
   height: 20px;
   padding: 0;
   border: 0;
@@ -95,27 +112,44 @@
 }
 
 .setup-progress-step > span {
-  width: 16px;
-  height: 6px;
-  background-color: var(--g-fg-4);
-  transform: scaleX(0.375);
+  position: relative;
+  width: 24px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--g-radius-pill);
+  background-color: var(--g-line-strong);
+  transition: background-color var(--g-dur-fast) var(--g-ease);
+}
+
+/* The fill sweeps in from the left when a step is reached, and back out when it is left. */
+.setup-progress-step > span::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-color: var(--g-fg-1);
+  transform: scaleX(0);
   transform-origin: left center;
   transition:
-    background-color var(--g-dur-fast) var(--g-ease),
-    transform var(--g-dur-panel) var(--g-ease-quint);
+    transform var(--g-dur-step) var(--g-ease-quint),
+    background-color var(--g-dur-fast) var(--g-ease);
 }
 
-.setup-progress-step:where([data-state="done"]) > span {
+.setup-progress-step:where([data-state="done"]) > span::after {
   background-color: var(--g-fg-3);
+  transform: none;
 }
 
-.setup-progress-step:where([data-state="current"]) > span {
-  background-color: var(--g-fg-1);
+.setup-progress-step:where([data-state="current"]) > span::after {
   transform: none;
 }
 
 @media (hover: hover) {
   .setup-progress-step:where(:not(:disabled):hover) > span {
+    background-color: var(--g-fg-4);
+  }
+
+  .setup-progress-step:where([data-state="done"]:not(:disabled):hover) > span::after {
     background-color: var(--g-fg-1);
   }
 }
@@ -231,20 +265,20 @@
 @media (hover: hover) {
   .setup-folder:hover:not(:disabled) {
     border-color: var(--g-fg-4);
-    background-color: var(--g-surface-1);
+    background-color: var(--g-surface-2);
     color: var(--g-fg-1);
   }
 }
 
 .setup-folder:active:not(:disabled) {
-  background-color: var(--g-surface-2);
+  background-color: var(--g-surface-3);
   transition-duration: 0ms;
 }
 
 .setup-folder[data-chosen] {
   border-style: solid;
   border-color: var(--g-line-strong);
-  background-color: var(--g-surface-1);
+  background-color: var(--g-surface-2);
   color: var(--g-fg-1);
 }
 
@@ -348,7 +382,7 @@
   padding: var(--g-space-12) var(--g-space-16);
   border-left: 2px solid var(--g-red);
   border-radius: 0 var(--g-radius-8) var(--g-radius-8) 0;
-  background-color: var(--g-surface-1);
+  background-color: var(--g-surface-2);
   color: var(--g-fg-1);
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
@@ -402,25 +436,221 @@
   transition-duration: var(--g-dur-base);
 }
 
-.setup-intro-field {
+/*
+ * The stage is a point on the window, a little above the middle where the water is still light
+ * enough to see the silhouettes against. Everything on it is centred on that point, so the
+ * animations carry only their own motion.
+ */
+.setup-intro-stage {
+  --intro-logo: clamp(96px, 14vh, 128px);
   position: absolute;
-  inset: 0;
+  top: 38%;
+  left: 50%;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  transition:
+    opacity var(--g-dur-base) var(--g-ease-out),
+    transform var(--g-dur-reveal) var(--g-ease-quint);
+}
+
+/*
+ * Handing over, the mark and the word lift a little and are gone before the card rises; the water
+ * underneath is setup's own, so nothing else changes.
+ */
+.setup-intro[data-leaving] .setup-intro-stage {
+  opacity: 0;
+  transform: translateY(calc(var(--g-space-12) * -1));
+}
+
+.setup-intro[data-leaving="fast"] .setup-intro-stage {
+  transition-duration: var(--g-dur-base);
+}
+
+.setup-intro-mark {
+  position: absolute;
+  top: calc(var(--intro-logo) / -2);
+  left: calc(var(--intro-logo) / -2);
+  width: var(--intro-logo);
+  height: var(--intro-logo);
+  color: var(--g-fg-1);
+}
+
+.setup-intro-mark > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .setup-intro-word {
   position: absolute;
-  z-index: 2;
-  padding: 0 var(--g-space-6);
-  background-color: var(--g-bg);
+  top: calc(var(--intro-logo) / 2 + var(--g-space-24));
+  left: 0;
   transform: translateX(-50%);
   white-space: nowrap;
 }
 
-.setup-intro-word > span {
-  display: inline-block;
-  animation-delay: 0ms;
+.setup-intro-word > .g-wordmark {
+  transform-origin: 50% 100%;
 }
 
+/*
+ * A swimmer: a dark silhouette centred on the stage from its own aspect. The outer span glides,
+ * the inner one pitches and shrinks, so the glide keeps one long eased stroke while the settle
+ * comes late.
+ */
+.setup-intro-swimmer {
+  --swimmer-w: calc(var(--intro-logo) * 2.6);
+  --swimmer-aspect: 0.40625;
+  position: absolute;
+  top: calc(var(--swimmer-w) * var(--swimmer-aspect) / -2);
+  left: calc(var(--swimmer-w) / -2);
+  width: var(--swimmer-w);
+  color: var(--g-bg);
+  will-change: transform, opacity;
+}
+
+.setup-intro-swimmer[data-kind="turtle"] {
+  --swimmer-w: calc(var(--intro-logo) * 1.6);
+  --swimmer-aspect: 0.91667;
+}
+
+.setup-intro-body {
+  display: block;
+  will-change: transform;
+}
+
+.setup-intro-body > .g-creature {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/*
+ * Live: the water lights up from black and its light opens down from the surface; the seal and
+ * the turtle glide in from either side and slow as they meet, nose up and shrink into the places
+ * the logo's animals take, and fade as the logo forms out of them; then the word rises.
+ * Transform and opacity only.
+ */
+.setup-intro[data-mode="live"] .setup-intro-water {
+  animation: setup-intro-water var(--ui-intro-light) var(--g-ease-out) both;
+}
+
+.setup-intro[data-mode="live"] .setup-intro-water > .g-shallows-light {
+  transform-origin: 50% 0;
+  animation: setup-intro-light var(--ui-intro-light) var(--g-ease-quint) both;
+}
+
+.setup-intro[data-mode="live"] .setup-intro-swimmer {
+  animation:
+    setup-intro-glide var(--ui-intro-glide) var(--ui-ease-glide) var(--ui-intro-glide-at) both,
+    setup-intro-swim var(--ui-intro-glide) linear var(--ui-intro-glide-at) both;
+}
+
+.setup-intro[data-mode="live"] .setup-intro-body {
+  animation: setup-intro-settle var(--ui-intro-glide) var(--g-ease-in-out) var(--ui-intro-glide-at)
+    both;
+}
+
+/*
+ * They come in on diagonals, so they only meet once they are small: the seal from high on the left,
+ * nose a little down, and the turtle from low on the right, facing left and nosing up.
+ */
+.setup-intro-swimmer[data-kind="seal"] {
+  --from-x: -56vw;
+  --from-y: -15vh;
+  --to-x: calc(var(--intro-logo) * 0.14);
+  --to-y: calc(var(--intro-logo) * -0.06);
+  --from-turn: 9deg;
+  --to-turn: -34deg;
+  --to-scale: 0.3;
+}
+
+.setup-intro-swimmer[data-kind="turtle"] {
+  --from-x: 56vw;
+  --from-y: 17vh;
+  --to-x: calc(var(--intro-logo) * -0.2);
+  --to-y: calc(var(--intro-logo) * 0.25);
+  --from-turn: 12deg;
+  --to-turn: 4deg;
+  --to-scale: 0.3;
+}
+
+.setup-intro[data-mode="live"] .setup-intro-mark {
+  animation: setup-intro-form var(--ui-intro-form) var(--g-ease-out) var(--ui-intro-form-at) both;
+}
+
+.setup-intro[data-mode="live"] .setup-intro-word > .g-wordmark {
+  animation: g-rise var(--g-dur-headline) var(--g-ease-quint) var(--ui-intro-word-at) both;
+}
+
+@keyframes setup-intro-water {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes setup-intro-light {
+  from {
+    opacity: 0;
+    transform: scaleY(0.35);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes setup-intro-glide {
+  from {
+    transform: translate(var(--from-x), var(--from-y));
+  }
+  to {
+    transform: translate(var(--to-x), var(--to-y));
+  }
+}
+
+/* Full size for the first third of the stroke, then the settle into the mark. */
+@keyframes setup-intro-settle {
+  0%,
+  32% {
+    transform: rotate(var(--from-turn));
+  }
+  100% {
+    transform: rotate(var(--to-turn)) scale(var(--to-scale));
+  }
+}
+
+@keyframes setup-intro-swim {
+  0% {
+    opacity: 0;
+  }
+  14% {
+    opacity: 1;
+  }
+  74% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes setup-intro-form {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Over the water: a quiet pill with the Escape keycap, at the window's foot. */
 .setup-skip-intro {
   position: fixed;
   right: 32px;
@@ -428,7 +658,7 @@
   z-index: 31;
   gap: var(--g-space-8);
   border-color: var(--g-line-strong);
-  background-color: var(--g-bg);
+  background-color: var(--g-surface-1);
   color: var(--g-fg-2);
 }
 
@@ -626,7 +856,7 @@
   box-shadow: inset 0 0 0 1px var(--g-line);
 }
 
-.setup-clone-dialog .clone-command {
+:is(.setup-clone-dialog, .setup-column) .clone-command {
   background-color: var(--g-bg);
 }
 
@@ -986,12 +1216,16 @@ html[data-motion="off"] * {
 @media (prefers-reduced-motion: reduce) {
   .setup-content,
   .setup-project-saved,
-  .setup-intro-word > span {
+  .setup-shell:not([data-cinematic]) .setup-column,
+  .setup-intro *,
+  .setup-intro[data-mode="live"] .setup-intro-water > .g-shallows-light {
     animation: none;
   }
 
   .setup-intro,
-  .setup-progress-step > span {
+  .setup-intro-stage,
+  .setup-progress-step > span,
+  .setup-progress-step > span::after {
     transition: none;
   }
 }
@@ -1005,7 +1239,8 @@ html[data-motion="off"] * {
 
   .setup-column {
     width: calc(100% - var(--g-space-32));
-    padding-top: calc(var(--ui-titlebar-height) + var(--g-space-80));
+    margin-top: calc(var(--ui-titlebar-height) + var(--g-space-48));
+    padding: var(--g-space-24);
   }
 
   .setup-heading {

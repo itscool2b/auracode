@@ -97,6 +97,7 @@ impl SessionManager {
                 source: path,
                 save: None,
                 folder_id: Some(input.folder_id.clone()),
+                folder_save: false,
             })
             .await
             .map_err(|error| storage_error(&error))?

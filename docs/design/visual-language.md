@@ -968,10 +968,14 @@ treatment changes.
 ### 6.1 Window and titlebar
 
 The window is `--g-bg` (the native window is painted black, no vibrancy, no Mica). The sidebar sits
-on it with no fill. The main pane is surface-1, radius 12, 1px line ring, inset 8px from the
-window's top, right and bottom and from the sidebar; with the right panel open the main pane
-narrows and the panel pane (surface-1, 380 wide, 320 to 560 by dragging the 8px gutter, arrow keys
-in 20px steps while it has focus) sits 8px to its right. The top 52px is the drag region; macOS
+on it with no fill. The main pane is Shallows' inset panel (owner decision 2026-10-28): surface-1,
+radius 16 (`--ui-pane-radius`), inset 8px from the window's top, right and bottom and from the
+sidebar, with a calm rim drawn outside it (1px `--g-line-faint`, so nothing inside can cover it),
+its top edge lit one step brighter (an inset 1px `--g-line`), and a faint light falling from the
+top under the content (a 2% white radial, 280px deep, never over a word). Settings and Diagnostics
+draw the same pane. With the right panel open the main pane narrows and the panel pane (surface-1,
+the same radius and rim, 380 wide, 320 to 560 by dragging the 8px gutter, arrow keys in 20px steps
+while it has focus) sits 8px to its right. The top 52px is the drag region; macOS
 traffic lights at x 18 to 70; Windows caption buttons are 46x52 hit areas with 10px fg-2 glyphs,
 hover surface-3, close hover red with a black glyph. No title text in the band. Under 880px of chat
 width the panel floats over the chat with the shadow.
@@ -980,7 +984,11 @@ width the panel floats over the chat with the shadow.
 
 264px, 12px insets, rows 240 wide, Grok's order. Every row's icon or square starts at x 20 and its
 words at x 44; rows sit 4px apart. One row style: 14/20 fg-2 at rest, a surface-2 fill and fg-1
-under the hand, surface-3 while pressed.
+under the hand, surface-3 while pressed. The fill is a layer under the words that fades in (150ms)
+and grows from 96% (300ms quint), so the hand lands softly; the open chat's surface-3 fill settles
+in under the row it moves to and eases out of the one it leaves. A chat that appears while the list
+is open (new, moved in, synced) drops into place from 6px above and fades in once (650ms quint);
+the rows already there never move.
 
 1. Band (52px, drags the window): only the 28px collapse toggle at the right (⌘\), Grok's; the
    band's left stays empty for the macOS traffic lights. The logo lives in the footer.
@@ -1150,8 +1158,10 @@ field. Footer: the pager, "Skip" ghost, "Continue" primary (⌘ Enter). Answers 
 ### 6.9 Composer
 
 Grok's pill: the message on top, one row of controls under it, and never more than four controls
-besides the box. Shell: 720 wide, 16px above the pane's bottom, surface-2, radius 16, 1px
-line-strong ring (fg-4 while focused, fg-3 when the box is reached from the keyboard); no shadow.
+besides the box. Shell: 720 wide, 16px above the pane's bottom, surface-2, radius 20, floating on
+the pane (Shallows): a soft 1px rim (white at 7%) lit along its top edge, and one long shadow under
+it (`--ui-composer-shadow`); focus within brightens the rim to 16%, and the box reached from the
+keyboard lights it to fg-3.
 Segments above it in the dock: queue, handoff, notices. Input: padding 16 16 8, prose 15/24,
 placeholder fg-3 ("Message Claude Code"; while running "Queue a message for Claude Code"), grows to
 240px. Attachments and mentions sit on top inside the pill as 28px surface-3 chips. Control row
@@ -1165,6 +1175,16 @@ typed, Stop steps back to a soft disc and the send control becomes one 32px surf
 messages only between turns (Claude Code, Pi) has "After this turn" in fg-2 words where Steer
 would be, never a dead control; the disc still queues. Cancelling: the red "Force stop" pill.
 `@` mentions a project file and `/` lists commands; both open menus above the shell.
+
+**Small-space motion** (motion.css; transform, `translate` and opacity only, all still under
+reduced motion): every button settles to 97% while pressed, at once, and eases back over 150ms;
+the agent chip and New chat's agent pills give the same way. The one white action on a screen (a
+primary pill, the ready send disc) is magnetic: it leans up to 3px toward a fine pointer at its edge
+(half that vertically) through `translate`, and eases home over 300ms when the pointer leaves
+(`lib/magnetic.ts`); layout never moves and its centre stays under the hand. When the disc turns
+white its arrow lifts 3px into place once. Popovers grow out of their trigger from 96% on the panel
+quint (200ms): the composer's upward from their left edge, the header menu and the worktree chip's
+downward from their own corner. Tooltips rise 2px as they fade in.
 
 ### 6.10 Pickers (agent, model, effort)
 
@@ -1209,17 +1229,30 @@ below, the composer; 24px below that, up to three 36px ledger rows of recent cha
 the removal count in mono; "No changes" fg-3; "Needs you" volt; "Failed" red; "Working for 3m" with
 the loader), age in mono 12 fg-3. Switching agent rises the new name per word and runs the glint
 once; first paint does neither. No folder: "**Claude Code** is ready." with an outline "Choose a
-folder" (⌘ O).
+folder" (⌘ O). A chat with nothing in it yet keeps New chat's lit water and swimmers behind its
+transcript and composer.
+
+**Lit water (Shallows, owner decision 2026-10-28)**: New chat and an empty chat fill the pane with
+`Shallows` (the falloff from `--g-water-surface` to `--g-water-deep`, the soft top light, the
+pane's lit top edge) and two `Swimmers` (`PANE_SWIMMERS` in `components/Water.tsx`): a seal high at
+the left (152 to 232px wide, 6px/s) and a far turtle at the right (88 to 116px, depth 0.45,
+4px/s), slower than setup's because the person works here. They never yield to the pointer (the
+hand lives on the card) and the layer takes no pointer events, so nothing behind the composer ever
+moves because of the hand; reduced motion holds them still. No texture, no dither, no space. They
+are the screen's only ambient motion (section 7) and never swim behind a transcript with messages.
 
 **New chat** (before a chat exists) follows Grok's start screen: the 40px logo centred, one two-tone
 display line ("What are we working on?", then "**Claude Code** is ready in **auracode**.",
 "Looking for **Codex**." or "**Codex** needs you to sign in."), one 15/24 fg-3 hint, and one
-composer card (surface-2, radius 16, line-strong ring) anchored at 18vh so nothing above it moves.
-The card's first row holds the agents that can run here as 32px pills over native radios, each with
-its 24px round `AgentMark`: the walking loader while the agent is still detected (name in fg-3), its
-code once found (the mark settles in once over 250ms `--g-ease-out`; never on first paint or under
-reduced motion), the volt square once a sign-in check says it needs you; the selected pill is
-surface-4 with an fg-3 ring. Refresh is a ghost icon at the row's end. The second row holds the
+composer card anchored at 18vh so nothing above it moves. The card floats on the water like the
+composer (6.9): surface-2, radius 20, the soft rim lit along its top and one long shadow; a keyboard
+inside it brightens the rim. It arrives in three soft steps, the hero, the card and what is under
+it, each an 8px rise over 340ms 70ms apart, once per New chat. The card's first row holds the agents
+that can run here as 32px pills over native radios, each with its 24px round `AgentMark`: while the
+agent is still detected the mark waits at half opacity inside a soft ring that swells from it and
+fades every 1.6s (6.17a; name in fg-3), its code once found (the mark settles in once over 250ms
+`--g-ease-out`; never on first paint or under reduced motion), the volt square once a sign-in check
+says it needs you; the selected pill is surface-4 with an fg-3 ring. Refresh is a ghost icon at the row's end. The second row holds the
 folder icon in the marks' column, the path in mono, the project folders, "Choose folder" (outline)
 and "Create" (the one primary). Under the card, on one 16px axis: the worktree chip row, the
 busy-folder well (Local only; one volt square and an explicit consent), the download note, errors,
@@ -1309,24 +1342,62 @@ destructive steps. Shortcuts is one keycap table. About: the 40px logo, "auracod
 in mono, then Updates (its phase, version and one next step; progress, notes and the install
 question open under it), This device, Diagnostics and Third-party notices.
 
-### 6.17 Onboarding and the dither intro
+### 6.16a Instructions
 
-**First launch intro** (once, skippable with any key, about 2.4s): the window opens black; a
-full-window DitherField (`standard`, density 0.45) starts live; from 200ms to 1400ms `progress` eases
-0 to 1 (`--g-ease-out`, order "radial") into `{ kind: "path", d: LOGO_PATH, height: 0.3 }`, so the
-field condenses into the logo; at 1400ms "auracode" rises under it (`Wordmark` text 32px, `.g-rise`);
-at 1800ms the field reveals (800ms) into step 1. Reduced motion: one still frame of the formed mark
-for 300ms, then step 1. Later launches skip it.
+Settings' Instructions page (docs/instructions.md), on Vercel's settings cards. One group of rows
+first: "Applies to" with a 220px select (your user files, each project folder, and the open chat's
+folder when opened from a chat) over the folder in mono, "Files" with the strong segmented control
+(One file, Per agent) and Rust's one sentence, and a row per hand-edited managed copy ("Edited copy
+for Pi", Resolve). Then "Text": per agent, the files as quiet mono pills (28px, the open one
+surface-3); the file's head (its path in mono, lines and size in 12/16 fg-3 tabular); its notes as
+12/16 lines led by a 6px circle (fg-3, or volt when it needs the person: a size limit, a file new
+worktree chats will miss, a case variant); a mono textarea at the code size, on the page black, at
+least 320px; and Vercel's card footer behind an inset hairline: who reads the file at left, then
+28px outline actions (Rename, Copy into new worktree chats, Commit), Discard (ghost) and Review
+changes, the page's one primary. Then "Agents": 60px rows of a 24px mark, the name and Rust's
+sentence, size warnings as volt-circle lines, and at right the status as a word led by a 6px
+circle (fg-3; volt for an edited copy, an override in the way, or nothing to read; a hollow fg-3
+ring for an agent without a file there). Status here is a circle, not a square (owner decision,
+2026-10-28). Agents that are not installed fold under "N agents not installed"; files in other
+folders fold the same way. The review is the large dialog: the title, Rust's sentence, a radio list
+of cards when a choice comes first (which text to keep, or restore against adopt), then each file
+as its action word, path in mono and role in fg-3 over its diff (4.9), optional removals as
+checkboxes in a well, the notes in 12/16 fg-3, then Cancel and Apply.
 
-**Layout** (Grok's start screen, the website hero's field): no sidebar. One centred column, 480
-wide (the window minus 48 when narrower), its top at `clamp(128px, 24vh, 208px)` so the heading
-holds one place on every step, over a window-wide DitherField (`quiet`, density 0.36, edges 0.85,
-ceiling 0.6, accent 0.001, `interactive`, still under reduced motion) that gathers at the sides and
-clears to black behind the column (an ellipse at least 520px from the centre) and along the top
-edge. `Wordmark` 16 top left and "Skip setup" (ghost) top right, just under the titlebar band.
+### 6.17 Onboarding and the Shallows intro
 
-**Progress**: four 6px pixels, fg-4 ahead, fg-3 done; the current one stretches to a 16px fg-1 bar
-over 300ms quint. Each is a 24px button that visits its step. No numerals, no checklist.
+**First launch intro** (once, skippable with Escape, Enter or Skip intro, inside setup's 1800ms
+hold; Shallows replaced the dither field on 2026-10-28): the window opens black and lights up like
+water seen from below, the `Shallows` falloff fading in over 900ms while its top light opens down
+from the surface. From 100ms a seal glides in from high on the left and a turtle (facing left) from
+low on the right, pure black silhouettes about 2.6 and 1.6 logo widths wide, on one long eased
+stroke each (1200ms, `--ui-ease-glide`, which arrives already moving and slows evenly). They come
+in on diagonals so they only meet once they are small: from a third of the way in they pitch (the
+seal noses up 34 degrees, as the sea lion in the logo sits up) and shrink to 30% into the places
+the logo's two animals take, fading over the last quarter as the logo (fg-1, `clamp(96px, 14vh,
+128px)`, 38% down the window) forms out of them from 90% over 520ms from 900ms. At 1220ms
+"auracode" rises under it (`Wordmark` text 32px, `g-rise`). At 1800ms the mark and the word lift
+12px and fade in 200ms while the intro's water hands over to setup's identical water underneath,
+and the card rises 180ms later. Every part is CSS keyframes on transform and opacity. Reduced
+motion, and every later launch: the formed mark still on the lit water (300ms on a first launch
+under reduced motion, 240ms later), then step 1. A sign-in link still opens Account over it.
+
+**Layout** (Grok's start screen on Aside's soft panel): no sidebar. The window is lit water
+(`Shallows` at `SETUP_WATER_DEPTH` 140%, fixed behind the scroll) with three `Swimmers`
+(`SETUP_SWIMMERS`): a large turtle at the left (168 to 296px, 7px/s), a seal at the right heading
+left (220 to 384px, 10px/s) and a small far turtle near the surface (88px, depth 0.6). They ease up
+to 22px out of a fine pointer's way through a smooth field and hold still under reduced motion.
+Every step sits on one card: 560 wide (the window minus 48 when narrower), padding 40 (24 under
+760px), radius 20, opaque `--g-water-low`, a hairline water rim with a lit top edge and one long
+soft shadow (`--ui-card-*`); its top at `clamp(96px, 20vh, 184px)` so the heading holds one place
+on every step. The card rises 12px from 98.5% and fades in over 650ms quint when setup opens.
+Inside it, hover and open fills step up one surface (surface-2) so they read on the card, and code
+wells step down to black. `Wordmark` 16 top left and "Skip setup" (ghost) top right, just under
+the titlebar band.
+
+**Progress**: four 24 by 4px rounded bars on a line-strong track; a fill sweeps in from the left
+over 600ms quint when a step is reached (fg-3 behind, fg-1 current) and back out when it is left.
+Each is a 28px button that visits its step. No numerals, no checklist.
 
 **Steps** (each skippable: Continue never requires anything; Enter continues outside controls):
 
@@ -1367,16 +1438,24 @@ saved at the retired motion step resumes at First project. The one primary is "G
 Vercel's project list. Back to chats and Run setup again (ghosts) on the top line; "Agents" in
 `.g-text-title` with "3 of 9 installed on this computer." under it and Refresh (outline) at right.
 One frame (a 1px line ring drawn over the rows, radius 12) of 60px rows on hairlines: a 32px `AgentMark`, the name 14/20 500
-over the version in mono 12/16 fg-3, the status in 12/16 (a 6px square and a word: green
-"Installed", volt "Needs sign-in", red "Unavailable", an fg-4 outline square and fg-3 "Not
-installed", fg-3 "Looking"), the date auracode last verified the integration in 12/16 fg-3
+over the version in mono 12/16 fg-3, the status in 12/16 (a 16px slot and a word: a green check
+in a green-tinted circle and "Installed", a volt dot and "Needs sign-in", a red dot and
+"Unavailable", an fg-4 ring and fg-3 "Not installed", the pulse and fg-3 "Looking"), the date auracode last verified the integration in 12/16 fg-3
 tabular, at most one outline 28 action (Install, Update or Sign in) and a kebab menu (plain rows,
 one divider) for the rest: Sign in, Check sign-in, Update, Installation guide, Copy path. A row
 opens its details on surface-1: the description, facts on hairlines (runs from, installed with,
-latest release, updates, verified) and the executable picker. Detection: the mark shows the pixel
-loader while an agent is looked for (the row's one live indicator); when it is found the status and
-version settle once (2px rise, 340ms reveal) and the green square scales in (250ms). Rows enter
-with `.g-enter`. Reduced motion: everything in place, the loader still. Install appears only for
+latest release, updates, verified) and the executable picker.
+
+**Detection** (setup's roster, Agents and New chat alike; Shallows' small-space motion): while an
+agent is looked for, its mark waits at 45% and the status slot holds one soft circular pulse
+(`.ui-pulse`: a 6px fg-3 dot that breathes to 80% and back while a 1px ring swells out of it to
+2.6 times and fades, every 1.6s on `--g-ease-in-out`), the row's one live indicator and never a
+spinner. Found: the mark comes up to full over 340ms, a green-tinted 16px circle grows into the
+slot from 40% (300ms ease-out) and its check follows 100ms later from half size with a slight turn,
+and the word and the version settle once (2px rise, 340ms reveal). Needs sign-in: the volt dot
+grows in. Unavailable: the red dot only fades in, so a failure stays calm. One 16px slot holds every
+state, so the word never moves. Rows enter with `.g-enter`, 70ms apart; Agents' Refresh and its
+first search show the same pulse. Reduced motion: everything in place, the pulse a still dot. Install appears only for
 the reviewed, version-pinned installers (Claude Code, Codex, Pi, OpenCode 1, Grok Build) and opens
 the TerminalSheet with the package, program, arguments and folder as rows before Start; Sign in
 appears only where the vendor's CLI has its own login (Claude Code, Codex, Cursor, Grok Build,
@@ -1406,7 +1485,9 @@ features are one 12/16 line. An item's preview and copy, and Copy history, open 
 Every dialog is 4.6's shell, in one of its three widths, on Vercel's transfer dialog: the title,
 one sentence saying what happens to what (the variables in fg-1 500), the details as key and value
 rows on hairlines or a hairline grid of versions, then `.g-dialog-actions`: Cancel (soft) and one
-primary, or the red pill for a removal. The TerminalSheet (sign-in, installs, vendor commands) is
+primary, or the red pill for a removal. A dialog lifts out of its scrim as it opens (8px and 97% to
+rest, 300ms quint) while the scrim fades in under it (200ms); banners and notices in the pane
+drift 4px into place once. The TerminalSheet (sign-in, installs, vendor commands) is
 the large dialog: its sentence says closing stops the process and output is not saved, the
 reviewed command as rows, a status line led by its mark (a still green square while running, the
 white check or red square after), the terminal well at 144px until Start and full height after,
@@ -1487,8 +1568,8 @@ another chat is open; closing a tab, reloading or quitting stops them. Nothing a
   accordion panel opening by `grid-template-rows` (300ms).
 - One live indicator animates at a time per row or card (a shimmer or a loader, not both). Shallows
   is the only ambient motion on a screen: on the website the hero, the capabilities panel, the
-  closing panel and the 404. Until its Shallows branch, the app shows the dither field only during
-  the first launch intro and behind the onboarding column, never behind the transcript.
+  closing panel and the 404; in the app the first launch intro, setup's window, New chat and an
+  empty chat (6.13, 6.17), never behind a transcript with messages in it. The app draws no dither.
 - All animation shares one `requestAnimationFrame` loop (`frameClock()`); offscreen, hidden and
   reduced-motion elements own no frame; swimmers move by transform only; DitherField caps at
   30fps.
