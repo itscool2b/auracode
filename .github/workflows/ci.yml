@@ -169,6 +169,11 @@ jobs:
         timeout-minutes: 5
         run: pnpm --filter @auracode/desktop exec node scripts/check-terminal-panel.mjs
 
+      - name: Check Delete all auracode data
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 5
+        run: pnpm --filter @auracode/desktop exec node scripts/check-delete-data.mjs
+
       - name: Check every preview's layout on the grid
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 15
@@ -199,6 +204,7 @@ jobs:
             target/folder-resolution-browser
             target/repository-publication-browser
             target/workspace-removal-browser
+            target/delete-data-browser
             target/agent-installations-browser
             target/setup-actions-browser
             target/sidebar-footer-browser
