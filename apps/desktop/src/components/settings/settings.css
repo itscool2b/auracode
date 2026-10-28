@@ -241,6 +241,19 @@ h1 + .settings-group {
   width: 220px;
 }
 
+/* The default agent: its mark 8px before the select, so the select keeps the model's column. */
+.settings-agent-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  min-width: 0;
+}
+
+.settings-agent-mark {
+  display: inline-flex;
+  flex: none;
+}
+
 /* A whole row that opens something (X Money's chevron rows). */
 .settings-link {
   display: flex;
