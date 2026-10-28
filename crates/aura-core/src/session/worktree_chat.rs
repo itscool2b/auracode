@@ -241,8 +241,10 @@ impl SessionManager {
                     warnings.extend(result.warning.clone());
                     setup = Some(result);
                 }
+                // The error is a sentence of its own; its full stop ends this one too.
                 Err(error) => warnings.push(format!(
-                    "The chat and worktree are ready, but setup did not run: {error}. Review setup from the chat's Git panel."
+                    "The chat and worktree are ready, but setup did not run: {}. Review setup from the chat's Git panel.",
+                    error.to_string().trim_end_matches('.')
                 )),
             }
         }
