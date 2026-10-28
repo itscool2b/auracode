@@ -867,7 +867,8 @@ impl<'a> Model<'a> {
             .filter(|index| relevant(*index))
             .map(|index| self.file_info(index, source, readers[index].clone()))
             .collect();
-        let mut notices = self.notices.clone();
+        let mut notices = self.context.notices.clone();
+        notices.extend(self.notices.iter().cloned());
         if let Some(parent) = &self.parent_claude {
             notices.push(format!(
                 "{parent} is in a parent folder, so Claude Code reads CLAUDE files here instead of AGENTS.md."

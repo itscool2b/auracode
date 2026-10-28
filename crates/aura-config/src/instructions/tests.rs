@@ -38,6 +38,7 @@ impl Fixture {
             git: GitFacts::default(),
             state_dir: self.state.clone(),
             codex_limit: None,
+            notices: Vec::new(),
         }
     }
 
@@ -51,6 +52,7 @@ impl Fixture {
             git: GitFacts::default(),
             state_dir: self.state.clone(),
             codex_limit: None,
+            notices: Vec::new(),
         }
     }
 
@@ -1056,6 +1058,28 @@ fn a_dangling_link_reads_as_nothing_and_is_never_written() {
     };
     assert!(prepare(&context, &save).is_err());
     assert!(!fixture.project.join("missing.md").exists());
+}
+
+#[test]
+fn a_configured_codex_limit_is_read_and_a_bad_config_falls_back_to_the_default() {
+    let fixture = setup();
+    let codex = fixture.home.join(".codex");
+    std::fs::create_dir_all(&codex).unwrap();
+    assert_eq!(codex_doc_limit(&codex), None);
+    std::fs::write(
+        codex.join("config.toml"),
+        b"model = \"x\"\nproject_doc_max_bytes = 65536\n",
+    )
+    .unwrap();
+    assert_eq!(codex_doc_limit(&codex), Some(65536));
+    std::fs::write(
+        codex.join("config.toml"),
+        b"project_doc_max_bytes = \"big\"\n",
+    )
+    .unwrap();
+    assert_eq!(codex_doc_limit(&codex), None);
+    std::fs::write(codex.join("config.toml"), b"[unclosed\n").unwrap();
+    assert_eq!(codex_doc_limit(&codex), None);
 }
 
 /// A folder link: a junction on Windows (no privileges needed), a symlink elsewhere.

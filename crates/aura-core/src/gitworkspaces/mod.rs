@@ -6,6 +6,7 @@ mod git;
 mod identity;
 mod initialize;
 mod inspect;
+mod instructions;
 mod new_chat;
 pub(crate) use new_chat::{NewChatPlan, NewChatRequest};
 #[cfg(test)]

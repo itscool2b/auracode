@@ -27,6 +27,19 @@ use specta::Type;
 pub use apply::ApplyResult;
 pub use text::{Encoding, LineEnding};
 
+/// What the Instructions surface is open on. The host resolves it to folders; the interface
+/// never sends a path.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case", rename = "InstructionsTarget")]
+pub enum Target {
+    /// Each agent's user-level file.
+    Global,
+    /// A project folder on this device.
+    Folder { folder_id: String },
+    /// A chat's own folder: its worktree for a worktree chat.
+    Chat { chat_id: String },
+}
+
 /// Which folder a snapshot covers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case", rename = "InstructionsScope")]
@@ -316,6 +329,21 @@ pub struct Context {
     pub state_dir: PathBuf,
     /// Codex `project_doc_max_bytes` when the person changed it.
     pub codex_limit: Option<usize>,
+    /// Sentences the host adds to the snapshot (a Git query that could not run).
+    pub notices: Vec<String>,
+}
+
+/// Codex's `project_doc_max_bytes` from `config.toml` in its home, when set. A missing, large or
+/// malformed file gives `None`, and the documented 32 KiB default applies.
+pub fn codex_doc_limit(codex_home: &Path) -> Option<usize> {
+    let dir = cap_std::fs::Dir::open_ambient_dir(codex_home, cap_std::ambient_authority()).ok()?;
+    let bytes = crate::safe_fs::read(&dir, "config.toml").ok()??;
+    let document = std::str::from_utf8(&bytes)
+        .ok()?
+        .parse::<toml_edit::DocumentMut>()
+        .ok()?;
+    let value = document.get("project_doc_max_bytes")?.as_integer()?;
+    usize::try_from(value).ok().filter(|value| *value > 0)
 }
 
 /// A reviewed change waiting for Apply. It expires after ten minutes.
