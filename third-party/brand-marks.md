@@ -1,9 +1,10 @@
 # Agent marks
 
 auracode shows each coding agent's own logo beside its name, in the desktop app and on
-auracode.si, wherever its maker publishes a mark that may be used to refer to its product. The
-marks live in `packages/ui/src/graphite/agent-logos/` and are drawn by `AgentMark` and `AgentLogo`
-(`packages/ui/src/graphite/`).
+auracode.si. The marks live in `packages/ui/src/graphite/agent-logos/` and are drawn by
+`AgentMark` and `AgentLogo` (`packages/ui/src/graphite/`). Five follow terms their makers publish
+for this kind of use; four (Claude Code, Grok Build, Antigravity, Hermes) are used at the owner's
+direction while the owner handles permissions with those vendors (2026-10-28).
 
 **These marks are trademarks of their respective owners.** They are not part of auracode, are not
 covered by auracode's license (whichever the owner chooses), and are not licensed to anyone who
@@ -22,6 +23,10 @@ Retrieved 2026-10-28. Hashes are SHA-256 of the file as downloaded.
 - **Never recoloured, dimmed, filtered, stretched, skewed, rotated or cropped.** Optical balance
   between marks uses uniform scaling only (`SCALE` in `agentLogos.ts`). A "not installed" agent
   keeps its mark at full strength in a dashed tile; the dashes and the words say it is missing.
+  One exception to "rotated": Nous Research's own site shows the Hermes wing turned 45 degrees, so
+  auracode draws it the same way (`TURN` in `agentLogos.ts`); the stored file stays upright, as
+  published. A mark published in `currentColor` (Grok's) takes auracode's foreground colour, as
+  it takes the foreground on its maker's site.
 - **Clear space.** A mark sits in the app's agent tile with an even margin (2px at 16px and below,
   about a sixth of the tile above that) and never touches other artwork or text; the agent's name
   sits beside the tile.
@@ -34,6 +39,60 @@ Retrieved 2026-10-28. Hashes are SHA-256 of the file as downloaded.
   never drawn over a mark.
 
 ## Marks in use
+
+### Claude Code: the Claude spark
+
+- File: `claude-code.svg`, from `Claude logos/3 Claude Spark/SVG/Claude Spark - Clay.svg` in
+  Anthropic's press kit, https://www.anthropic.com/press-kit (which serves
+  https://www-cdn.anthropic.com/ae59ca4ca194dac9c9dc3bc78c5829468cb0e8af.zip). Zip
+  `c68ac92df86c825f95177e24016fcc9a8863a3fd4ca344fe6f0700b2c1e07151`, SVG
+  `6d53db4be375e899c937c26cf16684a80d6e869b1928d72b37748bef2560e219`. The spark is published in
+  Clay (`#D97757`) only, so it is used in Clay. The kit's Claude Code logo is the spark beside the
+  words "Claude Code"; the spark alone is used because the name sits beside it. viewBox cropped
+  from `0 0 94 94` to `0.4 0.2 93.6 93.6`.
+- Used at the owner's direction; the owner is handling permissions with the vendor. Anthropic's
+  guidelines: https://www.anthropic.com/legal/trademark-guidelines (no changes of colour, font or
+  proportion; reasonable space around the mark; no implied sponsorship).
+
+### Grok Build: the Grok mark
+
+- File: `grok.svg`, the Grok mark exactly as xAI's own Grok page draws it (the inline SVG beside
+  "Grok" on https://x.ai/grok, read from the page as a browser loads it on 2026-10-28; two paths
+  in `currentColor`, viewBox `0 0 34 32`). Captured markup
+  `ba8b4ece6ce7f2019b89f3b1bab1d1a67fb5c94385363620ab91687d9e922ff4`, as SVG
+  `add74f0bb9fc082dac934027023b85b1d380a60c37f01226d4a9680615059eb6`. viewBox cropped to
+  `0.5 0 33.33 32`. xAI's logo download (https://data.x.ai/logos/SpaceXAI_Grok_Assets.zip) sits
+  behind a bot check that refuses automated retrieval; it was not worked around. xAI publishes no
+  separate Grok Build mark.
+- Used at the owner's direction; the owner is handling permissions with the vendor. xAI's
+  guidelines: https://x.ai/legal/brand-guidelines (accurate reference only; no endorsement; nothing
+  near the mark that makes a new mark; no sublicensing).
+
+### Antigravity: the Antigravity icon
+
+- File: `antigravity.svg`, from Google's Antigravity press page, https://antigravity.google/press
+  ("Icon - White"): https://antigravity.google/assets/image/brand/antigravity-icon__white.svg. SVG
+  `5b8121138dcb017642ccf15d9f5cda738e61d8d70a12277c9cf5aeec3e575e81`. viewBox cropped from
+  `0 0 180 180` to `22.5 28.125 134.33 123.75`.
+- Used at the owner's direction; the owner is handling permissions with the vendor. Google's brand
+  rules: https://partnermarketinghub.withgoogle.com/brands/google/branding-guidelines/how-to-show-googles-brand/.
+
+### Hermes: the Hermes wing
+
+- File: `hermes.svg`, the wing that the Hermes Agent site (https://hermes-agent.nousresearch.com/)
+  shows as its header logo:
+  https://web-assets.nousresearch.com/marketing/b45356e6366b289aa373bef2ad42d009711fc9e2/assets/hermes-landing/teams/hermes-wing.svg.
+  SVG `6ee276e9bff5a166c41bc8e80c6717c525cb9b9e81a1111348559452a711e8cd`. Its two paths and
+  colours (`#F2F2F2`, `#0000F2`) are kept; the group's even-odd rules moved onto the paths, and
+  its clip, a rectangle the size of the viewBox, was dropped (it trims under 0.2% of the
+  artwork's height). viewBox unchanged. The site turns it 45 degrees, and so does auracode.
+- This is Nous Research's logomark for Hermes Agent. The repository's other marks
+  (https://github.com/NousResearch/hermes-agent/tree/main/assets, the figure on `nous-girl-*.svg`
+  and `icon-master*.svg`) are detailed illustrations that do not read under 32px. The wing reads
+  as a wing from 24px; at 14 and 16px it is a small blue stroke, the smallest it can be drawn.
+  The file is about 51 KB because the engraving is traced to pixel steps.
+- Used at the owner's direction; the owner is handling permissions with the vendor. Nous
+  Research's terms: https://portal.nousresearch.com/terms (12.1).
 
 ### Codex: the OpenAI Blossom
 
@@ -100,20 +159,20 @@ Retrieved 2026-10-28. Hashes are SHA-256 of the file as downloaded.
   canonical before a public release. Repository license MIT, which covers the code, not the
   trademark.
 
-## Agents that keep their two-letter code
+## Agents without a mark
 
-| Agent | Code | Why |
-|---|---|---|
-| Claude Code (Anthropic) | CC | Anthropic's trademark guidelines (https://www.anthropic.com/legal/trademark-guidelines, effective 2024-08-01) allow its marks "only as specifically permitted by us and only in materials we approve beforehand", and forbid any change of colour. No approval has been requested. Ask marketing@anthropic.com; the press kit is https://www.anthropic.com/press-kit. |
-| Antigravity (Google) | AG | https://antigravity.google/press offers icons but no usage grant. Google's brand rules require a Partner Marketing Hub account and an approval request before a product icon is used (https://partnermarketinghub.withgoogle.com/brands/google/branding-guidelines/how-to-show-googles-brand/). Not requested. |
-| Grok Build (xAI) | GB | xAI's guidelines (https://x.ai/legal/brand-guidelines, 2025-02-14) allow its marks to refer accurately to its services, but only "exactly as provided at the download link", https://data.x.ai/logos/SpaceXAI_Grok_Assets.zip. That download sits behind a bot check that refuses automated retrieval, so no copy was taken from anywhere else. To add it, download the zip by hand, store the white Grok symbol as `grok.svg` and register it in `agentLogos.ts`. Note xAI's terms: no sublicensing, no app titles, nothing placed close to the mark that makes a new mark (keep the name at the tile's distance). |
-| Hermes (Nous Research) | HM | No brand guidelines. Nous Research's terms (https://portal.nousresearch.com/terms, 12.1) prohibit commercial or promotional distribution of its materials and marks without prior written permission, and the only clear-background mark in https://github.com/NousResearch/hermes-agent/tree/main/assets is a detailed illustration (about 140 KB) that is illegible at 14 to 32px. Ask Nous Research first. |
-| Any other ACP or custom agent | First two letters | No mark is known for it. |
+Any other ACP or custom agent shows the first two letters of its id (`agentCode()`), and an
+unknown one "?". Until 2026-10-28 Claude Code, Antigravity, Grok Build and Hermes showed codes
+too, because their makers' published terms ask for approval first (Anthropic, Google, Nous
+Research) or allow only a download that refused automated retrieval (xAI); the owner chose to use
+their marks and is handling those permissions.
 
 ## Adding or changing a mark
 
-1. Download the vendor's own published file into an empty folder; never redraw, trace or take a
-   mark from a third party.
+1. Download the vendor's own published file (its brand kit, press page, or the mark its own site
+   draws) into an empty folder. Only when that file sits behind a login or a bot check, use an
+   exact copy from a reputable public source (Wikimedia Commons, Simple Icons) and check it against
+   the vendor's current mark. Never bypass a login or bot check, and never redraw or trace a mark.
 2. Keep its paths and colours; remove only export wrappers and no-op masks or clips, and crop the
    viewBox to the artwork. The file must be one `<svg>` with `role="img"`, an `aria-label` and a
    `<title>` naming the agent, and only flat `path`, `circle`, `rect`, `ellipse` or `polygon`

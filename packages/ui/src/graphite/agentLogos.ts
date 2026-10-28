@@ -1,6 +1,10 @@
 import { type AgentBrandId, getBrand } from "../brand";
+import antigravity from "./agent-logos/antigravity.svg?raw";
+import claudeCode from "./agent-logos/claude-code.svg?raw";
 import codex from "./agent-logos/codex.svg?raw";
 import cursor from "./agent-logos/cursor.svg?raw";
+import grok from "./agent-logos/grok.svg?raw";
+import hermes from "./agent-logos/hermes.svg?raw";
 import ohMyPi from "./agent-logos/oh-my-pi.svg?raw";
 import opencode from "./agent-logos/opencode.svg?raw";
 import pi from "./agent-logos/pi.svg?raw";
@@ -10,13 +14,17 @@ import pi from "./agent-logos/pi.svg?raw";
  * each source, guideline and term). Each file is the vendor's shapes, flattened to plain path,
  * circle, rect, ellipse or polygon elements with no raster, script, style, id or reference, and
  * names its agent. The marks are trademarks of their owners, are not covered by auracode's
- * license, and only say which agent a chat uses. An agent without a usable published mark keeps
+ * license, and only say which agent a chat uses. An agent without one (a custom ACP agent) keeps
  * its two-letter code (AgentMark).
  */
 type LogoId = Exclude<AgentBrandId, "generic">;
 
 const SOURCES: Readonly<Partial<Record<LogoId, string>>> = {
+  "claude-code": claudeCode,
   codex,
+  antigravity,
+  grok,
+  hermes,
   cursor,
   opencode,
   pi,
@@ -28,9 +36,20 @@ const SOURCES: Readonly<Partial<Record<LogoId, string>>> = {
  * same weight in a row. Uniform scaling only: a mark is never stretched, cropped or redrawn.
  */
 const SCALE: Readonly<Partial<Record<LogoId, number>>> = {
+  "claude-code": 0.96,
+  antigravity: 0.9,
   cursor: 0.94,
   opencode: 0.88,
   pi: 0.8,
+};
+
+/**
+ * Marks their makers show turned: the angle in degrees about the viewBox centre, and the viewBox of
+ * the turned artwork (measured from its ink). Nous Research's site shows the Hermes wing at 45
+ * degrees, so it is drawn that way too; the file keeps the wing upright, as published.
+ */
+const TURN: Readonly<Partial<Record<LogoId, { angle: number; frame: string }>>> = {
+  hermes: { angle: 45, frame: "-18.15 23.8 78.11 33.64" },
 };
 
 export type LogoShapeTag = "path" | "circle" | "rect" | "ellipse" | "polygon";
@@ -48,6 +67,8 @@ export interface AgentLogo {
   readonly shapes: readonly LogoShape[];
   /** Optical size within the logo box, above 0.5 and at most 1. */
   readonly scale: number;
+  /** A mark its maker shows turned: the angle about the viewBox centre and the turned frame. */
+  readonly turn?: { readonly angle: number; readonly frame: string };
 }
 
 /** The stored SVG files by brand id, exactly as committed. */
@@ -90,7 +111,8 @@ export const AGENT_LOGOS: Readonly<Partial<Record<LogoId, AgentLogo>>> = Object.
   (Object.entries(SOURCES) as [LogoId, string][]).map(([id, svg]) => {
     const { viewBox, shapes } = parseLogo(svg);
     const name = getBrand(id).name;
-    return [id, { id, name, viewBox, shapes, scale: SCALE[id] ?? 1 }];
+    const turn = TURN[id];
+    return [id, { id, name, viewBox, shapes, scale: SCALE[id] ?? 1, ...(turn ? { turn } : {}) }];
   }),
 );
 
