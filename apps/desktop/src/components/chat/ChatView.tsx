@@ -1,3 +1,4 @@
+import { AgentMark } from "@auracode/ui/graphite";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type {
   AgentEntry,
@@ -551,9 +552,16 @@ export function ChatView({
             {handoff ? (
               <details className="chat-handoff">
                 <summary>
-                  Next message includes a handoff to{" "}
-                  {agents?.find((agent) => agent.id === handoff.agent_id)?.name ?? handoff.agent_id}
-                  <span>Preview</span>
+                  {/* The words name the agent; its mark only shows whose turn comes next. */}
+                  <span className="chat-handoff-mark" aria-hidden="true">
+                    <AgentMark agent={handoff.agent_id} size={16} />
+                  </span>
+                  <span className="chat-handoff-text">
+                    Next message includes a handoff to{" "}
+                    {agents?.find((agent) => agent.id === handoff.agent_id)?.name ??
+                      handoff.agent_id}
+                  </span>
+                  <span className="chat-handoff-preview">Preview</span>
                 </summary>
                 <pre>
                   {handoff.handoff ||

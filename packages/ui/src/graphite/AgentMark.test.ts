@@ -3,7 +3,8 @@ import { renderToStaticMarkup, renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AGENT_BRAND_IDS } from "../brand";
 import { ORB_STATES, type OrbState } from "../orb/states";
-import { AgentMark, agentCode } from "./AgentMark";
+import { AgentMark, agentCode, logoSide } from "./AgentMark";
+import { AGENT_LOGOS } from "./agentLogos";
 import { loaderCellClass } from "./PixelLoader";
 import { loaderFrame } from "./pixels";
 
@@ -37,20 +38,37 @@ describe("AgentMark", () => {
     expect(html).toContain("width:16px");
   });
 
-  it("shows the agent's full code at rest at every size, so no two agents share a mark", () => {
-    expect(mark({ agent: "claude", size: 14 })).toContain(">CC</span>");
-    expect(mark({ agent: "codex", size: 14 })).toContain(">CX</span>");
+  it("shows the agent's published logo at rest, and its full code when it has none", () => {
+    for (const size of [14, 16, 20, 24, 32, 48, 56]) {
+      for (const id of AGENT_BRAND_IDS.filter((brand) => brand !== "generic")) {
+        const html = mark({ agent: id, size });
+        if (AGENT_LOGOS[id as keyof typeof AGENT_LOGOS]) {
+          expect(html, `${id} ${size}`).toContain(`data-agent-logo="${id}"`);
+          expect(html, `${id} ${size}`).toContain('data-logo=""');
+          expect(html, `${id} ${size}`).not.toContain("g-agent-mark-glyph");
+          expect(html, `${id} ${size}`).not.toContain("font-size");
+        } else {
+          expect(html, `${id} ${size}`).toMatch(/>[A-Z]{2}<\/span>/);
+          expect(html, `${id} ${size}`).not.toContain("data-logo");
+        }
+      }
+    }
+    expect(mark({ agent: "codex", size: 16 })).toContain('data-agent-logo="codex"');
     expect(mark({ agent: "claude", size: 16 })).toContain(">CC</span>");
-    expect(mark({ agent: "codex", size: 16 })).toContain(">CX</span>");
-    expect(mark({ agent: "opencode", size: 16 })).toContain(">OC</span>");
-    expect(mark({ agent: "pi", size: 16 })).toContain(">PI</span>");
-    expect(mark({ agent: "claude", size: 24 })).toContain(">CC</span>");
-    expect(mark({ agent: "codex", size: 48 })).toContain(">CX</span>");
     expect(mark({ agent: "grok", size: 56 })).toContain(">GB</span>");
-    const small = [14, 16, 20].flatMap((size) =>
-      AGENT_BRAND_IDS.filter((id) => id !== "generic").map((id) => mark({ agent: id, size })),
-    );
-    for (const html of small) expect(html).toMatch(/>[A-Z]{2}<\/span>/);
+  });
+
+  it("draws a logo inside an even margin of its tile, centred on whole pixels", () => {
+    expect([12, 14, 16, 20, 24, 32, 48, 56].map(logoSide)).toEqual([8, 10, 12, 14, 16, 22, 32, 36]);
+    for (const size of [13, 14, 15, 16, 17, 20, 24, 31, 32, 56]) {
+      expect((size - logoSide(size)) % 2, `${size}`).toBe(0);
+      expect(size - logoSide(size), `${size}`).toBeGreaterThanOrEqual(4);
+    }
+    const html = mark({ agent: "cursor", size: 24 });
+    expect(html).toContain('width="16" height="16"');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain('focusable="false"');
+    expect(html).not.toContain("<title>");
   });
 
   it("sizes a two-letter code to fit its tile, never under 7px", () => {
@@ -63,7 +81,7 @@ describe("AgentMark", () => {
 
   it("puts each state in the glyph's place", () => {
     const shapes: Record<OrbState, string> = {
-      idle: "g-agent-mark-glyph",
+      idle: "g-agent-mark-logo",
       thinking: "g-px",
       streaming: "g-px",
       tool: "g-px",
@@ -75,7 +93,11 @@ describe("AgentMark", () => {
       const html = mark({ agent: "pi", state, size: 24 });
       expect(html, state).toContain(shapes[state]);
       expect(html, state).toContain(`data-state="${state}"`);
-      if (state !== "idle") expect(html, state).not.toContain("g-agent-mark-glyph");
+      if (state !== "idle") {
+        expect(html, state).not.toContain("g-agent-mark-logo");
+        expect(html, state).not.toContain("g-agent-mark-glyph");
+        expect(mark({ agent: "claude", state, size: 24 }), state).not.toContain(">CC<");
+      }
     }
   });
 
@@ -120,11 +142,14 @@ describe("AgentMark", () => {
     expect(html).toContain('aria-label="Claude Code, idle"');
   });
 
-  it("draws a ghost as an empty dashed tile with its code, whatever the state", () => {
+  it("draws a ghost as an empty dashed tile with its logo or code, whatever the state", () => {
     const html = mark({ agent: "cursor", state: "thinking", ghost: true, size: 24 });
     expect(html).toContain('data-ghost=""');
-    expect(html).toContain(">CU</span>");
+    expect(html).toContain('data-agent-logo="cursor"');
     expect(html).not.toContain("g-px");
+    const code = mark({ agent: "hermes", state: "waiting", ghost: true, size: 24 });
+    expect(code).toContain(">HM</span>");
+    expect(code).not.toContain("g-agent-mark-waiting");
   });
 });
 

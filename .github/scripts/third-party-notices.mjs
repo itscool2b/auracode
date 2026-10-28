@@ -249,6 +249,8 @@ export function renderText(catalogue, distribution) {
     "",
     "Component source archives are linked below, including the unmodified source for MPL-covered components.",
     "",
+    "Agent marks: the logos shown beside the Codex (the OpenAI Blossom), Cursor, OpenCode, Pi and oh-my-pi agents are trademarks of their respective owners. They only identify which agent a chat uses, imply no endorsement or partnership, and are not covered by these notices or by any license for auracode. Their sources, guidelines and terms are listed in third-party/brand-marks.md.",
+    "",
   ];
   const used = new Map();
   for (const record of records) {

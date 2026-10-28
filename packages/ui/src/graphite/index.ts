@@ -6,9 +6,12 @@
  */
 
 export { createFrameClock, type FrameClock, type FrameHost, frameClock } from "../frameClock";
-export { AgentMark, type AgentMarkProps, agentCode } from "./AgentMark";
+export { AgentLogo, type AgentLogoProps } from "./AgentLogo";
+export { AgentMark, type AgentMarkProps, agentCode, logoSide } from "./AgentMark";
+export { AGENT_LOGOS, type AgentLogo as AgentLogoData, agentLogo } from "./agentLogos";
 export { CopyButton, type CopyButtonProps } from "./CopyButton";
 export { Creature, type CreatureKind, type CreatureProps, creatureHeight } from "./Creature";
+export { type Cadence, type CadenceHost, createCadence, IDLE_WAIT_MS } from "./cadence";
 export {
   CREATURE_SMALL_MAX,
   SEAL_PATH,

@@ -1,5 +1,5 @@
-// Vite's `?raw` suffix imports a file's text. Only the token consistency tests use it; declaring it
-// here keeps the package free of `vite/client` and `@types/node`.
+// Vite's `?raw` suffix imports a file's text. The token consistency tests and the agent marks use
+// it; declaring it here keeps the package free of `vite/client` and `@types/node`.
 declare module "*.css?raw" {
   const content: string;
   export default content;
@@ -12,6 +12,12 @@ declare module "*.ts?raw" {
 }
 
 declare module "*.tsx?raw" {
+  const content: string;
+  export default content;
+}
+
+// The agents' published marks (graphite/agent-logos) are read as text and drawn inline.
+declare module "*.svg?raw" {
   const content: string;
   export default content;
 }

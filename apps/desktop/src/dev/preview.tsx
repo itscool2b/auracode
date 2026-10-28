@@ -53,6 +53,38 @@ const AGENT: AgentEntry = {
   latest_release: null,
 };
 
+/**
+ * `agents=lineup` offers a full lineup in the chat's picker (each agent's mark at 16px): four that
+ * can run, one still being checked and three not installed. Without it the chat knows only its own.
+ */
+const LINEUP: readonly AgentEntry[] = [
+  AGENT,
+  ...(
+    [
+      ["codex", "Codex", "0.170.0"],
+      ["cursor", "Cursor", "2026.10.22"],
+      ["opencode", "OpenCode", "1.19.4"],
+      ["pi", "Pi", "0.70.0"],
+      ["grok", "Grok Build", null],
+      ["omp", "oh-my-pi", null],
+      ["hermes", "Hermes", null],
+    ] as const
+  ).map(
+    ([id, name, version]): AgentEntry => ({
+      ...AGENT,
+      id,
+      name,
+      description: `Your installed ${name} CLI`,
+      availability: version
+        ? { state: "ready", version, path: `/usr/local/bin/${id}` }
+        : { state: "missing", reason: `${name} is not installed.` },
+      launch: id,
+    }),
+  ),
+];
+const CHAT_AGENTS: readonly AgentEntry[] =
+  new URLSearchParams(location.search).get("agents") === "lineup" ? LINEUP : [AGENT];
+
 /** Driver golden events receive only the actor's turn boundaries needed by the real chat store. */
 function recorded(source: { events: readonly { type: string; data: unknown }[] }): AuraEvent[] {
   const events: AuraEvent[] = [];
@@ -724,7 +756,7 @@ function Preview() {
             transport={transport}
             listed={chat}
             storage={null}
-            agents={[AGENT]}
+            agents={CHAT_AGENTS}
           />
         )}
       </main>

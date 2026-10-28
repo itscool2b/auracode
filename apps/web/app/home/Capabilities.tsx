@@ -1,3 +1,4 @@
+import { AGENT_BRAND_IDS, type AgentBrandId } from "@auracode/ui";
 import {
   AgentMark,
   Creature,
@@ -8,14 +9,20 @@ import {
 } from "@auracode/ui/graphite";
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useInView, usePageVisible, useReducedMotion } from "../motion";
+import { AgentStrip } from "./AgentStrip";
+
+/** How long the pointer rests on a row before its view shows. */
+const HOVER_INTENT_MS = 90;
 
 /*
  * Harvey's timer tabs in a Shallows panel (visual language 5.4): six one-line rows at left, one
  * live view of the app at right. The active row runs a 2px timer and the next takes over when it
- * fills; hovering, focusing or clicking a row shows its view at once and holds the cycle while the
- * pointer or focus stays in the panel. Views cross-fade by opacity and a small rise. The rows are
- * a real tab list (arrow keys, Home, End); each tab's panel is its one-sentence description, and
- * the views beside them illustrate it, so they stay out of the accessibility tree.
+ * fills; focusing or clicking a row shows its view at once, the pointer resting on it for 90ms
+ * does too, and the cycle holds while the pointer or focus stays in the panel. Views cross-fade by
+ * opacity and a small rise. The rows are a real tab list (arrow keys, Home, End); each tab's panel
+ * is its one-sentence description (the first also lists every agent's mark, and pointing at one
+ * chooses it in the view), and the views illustrate them, so they stay out of the accessibility
+ * tree.
  */
 
 const SEAL: readonly SwimmerSpec[] = [
@@ -341,14 +348,25 @@ function Tool({
   );
 }
 
-/** New chat (6.13): lit water, the logo, one line, and the card that picks an agent and a folder. */
-function AgentsView() {
-  const agents = [
-    { id: "claude-code", name: "Claude Code" },
-    { id: "codex", name: "Codex" },
-    { id: "cursor", name: "Cursor" },
-    { id: "opencode", name: "OpenCode" },
-  ];
+/** The agents New chat finds in this view; the rest wait under "Other agents". */
+const FOUND: readonly { id: AgentBrandId; name: string }[] = [
+  { id: "claude-code", name: "Claude Code" },
+  { id: "codex", name: "Codex" },
+  { id: "cursor", name: "Cursor" },
+  { id: "opencode", name: "OpenCode" },
+];
+
+/** Every agent auracode runs, in brand order, for the row under "Your agents, as they are". */
+const ALL_AGENTS: readonly AgentBrandId[] = AGENT_BRAND_IDS.filter((id) => id !== "generic");
+
+/**
+ * New chat (6.13): lit water, the logo, one line, and the card that picks an agent and a folder.
+ * `pointed` is the agent under the pointer in the row beside it: its pill is chosen, or "Other
+ * agents" lights when it is not one of the found ones.
+ */
+function AgentsView({ pointed }: { pointed: AgentBrandId | null }) {
+  const found = pointed === null || FOUND.some((agent) => agent.id === pointed);
+  const chosen = pointed !== null && found ? pointed : "claude-code";
   return (
     <div className="m-pane m-new">
       <Shallows className="m-water" aria-hidden="true">
@@ -362,8 +380,8 @@ function AgentsView() {
         <div className="m-card">
           <div className="m-card-row">
             <span className="m-pills">
-              {agents.map((agent, i) => (
-                <span key={agent.id} className={i === 0 ? "m-pill is-on" : "m-pill"}>
+              {FOUND.map((agent) => (
+                <span key={agent.id} className={agent.id === chosen ? "m-pill is-on" : "m-pill"}>
                   <AgentMark agent={agent.id} size={24} />
                   {agent.name}
                 </span>
@@ -381,8 +399,8 @@ function AgentsView() {
             <span className="m-button m-button-primary">Create</span>
           </div>
         </div>
-        <p className="m-other">
-          Other agents <span className="m-count">5</span>
+        <p className={found ? "m-other" : "m-other is-on"}>
+          Other agents <span className="m-count">{ALL_AGENTS.length - FOUND.length}</span>
           <Icon name="chevron" size={12} />
         </p>
       </div>
@@ -413,6 +431,7 @@ function HandoffView() {
       </div>
       <div className="m-dock">
         <p className="m-handoff">
+          <AgentMark agent="codex" size={16} />
           Next message includes a handoff to Codex
           <span className="m-strong">Preview</span>
         </p>
@@ -742,12 +761,17 @@ function SessionsView() {
   );
 }
 
-const ITEMS: readonly { id: string; title: string; text: string; view: () => ReactNode }[] = [
+const ITEMS: readonly {
+  id: string;
+  title: string;
+  text: string;
+  view: (pointed: AgentBrandId | null) => ReactNode;
+}[] = [
   {
     id: "agents",
     title: "Your agents, as they are",
     text: "Claude Code, Codex, Cursor and six more run through their own harnesses and sign-ins, plus any agent that speaks ACP.",
-    view: () => <AgentsView />,
+    view: (pointed) => <AgentsView pointed={pointed} />,
   },
   {
     id: "handoff",
@@ -787,12 +811,15 @@ export function Capabilities() {
   const [active, setActive] = useState(0);
   const [held, setHeld] = useState(false);
   const [live, setLive] = useState(false);
+  const [pointed, setPointed] = useState<AgentBrandId | null>(null);
+  const intent = useRef(0);
   const reduced = useReducedMotion();
   const visible = usePageVisible();
   const inView = useInView(panel, { threshold: 0.3 });
 
   // The timer runs only once scripts are in, motion is allowed and nobody is choosing.
   useEffect(() => setLive(true), []);
+  useEffect(() => () => window.clearTimeout(intent.current), []);
   const auto = live && !reduced && !held;
   const running = auto && inView && visible;
 
@@ -880,8 +907,13 @@ export function Capabilities() {
                       tabs.current[i] = node;
                     }}
                     onPointerEnter={(event) => {
-                      if (event.pointerType === "mouse") select(i);
+                      if (event.pointerType !== "mouse") return;
+                      // Hover intent: a pointer passing over the rows (on its way to the agents'
+                      // marks under them) does not switch the view; one that rests does.
+                      window.clearTimeout(intent.current);
+                      intent.current = window.setTimeout(() => select(i), HOVER_INTENT_MS);
                     }}
+                    onPointerLeave={() => window.clearTimeout(intent.current)}
                     onClick={() => select(i)}
                     onFocus={() => select(i)}
                   >
@@ -899,22 +931,30 @@ export function Capabilities() {
               </div>
               <div className="caps-notes">
                 {ITEMS.map((item, i) => (
-                  <p
+                  <div
                     key={item.id}
                     role="tabpanel"
                     id={`caps-note-${item.id}`}
                     aria-labelledby={`caps-tab-${item.id}`}
                     className={i === active ? "caps-note is-active" : "caps-note"}
                   >
-                    {item.text}
-                  </p>
+                    <p>{item.text}</p>
+                    {item.id === "agents" ? (
+                      <AgentStrip
+                        agents={ALL_AGENTS}
+                        active={i === active}
+                        label="Agents auracode runs"
+                        onPoint={setPointed}
+                      />
+                    ) : null}
+                  </div>
                 ))}
               </div>
             </div>
             <div className="caps-view" aria-hidden="true">
               {ITEMS.map((item, i) => (
                 <div key={item.id} className={i === active ? "m-scene is-active" : "m-scene"}>
-                  {item.view()}
+                  {item.view(pointed)}
                 </div>
               ))}
             </div>

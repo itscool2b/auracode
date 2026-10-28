@@ -648,6 +648,21 @@
   padding-top: 0.06em;
 }
 
+/*
+ * The agent's own mark, as its maker publishes it: never recoloured, dimmed or filtered, so a ghost
+ * says "not installed" with its dashed tile alone (third-party/brand-marks.md).
+ */
+.g-agent-mark-logo {
+  display: block;
+  flex: none;
+}
+
+.g-agent-logo {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+}
+
 .g-agent-mark-state {
   position: absolute;
   top: 0;

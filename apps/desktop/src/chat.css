@@ -1183,7 +1183,7 @@
 .chat-handoff > summary {
   display: flex;
   align-items: center;
-  gap: var(--g-space-12);
+  gap: var(--g-space-8);
   min-height: 36px;
   padding: 0 var(--g-space-16);
   list-style: none;
@@ -1196,8 +1196,18 @@
   display: none;
 }
 
-.chat-handoff > summary span {
+.chat-handoff-mark {
+  display: inline-flex;
+  flex: none;
+}
+
+.chat-handoff-text {
+  min-width: 0;
+}
+
+.chat-handoff-preview {
   margin-left: auto;
+  padding-left: var(--g-space-4);
   color: var(--g-fg-1);
   font-weight: 500;
 }

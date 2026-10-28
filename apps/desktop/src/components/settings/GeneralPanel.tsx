@@ -1,3 +1,4 @@
+import { AgentMark } from "@auracode/ui/graphite";
 import { useEffect, useRef, useState } from "react";
 import type {
   AgentEntry,
@@ -164,23 +165,34 @@ export function GeneralPanel({
         <h2 id="settings-new-chats">New chats</h2>
         <div className="settings-group">
           <Row title="Agent" detail="New chat starts with this agent selected.">
-            <select
-              className="g-select settings-control settings-select"
-              aria-label="Default agent"
-              data-testid="settings-default-agent"
-              value={agentId ?? ""}
-              disabled={disabled}
-              onChange={(event) =>
-                void change({ type: "default_agent", agent_id: event.currentTarget.value || null })
-              }
-            >
-              <option value="">Choose each time</option>
-              {agentChoices.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
-            </select>
+            <span className="settings-control settings-agent-choice">
+              {/* The chosen agent's mark; the select's own text names it. */}
+              {agentId ? (
+                <span className="settings-agent-mark" aria-hidden="true">
+                  <AgentMark agent={agentId} size={16} />
+                </span>
+              ) : null}
+              <select
+                className="g-select settings-select"
+                aria-label="Default agent"
+                data-testid="settings-default-agent"
+                value={agentId ?? ""}
+                disabled={disabled}
+                onChange={(event) =>
+                  void change({
+                    type: "default_agent",
+                    agent_id: event.currentTarget.value || null,
+                  })
+                }
+              >
+                <option value="">Choose each time</option>
+                {agentChoices.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </select>
+            </span>
           </Row>
           {agentId ? (
             <Row

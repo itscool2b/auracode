@@ -1,11 +1,16 @@
+import { AGENT_BRAND_IDS, type AgentBrandId } from "@auracode/ui";
 import { useEffect, useRef } from "react";
 import { AGENT_NAMES } from "../agents";
 import { useReducedMotion } from "../motion";
 import { Arrow } from "../ui";
+import { AgentStrip } from "./AgentStrip";
 
 const agentList = `${AGENT_NAMES.slice(0, -1).join(", ")} and ${AGENT_NAMES.at(-1) ?? ""}`;
 
-const QUESTIONS: readonly { question: string; answer: string }[] = [
+/** Every agent auracode runs, in the order the answer names them. */
+const AGENTS: readonly AgentBrandId[] = AGENT_BRAND_IDS.filter((id) => id !== "generic");
+
+const QUESTIONS: readonly { question: string; answer: string; agents?: boolean }[] = [
   {
     question: "Is auracode free?",
     answer:
@@ -14,6 +19,7 @@ const QUESTIONS: readonly { question: string; answer: string }[] = [
   {
     question: "Which agents does it run?",
     answer: `${agentList}, plus any agent that speaks the Agent Client Protocol. Each one runs through its own harness.`,
+    agents: true,
   },
   {
     question: "Does auracode see my agent logins?",
@@ -131,6 +137,8 @@ export function Faq() {
               <div className="faq-body">
                 <div className="faq-answer">
                   <p>{item.answer}</p>
+                  {/* The answer names every agent; the marks beside it are decorative. */}
+                  {item.agents ? <AgentStrip agents={AGENTS} /> : null}
                 </div>
               </div>
             </details>
