@@ -1,5 +1,54 @@
 # Auracode implementation progress
 
+## 2026-10-28: Instruction files, one file for every agent or a file per agent
+
+Branch `instructions` (from `origin/main`, with `origin/main` 6c383b5 merged in). Details,
+the per-agent table with each vendor's sources, and every edge case with its test are in
+`docs/instructions.md`.
+
+- **What it does:** Settings gains an Instructions page for your user files, a project folder
+  or a chat's own folder (its worktree), opened from Settings, a folder's Instructions button in
+  project settings, and the palette. It shows which file each agent reads (directly, through an
+  `@AGENTS.md` import, a link or a managed copy), lets the text be edited, and switches between
+  one file every agent reads and a file per agent. In a project the shared file is `AGENTS.md`:
+  agents that read it natively need nothing (Claude Code too, 2.1.277+, when no CLAUDE file is
+  in the folder or above), Claude Code otherwise gets `CLAUDE.md` with `@AGENTS.md`, and managed
+  byte-identical copies are used only where neither works (user scope: Pi, oh-my-pi, OpenCode,
+  Antigravity, Grok Build). No symlinks are created; existing ones are respected.
+- **Safety:** every write is a review of exact files and diffs that Rust prepared; Apply rechecks
+  every reviewed byte, backs replaced text up in `<data>/instructions/backups`, publishes with
+  no-overwrite hard links and puts every file back if one fails. Different texts are chosen or
+  combined first, overrides go only when ticked, a hand-edited copy is restored or adopted by
+  choice. Links are classified by the OS's own resolution against the canonical folder (a
+  security review finding: text resolution of `..` disagrees with the OS through linked folders);
+  outside and dangling links are never followed or written. Writes share the configuration gate
+  with Library copies and config sync and run in the maintenance owner.
+- **Git and worktrees:** read-only Git status flags untracked, ignored and modified files; an
+  untracked file can be added to the folder's worktree setup (the store now saves by folder only
+  with an explicit flag) or committed alone (one path staged and committed; other staged work
+  stays; a failed commit unstages it).
+- **Library:** the Library's user-level instruction copy is superseded by this page; the Rust
+  logic does not depend on the Library interface.
+- **Interface:** Vercel's settings cards: scope and mode rows, the text card with who reads it in
+  its footer and the one primary, then agents with status circles (owner decision: circles, volt
+  only for an edited copy, an override in the way, nothing to read, or a size limit). Previews:
+  `?preview=instructions`, `-per-agent`, `-conflict`, `-drift`, `-large`, `-review`.
+
+Verified locally on Windows: `pnpm lint` (28 warnings, all pre-existing), `pnpm typecheck`,
+`pnpm test` (root scripts 22, ui 278, desktop 5 node and 464 with 19 skipped, 8 of them new,
+design lab 352, web 4); `cargo test -p aura-config` 141 (39 new), `cargo test -p aura-core
+--lib` 473 (3 new, and the folder-save case in the setup store test), `cargo test -p
+auracode-desktop --lib` 210 (with `export_bindings`); Clippy with `-D warnings` on aura-config,
+aura-core and auracode-desktop; `cargo fmt --check`. `check-instructions.mjs` in Chromium and
+WebKit (9 axe scans each, 0 violations) and `check-layout.mjs`, 308 of 308 views clean across
+both engines and both sizes (eight new Instructions views). Sheets beside the Vercel New Project
+card and Transfer dialog and Grok's settings, at 1440x900 and 1024x700, are the ignored
+`target/design-research/sheets/app-instructions-*.png`. Symlink file cases skip here (creating
+file symlinks needs Developer Mode); the classifier unit test and a Windows junction test cover
+them. Not run: a real agent reading the files, the built app (the owner's debug app was
+running), automatic recovery after a crash mid-apply (deferred), macOS, the hand walkthrough
+and CI.
+
 ## 2026-10-28: M3 setup, clone and agents
 
 Branch `m3-onboarding` (from `app-integrated`).

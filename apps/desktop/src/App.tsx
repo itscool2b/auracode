@@ -2,7 +2,7 @@ import type { AgentBrandId, OrbState } from "@auracode/ui";
 import { DitherField } from "@auracode/ui/graphite";
 import { MotionConfig } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import type { AppInfo, StressConfig } from "./bindings";
+import type { AppInfo, InstructionsTarget, StressConfig } from "./bindings";
 import { ChatsScreen } from "./components/chat/ChatsScreen";
 import { ErrorScreen } from "./components/ErrorScreen";
 import { Home } from "./components/Home";
@@ -74,9 +74,15 @@ export function App({
   const viewRef = useRef(view);
   viewRef.current = view;
   const [settingsReturn, setSettingsReturn] = useState<"chats" | "setup">("chats");
-  const [settingsEntry, setSettingsEntry] = useState({
+  const [settingsEntry, setSettingsEntry] = useState<{
+    id: string;
+    page: "general" | "account" | "instructions";
+    email: string;
+    target?: InstructionsTarget;
+    chatLabel?: string;
+  }>({
     id: "initial",
-    page: "general" as "general" | "account",
+    page: "general",
     email: "",
   });
   useEffect(
@@ -402,6 +408,17 @@ export function App({
               setSettingsEntry({ id: "chats", page: "general", email: "" });
               setView("settings");
             }}
+            onInstructions={(target, chatLabel) => {
+              setSettingsReturn("chats");
+              setSettingsEntry({
+                id: `instructions:${Date.now()}`,
+                page: "instructions",
+                email: "",
+                target,
+                chatLabel,
+              });
+              setView("settings");
+            }}
           />
         </div>
         {view === "settings" ? (
@@ -409,6 +426,17 @@ export function App({
             navigationId={settingsEntry.id}
             initialPage={settingsEntry.page}
             initialEmail={settingsEntry.email}
+            instructionsTarget={settingsEntry.target}
+            chatLabel={settingsEntry.chatLabel}
+            instructionFolders={workspace?.getSnapshot().data?.projects.flatMap((project) =>
+              project.folders.map((folder) => ({
+                id: folder.id,
+                label:
+                  project.folders.length > 1
+                    ? `${project.name} / ${folder.display_name}`
+                    : project.name,
+              })),
+            )}
             backLabel={settingsReturn === "setup" ? "Back to setup" : "Back to chats"}
             info={info}
             onImported={async () => {

@@ -1309,6 +1309,28 @@ destructive steps. Shortcuts is one keycap table. About: the 40px logo, "auracod
 in mono, then Updates (its phase, version and one next step; progress, notes and the install
 question open under it), This device, Diagnostics and Third-party notices.
 
+### 6.16a Instructions
+
+Settings' Instructions page (docs/instructions.md), on Vercel's settings cards. One group of rows
+first: "Applies to" with a 220px select (your user files, each project folder, and the open chat's
+folder when opened from a chat) over the folder in mono, "Files" with the strong segmented control
+(One file, Per agent) and Rust's one sentence, and a row per hand-edited managed copy ("Edited copy
+for Pi", Resolve). Then "Text": per agent, the files as quiet mono pills (28px, the open one
+surface-3); the file's head (its path in mono, lines and size in 12/16 fg-3 tabular); its notes as
+12/16 lines led by a 6px circle (fg-3, or volt when it needs the person: a size limit, a file new
+worktree chats will miss, a case variant); a mono textarea at the code size, on the page black, at
+least 320px; and Vercel's card footer behind an inset hairline: who reads the file at left, then
+28px outline actions (Rename, Copy into new worktree chats, Commit), Discard (ghost) and Review
+changes, the page's one primary. Then "Agents": 60px rows of a 24px mark, the name and Rust's
+sentence, size warnings as volt-circle lines, and at right the status as a word led by a 6px
+circle (fg-3; volt for an edited copy, an override in the way, or nothing to read; a hollow fg-3
+ring for an agent without a file there). Status here is a circle, not a square (owner decision,
+2026-10-28). Agents that are not installed fold under "N agents not installed"; files in other
+folders fold the same way. The review is the large dialog: the title, Rust's sentence, a radio list
+of cards when a choice comes first (which text to keep, or restore against adopt), then each file
+as its action word, path in mono and role in fg-3 over its diff (4.9), optional removals as
+checkboxes in a well, the notes in 12/16 fg-3, then Cancel and Apply.
+
 ### 6.17 Onboarding and the dither intro
 
 **First launch intro** (once, skippable with any key, about 2.4s): the window opens black; a

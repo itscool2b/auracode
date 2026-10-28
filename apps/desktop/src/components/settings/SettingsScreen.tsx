@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   Bot,
   CircleUser,
+  FileText,
   Info,
   Keyboard,
   type LucideIcon,
@@ -12,13 +13,15 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
-import type { AppInfo } from "../../bindings";
+import type { AppInfo, InstructionsTarget } from "../../bindings";
+import { GLOBAL, type InstructionsApi, instructionsApi } from "../../lib/instructions";
 import { revealDataDir } from "../../lib/ipc";
 import { type GeneralApi, generalApi, type SetupApi, setupApi } from "../../lib/setup";
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
 import { AccountPanel } from "./AccountPanel";
 import { ConfigSyncPanel } from "./ConfigSyncPanel";
 import { GeneralPanel } from "./GeneralPanel";
+import { type InstructionsFolder, InstructionsPanel } from "./InstructionsPanel";
 import { LocalImportPanel } from "./LocalImportPanel";
 import { NoticesDialog } from "./NoticesDialog";
 import { ProfilePicker } from "./ProfilePicker";
@@ -28,9 +31,10 @@ import "./settings.css";
 
 export { Row } from "./SettingsRow";
 
-type Page = "general" | "account" | "configuration" | "shortcuts" | "about";
+export type Page = "general" | "instructions" | "account" | "configuration" | "shortcuts" | "about";
 const PAGES: readonly (readonly [Page, string, LucideIcon])[] = [
   ["general", "General", SlidersHorizontal],
+  ["instructions", "Instructions", FileText],
   ["account", "Account", CircleUser],
   ["configuration", "Configuration sync", RefreshCcw],
   ["shortcuts", "Shortcuts", Keyboard],
@@ -75,6 +79,11 @@ export function SettingsScreen({
   navigationId = "settings",
   initialEmail = "",
   backLabel = "Back to chats",
+  instructions = instructionsApi,
+  instructionsTarget = GLOBAL,
+  instructionFolders = [],
+  chatLabel,
+  instructionsOpenOnLoad,
 }: {
   readonly info: AppInfo;
   readonly onBack: () => void;
@@ -91,6 +100,13 @@ export function SettingsScreen({
   readonly navigationId?: string;
   readonly initialEmail?: string;
   readonly backLabel?: string;
+  readonly instructions?: InstructionsApi;
+  /** The scope Instructions opens on: global, a project folder, or a chat's own folder. */
+  readonly instructionsTarget?: InstructionsTarget;
+  readonly instructionFolders?: readonly InstructionsFolder[];
+  readonly chatLabel?: string;
+  /** Development previews only (see InstructionsPanel). */
+  readonly instructionsOpenOnLoad?: Parameters<typeof InstructionsPanel>[0]["openOnLoad"];
 }) {
   const [page, setPage] = useState<Page>(initialPage);
   const [notices, setNotices] = useState(false);
@@ -205,6 +221,15 @@ export function SettingsScreen({
               general={general}
               onSetup={onSetup}
               reveal={reveal}
+            />
+          ) : null}
+          {page === "instructions" ? (
+            <InstructionsPanel
+              api={instructions}
+              initialTarget={instructionsTarget}
+              folders={instructionFolders}
+              chatLabel={chatLabel}
+              openOnLoad={instructionsOpenOnLoad}
             />
           ) : null}
           {page === "account" ? (

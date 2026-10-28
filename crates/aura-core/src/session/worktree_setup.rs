@@ -172,6 +172,7 @@ impl SessionManager {
                 source,
                 save,
                 folder_id: None,
+                folder_save: false,
             })
             .await
             .map_err(|error| storage_error(&error))

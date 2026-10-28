@@ -4,6 +4,7 @@
 
 mod copy;
 pub mod extensions;
+pub mod instructions;
 mod inventory;
 mod mcp;
 mod mcp_document;

@@ -23,6 +23,7 @@ mod editors;
 mod folder_resolution;
 mod gitworkspaces;
 mod installer;
+mod instructions;
 mod live;
 #[cfg(feature = "account-sync")]
 mod local_import;

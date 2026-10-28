@@ -85,6 +85,10 @@ if (container) {
       void import("./dev/chatOptionsPreview").then(({ mountChatOptionsPreview }) =>
         mountChatOptionsPreview(container),
       );
+    else if (mode?.startsWith("instructions"))
+      void import("./dev/instructionsPreview").then(({ mountInstructionsPreview }) =>
+        mountInstructionsPreview(container, mode),
+      );
     else if (mode === "settings")
       void import("./dev/settingsPreview").then(({ mountSettingsPreview }) =>
         mountSettingsPreview(container),
