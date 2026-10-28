@@ -60,6 +60,19 @@ async fn terminal_review_is_one_use_and_folder_ownership_allows_live_agents() {
         .await
         .unwrap();
     assert_eq!(plan.spec.folder, rig.folder.canonicalize().unwrap());
+    // Shells start from plain paths: Windows PowerShell fails to start from a verbatim
+    // (`\\?\C:\...`) program path, and cmd.exe falls back to the Windows folder from a verbatim
+    // working folder.
+    let launch = &plan.spec.launch;
+    assert!(!launch.program.to_string_lossy().starts_with(r"\\?\"));
+    let aura_process::ProcessCwd::Fixed(cwd) = &launch.cwd else {
+        panic!("a terminal starts in its reviewed folder");
+    };
+    assert!(!cwd.to_string_lossy().starts_with(r"\\?\"), "{cwd:?}");
+    assert_eq!(
+        same_file::Handle::from_path(cwd).unwrap(),
+        same_file::Handle::from_path(&plan.spec.folder).unwrap()
+    );
     assert!(rig.manager.shared().live.contains(&chat.id));
     assert_eq!(rig.manager.project_terminal_count(), 1);
     assert_eq!(rig.manager.shared().live.owned_work_count(), 0);

@@ -191,6 +191,11 @@
     transition: background-color var(--g-dur-fast) var(--g-ease);
   }
 
+  /* Sentences end on a full last line, never on one orphaned word ("network." alone). */
+  p {
+    text-wrap: pretty;
+  }
+
   :root[data-glass="liquid_glass"] body,
   :root[data-glass="vibrancy"] body,
   :root[data-glass="mica"] body {

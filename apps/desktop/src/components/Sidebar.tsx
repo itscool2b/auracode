@@ -6,8 +6,8 @@ import {
   type OrbState,
 } from "@auracode/ui";
 import { AgentMark, Wordmark } from "@auracode/ui/graphite";
+import { ArrowLeft } from "lucide-react";
 import { useId } from "react";
-import { PlusIcon } from "./icons";
 
 /**
  * The slim sidebar of Diagnostics: wordmark, the way back to chats, and the sample agent's live
@@ -38,8 +38,8 @@ export function Sidebar({
         <ul className="sidebar-nav">
           <li>
             <button type="button" className="nav-item" onClick={onChats}>
-              <PlusIcon />
-              Chats
+              <ArrowLeft size={16} aria-hidden="true" />
+              Back to chats
             </button>
           </li>
         </ul>

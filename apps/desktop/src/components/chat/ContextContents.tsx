@@ -7,7 +7,7 @@ import { autonomyLabel, costLabel, tokensLabel } from "../../lib/chat/present";
 import type { ComposerTransport } from "../../lib/composer";
 import { composerDraft } from "../../lib/composerDraft";
 import { errorMessage } from "../../lib/errors";
-import { formatDuration } from "../../lib/format";
+import { agentVersion, formatDuration } from "../../lib/format";
 
 export type ContextTab = "Changes" | "Files" | "Plan" | "Session";
 
@@ -294,9 +294,12 @@ function Session({
     ["Folder", state.chat?.folder ?? "Unavailable"],
     [
       "Version",
-      session?.agent_version ??
-        (agent?.availability.state === "ready" ? agent.availability.version : null) ??
-        "Not reported",
+      agentVersion(
+        agent?.name ?? state.chat?.agent_name ?? "",
+        session?.agent_version ??
+          (agent?.availability.state === "ready" ? agent.availability.version : null) ??
+          "Not reported",
+      ),
     ],
   ];
   return (

@@ -47,7 +47,7 @@ export type GitWorkspaceApi = typeof gitWorkspaceApi;
  * A Windows verbatim path (`\\?\C:\work`, `\\?\UNC\server\share`) in the spelling the rest of
  * the app shows (`C:\work`, `\\server\share`). Older saved worktrees keep the verbatim form.
  */
-function withoutVerbatimPrefix(value: string): string {
+export function withoutVerbatimPrefix(value: string): string {
   if (/^\\\\\?\\UNC\\/i.test(value)) return `\\\\${value.slice(8)}`;
   if (/^\\\\\?\\[a-z]:/i.test(value)) return value.slice(4);
   return value;

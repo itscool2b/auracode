@@ -180,8 +180,11 @@
   line-height: var(--g-leading-code);
   font-variant-ligatures: none;
   tab-size: 2;
-  white-space: pre;
-  overflow-wrap: normal;
+  /* Instructions are prose: a paragraph wraps at the field's edge instead of running off it
+     behind a sideways scrollbar. Line breaks and indentation stay as written. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  resize: vertical;
 }
 
 .instructions-textarea:read-only {

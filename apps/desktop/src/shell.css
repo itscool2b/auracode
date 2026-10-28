@@ -1814,6 +1814,15 @@ details.setup-install-review[open] > summary::before {
   margin: 0;
 }
 
+/* The prompt grows downward only; the one next step sits at the right, as in every dialog. */
+.conversation-edit .g-textarea {
+  resize: vertical;
+}
+
+.conversation-edit > .g-button {
+  justify-self: end;
+}
+
 /* ---------- Command palette (6.15) ---------- */
 
 /* The palette is the large dialog held near the top (y 120), its own rows in place of padding. */

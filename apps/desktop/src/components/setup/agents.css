@@ -435,8 +435,14 @@
   margin: var(--g-space-16) 0 0;
 }
 
-.agent-detail-actions > .g-button-ghost:first-child {
+/* Ghost actions sit on the text column by their words, on every line they wrap to; an outline
+   primary leading the row keeps its edge on the column. */
+.agent-detail-actions:has(> .g-button-ghost) {
   margin-left: calc(var(--g-space-12) * -1);
+}
+
+.agent-detail-actions:has(> .g-button-ghost) > .g-button-outline:first-child {
+  margin-left: var(--g-space-12);
 }
 
 /* --------------------------------------------------------------------- the menu */

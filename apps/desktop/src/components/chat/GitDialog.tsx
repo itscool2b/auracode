@@ -16,7 +16,7 @@ import type {
   WorktreeRelocationPreview,
 } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
-import { type GitWorkspaceApi, sameFolder } from "../../lib/gitWorkspace";
+import { type GitWorkspaceApi, sameFolder, withoutVerbatimPrefix } from "../../lib/gitWorkspace";
 import type { ProjectToolsApi } from "../../lib/projectTools";
 import type { WorktreeSetupApi } from "../../lib/worktreeSetup";
 import { MergeConflicts } from "./MergeConflicts";
@@ -41,12 +41,12 @@ function Repository({ workspace }: { readonly workspace: GitWorkspace }) {
         <strong>{workspace.branch ?? "Detached HEAD"}</strong>
         <code>{workspace.head?.slice(0, 12) ?? "No commits"}</code>
       </div>
-      <p className="git-path">{workspace.root}</p>
+      <p className="git-path">{withoutVerbatimPrefix(workspace.root)}</p>
       <div className="git-status">
         <span>
           {workspace.files.length === 0
             ? "Working tree clean"
-            : `${workspace.files.length} changed paths`}
+            : `${workspace.files.length} changed ${workspace.files.length === 1 ? "path" : "paths"}`}
         </span>
         {workspace.is_linked_worktree ? <span>Linked worktree</span> : null}
         {workspace.has_submodules ? <span>Contains submodules</span> : null}
@@ -442,7 +442,7 @@ export function GitDialog({
                 <dt>Worktree</dt>
                 <dd>{preview.value.worktree.branch}</dd>
                 <dt>Current folder</dt>
-                <dd>{preview.value.folder.root}</dd>
+                <dd>{withoutVerbatimPrefix(preview.value.folder.root)}</dd>
                 <dt>Destination</dt>
                 <dd>{preview.value.destination}</dd>
                 {preview.value.worktree.recovery?.type === "merge" ? (
@@ -460,13 +460,13 @@ export function GitDialog({
                   <dt>Worktree</dt>
                   <dd>{preview.value.worktree.branch}</dd>
                   <dt>Folder</dt>
-                  <dd>{preview.value.worktree.path}</dd>
+                  <dd>{withoutVerbatimPrefix(preview.value.worktree.path)}</dd>
                   {preview.value.target ? (
                     <>
                       <dt>Target branch</dt>
                       <dd>{preview.value.target.branch}</dd>
                       <dt>Target folder</dt>
-                      <dd>{preview.value.target.root}</dd>
+                      <dd>{withoutVerbatimPrefix(preview.value.target.root)}</dd>
                     </>
                   ) : null}
                 </dl>

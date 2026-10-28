@@ -59,14 +59,23 @@ pub fn find_program(name: &str, env: &EnvMap) -> Option<PathBuf> {
 }
 
 /// [`find_program`] on Unix; on Windows only `<name>.exe`, because the adapters spawn the path they
-/// are given and Node refuses to spawn `.cmd` shims without a shell.
+/// are given and Node refuses to spawn `.cmd` shims without a shell. A name typed with its `.exe`
+/// (`PING.EXE`, as Windows people often write it) is that file, not `PING.EXE.exe`.
 pub fn find_exe(name: &str, env: &EnvMap) -> Option<PathBuf> {
     #[cfg(windows)]
     {
         if name.is_empty() || Path::new(name).components().count() != 1 {
             return None;
         }
-        let file = format!("{name}.exe");
+        let typed_exe = name.len() > 4
+            && name
+                .get(name.len() - 4..)
+                .is_some_and(|tail| tail.eq_ignore_ascii_case(".exe"));
+        let file = if typed_exe {
+            name.to_owned()
+        } else {
+            format!("{name}.exe")
+        };
         path_dirs(env).find_map(|dir| {
             let candidate = dir.join(&file);
             candidate.is_file().then_some(candidate)
@@ -236,5 +245,10 @@ mod tests {
             std::env::join_paths([&exes]).expect("join"),
         );
         assert_eq!(find_exe("claude", &mixed), Some(exes.join("claude.exe")));
+        // A name typed with its extension, in any case, is that file.
+        assert_eq!(find_exe("claude.exe", &env), Some(exes.join("claude.exe")));
+        assert_eq!(find_exe("CLAUDE.EXE", &env), Some(exes.join("CLAUDE.EXE")));
+        assert_eq!(find_exe("npm.cmd", &env), None);
+        assert_eq!(find_exe(".exe", &env), None);
     }
 }

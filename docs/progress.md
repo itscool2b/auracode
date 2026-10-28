@@ -4151,3 +4151,85 @@ steering then passed clean at both sizes. The sheet is the ignored
 Not done: the hand walkthrough in the native app; aura-drivers' `conformance` and `codex_schema`
 test binaries (Windows Application Control blocks them, 4551); a real agent run (none was sent);
 CI.
+
+### Milestone walkthrough of the Windows app (2026-10-28, branch `app-walkthrough`)
+
+The whole desktop app walked by hand on Windows 11 (3840x2160 at 150%), in the native WebView2
+window of a debug build from `main` (1ecd9b8), on throwaway data folders (`%TEMP%\auracode-walk\d`
+and `d2`) and a scratch Git project. The window was driven over WebView2's DevTools port
+(`TAURI_WEBVIEW_AUTOMATION`), with UI Automation and window messages for the folder picker, the
+tray and minimize; Orca was not installed on this PC.
+
+Walked, and passing after the fixes below: the first-launch intro (seal and turtle form the logo,
+then setup's water); all four setup steps, Skip setup and the clone form (no clone started); New
+chat (worktree chip by default, Local, the popover, the busy-folder consent); Demo chats
+(streaming, Retry, Edit and resend, Fork, queue edit and reorder, Steer's "After this turn",
+held messages, Changes and a revert that restored the files on disk); the terminal panel;
+the Git dialog with a scratch repository and a saved worktree setup; the sidebar, Ctrl+1 to 9,
+the logo and Settings foot; the command palette; every Settings page (General's switches and
+autonomy, Instructions against the scratch project, Account, Configuration sync, Shortcuts,
+About, This device, Delete all auracode data opened and cancelled, never confirmed);
+Diagnostics; Agents (logos, details, Connection, the row menu); the Plugin library (looked
+only); the quit question (Keep auracode open, then Stop agents and quit, no auracode child
+left); the tray (tooltip, a click restores the window) and minimize.
+
+Fixed (one commit each, tests where they fit):
+- **Terminal panel**: Windows PowerShell never started ("The type initializer for
+  System.Net.ServicePointManager threw an exception") and Command Prompt opened in `C:\Windows`:
+  both were spawned from verbatim `\\?\` paths. Shells now start from the plain spelling.
+- **Window**: the native caption was Windows' grey band above the black app; DWM paints it
+  `--g-bg` with an fg-3 title.
+- **Worktree setup**: a program typed as `PING.EXE` was not found (looked up as `PING.EXE.exe`);
+  its failure note ended "arguments.. Review"; raw `invoke` failures read "Something went
+  wrong." or "The terminal could not continue." instead of Rust's reason.
+- **New chat**: choosing a project replaced the agent already picked with the project's
+  default (Claude Code turned back into the demo agent).
+- **Names**: worktree chats showed the worktree id as their project in the header and in Needs
+  you; versions repeated the agent's name ("Claude Code / Claude Code 2.1.312"); "built in" in
+  lower case; verbatim paths and "1 changed paths" in the Git dialog; "Reverted 2 file(s)".
+- **Setup and Agents**: an installed agent sank among the absent ones when the roster unfolded;
+  wrapped detail actions sat 12px off the column; the Agents page cut the catalog's verification
+  sentence mid-word (now "Tested on 2.1.310" or "Untested") and counted the demo ("5 of 10" where
+  setup says 4 of 9); the clone form showed a red error before a folder could be chosen.
+- **Polish**: browser triangles on three disclosures; orphaned last words; the Instructions editor not wrapping; Edit and resend's
+  full-width soft button; the sidebar's "Your projects and chats will appear here" under a
+  project; missing terminal and sidebar shortcuts; Diagnostics' "+ Chats" and "orbs".
+
+The queue, exercised on purpose with the Demo agent (no change made; `queue-unstuck` owns it):
+every send, even to an idle agent, shows "1 queued" for 0.6 to 1 s while the header says "Saving
+checkpoint before sending the prompt", then sends. Sent during a turn (normal and `/slow`), right
+after a turn, while starting, after a cancelled `/hang`, and in a second Local chat on a busy
+folder: each sent once the turn ended, none stuck. During `/hang` a queued message waits with
+only "1 queued" until Stop, which turns it into "held" with Send queued. After a quit with a
+queued message, the reopened chat shows it held; a new message then jumps ahead and is sent while
+the older one stays "1 queued · held" with the agent Ready (still held 10 s later, 18:44Z) until
+Send queued is pressed. While a worktree setup command runs, New chat has no composer at all.
+
+Measured, auracode and its 7 WebView2 processes, 10 s each, New chat idle with its swimmers:
+visible 8.3% and 5.3% of one core; minimized 0.6% and 0.9%. Real agents, one short turn each in
+the scratch project: Claude Code 2.1.312 on Haiku 5.5 answered in 1.4 s; Codex 0.162.1 on
+GPT-6-Luna in 3.2 s. Sheets are the ignored `target/design-research/sheets/walkthrough-*.png`.
+
+Left, with reasons: the scrollbars keep Chromium's arrow buttons (styling them means turning off
+`scrollbar-color` on Windows across every scroller), and the transcript column moves 8px left when
+an answer first scrolls (a both-edges scrollbar gutter fixed it but set rows off the 4px grid, so
+it was reverted; a fixed 8px custom scrollbar would allow both); a revert leaves its saved originals as
+untracked `.auracode-revert-*` files inside the worktree (where to keep them is a backend
+decision); worktree folders appear as project folders by their ids in New chat's and
+Instructions' folder lists; a worktree chat's Git dialog still offers "Create an isolated
+workspace"; the Demo agent's mark reads "MO"; the first New chat setup run once failed and a
+second identical run worked (the reason now shows); the Plugin library took about 17 s to list.
+The opened Instructions page first showed the owner's user-level `~/.codex/AGENTS.md` (the app's
+default scope); it was switched to the scratch project and nothing outside it was edited.
+
+Checks: desktop `tsc` and Vitest (494, 19 skipped), Biome (26 existing warnings), the notice
+catalogue refreshed for the desktop manifest;
+`cargo fmt --check`, Clippy on aura-process, aura-core and the desktop app with `-D warnings`;
+`cargo test` for aura-process (193), aura-core's session tests (67) and the desktop window tests
+(25). In Chromium and WebKit: `check-setup`, `check-setup-actions`, `check-chat`, `check-settings` (with
+its sub-checks, after building the website it reads), `check-new-chat-worktree`,
+`check-agent-installations`, `check-instructions`, `check-terminal-panel`, `check-git-review` and
+`check-sidebar-footer`. `check-layout` in Chromium only (the owner was gaming, so one engine at a
+time): 186 of 186 views clean; its `plugins#plugin-item` step was left out because it fails the
+same way on `origin/main`'s frontend (the row menu closes when focusing its first item scrolls the
+page). WebKit's `check-layout`, the native macOS build and CI were not run.

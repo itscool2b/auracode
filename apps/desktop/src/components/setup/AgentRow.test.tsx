@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AgentConnections, AgentEntry } from "../../bindings";
-import { automaticChoice, ConnectionSetting, connectionDetail } from "./AgentRow";
+import { automaticChoice, ConnectionSetting, connectionDetail, verifiedSummary } from "./AgentRow";
 
 const ready = { state: "ready", version: "Claude Code 2.1.310", path: "/bin/claude" } as const;
 const missing = {
@@ -106,5 +106,25 @@ describe("the Connection setting", () => {
     );
     expect(options(chosen)[0]).toEqual(["", "Automatic", false]);
     expect(options(chosen)[2]).toEqual(["claude-acp", "ACP adapter", false]);
+  });
+});
+
+describe("the row's verification word", () => {
+  it("names the last version the catalog note tested, never a cut-off sentence", () => {
+    expect(verifiedSummary("Claude Code 2.1.310 (macOS)")).toBe("Tested on 2.1.310");
+    expect(
+      verifiedSummary(
+        "Codex 0.162.1 free controls and fixtures (Windows); prompted verification pending",
+      ),
+    ).toBe("Tested on 0.162.1");
+    expect(verifiedSummary("adapter 0.95.0 with Claude Code 2.1.310")).toBe("Tested on 2.1.310");
+  });
+
+  it("says untested for unverified integrations, a date as a date, and nothing otherwise", () => {
+    expect(verifiedSummary("Unverified: documentation and synthetic protocol tests only")).toBe(
+      "Untested",
+    );
+    expect(verifiedSummary("2026-10-24")).toBe("Tested Oct 24, 2026");
+    expect(verifiedSummary("auracode")).toBe("");
   });
 });

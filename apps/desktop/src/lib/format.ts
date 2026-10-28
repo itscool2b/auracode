@@ -124,3 +124,21 @@ export function formatCost(amount: number | null, currency: string): string | nu
   const value = amount.toFixed(4);
   return currency === "USD" ? `$${value}` : `${value} ${currency}`;
 }
+
+/**
+ * An agent's version as a line under or beside its name. Detection reports what the binary
+ * printed, led by its label ("Claude Code 2.1.312"); beside the name that label only repeats it,
+ * so it goes ("2.1.312"). A label that differs from the name (the CLI behind an adapter) stays.
+ */
+export function agentVersion(name: string, version: string): string {
+  const lead = `${name} `;
+  return version.length > lead.length &&
+    version.slice(0, lead.length).toLowerCase() === lead.toLowerCase()
+    ? version.slice(lead.length)
+    : version;
+}
+
+/** Where an agent runs from. The demo agent runs inside auracode, which Rust reports as "built in". */
+export function builtInPath(path: string): string {
+  return path === "built in" ? "Built in" : path;
+}

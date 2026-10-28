@@ -290,12 +290,16 @@ impl SessionManager {
             folder: folder_key,
             _identity: prepared.identity,
         };
+        // The review holds canonical paths, which Windows spells verbatim (`\\?\C:\...`). Shells
+        // are started with the plain spelling: Windows PowerShell cannot start from a verbatim
+        // program path (its .NET configuration fails to load), and cmd.exe treats a verbatim
+        // working folder as UNC and falls back to the Windows folder.
         let spec = SpawnSpec {
             launch: LaunchSpec {
                 label: format!("Project {}", shell.choice.label),
-                program: shell.program,
+                program: crate::fsutil::plain_path(&shell.program),
                 args: shell.choice.args.into_iter().map(Into::into).collect(),
-                cwd: ProcessCwd::Fixed(prepared.folder.clone()),
+                cwd: ProcessCwd::Fixed(crate::fsutil::plain_path(&prepared.folder)),
                 set_env: Vec::new(),
                 daemons: Vec::new(),
                 startup_timeout: Duration::from_secs(15),

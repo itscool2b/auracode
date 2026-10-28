@@ -153,7 +153,8 @@ describe("New chat", () => {
     expect(html).toContain(
       "Creating this chat downloads @agentclientprotocol/claude-agent-acp 0.95.0",
     );
-    expect(html).toContain("Claude Code 2.1.309 via claude-agent-acp 0.95.0");
+    // The version line under "Claude Code is ready" does not repeat the name.
+    expect(html).toContain(">2.1.309 via claude-agent-acp 0.95.0 (/usr/local/bin/claude)<");
     // One Claude Code, whichever way it runs.
     expect(html.match(/type="radio"/g)?.length).toBe(1);
     expect(buttons(html).find((b) => b.label === "Refreshing…")?.disabled).toBe(true);

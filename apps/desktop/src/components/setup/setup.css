@@ -733,6 +733,14 @@
   line-height: var(--g-leading-ui);
 }
 
+/* What the form waits for next (a folder to clone into), before anything is wrong. */
+.clone-hint {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
 .clone-problem {
   margin: 0;
   color: var(--g-red);

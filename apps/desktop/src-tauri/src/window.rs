@@ -217,7 +217,51 @@ pub fn create_main(
         builder = builder.additional_browser_args(&arguments);
     }
 
-    Ok(builder.build()?)
+    let window = builder.build()?;
+    #[cfg(windows)]
+    if let Ok(hwnd) = window.hwnd() {
+        caption::paint(hwnd.0);
+    }
+    Ok(window)
+}
+
+/// Graphite's black (`--g-bg`) and fg-3 (#858585) as Windows COLORREFs (0x00BBGGRR).
+#[cfg(any(windows, test))]
+const CAPTION_COLORS: [u32; 2] = [0x0000_0000, 0x0085_8585];
+
+/// Windows keeps its native title bar (its caption buttons keep Snap Layouts, plan.md), which
+/// Windows 11 paints in the system's dark grey or the Mica material: a lighter band above the black
+/// window (6.1). DWM paints the caption Graphite's black and its title fg-3 instead. Windows 10
+/// ignores both attributes and keeps its own caption.
+#[cfg(windows)]
+#[allow(unsafe_code)]
+mod caption {
+    use windows_sys::Win32::Graphics::Dwm::{
+        DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DwmSetWindowAttribute,
+    };
+
+    pub fn paint(hwnd: *mut core::ffi::c_void) {
+        let [caption, text] = super::CAPTION_COLORS;
+        for (attribute, color) in [(DWMWA_CAPTION_COLOR, caption), (DWMWA_TEXT_COLOR, text)] {
+            // SAFETY: `hwnd` is this process's live main window, and DWM copies the 4-byte value
+            // before returning; an older Windows answers with an error and nothing changes.
+            let result = unsafe {
+                DwmSetWindowAttribute(
+                    hwnd,
+                    attribute as u32,
+                    (&raw const color).cast(),
+                    size_of::<u32>() as u32,
+                )
+            };
+            if result < 0 {
+                tracing::debug!(
+                    result,
+                    attribute,
+                    "the window caption keeps its system colour"
+                );
+            }
+        }
+    }
 }
 
 /// The switches wry gives every WebView2 environment unless the app sets its own.
@@ -410,6 +454,32 @@ fn leave_for_browser(app: &AppHandle, url: &Url) {
 
 #[cfg(test)]
 mod tests {
+    /// The caption's colours are Graphite's own tokens, so the title bar and the page meet without
+    /// a seam: `--g-bg` behind the caption and `--g-fg-3` for its title.
+    #[test]
+    fn the_caption_takes_graphites_black_and_fg_3() {
+        let tokens = include_str!("../../../../packages/ui/src/graphite/tokens.css");
+        let colorref = |name: &str| {
+            let line = tokens
+                .lines()
+                .find(|line| line.trim_start().starts_with(&format!("{name}:")))
+                .unwrap_or_else(|| panic!("{name} is a Graphite token"));
+            let hex = line
+                .split('#')
+                .nth(1)
+                .expect("a hex colour")
+                .get(..6)
+                .unwrap();
+            let rgb = u32::from_str_radix(hex, 16).unwrap();
+            // 0x00RRGGBB to Windows' 0x00BBGGRR.
+            ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF)
+        };
+        assert_eq!(
+            super::CAPTION_COLORS,
+            [colorref("--g-bg"), colorref("--g-fg-3")]
+        );
+    }
+
     #[cfg(all(windows, debug_assertions))]
     #[test]
     fn only_webdriver_automation_adds_the_drivers_switches_to_wrys_own() {

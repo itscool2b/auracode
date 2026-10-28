@@ -51,6 +51,8 @@ function Keys({ keys, mac }: { readonly keys: string; readonly mac: boolean }) {
     "↑": "Up arrow",
     "↓": "Down arrow",
     "1–9": "1 to 9",
+    "`": "Backtick",
+    "\\": "Backslash",
   };
   const caps = keys === "Esc again" ? ["Esc", "Esc"] : keys.split(" ");
   return (
@@ -159,6 +161,9 @@ export function SettingsScreen({
     ["Open chat 1 to 9 in the sidebar", `${key} 1–9`],
     ["Search chats, projects and files", `${key} K`],
     ["Open context panel", `${key} J`],
+    ["Show or hide the terminal", `${key} \``],
+    ["New terminal", `${key} Shift \``],
+    ["Collapse the sidebar", `${key} \\`],
     ["Choose agent, model and effort", `${key} .`],
     ["Open settings", `${key} ,`],
     ["Send message", "Enter"],
