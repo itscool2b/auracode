@@ -72,6 +72,30 @@ const agents: AgentEntry[] = [
         }
       : null,
 }));
+// What a version probe found for each installed agent, so the details show where it runs from,
+// how it was installed and, for Codex, its latest release.
+const PACKAGES: Readonly<Record<string, string>> = {
+  claude: "@anthropic-ai/claude-code",
+  codex: "@openai/codex",
+  pi: "@earendil-works/pi-coding-agent",
+};
+for (const agent of agents) {
+  const name = PACKAGES[agent.id];
+  if (!name || agent.availability.state !== "ready") continue;
+  const version = agent.availability.version ?? "";
+  agent.installation = {
+    agent_id: agent.id,
+    provider: agent.id,
+    host: { type: "native" },
+    launch_path: `C:\\Users\\fixture\\AppData\\Roaming\\npm\\${agent.id}.cmd`,
+    resolved_path: null,
+    version,
+    channel: { type: "npm", package: name },
+    verification: { state: "verified", version, scope: "fixture" },
+  };
+  if (agent.id === "codex")
+    agent.latest_release = { version, source: "npm latest", checked_at: null, stale: true };
+}
 // Claude Code and Codex each run directly or through their ACP adapter: one entry each, with the
 // Connection setting in their details (Automatic picks the direct connection here).
 const ADAPTERS: Readonly<Record<string, [string, string]>> = {
@@ -139,6 +163,14 @@ const transport = new FakeTransport({
     setConnection(agentId, connection);
     return detected();
   },
+  // Rust can update Claude Code's npm install, so its newer release has an Update action; the
+  // others say why not, in their details. Reading this runs no vendor command.
+  agentMaintenance: async (agentId) => ({
+    auth_status: false,
+    login_available: false,
+    update_unavailable:
+      agentId === "claude" ? null : "Synthetic fixture: no vendor command can run here.",
+  }),
   pickFolder: async () => "C:/fixture/Orbit",
 });
 const app = new AppStore(transport);

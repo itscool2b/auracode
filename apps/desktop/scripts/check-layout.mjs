@@ -2,7 +2,7 @@
  * The layout probe: walks every ?preview= mode in
  * Chromium and WebKit at two window sizes, plus the chat shell's floating layers opened as a person
  * opens them ("settled#picker": the picker, the palette, the chat menu, the Changes panel, a
- * typed message) and other screens' states ("plugins#plugin-menu"),
+ * typed message) and other screens' states ("plugins#plugin-menu", an agent's opened details),
  * and fails on the five things a clean screen never has:
  *
  * 1. Horizontal overflow: the page scrolls sideways, or a visible box reaches past the window.
@@ -63,6 +63,18 @@ export const MODES = [
   "settings#defaults",
   "setup",
   "agents",
+  // An agent's details opened on the Agents page, in each state they take: ready on its direct
+  // connection, ready on its ACP adapter, a newer release with Update, not installed, and broken;
+  // then the same details in setup's compact roster.
+  "agents#codex",
+  "agents#codex-adapter",
+  "agents#claude-update",
+  "agents#grok-missing",
+  "agents&broken#cursor-broken",
+  "setup#roster",
+  // The details' executable choice, opened on its own fixture page (the Agents preview has no
+  // executables to list).
+  "scripts/fixtures/agent-installations.html#executables",
   // New chat in a project folder: a Git folder's worktree chip, no commit yet, a plain folder.
   "new-worktree",
   "new-unavailable",
@@ -161,8 +173,46 @@ async function queueTwo(page) {
   await page.getByTestId("queued-prompt").nth(1).waitFor();
 }
 
+/** Opens an agent's details on the Agents page, as a person does, and brings them into view. */
+async function openAgent(page, name) {
+  const row = page.locator(".agent-row", {
+    has: page.locator(".agent-row-name strong", { hasText: new RegExp(`^${name}$`) }),
+  });
+  await row.locator(".agent-row-toggle").click();
+  await row.locator(".agent-detail").waitFor();
+  return row;
+}
+
+/** Centres the opened row in the page's scroller, so every probe sees the whole of it. */
+const showRow = (row) => row.evaluate((node) => node.scrollIntoView({ block: "center" }));
+
 /** How each "<mode>#<view>" opens its layer before the probes run. */
 const OPENERS = {
+  codex: async (page) => showRow(await openAgent(page, "Codex")),
+  "codex-adapter": async (page) => {
+    const row = await openAgent(page, "Codex");
+    await page.getByRole("combobox", { name: "Codex connection" }).selectOption("codex-acp");
+    await row.getByText(/The ACP adapter downloads once/).waitFor();
+    await showRow(row);
+  },
+  "claude-update": async (page) => {
+    const row = await openAgent(page, "Claude Code");
+    await row.getByRole("button", { name: "Update Claude Code" }).waitFor();
+    await showRow(row);
+  },
+  "grok-missing": async (page) => showRow(await openAgent(page, "Grok Build")),
+  "cursor-broken": async (page) => showRow(await openAgent(page, "Cursor")),
+  executables: async (page) => {
+    await page.getByRole("button", { name: "Choose executable" }).click();
+    await page.getByRole("button", { name: "Use this executable" }).waitFor();
+  },
+  // Setup's roster draws the same details compact, with the actions inside them.
+  roster: async (page) => {
+    await page.waitForFunction(() => !document.querySelector("[data-cinematic]"));
+    await page.getByRole("button", { name: "Get started" }).click();
+    await page.getByRole("heading", { name: /^Found 3 agents\./ }).waitFor();
+    await showRow(await openAgent(page, "Claude Code"));
+  },
   picker: (page) => page.keyboard.press("Control+."),
   palette: (page) => page.keyboard.press("Control+k"),
   "chat-menu": (page) => page.locator('summary[aria-label="Chat details and controls"]').click(),
