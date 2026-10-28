@@ -1,4 +1,5 @@
 import type { TerminalChunk } from "../bindings";
+import { errorMessage } from "./errors";
 import {
   agentLoginStart,
   terminalClose,
@@ -164,5 +165,5 @@ export class TerminalSession {
 }
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : "The terminal could not continue.";
+  return errorMessage(error, "The terminal could not continue.");
 }
