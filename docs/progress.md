@@ -3563,3 +3563,42 @@ InvalidState in about one run in five. Account writes are ordered per vault entr
 process, and every account test uses the same origin and account ID, so a restore in one test made
 another test's account stale. The tests now take turns with that entry. The result: 0 failures in
 20 runs of `accounts::`, against 3 in 15 before. Production code is unchanged.
+
+### Website in Shallows (2026-10-28, branch `site-shallows`)
+
+The owner chose direction B, Shallows, from three concepts ("shallows looks hella good. implement
+that"), and asked that it fix the earlier review: drop the tiles section and everything below it,
+remove the film card's Pause button, make hovering a seal or turtle smooth, and lose the dither.
+`docs/design/visual-language.md` records Shallows as the brand surface (1, 4.16, section 5).
+
+- **Shared primitives** in `@auracode/ui/graphite`, committed first and alone (bd537fe) for the
+  app branch: `Creature` with `SEAL_PATH` and `TURTLE_PATH` (and small variants for 64px and
+  below), generated from splines in `creatureGeometry.ts` so the gaps between body and flippers
+  are exact; `Shallows`, the lit-water panel and its tokens; `Swimmers`, transform-only motion on
+  the shared frame clock, paused off screen and in hidden tabs, still under reduced motion, with a
+  smooth eased give-way field for the pointer instead of the old lens.
+- **Website**: the hero is one lit panel with the nav resting on it, two near silhouettes and a far
+  turtle, the rotating headline (now a FLIP glide, no blur, no glint), one Download and the real
+  app. The film card, the tiles and the giant dithered footer logo are gone. One capabilities panel
+  takes their place: six one-line rows with a 2px timer and a live view of the app that cross-fades
+  on hover, focus, click or the timer, a real tab list. Then a hairline FAQ, a closing panel in
+  lit water and a minimal footer. The 404 is a lit panel with a turtle. Status marks are circles.
+  The social card is redrawn in Shallows; the dither fallback images are no longer built, and no
+  dither code ships to the site (checked in the built JavaScript).
+- **Motion**: blocks rise 16px and fade in once; the three primary Download pills are magnetic
+  (transform only); the product settles in on scroll where scroll timelines run. Only transform
+  and opacity animate, plus the FAQ's 300ms disclosure.
+
+Checks on this branch: `pnpm lint` (37 warnings, all existing in desktop CSS), `pnpm typecheck`
+and `pnpm test` pass: scripts 22, ui 294, desktop 441 plus 5 (19 skipped), design lab 352, web 4.
+`pnpm --filter @auracode/web test:browser` passes in Chromium and WebKit, now also running axe on
+each of the six capability views and checking their keys, and that the home page has no canvas and
+no Play or Pause. `worker:build` and `worker:test` pass (5 of 5). Frame times on the built site in
+headless Chromium at 1440 by 900: 0 of 1,495 frames over 25ms across idle, sweeping the pointer over
+the swimmers, hovering the magnetic button, scrolling and switching capabilities (max 16.8ms, no
+long tasks); the trace shows 14ms of layout and 52ms of paint in total. Comparison sheets are in
+`target/design-research/sheets/site-shallows-*.png`.
+
+Not done here: the desktop app still uses the dither field on its first-launch intro and
+onboarding until its Shallows branch; `StatusDot` itself becomes a circle with the `native-fixes`
+branch (the site styles its own dots). The hand walkthrough before merge and real Safari remain.

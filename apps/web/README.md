@@ -15,7 +15,8 @@ corepack pnpm --filter @auracode/web dev
 ```
 
 Browser checks use owned headless Chromium and WebKit, synthetic API/Turnstile responses, and
-block external requests. They cover desktop/mobile overflow, keyboard focus, no-JavaScript
+block external requests. They cover desktop/mobile overflow, keyboard focus, the capabilities tab
+list (axe on each view, arrow keys, Home and End), no dither canvas and no Pause button, no-JavaScript
 downloads, invalid-code recovery, email-only app links, CSRF headers, revocation confirmation and
 typed deletion confirmation. Axe checks the home and account views. Chromium verifies native Tab
 order; Windows WebKit lacks the OS full-keyboard-access setting, so that harness explicitly focuses
@@ -36,10 +37,11 @@ third-party reference image, font or script is shipped.
 
 The product image is a capture of the real desktop interface in its local preview mode, not a
 fabricated mock. Regenerate it from the integrated desktop whenever the app changes visibly. The
-dither field fallbacks, the favicons and the social card are generated at build time by
-`scripts/site-images.ts`, the last two from the logo's own path. Without JavaScript the hero and closing fields show their first frame as
-a static image and the other fields step aside for their content (the screenshot, the footer logo,
-the 404 numerals). Reduced motion shows a still frame.
+favicons and the social card are generated at build time by `scripts/site-images.ts` from the
+logo's and the creatures' own paths; the social card is drawn in Shallows. The site is built in
+Shallows (`Shallows`, `Swimmers` and `Creature` from `@auracode/ui/graphite`) and ships no dither
+engine. Without JavaScript the swimmers render still at their anchors, the capabilities panel shows
+its first row and the FAQ opens natively. Reduced motion holds every swimmer still.
 
 ## Deployment prerequisites
 
