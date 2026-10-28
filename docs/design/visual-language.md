@@ -1186,7 +1186,10 @@ One segment over the composer, its width and radius 16 (surface-2, 1px line ring
 under the hand or with focus in the row. Edit opens the words in a field in place (Enter saves,
 Esc cancels without touching the turn). Held messages (after a stop, an error or a restart) add
 "· held" to the head, a "held" chip on their rows, "Send queued" (24px soft) at the head's end and
-one 12/16 fg-3 line saying why they wait.
+one 12/16 fg-3 line saying why they wait. When a held message is next, everything after it waits
+behind it, and the head names the reason ("Held after a restart") with that message's own actions:
+"Send it now" (24px soft), "Discard" (24px ghost), and "Send all" (24px ghost) when more than one
+is held; later held rows keep their own Send. A held message never goes on its own.
 
 ### 6.13 Empty state
 

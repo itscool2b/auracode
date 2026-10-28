@@ -768,13 +768,49 @@ describe("the queue and the composer's stop button", () => {
     expect(html).toContain('data-test-reason="held"');
     // The reason replaces the general note under the list.
     expect(html).not.toContain("chat-queue-note");
+    // The head acts on the first held message; the later held one keeps its own Send.
     expect(buttons(html).map((b) => b.label)).toEqual([
-      "Send queued",
-      "Send this message now",
+      "Send it now",
+      "Discard",
+      "Send all",
       "Remove from the queue",
       "Send this message now",
       "Remove from the queue",
     ]);
+  });
+
+  it("keeps a new message behind a held one, offering Send it now or Discard for the held one", () => {
+    const queue = [
+      { prompt_id: "held", preview: "typed before the restart", held: true, created_at: 1 },
+      { prompt_id: "new", preview: "typed after it", held: false, created_at: 2 },
+    ];
+    const wait = queueWaitView({ reason: "held", after: "restart" }, "Claude Code", {
+      canInterrupt: true,
+      canRecreate: false,
+    });
+    const html = renderToStaticMarkup(
+      <QueueList
+        queue={queue}
+        held={true}
+        wait={wait}
+        onRemove={noop}
+        onSendQueued={noop}
+        onSendNow={noop}
+      />,
+    );
+    expect(html).toContain("Held after a restart");
+    expect(html).toContain("2 queued");
+    // One held message: no Send all, and no second Send on its own row.
+    expect(buttons(html).map((b) => b.label)).toEqual([
+      "Send it now",
+      "Discard",
+      "Remove from the queue",
+      "Remove from the queue",
+    ]);
+    expect(html).toContain('data-testid="queue-send-held"');
+    expect(html).toContain('data-testid="queue-discard-held"');
+    expect(html).not.toContain('data-testid="send-queued"');
+    expect(wait?.detail).toContain("Send it now, or discard it.");
   });
 
   it("says a message typed while the agent starts goes once it has started", () => {

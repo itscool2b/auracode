@@ -1618,7 +1618,8 @@ impl ChatActor {
         }
         let prompt_id = new_id();
         let now = now_millis();
-        if self.can_dispatch() {
+        // A prompt goes at once only with nothing queued before it: held prompts keep their place.
+        if self.queue.is_empty() && self.can_dispatch() {
             let queued = self.dispatch(Prompt {
                 id: prompt_id.clone(),
                 parts,
@@ -1651,17 +1652,28 @@ impl ChatActor {
             None,
         );
         self.info_dirty = true;
-        if matches!(
-            self.status,
-            SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired
-        ) {
-            // A full slot shows as a card; the prompt stays queued.
-            let _ = self.start(false, false);
-        }
+        self.advance();
         Ok(PromptAck {
             prompt_id,
             queued: true,
         })
+    }
+
+    /// The queue's head may go now: it is sent when the agent can take it, or the agent starts
+    /// when it is stopped (a full slot shows as a card; the prompt stays queued). A held head is
+    /// the person's to send or discard, so nothing behind it moves on its own.
+    fn advance(&mut self) {
+        if !self.queue.first().is_some_and(|row| !row.held) {
+            return;
+        }
+        if self.can_dispatch() {
+            self.dispatch_next();
+        } else if matches!(
+            self.status,
+            SessionStatus::Stopped | SessionStatus::Failed | SessionStatus::AuthRequired
+        ) {
+            let _ = self.start(false, false);
+        }
     }
 
     /// `Ready` with no turn: a prompt goes out now.
@@ -1685,7 +1697,7 @@ impl ChatActor {
         let Some(index) = self.queue.iter().position(|row| row.id == prompt_id) else {
             return Err(SessionError::RequestNotPending);
         };
-        self.queue.remove(index);
+        let removed = self.queue.remove(index);
         self.queue_op(Op::QueueRemove {
             id: prompt_id.to_owned(),
         });
@@ -1699,6 +1711,10 @@ impl ChatActor {
         );
         self.info_dirty = true;
         self.schedule_flush();
+        // Discarding the held prompt everything waited behind lets the next one go, as if sent.
+        if index == 0 && removed.held {
+            self.advance();
+        }
         Ok(())
     }
 
@@ -1917,7 +1933,8 @@ impl ChatActor {
         }
     }
 
-    /// Holds every queued row: rows typed afterwards are not held, and go first at the next `Ready`.
+    /// Holds every queued row. Rows typed afterwards are not held but wait behind the held ones,
+    /// which go only when the person sends them (or are discarded): order is kept.
     fn hold_queue(&mut self, cause: HoldCause) {
         if self.queue.iter().all(|row| row.held) {
             return;
@@ -1940,10 +1957,11 @@ impl ChatActor {
         if !self.can_dispatch() {
             return;
         }
-        let Some(index) = self.queue.iter().position(|row| !row.held) else {
+        // The head goes first; a held head waits for the person, and everything behind it with it.
+        if !self.queue.first().is_some_and(|row| !row.held) {
             return;
-        };
-        let row = self.queue.remove(index);
+        }
+        let row = self.queue.remove(0);
         self.dispatch(Prompt {
             id: row.id,
             parts: if row.parts.is_empty() {
@@ -4249,7 +4267,9 @@ impl ChatActor {
         }
         if let Some(fresh) = self.pending_start.take() {
             let _ = self.start(fresh, false);
-        } else if self.status == SessionStatus::Stopped && self.queue.iter().any(|row| !row.held) {
+        } else if self.status == SessionStatus::Stopped
+            && self.queue.first().is_some_and(|row| !row.held)
+        {
             let _ = self.start(false, false);
         }
     }
@@ -4535,7 +4555,7 @@ impl ChatActor {
             && self.turn.is_none()
             && self.subscribers.is_empty()
             && !self.normalizer.has_open_requests()
-            && !self.queue.iter().any(|row| !row.held)
+            && !self.queue.first().is_some_and(|row| !row.held)
             && !self.quitting
             && self
                 .driver
@@ -4830,7 +4850,7 @@ impl ChatActor {
         if !self.store.workspace_available(&self.chat_id) {
             return Some(QueueWait::WorkspaceRemoved);
         }
-        if self.queue.iter().all(|row| row.held) {
+        if self.queue.first().is_some_and(|row| row.held) {
             return Some(QueueWait::Held {
                 after: self.hold_cause,
             });

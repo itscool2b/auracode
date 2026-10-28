@@ -784,6 +784,13 @@ function Preview() {
           publish([ev.lifecycle(promptId, "started"), ev.session(header())]);
           return queue;
         },
+        // Discard: the message leaves the queue; the next one goes unless it is held too.
+        cancelQueued: async (_chatId, promptId) => {
+          queueCalls.push(`discard:${promptId}`);
+          queue = queue.filter((row) => row.prompt_id !== promptId);
+          wait = queue[0]?.held ? { reason: "held", after: "restart" } : { reason: "working" };
+          publish([ev.lifecycle(promptId, "cancelled"), ev.session(header())]);
+        },
         resumeQueue: async () => {
           queueCalls.push("resumeQueue");
           queue = queue.map((row) => ({ ...row, held: false }));

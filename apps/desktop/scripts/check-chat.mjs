@@ -28,7 +28,7 @@ let server;
 let serverOutput = "";
 await mkdir(out, { recursive: true });
 
-/** The queue's waits (`?preview=queue-*`): the words its head says and the one action it offers. */
+/** The queue's waits (`?preview=queue-*`): the words its head says and the actions it offers. */
 const QUEUE_CASES = [
   { mode: "queue-starting", reason: "starting", text: "Starting Claude Code", action: null },
   {
@@ -56,7 +56,12 @@ const QUEUE_CASES = [
     text: "Answer the permission request first",
     action: null,
   },
-  { mode: "queue-held", reason: "held", text: "Held after a restart", action: "Send queued" },
+  {
+    mode: "queue-held",
+    reason: "held",
+    text: "Held after a restart",
+    action: ["Send it now", "Discard", "Send all"],
+  },
   {
     mode: "queue-failed",
     reason: "start_failed",
@@ -255,7 +260,7 @@ async function inspect(engine, launcher) {
       );
       assert.deepEqual(
         await page.locator(".chat-queue-head-actions button").allTextContents(),
-        queue.action ? [queue.action] : [],
+        Array.isArray(queue.action) ? queue.action : queue.action ? [queue.action] : [],
         `${engine}/${queue.mode}: the head's action`,
       );
       assert.equal(
@@ -281,16 +286,29 @@ async function inspect(engine, launcher) {
     ]);
     await page.getByTestId("still-working-send-now").click();
     await page.waitForFunction(() => window.queuePreview.calls().includes("sendNow:queued-1"));
-    // Held after a restart: one message goes on its own, then Send queued releases the rest.
+    // Held after a restart: a later held message goes on its own with its row's Send; the head's
+    // Send it now sends the first; Discard drops it instead; Send all releases every held one.
     await page.goto(`${url}/?preview=queue-held`);
     await page.getByRole("button", { name: "Send this message now" }).first().click();
-    await page.waitForFunction(() => window.queuePreview.calls().includes("sendNow:queued-1"));
+    await page.waitForFunction(() => window.queuePreview.calls().includes("sendNow:queued-2"));
     assert.equal(await page.getByTestId("queued-prompt").count(), 1);
     assert.equal(
       await page.getByTestId("queued-prompt").first().getAttribute("data-test-held"),
       "true",
       "the other message stays held",
     );
+    assert.deepEqual(
+      await page.locator(".chat-queue-head-actions button").allTextContents(),
+      ["Send it now", "Discard"],
+      "one held message: its own actions, no Send all",
+    );
+    await page.getByTestId("queue-send-held").click();
+    await page.waitForFunction(() => window.queuePreview.calls().includes("sendNow:queued-1"));
+    await page.goto(`${url}/?preview=queue-held`);
+    await page.getByTestId("queue-discard-held").click();
+    await page.waitForFunction(() => window.queuePreview.calls().includes("discard:queued-1"));
+    assert.equal(await page.getByTestId("queued-prompt").count(), 1);
+    await page.goto(`${url}/?preview=queue-held`);
     await page.getByTestId("send-queued").click();
     await page.waitForFunction(() => window.queuePreview.calls().includes("resumeQueue"));
     // A failed start retries from the queue; a missing worktree opens Recreate folder's review.

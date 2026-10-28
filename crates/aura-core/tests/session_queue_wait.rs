@@ -453,6 +453,99 @@ async fn a_prompt_held_by_a_restart_is_released_and_starts_the_agent() {
     assert_eq!(prompts(&handle), ["later"]);
 }
 
+/// After a restart a new prompt queues behind the held one, which keeps "Held after a restart":
+/// nothing starts the agent or sends either of them until the person decides. Send it now sends
+/// the held one first, then the new one.
+#[tokio::test(start_paused = true)]
+async fn a_new_prompt_waits_behind_a_prompt_held_by_a_restart() {
+    let (first, _) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Hang,
+    ]);
+    let h = Harness::new(vec![first]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.send(&chat.id, "work".into()).await.expect("send");
+    let held = h
+        .manager
+        .send(&chat.id, "older".into())
+        .await
+        .expect("send");
+    let (second, handle) = ScriptedDriver::new(vec![ready_step("n1")]);
+    let h = h.restart(vec![second], Options::default()).await;
+    let newer = h
+        .manager
+        .send(&chat.id, "newer".into())
+        .await
+        .expect("send");
+    assert!(newer.queued);
+    tokio::time::sleep(Duration::from_secs(30)).await;
+    assert!(h.factory.setups().is_empty(), "nothing started the agent");
+    assert!(prompts(&handle).is_empty());
+    assert_eq!(
+        wait_now(&h, &chat.id).await,
+        Some(QueueWait::Held {
+            after: HoldCause::Restart
+        })
+    );
+    let rows: Vec<(String, bool)> = h
+        .queue(&chat.id)
+        .await
+        .into_iter()
+        .map(|row| (row.prompt_id, row.held))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (held.prompt_id.clone(), true),
+            (newer.prompt_id.clone(), false)
+        ]
+    );
+    h.manager
+        .send_now(&chat.id, &held.prompt_id)
+        .await
+        .expect("Send it now");
+    let turn = prompt_turn(&handle).await;
+    assert_eq!(prompts(&handle), ["older"]);
+    assert_eq!(wait_now(&h, &chat.id).await, Some(QueueWait::Working));
+    handle.emit(ended(&turn, StopReason::EndTurn));
+    prompt_turn(&handle).await;
+    assert_eq!(prompts(&handle), ["older", "newer"]);
+}
+
+/// Discarding the held prompt lets the one queued behind it go, starting the agent as a send would.
+#[tokio::test(start_paused = true)]
+async fn discarding_the_held_prompt_lets_the_next_one_go() {
+    let (first, _) = ScriptedDriver::new(vec![
+        ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        Step::Hang,
+    ]);
+    let h = Harness::new(vec![first]);
+    let chat = h.chat().await;
+    h.status(&chat.id, SessionStatus::Ready).await;
+    h.manager.send(&chat.id, "work".into()).await.expect("send");
+    let held = h
+        .manager
+        .send(&chat.id, "older".into())
+        .await
+        .expect("send");
+    let (second, handle) = ScriptedDriver::new(vec![ready_step("n1")]);
+    let h = h.restart(vec![second], Options::default()).await;
+    h.manager
+        .send(&chat.id, "newer".into())
+        .await
+        .expect("send");
+    h.manager
+        .cancel_queued(&chat.id, &held.prompt_id)
+        .await
+        .expect("Discard");
+    prompt_turn(&handle).await;
+    assert_eq!(prompts(&handle), ["newer"]);
+    assert!(h.queue(&chat.id).await.is_empty());
+}
+
 /// A sign-in error puts the prompt back held until the agent is signed in.
 #[tokio::test(start_paused = true)]
 async fn a_sign_in_error_holds_the_prompt_for_the_sign_in() {

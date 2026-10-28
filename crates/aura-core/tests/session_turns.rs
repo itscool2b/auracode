@@ -163,7 +163,8 @@ async fn queue_runs_prompts_in_order_after_a_normal_end() {
 }
 
 /// S15 and A12: an interrupt holds the rows queued before it, even when the agent's `end_turn`
-/// races the cancel; a prompt typed after the interrupt is sent when that turn ends.
+/// races the cancel; a prompt typed after the interrupt waits behind them, and Send queued sends
+/// them all in order.
 #[tokio::test(start_paused = true)]
 async fn interrupt_racing_end_turn_holds_queue() {
     let (driver, handle) = ScriptedDriver::new(vec![
@@ -172,6 +173,8 @@ async fn interrupt_racing_end_turn_holds_queue() {
         Step::Expect(CommandMatch::Interrupt),
         Step::Wait(Duration::from_secs(1)),
         // The agent finished first and says so.
+        end_turn(StopReason::EndTurn),
+        Step::Expect(CommandMatch::Prompt),
         end_turn(StopReason::EndTurn),
         Step::Expect(CommandMatch::Prompt),
         end_turn(StopReason::EndTurn),
@@ -193,13 +196,22 @@ async fn interrupt_racing_end_turn_holds_queue() {
         .await
         .expect("send");
     assert!(after.queued, "the turn is still being cancelled");
-    let next = command(&handle, CommandMatch::Prompt).await;
-    assert_eq!(prompt_text(&next), "typed after the stop");
     h.status(&chat.id, SessionStatus::Ready).await;
-    let rows = h.queue(&chat.id).await;
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].prompt_id, before.prompt_id);
-    assert!(rows[0].held, "queued before the stop: held");
+    tokio::time::sleep(Duration::from_secs(30)).await;
+    let rows: Vec<(String, bool)> = h
+        .queue(&chat.id)
+        .await
+        .into_iter()
+        .map(|row| (row.prompt_id, row.held))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (before.prompt_id.clone(), true),
+            (after.prompt_id.clone(), false)
+        ],
+        "queued before the stop: held; typed after it: waiting behind it"
+    );
     let stored = h.stored(&chat.id).await;
     let first_end = stored
         .iter()
@@ -213,11 +225,15 @@ async fn interrupt_racing_end_turn_holds_queue() {
         StopReason::EndTurn,
         "the agent's own reason is shown"
     );
-    // Send queued releases the held row.
+    // Send queued releases the held row; the one typed after it follows.
     h.manager.resume_queue(&chat.id).await.expect("resume");
     assert_eq!(
         prompt_text(&command(&handle, CommandMatch::Prompt).await),
         "queued before the stop"
+    );
+    assert_eq!(
+        prompt_text(&command(&handle, CommandMatch::Prompt).await),
+        "typed after the stop"
     );
 }
 
@@ -530,9 +546,11 @@ async fn a_stop_drops_a_start_asked_for_while_stopping() {
     assert_eq!(h.factory.setups().len(), 1, "the Start fresh was dropped");
 }
 
-/// S15: a crash holds the queue, and a prompt typed after the crash goes out at the next `Ready`.
+/// S15: a crash holds the queue, and a prompt typed after the crash waits behind the held one:
+/// nothing starts or goes on its own. Sending the held one starts the agent and sends both, in
+/// the order they were typed.
 #[tokio::test(start_paused = true)]
-async fn queue_is_held_after_a_crash_and_new_prompts_go_first() {
+async fn queue_is_held_after_a_crash_and_new_prompts_wait_behind_it() {
     let (first, first_handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
         Step::Expect(CommandMatch::Prompt),
@@ -544,6 +562,8 @@ async fn queue_is_held_after_a_crash_and_new_prompts_go_first() {
     ]);
     let (second, handle) = ScriptedDriver::new(vec![
         ready_step("n1"),
+        Step::Expect(CommandMatch::Prompt),
+        end_turn(StopReason::EndTurn),
         Step::Expect(CommandMatch::Prompt),
         end_turn(StopReason::EndTurn),
     ]);
@@ -558,18 +578,41 @@ async fn queue_is_held_after_a_crash_and_new_prompts_go_first() {
         .expect("send");
     command(&first_handle, CommandMatch::Prompt).await;
     h.status(&chat.id, SessionStatus::Stopped).await;
-    h.manager
+    let typed = h
+        .manager
         .send(&chat.id, "typed after the crash".into())
         .await
         .expect("send");
+    assert!(typed.queued);
+    tokio::time::sleep(Duration::from_secs(30)).await;
+    assert_eq!(h.factory.setups().len(), 1, "nothing started the agent");
+    let rows: Vec<(String, bool)> = h
+        .queue(&chat.id)
+        .await
+        .into_iter()
+        .map(|row| (row.prompt_id, row.held))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (held.prompt_id.clone(), true),
+            (typed.prompt_id.clone(), false)
+        ]
+    );
+    h.manager
+        .send_now(&chat.id, &held.prompt_id)
+        .await
+        .expect("Send it now");
+    assert_eq!(
+        prompt_text(&command(&handle, CommandMatch::Prompt).await),
+        "queued before the crash"
+    );
     assert_eq!(
         prompt_text(&command(&handle, CommandMatch::Prompt).await),
         "typed after the crash"
     );
-    let rows = h.queue(&chat.id).await;
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].prompt_id, held.prompt_id);
-    assert!(rows[0].held);
+    h.status(&chat.id, SessionStatus::Ready).await;
+    assert!(h.queue(&chat.id).await.is_empty());
 }
 
 /// P10: a crash mid-turn force-stops the processes, shows the error with the stderr tail, ends

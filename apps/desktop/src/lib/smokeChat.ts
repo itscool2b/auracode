@@ -45,7 +45,7 @@ import {
  *   through the quit flow, which interrupts that turn and holds that prompt.
  * - **chat_reopen**: the same data folder again. The chat is listed, opening it starts nothing,
  *   its stored history renders the same script, the turn the quit interrupted reads Interrupted,
- *   the prompt reads held, Resume starts the agent, and Send queued sends the prompt.
+ *   the prompt reads held, Resume starts the agent, and Send it now sends the prompt.
  * - **agent** (`AURACODE_SMOKE_AGENT`, local runs only): one minimal chat with a real agent.
  *
  * Each scenario reports every check its list defines (`SMOKE_*_CHECKS`, which the shell holds the
@@ -303,8 +303,8 @@ export const CHAT_TRANSCRIPT: readonly SegmentShape[] = [
   SEGMENTS.busy,
   SEGMENTS.queued,
   SEGMENTS.hang,
-  SEGMENTS.afterStop,
   SEGMENTS.heldAtStop,
+  SEGMENTS.afterStop,
   SEGMENTS.beforeFail,
   SEGMENTS.fail,
   SEGMENTS.heldAtError,
@@ -545,13 +545,15 @@ async function answerPermission(prompt: string, optionId: string): Promise<Segme
   return asking;
 }
 
-/** Clicks Send queued and waits for the turn of `prompt` to end with its echo. */
+/**
+ * Clicks the held message's Send it now (Send queued when the queue waits for something else) and
+ * waits for the turn of `prompt` to end with its echo.
+ */
 async function sendQueued(prompt: string): Promise<SegmentView> {
-  click(one("send-queued"), "Send queued");
+  click(one("queue-send-held") ?? one("send-queued"), "Send it now");
   const ended = await waitTurnEnded(prompt);
   expectSegment(ended, echoTurn(prompt));
   expectReply(ended, echoed(prompt));
-  await waitQueueEmpty();
   return ended;
 }
 
@@ -881,16 +883,19 @@ async function chatScenario(
     const stopped = await waitTurnEnded(PROMPTS.hang);
     expectSegment(stopped, SEGMENTS.hang);
     await waitQueued(PROMPTS.heldAtStop, true);
-    await waitFor("Send queued", () => one("send-queued"));
+    await waitFor("Send it now", () => one("queue-send-held"));
     await expectNoTurn(PROMPTS.heldAtStop, "it was queued before the Stop and is held");
     await send(PROMPTS.afterStop);
-    const after = await waitTurnEnded(PROMPTS.afterStop);
-    expectReply(after, echoed(PROMPTS.afterStop));
+    await waitQueued(PROMPTS.afterStop, false);
+    await expectNoTurn(PROMPTS.afterStop, "it waits behind the held prompt");
     if (queued(PROMPTS.heldAtStop)?.held !== true || turnOf(PROMPTS.heldAtStop) !== null) {
       throw new StepError(`the held prompt did not stay held (${describeQueue()})`);
     }
     await sendQueued(PROMPTS.heldAtStop);
-    return "the queued prompt was held at the Stop and not sent; the prompt typed after it went out at once; Send queued sent the held one";
+    const after = await waitTurnEnded(PROMPTS.afterStop);
+    expectReply(after, echoed(PROMPTS.afterStop));
+    await waitQueueEmpty();
+    return "the queued prompt was held at the Stop and not sent; the prompt typed after it waited behind it; Send it now sent the held one, then the other";
   });
 
   await checks.run("error-card", async () => {
@@ -912,7 +917,8 @@ async function chatScenario(
     await waitQueued(PROMPTS.heldAtError, true);
     await expectNoTurn(PROMPTS.heldAtError, "it was queued before the failed turn and is held");
     await sendQueued(PROMPTS.heldAtError);
-    return "the prompt queued behind the failed turn was held; Send queued sent it";
+    await waitQueueEmpty();
+    return "the prompt queued behind the failed turn was held; Send it now sent it";
   });
 
   await checks.run("crash-card", async () => {
@@ -941,7 +947,8 @@ async function chatScenario(
       throw new StepError(`the held prompt did not stay held (${describeQueue()})`);
     }
     await sendQueued(PROMPTS.heldAtCrash);
-    return "the prompt queued behind the crash was held; Retry started the agent and the prompt stayed held until Send queued";
+    await waitQueueEmpty();
+    return "the prompt queued behind the crash was held; Retry started the agent and the prompt stayed held until Send it now";
   });
 
   await checks.run("auth-card", async () => {
@@ -1126,8 +1133,10 @@ async function reopenScenario(
     if (rows.length !== 1 || queued(PROMPTS.heldAtQuit)?.held !== true) {
       throw new StepError(`the queue shows ${describeQueue()}`);
     }
-    if (one("send-queued") === null) throw new StepError("the held prompt offers no Send queued");
-    return `"${PROMPTS.heldAtQuit}" waits held, with Send queued`;
+    if (one("queue-send-held") === null || one("queue-discard-held") === null) {
+      throw new StepError("the held prompt offers no Send it now and Discard");
+    }
+    return `"${PROMPTS.heldAtQuit}" waits held, with Send it now and Discard`;
   });
 
   await checks.run("reopen-blob", async () => {
@@ -1151,7 +1160,8 @@ async function reopenScenario(
 
   await checks.run("reopen-send-queued", async () => {
     await sendQueued(PROMPTS.heldAtQuit);
-    return `Send queued sent "${PROMPTS.heldAtQuit}" and its reply arrived`;
+    await waitQueueEmpty();
+    return `Send it now sent "${PROMPTS.heldAtQuit}" and its reply arrived`;
   });
 }
 

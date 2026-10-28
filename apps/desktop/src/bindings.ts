@@ -2186,8 +2186,8 @@ export type PullRequestResult = {
 };
 
 /**
- *  Why queued prompts wait. The first prompt that is not held goes next; when every prompt is held,
- *  they wait for the person ([`QueueWait::Held`]).
+ *  Why queued prompts wait. Prompts go in order: a held prompt waits for the person to send or
+ *  discard it, and every prompt queued behind it waits too ([`QueueWait::Held`]).
  */
 export type QueueWait = 
 /**  The agent is starting or resuming its session. */
@@ -2218,7 +2218,7 @@ export type QueueWait =
 { reason: "folder_missing" } | 
 /**  The chat's project or folder was removed. */
 { reason: "workspace_removed" } | 
-/**  Every queued prompt is held, since `after`. */
+/**  The next prompt is held, since `after`, and waits for the person with any behind it. */
 { reason: "held"; after: HoldCause };
 
 export type QueuedPrompt = {
