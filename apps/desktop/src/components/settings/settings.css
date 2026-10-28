@@ -91,6 +91,7 @@
 
 /* A group (X Money): an optional heading and one short line, then the well. */
 .settings-section + .settings-section,
+.settings-group + .settings-section,
 .settings-section + :is(.settings-error, .settings-footnote) + .settings-section {
   margin-top: var(--g-space-32);
 }

@@ -122,6 +122,8 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::cancel_demo_stream,
             commands::window_ready,
             commands::reveal_data_dir,
+            crate::data_cleanup_commands::data_cleanup_review,
+            crate::data_cleanup_commands::data_cleanup_apply,
             commands::acknowledge_recovery,
             commands::smoke_report,
             commands::agents_list,

@@ -119,6 +119,16 @@ export const commands = {
 	 */
 	revealDataDir: () => typedError<null, AppError>(__TAURI_INVOKE("reveal_data_dir")),
 	/**
+	 *  Reviews what deleting all of auracode's data would remove. Changes nothing; checks
+	 *  auracode's worktrees with read-only Git commands.
+	 */
+	dataCleanupReview: () => typedError<DataCleanupReview, AppError>(__TAURI_INVOKE("data_cleanup_review")),
+	/**
+	 *  Starts the reviewed cleanup and quits auracode. Running agents and terminals stop without a
+	 *  second question: the review said so. Nothing is deleted until auracode has exited.
+	 */
+	dataCleanupApply: (token: string, choice: DataCleanupChoice) => typedError<null, AppError>(__TAURI_INVOKE("data_cleanup_apply", { token, choice })),
+	/**
 	 *  Dismisses the database repair notice (`recovery_notice` in `app_info`) for good: later launches
 	 *  no longer show it. Takes no path: the shell acknowledges exactly the repair startup reported,
 	 *  never one the page names. Calling it again, or with no notice, does nothing; when it fails the
@@ -1174,6 +1184,62 @@ export type ConversationTurns = {
 export type Cost = {
 	amount: number | null,
 	currency: string,
+};
+
+/**  The person's choices in the review. */
+export type DataCleanupChoice = {
+	/**  Worktrees with unsaved work to delete too; each must be one the review listed. */
+	remove_worktrees: string[],
+	/**  macOS: move the app to the Trash afterwards. */
+	move_app_to_trash: boolean,
+};
+
+export type DataCleanupItem = {
+	kind: DataCleanupItemKind,
+	path: string,
+	/**  Size on disk, when it could be counted quickly. */
+	bytes: number | null,
+};
+
+export type DataCleanupItemKind = 
+/**  The data folder: chats, settings, worktrees, checkpoints, adapters. */
+"data" | 
+/**  Window position, web caches, preferences. */
+"app" | 
+/**  An entry auracode made in a data folder it does not own by name. */
+"entry" | 
+/**  Update downloads and other leftovers in the temporary folder. */
+"temporary";
+
+/**  What "Delete all auracode data" would remove, for the review. */
+export type DataCleanupReview = {
+	/**  One use, for [`data_cleanup_apply`], within ten minutes. */
+	token: string,
+	scope: DataCleanupScope,
+	items: DataCleanupItem[],
+	worktrees: DataCleanupWorktree[],
+	/**  Where auracode's keys are: "Windows Credential Manager" or "the macOS keychain". */
+	secure_store: string | null,
+	/**  macOS: the app bundle "move auracode to the Trash" would move; `None` where it cannot. */
+	app_bundle: string | null,
+};
+
+/**  How far the review reaches. */
+export type DataCleanupScope = 
+/**  Everything auracode keeps on this device. */
+"machine" | 
+/**  Only this launch's own data folder (`AURACODE_DATA_DIR`). */
+"data_folder";
+
+export type DataCleanupWorktree = {
+	path: string,
+	/**  The repository it belongs to, when Git could tell. */
+	repository: string | null,
+	branch: string | null,
+	/**  What deleting the folder would lose, in one line. */
+	summary: string,
+	/**  Uncommitted files or commits no other branch has (or Git could not check it). */
+	unsaved: boolean,
 };
 
 /**  The profile database as the info card shows it. */

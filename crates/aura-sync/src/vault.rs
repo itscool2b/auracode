@@ -95,6 +95,18 @@ impl NativeStore {
         #[cfg(any(windows, target_os = "macos"))]
         Ok(Self { store })
     }
+    /// Removes every entry in auracode's own service and returns how many went: the data cleanup
+    /// for an uninstall or a reset to a fresh install, so entries whose records are already gone
+    /// go too. The platform does the matching (Windows filters Credential Manager by the
+    /// `auracode.sync.v1:` target prefix, macOS the keychain by its service), so no other app's
+    /// credential reaches this process, and each hit is checked again before it is deleted.
+    pub fn sweep_app_entries(&self) -> Result<usize> {
+        let _guard = NATIVE_ACCESS.lock().map_err(|_| VaultError::Unavailable)?;
+        #[cfg(windows)]
+        return credential_manager::remove_prefixed(&format!("{SERVICE}:"));
+        #[cfg(not(windows))]
+        return sweep_by_service(self.store.as_ref());
+    }
     fn entry(&self, entry: &VaultEntry) -> Result<keyring_core::Entry> {
         let target = format!("{SERVICE}:{}", entry.0);
         #[cfg(windows)]
@@ -135,6 +147,175 @@ impl SecretStore for NativeStore {
         }
     }
 }
+/// The keychain sweep: the store's own search by exact service, then a second check of each hit,
+/// since a store may match loosely (keyring-core's mock matches substrings).
+#[cfg_attr(windows, allow(dead_code))]
+fn sweep_by_service(store: &keyring_core::CredentialStore) -> Result<usize> {
+    let spec = std::collections::HashMap::from([("service", SERVICE)]);
+    let entries = match store.search(&spec) {
+        Ok(entries) => entries,
+        Err(keyring_core::Error::NoEntry) => return Ok(0),
+        Err(error) => return Err(platform(error)),
+    };
+    let prefix = format!("{SERVICE}:");
+    let mut removed = 0;
+    for entry in entries {
+        let ours = entry
+            .get_specifiers()
+            .is_some_and(|(service, user)| service == SERVICE && user.starts_with(&prefix));
+        if !ours {
+            continue;
+        }
+        match entry.delete_credential() {
+            Ok(()) => removed += 1,
+            Err(keyring_core::Error::NoEntry) => {}
+            Err(error) => return Err(platform(error)),
+        }
+    }
+    Ok(removed)
+}
+
+/// Credential Manager's own filtered enumeration: `CredEnumerateW` with a `prefix*` filter returns
+/// only matching targets, so no other application's credential reaches this process. The FFI is
+/// confined to this module, which is why it alone allows `unsafe`.
+#[cfg(windows)]
+#[allow(unsafe_code)]
+mod credential_manager {
+    use super::{Result, VaultError};
+    use windows_sys::Win32::Foundation::{ERROR_NOT_FOUND, GetLastError};
+    use windows_sys::Win32::Security::Credentials::{
+        CRED_TYPE_GENERIC, CREDENTIALW, CredDeleteW, CredEnumerateW, CredFree,
+    };
+
+    pub(super) fn wide(text: &str) -> Vec<u16> {
+        text.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    /// Reads a NUL-terminated UTF-16 string the API returned.
+    ///
+    /// # Safety
+    /// `text` is null or points at a NUL-terminated UTF-16 string that outlives this call.
+    unsafe fn read(text: *const u16) -> Option<String> {
+        if text.is_null() {
+            return None;
+        }
+        let mut length = 0;
+        // SAFETY: the caller guarantees a terminated string; the loop stops at its NUL.
+        while unsafe { *text.add(length) } != 0 {
+            length += 1;
+        }
+        // SAFETY: `length` units were just read from the same allocation.
+        String::from_utf16(unsafe { std::slice::from_raw_parts(text, length) }).ok()
+    }
+
+    pub(super) fn remove_prefixed(prefix: &str) -> Result<usize> {
+        if prefix.is_empty() || prefix.contains('*') {
+            return Err(VaultError::Invalid);
+        }
+        let filter = wide(&format!("{prefix}*"));
+        let mut count = 0u32;
+        let mut credentials: *mut *mut CREDENTIALW = std::ptr::null_mut();
+        // SAFETY: valid out pointers; the filter is NUL-terminated and lives across the call.
+        let found = unsafe { CredEnumerateW(filter.as_ptr(), 0, &mut count, &mut credentials) };
+        if found == 0 {
+            // SAFETY: reads this thread's last error right after the failed call.
+            return match unsafe { GetLastError() } {
+                ERROR_NOT_FOUND => Ok(0),
+                _ => Err(VaultError::Unavailable),
+            };
+        }
+        let mut targets = Vec::new();
+        for index in 0..count as usize {
+            // SAFETY: CredEnumerateW returned `count` valid credential pointers.
+            let credential = unsafe { &**credentials.add(index) };
+            if credential.CredentialBlobSize > 0 && !credential.CredentialBlob.is_null() {
+                // Never keep secret bytes around, even our own: clear them before the free.
+                // SAFETY: the blob is `CredentialBlobSize` bytes inside this allocation.
+                unsafe {
+                    std::ptr::write_bytes(
+                        credential.CredentialBlob,
+                        0,
+                        credential.CredentialBlobSize as usize,
+                    )
+                };
+            }
+            // SAFETY: TargetName is a NUL-terminated string inside the same allocation.
+            let target = unsafe { read(credential.TargetName) };
+            if credential.Type == CRED_TYPE_GENERIC
+                && let Some(target) = target
+                && target.starts_with(prefix)
+            {
+                targets.push(target);
+            }
+        }
+        // SAFETY: frees the one buffer CredEnumerateW allocated; nothing points into it now.
+        unsafe { CredFree(credentials.cast()) };
+        let mut removed = 0;
+        for target in targets {
+            let name = wide(&target);
+            // SAFETY: a NUL-terminated target name that lives across the call.
+            if unsafe { CredDeleteW(name.as_ptr(), CRED_TYPE_GENERIC, 0) } != 0 {
+                removed += 1;
+            // SAFETY: reads this thread's last error right after the failed call.
+            } else if unsafe { GetLastError() } != ERROR_NOT_FOUND {
+                return Err(VaultError::Unavailable);
+            }
+        }
+        Ok(removed)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn refuses_an_empty_or_wildcard_prefix() {
+            assert!(super::remove_prefixed("").is_err());
+            assert!(super::remove_prefixed("auracode*").is_err());
+        }
+
+        /// Writes and sweeps throwaway session credentials under a random test-only prefix, never
+        /// auracode's own service. Ignored by default because it uses the real Credential
+        /// Manager: `cargo test -p aura-sync --lib credential_manager -- --ignored`.
+        #[test]
+        #[ignore = "uses the real Windows Credential Manager with a throwaway test prefix"]
+        fn removes_only_targets_with_the_prefix() {
+            use windows_sys::Win32::Security::Credentials::{
+                CRED_PERSIST_SESSION, CREDENTIALW, CredWriteW,
+            };
+            let unique = format!(
+                "{:x}-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos(),
+                std::process::id()
+            );
+            let prefix = format!("auracode.sweep-test.{unique}:");
+            let unrelated = format!("auracode.sweep-test-other.{unique}:kept");
+            let write = |target: &str| {
+                let name = super::wide(target);
+                let mut secret = *b"synthetic";
+                let credential = CREDENTIALW {
+                    Type: super::CRED_TYPE_GENERIC,
+                    TargetName: name.as_ptr().cast_mut(),
+                    CredentialBlobSize: secret.len() as u32,
+                    CredentialBlob: secret.as_mut_ptr(),
+                    Persist: CRED_PERSIST_SESSION,
+                    ..Default::default()
+                };
+                // SAFETY: every pointer lives across the call.
+                assert_ne!(unsafe { CredWriteW(&credential, 0) }, 0);
+            };
+            write(&format!("{prefix}one"));
+            write(&format!("{prefix}two"));
+            write(&unrelated);
+            assert_eq!(super::remove_prefixed(&prefix).unwrap(), 2);
+            assert_eq!(super::remove_prefixed(&prefix).unwrap(), 0);
+            // The unrelated target survived the sweep; remove it by its own exact name.
+            assert_eq!(super::remove_prefixed(&unrelated).unwrap(), 1);
+        }
+    }
+}
+
 fn validate(secret: &[u8]) -> Result<()> {
     if secret.is_empty() || secret.len() > MAX_SECRET {
         Err(VaultError::Invalid)

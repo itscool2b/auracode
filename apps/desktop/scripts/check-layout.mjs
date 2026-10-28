@@ -131,6 +131,11 @@ export const MODES = [
   "instructions-drift",
   "instructions-large",
   "instructions-review",
+  // Settings' "Delete all auracode data": the review, worktrees with unsaved work, and macOS
+  // with the Trash.
+  "delete-data",
+  "delete-data-worktrees",
+  "delete-data-macos",
 ];
 
 /** Waits until the panel's shell has drawn its prompt. */

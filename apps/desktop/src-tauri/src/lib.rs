@@ -35,6 +35,7 @@ pub mod config_library;
 pub mod config_sync;
 pub mod config_vendor;
 pub mod conversation_commands;
+pub mod data_cleanup_commands;
 pub mod deep_links;
 pub mod demo;
 pub mod error;
@@ -61,6 +62,7 @@ pub mod smoke;
 pub mod state;
 mod sync;
 pub mod terminal;
+pub mod uninstall;
 pub mod updater;
 pub mod window;
 pub mod workspace_commands;
@@ -111,7 +113,17 @@ pub fn run() {
     // First, so a second launch hands over to the running instance before anything else starts.
     // Smoke runs and launches with their own data folder skip it (see `single_instance`).
     if launch.single_instance() {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // The data cleanup (an uninstall) asks this copy to quit: stop agents and terminals
+            // without another question, since uninstalling is the answer.
+            if uninstall::is_quit_request(&args) {
+                tracing::info!("quitting for the data cleanup");
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.quit.confirm_ahead();
+                }
+                app.exit(0);
+                return;
+            }
             window::focus_main(app);
         }));
     }
@@ -168,6 +180,15 @@ pub fn run() {
 /// screen (`boot`), and a window that cannot be created at all is logged and ends the app with
 /// [`STARTUP_FAILED`].
 fn setup(app: &mut tauri::App, launch: LaunchOptions) {
+    // A cleanup asked a running copy to quit and none was running (or this launch runs on its
+    // own): there is nothing to quit, so end before any data folder or window opens.
+    let args: Vec<String> = std::env::args_os()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    if uninstall::is_quit_request(&args) {
+        app.handle().exit(0);
+        return;
+    }
     // Product appearance is always dark, including native menus and macOS materials.
     app.set_theme(Some(tauri::Theme::Dark));
     if let Some(Err(error)) = &launch.smoke {
