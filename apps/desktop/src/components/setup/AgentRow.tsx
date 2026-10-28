@@ -53,17 +53,17 @@ export function automaticChoice(connections: AgentConnections): string {
 }
 
 /**
- * The Connection row's one line: what Automatic does and that chats keep theirs, then the adapter's
- * one-time download when the connection in use needs it (its install lives here, not in a row).
+ * The Connection row's one line (6.16): that it applies to new chats, then what Automatic does, or
+ * the adapter's one-time download when the connection in use needs it (its install lives here, not
+ * in a row). The select's "Automatic (…)" already names what Automatic uses.
  */
 export function connectionDetail(connections: AgentConnections): string {
-  const line = "Automatic uses the first that can run here. A chat keeps the one it started with.";
   const used = connections.options.find(
     (option) => option.id === (connections.preferred ?? connections.active),
   );
   return used?.needs_download
-    ? `${line} The ${used.label} downloads once, with its first chat.`
-    : line;
+    ? `Applies to new chats. The ${used.label} downloads once, with its first chat.`
+    : "Applies to new chats. Automatic uses the first that can run here.";
 }
 
 /**
@@ -83,7 +83,7 @@ export function ConnectionSetting({
 }) {
   const [saving, setSaving] = useState(false);
   return (
-    <div className="settings-group agent-connection" data-testid="agent-connection">
+    <div className="agent-connection" data-testid="agent-connection">
       <Row title="Connection" detail={connectionDetail(connections)}>
         <select
           className="g-select settings-control settings-select"
@@ -501,6 +501,8 @@ export function AgentRow({
   const version = ready
     ? ((agent.availability.state === "ready" ? agent.availability.version : null) ?? "Built in")
     : null;
+  // The Agents page says a newer release under the row; its details do not repeat the line.
+  const updateLine = !compact && agent.harness?.state === "update_available";
   const style = { "--g-row-index": index } as CSSProperties;
   return (
     <li
@@ -575,7 +577,7 @@ export function AgentRow({
           </div>
         )}
       </div>
-      {!compact && agent.harness?.state === "update_available" ? (
+      {updateLine && agent.harness ? (
         <p className="agent-row-update" role="status">
           <StatusDot tone="volt" />
           <span>{harnessText(agent.name, agent.harness)}</span>
@@ -595,6 +597,7 @@ export function AgentRow({
         <AgentDetail
           agent={agent}
           maintenance={maintenance}
+          updateLine={updateLine}
           onRefresh={onRefresh}
           onConnection={onConnection}
           onError={setError}
@@ -646,9 +649,20 @@ export function AgentRow({
   );
 }
 
+/** One fact on its hairline: a 36px row, the label's baseline on the value's first line. */
+function Fact({ label, children }: { readonly label: string; readonly children: ReactNode }) {
+  return (
+    <div className="agent-fact">
+      <dt>{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
 function AgentDetail({
   agent,
   maintenance,
+  updateLine,
   onRefresh,
   onConnection,
   onError,
@@ -656,6 +670,8 @@ function AgentDetail({
 }: {
   readonly agent: AgentEntry;
   readonly maintenance: AgentMaintenance | null;
+  /** The row already says a newer release is available, so Updates keeps only the rest. */
+  readonly updateLine: boolean;
   readonly onRefresh: () => void;
   readonly onConnection?: (agentId: string, connection: string | null) => Promise<void>;
   readonly onError: (message: string | null) => void;
@@ -667,6 +683,13 @@ function AgentDetail({
       : null;
   const installation = agent.installation;
   const release = agent.latest_release;
+  // One Updates fact: where the release stands, then why auracode cannot update it, if it cannot.
+  const updates = [
+    ...new Set([
+      agent.harness && !updateLine ? harnessText(agent.name, agent.harness) : null,
+      maintenance?.update_unavailable ?? null,
+    ]),
+  ].filter((line): line is string => Boolean(line));
   return (
     <div className="agent-detail">
       <p className="agent-detail-lead">{agent.description}</p>
@@ -674,43 +697,34 @@ function AgentDetail({
       <dl className="agent-facts">
         {installation ? (
           <>
-            <dt>Runs from</dt>
-            <dd>
+            <Fact label="Runs from">
               <code>{installation.launch_path}</code>
-            </dd>
-            <dt>Installed with</dt>
-            <dd>{channelLabel(installation)}</dd>
-          </>
-        ) : null}
-        {agent.harness ? (
-          <>
-            <dt>Updates</dt>
-            <dd>{harnessText(agent.name, agent.harness)}</dd>
+            </Fact>
+            <Fact label="Installed with">{channelLabel(installation)}</Fact>
           </>
         ) : null}
         {release?.version ? (
-          <>
-            <dt>Latest release</dt>
-            <dd>
-              <code>{release.version}</code>
-              {release.stale ? <span className="agent-facts-aside"> · cached</span> : null}
-            </dd>
-          </>
+          <Fact label="Latest release">
+            <code>{release.version}</code>
+            {release.stale ? <span className="agent-facts-aside"> · cached</span> : null}
+          </Fact>
         ) : null}
-        {maintenance?.update_unavailable ? (
-          <>
-            <dt>Updates</dt>
-            <dd>{maintenance.update_unavailable}</dd>
-          </>
+        {updates.length ? (
+          <Fact label="Updates">
+            {updates.map((line, at) => (
+              <span key={line} className="agent-fact-line" data-aside={at > 0 || undefined}>
+                {line}
+              </span>
+            ))}
+          </Fact>
         ) : null}
-        <dt>Verified</dt>
-        <dd>
+        <Fact label="Verified">
           {verifiedDate(agent.last_verified)}
           <span className="agent-facts-aside">
             {" "}
             · for the listed integration; a newer release may differ
           </span>
-        </dd>
+        </Fact>
       </dl>
       {onConnection && agent.connections ? (
         <ConnectionSetting
