@@ -21,6 +21,17 @@ pub(crate) struct PendingContinuation {
     pub native_start: NativeStartOptions,
 }
 
+impl PendingContinuation {
+    /// Nothing left for the next prompt to carry: the handoff went out with the continuation's
+    /// first turn and its session has started. The row stays as the chat's lineage.
+    fn is_spent(&self) -> bool {
+        self.handoff.is_empty()
+            && !self.force_fresh
+            && self.resume_source.is_none()
+            && self.native_start == NativeStartOptions::default()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct ConversationSnapshot {
     pub remote_history: bool,
@@ -118,13 +129,16 @@ pub(crate) fn execute(
         ConversationCommand::Pending { chat_id } => {
             let chat =
                 rows::chat(conn, device, &chat_id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
-            Ok(ConversationReply::Pending(pending(conn, &chat_id)?.map(
-                |value| aura_protocol::conversation::PendingHandoff {
-                    agent_id: chat.agent_id,
-                    handoff: value.handoff,
-                    uses_native_fork: value.native_start.fork,
-                },
-            )))
+            // A spent continuation is not a handoff: the chat would announce one forever.
+            Ok(ConversationReply::Pending(
+                pending(conn, &chat_id)?
+                    .filter(|value| !value.is_spent())
+                    .map(|value| aura_protocol::conversation::PendingHandoff {
+                        agent_id: chat.agent_id,
+                        handoff: value.handoff,
+                        uses_native_fork: value.native_start.fork,
+                    }),
+            ))
         }
         ConversationCommand::Turns { chat_id, before } => {
             let _ =
