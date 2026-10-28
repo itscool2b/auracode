@@ -13,7 +13,7 @@
 /*
  * Every button gives under the hand: pressed, it settles to 97% at once and eases back on release,
  * never moving its neighbours. The one white action on a screen (a primary pill, the send disc) is
- * magnetic: lib/magnetic.ts sets --ui-magnet-x and -y as the pointer crosses it, up to 3px at its
+ * magnetic: lib/magnetic.ts sets its inline translate as the pointer crosses it, up to 3px at its
  * edge, and it eases home when the pointer leaves.
  */
 .g-button {
@@ -27,10 +27,6 @@
 
 .g-button:active:not(:disabled, [aria-disabled="true"]) {
   transform: scale(0.97);
-}
-
-:is(.g-button-primary, .chat-send) {
-  translate: var(--ui-magnet-x, 0px) var(--ui-magnet-y, 0px);
 }
 
 /* ------------------------------------------------------------- popovers and dialogs */
@@ -275,7 +271,8 @@
   }
 
   :is(.g-button-primary, .chat-send) {
-    translate: none;
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced motion overrides the inline lean. */
+    translate: none !important;
   }
 
   :is(.chat-popover > summary, .chat-sidebar-settings)[data-tip]::after {
@@ -316,5 +313,6 @@
 }
 
 :root:is([data-motion="reduced"], [data-motion="off"]) :is(.g-button-primary, .chat-send) {
-  translate: none;
+  /* biome-ignore lint/complexity/noImportantStyles: The app's motion setting overrides the inline lean. */
+  translate: none !important;
 }

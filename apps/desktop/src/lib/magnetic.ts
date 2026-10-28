@@ -3,8 +3,9 @@ import { prefersReducedMotion } from "@auracode/ui";
 /**
  * The app's magnetic controls (docs/design/visual-language.md, 6.9): the one white action on a
  * screen (a primary pill, the send disc) leans a few pixels toward the pointer while the pointer is
- * over it, and eases home when it leaves. Only the `translate` property moves, through two custom
- * properties motion.css reads, so layout never changes and the click target stays under the hand.
+ * over it, and eases home when it leaves. Only its inline `translate` moves (motion.css eases it),
+ * so layout never changes and the click target stays under the hand. At rest nothing is set, so a
+ * control never holds a stacking context it does not need.
  *
  * Fine pointers only; nothing happens under reduced motion (the OS setting or the app's own) or
  * on a disabled control. One delegated listener serves the whole document.
@@ -13,6 +14,9 @@ export const MAGNETIC_SELECTOR = ".g-button-primary, .chat-send:not([data-quiet]
 
 /** The furthest a control leans, in px, at its edge; its centre does not move. */
 export const MAGNET_REACH = 3;
+
+/** After easing home (motion.css, 300ms), the inline translate is dropped entirely. */
+const RELEASE_MS = 360;
 
 /** The lean for a pointer at (`x`, `y`) over a box: proportional to the offset, capped at reach. */
 export function magnetOffset(
@@ -48,14 +52,19 @@ export function installMagnetic(root: Document = document): () => void {
   if (!view || typeof view.matchMedia !== "function") return () => {};
   const fine = view.matchMedia("(hover: hover) and (pointer: fine)");
   let current: HTMLElement | null = null;
+  let lean = { x: 0, y: 0 };
   let frame = 0;
   let pointer = { x: 0, y: 0 };
   const release = () => {
-    if (current) {
-      current.style.removeProperty("--ui-magnet-x");
-      current.style.removeProperty("--ui-magnet-y");
-    }
+    // Easing home goes to an explicit zero first, so the transition has somewhere to run to.
+    if (current) current.style.translate = "0px 0px";
+    const left = current;
     current = null;
+    lean = { x: 0, y: 0 };
+    if (left)
+      view.setTimeout(() => {
+        if (left !== current) left.style.removeProperty("translate");
+      }, RELEASE_MS);
   };
   const apply = () => {
     frame = 0;
@@ -65,15 +74,12 @@ export function installMagnetic(root: Document = document): () => void {
     }
     // The box already holds the lean; measuring against its untranslated centre keeps it steady.
     const box = current.getBoundingClientRect();
-    const x = Number.parseFloat(current.style.getPropertyValue("--ui-magnet-x")) || 0;
-    const y = Number.parseFloat(current.style.getPropertyValue("--ui-magnet-y")) || 0;
-    const lean = magnetOffset(
-      { left: box.left - x, top: box.top - y, width: box.width, height: box.height },
+    lean = magnetOffset(
+      { left: box.left - lean.x, top: box.top - lean.y, width: box.width, height: box.height },
       pointer.x,
       pointer.y,
     );
-    current.style.setProperty("--ui-magnet-x", `${lean.x.toFixed(2)}px`);
-    current.style.setProperty("--ui-magnet-y", `${lean.y.toFixed(2)}px`);
+    current.style.translate = `${lean.x.toFixed(2)}px ${lean.y.toFixed(2)}px`;
   };
   const move = (event: PointerEvent) => {
     if (!fine.matches || event.pointerType !== "mouse") return;
