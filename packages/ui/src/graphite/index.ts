@@ -1,13 +1,23 @@
 /**
  * Graphite: auracode's visual language (docs/design/visual-language.md). Black, a grey ladder, one
- * volt accent and a live ordered-dither field. Import the stylesheet once at the app root; it
- * brings Geist and Geist Mono with it:
+ * volt accent, and Shallows: lit water with seals and turtles swimming through it. Import the
+ * stylesheet once at the app root; it brings Geist and Geist Mono with it:
  *   import "@auracode/ui/graphite.css"; // or graphite-tokens.css for the variables alone
  */
 
 export { createFrameClock, type FrameClock, type FrameHost, frameClock } from "../frameClock";
 export { AgentMark, type AgentMarkProps, agentCode } from "./AgentMark";
 export { CopyButton, type CopyButtonProps } from "./CopyButton";
+export { Creature, type CreatureKind, type CreatureProps, creatureHeight } from "./Creature";
+export {
+  CREATURE_SMALL_MAX,
+  SEAL_PATH,
+  SEAL_SMALL_PATH,
+  SEAL_VIEWBOX,
+  TURTLE_PATH,
+  TURTLE_SMALL_PATH,
+  TURTLE_VIEWBOX,
+} from "./creaturePaths";
 export {
   type DitherClearingArea,
   DitherField,
@@ -49,7 +59,9 @@ export {
   loaderFrame,
   type PixelRect,
 } from "./pixels";
+export { Shallows, type ShallowsProps } from "./Shallows";
 export { StatusDot, type StatusDotProps, type StatusTone } from "./StatusDot";
+export { Swimmers, type SwimmersProps } from "./Swimmers";
 export {
   type DitherSprite,
   type ParsedSprite,
@@ -59,6 +71,15 @@ export {
   type SpritePose,
   spritePose,
 } from "./sprites";
+export {
+  ease,
+  GAITS,
+  giveWay,
+  type SwimmerSpec,
+  type SwimPose,
+  swimPose,
+  swumDistance,
+} from "./swim";
 export {
   contrastRatio,
   DITHER_PALETTES,
