@@ -3,7 +3,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import fullAuto from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-full-auto.events.json";
 import thinking from "../../../../crates/aura-drivers/tests/fixtures/claude/recorded-thinking.events.json";
-import type { AgentEntry, AuraEvent, EventBatch, SessionStatus } from "../bindings";
+import type {
+  AgentEntry,
+  AuraEvent,
+  EventBatch,
+  QueuedPrompt,
+  QueueWait,
+  SessionStatus,
+} from "../bindings";
 import { ChatList } from "../components/chat/ChatList";
 import { SidebarBand } from "../components/chat/ChatsScreen";
 import { ChatView } from "../components/chat/ChatView";
@@ -40,6 +47,56 @@ const NEW_CHAT_SCENARIOS: Readonly<Record<string, NewChatScenario>> = {
   "new-unavailable": "unavailable",
   "new-plain": "plain",
 };
+
+/**
+ * `?preview=queue-<case>`: the chat with two messages waiting and the session's word on why, one
+ * mode per wait a person meets: the agent starting, working, finishing its turn (a hook or a
+ * background task), a permission to answer, held after a restart, a failed start and a missing
+ * worktree folder. The fake shell answers Send now, Send queued and Start, and lists what was
+ * asked on `window.queuePreview.calls()`. No agent runs.
+ */
+const QUEUE_PREVIEWS: Readonly<
+  Record<
+    string,
+    { status: SessionStatus; wait: QueueWait; events: string; held?: boolean; quiet?: boolean }
+  >
+> = {
+  "queue-starting": { status: "starting", wait: { reason: "starting" }, events: "settled" },
+  "queue-working": { status: "running", wait: { reason: "working" }, events: "thinking" },
+  "queue-stalled": {
+    status: "running",
+    wait: { reason: "working" },
+    events: "thinking",
+    quiet: true,
+  },
+  "queue-finishing": {
+    status: "running",
+    wait: { reason: "finishing_turn", since: 1_761_300_000_000, sends_at: 1_761_300_015_000 },
+    events: "settled",
+  },
+  "queue-answer": {
+    status: "running",
+    wait: { reason: "needs_answer", question: false },
+    events: "permission",
+  },
+  "queue-held": {
+    status: "ready",
+    wait: { reason: "held", after: "restart" },
+    events: "settled",
+    held: true,
+  },
+  "queue-failed": { status: "failed", wait: { reason: "start_failed" }, events: "error" },
+  "queue-missing": {
+    status: "failed",
+    wait: { reason: "folder_missing" },
+    events: "missing-worktree",
+  },
+};
+
+const QUEUED_WORDS = [
+  "Also add the changelog entry for the sidebar change",
+  "Then run the layout checks at 960 pixels",
+];
 
 const AGENT: AgentEntry = {
   id: "claude",
@@ -473,9 +530,20 @@ function Preview() {
     "terminal-panel",
     "missing-worktree",
     ...Object.keys(NEW_CHAT_SCENARIOS),
+    ...Object.keys(QUEUE_PREVIEWS),
   ].includes(requested)
     ? requested
     : "settled";
+  const queued = QUEUE_PREVIEWS[mode] ?? null;
+  // The chat's transcript: a queue case shows the chat it waits in.
+  const shown = queued?.events ?? mode;
+  // `queue-stalled`: the store's clock runs a minute ahead once the chat has joined, so the
+  // still-working hint shows at once instead of after a real minute.
+  const [now] = useState(() => {
+    if (!queued?.quiet) return undefined;
+    let calls = 0;
+    return () => Date.now() + (calls++ === 0 ? 0 : 61_000);
+  });
   // `?preview=terminal-panel&tabs=2&height=280`: the settled chat with its docked terminals open.
   const [terminals] = useState(() => {
     const params = new URLSearchParams(location.search);
@@ -506,7 +574,8 @@ function Preview() {
     mode === "new" || scenario ? null : "preview",
   );
   const status: SessionStatus =
-    mode === "thinking" ||
+    queued?.status ??
+    (mode === "thinking" ||
     mode === "streaming" ||
     mode === "permission" ||
     mode === "history-question" ||
@@ -514,19 +583,19 @@ function Preview() {
       ? "running"
       : mode === "error" || mode === "missing-worktree"
         ? "failed"
-        : "ready";
+        : "ready");
   const chat = useMemo(
     () =>
       chatSummary("preview", {
         title: "Make the sidebar easier to scan",
         agent_id: "claude",
         agent_name: AGENT.name,
-        folder: mode === "missing-worktree" ? MISSING_FOLDER : "/workspace/auracode",
-        folder_state: mode === "missing-worktree" ? "missing" : "ok",
+        folder: shown === "missing-worktree" ? MISSING_FOLDER : "/workspace/auracode",
+        folder_state: shown === "missing-worktree" ? "missing" : "ok",
         status,
-        needs_attention: mode === "permission",
+        needs_attention: shown === "permission",
       }),
-    [mode, status],
+    [shown, status],
   );
   const publishPreview = useRef<((updates: AuraEvent[]) => void) | null>(null);
   const attached = useRef(false);
@@ -582,8 +651,27 @@ function Preview() {
         ? recorded(thinking)
         : mode === "recorded-tools"
           ? recorded(fullAuto)
-          : synthetic(mode === "terminal-panel" ? "settled" : mode);
+          : synthetic(mode === "terminal-panel" ? "settled" : shown);
     let seq = events.length;
+    // A queue case: two messages waiting, and the session's word on why.
+    let queue: QueuedPrompt[] = queued
+      ? QUEUED_WORDS.map((preview, index) => ({
+          prompt_id: `queued-${index + 1}`,
+          preview,
+          held: queued.held === true,
+          created_at: index + 1,
+        }))
+      : [];
+    let wait: QueueWait | null = queued?.wait ?? null;
+    const queueCalls: string[] = [];
+    Object.assign(window, { queuePreview: { calls: () => [...queueCalls] } });
+    const header = () =>
+      sessionInfo({
+        agent_name: AGENT.name,
+        status: currentStatus,
+        queue_held: queue.some((row) => row.held),
+        queue_wait: queue.length > 0 ? wait : null,
+      });
     const history = items(numbered(events.map((event) => [null, event] as const)));
     const before =
       mode === "partial-message"
@@ -674,7 +762,8 @@ function Preview() {
             }),
             {
               chat: { ...chat, status: currentStatus },
-              session: sessionInfo({ agent_name: AGENT.name, status: currentStatus }),
+              session: header(),
+              queue,
             },
           );
         },
@@ -682,7 +771,30 @@ function Preview() {
         pickFolder: async () => "/workspace/auracode",
         stop: async () => {
           currentStatus = "stopped";
-          publish([ev.session(sessionInfo({ agent_name: AGENT.name, status: currentStatus }))]);
+          publish([ev.session(header())]);
+        },
+        // Send now and Send: the message goes, and the next one waits behind its turn.
+        sendNow: async (_chatId, promptId) => {
+          queueCalls.push(`sendNow:${promptId}`);
+          queue = queue.filter((row) => row.prompt_id !== promptId);
+          currentStatus = "running";
+          wait = queue.some((row) => !row.held)
+            ? { reason: "working" }
+            : { reason: "held", after: "restart" };
+          publish([ev.lifecycle(promptId, "started"), ev.session(header())]);
+          return queue;
+        },
+        resumeQueue: async () => {
+          queueCalls.push("resumeQueue");
+          queue = queue.map((row) => ({ ...row, held: false }));
+          wait = { reason: "working" };
+          publish([ev.session(header())]);
+        },
+        start: async () => {
+          queueCalls.push("start");
+          currentStatus = "starting";
+          wait = { reason: "starting" };
+          publish([ev.session(header())]);
         },
         respondPermission: async (_chatId, requestId, optionId) =>
           publish([ev.permissionResolved(requestId, optionId)]),
@@ -701,10 +813,10 @@ function Preview() {
         },
       }),
     );
-    return mode === "missing-worktree"
+    return shown === "missing-worktree"
       ? Object.assign(context, { git: missingWorktreeGit() })
       : context;
-  }, [mode, status, chat]);
+  }, [mode, shown, queued, status, chat]);
   return (
     // Mirrors ChatsScreen's frame: the drag bands, the sidebar toggle, the panes.
     <div
@@ -757,6 +869,7 @@ function Preview() {
             listed={chat}
             storage={null}
             agents={CHAT_AGENTS}
+            now={now}
           />
         )}
       </main>

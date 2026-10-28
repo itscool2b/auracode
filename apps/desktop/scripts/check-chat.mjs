@@ -28,6 +28,49 @@ let server;
 let serverOutput = "";
 await mkdir(out, { recursive: true });
 
+/** The queue's waits (`?preview=queue-*`): the words its head says and the one action it offers. */
+const QUEUE_CASES = [
+  { mode: "queue-starting", reason: "starting", text: "Starting Claude Code", action: null },
+  {
+    mode: "queue-working",
+    reason: "working",
+    text: "Claude Code is still working",
+    action: "Send now",
+  },
+  {
+    // The quiet turn's own line offers Send now, so the head does not repeat it.
+    mode: "queue-stalled",
+    reason: "working",
+    text: "Claude Code is still working",
+    action: null,
+  },
+  {
+    mode: "queue-finishing",
+    reason: "finishing_turn",
+    text: "Waiting for Claude Code to finish its turn",
+    action: "Send now",
+  },
+  {
+    mode: "queue-answer",
+    reason: "needs_answer",
+    text: "Answer the permission request first",
+    action: null,
+  },
+  { mode: "queue-held", reason: "held", text: "Held after a restart", action: "Send queued" },
+  {
+    mode: "queue-failed",
+    reason: "start_failed",
+    text: "Claude Code could not start",
+    action: "Retry",
+  },
+  {
+    mode: "queue-missing",
+    reason: "folder_missing",
+    text: "This worktree's folder is missing",
+    action: "Recreate folder",
+  },
+];
+
 async function ready() {
   for (let attempt = 0; attempt < 100; attempt++) {
     if (server?.exitCode !== null && server?.exitCode !== undefined) throw new Error(serverOutput);
@@ -78,6 +121,7 @@ async function inspect(engine, launcher) {
         "diff",
         "recorded-thinking",
         "recorded-tools",
+        ...QUEUE_CASES.map((queue) => queue.mode),
       ]) {
         await page.goto(`${url}/?preview=${mode}`);
         await page
@@ -188,6 +232,76 @@ async function inspect(engine, launcher) {
         );
       }
     }
+
+    // The queue says why the next message waits, with the one action that helps.
+    for (const queue of QUEUE_CASES) {
+      await page.goto(`${url}/?preview=${queue.mode}`);
+      const reason = page.getByTestId("queue-reason");
+      await reason.waitFor();
+      await page.waitForFunction(
+        (text) =>
+          document.querySelector('[data-testid="queue-reason"]')?.textContent?.includes(text),
+        queue.text,
+      );
+      assert.equal(
+        await reason.getAttribute("data-test-reason"),
+        queue.reason,
+        `${engine}/${queue.mode}: the reason`,
+      );
+      assert.match(
+        (await reason.textContent()) ?? "",
+        / · 2 queued/,
+        `${engine}/${queue.mode}: the count follows the reason`,
+      );
+      assert.deepEqual(
+        await page.locator(".chat-queue-head-actions button").allTextContents(),
+        queue.action ? [queue.action] : [],
+        `${engine}/${queue.mode}: the head's action`,
+      );
+      assert.equal(
+        await page.getByTestId("queued-prompt").count(),
+        2,
+        `${engine}/${queue.mode}: both waiting messages listed`,
+      );
+    }
+    const calls = () => page.evaluate(() => window.queuePreview.calls());
+    // Send now moves the next message on; the one behind it now waits for that turn.
+    await page.goto(`${url}/?preview=queue-working`);
+    await page.getByTestId("queue-send-now").click();
+    await page.getByTestId("queued-prompt").first().waitFor();
+    assert.deepEqual(await calls(), ["sendNow:queued-1"]);
+    assert.equal(await page.getByTestId("queued-prompt").count(), 1);
+    assert.match((await page.getByTestId("queue-reason").textContent()) ?? "", /1 queued/);
+    // A turn quiet for a minute: the calm line offers Send now beside Stop.
+    await page.goto(`${url}/?preview=queue-stalled`);
+    await page.getByTestId("still-working").waitFor();
+    assert.deepEqual(await page.getByTestId("still-working").locator("button").allTextContents(), [
+      "Send now",
+      "Stop",
+    ]);
+    await page.getByTestId("still-working-send-now").click();
+    await page.waitForFunction(() => window.queuePreview.calls().includes("sendNow:queued-1"));
+    // Held after a restart: one message goes on its own, then Send queued releases the rest.
+    await page.goto(`${url}/?preview=queue-held`);
+    await page.getByRole("button", { name: "Send this message now" }).first().click();
+    await page.waitForFunction(() => window.queuePreview.calls().includes("sendNow:queued-1"));
+    assert.equal(await page.getByTestId("queued-prompt").count(), 1);
+    assert.equal(
+      await page.getByTestId("queued-prompt").first().getAttribute("data-test-held"),
+      "true",
+      "the other message stays held",
+    );
+    await page.getByTestId("send-queued").click();
+    await page.waitForFunction(() => window.queuePreview.calls().includes("resumeQueue"));
+    // A failed start retries from the queue; a missing worktree opens Recreate folder's review.
+    await page.goto(`${url}/?preview=queue-failed`);
+    await page.getByTestId("queue-start").click();
+    await page.waitForFunction(() => window.queuePreview.calls().includes("start"));
+    await page.goto(`${url}/?preview=queue-missing`);
+    await page.getByTestId("queue-recreate").click();
+    await page.waitForFunction(() =>
+      window.missingWorktreeFixture.calls().includes("review-recreate"),
+    );
 
     await page.goto(`${url}/?preview=long-prompt`);
     const fold = page.getByRole("button", { name: "Show all", exact: true });
@@ -662,7 +776,7 @@ async function inspect(engine, launcher) {
     const failures = results.filter((result) => result.violations.length > 0);
     assert.deepEqual(failures, [], `${engine} accessibility violations`);
     console.log(
-      `${engine}: 16 accessibility scans, recorded transcripts, bounded 500-turn history and 1,000-tool turn, prepend/append anchors, draft/disclosure/focus retention, clipboard/folding/diff controls, motion and minimum window passed`,
+      `${engine}: ${results.length} accessibility scans, ${QUEUE_CASES.length} queue waits with their actions, recorded transcripts, bounded 500-turn history and 1,000-tool turn, prepend/append anchors, draft/disclosure/focus retention, clipboard/folding/diff controls, motion and minimum window passed`,
     );
   } finally {
     await browser.close();
