@@ -9,39 +9,47 @@
 /* --------------------------------------------------------------------------------- base */
 
 /*
- * One type scale, matched to the hero (x.ai's h1 and h2, Aside's hero, measured): the display style
- * is Geist 500 with tight tracking, one h2 size, one lead size and one body size. Sections are
- * separated by space, never by rules.
+ * One type scale and one rhythm, taken from the reference landing pages (x.ai, X Money, Aside):
+ * a display size for the hero, one heading size, one lead and the 16, 14 and 12px text sizes.
+ * Every size and every gap sits on the 4px grid. Sections are separated by space, never by rules:
+ * 160px between sections on desktops, 128 on tablets and 96 on phones.
  */
 :root {
+  --g-web-gutter: 16px;
   --inset: 0px;
-  --section-pad: 88px;
-  --heading-gap: 48px;
   --col: min(100% - 2 * var(--g-web-gutter), var(--g-web-max));
-  --site-display-tracking: -0.04em;
-  --site-h2: clamp(32px, 1.75vw + 23px, 48px);
-  --site-h2-leading: 1.06;
-  --site-h2-tracking: -0.035em;
-  --site-h3: clamp(26px, 0.9vw + 19px, 32px);
-  --site-h3-leading: 1.15;
-  --site-h3-tracking: -0.03em;
-  --site-lead: 18px;
-  --site-lead-leading: 28px;
+  --section-pad: 48px;
+  --heading-gap: 40px;
+  --site-display: 40px;
+  --site-h2: 32px;
+  --site-h2-leading: 36px;
+  --site-lead: 16px;
+  --site-lead-leading: 24px;
+  --site-tracking: -0.035em;
 }
 
 @media (min-width: 640px) {
   :root {
-    --section-pad: 120px;
-    --site-lead: 20px;
-    --site-lead-leading: 30px;
+    --g-web-gutter: 24px;
+    --section-pad: 64px;
+    --heading-gap: 48px;
+    --site-display: 56px;
+    --site-h2: 36px;
+    --site-h2-leading: 40px;
+    --site-lead: 18px;
+    --site-lead-leading: 28px;
   }
 }
 
 @media (min-width: 1024px) {
   :root {
+    --g-web-gutter: 40px;
     --inset: 40px;
-    --section-pad: 152px;
-    --heading-gap: 64px;
+    --section-pad: 80px;
+    --heading-gap: 56px;
+    --site-display: 72px;
+    --site-h2: 40px;
+    --site-h2-leading: 44px;
   }
 }
 
@@ -60,8 +68,8 @@ body {
   margin: 0;
   background-color: var(--g-bg);
   color: var(--g-fg-1);
-  font-size: var(--g-web-body);
-  line-height: var(--g-web-body-leading);
+  font-size: 16px;
+  line-height: 24px;
 }
 
 h1,
@@ -136,6 +144,10 @@ canvas {
   flex: none;
 }
 
+.g-button {
+  text-decoration: none;
+}
+
 .text-link {
   display: inline-flex;
   align-items: center;
@@ -187,8 +199,8 @@ canvas {
 
 .note {
   color: var(--g-fg-3);
-  font-size: var(--g-web-small);
-  line-height: var(--g-web-small-leading);
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .mono {
@@ -196,14 +208,9 @@ canvas {
   font-variant-ligatures: none;
 }
 
-/* The primary pill settles slowly on hover (Harvey, measured 300ms cubic-bezier(0, 0.7, 0.3, 1)). */
-.g-button {
-  text-decoration: none;
-}
-
 /* ---------------------------------------------------------------- column and type */
 
-/* One content column; sections are separated by space and type, never by rules. */
+/* One content column, 1120px wide from 1024px up: every section, the nav and the footer share it. */
 .frame,
 .wrap {
   position: relative;
@@ -219,10 +226,7 @@ canvas {
   padding-block: var(--section-pad);
 }
 
-/*
- * Every section heading in the hero's display style at one size, two-tone: the statement in fg-1,
- * its continuation in fg-3 on the next line.
- */
+/* Every section heading at one size, two-tone: the statement in fg-1, its continuation in fg-3. */
 .title,
 .page-title {
   max-width: 22em;
@@ -230,7 +234,7 @@ canvas {
   font-size: var(--site-h2);
   line-height: var(--site-h2-leading);
   font-weight: 500;
-  letter-spacing: var(--site-h2-tracking);
+  letter-spacing: var(--site-tracking);
   text-wrap: balance;
 }
 
@@ -249,26 +253,18 @@ canvas {
   display: inline;
 }
 
-.lead {
-  max-width: 30em;
-  color: var(--g-fg-3);
-  font-size: var(--site-lead);
-  line-height: var(--site-lead-leading);
-  text-wrap: pretty;
-}
-
 .caption-title {
   color: var(--g-fg-1);
-  font-size: var(--g-web-body);
-  line-height: var(--g-web-body-leading);
+  font-size: 14px;
+  line-height: 20px;
   font-weight: 500;
 }
 
 .caption-text {
   max-width: 34em;
   color: var(--g-fg-3);
-  font-size: var(--g-web-body);
-  line-height: var(--g-web-body-leading);
+  font-size: 14px;
+  line-height: 20px;
   text-wrap: pretty;
 }
 
@@ -328,7 +324,7 @@ canvas {
 .nav-inner {
   display: flex;
   align-items: center;
-  gap: 40px;
+  justify-content: space-between;
   width: var(--col);
   height: 100%;
   margin-inline: auto;
@@ -338,42 +334,39 @@ canvas {
 .nav-home {
   display: inline-flex;
   align-items: center;
-  margin-left: -6px;
-  padding: 6px;
+  margin-left: -4px;
+  padding: 4px;
   border-radius: var(--g-radius-6);
-  color: var(--g-fg-1);
-}
-
-.nav-links {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-}
-
-.nav-links > a,
-.nav-signin {
-  color: var(--g-fg-2);
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  transition: color var(--g-dur-settle) var(--g-ease-soft);
-}
-
-/* Harvey's nav: the hovered link brightens and its siblings dim, over 300ms. */
-.nav-links:has(> a:hover) > a:not(:hover) {
-  color: var(--g-fg-3);
-}
-
-.nav-links > a:hover,
-.nav-signin:hover {
   color: var(--g-fg-1);
 }
 
 .nav-actions {
   display: flex;
   align-items: center;
-  gap: 20px;
-  margin-left: auto;
+  gap: 24px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+/* Harvey's nav: the hovered link brightens and its sibling dims, over 300ms (g-dim-text). */
+.nav-links > a {
+  color: var(--g-fg-2);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.nav-links > a:hover {
+  color: var(--g-fg-1);
+}
+
+.nav-actions > .g-button {
+  justify-content: center;
+  min-width: 96px;
 }
 
 .nav-menu {
@@ -383,9 +376,9 @@ canvas {
 .nav-menu-button {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  margin-right: -8px;
+  width: 32px;
+  height: 32px;
+  margin-right: -4px;
   border-radius: var(--g-radius-pill);
   color: var(--g-fg-1);
   list-style: none;
@@ -423,7 +416,7 @@ canvas {
   align-content: start;
   height: calc(100dvh - 64px);
   overflow-y: auto;
-  padding: 4px var(--g-web-gutter) 20px;
+  padding: 8px var(--g-web-gutter) 24px;
   background-color: var(--g-bg);
 }
 
@@ -439,8 +432,7 @@ canvas {
 }
 
 @media (max-width: 767px) {
-  .nav-links,
-  .nav-signin {
+  .nav-links {
     display: none;
   }
 
@@ -453,11 +445,12 @@ canvas {
   }
 }
 
-/* ------------------------------------------------------------------------- the stage */
+/* ---------------------------------------------- the stage (x.ai's hero) */
 
 .stage {
   position: relative;
   isolation: isolate;
+  padding-bottom: var(--section-pad);
 }
 
 .stage-field {
@@ -469,21 +462,21 @@ canvas {
 .hero {
   position: relative;
   z-index: 2;
-  padding: 148px var(--g-web-gutter) 128px;
+  padding: 120px var(--g-web-gutter) 96px;
   text-align: center;
 }
 
 .hero-copy {
-  max-width: 980px;
+  max-width: 960px;
   margin-inline: auto;
 }
 
 .hero-title {
   color: var(--g-fg-1);
-  font-size: var(--g-web-hero);
+  font-size: var(--site-display);
   line-height: 1;
   font-weight: 500;
-  letter-spacing: var(--site-display-tracking);
+  letter-spacing: -0.04em;
 }
 
 .hero-line {
@@ -550,26 +543,29 @@ canvas {
 }
 
 .hero-lead {
-  max-width: 600px;
+  max-width: 560px;
   margin: 32px auto 0;
-  color: var(--g-fg-3);
-  font-size: var(--g-web-lead);
-  line-height: var(--g-web-lead-leading);
-  text-wrap: pretty;
-}
-
-.hero-lead strong {
-  color: var(--g-fg-1);
-  font-weight: 500;
+  color: var(--g-fg-2);
+  font-size: var(--site-lead);
+  line-height: var(--site-lead-leading);
+  text-wrap: balance;
 }
 
 .hero-actions {
   display: flex;
-  flex-wrap: wrap;
   justify-content: center;
-  gap: 12px;
   width: fit-content;
   margin: 40px auto 0;
+}
+
+/*
+ * Pills whose width the label would leave between pixels take a whole-pixel minimum, so a centred
+ * or right-aligned pill still lands on the 4px grid.
+ */
+.hero-actions > .g-button,
+.closing-panel > .g-button {
+  justify-content: center;
+  min-width: 120px;
 }
 
 /* Hero entrance (x.ai and X Money, measured). Gated on .js, so the page is whole without it. */
@@ -599,16 +595,20 @@ canvas {
   }
 }
 
-/* The product frame: the real app, rounded, one hairline ring holding its dark edges on the stage. */
+/* The product frame: the real app on the content column, one ring holding its dark edges. */
 .showcase {
   position: relative;
   z-index: 2;
-}
-
-.product-frame {
-  position: relative;
   width: var(--col);
   margin-inline: auto;
+  padding-inline: var(--inset);
+  container-type: inline-size;
+}
+
+/* The screenshot's 16:10, rounded up to the 4px grid so nothing below lands between pixels. */
+.product-frame {
+  position: relative;
+  height: round(up, 62.5cqw, 4px);
   overflow: hidden;
   border-radius: var(--g-radius-12);
   background-color: var(--g-bg);
@@ -620,13 +620,18 @@ canvas {
   animation: site-fade 1250ms var(--g-ease-reveal) 760ms both;
 }
 
-.product-field {
+.product-field,
+.product-field > .g-dither-content,
+.product-field picture {
   display: block;
+  height: 100%;
 }
 
 .product-field img {
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
 }
 
 /* Until the field's first frame lands, the screenshot waits, so it never flashes before the dissolve. */
@@ -634,299 +639,7 @@ canvas {
   opacity: 0;
 }
 
-/* ------------------------------------------------ the triptych (Harvey, top performers) */
-
-.triptych-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
-  margin-top: var(--heading-gap);
-  padding: 0;
-  list-style: none;
-}
-
-/* A recessed tile on a dim, still dither grain. */
-.tile {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  border-radius: var(--g-radius-16);
-  background-color: var(--g-surface-1);
-}
-
-.tile-tall {
-  aspect-ratio: 4 / 5;
-}
-
-.tile-grain {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-}
-
-.tile-body {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  place-items: center;
-  padding: 28px;
-}
-
-.triptych-item .caption-title {
-  margin-top: 24px;
-}
-
-.triptych-item .caption-text {
-  margin-top: 4px;
-}
-
-/*
- * Harvey's word wheel, measured from its archived source: every 1100ms the column moves up one
- * pitch over 600ms and the colour by distance rides the same step (1, 0.6, 0.3 and 0.1 there, solid
- * greys here so the type stays crisp).
- */
-.wheel {
-  --wheel-size: 32px;
-  --wheel-gap: 10px;
-  --wheel-pitch: calc(var(--wheel-size) * 1.1 + var(--wheel-gap));
-  display: none;
-  font-size: var(--wheel-size);
-  line-height: 1.1;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-  text-align: center;
-}
-
-.wheel-window {
-  position: relative;
-  height: calc(7 * var(--wheel-pitch) - var(--wheel-gap));
-  overflow: hidden;
-}
-
-.wheel-column {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wheel-gap);
-}
-
-.wheel-column[data-moving] {
-  transition: transform var(--g-dur-step) var(--g-ease-step);
-}
-
-.wheel-row {
-  display: block;
-  white-space: nowrap;
-}
-
-.wheel-column[data-moving] > .wheel-row {
-  transition: color var(--g-dur-step) var(--g-ease-step);
-}
-
-.wheel-row[data-d="0"] {
-  color: var(--g-fg-1);
-}
-
-.wheel-row[data-d="1"] {
-  color: var(--g-fg-3);
-}
-
-.wheel-row[data-d="2"] {
-  color: var(--g-fg-4);
-}
-
-.wheel-row[data-d="3"] {
-  color: var(--g-line-strong);
-}
-
-/* Without JavaScript, and under reduced motion, the names are a static list. */
-.agent-list {
-  display: grid;
-  gap: 2px;
-  padding: 0;
-  color: var(--g-fg-3);
-  font-size: 22px;
-  line-height: 30px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  text-align: center;
-  list-style: none;
-}
-
-.agent-list > li:first-child {
-  color: var(--g-fg-1);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .js .wheel {
-    display: block;
-  }
-
-  .js .agent-list {
-    display: none;
-  }
-}
-
-/* Two agents trading one chat, as Harvey's two cursors share one document. */
-.handover {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-}
-
-.handover-card {
-  display: grid;
-  gap: 10px;
-  width: min(100%, 248px);
-  padding: 14px;
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
-  box-shadow: var(--g-shadow);
-  color: var(--g-fg-2);
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.handover-user {
-  justify-self: end;
-  padding: 6px 10px;
-  border-radius: 12px 12px 4px 12px;
-  background-color: var(--g-surface-3);
-  color: var(--g-fg-1);
-}
-
-.handover-event {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.handover-text code {
-  color: var(--g-fg-1);
-  font-family: var(--g-mono);
-  font-size: 12px;
-}
-
-.cursor {
-  position: absolute;
-  display: flex;
-  align-items: flex-start;
-  gap: 2px;
-}
-
-.cursor-pointer {
-  flex: none;
-  color: var(--g-fg-1);
-}
-
-.cursor-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 16px;
-  padding: 4px 10px 4px 6px;
-  border-radius: var(--g-radius-8);
-  background-color: var(--g-surface-4);
-  box-shadow: var(--g-shadow);
-  color: var(--g-fg-1);
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.cursor-a {
-  top: 13%;
-  left: 7%;
-}
-
-.cursor-b {
-  right: 7%;
-  bottom: 12%;
-}
-
-.js .cursor-a {
-  animation: cursor-a 7.2s var(--g-ease-in-out) infinite;
-}
-
-.js .cursor-b {
-  animation: cursor-b 8.4s var(--g-ease-in-out) infinite;
-}
-
-@keyframes cursor-a {
-  0%,
-  100% {
-    transform: none;
-  }
-  40% {
-    transform: translate(26px, 34px);
-  }
-  70% {
-    transform: translate(8px, 52px);
-  }
-}
-
-@keyframes cursor-b {
-  0%,
-  100% {
-    transform: none;
-  }
-  35% {
-    transform: translate(-28px, -38px);
-  }
-  68% {
-    transform: translate(-6px, -18px);
-  }
-}
-
-/* Harvey's scrolling list of sources, here the places auracode runs: two copies loop. */
-.facts {
-  align-self: stretch;
-  justify-self: stretch;
-  margin: -28px -8px;
-  overflow: hidden;
-}
-
-.facts-list {
-  display: grid;
-  gap: 10px;
-  padding: 18px 0;
-  list-style: none;
-}
-
-.fact {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 48px;
-  padding: 0 16px;
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
-  color: var(--g-fg-1);
-  font-size: 15px;
-  line-height: 22px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.fact > .glyph {
-  flex: none;
-  color: var(--g-fg-3);
-}
-
-.js .facts-list {
-  animation: facts 24s linear infinite;
-}
-
-@keyframes facts {
-  to {
-    transform: translateY(calc(-50% - 5px));
-  }
-}
-
-/* ------------------------------------------------------------- the film card (x.ai) */
+/* -------------------------------------------------- the film card (x.ai) */
 
 .film-card {
   position: relative;
@@ -952,16 +665,16 @@ canvas {
 .film-copy {
   display: grid;
   align-content: center;
-  gap: 20px;
+  gap: 16px;
 }
 
 .film-play,
 .film-caption {
   color: var(--g-fg-1);
-  font-size: var(--site-h3);
-  line-height: var(--site-h3-leading);
+  font-size: 32px;
+  line-height: 40px;
   font-weight: 500;
-  letter-spacing: var(--site-h3-tracking);
+  letter-spacing: -0.03em;
 }
 
 .film-play {
@@ -974,10 +687,15 @@ canvas {
   border-radius: var(--g-radius-8);
   background: none;
   cursor: pointer;
+  transition: color var(--g-dur-fast) var(--g-ease);
+}
+
+.film-play:hover {
+  color: var(--g-primary-hover);
 }
 
 .film-play:focus-visible {
-  outline: 2px solid var(--g-fg-1);
+  outline: 2px solid var(--g-focus);
   outline-offset: 8px;
 }
 
@@ -1005,7 +723,7 @@ html:not(.js) .film-play {
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 12px;
   height: 440px;
-  padding: 18px;
+  padding: 16px;
   border-radius: var(--g-radius-16);
   background-color: var(--g-bg);
   box-shadow: var(--g-shadow);
@@ -1017,7 +735,7 @@ html:not(.js) .film-play {
 .film-transcript {
   display: grid;
   align-content: start;
-  gap: 10px;
+  gap: 12px;
   overflow: hidden;
 }
 
@@ -1028,12 +746,11 @@ html:not(.js) .film-play {
 .film-empty {
   display: grid;
   justify-items: center;
-  gap: 14px;
+  gap: 16px;
   margin-top: 112px;
   color: var(--g-fg-3);
-  font-size: 18px;
-  line-height: 26px;
-  letter-spacing: -0.01em;
+  font-size: 16px;
+  line-height: 24px;
   text-align: center;
 }
 
@@ -1049,7 +766,7 @@ html:not(.js) .film-play {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 12px;
+  gap: 4px 12px;
   padding: 8px 12px;
   border-radius: var(--g-radius-8);
   background-color: var(--g-surface-1);
@@ -1068,35 +785,9 @@ html:not(.js) .film-play {
   justify-content: space-between;
   gap: 12px;
   min-height: 52px;
-  padding: 10px 10px 10px 16px;
+  padding: 8px 8px 8px 16px;
   border-radius: var(--g-radius-16);
   background-color: var(--g-surface-2);
-}
-
-.film-typed {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--g-fg-1);
-  white-space: nowrap;
-}
-
-.film-caret {
-  display: inline-block;
-  width: 2px;
-  height: 16px;
-  margin-left: 1px;
-  vertical-align: -3px;
-  background-color: var(--g-fg-1);
-}
-
-.js .film-caret {
-  animation: caret 1s steps(1) infinite;
-}
-
-@keyframes caret {
-  50% {
-    opacity: 0;
-  }
 }
 
 .film-chip {
@@ -1109,29 +800,23 @@ html:not(.js) .film-play {
   border-radius: var(--g-radius-8);
   background-color: var(--g-surface-3);
   color: var(--g-fg-1);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
 }
 
-/* ------------------------------------------------------- miniatures of the real app */
+/* ------------------------------------------------- miniatures of the real app */
 
 .mini {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-  width: min(100%, 460px);
+  width: 100%;
   color: var(--g-fg-1);
   font-size: 14px;
   line-height: 20px;
 }
 
-.js .mini-enter {
-  animation: g-enter var(--g-dur-row) var(--g-ease-reveal) both;
-  animation-delay: calc(80ms + var(--row, 0) * var(--g-stagger-row));
-}
-
 .mini-code,
-.mini-time,
 .mini-num,
 .mini-stat,
 .mini-ln,
@@ -1143,7 +828,7 @@ html:not(.js) .film-play {
 }
 
 .mini-code {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .mini-quiet {
@@ -1178,6 +863,7 @@ html:not(.js) .film-play {
 
 .mini-button {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 6px;
   height: 28px;
@@ -1185,8 +871,8 @@ html:not(.js) .film-play {
   border-radius: var(--g-radius-pill);
   background-color: var(--g-surface-3);
   color: var(--g-fg-1);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 16px;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -1215,33 +901,57 @@ html:not(.js) .film-play {
   font-size: 10px;
 }
 
-/* Approval: the transcript above, the card in the composer's place (visual language 6.4, 6.6). */
 .mini-user {
   justify-self: end;
   max-width: 82%;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-radius: 16px 16px 4px 16px;
   background-color: var(--g-surface-3);
   color: var(--g-fg-1);
-  font-size: 14px;
-  line-height: 22px;
 }
 
-.mini-byline {
+.mini-byline,
+.mini-event {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 4px;
 }
 
 .mini-tool {
   color: var(--g-fg-2);
 }
 
+.mini-typed {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--g-fg-1);
+  white-space: nowrap;
+}
+
+.mini-caret {
+  display: inline-block;
+  width: 2px;
+  height: 16px;
+  margin-left: 1px;
+  vertical-align: -3px;
+  background-color: var(--g-fg-1);
+}
+
+.js .mini-caret {
+  animation: caret 1s steps(1) infinite;
+}
+
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Approval: the transcript above, the card in the composer's place (visual language 6.4, 6.6). */
 .mini-card {
   display: grid;
-  gap: 10px;
-  padding: 16px 18px 14px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-16);
   background-color: var(--g-surface-2);
@@ -1251,7 +961,7 @@ html:not(.js) .film-play {
 .mini-card-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .mini-ask {
@@ -1263,25 +973,18 @@ html:not(.js) .film-play {
 }
 
 .mini-ask .mini-code {
-  font-size: 15px;
-}
-
-.mini-time {
-  color: var(--g-fg-3);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 14px;
 }
 
 .mini-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 8px;
 }
 
 .mini-diff {
   display: grid;
-  padding: 0 0 6px;
+  padding: 0 0 4px;
   overflow: hidden;
   border: 1px solid var(--g-line);
   border-radius: var(--g-radius-8);
@@ -1333,153 +1036,16 @@ html:not(.js) .film-play {
   color: var(--g-red);
 }
 
-/* Plan */
-.mini-plan-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
-  padding: 14px 16px 12px;
-  border: 1px solid var(--g-line-strong);
-  border-radius: var(--g-radius-16);
-  background-color: var(--g-surface-2);
-  box-shadow: var(--g-shadow);
-}
-
-.mini-plan-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.mini-steps {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  padding: 0;
-  list-style: none;
-}
-
-.mini-steps::before {
-  content: "";
-  position: absolute;
-  top: 16px;
-  bottom: 16px;
-  left: 6px;
-  width: 1px;
-  background-image: linear-gradient(180deg, var(--g-line-strong) 50%, transparent 0);
-  background-size: 1px 6px;
-}
-
-.mini-step {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 32px;
-}
-
-.mini-node {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 14px;
-  height: 14px;
-  background-color: var(--g-surface-2);
-}
-
-.mini-step.is-done .mini-node {
-  background-color: var(--g-fg-1);
-  fill: var(--g-on-light);
-}
-
-.mini-step.is-pending .mini-node {
-  box-shadow: inset 0 0 0 1px var(--g-fg-4);
-}
-
-.mini-step-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mini-step.is-done .mini-step-label {
-  color: var(--g-fg-3);
-  text-decoration-line: line-through;
-  text-decoration-color: var(--g-fg-4);
-}
-
-.mini-step.is-active .mini-step-label {
-  color: var(--g-fg-1);
-  font-weight: 500;
-}
-
-.mini-step.is-pending .mini-step-label {
-  color: var(--g-fg-2);
-}
-
-.mini-plan-foot {
-  margin-top: 6px;
-  color: var(--g-fg-3);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.mini-segment {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-3);
-}
-
-.mini-segment-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--g-fg-1);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mini-ticks {
-  display: inline-flex;
-  gap: 4px;
-}
-
-.mini-ticks > span {
-  position: relative;
-  width: 24px;
-  height: 2px;
-  overflow: hidden;
-  background-color: var(--g-line-strong);
-}
-
-.mini-ticks > .is-done {
-  background-color: var(--g-fg-1);
-}
-
-.mini-ticks > .is-active::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-color: var(--g-fg-1);
-  transform: translateX(-40%);
-}
-
-/* ---------------------------------------------------------- staggered tiles (X Money) */
+/* ------------------------------------------------- staggered tiles (X Money) */
 
 /*
- * Pairs of a square tile and its text, two to a row, the text set against the tile's bottom edge;
- * the wide tile starts where the first pair's text would be, as on X Money.
+ * Four 268px columns 16px apart, as on money.x.com: pairs of a tile and its caption, the caption
+ * set against the tile's bottom edge in the next column, and a wide tile on alternate rows.
  */
 .tiles-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 72px 24px;
+  gap: 48px 16px;
   margin-top: var(--heading-gap);
   padding: 0;
   list-style: none;
@@ -1492,8 +1058,12 @@ html:not(.js) .film-play {
   align-items: end;
 }
 
-.tiles-item.is-wide {
+.tiles-item.is-wide-end {
   grid-column: 2 / span 3;
+}
+
+.tiles-item.is-wide-start {
+  grid-column: 1 / span 3;
 }
 
 .tiles-tile {
@@ -1501,16 +1071,22 @@ html:not(.js) .film-play {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   place-items: center;
-  aspect-ratio: 1;
+  height: 240px;
   padding: 20px;
   overflow: hidden;
-  border-radius: var(--g-radius-16);
+  border-radius: var(--g-radius-12);
   background-color: var(--g-surface-1);
+  container-type: inline-size;
+  transition: opacity var(--g-dur-dim) var(--g-ease-smooth);
 }
 
-.tiles-item.is-wide .tiles-tile {
+.tiles-item:is(.is-wide-end, .is-wide-start) .tiles-tile {
   grid-column: span 2;
-  aspect-ratio: 2.08;
+}
+
+/* X Money: hovering one tile dims the others to half, over 500ms. */
+.tiles-grid[data-active] .tiles-item:not([data-current]) .tiles-tile {
+  opacity: 0.5;
 }
 
 .tiles-text {
@@ -1518,22 +1094,21 @@ html:not(.js) .film-play {
   gap: 4px;
 }
 
-/* Autonomy: the menu's three levels, the selection walking down them. */
+/* Agents and autonomy: a menu, the selection walking down it on hover. */
 .mini-menu {
-  display: grid;
   gap: 4px;
   padding: 0;
   list-style: none;
 }
 
 .mini-menu > li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 10px;
+  height: 32px;
+  padding: 0 12px 0 8px;
   border-radius: var(--g-radius-8);
-  color: var(--g-fg-3);
+  color: var(--g-fg-2);
   transition: background-color var(--g-dur-panel) var(--g-ease);
 }
 
@@ -1541,16 +1116,29 @@ html:not(.js) .film-play {
   background-color: var(--g-surface-3);
 }
 
-.mini-menu-copy {
-  display: grid;
-}
-
 .mini-menu > li:not(.is-selected) .mini-strong {
   color: var(--g-fg-2);
 }
 
+.mini-check {
+  margin-left: auto;
+  color: var(--g-fg-1);
+}
+
+.mini-autonomy > li {
+  height: auto;
+  padding: 8px 8px 8px 12px;
+}
+
+.mini-menu-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
 .ticks {
   display: inline-flex;
+  flex: none;
   align-items: flex-end;
   gap: 2px;
   height: 8px;
@@ -1577,57 +1165,60 @@ html:not(.js) .film-play {
   background-color: var(--g-fg-1);
 }
 
-/* Queue: a running turn, two messages behind it, and the hint line. */
+/* Handoff: the switch and the next agent's first words, in plain view. */
+.mini-handoff .mini-user {
+  max-width: 100%;
+}
+
+.mini-answer {
+  color: var(--g-fg-2);
+}
+
+.mini-answer .mini-code {
+  color: var(--g-fg-1);
+}
+
+/* Queue: a running turn and a message waiting behind it. */
 .mini-queue-stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
 }
 
-.mini-sliver {
-  height: 4px;
-  margin-inline: 12px;
-  border-radius: 4px 4px 0 0;
+.mini-segment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--g-radius-12) var(--g-radius-12) 0 0;
   background-color: var(--g-surface-3);
 }
 
-.mini-queue .mini-segment {
-  margin: 0;
-  border-radius: var(--g-radius-12) var(--g-radius-12) 0 0;
+.mini-segment-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--g-fg-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mini-shell {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   min-height: 48px;
-  padding: 8px 8px 8px 14px;
+  padding: 8px 8px 8px 12px;
   border-radius: 0 0 var(--g-radius-12) var(--g-radius-12);
   background-color: var(--g-surface-2);
-}
-
-.mini-hint {
-  color: var(--g-fg-3);
-  font-family: var(--g-mono);
-  font-size: 11px;
-  line-height: 16px;
-  font-variant-ligatures: none;
-}
-
-.mini-link {
-  color: var(--g-fg-2);
-  font-size: 12px;
-  text-decoration-line: underline;
-  text-decoration-color: var(--g-fg-4);
-  text-underline-offset: 3px;
 }
 
 /* Checkpoint: X Money's Front and Back, here the file after this turn and before it. */
 .mini-checkpoint {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 28px;
-  width: min(100%, 560px);
+  gap: 24px;
 }
 
 .checkpoint-toggle {
@@ -1642,8 +1233,8 @@ html:not(.js) .film-play {
 .checkpoint-toggle > button {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 4px 8px;
   border: 0;
   border-radius: var(--g-radius-8);
   background: none;
@@ -1656,16 +1247,13 @@ html:not(.js) .film-play {
   transition: color var(--g-dur-fast) var(--g-ease);
 }
 
-.checkpoint-toggle > button[aria-pressed="true"] {
-  color: var(--g-fg-1);
-}
-
+.checkpoint-toggle > button[aria-pressed="true"],
 .checkpoint-toggle > button:hover {
   color: var(--g-fg-1);
 }
 
 .checkpoint-toggle > button:focus-visible {
-  outline: 2px solid var(--g-fg-1);
+  outline: 2px solid var(--g-focus);
   outline-offset: 2px;
 }
 
@@ -1682,18 +1270,17 @@ html:not(.js) .film-play {
 .checkpoint-file {
   display: grid;
   gap: 8px;
-  padding: 12px 0 10px;
+  padding: 12px 0;
   border-radius: var(--g-radius-12);
   background-color: var(--g-surface-2);
 }
 
-.checkpoint-head,
-.checkpoint-foot {
+.checkpoint-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-inline: 14px;
+  padding-inline: 12px;
 }
 
 .checkpoint-code {
@@ -1709,6 +1296,7 @@ html:not(.js) .film-play {
 
 .checkpoint-code > li {
   display: flex;
+  overflow: hidden;
   white-space: pre;
 }
 
@@ -1728,355 +1316,83 @@ html:not(.js) .film-play {
   color: var(--g-red);
 }
 
-/* Keys: the shortcuts, lighting one at a time. */
-.mini-keys > ul {
-  display: grid;
-  gap: 4px;
+/* Sessions: four chats side by side, one waiting on you. */
+.mini-sessions {
+  gap: 0;
   padding: 0;
   list-style: none;
 }
 
-.mini-keys li {
-  display: flex;
+.mini-sessions > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 96px;
   align-items: center;
-  gap: 12px;
-  padding: 6px 10px;
-  border-radius: var(--g-radius-8);
-  color: var(--g-fg-3);
-  transition:
-    background-color var(--g-dur-panel) var(--g-ease),
-    color var(--g-dur-panel) var(--g-ease);
+  gap: 16px;
+  height: 44px;
+  padding-inline: 8px;
+  border-bottom: 1px solid var(--g-line);
 }
 
-.mini-keys li.is-active {
-  background-color: var(--g-surface-3);
-  color: var(--g-fg-1);
+.mini-sessions > li:last-child {
+  border-bottom: 0;
 }
 
-.mini-keys-caps {
-  display: inline-flex;
-  gap: 3px;
-  min-width: 52px;
-}
-
-/* ---------------------------------------------------------------- the strip (Vercel) */
-
-.strip-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: start;
-  gap: 32px 64px;
-}
-
-.strip-head .lead {
-  justify-self: end;
-  padding-top: 8px;
-}
-
-/* Vercel's single frame: three joined panels, the frame's own rule between them. */
-.strip-band {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  height: 340px;
-  margin-top: var(--heading-gap);
-  overflow: hidden;
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-radius-16);
-}
-
-.strip-panel {
-  position: relative;
+.mini-session-title {
   min-width: 0;
   overflow: hidden;
-}
-
-.strip-panel + .strip-panel {
-  border-left: 1px solid var(--g-line);
-}
-
-.strip-timeline {
-  display: grid;
-  align-content: center;
-  padding: 28px;
-}
-
-.strip-timeline > ol {
-  display: grid;
-  gap: 22px;
-  padding: 0;
-  list-style: none;
-}
-
-.strip-timeline li {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-}
-
-.strip-kind {
-  color: var(--g-fg-3);
-  font-family: var(--g-mono);
-  font-size: 12px;
-  line-height: 16px;
-  font-variant-ligatures: none;
-}
-
-.strip-track {
-  position: relative;
-  height: 10px;
-  border-radius: 2px;
-  background-color: var(--g-surface-2);
-}
-
-.strip-bar {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 2px;
-  background-color: var(--g-fg-3);
-  transform-origin: 0 50%;
-}
-
-.strip-bar.is-now {
-  background-color: var(--g-fg-1);
-}
-
-.js .strip-bar {
-  animation: strip-bar 6s var(--g-ease-out) infinite;
-  animation-delay: calc(var(--i, 0) * 420ms);
-}
-
-@keyframes strip-bar {
-  0% {
-    transform: scaleX(0);
-  }
-  14%,
-  84% {
-    transform: none;
-    opacity: 1;
-  }
-  94%,
-  100% {
-    transform: none;
-    opacity: 0;
-  }
-}
-
-.strip-rows {
-  display: grid;
-  padding: 0;
-  list-style: none;
-}
-
-.js .strip-rows {
-  animation: strip-rows 28s linear infinite;
-}
-
-@keyframes strip-rows {
-  to {
-    transform: translateY(-50%);
-  }
-}
-
-.strip-sessions li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
-  gap: 2px 12px;
-  padding: 12px 20px;
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.strip-title {
-  overflow: hidden;
-  color: var(--g-fg-1);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.strip-agent {
+.mini-session-agent,
+.mini-session-status {
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--g-fg-3);
-}
-
-.strip-status {
-  display: inline-flex;
-  grid-row: 1 / span 2;
-  grid-column: 2;
   align-items: center;
   gap: 8px;
-  color: var(--g-fg-2);
+  color: var(--g-fg-3);
   white-space: nowrap;
 }
 
-.strip-status.is-waiting {
-  color: var(--g-fg-1);
+.mini-session-status.is-waiting {
+  color: var(--g-volt);
 }
 
-.strip-status.is-done {
-  color: var(--g-fg-3);
-}
+@container (max-width: 420px) {
+  .mini-sessions > li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
 
-.strip-chips {
-  display: grid;
-  align-content: center;
-  gap: 12px;
-}
-
-.strip-chip-row {
-  display: flex;
-  gap: 10px;
-  width: max-content;
-}
-
-.js .strip-chip-row {
-  animation: strip-drift calc(36s + var(--r, 0) * 9s) linear infinite;
-}
-
-.js .strip-chip-row:nth-child(2) {
-  animation-direction: reverse;
-}
-
-@keyframes strip-drift {
-  to {
-    transform: translateX(calc(-50% - 5px));
+  .mini-session-agent {
+    display: none;
   }
 }
 
-.strip-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 14px 0 10px;
-  border-radius: var(--g-radius-12);
-  background-color: var(--g-surface-2);
-  color: var(--g-fg-1);
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-}
+/* -------------------------------------------------------------- FAQ (X Money) */
 
-.strip-notes {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 32px 24px;
-  margin-top: 40px;
-  padding: 0;
-  list-style: none;
-}
-
-.strip-notes > li {
-  display: grid;
-  align-content: start;
-  gap: 4px;
-}
-
-.strip-notes .glyph {
-  margin-bottom: 12px;
-  color: var(--g-fg-1);
-}
-
-/* ------------------------------------------------------- the giant numerals (AiiD) */
-
-.numerals-grid {
-  display: grid;
-  gap: var(--heading-gap);
-}
-
-/* One rule splits the numerals from their captions; the figure height places it. */
-.numerals-list {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0 24px;
-  padding: 0;
-  list-style: none;
-}
-
-.numerals-list::after {
-  content: "";
-  position: absolute;
-  top: calc(var(--figure-h) + 24px);
-  right: 0;
-  left: 0;
-  height: 1px;
-  background-color: var(--g-line-strong);
-}
-
-.numeral {
-  display: grid;
-  align-content: start;
-}
-
-.numeral-figure {
-  position: relative;
-  display: block;
-  height: var(--figure-h);
-  margin-bottom: 49px;
-}
-
-.numeral-field {
-  position: absolute;
-  inset: 0;
-}
-
-/* The figure as text, in Geist Pixel: what a reader without JavaScript sees. */
-.numeral-text {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  color: var(--g-fg-1);
-  font-family: "Geist Pixel", ui-monospace, monospace;
-  font-size: var(--figure);
-  line-height: 0.74;
-  font-weight: 400;
-}
-
-.js .numeral-text {
-  visibility: hidden;
-}
-
-html:not(.js) .numeral-field {
-  display: none;
-}
-
-.numeral-title {
-  color: var(--g-fg-1);
-  font-size: var(--site-lead);
-  line-height: var(--site-lead-leading);
-  font-weight: 500;
-}
-
-.numeral-note {
-  display: block;
-  color: var(--g-fg-3);
-  font-size: var(--g-web-body);
-  line-height: var(--g-web-body-leading);
-}
-
-/* --------------------------------------------------------------------------- FAQ */
-
+/* The tiles' four columns: the heading over the first two, the questions over the last two. */
 .faq-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: start;
-  gap: 64px;
+  gap: 40px 16px;
 }
 
 .faq-head {
   display: grid;
+  grid-column: 1 / span 2;
   justify-items: start;
   gap: 32px;
+}
+
+.faq-head > .g-button {
+  justify-content: center;
+  min-width: 128px;
 }
 
 .faq-list {
   position: relative;
   display: grid;
+  grid-column: 3 / span 2;
   gap: 4px;
 }
 
@@ -2113,7 +1429,7 @@ html:not(.js) .numeral-field {
   justify-content: space-between;
   gap: 16px;
   min-height: 52px;
-  padding: 14px 18px;
+  padding: 14px 16px;
   border-radius: var(--g-radius-12);
   color: var(--g-fg-1);
   font-size: 16px;
@@ -2173,85 +1489,69 @@ html:not(.js) .numeral-field {
 }
 
 .faq-answer > p {
-  max-width: 600px;
-  padding: 0 18px 18px;
+  max-width: 520px;
+  padding: 0 16px 16px;
   color: var(--g-fg-2);
 }
 
-/* --------------------------------------------------------------------- the close */
+/* ------------------------------------------------- the closing panel (Aside) */
 
-.closing {
+.closing-panel {
   position: relative;
   isolation: isolate;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 40px;
+  padding: 152px 24px;
+  overflow: hidden;
+  border-radius: 24px;
+  background-color: var(--g-surface-1);
+  text-align: center;
 }
 
+/* Like the film card's, the field is transparent over the panel's surface. */
 .closing-field {
   position: absolute;
   inset: 0;
   z-index: -1;
-}
-
-.closing-inner {
-  display: grid;
-  justify-items: center;
-  gap: 40px;
-  padding: 168px var(--g-web-gutter);
-  text-align: center;
+  background-color: transparent;
 }
 
 .closing-title {
-  color: var(--g-fg-1);
-  font-size: clamp(44px, 6vw, 80px);
-  line-height: 1;
-  font-weight: 500;
-  letter-spacing: var(--site-display-tracking);
+  max-width: none;
 }
 
-.closing-title > span {
-  display: block;
-  color: var(--g-fg-3);
+/* ------------------------------------------------------- footer (x.ai) */
+
+/*
+ * x.ai's footer on the tiles' four columns: the brand over the first two, here the giant logo
+ * the field forms as it scrolls in, and three link columns over the last two.
+ */
+.site-footer {
+  padding-block: var(--section-pad) 48px;
 }
 
-/* ------------------------------------------------------------------------ footer */
-
-.footer-top {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 48px;
-  padding: 72px var(--inset) 96px;
-}
-
-.footer-home {
-  display: inline-flex;
-  margin-left: -6px;
-  padding: 6px;
-  border-radius: var(--g-radius-6);
-  color: var(--g-fg-1);
-}
-
-.footer-brand > p {
-  margin-top: 8px;
-  color: var(--g-fg-3);
-  font-size: 14px;
-  line-height: 22px;
+.footer-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  gap: 64px 16px;
 }
 
 .footer-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 32px 0;
-}
-
-.footer-col {
-  width: 160px;
+  display: grid;
+  grid-row: 1;
+  grid-column: 3 / span 2;
+  grid-template-columns: repeat(3, 176px);
+  gap: 32px 12px;
 }
 
 .footer-heading {
   margin-bottom: 12px;
   color: var(--g-fg-1);
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
   font-weight: 500;
 }
 
@@ -2265,7 +1565,7 @@ html:not(.js) .numeral-field {
 .footer-col a {
   color: var(--g-fg-3);
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
   transition: color var(--g-dur-micro) var(--g-ease);
 }
 
@@ -2273,33 +1573,26 @@ html:not(.js) .numeral-field {
   color: var(--g-fg-1);
 }
 
+/* The logo's 546 by 557, rounded to whole 4px steps: 400 by 408, and 316 by 320 on phones. */
 .footer-mark {
   position: relative;
-  height: clamp(120px, 20vw, 280px);
-  overflow: hidden;
+  grid-row: 1;
+  grid-column: 1 / span 2;
+  width: 400px;
+  height: 408px;
+  color: var(--g-fg-1);
 }
 
-.footer-mark-field {
+.footer-mark-field,
+.footer-mark-logo {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
-/* The word as text: what a reader without JavaScript sees. */
-.footer-mark-text {
-  position: absolute;
-  right: 0;
-  bottom: 0.02em;
-  left: 0;
-  color: var(--g-fg-1);
-  font-size: 22.6vw;
-  line-height: 0.76;
-  font-weight: 600;
-  letter-spacing: -0.06em;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.js .footer-mark-text {
+/* The plain logo is what a reader without JavaScript sees; with it, the field draws the logo. */
+.js .footer-mark-logo {
   visibility: hidden;
 }
 
@@ -2324,16 +1617,16 @@ html:not(.js) .footer-mark-field {
 
 .page-head {
   max-width: 760px;
-  margin-bottom: 56px;
+  margin-bottom: 48px;
 }
 
 .page-lead {
   max-width: 620px;
   margin-top: 24px;
   color: var(--g-fg-2);
-  font-size: var(--g-web-lead);
-  line-height: var(--g-web-lead-leading);
-  text-wrap: pretty;
+  font-size: var(--site-lead);
+  line-height: var(--site-lead-leading);
+  text-wrap: balance;
 }
 
 .notice {
@@ -2343,12 +1636,12 @@ html:not(.js) .footer-mark-field {
   max-width: 680px;
   margin: 0 0 24px;
   padding: 12px 16px;
-  border: 1px solid var(--g-line-strong);
   border-radius: var(--g-radius-8);
   background-color: var(--g-surface-1);
+  box-shadow: inset 0 0 0 1px var(--g-line-strong);
   color: var(--g-fg-2);
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
 }
 
 .notice-mark {
@@ -2371,12 +1664,12 @@ html:not(.js) .footer-mark-field {
   color: var(--g-fg-1);
 }
 
-/* Prose: legal pages and long notes, 16/26 at about 680px. */
+/* Prose: legal pages and long notes, 16/24 at about 680px. */
 .prose {
   max-width: 680px;
   color: var(--g-fg-2);
   font-size: 16px;
-  line-height: 26px;
+  line-height: 24px;
 }
 
 .prose > * + * {
@@ -2384,12 +1677,13 @@ html:not(.js) .footer-mark-field {
 }
 
 .prose > h2 {
-  margin-top: 64px;
+  margin-top: 56px;
+  text-wrap: balance;
   color: var(--g-fg-1);
-  font-size: var(--g-web-h3);
-  line-height: var(--g-web-h3-leading);
+  font-size: 24px;
+  line-height: 32px;
   font-weight: 500;
-  letter-spacing: var(--g-web-h3-tracking);
+  letter-spacing: -0.02em;
 }
 
 .prose strong {
@@ -2401,51 +1695,51 @@ html:not(.js) .footer-mark-field {
   margin-top: 32px;
 }
 
-.prose-section + .prose-section {
-  margin-top: 72px;
+.prose-sections {
+  display: grid;
+  gap: 80px;
+  margin-top: 80px;
 }
 
-/* Download */
+/* Download: x.ai's "Choose how to get started", two cards, one per platform. */
 .download-status {
-  display: grid;
-  gap: 4px;
   margin: -24px 0 48px;
 }
 
-/* Two recessed cards, one per platform; their spec rows are the only rules on the page. */
 .download-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  gap: 24px;
+  gap: 16px;
 }
 
 .download-cell {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 36px 32px 32px;
+  padding: 32px;
   border-radius: var(--g-radius-16);
   background-color: var(--g-surface-1);
 }
 
 .download-name {
   color: var(--g-fg-1);
-  font-size: var(--g-web-h3);
-  line-height: var(--g-web-h3-leading);
+  font-size: 24px;
+  line-height: 32px;
   font-weight: 500;
-  letter-spacing: var(--g-web-h3-tracking);
+  letter-spacing: -0.02em;
 }
 
 .download-sub {
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--g-fg-3);
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
 }
 
+/* Hairlines drawn as inset shadows, so the rows keep whole 44px steps. */
 .data-rows {
   display: grid;
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-line);
 }
 
 .data-row {
@@ -2454,10 +1748,10 @@ html:not(.js) .footer-mark-field {
   justify-content: space-between;
   gap: 16px;
   min-height: 44px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--g-line);
+  padding: 12px 0;
+  box-shadow: inset 0 -1px 0 var(--g-line);
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
 }
 
 .data-row > dt {
@@ -2473,7 +1767,7 @@ html:not(.js) .footer-mark-field {
 }
 
 .data-row .mono {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .download-action {
@@ -2488,11 +1782,11 @@ html:not(.js) .footer-mark-field {
   white-space: pre-wrap;
 }
 
-/* Auth */
+/* Auth: a centred 480px column, the title and the form, one action. */
 .auth-column {
   display: grid;
   justify-items: center;
-  padding: 104px var(--inset) 128px;
+  padding: 96px var(--inset) 128px;
 }
 
 .auth-shell {
@@ -2503,29 +1797,9 @@ html:not(.js) .footer-mark-field {
   margin-bottom: 32px;
 }
 
-.auth-title {
-  color: var(--g-fg-1);
-  font-size: var(--site-h2);
-  line-height: var(--site-h2-leading);
-  font-weight: 500;
-  letter-spacing: var(--site-h2-tracking);
-}
-
-.auth-title > span {
-  display: block;
-  color: var(--g-fg-3);
-}
-
 .auth-intro {
-  margin-top: 20px;
+  margin-top: 16px;
   color: var(--g-fg-3);
-  font-size: var(--g-web-body);
-  line-height: var(--g-web-body-leading);
-}
-
-.auth-intro strong {
-  color: var(--g-fg-1);
-  font-weight: 500;
 }
 
 .auth-inline-link {
@@ -2546,48 +1820,40 @@ html:not(.js) .footer-mark-field {
 
 .auth-panel {
   display: grid;
-  gap: 20px;
-  padding: 28px;
+  gap: 24px;
+  padding: 32px;
   border-radius: var(--g-radius-16);
   background-color: var(--g-surface-1);
 }
 
 .auth-panel-title {
   color: var(--g-fg-1);
-  font-size: 20px;
-  line-height: 26px;
+  font-size: 24px;
+  line-height: 32px;
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 .auth-panel-copy {
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--g-fg-2);
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
 }
 
 .auth-actions {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .auth-actions .g-button {
   width: 100%;
 }
 
-.auth-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-  font-size: 14px;
-  line-height: 22px;
-}
-
 .auth-terms {
   color: var(--g-fg-3);
   font-size: 12px;
-  line-height: 18px;
+  line-height: 16px;
 }
 
 .auth-terms a {
@@ -2620,9 +1886,8 @@ html:not(.js) .footer-mark-field {
 }
 
 .field-help {
-  margin-top: -2px;
   color: var(--g-fg-3);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 20px;
 }
 
@@ -2650,8 +1915,8 @@ html:not(.js) .footer-mark-field {
 
 .field-meta {
   color: var(--g-fg-3);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 16px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2662,16 +1927,18 @@ html:not(.js) .footer-mark-field {
 .code-form .text-button {
   justify-self: center;
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
 }
 
+/* Turnstile's widget is 65px tall; its slot rounds that up to the grid. */
 .verification {
   display: grid;
+  align-content: start;
   gap: 8px;
-  min-height: 65px;
+  min-height: 68px;
   color: var(--g-fg-2);
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
 }
 
 .verification:empty {
@@ -2749,10 +2016,10 @@ html:not(.js) .footer-mark-field {
 }
 
 .account-block-head > p {
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--g-fg-3);
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
 }
 
 .account-block-body {
@@ -2767,7 +2034,7 @@ html:not(.js) .footer-mark-field {
   max-width: 100%;
   color: var(--g-fg-1);
   font-size: 24px;
-  line-height: 30px;
+  line-height: 32px;
   font-weight: 500;
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;
@@ -2783,7 +2050,7 @@ html:not(.js) .footer-mark-field {
   display: grid;
   width: 100%;
   padding: 0;
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-line);
   list-style: none;
 }
 
@@ -2794,7 +2061,7 @@ html:not(.js) .footer-mark-field {
   gap: 8px 16px;
   min-height: 64px;
   padding: 12px 0;
-  border-bottom: 1px solid var(--g-line);
+  box-shadow: inset 0 -1px 0 var(--g-line);
 }
 
 .device-main {
@@ -2804,15 +2071,15 @@ html:not(.js) .footer-mark-field {
 
 .device-name {
   color: var(--g-fg-1);
-  font-size: 15px;
-  line-height: 22px;
+  font-size: 16px;
+  line-height: 24px;
   font-weight: 500;
 }
 
 .device-meta {
   color: var(--g-fg-3);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .device-status {
@@ -2820,8 +2087,8 @@ html:not(.js) .footer-mark-field {
   align-items: center;
   gap: 8px;
   color: var(--g-fg-2);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .device-status .g-status-dot {
@@ -2832,10 +2099,10 @@ html:not(.js) .footer-mark-field {
 .empty {
   display: grid;
   justify-items: start;
-  gap: 10px;
+  gap: 12px;
   color: var(--g-fg-3);
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
 }
 
 .meters {
@@ -2852,8 +2119,8 @@ html:not(.js) .footer-mark-field {
 
 .meter-label {
   color: var(--g-fg-3);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .meter-value {
@@ -2866,7 +2133,7 @@ html:not(.js) .footer-mark-field {
 
 .meter-value > small {
   color: var(--g-fg-3);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
 }
 
@@ -2902,7 +2169,7 @@ html:not(.js) .footer-mark-field {
 .security-rows {
   display: grid;
   width: 100%;
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-line);
 }
 
 .security-row {
@@ -2911,22 +2178,22 @@ html:not(.js) .footer-mark-field {
   align-items: center;
   justify-content: space-between;
   gap: 12px 24px;
-  padding: 18px 0;
-  border-bottom: 1px solid var(--g-line);
+  padding: 16px 0;
+  box-shadow: inset 0 -1px 0 var(--g-line);
 }
 
 .security-row h3 {
   color: var(--g-fg-1);
-  font-size: 15px;
-  line-height: 22px;
+  font-size: 16px;
+  line-height: 24px;
   font-weight: 500;
 }
 
 .security-row p {
   max-width: 380px;
-  margin-top: 2px;
+  margin-top: 4px;
   color: var(--g-fg-3);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 20px;
 }
 
@@ -2939,10 +2206,10 @@ html:not(.js) .footer-mark-field {
 
 .account-signed-out h2 {
   color: var(--g-fg-1);
-  font-size: var(--g-web-h3);
-  line-height: var(--g-web-h3-leading);
+  font-size: 24px;
+  line-height: 32px;
   font-weight: 500;
-  letter-spacing: var(--g-web-h3-tracking);
+  letter-spacing: -0.02em;
 }
 
 .account-signed-out p {
@@ -2965,17 +2232,17 @@ html:not(.js) .footer-mark-field {
 
 .confirm-dialog h2 {
   color: var(--g-fg-1);
-  font-size: 22px;
-  line-height: 28px;
+  font-size: 24px;
+  line-height: 32px;
   font-weight: 500;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
 }
 
 .confirm-dialog > p {
   margin-top: 8px;
   color: var(--g-fg-2);
   font-size: 14px;
-  line-height: 22px;
+  line-height: 20px;
 }
 
 .confirm-field {
@@ -2986,7 +2253,7 @@ html:not(.js) .footer-mark-field {
 
 .confirm-field label {
   color: var(--g-fg-2);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 20px;
   overflow-wrap: anywhere;
 }
@@ -3008,17 +2275,6 @@ html:not(.js) .footer-mark-field {
   color: var(--g-fg-4);
 }
 
-@media (max-width: 639px) {
-  .confirm-dialog {
-    width: calc(100vw - 24px);
-    margin: auto 12px 12px;
-  }
-
-  .confirm-dialog[open] {
-    animation-name: sheet-rise;
-  }
-}
-
 @keyframes sheet-rise {
   from {
     opacity: 0;
@@ -3030,7 +2286,7 @@ html:not(.js) .footer-mark-field {
   }
 }
 
-/* Changelog */
+/* Changelog: one entry per release, the date at left and the notes as prose. */
 .release-entry {
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr);
@@ -3041,7 +2297,7 @@ html:not(.js) .footer-mark-field {
   display: grid;
   align-content: start;
   justify-items: start;
-  gap: 8px;
+  gap: 4px;
   color: var(--g-fg-3);
   font-size: 14px;
   line-height: 20px;
@@ -3079,10 +2335,10 @@ html:not(.js) .footer-mark-field {
 
 .error-title {
   color: var(--g-fg-1);
-  font-size: var(--g-web-h2);
-  line-height: var(--g-web-h2-leading);
+  font-size: var(--site-h2);
+  line-height: var(--site-h2-leading);
   font-weight: 500;
-  letter-spacing: var(--g-web-h2-tracking);
+  letter-spacing: var(--site-tracking);
 }
 
 .error-title > span {
@@ -3097,36 +2353,14 @@ html:not(.js) .footer-mark-field {
   gap: 12px;
 }
 
+.error-actions > .g-button {
+  justify-content: center;
+  min-width: 120px;
+}
+
 /* --------------------------------------------------------------------- responsive */
 
 @media (max-width: 1023px) {
-  .faq-grid,
-  .strip-head {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 32px;
-  }
-
-  .faq-grid {
-    gap: 48px;
-  }
-
-  .strip-head .lead {
-    justify-self: start;
-    padding-top: 0;
-  }
-
-  .triptych-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .triptych-item:last-child {
-    grid-column: 1 / -1;
-  }
-
-  .triptych-item:last-child .tile-tall {
-    aspect-ratio: 2 / 1;
-  }
-
   .film-card {
     grid-template-columns: minmax(0, 1fr);
     gap: 40px;
@@ -3140,24 +2374,42 @@ html:not(.js) .footer-mark-field {
 
   .tiles-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 56px 24px;
+    gap: 48px 16px;
   }
 
   .tiles-item,
-  .tiles-item.is-wide {
+  .tiles-item.is-wide-end,
+  .tiles-item.is-wide-start {
+    display: grid;
+    grid-column: auto;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    align-items: start;
+    gap: 16px;
+  }
+
+  .tiles-item:is(.is-wide-end, .is-wide-start) {
     grid-column: 1 / -1;
   }
 
-  .tiles-item.is-wide .tiles-text {
-    grid-column: 1 / -1;
+  .tiles-item:is(.is-wide-end, .is-wide-start) .tiles-tile {
+    grid-column: auto;
   }
 
-  .strip-band {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  .faq-grid,
+  .footer-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .strip-chips {
-    display: none;
+  .faq-head,
+  .faq-list,
+  .footer-links {
+    grid-column: 1;
+  }
+
+  .footer-mark {
+    grid-row: 2;
+    grid-column: 1;
   }
 
   .account {
@@ -3179,103 +2431,48 @@ html:not(.js) .footer-mark-field {
 
 @media (max-width: 767px) {
   .hero {
-    padding-top: 104px;
-    padding-bottom: 96px;
-  }
-
-  .triptych-row,
-  .strip-notes {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .triptych-item .tile-tall {
-    aspect-ratio: 1;
-  }
-
-  .triptych-item:last-child .tile-tall {
-    aspect-ratio: 1;
+    padding-top: 88px;
+    padding-bottom: 64px;
   }
 
   .film-card {
     min-height: 0;
-    padding: 28px 20px 20px;
+    padding: 24px 16px 16px;
     border-radius: var(--g-radius-16);
+  }
+
+  .film-play,
+  .film-caption {
+    font-size: 24px;
+    line-height: 32px;
   }
 
   .film-window {
     height: 400px;
-    padding: 14px;
+    padding: 12px;
   }
 
   .tiles-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 48px;
+    gap: 40px;
   }
 
-  .tiles-item,
-  .tiles-item.is-wide {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
-  }
-
-  .tiles-item.is-wide .tiles-tile {
+  .tiles-item:is(.is-wide-end, .is-wide-start) {
     grid-column: auto;
-    aspect-ratio: auto;
-    min-height: 320px;
   }
 
   .mini-checkpoint {
     grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+    gap: 12px;
   }
 
   .checkpoint-toggle {
     display: flex;
   }
 
-  .strip-band {
-    grid-template-columns: minmax(0, 1fr);
-    height: auto;
-  }
-
-  .strip-panel {
-    height: 260px;
-  }
-
-  .strip-panel + .strip-panel {
-    border-top: 1px solid var(--g-line);
-    border-left: 0;
-  }
-
-  .numerals-list {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 28px;
-  }
-
-  .numerals-list::after {
-    display: none;
-  }
-
-  .numeral {
-    grid-template-columns: 104px minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto auto;
-    column-gap: 16px;
-  }
-
-  .numeral-figure {
-    grid-row: 1 / span 3;
-    margin-bottom: 0;
-  }
-
-  .numeral-title {
-    grid-row: 2;
-    grid-column: 2;
-  }
-
-  .numeral-note {
-    grid-row: 3;
-    grid-column: 2;
+  .closing-panel {
+    padding-block: 120px;
+    border-radius: var(--g-radius-16);
   }
 
   .account-block {
@@ -3290,14 +2487,6 @@ html:not(.js) .footer-mark-field {
   .release-entry {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
-  }
-
-  .closing-inner {
-    padding-block: 120px;
-  }
-
-  .footer-col {
-    width: 140px;
   }
 }
 
@@ -3317,7 +2506,19 @@ html:not(.js) .footer-mark-field {
   }
 
   .download-cell {
-    padding: 32px 24px 28px;
+    padding: 32px 24px 24px;
+  }
+
+  /* Three equal columns and a logo capped by the column, so a 320px phone never scrolls sideways. */
+  .footer-links {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 16px;
+  }
+
+  .footer-mark {
+    width: min(316px, 100%);
+    height: auto;
+    aspect-ratio: 316 / 320;
   }
 
   .mini-button-ghost {
@@ -3326,6 +2527,15 @@ html:not(.js) .footer-mark-field {
 
   .mini-actions {
     flex-wrap: wrap;
+  }
+
+  .confirm-dialog {
+    width: calc(100vw - 24px);
+    margin: auto 12px 12px;
+  }
+
+  .confirm-dialog[open] {
+    animation-name: sheet-rise;
   }
 }
 
@@ -3346,23 +2556,13 @@ html:not(.js) .footer-mark-field {
   .js .hero-actions,
   .js .product-frame,
   .js .agent-rule,
-  .js .mini-enter,
-  .js .cursor-a,
-  .js .cursor-b,
-  .js .facts-list,
   .js .film-enter,
-  .js .film-caret,
-  .js .strip-bar,
-  .js .strip-rows,
-  .js .strip-chip-row {
+  .js .mini-caret {
     animation: none;
   }
 
   .mini-menu > li,
-  .mini-keys li {
-    transition: none;
-  }
-
+  .tiles-tile,
   .agent-slot {
     transition: none;
   }
@@ -3387,7 +2587,7 @@ body:has(.device-verification) > :is(.site-nav, .site-footer, .skip) {
 
 .device-verification {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding: 14px 16px;
   color: var(--g-fg-2);
   font-size: 13px;

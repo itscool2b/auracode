@@ -10,8 +10,6 @@ import {
   useRouteError,
 } from "react-router";
 import "@auracode/ui/graphite.css";
-// Geist and Geist Mono come with graphite.css; Geist Pixel sets the giant numerals.
-import "@fontsource/geist-pixel";
 import "./site.css";
 import { BOOT_SCRIPT, Enhancements } from "./enhance";
 import { ERROR_FIELD } from "./fields";

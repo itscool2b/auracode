@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import catalog from "#release-catalog";
 import { Arrow, Page } from "../ui";
 
@@ -20,13 +19,7 @@ const PLATFORMS = [
 ] as const;
 
 export default function Download() {
-  const [detected, setDetected] = useState("");
   const release = catalog.release;
-  useEffect(() => {
-    setDetected(
-      /Mac/i.test(navigator.platform) ? "macOS" : /Win/i.test(navigator.platform) ? "Windows" : "",
-    );
-  }, []);
   return (
     <Page
       wide
@@ -34,19 +27,14 @@ export default function Download() {
       tone="Free, local, no account."
       lead={
         release
-          ? `auracode ${release.version} for Windows and macOS. Choose your platform; you can always use a different one.`
-          : "auracode is being prepared for Windows and macOS. Choose your platform; you can always use a different one."
+          ? `Version ${release.version} for Windows and macOS.`
+          : "Installers for Windows and macOS are on the way."
       }
     >
-      {detected || release?.channel === "staging" ? (
-        <div className="download-status">
-          {detected ? <p className="note">You appear to be using {detected}.</p> : null}
-          {release?.channel === "staging" ? (
-            <p className="note" role="status">
-              Staging preview. These builds are for release qualification.
-            </p>
-          ) : null}
-        </div>
+      {release?.channel === "staging" ? (
+        <p className="note download-status" role="status">
+          Staging preview. These builds are for release qualification.
+        </p>
       ) : null}
       <div className="download-grid" data-reveal="">
         {release
@@ -140,13 +128,6 @@ export default function Download() {
             one. If your system blocks a build, stop and report the exact warning. Do not disable
             operating-system security protections.
           </p>
-          <p>
-            The base app works offline. Install and sign in to your chosen coding agent through its
-            own supported workflow. An auracode account is optional.
-          </p>
-          <a className="text-link" href="/changelog">
-            Read the development notes <Arrow />
-          </a>
         </section>
       </div>
     </Page>

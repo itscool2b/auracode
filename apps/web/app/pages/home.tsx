@@ -1,11 +1,8 @@
 import { Closing } from "../home/Closing";
 import { Faq } from "../home/Faq";
 import { Film } from "../home/Film";
-import { Numerals } from "../home/Numerals";
 import { Stage } from "../home/Stage";
-import { Strip } from "../home/Strip";
 import { Tiles } from "../home/Tiles";
-import { Triptych } from "../home/Triptych";
 
 export const meta = () => [
   { title: "auracode · One window for your coding agents" },
@@ -16,15 +13,17 @@ export const meta = () => [
   },
 ];
 
+/**
+ * Five sections, each copied from a named section of a reference landing page
+ * (docs/design/visual-language.md 5): x.ai's hero, x.ai's film card, X Money's staggered tiles,
+ * X Money's FAQ and Aside's closing panel. The footer follows x.ai's.
+ */
 export default function Home() {
   return (
     <main id="main" className="home">
       <Stage />
-      <Triptych />
       <Film />
       <Tiles />
-      <Strip />
-      <Numerals />
       <Faq />
       <Closing />
     </main>

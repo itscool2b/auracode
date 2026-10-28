@@ -107,6 +107,12 @@ try {
       assert.ok(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       );
+      // The narrowest phones still in use: nothing may scroll sideways at 320px either.
+      await page.setViewportSize({ width: 320, height: 640 });
+      assert.ok(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+        "the home page scrolls sideways at 320px",
+      );
       await page.goto(`${base}/download`);
       assert.equal(await page.getByRole("button", { name: "Installer coming soon" }).count(), 2);
       await page.route("**/api/v1/config", (route) =>

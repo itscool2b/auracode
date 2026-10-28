@@ -1,36 +1,42 @@
-import { DitherField, type DitherTarget, Wordmark } from "@auracode/ui/graphite";
+import {
+  DitherField,
+  type DitherTarget,
+  LOGO_PATH,
+  LOGO_VIEWBOX,
+  Logo,
+} from "@auracode/ui/graphite";
 import { useRef } from "react";
-import { FOOTER_FIELD } from "./fields";
+import { FOOTER_CLEARING, FOOTER_FIELD } from "./fields";
 import { useReducedMotion, useScrollValue } from "./motion";
 
-const WORDMARK: DitherTarget = {
-  kind: "text",
-  text: "auracode",
-  fontSize: "fit",
-  fontWeight: 600,
-  tracking: -0.06,
+const LOGO: DitherTarget = {
+  kind: "path",
+  d: LOGO_PATH,
+  viewBox: LOGO_VIEWBOX,
+  height: 1,
+  align: "start",
   anchor: "bottom",
-  inset: 8,
+  inset: 0,
   texture: 0.22,
 };
 
 /**
- * The giant edge-to-edge wordmark (the AI in Design bar): the dither field resolves into the word as
- * it scrolls in, from 0 as its top enters to 1 once its bottom reaches the viewport's bottom.
- * Without JavaScript the word is plain text; under reduced motion it is the formed still frame.
+ * The giant logo (the AI in Design bar for uniqueness): the dither field resolves into the seal and
+ * the turtle as it scrolls in, from 0 as its top enters to 1 once its bottom reaches the viewport's
+ * bottom. Without JavaScript it is the plain logo; under reduced motion the formed still frame.
  */
-function FooterWordmark() {
-  const footerMark = useRef<HTMLDivElement>(null);
+function FooterLogo() {
+  const mark = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
   const progress = useScrollValue(
-    footerMark,
+    mark,
     (rect, viewport) => (viewport - rect.top) / Math.max(1, rect.height - 2),
     { step: 0.004 },
   );
   const formed = reduced || progress >= 1;
   return (
-    <div className="footer-mark" ref={footerMark} aria-hidden="true">
-      <span className="footer-mark-text">auracode</span>
+    <div className="footer-mark" ref={mark} aria-hidden="true">
+      <Logo className="footer-mark-logo" size={512} />
       <DitherField
         className="footer-mark-field site-field"
         cell={FOOTER_FIELD.cell}
@@ -38,7 +44,8 @@ function FooterWordmark() {
         accent={FOOTER_FIELD.accent}
         palette={FOOTER_FIELD.palette}
         seed={FOOTER_FIELD.seed}
-        target={WORDMARK}
+        clearing={FOOTER_CLEARING}
+        target={LOGO}
         progress={formed ? 1 : progress}
         order="up"
         still={formed}
@@ -47,16 +54,11 @@ function FooterWordmark() {
   );
 }
 
+/** x.ai's footer: the brand at left, three link columns at right, nothing else. */
 export function SiteFooter() {
   return (
     <footer className="site-footer">
-      <div className="frame footer-top">
-        <div className="footer-brand">
-          <a className="footer-home" href="/" aria-label="auracode home">
-            <Wordmark size={16} />
-          </a>
-          <p>One window for your coding agents.</p>
-        </div>
+      <div className="wrap footer-grid">
         <nav className="footer-links" aria-label="Footer">
           <div className="footer-col">
             <p className="footer-heading">Product</p>
@@ -95,8 +97,8 @@ export function SiteFooter() {
             </ul>
           </div>
         </nav>
+        <FooterLogo />
       </div>
-      <FooterWordmark />
     </footer>
   );
 }

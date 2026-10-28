@@ -28,8 +28,9 @@ const SEAM_DROP = 40;
 const FOOT_RY = 220;
 
 /**
- * The opening stage: the live dither field fills it edge to edge, gathers toward the sides and
- * thins to black behind the headline, lead and buttons and along the product frame's top edge.
+ * x.ai's hero: a centred two-line headline, one lead and one action, the product right under it.
+ * The live dither field fills the stage edge to edge, gathers toward the sides and thins to black
+ * behind the headline, lead and button and along the product frame's top edge.
  * Seals and turtles swim through it. The frame's own field dissolves into the real screenshot,
  * already under way when the page opens, as the frame scrolls up; on a phone, where a dithered
  * screenshot is too small to read, the screenshot shows at once.
@@ -154,15 +155,12 @@ export function Stage() {
             </span>
           </h1>
           <p className="hero-lead" data-clear="">
-            <strong>The coding agents you already use, together in one chat.</strong> auracode runs
-            each one through its own harness, on your machine. Free, local, and no account needed.
+            The coding agents you already use, together in one chat on your machine. Free, with
+            nothing to sign up for.
           </p>
           <div className="hero-actions" data-clear="">
-            <a className="g-button g-button-primary g-button-44 hero-cta" href="/download">
+            <a className="g-button g-button-primary g-button-44" href="/download">
               Download
-            </a>
-            <a className="g-button g-button-outline g-button-44 hero-cta" href="/signin">
-              Invited sign-in
             </a>
           </div>
         </div>

@@ -10,7 +10,6 @@ export default function Changelog() {
         <div className="release-meta">
           <time dateTime="2026-10-26">26 October 2026</time>
           <span>Development preview</span>
-          <span className="g-new">New</span>
         </div>
         <div className="release-body prose">
           <h2>One workspace. Your own agents.</h2>

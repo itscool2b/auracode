@@ -2,9 +2,10 @@ import { Wordmark } from "@auracode/ui/graphite";
 import { useEffect, useRef } from "react";
 
 /**
- * 64px sticky nav: transparent at the top of the page, solid black with a hairline once the page
- * scrolls. Hovering one link dims its siblings (Harvey). Under 768px the links fold into a menu
- * built on <details>, so it opens without JavaScript too.
+ * Aside's and x.ai's 64px sticky nav: the wordmark at left; Changelog, Sign in and the one primary
+ * Download at right. Transparent at the top of the page, solid black once the page scrolls.
+ * Hovering one link dims its sibling (Harvey). Under 768px the links fold into a menu built on
+ * <details>, so it opens without JavaScript too; Download stays in the bar.
  */
 export function SiteHeader() {
   const header = useRef<HTMLElement>(null);
@@ -58,15 +59,12 @@ export function SiteHeader() {
         <a className="nav-home" href="/" aria-label="auracode home">
           <Wordmark size={16} />
         </a>
-        <nav className="nav-links g-dim-text" aria-label="Main">
-          <a href="/download">Download</a>
-          <a href="/changelog">Changelog</a>
-        </nav>
         <div className="nav-actions">
-          <a className="nav-signin" href="/signin">
-            Sign in
-          </a>
-          <a className="g-button g-button-primary nav-cta" href="/download">
+          <nav className="nav-links g-dim-text" aria-label="Main">
+            <a href="/changelog">Changelog</a>
+            <a href="/signin">Sign in</a>
+          </nav>
+          <a className="g-button g-button-primary" href="/download">
             Download
           </a>
           <details className="nav-menu" ref={menu}>
@@ -78,7 +76,6 @@ export function SiteHeader() {
               </svg>
             </summary>
             <nav className="nav-sheet" aria-label="Menu">
-              <a href="/download">Download</a>
               <a href="/changelog">Changelog</a>
               <a href="/signin">Sign in</a>
               <a href="/account">Account</a>

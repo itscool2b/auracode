@@ -2986,3 +2986,25 @@ Verified locally:
   352), the website static tests, the notices and instructions script tests, and desktop Clippy.
 - Screenshots of the site header, the New chat welcome, the onboarding header and the intro
   frames.
+
+### Website landing redesign (2026-10-27, branch `site-landing`)
+
+The home page was rebuilt from a study of the five reference landing pages (visual language 5.12):
+five sections instead of eight, each copied from a named reference section.
+- Hero and product: x.ai's hero. One action (Download); the second button is cut.
+- Film card: x.ai's "The SpaceXAI team runs on Grok Bot".
+- Six staggered tiles: X Money's "One app". They absorb the triptych's agents and handoff tiles and
+  the strip's parallel chats; the plan and keyboard tiles are cut. Still at rest; hover plays one
+  loop and dims the others.
+- FAQ: X Money's, six rows.
+- Closing panel: Aside's, with a turtle and a seal.
+- Footer: x.ai's, the brand drawn as the giant seal and turtle logo that the field forms on scroll.
+
+Cut: the triptych, the strip and the giant numerals, with their CSS and the Geist Pixel font. The
+stylesheet went from 3,406 to 2,604 lines. Header: wordmark, Changelog, Sign in, Download.
+One stepped type scale and a 160px section rhythm; padded boxes sit on the 4px grid at 1440.
+Inner pages lost their redundant parts: the sign-in panel's second heading and extra link, the
+download page's platform guess, repeated note and changelog link, and the changelog's New chip.
+
+Open: the generated third-party notices page has no site chrome; restyling it needs a change in
+`.github/scripts/third-party-notices.mjs`.

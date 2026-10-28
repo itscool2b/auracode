@@ -8,19 +8,14 @@ const QUESTIONS: readonly { question: string; answer: string }[] = [
   {
     question: "Is auracode free?",
     answer:
-      "Yes. The Local desktop app is free and there is no paid tier. Cloud sync is an invite-only private preview.",
-  },
-  {
-    question: "Do I need an account?",
-    answer:
-      "No. The app works without an account or a network connection. An account only adds encrypted sync between your machines, and accounts are invite-only for now.",
+      "Yes. The desktop app is free, there is no paid tier and nothing to sign up for. It works without an account.",
   },
   {
     question: "Which agents does it run?",
     answer: `${agentList}, plus any agent that speaks the Agent Client Protocol. Each one runs through its own harness.`,
   },
   {
-    question: "Does auracode see my API keys or logins?",
+    question: "Does auracode see my agent logins?",
     answer:
       "No. auracode never reads, stores or proxies agent credentials. Each agent signs in through its own flow and keeps its own keys.",
   },
@@ -46,7 +41,9 @@ const SLIDE = 270;
 const QUINT = "cubic-bezier(0.23, 1, 0.32, 1)";
 
 /**
- * X Money's FAQ: one row open at a time, opening over 300ms, and the open row's tinted well slides
+ * X Money's FAQ ("Your questions, answered"): the two-tone heading and one pill at left, six rows
+ * at right on the tiles' third column. One row open at a time, opening over 300ms, and the open
+ * row's tinted well slides
  * from the old row to the new one in about 270ms. Built on <details>, so every answer opens without
  * JavaScript; the script only adds the motion and keeps one row open.
  */
