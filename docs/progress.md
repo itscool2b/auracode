@@ -3977,3 +3977,22 @@ navigation and its other checks), `check-setup` (Agents), `check-agent-installat
 
 Not done: the hand walkthrough of the built app and site; real Safari; the CPU of the native
 WebView2 window (measured in Chromium only). CI was not run.
+
+### Agents: opened details on the 4px grid (2026-10-28, branch `agents-details-grid`)
+
+The follow-up `one-agent-entry` left. An agent's details now continue the row's text column to
+the kebab's edge: facts are 36px rows on a hairline drawn over their top, the label on the value's
+baseline; the Connection row is the Settings row without the well's inset, on the same hairline,
+with a one-line description ("Applies to new chats." then Automatic or the adapter's download);
+one Updates fact replaces two and no longer repeats the row's update line; the executable list's
+legend stacks 20 over 16. `check-layout` opens Codex direct and on its adapter, Claude Code with an
+update, Grok Build not installed, Cursor broken, setup's compact roster and the executable choice;
+the old details gave 7 to 18 grid findings each. The Agents fixture gains installations, a cached
+release and Claude Code's Update action.
+
+Verified on Windows: `pnpm lint` (28 existing warnings), `pnpm typecheck`, `pnpm test` (scripts
+22, ui 253, desktop 10 node and 488 with 19 skipped, design lab 352, web 4), the acceptance gate
+test (6); in Chromium and WebKit `check-setup`, `check-agent-installations`, `check-settings` and
+`check-layout` (368 of 368 views clean). Sheet: the ignored
+`target/design-research/sheets/agents-details-grid.png`. Not done: the hand walkthrough of the
+built app; CI.
