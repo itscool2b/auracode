@@ -34,6 +34,85 @@ pub struct ConfigScanner {
     pub(crate) sources: Vec<ConfigSource>,
     pub(crate) home: PathBuf,
     pub(crate) platform: ConfigScope,
+    /// Whether a bare program name is found on this device's PATH. None: not checked.
+    pub(crate) program_lookup: Option<ProgramLookup>,
+}
+
+/// Resolves a bare program name through the device's own PATH, never as a path.
+pub type ProgramLookup = std::sync::Arc<dyn Fn(&str) -> bool + Send + Sync>;
+
+/// What an MCP command from another device may be checked as. Only `Local` paths and `Bare`
+/// names are ever looked up; everything else is held without touching the filesystem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommandPath {
+    /// A program name resolved through PATH.
+    Bare(String),
+    /// A normalized local absolute path, or one under the home folder.
+    Local(PathBuf),
+    /// UNC and device paths, `..` escapes, another system's absolute form, relative paths, URLs,
+    /// `~user` and control characters. Probing them could reach a network share.
+    Refused,
+}
+
+/// Classifies command text before any filesystem access. `windows` picks the local absolute form
+/// (`C:/...` on Windows, `/...` elsewhere), so both rule sets are tested on every OS.
+pub fn classify_command(command: &str, home: &std::path::Path, windows: bool) -> CommandPath {
+    if command.is_empty()
+        || command.len() > 1024
+        || command.chars().any(|c| c.is_control())
+        || command.trim() != command
+    {
+        return CommandPath::Refused;
+    }
+    let normalized = command.replace('\\', "/");
+    // `\\host\share`, `//host/share`, `\\?\UNC\...`, `\\?\C:\...` and `\\.\pipe\...` all start so.
+    if normalized.starts_with("//") {
+        return CommandPath::Refused;
+    }
+    let parts: Vec<&str> = normalized.split('/').collect();
+    if parts.contains(&"..") {
+        return CommandPath::Refused;
+    }
+    let bytes = normalized.as_bytes();
+    let drive =
+        bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'/';
+    // A colon anywhere else is a URL, a stream name or a drive-relative path.
+    if normalized
+        .char_indices()
+        .any(|(index, c)| c == ':' && !(drive && index == 1))
+    {
+        return CommandPath::Refused;
+    }
+    if let Some(rest) = normalized.strip_prefix("~/") {
+        return CommandPath::Local(home.join(rest));
+    }
+    if normalized.starts_with('~') {
+        return CommandPath::Refused;
+    }
+    if drive {
+        return if windows {
+            CommandPath::Local(PathBuf::from(&normalized))
+        } else {
+            CommandPath::Refused
+        };
+    }
+    if normalized.starts_with('/') {
+        // On Windows a rooted path without a drive depends on the current drive.
+        return if windows {
+            CommandPath::Refused
+        } else {
+            CommandPath::Local(PathBuf::from(&normalized))
+        };
+    }
+    if !normalized.contains('/')
+        && normalized
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-+".contains(&byte))
+        && normalized != "."
+    {
+        return CommandPath::Bare(normalized);
+    }
+    CommandPath::Refused
 }
 
 pub struct ConfigScan {
@@ -93,7 +172,15 @@ impl ConfigScanner {
             sources,
             home,
             platform,
+            program_lookup: None,
         })
+    }
+
+    /// Bare MCP command names are then checked with this PATH lookup.
+    #[must_use]
+    pub fn with_program_lookup(mut self, lookup: ProgramLookup) -> Self {
+        self.program_lookup = Some(lookup);
+        self
     }
 
     pub fn scan(&self) -> ConfigScan {
@@ -264,27 +351,26 @@ impl ConfigScanner {
         }
     }
 
-    /// An MCP server whose command is a path (absolute or under the home folder) that does not
-    /// exist on this device. Bare program names are found on PATH by the agent and not checked.
-    pub(crate) fn missing_command(&self, value: &Value) -> Option<String> {
+    /// The command of an MCP server another device synchronized, checked only where that is safe:
+    /// a refused form is reported without any filesystem access (`true`), a local absolute or
+    /// home path is checked for existence, and a bare name only through the device's PATH lookup.
+    /// None: present, unchecked, or no command.
+    pub(crate) fn command_problem(&self, value: &Value) -> Option<(String, bool)> {
         let command = value.get("command").and_then(|command| match command {
             Value::String(text) => Some(text.as_str()),
             // OpenCode-style arrays name the program first.
             Value::Array(items) => items.first().and_then(Value::as_str),
             _ => None,
         })?;
-        let looks_like_path = command.starts_with('~')
-            || command.contains('/')
-            || command.contains('\\')
-            || command.as_bytes().get(1) == Some(&b':');
-        if !looks_like_path {
-            return None;
+        match classify_command(command, &self.home, cfg!(windows)) {
+            CommandPath::Refused => Some((command.to_owned(), true)),
+            CommandPath::Local(path) => (!path.exists()).then(|| (command.to_owned(), false)),
+            CommandPath::Bare(name) => self
+                .program_lookup
+                .as_ref()
+                .is_some_and(|found| !found(&name))
+                .then(|| (command.to_owned(), false)),
         }
-        let expanded = match command.strip_prefix('~') {
-            Some(rest) => self.home.join(rest.trim_start_matches(['/', '\\'])),
-            None => PathBuf::from(command),
-        };
-        (!expanded.exists()).then(|| command.to_owned())
     }
 
     pub(crate) fn source(&self, identity: &ConfigIdentity) -> Option<&ConfigSource> {

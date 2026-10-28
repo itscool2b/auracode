@@ -51,6 +51,9 @@ pub enum ConfigHold {
     DeviceSpecific { platform: ConfigScope },
     /// An MCP command path that does not exist here. It is never written.
     MissingPath { path: String },
+    /// An MCP command auracode will not look up: a network share, a device path, a `..` escape
+    /// or another system's form. It is kept for the device it came from and never written here.
+    ForeignPath { path: String },
     /// A previous apply or install did not finish; the reason says why.
     Retained { reason: String },
     /// The account could not be reached. The saved state is kept.
@@ -799,9 +802,13 @@ fn hold(
             .remote
             .as_ref()
             .and_then(|remote| remote.content.as_ref())
-        && let Some(path) = scanner.missing_command(value)
+        && let Some((path, refused)) = scanner.command_problem(value)
     {
-        return Some(ConfigHold::MissingPath { path });
+        return Some(if refused {
+            ConfigHold::ForeignPath { path }
+        } else {
+            ConfigHold::MissingPath { path }
+        });
     }
     None
 }
@@ -1016,6 +1023,9 @@ pub fn hold_sentence(hold: &ConfigHold) -> String {
         ),
         ConfigHold::MissingPath { path } => format!(
             "The command {path} does not exist on this device, so this server is not written here."
+        ),
+        ConfigHold::ForeignPath { path } => format!(
+            "The command {path} is a network, device or relative path, so it is not looked up or written here. It stays with the device it came from."
         ),
         ConfigHold::Retained { reason } => reason.clone(),
         ConfigHold::Offline => "The account cannot be reached. The last synchronized state is kept until you are back online.".into(),

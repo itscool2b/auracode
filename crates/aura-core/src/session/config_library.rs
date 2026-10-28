@@ -17,8 +17,18 @@ pub struct LibraryRoots {
 }
 
 impl SessionManager {
+    /// Every agent synced; profile transitions use this so a paused agent is still restored.
     pub async fn config_sync_scanner(
         &self,
+    ) -> Result<(aura_config::sync::ConfigScanner, Vec<String>), SessionError> {
+        self.config_sync_scanner_for(&[]).await
+    }
+
+    /// `paused`: agents whose configuration sync the person turned off on this device. Their
+    /// items wait unchanged. Each source carries the detected version for feature floors.
+    pub async fn config_sync_scanner_for(
+        &self,
+        paused: &[String],
     ) -> Result<(aura_config::sync::ConfigScanner, Vec<String>), SessionError> {
         use aura_config::sync::{ConfigScanner, ConfigScope, ConfigSource};
         let env = self.deps().env.get().await;
@@ -49,19 +59,23 @@ impl SessionManager {
                     Provider::Pi => "pi",
                     Provider::Shared => "",
                 };
-                let installed = source.provider == Provider::Shared
-                    || agents.iter().any(|agent| {
-                        agent.id == name
-                            && matches!(
-                                agent.availability,
-                                aura_protocol::session::Availability::Ready { .. }
-                            )
-                    });
+                let ready = agents.iter().find(|agent| {
+                    agent.id == name
+                        && matches!(
+                            agent.availability,
+                            aura_protocol::session::Availability::Ready { .. }
+                        )
+                });
+                let installed = source.provider == Provider::Shared || ready.is_some();
+                let version = ready
+                    .and_then(|agent| agent.installation.as_ref())
+                    .map(|installation| installation.version.clone());
+                let paused = paused.iter().any(|agent| agent == name);
                 ConfigSource {
                     source,
                     installed,
-                    version: None,
-                    paused: false,
+                    version,
+                    paused,
                 }
             })
             .collect();
@@ -72,8 +86,13 @@ impl SessionManager {
         } else {
             ConfigScope::Portable
         };
+        // A bare MCP command from another device is looked up on this device's PATH only.
+        let vars = env.vars.clone();
         let scanner = ConfigScanner::new(sources, home, platform)
-            .map_err(|error| SessionError::Organization(error.to_string()))?;
+            .map_err(|error| SessionError::Organization(error.to_string()))?
+            .with_program_lookup(std::sync::Arc::new(move |name: &str| {
+                aura_process::find_program(name, &vars).is_some()
+            }));
         Ok((scanner, roots.notices))
     }
 

@@ -22,6 +22,11 @@ export type ConfigHold =
 { kind: "device_specific"; platform: ConfigScope } | 
 /**  An MCP command path that does not exist here. It is never written. */
 { kind: "missing_path"; path: string } | 
+/**
+ *  An MCP command auracode will not look up: a network share, a device path, a `..` escape
+ *  or another system's form. It is kept for the device it came from and never written here.
+ */
+{ kind: "foreign_path"; path: string } | 
 /**  A previous apply or install did not finish; the reason says why. */
 { kind: "retained"; reason: string } | 
 /**  The account could not be reached. The saved state is kept. */

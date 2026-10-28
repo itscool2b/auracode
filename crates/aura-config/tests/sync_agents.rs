@@ -587,3 +587,112 @@ async fn applying_one_agent_is_atomic_per_item_and_a_failure_keeps_the_others() 
     .unwrap();
     assert!(none.is_empty());
 }
+
+#[test]
+fn commands_from_another_device_are_classified_before_any_filesystem_access() {
+    let home = Path::new("C:/Users/person");
+    for (command, windows) in [
+        (r"\\attacker\share\x.exe", true),
+        ("//attacker/share/x", true),
+        (r"\\?\UNC\attacker\share\x", true),
+        (r"\\?\C:\tools\x.exe", true),
+        (r"\\.\pipe\x", true),
+        (r"/\attacker\share", true),
+        ("//attacker/share/x", false),
+        ("~/../other/bin/tool", true),
+        ("C:/tools/../../Windows/x.exe", true),
+        ("/opt/../../etc/x", false),
+        ("C:/tools/x.exe", false),
+        ("/usr/local/bin/x", true),
+        ("C:tool.exe", true),
+        ("bin/tool", true),
+        ("./tool", false),
+        ("~other/bin/tool", false),
+        ("file://host/x", false),
+        ("tool\u{0}.exe", true),
+    ] {
+        assert_eq!(
+            classify_command(command, home, windows),
+            CommandPath::Refused,
+            "{command} (windows: {windows})"
+        );
+    }
+    assert_eq!(
+        classify_command("C:/tools/x.exe", home, true),
+        CommandPath::Local("C:/tools/x.exe".into())
+    );
+    assert_eq!(
+        classify_command(r"C:\tools\x.exe", home, true),
+        CommandPath::Local("C:/tools/x.exe".into())
+    );
+    assert_eq!(
+        classify_command("/usr/local/bin/x", home, false),
+        CommandPath::Local("/usr/local/bin/x".into())
+    );
+    assert_eq!(
+        classify_command("~/bin/tool", home, true),
+        CommandPath::Local(home.join("bin/tool"))
+    );
+    assert_eq!(
+        classify_command("npx", home, true),
+        CommandPath::Bare("npx".into())
+    );
+}
+
+#[tokio::test]
+async fn network_paths_are_held_unprobed_and_bare_names_use_the_path_lookup() {
+    use std::sync::{Arc, Mutex};
+    let device = Device::new();
+    let asked = Arc::new(Mutex::new(Vec::<String>::new()));
+    let lookup = Arc::clone(&asked);
+    let scanner = device
+        .codex()
+        .with_program_lookup(Arc::new(move |name: &str| {
+            lookup.lock().unwrap().push(name.to_owned());
+            name == "node"
+        }));
+    let port = Port::default();
+    let mut ids = Vec::new();
+    for (name, command) in [
+        ("share", r"\\attacker\share\x.exe"),
+        ("slashes", "//attacker/share/x"),
+        ("escape", "~/../../x"),
+        ("node", "node"),
+        ("absent", "uvx-missing"),
+    ] {
+        let server = value(
+            identity(Provider::Codex, ConfigFormat::Mcp, "config.toml", &[name]),
+            json!({"command": command, "args": []}),
+        );
+        ids.push((name, server.identity.id().unwrap()));
+        port.remote(&server);
+    }
+    for (name, id) in &ids {
+        let review = prepare_review(&port, &scanner, id, ConfigChoice::Automatic)
+            .await
+            .unwrap();
+        let hold = review.preview.item.hold.clone();
+        match *name {
+            "share" | "slashes" | "escape" => {
+                assert!(
+                    matches!(hold, Some(ConfigHold::ForeignPath { .. })),
+                    "{name}: {hold:?}"
+                );
+                assert!(!review.preview.can_apply);
+            }
+            "node" => assert_eq!(hold, None, "{name}"),
+            _ => assert!(
+                matches!(hold, Some(ConfigHold::MissingPath { .. })),
+                "{name}: {hold:?}"
+            ),
+        }
+    }
+    let asked = asked.lock().unwrap();
+    assert!(
+        asked
+            .iter()
+            .all(|name| name == "node" || name == "uvx-missing"),
+        "only bare names reach the PATH lookup: {asked:?}"
+    );
+    assert!(!device.root("codex/config.toml").exists());
+}

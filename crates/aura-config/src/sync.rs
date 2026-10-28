@@ -29,7 +29,10 @@ pub use review::{
     PreparedConfigReview, feature_floor, hold_sentence, inventory, prepare_review, set_device_only,
     version_at_least,
 };
-pub use scan::{ConfigScan, ConfigScanner, ConfigSkipped, ConfigSource};
+pub use scan::{
+    CommandPath, ConfigScan, ConfigScanner, ConfigSkipped, ConfigSource, ProgramLookup,
+    classify_command,
+};
 pub use snapshot::{ConfigContent, ConfigFile, ConfigFormat, ConfigIdentity, ConfigSnapshot};
 
 /// A single item snapshot fits below the authenticated cloud blob plaintext limit. Larger bundles
