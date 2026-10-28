@@ -73,6 +73,26 @@ describe("Instructions helpers", () => {
     expect(modeSentence(perAgent)).toBe("Agents read different files here.");
   });
 
+  it("says plainly who shares a file and who would read one not created yet", async () => {
+    const universal = await createInstructionsFixture("universal").api.snapshot({ type: "global" });
+    const shared = fileByKey(universal, "project:AGENTS.md");
+    expect(shared && readersSentence(universal, shared)).toBe("Every agent reads this file.");
+    const perAgent = await createInstructionsFixture("universal").api.snapshot({ type: "global" });
+    const override = fileByKey(perAgent, "project:AGENTS.override.md");
+    expect(override && readersSentence(perAgent, override)).toBe(
+      "Once created, Codex and Pi read it instead of AGENTS.md.",
+    );
+    const gemini = fileByKey(perAgent, "project:GEMINI.md");
+    expect(gemini && readersSentence(perAgent, gemini)).toBe(
+      "Once created, Antigravity reads it as well.",
+    );
+    const split = await createInstructionsFixture("per-agent").api.snapshot({ type: "global" });
+    const agentsFile = fileByKey(split, "project:AGENTS.md");
+    expect(agentsFile && readersSentence(split, agentsFile)).toBe(
+      "Every agent reads this file except Claude Code.",
+    );
+  });
+
   it("counts agents that read a file through an import or a managed copy", async () => {
     const global = await createInstructionsFixture("drift").api.snapshot({ type: "global" });
     const source = fileByKey(global, global.source);

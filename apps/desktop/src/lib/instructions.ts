@@ -141,8 +141,19 @@ export function modeSentence(snapshot: InstructionsSnapshot): string {
   }
 }
 
-/** Readers of a file, by name, with "and N more" past three. */
+/**
+ * Who reads a file, said plainly: shared files name their agents, a file nearly every agent reads
+ * names the exceptions, and a file that does not exist yet says who would read it.
+ */
 export function readersSentence(snapshot: InstructionsSnapshot, file: InstructionsFile): string {
+  if (file.kind === "missing") {
+    const future = snapshot.agents
+      .filter((agent) => agent.override_file === file.key || agent.file === file.key)
+      .map((agent) => agent.name);
+    if (future.length === 0) return "No agent reads this file here yet.";
+    const instead = /(^|[/:])(CLAUDE|AGENTS\.override)\.md$/.test(file.key);
+    return `Once created, ${listNames(future)} ${future.length === 1 ? "reads" : "read"} it${instead ? " instead of AGENTS.md" : " as well"}.`;
+  }
   // Agents that reach this file through an import, a link or a managed copy read it too.
   const ids = [
     ...file.readers,
@@ -152,6 +163,12 @@ export function readersSentence(snapshot: InstructionsSnapshot, file: Instructio
   ];
   const names = ids.map((id) => agentName(snapshot, id));
   if (names.length === 0) return "No agent reads this file here.";
+  const others = snapshot.agents
+    .filter((agent) => !ids.includes(agent.id))
+    .map((agent) => agent.name);
+  if (others.length === 0) return "Every agent reads this file.";
+  if (names.length > 3 && others.length <= 2)
+    return `Every agent reads this file except ${listNames(others)}.`;
   if (names.length > 3)
     return `Read by ${names.slice(0, 3).join(", ")} and ${names.length - 3} more.`;
   return `Read by ${listNames(names)}.`;
