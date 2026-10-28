@@ -14,12 +14,14 @@ import {
 } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import type { AppInfo, InstructionsTarget } from "../../bindings";
+import type { DataCleanupApi } from "../../lib/dataCleanup";
 import { GLOBAL, type InstructionsApi, instructionsApi } from "../../lib/instructions";
 import { revealDataDir } from "../../lib/ipc";
 import { type GeneralApi, generalApi, type SetupApi, setupApi } from "../../lib/setup";
 import { type UpdatesApi, updatesApi } from "../../lib/updates";
 import { AccountPanel } from "./AccountPanel";
 import { ConfigSyncPanel } from "./ConfigSyncPanel";
+import { DeleteDataDialog } from "./DeleteDataDialog";
 import { GeneralPanel } from "./GeneralPanel";
 import { type InstructionsFolder, InstructionsPanel } from "./InstructionsPanel";
 import { LocalImportPanel } from "./LocalImportPanel";
@@ -84,6 +86,8 @@ export function SettingsScreen({
   instructionFolders = [],
   chatLabel,
   instructionsOpenOnLoad,
+  dataCleanup,
+  deleteDataOpenOnLoad = false,
 }: {
   readonly info: AppInfo;
   readonly onBack: () => void;
@@ -107,9 +111,14 @@ export function SettingsScreen({
   readonly chatLabel?: string;
   /** Development previews only (see InstructionsPanel). */
   readonly instructionsOpenOnLoad?: Parameters<typeof InstructionsPanel>[0]["openOnLoad"];
+  /** "Delete all auracode data"; previews pass a synthetic one. */
+  readonly dataCleanup?: DataCleanupApi;
+  /** Development previews only: About opens with the review already showing. */
+  readonly deleteDataOpenOnLoad?: boolean;
 }) {
   const [page, setPage] = useState<Page>(initialPage);
   const [notices, setNotices] = useState(false);
+  const [deleting, setDeleting] = useState(deleteDataOpenOnLoad);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     void navigationId;
@@ -268,15 +277,6 @@ export function SettingsScreen({
             <>
               <div className="settings-group">
                 <UpdatePanel api={updates} />
-                <Row
-                  title="This device"
-                  detail={
-                    <>
-                      {info.os === "macos" ? "macOS" : "Windows"} {info.os_version} ·{" "}
-                      <span className="settings-mono">{info.arch}</span>
-                    </>
-                  }
-                />
                 <Row title="Diagnostics" detail="Startup details and local troubleshooting tools.">
                   <button
                     className="g-button g-button-outline g-button-28"
@@ -299,7 +299,36 @@ export function SettingsScreen({
                   </button>
                 </Row>
               </div>
+              <section className="settings-section" aria-labelledby="settings-this-device">
+                <h2 id="settings-this-device">This device</h2>
+                <div className="settings-group">
+                  <Row
+                    title={info.os === "macos" ? "macOS" : "Windows"}
+                    detail={
+                      <>
+                        {info.os_version} · <span className="settings-mono">{info.arch}</span>
+                      </>
+                    }
+                  />
+                  <Row
+                    title="Delete all auracode data"
+                    detail="Chats, settings, keys and worktrees, as if auracode was never installed. Your agents and repositories stay."
+                  >
+                    <button
+                      className="g-button g-button-outline g-button-28"
+                      type="button"
+                      data-testid="settings-delete-data"
+                      onClick={() => setDeleting(true)}
+                    >
+                      Review
+                    </button>
+                  </Row>
+                </div>
+              </section>
               {notices ? <NoticesDialog onClose={() => setNotices(false)} /> : null}
+              {deleting ? (
+                <DeleteDataDialog api={dataCleanup} onClose={() => setDeleting(false)} />
+              ) : null}
             </>
           ) : null}
         </div>

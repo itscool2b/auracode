@@ -38,7 +38,8 @@ function template(bytes) {
   return bytes.subarray(start, bytes.indexOf(0, start)).toString("utf8");
 }
 
-const keys = (text) => [...text.matchAll(/^LangString (\w+) \$\{LANG_ENGLISH\}/gmu)].map((m) => m[1]);
+const keys = (text) =>
+  [...text.matchAll(/^LangString (\w+) \$\{LANG_ENGLISH\}/gmu)].map((m) => m[1]);
 
 test("the bundle builds only the NSIS installer on Windows, with the hooks and strings", () => {
   assert.deepEqual(config.bundle.targets, ["app", "dmg", "nsis"], "no MSI without the cleanup");
@@ -80,7 +81,7 @@ test("the pinned template still inserts the hooks where they rely on it", { skip
   const section = text.slice(text.indexOf("Section Uninstall"));
   const hook = section.indexOf("!insertmacro NSIS_HOOK_PREUNINSTALL");
   const running = section.indexOf("!insertmacro CheckIfAppIsRunning");
-  const removal = section.indexOf("${If} $DeleteAppDataCheckboxState = 1");
+  const removal = section.indexOf(`\${If} $DeleteAppDataCheckboxState = 1`);
   const post = section.indexOf("!insertmacro NSIS_HOOK_POSTUNINSTALL");
   assert.ok(hook >= 0 && hook < running, "the cleanup runs before the app check and file removal");
   assert.ok(running < removal && removal < post, "Tauri's data step reads the reset checkbox");
@@ -90,9 +91,11 @@ test("the pinned template still inserts the hooks where they rely on it", { skip
   assert.doesNotMatch(text, /DeleteAppDataCheckbox \$\{BM_SETCHECK\}/u);
 });
 
-test("the custom English file defines every string the pinned CLI's does", { skip: !binary }, () => {
+test("the custom English file defines every string the pinned CLI's does", {
+  skip: !binary,
+}, () => {
   const text = binary.toString("utf8");
-  const start = text.indexOf("LangString addOrReinstall ${LANG_ENGLISH}");
-  const end = text.indexOf("\n", text.indexOf("LangString deleteAppData ${LANG_ENGLISH}", start));
+  const start = text.indexOf(`LangString addOrReinstall \${LANG_ENGLISH}`);
+  const end = text.indexOf("\n", text.indexOf(`LangString deleteAppData \${LANG_ENGLISH}`, start));
   assert.deepEqual(keys(english).sort(), keys(text.slice(start, end)).sort());
 });

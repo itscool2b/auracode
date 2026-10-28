@@ -96,6 +96,10 @@ if (container) {
       void import("./dev/settingsPreview").then(({ mountSettingsPreview }) =>
         mountSettingsPreview(container),
       );
+    else if (mode?.startsWith("delete-data"))
+      void import("./dev/deleteDataPreview").then(({ mountDeleteDataPreview }) =>
+        mountDeleteDataPreview(container, mode),
+      );
     else if (
       mode === "setup" ||
       mode === "agents" ||
