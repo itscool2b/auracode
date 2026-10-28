@@ -94,7 +94,7 @@ impl GitWorkspaces {
             ));
         }
         for name in ["registry.json", "publications.json"] {
-            let legacy = profile.dir.join("worktrees").join(name);
+            let legacy = profile.worktrees_dir().join(name);
             match std::fs::symlink_metadata(&legacy) {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
                 Err(error) => return Err(error.into()),
@@ -134,7 +134,7 @@ impl GitWorkspaces {
         Arc::new(Self {
             env,
             registry,
-            root: profile.dir.join("worktrees"),
+            root: profile.worktrees_dir(),
             records,
             publication_records,
             gate: tokio::sync::Mutex::new(()),
