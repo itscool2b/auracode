@@ -2,6 +2,11 @@ use super::*;
 use aura_sync::vault::VaultError;
 use std::{collections::HashMap, sync::Mutex as StdMutex};
 
+/// Account writes are ordered per vault entry for the whole process (`aura_sync::account`), and
+/// every test here binds the same origin and account ID. A newer restore in one test would make
+/// another test's account stale, so the tests take turns with that entry.
+static SHARED_ACCOUNT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[derive(Default)]
 struct Memory {
     values: StdMutex<HashMap<VaultEntry, Vec<u8>>>,
@@ -45,6 +50,7 @@ impl SecretStore for Memory {
 
 #[tokio::test]
 async fn removal_requires_local_and_explicit_review_then_retains_receipt_through_key_failure() {
+    let _account = SHARED_ACCOUNT.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let profiles = profiles(&dir);
     profiles.open_active().unwrap();
@@ -141,6 +147,7 @@ async fn removal_requires_local_and_explicit_review_then_retains_receipt_through
 
 #[tokio::test]
 async fn removal_retries_index_acknowledgements_after_staging_and_after_key_erasure() {
+    let _account = SHARED_ACCOUNT.lock().await;
     for fail_at in [2, 5] {
         let dir = tempfile::tempdir().unwrap();
         let profiles = profiles(&dir);
@@ -194,6 +201,7 @@ async fn removal_retries_index_acknowledgements_after_staging_and_after_key_eras
 
 #[tokio::test]
 async fn removal_preserves_files_when_receipt_cannot_save_or_profile_is_owned() {
+    let _account = SHARED_ACCOUNT.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let profiles = profiles(&dir);
     profiles.open_active().unwrap();
@@ -255,6 +263,7 @@ async fn removal_preserves_files_when_receipt_cannot_save_or_profile_is_owned() 
 
 #[tokio::test]
 async fn removal_prepared_resume_rechecks_staged_content_before_deletion() {
+    let _account = SHARED_ACCOUNT.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let profiles = profiles(&dir);
     profiles.open_active().unwrap();
@@ -309,6 +318,7 @@ async fn removal_prepared_resume_rechecks_staged_content_before_deletion() {
 
 #[tokio::test]
 async fn reset_detaches_old_profile_durably_before_ack_and_never_reuses_its_ciphertext() {
+    let _account = SHARED_ACCOUNT.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let profiles = profiles(&dir);
     profiles.open_active().unwrap();
@@ -456,6 +466,7 @@ fn retained_database(profiles: &Profiles, account: &str, key: &AccountKey) -> Pr
 
 #[tokio::test]
 async fn explicit_rebinding_proves_key_identity_and_preserves_queued_edits_across_index_failure() {
+    let _account = SHARED_ACCOUNT.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let profiles = profiles(&dir);
     profiles.open_active().unwrap();
@@ -564,6 +575,7 @@ async fn explicit_rebinding_proves_key_identity_and_preserves_queued_edits_acros
 
 #[tokio::test]
 async fn explicit_rebinding_refuses_future_schema_without_rewriting_database_or_index() {
+    let _account = SHARED_ACCOUNT.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let profiles = profiles(&dir);
     profiles.open_active().unwrap();
@@ -604,6 +616,7 @@ async fn explicit_rebinding_refuses_future_schema_without_rewriting_database_or_
 
 #[tokio::test]
 async fn opening_and_status_never_create_profile_or_contact_service() {
+    let _account = SHARED_ACCOUNT.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let vault = Arc::new(Memory::default());
     let accounts = Accounts::open(api(), vault.clone(), profiles(&dir))
@@ -628,6 +641,7 @@ async fn opening_and_status_never_create_profile_or_contact_service() {
 
 #[tokio::test]
 async fn confirmed_offline_key_creates_one_opaque_profile_without_activating_it() {
+    let _account = SHARED_ACCOUNT.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let profiles = profiles(&dir);
     let local = profiles.open_active().unwrap();
@@ -670,6 +684,7 @@ async fn confirmed_offline_key_creates_one_opaque_profile_without_activating_it(
 
 #[tokio::test]
 async fn malformed_index_is_preserved_and_cannot_select_local_profile() {
+    let _account = SHARED_ACCOUNT.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let vault = Arc::new(Memory::default());
     let entry = index::entry(api().origin(), dir.path()).unwrap();
@@ -688,6 +703,7 @@ async fn malformed_index_is_preserved_and_cannot_select_local_profile() {
 
 #[tokio::test]
 async fn index_rejects_duplicate_profile_bindings_and_future_version() {
+    let _account = SHARED_ACCOUNT.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let vault = Arc::new(Memory::default());
     let entry = index::entry(api().origin(), dir.path()).unwrap();
@@ -709,6 +725,7 @@ async fn index_rejects_duplicate_profile_bindings_and_future_version() {
 
 #[tokio::test]
 async fn concurrent_mutations_and_unknown_recovery_confirmation_are_rejected() {
+    let _account = SHARED_ACCOUNT.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let accounts = Accounts::open(api(), Arc::new(Memory::default()), profiles(&dir))
         .await
@@ -774,6 +791,7 @@ fn cooldown_errors_are_structured_and_recovery_debug_is_redacted() {
 
 #[tokio::test]
 async fn second_owner_is_refused_without_reading_or_replacing_the_index() {
+    let _account = SHARED_ACCOUNT.lock().await;
     let dir = tempfile::tempdir().unwrap();
     let vault = Arc::new(Memory::default());
     let first = Accounts::open(api(), vault.clone(), profiles(&dir))

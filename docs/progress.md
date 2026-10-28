@@ -3469,3 +3469,40 @@ and `cargo clippy -p aura-core --features account-sync --lib --tests -- -D warni
 checkpoints, conversation and gitworkspaces (83); desktop Vitest (403, 19 skipped), `tsc` and Biome
 (37 warnings, none new). The browser `check-*` scripts, the full aura-core suite and CI were not
 run. Bindings were unchanged by the merge.
+
+### Open pull requests merged and the production API switched on (2026-10-28)
+
+The owner granted full merge autonomy. PRs #8 to #18 were merged in order on one branch, each
+with its own merge commit, verified together and pushed to `main` once (01ede50). GitHub marks
+all eleven merged. Conflicts were confined to this log (both sides kept), the notice catalogue
+(regenerated), the Agents page (the redesign's version, which already offers the OpenCode install)
+and three files where the earlier integration merges' resolutions applied unchanged.
+
+Checks on the merged tree:
+- `pnpm lint`, `pnpm typecheck` and `pnpm test` pass: desktop 426 plus 5, ui 276, design lab 352,
+  web 4, scripts 22.
+- `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D warnings` pass.
+- Rust suites: aura-config 102, the desktop lib 208, and aura-core lib with account-sync 551 of
+  552 (the failure is the account test race fixed below).
+- The website's browser tests pass in Chromium and WebKit, and the worker builds and passes 5
+  runtime tests.
+- Application Control blocked the aura-agents lib test binary (4551), so it runs in the final CI.
+
+`auracode.si` served the merged build about 15 minutes after the push. Every route answers, and
+the home page shows the new landing.
+
+**Production API.** The zone route `auracode.si/api/*` now points to `auracode-api`, the staged
+build with the invitation-order fix, as the owner pre-approved for M6. Verified live:
+- `health` and `config` return 200, with the production Turnstile key.
+- `auth/session`, `devices` and `account` return 401 without a session.
+- A sign-in challenge with an invalid Turnstile token gets 403, and so does a foreign origin. No
+  email is sent, and the allowlist and Turnstile secrets are present.
+- `/signin` renders the real Turnstile widget.
+
+One live invited sign-in remains for the owner, because it needs the emailed code.
+
+**Account test race.** `accounts::tests::reset_detaches_old_profile_durably...` failed with
+InvalidState in about one run in five. Account writes are ordered per vault entry across the
+process, and every account test uses the same origin and account ID, so a restore in one test made
+another test's account stale. The tests now take turns with that entry. The result: 0 failures in
+20 runs of `accounts::`, against 3 in 15 before. Production code is unchanged.
