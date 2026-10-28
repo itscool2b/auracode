@@ -16,8 +16,10 @@ import type {
   WorktreeRelocationPreview,
 } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
-import type { GitWorkspaceApi } from "../../lib/gitWorkspace";
+import { type GitWorkspaceApi, sameFolder } from "../../lib/gitWorkspace";
+import type { ProjectToolsApi } from "../../lib/projectTools";
 import type { WorktreeSetupApi } from "../../lib/worktreeSetup";
+import { MergeConflicts } from "./MergeConflicts";
 import { Modal } from "./Modal";
 import { RecreateWorktreeDialog } from "./RecreateWorktreeDialog";
 import { WorktreeSetupPanel } from "./WorktreeSetupPanel";
@@ -30,15 +32,6 @@ type Preview =
   | { type: "recovery"; value: WorktreeRecoveryPreview }
   | { type: "pull_request"; value: PullRequestPreview }
   | { type: "relocate"; value: WorktreeRelocationPreview };
-
-function sameFolder(left: string, right: string): boolean {
-  const normalize = (value: string) => value.replaceAll("\\", "/").replace(/\/$/, "");
-  // Windows folder names are compared without case; macOS can be case-sensitive.
-  const windows = /^[a-z]:[\\/]/i.test(left);
-  return windows
-    ? normalize(left).toLowerCase() === normalize(right).toLowerCase()
-    : normalize(left) === normalize(right);
-}
 
 function Repository({ workspace }: { readonly workspace: GitWorkspace }) {
   return (
@@ -93,6 +86,9 @@ export function GitDialog({
   onChanged,
   allowIsolation = true,
   setupApi,
+  agentName = "the agent",
+  onAskAgent,
+  projectTools,
 }: {
   readonly chatId: string;
   readonly title: string;
@@ -103,6 +99,12 @@ export function GitDialog({
   readonly onChanged: () => void;
   readonly allowIsolation?: boolean;
   readonly setupApi?: WorktreeSetupApi;
+  /** The chat's agent, by name, for a conflicted merge's "Ask … to resolve". */
+  readonly agentName?: string;
+  /** Sends a visible message to the chat's agent; resolves to null once sent, or why it was not. */
+  readonly onAskAgent?: (text: string) => Promise<string | null>;
+  /** Detected editors for the chat's folder, for a conflicted merge's "Open in …". */
+  readonly projectTools?: Pick<ProjectToolsApi, "review" | "openEditor">;
 }) {
   const [workspace, setWorkspace] = useState<GitWorkspace | null>(null);
   const [initialBranch, setInitialBranch] = useState("main");
@@ -470,16 +472,16 @@ export function GitDialog({
                 </dl>
                 <pre>{preview.value.changes || "No file changes."}</pre>
                 {preview.value.conflicts.length > 0 ? (
-                  <>
-                    <h4 className="git-conflict-title">Conflicts to resolve first</h4>
-                    <ul>
-                      {preview.value.conflicts.map((path) => (
-                        <li key={path}>
-                          <code>{path}</code>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
+                  <MergeConflicts
+                    chatId={chatId}
+                    preview={preview.value}
+                    inWorktree={
+                      workspace !== null && sameFolder(workspace.root, preview.value.worktree.path)
+                    }
+                    agentName={agentName}
+                    onAskAgent={onAskAgent}
+                    projectTools={projectTools}
+                  />
                 ) : null}
               </>
             )}

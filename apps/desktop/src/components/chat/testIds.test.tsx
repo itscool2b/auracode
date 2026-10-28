@@ -49,7 +49,7 @@ const ACTIONS: TurnActions = {
   requests: new Map(),
   onRespondPermission: noop,
   onRespondUi: noop,
-  errorActions: () => ({ retry: true, startFresh: true }),
+  errorActions: () => ({ retry: true, startFresh: true, recreate: false }),
   onStart: noop,
   onShowLog: noop,
   canResume: true,
@@ -509,7 +509,7 @@ describe("the automation attributes of the chat screens", () => {
           detail: "panicked",
           recoverable: true,
         }}
-        actions={{ retry: true, startFresh: true }}
+        actions={{ retry: true, startFresh: true, recreate: false }}
         onRetry={noop}
         onStartFresh={noop}
         onShowLog={noop}

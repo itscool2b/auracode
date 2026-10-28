@@ -28,6 +28,8 @@ export interface TurnActions extends BlobProps {
   ) => ErrorActions;
   readonly onStart: (fresh: boolean) => void;
   readonly onShowLog: () => void;
+  /** Reviews recreating the chat's deleted worktree folder (Git workspace's recreate flow). */
+  readonly onRecreateFolder?: () => void;
   /** The session has no process: a turn interrupted when auracode closed offers Resume session. */
   readonly canResume: boolean;
 }
@@ -182,6 +184,7 @@ export const TurnView = memo(function TurnView({
                   actions={actions.errorActions(item.key, item.errorKind)}
                   onRetry={() => actions.onStart(false)}
                   onStartFresh={() => actions.onStart(true)}
+                  onRecreate={actions.onRecreateFolder}
                   onShowLog={actions.onShowLog}
                 />
               );

@@ -8,6 +8,7 @@ import {
   terminalTransport,
 } from "../lib/terminal";
 import { DialogClose, dialogClassName } from "./chat/Modal";
+import { openXterm } from "./xterm";
 import "@xterm/xterm/css/xterm.css";
 import "./TerminalSheet.css";
 
@@ -55,77 +56,18 @@ export function TerminalSheet({
     setReady(false);
     setState({ state: "idle" });
     void (async () => {
-      const [{ Terminal }, { FitAddon }, { WebglAddon }] = await Promise.all([
-        import("@xterm/xterm"),
-        import("@xterm/addon-fit"),
-        import("@xterm/addon-webgl"),
-      ]);
       const element = container.current;
       if (disposed || !element) return;
-      const styles = getComputedStyle(element);
-      const color = (name: string, fallback: string) =>
-        styles.getPropertyValue(name).trim() || fallback;
-      // Graphite's terminal well: code text on surface-1 and the ANSI palette (visual-language 3.1).
-      const term = new Terminal({
-        cols: 80,
-        rows: 24,
-        scrollback: 1000,
-        fontSize: 12.5,
-        lineHeight: 1.44,
-        fontFamily: color("--g-mono", '"Geist Mono Variable", monospace'),
-        cursorBlink: false,
-        screenReaderMode: true,
-        disableStdin: true,
-        logLevel: "off",
-        theme: {
-          background: color("--g-surface-1", "#0a0a0a"),
-          foreground: color("--g-code-fg", "#d4d4d4"),
-          cursor: color("--g-fg-1", "#ededed"),
-          cursorAccent: color("--g-surface-1", "#0a0a0a"),
-          selectionBackground: color("--g-selection", "#333333"),
-          selectionForeground: color("--g-fg-1", "#ededed"),
-          black: color("--g-ansi-black", "#4d4d4d"),
-          red: color("--g-ansi-red", "#ff6b6b"),
-          green: color("--g-ansi-green", "#3dd68c"),
-          yellow: color("--g-ansi-yellow", "#e6cc6e"),
-          blue: color("--g-ansi-blue", "#7aa7ff"),
-          magenta: color("--g-ansi-magenta", "#d69cff"),
-          cyan: color("--g-ansi-cyan", "#5cd6d6"),
-          white: color("--g-ansi-white", "#d4d4d4"),
-          brightBlack: color("--g-ansi-bright-black", "#858585"),
-          brightRed: color("--g-ansi-bright-red", "#ff8f8f"),
-          brightGreen: color("--g-ansi-bright-green", "#6ee7a8"),
-          brightYellow: color("--g-ansi-bright-yellow", "#f2dc8c"),
-          brightBlue: color("--g-ansi-bright-blue", "#a3c2ff"),
-          brightMagenta: color("--g-ansi-bright-magenta", "#e4bdff"),
-          brightCyan: color("--g-ansi-bright-cyan", "#8ae6e6"),
-          brightWhite: color("--g-ansi-bright-white", "#ededed"),
-        },
-        linkHandler: {
-          activate: (_event, uri) => {
-            try {
-              const url = new URL(uri);
-              if (url.protocol === "https:" || url.protocol === "http:") setLink(url.href);
-            } catch {
-              /* Malformed links remain terminal text. */
-            }
-          },
-        },
-      });
-      const fit = new FitAddon();
-      term.loadAddon(fit);
-      term.open(element);
-      term.textarea?.setAttribute("aria-label", `${agentId} ${purpose} terminal input`);
-      // The canvas renderer is optional; terminal IO stays usable if WebGL is unavailable/lost.
-      try {
-        const webgl = new WebglAddon();
-        webgl.onContextLoss(() => webgl.dispose());
-        term.loadAddon(webgl);
-      } catch {
-        /* xterm keeps its DOM renderer. */
-      }
       // Vendor output cannot set the OS clipboard. Copying requires the explicit button below.
-      const clipboard = term.parser.registerOscHandler(52, () => true);
+      const view = await openXterm(element, {
+        inputLabel: `${agentId} ${purpose} terminal input`,
+        onLink: setLink,
+      });
+      if (disposed) {
+        view.dispose();
+        return;
+      }
+      const term = view.term;
       const connection = new TerminalSession(
         transport,
         (bytes) => new Promise<void>((resolve) => term.write(bytes, resolve)),
@@ -147,23 +89,17 @@ export function TerminalSheet({
       const resize = term.onResize(({ rows, cols }) => {
         void connection.resize({ rows, cols });
       });
-      const fitToView = () => {
-        const dimensions = fit.proposeDimensions();
-        if (!dimensions || dimensions.cols < 2 || dimensions.rows < 1) return;
-        term.resize(Math.min(1000, dimensions.cols), Math.min(1000, dimensions.rows));
-      };
-      const observer = new ResizeObserver(fitToView);
+      const observer = new ResizeObserver(view.fit);
       observer.observe(element);
-      fitToView();
+      view.fit();
       setReady(true);
       cleanup = () => {
         void connection.close();
         observer.disconnect();
-        clipboard.dispose();
         textInput.dispose();
         binaryInput.dispose();
         resize.dispose();
-        term.dispose();
+        view.dispose();
         if (session.current === connection) session.current = null;
         if (terminal.current === term) terminal.current = null;
       };

@@ -240,6 +240,48 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * A conflicted merge: the files, one calm line, the exact message the agent would receive (in the
+ * review's well), then Open in an editor and Ask the agent. Merge stays disabled below.
+ */
+.git-conflicts > .git-note {
+  margin: var(--g-space-12) 0 0;
+}
+
+/* Its own line height stays inside the sentence's, so the line keeps its 20px. */
+.git-inline {
+  color: var(--g-fg-1);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code-inline);
+  line-height: normal;
+  overflow-wrap: anywhere;
+}
+
+.git-conflict-message {
+  margin: var(--g-space-12) 0 0;
+}
+
+.git-conflict-label {
+  margin: 0 0 var(--g-space-6);
+  color: var(--g-fg-2);
+  font-weight: 500;
+}
+
+.git-conflict-actions {
+  margin-top: var(--g-space-12);
+}
+
+.git-conflict-help {
+  margin: var(--g-space-8) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.git-conflict-error {
+  margin: var(--g-space-8) 0 0;
+  color: var(--g-red);
+  overflow-wrap: anywhere;
+}
+
 .git-worktrees {
   display: grid;
   gap: var(--g-space-8);

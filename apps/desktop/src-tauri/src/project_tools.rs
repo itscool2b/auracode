@@ -3,6 +3,7 @@ use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
 };
+use aura_core::session::EditorOpen;
 use aura_core::terminal::TerminalError;
 use aura_process::{Spawner, pty::PtySize};
 use aura_protocol::git::{GitInitializePreview, GitWorkspace};
@@ -29,6 +30,18 @@ pub async fn project_tools_review(
 ) -> Result<ProjectToolsReview, AppError> {
     current(&webview, &state)?;
     Ok(state.sessions()?.project_tools_review(&chat_id).await?)
+}
+
+/// Reserves a project shell for the docked panel or the reviewed sheet. A window may hold several;
+/// the app holds at most eight. The shell itself starts only through `project_terminal_start`.
+#[tauri::command]
+#[specta::specta]
+pub fn project_terminal_reserve(
+    webview: Webview,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    current(&webview, &state)?;
+    Ok(state.terminals.reserve_project(webview.label())?.pending())
 }
 
 #[tauri::command]
@@ -69,6 +82,19 @@ fn editor_url(editor: ProjectEditor, folder: &str) -> Result<Url, AppError> {
         ProjectEditor::Cursor => "cursor",
         ProjectEditor::VsCode => "vscode",
         ProjectEditor::VsCodeInsiders => "vscode-insiders",
+        // These open through their detected launcher, never a URL.
+        ProjectEditor::Zed
+        | ProjectEditor::IntellijIdea
+        | ProjectEditor::WebStorm
+        | ProjectEditor::PyCharm
+        | ProjectEditor::RustRover
+        | ProjectEditor::GoLand
+        | ProjectEditor::CLion => {
+            return Err(AppError::new(
+                AppErrorCode::InvalidArgument,
+                "This editor opens through its own launcher.",
+            ));
+        }
     };
     let mut url = Url::parse(&format!("{scheme}://file/")).map_err(|_| {
         AppError::new(
@@ -112,12 +138,21 @@ pub async fn project_editor_open(
 ) -> Result<(), AppError> {
     current(&webview, &state)?;
     let admission = state.sessions()?;
-    let folder = admission
-        .project_editor_folder(&chat_id, &token, editor)
+    let open = admission
+        .project_editor_open(&chat_id, &token, editor)
         .await?;
     current(&webview, &state)?;
-    let url = editor_url(editor, &folder)?;
-    app.opener().open_url(url.as_str(),None::<&str>).map_err(|_|AppError::new(AppErrorCode::AgentUnavailable,"The operating system could not open this editor. Install or repair its URL handler, then review the folder again."))?;
+    match open {
+        EditorOpen::Url { folder } => {
+            let url = editor_url(editor, &folder)?;
+            app.opener().open_url(url.as_str(),None::<&str>).map_err(|_|AppError::new(AppErrorCode::AgentUnavailable,"The operating system could not open this editor. Install or repair its URL handler, then review the folder again."))?;
+        }
+        // The detected launcher, detached: the editor is the person's, never an owned process.
+        EditorOpen::Launch(launch) => tauri::async_runtime::spawn_blocking(move || launch.spawn())
+            .await
+            .map_err(|_| AppError::new(AppErrorCode::AgentUnavailable, "The editor launch stopped unexpectedly."))?
+            .map_err(|_| AppError::new(AppErrorCode::AgentUnavailable, "The operating system could not start this editor. Check its installation, then review the folder again."))?,
+    }
     // The profile lease stays alive through the OS dispatch receipt, not the editor's lifetime.
     drop(admission);
     Ok(())
@@ -147,6 +182,18 @@ mod tests {
                 .as_str()
                 .ends_with("//server/share/a%252Fb/")
         );
+        // Zed and the JetBrains IDEs never open through a URL, only their detected launcher.
+        for editor in [
+            ProjectEditor::Zed,
+            ProjectEditor::IntellijIdea,
+            ProjectEditor::WebStorm,
+            ProjectEditor::PyCharm,
+            ProjectEditor::RustRover,
+            ProjectEditor::GoLand,
+            ProjectEditor::CLion,
+        ] {
+            assert!(editor_url(editor, "/project").is_err());
+        }
     }
 }
 

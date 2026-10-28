@@ -8,7 +8,7 @@ import { hasProcess } from "../../lib/chat/transcript";
 import { inTauri } from "../../lib/ipc";
 import { projectName } from "./ChatList";
 import { FolderContext } from "./FolderContext";
-import { commandKey } from "./Keys";
+import { commandKey, Keys } from "./Keys";
 import { closePopover, Popover } from "./Popover";
 
 /** Statuses the header says out loud; Ready and Stopped stay quiet (screen readers still hear them). */
@@ -32,6 +32,8 @@ export function Header({
   onHistory,
   onGit,
   onTools,
+  onTerminal,
+  terminalOpen = false,
   onExport,
   onDebug,
   changesOpen = false,
@@ -53,6 +55,9 @@ export function Header({
   readonly onHistory?: () => void;
   readonly onGit?: () => void;
   readonly onTools?: () => void;
+  /** Shows or hides the docked terminal panel (Ctrl+`, Cmd+` on macOS). */
+  readonly onTerminal?: () => void;
+  readonly terminalOpen?: boolean;
   readonly onExport?: () => void;
   readonly onDebug?: () => void;
   readonly changesOpen?: boolean;
@@ -157,16 +162,28 @@ export function Header({
               </span>
             ) : null}
           </div>
-          {onGit || tools || onHistory ? (
+          {onGit || onTerminal || tools || onHistory ? (
             <div className="chat-header-actions">
               {onGit ? (
                 <button type="button" className="g-menu-item" onClick={item(onGit)}>
                   Git workspace
                 </button>
               ) : null}
+              {onTerminal ? (
+                <button
+                  type="button"
+                  className="g-menu-item"
+                  data-testid="chat-terminal-toggle"
+                  aria-keyshortcuts="Control+` Meta+`"
+                  onClick={item(onTerminal)}
+                >
+                  {terminalOpen ? "Hide terminal" : "Show terminal"}
+                  <Keys keys={[commandKey(), "`"]} />
+                </button>
+              ) : null}
               {tools ? (
                 <button type="button" className="g-menu-item" onClick={item(tools)}>
-                  Terminal and editor
+                  Open in editor
                 </button>
               ) : null}
               {onHistory ? (

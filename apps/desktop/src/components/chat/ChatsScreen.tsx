@@ -6,6 +6,7 @@ import { type AppStore, NewChatDraft } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
 import { navigationTarget } from "../../lib/nativeNavigation";
 import { preselectAgent, type SetupApi, setupApi } from "../../lib/setup";
+import { TerminalPanels } from "../../lib/terminalPanel";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { AgentDock } from "./AgentDock";
 import { Banners } from "./Banners";
@@ -15,6 +16,7 @@ import { ChatView } from "./ChatView";
 import { CommandPalette, type PaletteCommand } from "./CommandPalette";
 import { NewChat } from "./NewChat";
 import { ProjectDialog } from "./ProjectDialog";
+import { createXtermRuntime } from "./terminalRuntime";
 
 const noSubscribe = () => () => {};
 const emptyWorkspace = () => EMPTY_WORKSPACE;
@@ -113,6 +115,12 @@ export function ChatsScreen({
   const [chatOptions, setChatOptions] = useState<string | null>(null);
   const [palette, setPalette] = useState(false);
   const [chatCommands, setChatCommands] = useState<readonly PaletteCommand[]>([]);
+  // Docked terminals belong to the screen, not the open chat, so a chat's shells keep running
+  // while another chat shows. Leaving the screen stops them all.
+  const [terminals] = useState(() =>
+    transport.projectTools ? new TerminalPanels(transport.projectTools, createXtermRuntime) : null,
+  );
+  useEffect(() => () => void terminals?.dispose(), [terminals]);
   const chatIds = snapshot.chats?.map((chat) => chat.id).join(",") ?? "";
   // A new or externally created chat can also create a project. Live status text is merged below.
   // biome-ignore lint/correctness/useExhaustiveDependencies: Membership refresh depends on the set of listed IDs, not each status update.
@@ -254,6 +262,7 @@ export function ChatsScreen({
             key={selected}
             chatId={selected}
             onCommands={setChatCommands}
+            terminals={terminals}
             transport={transport}
             listed={snapshot.chats?.find((chat) => chat.id === selected) ?? null}
             storage={snapshot.storage}
