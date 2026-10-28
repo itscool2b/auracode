@@ -1342,16 +1342,24 @@ the TerminalSheet with the package, program, arguments and folder as rows before
 appears only where the vendor's CLI has its own login (Claude Code, Codex, Cursor, Grok Build,
 OpenCode, Hermes). Every other agent keeps its Installation guide.
 
-### 6.18 Library
+### 6.18 Plugin library
 
-Vercel's page grammar: Back, "Library" in `.g-text-title` with one line under it, Refresh (ghost
-icon) and Manage integrations (outline) at right, then a 36px search and two selects (source,
-agent). One frame of three panes on the page's 32px column: the views as plain 32px rows with
-counts (the current one filled surface-3) and Copy history after one divider (a volt square when a
-copy needs recovery), Sources folded at the bottom; the items as 56px rows on hairlines (a 24px
-`AgentMark`, name 14/20 500, agent and scope in 12/16 fg-3; the selected row surface-2 with the
-rail); the chosen item with its title 16/22 600, its file in a well with a 36px head, and "Copy to"
-with Review copy (the page's one primary). Empty states are a title and one line.
+Vercel's project pages: Back, "Plugin library" in `.g-text-title` with one line under it and
+Refresh (ghost icon) at right. Below, a 200px column of agents as plain 32px rows (a 16px
+`AgentMark`, the name, a volt status dot only when an update is available; the current one filled
+surface-3), and the chosen agent as one scrolling page beside it: its 32px mark, name 16/22 600 over
+the version in mono and "Updated 4 minutes ago" in 12/16 fg-3, the page's one primary (Add plugin, or
+Add package for Pi) and a kebab for the rest (Refresh listings, Add marketplace, Copy history, Open
+Agents). Under it the harness line in a surface-1 well (a volt dot and Update when a release is
+newer, a red dot when the binary failed, plain fg-2 otherwise), the reread notice after a version
+change, the agent's one-sentence summary, and Sync across devices as one settings row with its
+switch. Each feature follows as a 14/20 600 heading with its count, one 12/16 fg-3 line saying where
+its rows came from (the CLI command, or why its files answer instead; red when the command failed),
+and 60px rows on hairlines in a 12px ring drawn inset: the name 14/20 500, its facts in 12/16 fg-3,
+Enabled or Disabled with a dot, an outline 28 Install for an available plugin, and a kebab (Preview
+and copy, Enable or Disable, Update, Remove; each opens the reviewed command filled in). Available
+plugins sit under their own 14/20 heading with a 280px search and "Showing 20 of 3,599". Empty
+features are one 12/16 line. An item's preview and copy, and Copy history, open as large dialogs.
 
 ### 6.19 Dialogs and sheets
 

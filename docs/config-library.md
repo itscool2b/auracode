@@ -1,5 +1,9 @@
 # Local configuration Library
 
+The app shows this inventory through the per-agent [Plugin library](plugin-library.md). Instruction
+files are still inventoried and copied by this crate for its other callers, but the Plugin library no
+longer lists them: they belong to the separate Instructions surface.
+
 `aura-config` is the Rust adapter boundary. The host supplies approved user or project roots; callers
 select logical item IDs, never arbitrary paths. Inspection is explicit and local. It does not run an
 agent, load a skill, resolve an environment reference, connect to MCP, or install a package.
