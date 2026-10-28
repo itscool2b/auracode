@@ -35,7 +35,7 @@
   --g-primary-hover: #ffffff;
   --g-primary-active: #d6d6d6;
 
-  /* Signal. Volt is the only accent: needs you, live, new, the glint, lit dither pixels. */
+  /* Signal. Volt is the only accent: needs you, live, new, the glint. */
   --g-volt: #ccff33;
   --g-volt-tint: rgb(204 255 51 / 0.12);
   --g-green: #3dd68c;
@@ -107,11 +107,6 @@
   --g-shade-far: #121212;
   --g-shallows-radius: 28px;
   --g-shallows-radius-compact: 20px;
-
-  /* Dither field: black plus three greys, lit pixels in volt */
-  --g-dither-1: #2e2e2e;
-  --g-dither-2: #4d4d4d;
-  --g-dither-3: #858585;
 
   /* Type. Integer weights only: 400, 500, 600. */
   --g-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;

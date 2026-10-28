@@ -18,23 +18,6 @@ export {
   TURTLE_SMALL_PATH,
   TURTLE_VIEWBOX,
 } from "./creaturePaths";
-export {
-  type DitherClearingArea,
-  DitherField,
-  type DitherFieldProps,
-  type DitherTarget,
-} from "./DitherField";
-export {
-  BAYER_8,
-  bayerThreshold,
-  DEFAULT_ACCENT,
-  DEFAULT_SEED,
-  type DissolveOrder,
-  type DitherFrameOptions,
-  ditherLevel,
-  renderDitherFrame,
-  VOLT,
-} from "./dither";
 export { Keycap, type KeycapProps } from "./Keycap";
 export { Logo, type LogoProps, Wordmark, type WordmarkProps } from "./Logo";
 export {
@@ -63,15 +46,6 @@ export { Shallows, type ShallowsProps } from "./Shallows";
 export { StatusDot, type StatusDotProps, type StatusTone } from "./StatusDot";
 export { Swimmers, type SwimmersProps } from "./Swimmers";
 export {
-  type DitherSprite,
-  type ParsedSprite,
-  paintSprites,
-  parseSprite,
-  type SpriteAvoid,
-  type SpritePose,
-  spritePose,
-} from "./sprites";
-export {
   ease,
   GAITS,
   giveWay,
@@ -82,8 +56,6 @@ export {
 } from "./swim";
 export {
   contrastRatio,
-  DITHER_PALETTES,
-  type DitherPaletteName,
   GRAPHITE_COLORS,
   GRAPHITE_DURATIONS,
   GRAPHITE_EASINGS,

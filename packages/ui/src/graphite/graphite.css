@@ -696,56 +696,6 @@
   white-space: nowrap;
 }
 
-/* ------------------------------------------------------------------ DitherField (4.15) */
-
-.g-dither {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.g-dither-content {
-  position: relative;
-  z-index: 0;
-}
-
-.g-dither-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 1;
-  display: block;
-  pointer-events: none;
-  image-rendering: pixelated;
-  transition: opacity var(--g-dur-reveal) var(--g-ease-out);
-}
-
-.g-dither-canvas:where([data-revealed]) {
-  opacity: 0;
-}
-
-.g-dither-fallback {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  image-rendering: pixelated;
-  pointer-events: none;
-}
-
-.g-dither-fallback:where([data-hidden]) {
-  visibility: hidden;
-}
-
-/* Without scripts nothing would ever reveal the content, so the field stands aside. */
-@media (scripting: none) {
-  .g-dither:where([data-reveals]) > :where(.g-dither-canvas, .g-dither-fallback) {
-    display: none;
-  }
-}
-
 /* -------------------------------------------------------- Shallows and Swimmers (4.16) */
 
 /*
@@ -1462,10 +1412,6 @@
   .g-glint::after {
     background-image: none;
   }
-
-  .g-dither-canvas {
-    transition: none;
-  }
 }
 
 @keyframes g-fade {
@@ -1494,8 +1440,4 @@
 :root:is([data-motion="reduced"], [data-motion="off"]) :where(.g-glint)::after {
   animation: none;
   background-image: none;
-}
-
-:root:is([data-motion="reduced"], [data-motion="off"]) :where(.g-dither-canvas) {
-  transition: none;
 }

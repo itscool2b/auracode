@@ -6,8 +6,8 @@ accent, **volt** `#CCFF33`, means look here. **Shallows replaces the dither fiel
 surface on 2026-10-28 (owner decision):** lit water seen from below, with seals and turtles passing
 as dark silhouettes (4.16). The foundation ships in `@auracode/ui/graphite` (tokens, stylesheet,
 `Shallows`, `Swimmers`, `Creature`, `AgentMark`, `Logo`, `Wordmark`, `StatusDot`,
-`PixelLoader`, `Keycap`, `CopyButton`, and `DitherField` until the app no longer uses it). The
-website is built in Shallows; the desktop app moves next. Every number here is meant to be built as written. Motion values are
+`PixelLoader`, `Keycap` and `CopyButton`). The website and the desktop app are built in Shallows.
+Every number here is meant to be built as written. Motion values are
 measured on the reference sites (`target/design-research/motion.md`, captured 2026-10-26); the
 few that are not are marked *provisional*.
 
@@ -24,8 +24,9 @@ and for screens not yet moved.
 **Dither history.** From 2026-10-26 to 2026-10-28 the signature was a live ordered-dither field
 with pixel-art seals and turtles swimming through it. The owner rejected it as a messy background,
 and the creatures glitched as they eased away from the pointer. Shallows keeps the animals and the
-calm and drops the texture: one grey fade, flat silhouettes, transform-only motion. The website no
-longer uses or ships the dither engine (4.15 documents the component while the app still uses it).
+calm and drops the texture: one grey fade, flat silhouettes, transform-only motion. Once neither
+the website nor the app used it, the dither engine (`DitherField`, its renderer, sprites and
+palettes) was deleted from `@auracode/ui` (2026-10-28); 4.15 keeps a one-line note.
 
 ---
 
@@ -186,7 +187,7 @@ surface-4 (4.3:1): selected rows use fg-2 or fg-1.
 
 | Token | Value | Meaning |
 |---|---|---|
-| `--g-volt` | `#CCFF33` (17.9:1 on bg) | Look here: needs you, live, new, the glint, lit dither pixels. Text or a small mark |
+| `--g-volt` | `#CCFF33` (17.9:1 on bg) | Look here: needs you, live, new, the glint. Text or a small mark |
 | `--g-volt-tint` | `rgb(204 255 51 / 0.12)` | Behind "New" and needs-you chips only |
 | `--g-green` | `#3DD68C` (11.2:1) | Passed, allowed, added. Never "done": done is a white check |
 | `--g-green-tint` | `rgb(61 214 140 / 0.12)` | Behind pass chips |
@@ -223,10 +224,6 @@ Comments are dim, never italic. ANSI inverse renders as the hue at 16% behind th
 **Project marks**: `--g-project-slate #8A98A6`, `--g-project-sand #A59E92`,
 `--g-project-sage #8C9C88`, `--g-project-clay #A88E80`. Four quiet tones a person can give a
 project; they colour that project's own swatch and nothing else, never chrome or text.
-
-**Dither palettes** (greys above black, darkest first): `quiet` `#191919 #2E2E2E #4D4D4D`
-(behind reading content), `standard` `#2E2E2E #4D4D4D #858585` (hero), `bright`
-`#4D4D4D #A3A3A3 #EDEDED` (type made of pixels). Lit pixels are volt in every palette.
 
 ### 3.2 Type
 
@@ -332,7 +329,7 @@ Measured on the reference sites (`target/design-research/motion.md`); only the e
 | Easing | Curve | Job | Source |
 |---|---|---|---|
 | `--g-ease` | `cubic-bezier(0.4, 0, 0.2, 1)` | Hover colour and fill, toggles, menus | x.ai, X Money, Vercel, Aside |
-| `--g-ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Letters, underline and line draws, dither reveal | x.ai |
+| `--g-ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Letters, underline and line draws | x.ai |
 | `--g-ease-quint` | `cubic-bezier(0.23, 1, 0.32, 1)` | Headline flip-up, panels, accordion, dialogs | X Money |
 | `--g-ease-smooth` | `cubic-bezier(0.32, 0.72, 0, 1)` | Sibling dims, large media reveals | X Money |
 | `--g-ease-settle` | `cubic-bezier(0, 0.7, 0.3, 1)` | Button hover (fast start, slow tail) | Harvey |
@@ -354,7 +351,7 @@ Measured on the reference sites (`target/design-research/motion.md`); only the e
 | `--g-dur-dim` | 500ms | Sibling dim, media crossfade | X Money, Harvey |
 | `--g-dur-step` | 600ms | One word-wheel step | Harvey |
 | `--g-dur-headline` | 650ms | Per-word flip-up | X Money, x.ai |
-| `--g-dur-reveal` | 800ms | Underline and line draws, dither reveal fade | x.ai |
+| `--g-dur-reveal` | 800ms | Underline and line draws | x.ai |
 | `--g-dur-count` | 950ms | Count-up | AI in Design |
 | `--g-dur-tick` | 1100ms | Word-wheel period | Harvey |
 | `--g-dur-shimmer` | 1400ms | One shimmer sweep, linear, only while live | X Money |
@@ -381,10 +378,8 @@ in components. Movement durations (`letter`, `panel`, `row`, `step`, `headline`,
 transform; the rotating word stops on its first word with a static grey rule and no glint; the word
 wheel and tab timers stop advancing (the active tab shows a full rule); counters show their final
 values; the shimmer becomes static fg-2; rows render in place; the pixel check appears whole;
-loaders hold their static pattern; swimmers hold where they are and the shimmer stops; every
-DitherField renders one still frame and owns no animation frame, and a field that reveals content
-shows the content at once. Content is never hidden waiting
-for motion.
+loaders hold their static pattern; swimmers hold where they are and the shimmer stops. Content is
+never hidden waiting for motion.
 
 ### 3.9 Layout tokens
 
@@ -642,96 +637,18 @@ The website builds:
 - `og.png`, a 1200 x 630 social card: the lit water of Shallows with a turtle and a seal, and the
   logo in fg-1 at the centre.
 
-### 4.15 `DitherField`
+### 4.15 `DitherField` (removed)
 
-No longer the brand surface (2026-10-28): Shallows (4.16) replaced it. The website does not use or
-ship it; the app keeps it on its first-launch intro and onboarding until its Shallows branch lands,
-and the component stays in `@auracode/ui` until nothing uses it.
-
-The signature: a live ordered dither of an evolving field, on a 2D canvas (no WebGL).
-
-**Rendering.** The canvas holds one pixel per cell and is scaled up with `image-rendering:
-pixelated`. A cell is `cell` CSS px (default 4), snapped to whole device pixels
-(`round(cell * devicePixelRatio)`), and the canvas is sized to whole cells, so the upscale never
-makes uneven cells; past 240,000 cells the cell grows. Each frame:
-
-1. **Field.** Seeded 3D value noise (quintic, 256-cell lattice), fbm of 4 octaves rotated about 37
-   degrees and scaled 2.03 per octave so no lattice shows, domain-warped by two 2-octave fbm lookups
-   (strength 2.4). Base wavelength 420 CSS px; sampled every 4 cells and interpolated, because the
-   field is deliberately smooth and the dither supplies the texture. Time moves the third axis at
-   0.03 units a second plus a slow drift, so forms fold and travel without churning.
-2. **Shape.** `density` (default 0.5) sets the floor `0.74 - 0.36 * density`; above it a smooth
-   ramp of 0.24 reaches full; the result is posterised into 4 plateaus with soft 20% edges, so the
-   field reads as drawn areas of tone with patterned transitions rather than fog. About two thirds
-   of a default field is black.
-3. **Dither.** Bayer 8x8 thresholds quantise each cell to black plus the palette's greys
-   (`standard` by default; the palettes are in 3.1).
-4. **Volt.** Where the unlensed field passes 0.72, a fixed per-cell hash below `accent` (default
-   0.02) lights the cell volt: a few dozen pixels on a hero, appearing as peaks pass over them like
-   lit sensor pixels. Never from the lens, never on image targets, a fifth as often inside text and
-   grid targets.
-
-**Props.** `className`, `style`; `children` (real content under the field); `cell` 4; `speed` 1
-(0 holds); `density` 0.5; `edges` 0; `ceiling` 1; `accent` 0.02; `interactive` false; `target`;
-`progress` (0, or 1 when only a target is set); `reveal` false; `order` "scatter"; `palette`
-"standard" (or 2 to 4 greys); `transparent` false (black cells clear, to layer over a surface);
-`clearing`; `fallbackSrc`; `still` false; `seed` `0x6a09e667`; `fps` 30; `sprites` (none); `label`
-(otherwise `aria-hidden`).
-
-- **Lens** (`interactive`, fine pointers with hover only): within 120 CSS px of the pointer the
-  field develops: the floor drops by up to 0.16 and contrast rises by up to 60%, both falling off
-  with the square of distance; the lens eases toward the pointer and fades out when it leaves.
-- **Target**: `{ kind: "text", text, fontFamily, fontWeight 600, fontSize | "fit", tracking
-  -0.06em, align, anchor, inset, texture 0.25 }`, `{ kind: "image", src, fit "cover", texture 0 }`
-  (same-origin images; luminance lifted by a 0.6 gamma so dark UI keeps texture; a tainted image
-  leaves the field as noise and still reveals), `{ kind: "grid", rows, scale }` (a pixel grid,
-  crisp at any size), or `{ kind: "path", d, viewBox, height 0.6, align, anchor, inset, texture
-  0.2 }` (one even-odd SVG path such as `LOGO_PATH`, `height` a fraction of the field's height,
-  capped by its width). Text waits for its font to load and redraws.
-  `texture` lets the live field shade the resolved target.
-- **Dissolve** (`progress` 0 to 1): each cell leaves the field when progress passes its threshold:
-  half a per-cell random value, half a slow noise, so pixels go in ragged islands rather than as
-  salt and pepper; `order` "down", "up" or "radial" adds a direction. Cells crossing the front
-  flash one step brighter for 2.5% of progress.
-- **Reveal**: with `reveal`, at progress 1 the canvas fades out over 800ms `--g-ease-out` and stops
-  drawing, showing `children`; it returns if progress drops. Under reduced motion it reveals at
-  once.
-- **Clearing**: an ellipse in fractions of the field (`{ x 0.5, y 0.5, rx, ry }`), or a list of them
-  that multiply, where the field thins to black a pixel at a time, so a headline set over it stays
-  readable.
-- **Edges** (0 to 1): the floor rises by up to 0.12 in the middle and falls by up to 0.2 at the left
-  and right edges, so the field gathers at the sides of a centred layout.
-- **Ceiling** (0 to 1): the brightest the field itself may get. Below 1 its plateaus dither between
-  the top two greys instead of filling solid; sprites keep the full range and read against it.
-- **Sprites** (opt-in, none by default): small luminance grids with 2 to 4 frames (`.` empty, `0`
-  to `9` ninths of full brightness), drawn into the field's luminance before the threshold, so they
-  dither in the same cells and greys as the noise. Each drifts in CSS px a second with an optional
-  sine bob, a lazy roll and a 1-cell black moat, travels fully off one side before entering from the
-  other, mirrors when swimming left, eases away from the lens, fades to black inside a clearing and
-  never lights volt. They ride the field's clock: frozen in place under reduced motion or `still`,
-  paused whenever the field pauses.
-
-**Performance.** Draws from the shared frame clock, at most `fps` (30) times a second, only while
-the field intersects the viewport (64px margin), the page is visible, motion is allowed, `still`
-is off and it is not revealed; otherwise it renders single frames on demand (resize, target or
-progress change). Measured: about 2.5ms a frame in Chromium and 4.9ms in WebKit for a 1440x720
-hero at 4px cells, lens and clearing included.
-
-**Server, no JS, no canvas.** Server rendering emits the wrapper, the optional fallback `<img>` and
-an empty canvas, touching no browser API. The fallback shows until the first frame lands and stays
-if the canvas is unavailable. For a field without a target, `renderDitherFrame({ cols, rows,
-cellPx, seed, density, accent, edges, ceiling, clearing, overlay })` (clearing in cells, time 0,
-the overlay from `paintSprites`) renders the identical first frame in Node, sprites included, so a
-build step can write the fallback PNG at one pixel per cell and the hand-off is seamless. With
-`children` and no scripting, the field steps aside (`@media (scripting: none)`). Give the field a
-size; it fills its box.
+The live ordered-dither field on a 2D canvas was the brand surface from 2026-10-26 to 2026-10-28.
+Shallows (4.16) replaced it, and its engine, sprites and palettes were deleted from `@auracode/ui`
+on 2026-10-28 once neither the website nor the app used them.
 
 ### 4.16 Shallows, `Swimmers` and `Creature`
 
 The brand surface since 2026-10-28 (owner decision, direction B of three concepts): the sea seen
 from below. One rounded panel lit from the top like the water's surface, and seals and turtles
-passing above as dark silhouettes. It replaced the dither field (4.15), which the owner found
-messy, and the pixel sprites that glitched under the pointer.
+passing above as dark silhouettes. It replaced the dither field (4.15, now removed), which the
+owner found messy, and the pixel sprites that glitched under the pointer.
 
 **`Shallows`** (`as`, `shimmer`, `depth`, and any HTML attributes). One panel, radius
 `--g-shallows-radius` 28px (`--g-shallows-radius-compact` 20px on phones), `overflow: hidden`,
@@ -1571,8 +1488,7 @@ another chat is open; closing a tab, reloading or quitting stops them. Nothing a
   closing panel and the 404; in the app the first launch intro, setup's window, New chat and an
   empty chat (6.13, 6.17), never behind a transcript with messages in it. The app draws no dither.
 - All animation shares one `requestAnimationFrame` loop (`frameClock()`); offscreen, hidden and
-  reduced-motion elements own no frame; swimmers move by transform only; DitherField caps at
-  30fps.
+  reduced-motion elements own no frame; swimmers move by transform only.
 - Long lists virtualise; rows use `contain: layout style`.
 - Pixel geometry lands on whole CSS pixels and uses `shape-rendering: crispEdges`.
 

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import agentMarkSource from "./AgentMark.tsx?raw";
 import copySource from "./CopyButton.tsx?raw";
-import ditherFieldSource from "./DitherField.tsx?raw";
-import ditherSource from "./dither.ts?raw";
-import engineSource from "./ditherEngine.ts?raw";
 import graphiteCss from "./graphite.css?raw";
 import keycapSource from "./Keycap.tsx?raw";
 import markSource from "./Logo.tsx?raw";
@@ -13,7 +10,6 @@ import pixelsSource from "./pixels.ts?raw";
 import statusSource from "./StatusDot.tsx?raw";
 import {
   contrastRatio,
-  DITHER_PALETTES,
   GRAPHITE_COLORS,
   GRAPHITE_DURATIONS,
   GRAPHITE_EASINGS,
@@ -112,18 +108,6 @@ describe("Graphite colour tokens", () => {
     expect(lum("fg-1")).toBeGreaterThan(lum("fg-2"));
     expect(lum("fg-2")).toBeGreaterThan(lum("fg-3"));
     expect(lum("fg-3")).toBeGreaterThan(lum("fg-4"));
-  });
-
-  it("builds dither palettes from greys only, darkest first", () => {
-    for (const [name, greys] of Object.entries(DITHER_PALETTES)) {
-      expect(greys.length, name).toBe(3);
-      for (let i = 0; i < greys.length; i++) {
-        const hex = greys[i] ?? "";
-        expect(hex, name).toMatch(/^#([0-9a-f]{2})\1\1$/);
-        if (i > 0)
-          expect(relativeLuminance(hex)).toBeGreaterThan(relativeLuminance(greys[i - 1] ?? ""));
-      }
-    }
   });
 
   it("measures contrast like WCAG", () => {
@@ -236,9 +220,6 @@ describe("Graphite stylesheet rules", () => {
     const sources = {
       agentMarkSource,
       copySource,
-      ditherFieldSource,
-      ditherSource,
-      engineSource,
       graphiteCss,
       keycapSource,
       loaderSource,
