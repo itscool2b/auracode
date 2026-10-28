@@ -772,18 +772,17 @@ fn hold(
         Some(source) if source.paused => return Some(ConfigHold::SyncPaused),
         Some(_) => {}
     }
-    if let Some(reason) = skipped {
-        return Some(ConfigHold::Retained {
-            reason: reason.into(),
-        });
-    }
     let incoming = matches!(operation, ConfigOperation::Apply | ConfigOperation::Merge);
-    if identity.requires_vendor() && incoming {
+    // Holds that keep an item from being written come first: a retained (skipped) item must
+    // never bypass the version floor or the command path check that guards incoming MCP items.
+    if identity.requires_vendor()
+        && incoming
+        && let Some((feature, minimum)) = feature_floor(identity.provider)
+    {
         let found = source.and_then(|source| source.version.clone());
-        if let Some((feature, minimum)) = feature_floor(identity.provider)
-            && found
-                .as_deref()
-                .is_none_or(|found| !version_at_least(found, minimum))
+        if found
+            .as_deref()
+            .is_none_or(|found| !version_at_least(found, minimum))
         {
             return Some(ConfigHold::NeedsVersion {
                 feature: feature.into(),
@@ -791,15 +790,6 @@ fn hold(
                 found,
             });
         }
-        if let Some(marketplace) = plugin_marketplace(identity)
-            && scanner.has_marketplace(identity.provider, &marketplace) == Some(false)
-        {
-            return Some(ConfigHold::MarketplaceMissing {
-                marketplace,
-                source: None,
-            });
-        }
-        return Some(ConfigHold::VendorInstall);
     }
     if identity.format == super::ConfigFormat::Mcp
         && incoming
@@ -814,6 +804,22 @@ fn hold(
         } else {
             ConfigHold::MissingPath { path }
         });
+    }
+    if let Some(reason) = skipped {
+        return Some(ConfigHold::Retained {
+            reason: reason.into(),
+        });
+    }
+    if identity.requires_vendor() && incoming {
+        if let Some(marketplace) = plugin_marketplace(identity)
+            && scanner.has_marketplace(identity.provider, &marketplace) == Some(false)
+        {
+            return Some(ConfigHold::MarketplaceMissing {
+                marketplace,
+                source: None,
+            });
+        }
+        return Some(ConfigHold::VendorInstall);
     }
     None
 }
