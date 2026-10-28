@@ -53,6 +53,17 @@ async function checkLibrary(page, engine) {
   await audit(page, `${engine} vendor dialog from a row`);
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "detached" });
+  // A row below the fold: the click first scrolls it into view, and that scroll's event, which
+  // arrives after the menu opened, leaves the menu open. A scroll that moves the row closes it.
+  await page.getByRole("button", { name: "review-changes actions" }).click();
+  const rowMenu = page.getByRole("menu", { name: "review-changes actions" });
+  await rowMenu.waitFor();
+  await page.evaluate(
+    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+  );
+  assert.equal(await rowMenu.count(), 1, `${engine}: the menu closed on the click's own scroll`);
+  await page.locator(".plugins-main").evaluate((node) => node.scrollBy(0, -120));
+  await rowMenu.waitFor({ state: "detached" });
   // Available plugins are searched, then installed through the same review.
   await page.getByLabel("Find an available Claude Code plugin").fill("security");
   await page.getByRole("button", { name: "Install security-review" }).click();

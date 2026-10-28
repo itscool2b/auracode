@@ -197,6 +197,27 @@ async function openAgent(page, name) {
 /** Centres the opened row in the page's scroller, so every probe sees the whole of it. */
 const showRow = (row) => row.evaluate((node) => node.scrollIntoView({ block: "center" }));
 
+/** Resolves after two painted frames: every scroll event of an earlier scroll has arrived. */
+const frames = (page) =>
+  page.evaluate(
+    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+  );
+
+/**
+ * Opens a Plugin library row's menu as a person does: the row is brought into view and its scroll
+ * has settled, then the click. Waits for the open state itself (the trigger expanded, the menu
+ * shown, its first item holding focus) rather than for time to pass.
+ */
+async function openRowMenu(page, name) {
+  const trigger = page.getByRole("button", { name, exact: true });
+  await trigger.scrollIntoViewIfNeeded();
+  await frames(page);
+  await trigger.click();
+  await page.getByRole("button", { name, exact: true, expanded: true }).waitFor();
+  await page.getByRole("menu", { name }).waitFor();
+  await page.waitForFunction(() => document.activeElement?.getAttribute("role") === "menuitem");
+}
+
 /** How each "<mode>#<view>" opens its layer before the probes run. */
 const OPENERS = {
   codex: async (page) => showRow(await openAgent(page, "Codex")),
@@ -238,14 +259,13 @@ const OPENERS = {
     await page.getByLabel("Default agent").selectOption("codex");
     await page.getByLabel("Default model").waitFor();
   },
-  "plugin-menu": async (page) => {
-    await page.getByRole("button", { name: "tools actions" }).click();
-    await page.getByRole("menu", { name: "tools actions" }).waitFor();
-  },
+  "plugin-menu": (page) => openRowMenu(page, "tools actions"),
   "plugin-item": async (page) => {
     // The menu opens with its first item focused; Enter picks it without scrolling the page.
-    await page.getByRole("button", { name: "review-changes actions" }).click();
-    await page.getByRole("menuitem", { name: "Preview and copy…" }).waitFor();
+    await openRowMenu(page, "review-changes actions");
+    await page.waitForFunction(
+      () => document.activeElement?.textContent?.trim() === "Preview and copy…",
+    );
     await page.keyboard.press("Enter");
     await page.getByLabel("Copy destination").waitFor();
   },
