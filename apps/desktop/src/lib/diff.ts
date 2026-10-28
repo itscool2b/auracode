@@ -67,16 +67,18 @@ export function diffLines(oldText: string | null, newText: string): LineDiff {
       i += 1;
       j += 1;
     } else if (
-      right !== undefined &&
-      (left === undefined || (lengths[i * cols + j + 1] ?? 0) >= (lengths[(i + 1) * cols + j] ?? 0))
+      left !== undefined &&
+      (right === undefined ||
+        (lengths[(i + 1) * cols + j] ?? 0) >= (lengths[i * cols + j + 1] ?? 0))
     ) {
-      lines.push({ op: "add", text: right });
-      added += 1;
-      j += 1;
-    } else if (left !== undefined) {
+      // On a tie the removal goes first, as in Git: a changed line reads old, then new.
       lines.push({ op: "remove", text: left });
       removed += 1;
       i += 1;
+    } else if (right !== undefined) {
+      lines.push({ op: "add", text: right });
+      added += 1;
+      j += 1;
     }
   }
   return { lines, added, removed, truncated: false };
