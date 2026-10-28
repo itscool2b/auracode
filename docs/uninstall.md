@@ -121,8 +121,8 @@ runs `auracode.exe --uninstall-cleanup --interactive`:
 
 1. If auracode is running, it is asked to quit. It stops only its own agents and terminals and
    asks no further question.
-2. If it has not quit after 45 seconds, Tauri's own check offers to close it, and the cleanup runs
-   again.
+2. If it has not quit after 45 seconds, Tauri's own check offers to close it. The cleanup then
+   runs once the app's files are removed, from a copy of the program.
 3. A dialog lists the worktrees with unsaved work. Yes keeps them; No deletes them.
 4. If something could not be deleted, a second dialog lists it.
 
@@ -215,7 +215,7 @@ Use these steps when the app is already gone.
 
 | Case | What happens |
 |---|---|
-| auracode is running | It is asked to quit and stops only its own agents and terminals. If it is still running, nothing is deleted (exit 3). The Windows uninstaller then offers to close it and runs the cleanup again. |
+| auracode is running | It is asked to quit and stops only its own agents and terminals. If it is still running, nothing is deleted (exit 3). The Windows uninstaller then offers to close it and runs the cleanup after removing the app, from a copy of the program. |
 | A file is in use (a webview helper, an editor) | Retried for about ten seconds, then listed. Everything else goes. Running the cleanup again finishes once the file is free. |
 | The secure store is locked or unavailable | The files go, the keys are reported as not removed, and a later run removes them. |
 | Git is missing, or a repository is gone | Its worktrees count as unsaved and stay unless chosen. A registration Git could not prune is reported, with the command to run. |

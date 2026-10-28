@@ -41,34 +41,51 @@ function template(bytes) {
 const keys = (text) =>
   [...text.matchAll(/^LangString (\w+) \$\{LANG_ENGLISH\}/gmu)].map((m) => m[1]);
 
+const has = (text, fragment, message) => assert.ok(text.includes(fragment), message ?? fragment);
+/** NSIS spellings that read as template placeholders or escapes in JavaScript. */
+const BIN = `$${"{"}MAINBINARYNAME}`;
+const SEP = String.fromCharCode(92);
+
 test("the bundle builds only the NSIS installer on Windows, with the hooks and strings", () => {
   assert.deepEqual(config.bundle.targets, ["app", "dmg", "nsis"], "no MSI without the cleanup");
   assert.deepEqual(nsis.languages, ["English"]);
   assert.match(hooks, /^!macro NSIS_HOOK_PREUNINSTALL$/mu);
   assert.match(hooks, /^!macro NSIS_HOOK_POSTUNINSTALL$/mu);
-  assert.doesNotMatch(hooks, /—/u, "no em dashes");
-  assert.doesNotMatch(english, /—/u, "no em dashes");
+  const dash = String.fromCharCode(0x2014);
+  assert.ok(!hooks.includes(dash) && !english.includes(dash), "no em dashes");
 });
 
 test("the hooks run the Rust cleanup and keep Tauri from deleting the data folder whole", () => {
-  assert.match(hooks, /"\$INSTDIR\\\$\{MAINBINARYNAME\}\.exe" --uninstall-cleanup \$R8/u);
-  assert.match(hooks, /StrCpy \$DeleteAppDataCheckboxState 0/u);
+  has(hooks, `ExecWait '"\${program}" --uninstall-cleanup $AuracodeCleanupFlags' $R9`);
+  has(hooks, `!insertmacro AURACODE_CLEANUP "$INSTDIR${SEP}${BIN}.exe"`);
+  has(hooks, "StrCpy $DeleteAppDataCheckboxState 0");
   // Updates and the uninstall an installer runs before installing keep the data.
-  assert.match(hooks, /\$\{If\} \$UpdateMode = 1\s+StrCpy \$AuracodeDeleteData 0/u);
-  assert.match(hooks, /\$\{If\} \$EXEDIR == \$INSTDIR\s+StrCpy \$AuracodeDeleteData 0/u);
-  assert.match(hooks, /"\/KEEPDATA"/u);
+  has(hooks, `\${If} $UpdateMode = 1\n    StrCpy $AuracodeDeleteData 0`);
+  has(hooks, `\${If} $EXEDIR == $INSTDIR\n    StrCpy $AuracodeDeleteData 0`);
+  has(hooks, `\${GetOptions} $CMDLINE "/KEEPDATA" $R9`);
   // A quiet uninstall never shows a dialog.
-  assert.match(hooks, /\$\{OrIf\} \$\{Silent\}\s+StrCpy \$R8 ""/u);
+  has(hooks, `\${OrIf} \${Silent}\n      StrCpy $AuracodeCleanupFlags ""`);
+  // Still running: Tauri's own check closes auracode, then a copy of the program cleans up. Its
+  // check is inserted once per section, since its labels come from the line number.
+  assert.ok(!hooks.includes("!insertmacro CheckIfAppIsRunning"));
+  has(
+    hooks,
+    `CopyFiles /SILENT "$INSTDIR${SEP}${BIN}.exe" "$PLUGINSDIR${SEP}auracode-cleanup.exe"`,
+  );
+  has(
+    hooks,
+    `\${If} $AuracodeCleanupLater = 1\n    !insertmacro AURACODE_CLEANUP "$PLUGINSDIR${SEP}auracode-cleanup.exe"`,
+  );
   // The exit codes the hooks read are the Rust ones.
   const rust = readFileSync(resolve(tauri, "src/uninstall.rs"), "utf8");
-  assert.match(rust, /pub const RUNNING: i32 = 3;/u);
-  assert.match(rust, /pub const INCOMPLETE: i32 = 4;/u);
-  assert.match(hooks, /\$\{If\} \$R9 = 3/u);
-  assert.match(hooks, /\$\{ElseIf\} \$R9 = 4/u);
+  has(rust, "pub const RUNNING: i32 = 3;");
+  has(rust, "pub const INCOMPLETE: i32 = 4;");
+  has(hooks, `\${If} $R9 == "3"`);
+  has(hooks, `\${ElseIf} $R9 == "4"`);
 });
 
 test("the checkbox keeps the data, and every other string is Tauri's", () => {
-  assert.match(english, /LangString deleteAppData \$\{LANG_ENGLISH\} "Keep my auracode data/u);
+  has(english, `LangString deleteAppData \${LANG_ENGLISH} "Keep my auracode data`);
   assert.ok(keys(english).length >= 20);
 });
 

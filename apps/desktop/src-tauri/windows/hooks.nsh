@@ -17,9 +17,31 @@
 ; could not be deleted (the cleanup listed it).
 
 Var AuracodeDeleteData
+Var AuracodeCleanupFlags
+Var AuracodeCleanupLater
+
+; Runs the cleanup from `program`; its exit code lands in $R9 ("none" when it did not start).
+!macro AURACODE_CLEANUP program
+  ClearErrors
+  ExecWait '"${program}" --uninstall-cleanup $AuracodeCleanupFlags' $R9
+  ${If} ${Errors}
+    StrCpy $R9 "none"
+  ${EndIf}
+!macroend
+
+!macro AURACODE_CLEANUP_RESULT
+  ${If} $R9 == "0"
+    DetailPrint "auracode's data is deleted"
+  ${ElseIf} $R9 == "4"
+    DetailPrint "Some of auracode's data could not be deleted"
+  ${Else}
+    DetailPrint "auracode's data was not deleted (cleanup result $R9)"
+  ${EndIf}
+!macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
   StrCpy $AuracodeDeleteData 1
+  StrCpy $AuracodeCleanupLater 0
   ${If} $DeleteAppDataCheckboxState = 1
     StrCpy $AuracodeDeleteData 0
   ${EndIf}
@@ -38,28 +60,29 @@ Var AuracodeDeleteData
   ${EndIf}
   ${If} $AuracodeDeleteData = 1
     DetailPrint "Deleting auracode's data"
-    StrCpy $R8 "--interactive"
+    StrCpy $AuracodeCleanupFlags "--interactive"
     ${If} $PassiveMode = 1
     ${OrIf} ${Silent}
-      StrCpy $R8 ""
+      StrCpy $AuracodeCleanupFlags ""
     ${EndIf}
-    ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --uninstall-cleanup $R8' $R9
-    ${If} $R9 = 3
-      ; auracode did not quit when asked: Tauri's own check closes it, then the cleanup runs again.
-      !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
-      ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --uninstall-cleanup $R8' $R9
-    ${EndIf}
-    ${If} $R9 = 0
-      DetailPrint "auracode's data is deleted"
-    ${ElseIf} $R9 = 4
-      DetailPrint "Some of auracode's data could not be deleted"
+    !insertmacro AURACODE_CLEANUP "$INSTDIR\${MAINBINARYNAME}.exe"
+    ${If} $R9 == "3"
+      ; auracode did not quit when asked. Tauri's own check, next, offers to close it; the cleanup
+      ; then runs after the files are removed, from a copy of the program.
+      InitPluginsDir
+      CopyFiles /SILENT "$INSTDIR\${MAINBINARYNAME}.exe" "$PLUGINSDIR\auracode-cleanup.exe"
+      StrCpy $AuracodeCleanupLater 1
     ${Else}
-      DetailPrint "auracode's data was not deleted (cleanup exit code $R9)"
+      !insertmacro AURACODE_CLEANUP_RESULT
     ${EndIf}
   ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
+  ${If} $AuracodeCleanupLater = 1
+    !insertmacro AURACODE_CLEANUP "$PLUGINSDIR\auracode-cleanup.exe"
+    !insertmacro AURACODE_CLEANUP_RESULT
+  ${EndIf}
   ${If} $AuracodeDeleteData = 1
     ; The installer's own records, as Tauri's "delete app data" step clears them.
     DeleteRegKey SHCTX "${MANUPRODUCTKEY}"
