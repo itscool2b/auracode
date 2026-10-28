@@ -90,9 +90,12 @@ export function AgentMark({
   const svg = useRef<SVGSVGElement>(null);
   useLoaderSteps(svg, indicator === "loader", tempo, "neutral");
 
-  const code = agentCode(agent);
-  const glyph = box >= 24 ? code : (Array.from(code)[0] ?? "?");
-  const fontSize = Math.round(box * (glyph.length > 1 ? 0.38 : 0.56));
+  // The full code at every size: one letter would make Claude Code and Codex both "C".
+  const glyph = agentCode(agent);
+  const fontSize =
+    glyph.length > 1
+      ? Math.max(7, Math.round(box * (box < 24 ? 0.5 : 0.38)))
+      : Math.round(box * 0.56);
   const style: CSSProperties = {
     width: `${box}px`,
     height: `${box}px`,

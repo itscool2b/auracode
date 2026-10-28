@@ -566,7 +566,7 @@ glyph's place**; the agent's name always sits beside the mark.
 
 | State | Inside the tile |
 |---|---|
-| idle | The agent's code in Geist, fg-2: one letter under 24px at `0.56 * size`, two letters from 24px at `0.38 * size`; weight 500, or 600 below a 12px glyph |
+| idle | The agent's two-letter code in Geist, fg-2, at every size (one letter would make Claude Code and Codex both C): `0.5 * size` under 24px, never under 7px, and `0.38 * size` from 24px; a one-character code ("?") at `0.56 * size`; weight 500, or 600 below a 12px glyph |
 | thinking, streaming, tool | The 2x3 pixel loader (4.5) at its state's tempo |
 | waiting | A solid volt square, `0.375 * size` (parity-adjusted to centre on whole pixels) |
 | done | A white pixel check (cells `max(2, round(size / 8))`), drawn once a pixel at a time, 50ms apart (about 250ms, X Money's check), by CSS |
