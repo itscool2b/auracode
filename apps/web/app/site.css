@@ -788,6 +788,84 @@ canvas {
     visibility 0ms;
 }
 
+.caps-note > p {
+  margin: 0;
+}
+
+.caps-note > .agent-strip {
+  margin-top: 20px;
+}
+
+/*
+ * A row of agent marks (AgentStrip): the app's 24px tiles 8px apart. They rise 10px and fade in
+ * 24ms apart once seen (under 600ms in all), drift on their own slow periods while on screen (set
+ * from script), and lift 3px over a soft shadow with a lit top edge under the pointer. Each layer
+ * moves the whole mark: the entrance the item, the drift its first span, the lift its second.
+ */
+.agent-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-strip > li {
+  display: flex;
+}
+
+.js .agent-strip > li {
+  opacity: 0;
+  transform: translate3d(0, 10px, 0);
+  transition:
+    opacity 280ms var(--g-ease) calc(var(--i, 0) * 24ms),
+    transform 400ms var(--g-ease-reveal) calc(var(--i, 0) * 24ms);
+}
+
+.js .agent-strip[data-shown] > li {
+  opacity: 1;
+  transform: none;
+}
+
+.agent-strip-drift {
+  display: flex;
+}
+
+.agent-strip[data-live] .agent-strip-drift {
+  will-change: transform;
+}
+
+.agent-strip-lift {
+  position: relative;
+  display: flex;
+  border-radius: 5px;
+  transition: transform var(--g-dur-settle) var(--g-ease-settle);
+}
+
+.agent-strip-lift::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    0 6px 14px -4px rgb(0 0 0 / 0.9),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--g-dur-settle) var(--g-ease-settle);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .agent-strip > li:hover .agent-strip-lift {
+    transform: translate3d(0, -3px, 0);
+  }
+
+  .agent-strip > li:hover .agent-strip-lift::after {
+    opacity: 1;
+  }
+}
+
 /*
  * The live view: the app's inset pane (6.1), its scenes stacked and cross-faded. Its rim and lit
  * top edge are drawn over the scenes, so a scene that paints the black window keeps them.
@@ -1245,7 +1323,7 @@ canvas {
 .m-handoff {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-height: 36px;
   margin: 0;
   padding: 0 16px;
@@ -1775,6 +1853,19 @@ canvas {
   border-radius: var(--g-radius-pill);
 }
 
+/* Pointing at a mark in the row beside the view chooses its pill, eased like a row's hover. */
+.m-pill,
+.m-other {
+  transition:
+    background-color var(--g-dur-fast) var(--g-ease),
+    box-shadow var(--g-dur-fast) var(--g-ease),
+    color var(--g-dur-fast) var(--g-ease);
+}
+
+.m-other.is-on {
+  color: var(--g-fg-1);
+}
+
 .m-pill.is-on {
   background-color: var(--g-surface-4);
   box-shadow: inset 0 0 0 1px var(--g-fg-3);
@@ -2122,6 +2213,12 @@ canvas {
   color: var(--g-fg-2);
   font-size: 16px;
   line-height: 26px;
+}
+
+/* The agents' marks under the answer that names them: 16px below the words, 28px above the rule. */
+.faq-answer > .agent-strip {
+  margin-top: -8px;
+  padding: 0 40px 28px 0;
 }
 
 /* ----------------------------------------------------------- the closing panel (Shallows) */
@@ -3147,6 +3244,17 @@ canvas {
   .m-scene,
   .m-scene.is-active,
   .faq-item:is([data-state="opening"], [data-state="closing"]) .faq-answer {
+    transform: none;
+  }
+
+  .js .agent-strip > li,
+  .agent-strip-lift {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .agent-strip > li:hover .agent-strip-lift {
     transform: none;
   }
 
