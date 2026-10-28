@@ -826,6 +826,18 @@ pub enum Op {
     Barrier(oneshot::Sender<()>),
 }
 
+impl Op {
+    /// The op's name for logs.
+    pub(crate) fn name(&self) -> &'static str {
+        writer::op_name(self)
+    }
+
+    /// A read or a barrier: dropping it loses no data (its waiter learns the store closed).
+    pub(crate) fn is_read(&self) -> bool {
+        matches!(self, Op::ReadPage { .. } | Op::Barrier(_))
+    }
+}
+
 /// A chat to create in a folder on this device.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct NewChat {
