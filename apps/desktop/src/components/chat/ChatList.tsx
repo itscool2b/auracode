@@ -269,7 +269,12 @@ export function ChatList({
                 </span>
                 <span>
                   {chat.title ?? "New chat"}
-                  <small> · {projectName(chat.folder)}</small>
+                  <small>
+                    {" · "}
+                    {organization?.projects.find(
+                      (project) => project.id === membership.get(chat.id)?.project_id,
+                    )?.name ?? projectName(chat.folder)}
+                  </small>
                 </span>
               </button>
             ))}
@@ -300,7 +305,7 @@ export function ChatList({
           </h2>
           {sectionFolded ? null : (
             <>
-              {chats !== null && all.length === 0 ? (
+              {chats !== null && all.length === 0 && (archived || projects.length === 0) ? (
                 <p className="chat-sidebar-empty">
                   {archived ? "No archived chats." : "Your projects and chats will appear here."}
                 </p>

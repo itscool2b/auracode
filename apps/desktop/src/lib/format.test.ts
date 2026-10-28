@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Salvage } from "../bindings";
 import {
+  agentVersion,
   fileManagerName,
   formatCost,
   formatCount,
@@ -89,5 +90,21 @@ describe("numbers", () => {
     expect(formatCost(0.0184, "USD")).toBe("$0.0184");
     expect(formatCost(0.5, "EUR")).toBe("0.5000 EUR");
     expect(formatCost(null, "USD")).toBeNull();
+  });
+});
+
+describe("agent versions", () => {
+  it("drops the label that only repeats the agent's name", () => {
+    expect(agentVersion("Claude Code", "Claude Code 2.1.312")).toBe("2.1.312");
+    expect(agentVersion("Grok Build", "Grok Build 1.0.70 (unverified)")).toBe(
+      "1.0.70 (unverified)",
+    );
+    expect(agentVersion("Codex", "codex 0.162.1")).toBe("0.162.1");
+  });
+
+  it("keeps a version led by another label or by nothing", () => {
+    expect(agentVersion("Claude Code", "0.1.0")).toBe("0.1.0");
+    expect(agentVersion("OpenCode", "Node.js 22.1.0")).toBe("Node.js 22.1.0");
+    expect(agentVersion("Pi", "Pi ")).toBe("Pi ");
   });
 });

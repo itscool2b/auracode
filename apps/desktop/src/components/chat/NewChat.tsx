@@ -22,6 +22,7 @@ import { agentLineup } from "../../lib/chat/agentLineup";
 import { agentChoice, type NewChatDraft } from "../../lib/chat/appStore";
 import { WorktreeChoice } from "../../lib/chat/worktreeChoice";
 import { errorMessage } from "../../lib/errors";
+import { agentVersion, builtInPath } from "../../lib/format";
 import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { type WorktreeChatApi, worktreeChatApi } from "../../lib/worktreeChat";
 import { TerminalSheet } from "../TerminalSheet";
@@ -94,10 +95,12 @@ export function authStatusText(status: AgentAuthStatus): string {
 /** What the selected agent will run, once detection found it. */
 function readyLine(agent: AgentEntry): string | null {
   switch (agent.availability.state) {
-    case "ready":
+    case "ready": {
+      const path = builtInPath(agent.availability.path);
       return agent.availability.version === null
-        ? agent.availability.path
-        : `${agent.availability.version} (${agent.availability.path})`;
+        ? path
+        : `${agentVersion(agent.name, agent.availability.version)} (${path})`;
+    }
     case "checking":
       return "Still checking this agent; the chat starts once it is found.";
     case "missing":

@@ -5,6 +5,7 @@ import { chatActivity } from "../../lib/chat/activity";
 import type { ChatState } from "../../lib/chat/chatStore";
 import { contextLabel, costLabel, folderStateLabel, statusWord } from "../../lib/chat/present";
 import { hasProcess } from "../../lib/chat/transcript";
+import { agentVersion, builtInPath } from "../../lib/format";
 import { inTauri } from "../../lib/ipc";
 import { projectName } from "./ChatList";
 import { FolderContext } from "./FolderContext";
@@ -23,6 +24,7 @@ const QUIET = new Set(["ready", "stopped"]);
 export function Header({
   state,
   listed = null,
+  project = null,
   agent,
   resumable,
   onStart,
@@ -44,6 +46,11 @@ export function Header({
    * a start fails or gets past the folder check, while the snapshot is from the join.
    */
   readonly listed?: ChatSummary | null;
+  /**
+   * The project the chat belongs to. A worktree chat's folder is named after its worktree id, so
+   * the folder name stands in only when the workspace does not know the project.
+   */
+  readonly project?: string | null;
   /** The chat's agent as detection sees it, for the version that will run. */
   readonly agent: AgentEntry | null;
   /** There is an earlier session a start would continue. */
@@ -91,7 +98,7 @@ export function Header({
         </span>
         {chat ? (
           <span className="chat-header-folder" title={chat.folder}>
-            {projectName(chat.folder)}
+            {project ?? projectName(chat.folder)}
             {folderState !== null ? <span className="chat-row-flag"> · {folderState}</span> : null}
           </span>
         ) : null}
@@ -154,8 +161,8 @@ export function Header({
         >
           <div className="chat-session-info">
             <strong>{name}</strong>
-            <span>{version ?? "Version not reported"}</span>
-            {ready?.path ? <span className="ui-mono">{ready.path}</span> : null}
+            <span>{version === null ? "Version not reported" : agentVersion(name, version)}</span>
+            {ready?.path ? <span className="ui-mono">{builtInPath(ready.path)}</span> : null}
             {context !== null || cost !== null ? (
               <span className="chat-session-usage" data-testid="chat-usage">
                 {[context, cost].filter((part) => part !== null).join(" · ")}

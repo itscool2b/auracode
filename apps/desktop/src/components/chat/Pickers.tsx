@@ -11,6 +11,7 @@ import type {
 } from "../../bindings";
 import { agentLineup } from "../../lib/chat/agentLineup";
 import { AUTONOMIES, autonomyLabel, orderedOptions, pendingLabel } from "../../lib/chat/present";
+import { agentVersion } from "../../lib/format";
 import { focusPickerChoice, movePickerFocus, PickerChoices } from "./PickerChoices";
 import { closePopover, Popover } from "./Popover";
 
@@ -219,7 +220,9 @@ export function Pickers({
                     </span>
                     <small>
                       {entry.availability.state === "ready"
-                        ? (entry.availability.version ?? "Installed")
+                        ? entry.availability.version === null
+                          ? "Installed"
+                          : agentVersion(entry.name, entry.availability.version)
                         : entry.availability.state.replaceAll("_", " ")}
                     </small>
                     {entry.id === agent?.id ? <Check size={14} aria-label="Selected" /> : null}

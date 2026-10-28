@@ -51,6 +51,7 @@ export function ChatView({
   chatId,
   transport,
   listed,
+  project = null,
   storage,
   agents,
   onOpenChat,
@@ -62,6 +63,8 @@ export function ChatView({
   readonly transport: Transport;
   /** The chat as the chat list has it, which follows its folder state after the join. */
   readonly listed: ChatSummary | null;
+  /** The name of the project the chat belongs to, when the workspace knows it. */
+  readonly project?: string | null;
   /** The polled storage status: a failed join retries, and an unsaved gap joins again, on change. */
   readonly storage: StorageStatus | null;
   readonly agents: readonly AgentEntry[] | null;
@@ -482,6 +485,7 @@ export function ChatView({
       <Header
         state={state}
         listed={listed}
+        project={project}
         agent={agent}
         resumable={resumable}
         onStart={startSession}
