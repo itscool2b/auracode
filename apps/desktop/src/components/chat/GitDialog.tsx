@@ -16,7 +16,7 @@ import type {
   WorktreeRelocationPreview,
 } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
-import type { GitWorkspaceApi } from "../../lib/gitWorkspace";
+import { type GitWorkspaceApi, sameFolder } from "../../lib/gitWorkspace";
 import type { ProjectToolsApi } from "../../lib/projectTools";
 import type { WorktreeSetupApi } from "../../lib/worktreeSetup";
 import { MergeConflicts } from "./MergeConflicts";
@@ -32,15 +32,6 @@ type Preview =
   | { type: "recovery"; value: WorktreeRecoveryPreview }
   | { type: "pull_request"; value: PullRequestPreview }
   | { type: "relocate"; value: WorktreeRelocationPreview };
-
-function sameFolder(left: string, right: string): boolean {
-  const normalize = (value: string) => value.replaceAll("\\", "/").replace(/\/$/, "");
-  // Windows folder names are compared without case; macOS can be case-sensitive.
-  const windows = /^[a-z]:[\\/]/i.test(left);
-  return windows
-    ? normalize(left).toLowerCase() === normalize(right).toLowerCase()
-    : normalize(left) === normalize(right);
-}
 
 function Repository({ workspace }: { readonly workspace: GitWorkspace }) {
   return (

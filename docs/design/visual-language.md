@@ -1071,7 +1071,9 @@ field. Footer: the pager, "Skip" ghost, "Continue" primary (⌘ Enter). Answers 
 - **Turn error** (in the transcript): a well with a 2px red left edge (radius 0 8 8 0), padding 12
   16: a red square, the title 14/20 500 fg-1 ("Claude Code stopped: process exited with code 1"), the
   last stderr line in mono 13 fg-2, then 28px actions "Retry" (soft), "Open log" (ghost), "Continue
-  with Codex" (ghost).
+  with Codex" (ghost). A start that failed because the chat's own worktree folder was deleted
+  leads with "Recreate folder" (the one primary, opening 6.19's confirmation) and Retry steps back to
+  soft; once the folder is back one calm line in the dock says so and Retry is the way on.
 - **Blocking notice** (composer segment, 36px, surface-3): a 6px volt square when it blocks sending,
   the fact in 12/16 fg-2 ("Rate limit reached · resets 5:00 PM"), one 500 fg-1 text action.
 - **Warning** (transcript, 28px, 1px dashed line-strong, radius 8): a volt square, 12/16 fg-2 text,

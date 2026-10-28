@@ -84,6 +84,7 @@ describe("error card actions", () => {
       expect(errorActions(kind, { newest: true, live: false, resumable: false })).toEqual({
         retry: true,
         startFresh: false,
+        recreate: false,
       });
     }
     for (const kind of [
@@ -97,6 +98,7 @@ describe("error card actions", () => {
       expect(errorActions(kind, { newest: true, live: false, resumable: true }), kind).toEqual({
         retry: false,
         startFresh: false,
+        recreate: false,
       });
     }
     expect(
@@ -111,7 +113,22 @@ describe("error card actions", () => {
     expect(errorActions("start_timeout", { newest: true, live: false, resumable: true })).toEqual({
       retry: true,
       startFresh: true,
+      recreate: false,
     });
+  });
+
+  it("offer Recreate folder only for the newest missing-folder start of a deleted worktree", () => {
+    const context = { newest: true, live: false, resumable: false, recreatable: true };
+    expect(errorActions("folder_missing", context)).toEqual({
+      retry: true,
+      startFresh: false,
+      recreate: true,
+    });
+    // A plain folder that went missing, another start failure, an older card or a live session.
+    expect(errorActions("folder_missing", { ...context, recreatable: false }).recreate).toBe(false);
+    expect(errorActions("spawn_failed", context).recreate).toBe(false);
+    expect(errorActions("folder_missing", { ...context, newest: false }).recreate).toBe(false);
+    expect(errorActions("folder_missing", { ...context, live: true }).recreate).toBe(false);
   });
 });
 

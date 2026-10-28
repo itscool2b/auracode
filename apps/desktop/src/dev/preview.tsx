@@ -23,6 +23,7 @@ import {
   sessionInfo,
 } from "../lib/chat/testing";
 import { TerminalPanels } from "../lib/terminalPanel";
+import { MISSING_FOLDER, missingWorktreeGit } from "./missingWorktreeFixture";
 import { NewChatPreview } from "./newChatPreview";
 import type { NewChatScenario } from "./newChatWorktreeFixture";
 import { withPreviewContext } from "./previewContext";
@@ -288,6 +289,15 @@ function synthetic(mode: string): AuraEvent[] {
     ev.turnEnded("first", "end_turn", { durationMs: 18400 }),
   ];
   if (mode === "settled") return events;
+  // A later start failed: the chat's worktree folder was deleted outside the app.
+  if (mode === "missing-worktree")
+    return [
+      ...events,
+      ev.error(
+        "folder_missing",
+        `The chat's folder ${MISSING_FOLDER} can't be found. Restore it (or reconnect its drive), then press Retry.`,
+      ),
+    ];
   events.push(ev.turnStarted("next"), ev.user("u2", "Check the small window layout too."));
   if (mode === "streaming") return events;
   if (mode === "permission")
@@ -474,6 +484,7 @@ function Preview() {
     "recorded-thinking",
     "recorded-tools",
     "terminal-panel",
+    "missing-worktree",
     ...Object.keys(NEW_CHAT_SCENARIOS),
   ].includes(requested)
     ? requested
@@ -514,7 +525,7 @@ function Preview() {
     mode === "history-question" ||
     mode === "focus-group"
       ? "running"
-      : mode === "error"
+      : mode === "error" || mode === "missing-worktree"
         ? "failed"
         : "ready";
   const chat = useMemo(
@@ -523,7 +534,8 @@ function Preview() {
         title: "Make the sidebar easier to scan",
         agent_id: "claude",
         agent_name: AGENT.name,
-        folder: "/workspace/auracode",
+        folder: mode === "missing-worktree" ? MISSING_FOLDER : "/workspace/auracode",
+        folder_state: mode === "missing-worktree" ? "missing" : "ok",
         status,
         needs_attention: mode === "permission",
       }),
@@ -647,7 +659,7 @@ function Preview() {
       seq += updates.length;
     };
     publishPreview.current = publish;
-    return withPreviewContext(
+    const context = withPreviewContext(
       new FakeTransport({
         lists: async () => choices,
         setOption: async (_chatId, id, value) => {
@@ -702,6 +714,9 @@ function Preview() {
         },
       }),
     );
+    return mode === "missing-worktree"
+      ? Object.assign(context, { git: missingWorktreeGit() })
+      : context;
   }, [mode, status, chat]);
   return (
     // Mirrors ChatsScreen's frame: the drag bands, the sidebar toggle, the panes.

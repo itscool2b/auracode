@@ -157,6 +157,64 @@ export async function checkGitReview(page, url, out, engine) {
   await page.getByRole("button", { name: "Open Git workspace" }).waitFor();
   await checkWorktreeRecreate(page, url, out, engine);
   await checkMergeConflicts(page, url, out, engine);
+  await checkMissingWorktreeStart(page, url, out, engine);
+}
+
+/**
+ * A chat whose worktree folder was deleted by hand fails to start: its error card leads with
+ * Recreate folder (Retry steps back to a soft pill), which opens the same reviewed confirmation as
+ * the Git workspace dialog. Cancel changes nothing, a stale review is refused and reviewed again,
+ * and once the folder is back the card says so and Retry is the way on. Nothing starts by itself.
+ */
+export async function checkMissingWorktreeStart(page, url, out, engine) {
+  const calls = () => page.evaluate(() => window.missingWorktreeFixture.calls());
+  await page.goto(`${url}/?preview=missing-worktree&stale`);
+  const recreate = page.getByTestId("error-recreate-folder");
+  await recreate.waitFor();
+  assert.equal(await recreate.textContent(), "Recreate folder");
+  assert.match(await recreate.getAttribute("class"), /g-button-primary/);
+  assert.doesNotMatch(
+    await page.getByTestId("error-retry").getAttribute("class"),
+    /g-button-primary/,
+  );
+  assert.deepEqual(await calls(), ["list"]);
+  await settled(page);
+  assert.deepEqual(
+    (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze())
+      .violations,
+    [],
+  );
+  await page.screenshot({ path: resolve(out, `${engine}-missing-worktree-start.png`) });
+  await recreate.click();
+  const dialog = page.getByRole("dialog", { name: "Recreate the deleted folder?" });
+  await dialog.getByText("aura/sidebar-scan", { exact: true }).waitFor();
+  await dialog.getByText("C:\\auracode\\worktrees\\sidebar-scan", { exact: true }).waitFor();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await dialog.waitFor({ state: "detached" });
+  assert.deepEqual(await calls(), ["list", "review-recreate"]);
+  await recreate.click();
+  await dialog.getByRole("button", { name: "Recreate folder", exact: true }).click();
+  await dialog.getByRole("alert").filter({ hasText: "expired or was already used" }).waitFor();
+  await dialog.getByRole("button", { name: "Recreate folder", exact: true }).click();
+  await dialog.waitFor({ state: "detached" });
+  await page
+    .getByTestId("recreate-note")
+    .getByText(
+      "The folder is back on aura/sidebar-scan at its last commit. Uncommitted files from the deleted folder could not be restored. Retry to start Claude Code.",
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(await recreate.count(), 0);
+  assert.match(await page.getByTestId("error-retry").getAttribute("class"), /g-button-primary/);
+  assert.deepEqual(await calls(), [
+    "list",
+    "review-recreate",
+    "review-recreate",
+    "apply-recreate:recreate-2",
+    "review-recreate",
+    "apply-recreate:recreate-3",
+  ]);
+  await page.screenshot({ path: resolve(out, `${engine}-missing-worktree-recreated.png`) });
 }
 
 /**
@@ -284,7 +342,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       const page = await context.newPage();
       await checkGitReview(page, process.env.CHECK_URL ?? "http://localhost:1426", out, engine);
       console.log(
-        `${engine}: reviewed Git workspace, pull request, worktree recreation and merge conflict flows passed`,
+        `${engine}: reviewed Git workspace, pull request, worktree recreation (from the dialog and a start error) and merge conflict flows passed`,
       );
     } finally {
       await browser.close();

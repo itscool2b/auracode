@@ -87,6 +87,9 @@ export const MODES = [
   "terminal-panel#resized",
   // A worktree chat's merge that conflicts: the files, the message for the agent, Open in.
   "git-conflict#conflict",
+  // A chat whose worktree folder was deleted: its start error, and Recreate folder from it.
+  "missing-worktree",
+  "missing-worktree#recreate",
 ];
 
 /** Waits until the panel's shell has drawn its prompt. */

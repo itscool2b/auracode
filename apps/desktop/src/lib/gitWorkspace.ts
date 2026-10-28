@@ -42,3 +42,13 @@ export const gitWorkspaceApi = {
     settle(commands.worktreeRecreateApply(chatId, worktreeId, token)),
 };
 export type GitWorkspaceApi = typeof gitWorkspaceApi;
+
+/** One folder written two ways: separators and a trailing slash differ, and Windows ignores case. */
+export function sameFolder(left: string, right: string): boolean {
+  const normalize = (value: string) => value.replaceAll("\\", "/").replace(/\/$/, "");
+  // Windows folder names are compared without case; macOS can be case-sensitive.
+  const windows = /^[a-z]:[\\/]/i.test(left);
+  return windows
+    ? normalize(left).toLowerCase() === normalize(right).toLowerCase()
+    : normalize(left) === normalize(right);
+}

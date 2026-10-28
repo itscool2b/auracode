@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import type { AgentEntry, ChatSummary, PendingHandoff, StorageStatus } from "../../bindings";
+import type {
+  AgentEntry,
+  ChatSummary,
+  ManagedWorktree,
+  PendingHandoff,
+  StorageStatus,
+  WorktreeRecreatePreview,
+} from "../../bindings";
 import { ChatStore } from "../../lib/chat/chatStore";
 import { errorActions, minutesLabel } from "../../lib/chat/present";
 import { hasProcess, hasTurns, lastErrorKey } from "../../lib/chat/transcript";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
+import { sameFolder } from "../../lib/gitWorkspace";
 import { inTauri } from "../../lib/ipc";
 import type { TerminalPanels } from "../../lib/terminalPanel";
 import { ChangesPanel } from "./ChangesPanel";
@@ -21,6 +29,7 @@ import { Pickers } from "./Pickers";
 import { ProjectToolsDialog } from "./ProjectToolsDialog";
 import { QuestionCard } from "./QuestionCard";
 import { QueueList } from "./QueueList";
+import { RecreateWorktreeDialog } from "./RecreateWorktreeDialog";
 import { TerminalPanel } from "./TerminalPanel";
 import { Transcript } from "./Transcript";
 import type { TurnActions } from "./TurnView";
@@ -175,6 +184,52 @@ export function ChatView({
     [pendingRequests],
   );
 
+  // A start that failed because the folder is missing, where the folder is this chat's app-owned
+  // worktree deleted by hand: its card offers the Git workspace's Recreate folder review.
+  const newestItem = newestError ? state.transcript.items.get(newestError) : undefined;
+  const chatFolder = (listed ?? state.chat)?.folder ?? null;
+  const folderMissing =
+    (newestItem?.kind === "error" && newestItem.errorKind === "folder_missing") ||
+    listed?.folder_state === "missing";
+  const [missingTree, setMissingTree] = useState<ManagedWorktree | null>(null);
+  const [recreate, setRecreate] = useState<WorktreeRecreatePreview | null>(null);
+  const [recreateNote, setRecreateNote] = useState<{ text: string; failed: boolean } | null>(null);
+  useEffect(() => {
+    const git = transport.git;
+    if (!git || !folderMissing || live || chatFolder === null) {
+      setMissingTree(null);
+      return;
+    }
+    let current = true;
+    git.list(chatId).then(
+      (trees) => {
+        if (current)
+          setMissingTree(
+            trees.find((tree) => tree.state === "missing" && sameFolder(tree.path, chatFolder)) ??
+              null,
+          );
+      },
+      () => {
+        if (current) setMissingTree(null);
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [transport.git, chatId, folderMissing, live, chatFolder]);
+  useEffect(() => {
+    if (live) setRecreateNote(null);
+  }, [live]);
+  const reviewRecreate = useCallback(async () => {
+    if (!transport.git || !missingTree) return;
+    setRecreateNote(null);
+    try {
+      setRecreate(await transport.git.recreatePreview(chatId, missingTree.id));
+    } catch (error) {
+      setRecreateNote({ text: errorMessage(error), failed: true });
+    }
+  }, [transport.git, missingTree, chatId]);
+
   const startSession = useCallback(
     (fresh: boolean) => {
       if (fresh && transport.conversation) setContinuation({ type: "fresh_session" });
@@ -320,9 +375,15 @@ export function ChatView({
         void store.respondPermission(requestId, optionId),
       onRespondUi: (requestId, answer) => void store.respondUi(requestId, answer),
       errorActions: (key, kind) =>
-        errorActions(kind, { newest: key === newestError, live, resumable }),
+        errorActions(kind, {
+          newest: key === newestError,
+          live,
+          resumable,
+          recreatable: missingTree !== null,
+        }),
       onStart: startSession,
       onShowLog: () => void store.revealLog(),
+      onRecreateFolder: missingTree ? () => void reviewRecreate() : undefined,
       canResume: !live,
       onContinue: transport.conversation ? (intent) => setContinuation(intent) : undefined,
     }),
@@ -335,6 +396,8 @@ export function ChatView({
       resumable,
       transport.conversation,
       startSession,
+      missingTree,
+      reviewRecreate,
     ],
   );
 
@@ -457,6 +520,15 @@ export function ChatView({
             onLoadEarlier={() => void store.loadEarlier()}
           />
           <div className="chat-dock">
+            {recreateNote ? (
+              <p
+                className="conversation-notice"
+                role={recreateNote.failed ? "alert" : "status"}
+                data-testid="recreate-note"
+              >
+                {recreateNote.text}
+              </p>
+            ) : null}
             {canContinueHere ? (
               <div className="conversation-notice" role="status">
                 <p>
@@ -651,6 +723,28 @@ export function ChatView({
       ) : null}
       {dialog === "debug" ? (
         <DebugBundleDialog key={chatId} chatId={chatId} onClose={() => setDialog(null)} />
+      ) : null}
+      {recreate && transport.git ? (
+        <RecreateWorktreeDialog
+          chatId={chatId}
+          review={recreate}
+          api={transport.git}
+          onClose={() => setRecreate(null)}
+          onDone={(value) => {
+            setRecreate(null);
+            setMissingTree(null);
+            setRecreateNote(
+              value.error
+                ? { text: value.error, failed: true }
+                : {
+                    text: `The folder is back on ${value.worktree.branch} at its last commit. Uncommitted files from the deleted folder could not be restored. Retry to start ${agent?.name ?? state.chat?.agent_name ?? "the agent"}.`,
+                    failed: false,
+                  },
+            );
+            // The chat list reads the folder again, so the header stops calling it missing.
+            onOpenChat?.(chatId);
+          }}
+        />
       ) : null}
       {gitOpen && transport.git ? (
         <GitDialog
