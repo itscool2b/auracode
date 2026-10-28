@@ -6,6 +6,7 @@
 //! `window_ready` after its first paint, and a fallback shows the window after
 //! [`READY_FALLBACK`] anyway, so a broken frontend can never leave an invisible app running.
 
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -134,10 +135,13 @@ impl ShowOnce {
 /// a second and suspends the page after about five minutes, and a smoke run reads the DOM, not the
 /// pixels, so it has no reason to wait for the screen. Only macOS 14 and later have the switch;
 /// WebKitGTK and WebView2 offer none, and their smoke runs show the window.
+///
+/// `webview_data` moves the webview profile ([`crate::launch::LaunchOptions::webview_data_dir`]).
 pub fn create_main(
     app: &tauri::App,
     plan: &GlassPlan,
     keep_running_hidden: bool,
+    webview_data: Option<&Path>,
 ) -> Result<WebviewWindow, Box<dyn std::error::Error>> {
     let config = app
         .config()
@@ -197,6 +201,9 @@ pub fn create_main(
 
     if keep_running_hidden {
         builder = builder.background_throttling(BackgroundThrottlingPolicy::Disabled);
+    }
+    if let Some(folder) = webview_data {
+        builder = builder.data_directory(folder.to_path_buf());
     }
 
     // Avoids the white flash a transparent window shows on Windows before its first paint.

@@ -11,7 +11,7 @@
 //! ([`LaunchOptions::single_instance`]).
 
 use std::ffi::{OsStr, OsString};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use aura_core::paths::DATA_DIR_ENV;
 use serde::{Deserialize, Serialize};
@@ -38,6 +38,8 @@ pub const DEMO_AGENT: &str = "mock";
 pub const STRESS_ENV: &str = "AURACODE_STRESS";
 /// `1` disables window effects and transparency (an opaque window).
 pub const NO_GLASS_ENV: &str = "AURACODE_NO_GLASS";
+/// The webview profile folder inside a data folder, the name WebView2 and Tauri use by default.
+pub const WEBVIEW_DATA_FOLDER: &str = "EBWebView";
 
 /// Bounds for [`StressConfig`], shared with the stress view's controls.
 pub const MIN_ORBS: u32 = 1;
@@ -436,6 +438,25 @@ impl LaunchOptions {
     /// processes that open the same database.
     pub fn single_instance(&self) -> bool {
         !self.is_smoke() && !self.own_data_dir
+    }
+
+    /// Where the webview keeps its profile (storage, caches) for a launch with its own data
+    /// folder: `EBWebView` inside that folder, the same layout as the default folder, where Tauri
+    /// puts it on its own. Without this a throwaway first launch would share the installed app's
+    /// webview profile, and WebView2 refuses a second app on one profile while the first runs.
+    /// `None` keeps Tauri's default. macOS ignores the setting and keeps WebKit's per-app store.
+    pub fn webview_data_dir(&self, data_dir: Option<&Path>) -> Option<PathBuf> {
+        self.own_data_dir
+            .then_some(data_dir)
+            .flatten()
+            .map(|root| root.join(WEBVIEW_DATA_FOLDER))
+    }
+
+    /// Whether the window-state plugin restores and saves the window's geometry. It keeps one
+    /// file per bundle identifier in the roaming config folder, which a launch with its own data
+    /// folder must not read or write: the installed app's window would open where a test left it.
+    pub fn remembers_window_geometry(&self) -> bool {
+        !self.own_data_dir
     }
 
     /// A smoke launch whose switches are not valid opens the normal screen: it reports its failure
@@ -953,6 +974,25 @@ mod tests {
         );
         let both = options(&[(SMOKE_ENV, "1"), (DATA_DIR_ENV, "/tmp/smoke data")]);
         assert!(!both.single_instance());
+    }
+
+    /// A first launch on a throwaway data folder kept its webview profile in the installed app's
+    /// folder and restored or saved the installed app's window geometry.
+    #[test]
+    fn a_launch_with_its_own_data_folder_keeps_webview_and_window_state_there() {
+        let root = Path::new("scratch").join("data");
+        let own = options(&[(DATA_DIR_ENV, "scratch/data")]);
+        assert_eq!(
+            own.webview_data_dir(Some(&root)),
+            Some(root.join(WEBVIEW_DATA_FOLDER))
+        );
+        assert!(!own.remembers_window_geometry());
+        assert_eq!(own.webview_data_dir(None), None, "no data folder at all");
+
+        for plain in [options(&[]), options(&[(SMOKE_ENV, "1")])] {
+            assert_eq!(plain.webview_data_dir(Some(&root)), None, "Tauri's default");
+            assert!(plain.remembers_window_geometry());
+        }
     }
 
     /// `prefix` followed by a folder name that is not valid Unicode, which the OS allows in a
