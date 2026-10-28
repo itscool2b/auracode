@@ -107,8 +107,9 @@ impl SessionManager {
         if let Some(setup) = &setup {
             if !setup.files.is_empty() {
                 plan.warnings.push(format!(
-                    "After creation, saved setup copies {} listed file(s) from the source folder. Existing files are never overwritten. Environment files may contain application secrets; their contents are not shown, logged or stored.",
-                    setup.files.len()
+                    "After creation, saved setup copies {} listed {} from the source folder. Existing files are never overwritten. Environment files may contain application secrets; their contents are not shown, logged or stored.",
+                    setup.files.len(),
+                    if setup.files.len() == 1 { "file" } else { "files" }
                 ));
             }
             if let Some(command) = &setup.command {

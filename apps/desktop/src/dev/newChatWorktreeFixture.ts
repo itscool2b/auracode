@@ -197,7 +197,7 @@ export function newChatFixture(scenario: NewChatScenario): {
         );
       if (setup) {
         warnings.push(
-          `After creation, saved setup copies ${SETUP.files.length} listed file(s) from the source folder. Existing files are never overwritten. Environment files may contain application secrets; their contents are not shown, logged or stored.`,
+          `After creation, saved setup copies ${SETUP.files.length} listed ${SETUP.files.length === 1 ? "file" : "files"} from the source folder. Existing files are never overwritten. Environment files may contain application secrets; their contents are not shown, logged or stored.`,
         );
         warnings.push(
           `Then the saved setup command (${SETUP.command?.program} ${SETUP.command?.args.join(" ")}) is ready to run in an owned terminal in the new worktree, before the agent starts. It can modify the worktree and uses your normal command environment.`,

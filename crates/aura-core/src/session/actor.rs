@@ -2980,8 +2980,13 @@ impl ChatActor {
                                 NoticeLevel::Info
                             },
                             message: format!(
-                                "Reverted {} file(s). {}",
+                                "Reverted {} {}. {}",
                                 report.applied.len(),
+                                if report.applied.len() == 1 {
+                                    "file"
+                                } else {
+                                    "files"
+                                },
                                 report
                                     .error
                                     .as_deref()
