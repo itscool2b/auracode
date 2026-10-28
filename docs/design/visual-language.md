@@ -583,25 +583,36 @@ glyph's place**; the agent's name always sits beside the mark.
 
 | State | Inside the tile |
 |---|---|
-| idle | The agent's two-letter code in Geist, fg-2, at every size (one letter would make Claude Code and Codex both C): `0.5 * size` under 24px, never under 7px, and `0.38 * size` from 24px; a one-character code ("?") at `0.56 * size`; weight 500, or 600 below a 12px glyph |
+| idle, with a logo | The agent's own published mark (owner request 2026-10-28, "the actual logos"), exactly as its maker publishes it for dark backgrounds, centred in a square with an even margin: 2px up to a 16px tile, then `round(0.17 * size)` (12 in 16, 16 in 24, 22 in 32, 36 in 56, `logoSide()`), at its optical scale (uniform only) |
+| idle, without one | The agent's two-letter code in Geist, fg-2, at every size (one letter would make Claude Code and Codex both C): `0.5 * size` under 24px, never under 7px, and `0.38 * size` from 24px; a one-character code ("?") at `0.56 * size`; weight 500, or 600 below a 12px glyph |
 | thinking, streaming, tool | The 2x3 pixel loader (4.5) at its state's tempo |
 | waiting | A solid volt dot, `0.375 * size` across (parity-adjusted to centre on whole pixels) |
 | done | A white pixel check (cells `max(2, round(size / 8))`), drawn once a pixel at a time, 50ms apart (about 250ms, X Money's check), by CSS |
 | error | A solid red dot, same geometry as waiting |
-| ghost (any state) | Transparent tile, 1px dashed line-strong outline, the code in fg-3 (it is text, so it keeps AA contrast) |
+| ghost (any state) | Transparent tile, 1px dashed line-strong outline; a logo at full strength (the vendors forbid dimming or recolouring their marks, so the dashes and the words beside it say "not installed"), a code in fg-3 (it is text, so it keeps AA contrast) |
 
-Codes: CC Claude Code, CX Codex, PI Pi, MP oh-my-pi, AG Antigravity, HM Hermes, CU Cursor, GB
-Grok Build, OC OpenCode; any other agent takes the first two letters of its id; an empty or
-generic id shows "?" (`agentCode()`). Root: `span.g-agent-mark[role="img"]` with `aria-label`
-"Claude Code, waiting for approval" (from `ORB_STATE_LABELS`, or `label`), `data-agent` (the brand
-id, "generic" for unknown), `data-state`, `data-ghost`. No canvas. Idle, hidden, offscreen and
-reduced-motion marks own no animation frame; the check uses no frame at all. Volt and red differ
-in luminance as well as hue (17.9:1 against 6.9:1 on black), and the label and the words beside
-the mark always say the state.
+**Logos** (`agent-logos/`, `agentLogos.ts`, `AgentLogo` for a mark alone): Codex (the OpenAI
+Blossom), Cursor, OpenCode, Pi and oh-my-pi, each the vendor's own file, flattened to plain shapes
+with no raster, script, style, id or reference. They are their owners' trademarks, not covered by
+auracode's license, used only to say which agent a chat uses and never as or in auracode's own
+branding; `third-party/brand-marks.md` records each source, hash, guideline and term, and the
+notices page says so. A vendor colour in a mark is the vendor's, not an accent: volt still means
+only "look here". **Codes** stay for agents whose makers allow no logo use without approval
+(Claude Code, Antigravity, Hermes), whose official file could not be obtained (Grok Build) and for
+any other agent: CC Claude Code, AG Antigravity, HM Hermes, GB Grok Build; the codes CX, PI, MP, CU
+and OC remain for those agents' text uses (`agentCode()`); any other agent takes the first two
+letters of its id; an empty or generic id shows "?". Root: `span.g-agent-mark[role="img"]` with
+`aria-label` "Claude Code, waiting for approval" (from `ORB_STATE_LABELS`, or `label`),
+`data-agent` (the brand id, "generic" for unknown), `data-state`, `data-ghost`, `data-logo` when a
+logo shows; the drawing inside is hidden from assistive technology and has no title, so it adds
+no tooltip. No canvas. Idle, hidden, offscreen and reduced-motion marks own no animation frame;
+the check uses no frame at all. Volt and red differ in luminance as well as hue (17.9:1 against
+6.9:1 on black), and the label and the words beside the mark always say the state.
 
-Sizes in use: 14 (composer pill, event chips), 16 (header, bylines, live gutter, pickers, menus),
-24 (onboarding roster, New chat, library), 32 (Agents, settings), 48 (settings), 56 (empty
-state).
+Sizes in use: 14 (composer pill, event chips), 16 (header, bylines, live gutter, pickers, menus,
+the handoff above the composer, Settings' default agent), 24 (onboarding roster, New chat,
+library, the website's rows of marks), 32 (Agents, settings), 48 (settings), 56 (empty state).
+The development preview `?preview=agent-marks` shows every agent at every size and state.
 
 ### 4.14 `Logo`, `Wordmark` and the app icon
 
@@ -760,7 +771,10 @@ Centred over the water, 172px below the panel's top (140 on phones):
   designed agent: the old letters rise 0.23em and fade, last first, 15ms apart over 250ms; the new
   name arrives 25ms apart; the slot takes the new width at once and the line glides to its new
   centre by a FLIP transform over 450ms `--g-ease-out`. No underline and no glint. The heading's
-  accessible name is "One window for your coding agents". Reduced motion: no rotation.
+  accessible name is "One window for your coding agents". Reduced motion: no rotation. No logo
+  beside the rotating name (considered 2026-10-28): four of the nine agents, Claude Code first,
+  have no usable mark, so the slot would alternate between logos and letters, and OpenAI's terms
+  keep its mark less prominent than auracode's own, which a display-size Blossom would not be.
 - **Lead** (18/28 fg-2, max 540, 28px under): "The coding agents you already use, together in one
   chat on your machine. Free, with nothing to sign up for."
 - **One button** (36px under): the magnetic primary 44 "Download".
@@ -785,7 +799,10 @@ least 600px tall, with one seal drifting low at left.
   agents, as they are", "Switch agents mid-chat", "A checkpoint every turn", "Full auto by
   default", "Queue and steer", "Several chats at once". Under the active row a 2px timer fills over
   6.5s, and the next row takes over when it is full. Under the rows, the active row's one sentence
-  cross-fades (14/22 fg-2).
+  cross-fades (14/22 fg-2). The first row's sentence carries a row of every agent's mark (24px
+  tiles 8px apart, 20px under the words, a list named "Agents auracode runs"; see 5.8 for its
+  motion). Pointing at a mark chooses that agent's pill in the New chat view, or lights "Other
+  agents" when it is not one of the four found; leaving puts Claude Code back.
 - **View** (right): the app's inset pane (6.1: surface-1, radius 16, its rim and lit top edge drawn
   over every scene, the faint light) built from tokens and the app's own marks at its own sizes,
   each after a preview mode of the app as it is today: New chat on lit water with its agent pills
@@ -798,9 +815,11 @@ least 600px tall, with one seal drifting low at left.
   under 640px wide keeps each split's point (the Changes panel, the sidebar); under 480px it
   tightens for phones.
 - **Motion**: the old view clears in 200ms; the new one rises 14px from 0.985 and fades in from
-  120ms (460ms opacity, 820ms transform `--g-ease-out`). Hovering, focusing or clicking a row shows
-  its view at once and holds the cycle, the active row's rule full, while the pointer or focus stays
-  in the panel. The cycle also holds off screen, in a hidden tab and under reduced motion.
+  120ms (460ms opacity, 820ms transform `--g-ease-out`). Focusing or clicking a row shows its view
+  at once; the pointer resting on a row for 90ms does too (hover intent, so a pointer passing over
+  the rows to reach the marks under them leaves the view alone). Either holds the cycle, the
+  active row's rule full, while the pointer or focus stays in the panel. The cycle also holds off
+  screen, in a hidden tab and under reduced motion.
 - **Access**: the rows are a tab list with automatic activation (arrow keys, Home, End); each tab's
   panel is its sentence; the views illustrate it and are hidden from assistive technology.
 
@@ -814,7 +833,9 @@ summary 16/24 500 fg-1, a 12px plus whose upright turns flat as its answer opens
 fg-1). Answers 16/26 fg-2. All closed on load and one open at a time, built on `<details>`, so every
 answer opens without JavaScript. An answer opens by `grid-template-rows` over 300ms
 `--g-ease-quint` while it fades in, the site's one layout animation. "Nothing to sign up for" is
-answered here and in the hero lead; the invitation-only accounts are answered here.
+answered here and in the hero lead; the invitation-only accounts are answered here. "Which agents
+does it run?" ends with the row of agent marks (5.8), 16px under the words; the words name every
+agent, so the row is decorative there.
 
 ### 5.6 Closing panel
 
@@ -838,6 +859,17 @@ columns.
   the pointer, their label 60% further, following with a 0.12s time constant and settling back over
   0.34s. Transform only, so layout never moves; fine pointers only; off under reduced motion.
 - **Hover**: links, rows and icons change colour over 150 to 300ms; buttons settle over 300ms.
+- **Agent marks** (`AgentStrip`, owner request 2026-10-28, "cool animations to those logos"): once
+  a row is in view and its panel shown, the marks rise 10px and fade in 24ms apart (opacity 280ms
+  `--g-ease`, transform 400ms `--g-ease-reveal`, the ninth done by 592ms), again each time the
+  panel shows. While on screen in a visible tab, each drifts up and down 1.5px on its own period
+  (5.3 to 7.9s, phases apart, so no two move together), growing in over two seconds and stepping
+  about 20 times a second on the swimmers' cadence; its clock stops off screen and in hidden tabs,
+  so it resumes where it was. Under the pointer a mark lifts 3px and a soft shadow with a lit top
+  edge fades in (300ms `--g-ease-settle`). Each motion moves the whole mark; none scales, skews,
+  rotates or recolours it. The marks are not tab stops: they act on nothing a keyboard user needs,
+  and nine extra stops would sit between the rows and the view. Reduced motion: present at once,
+  still, no lift.
 - **Budget**: only transform and opacity animate, plus the FAQ's disclosure. Measured in Chromium
   at 1440 by 900 on the built site: 0 frames over 25ms while idle, sweeping the pointer over the
   swimmers, hovering the magnetic button, scrolling the page and switching capabilities; no long

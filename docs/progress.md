@@ -3977,3 +3977,56 @@ navigation and its other checks), `check-setup` (Agents), `check-agent-installat
 
 Not done: the hand walkthrough of the built app and site; real Safari; the CPU of the native
 WebView2 window (measured in Chromium only). CI was not run.
+
+### Agents' own logos (2026-10-28, branch `agent-logos`)
+
+The owner asked for "the actual logos" of the agents wherever the app and the site name them, and
+then for "cool animations to those logos" on the site.
+
+- **Which agents have a logo**: each vendor's brand kit or official repository was read, with its
+  guidelines. Codex (the OpenAI Blossom, white), Cursor (the flat cube for dark backgrounds),
+  OpenCode (its dark logo), Pi (its badge, in its dark-scheme colour) and oh-my-pi (its
+  repository icon) are drawn as published. Claude Code (Anthropic allows its marks only in
+  materials it approves beforehand), Antigravity (Google requires an approval request) and Hermes
+  (Nous Research's terms forbid promotional use without written permission, and its only
+  clear-background mark is illegible under 32px) keep their codes. Grok Build keeps GB because
+  xAI's terms allow use only of the file at its download link, which refused automated
+  retrieval; the bot check was not worked around. Sources, hashes, guidelines and terms, and how to
+  add a mark, are in `third-party/brand-marks.md`; the notices page names the marks as their
+  owners' trademarks, outside any auracode license.
+- **AgentMark** draws the logo in its tile (2px margin up to 16px, then about a sixth), unaltered,
+  at a per-mark optical scale; states still take its place, and a ghost keeps the logo at full
+  strength in its dashed tile (vendors forbid dimming). The marks are flat SVG in
+  `packages/ui/src/graphite/agent-logos/`, parsed into React shapes (no inner HTML) and tested to
+  hold nothing but plain shapes and a name. `AgentLogo` draws a mark alone. Every existing use
+  updated at once; the handoff above the composer and Settings' default agent gained a mark.
+  `?preview=agent-marks` shows every agent at every size and state, and `?preview=settled&
+  agents=lineup` offers a full lineup in the picker.
+- **Website**: the capabilities panel's New chat and picker views show the marks; the first row's
+  sentence and the FAQ answer that names the agents carry a row of all nine marks. They rise in
+  24ms apart (done by 592ms), drift 1.5px on their own periods while on screen, lift 3px over a
+  soft shadow under the pointer, and are still under reduced motion. Pointing at a mark in the
+  capabilities row chooses it in the view (or lights Other agents); the rows wait 90ms before
+  switching so the pointer can reach the marks. The hero keeps its text: four agents have no usable
+  mark, and OpenAI's terms keep its mark smaller than auracode's own.
+- **Idle cost**, headed Chromium at 1440 by 900, 10 s each, pointer outside: capabilities held on
+  "Switch agents" (marks hidden) renderer 6.0%, GPU 4.5%, 26.6 ms/s main thread, 35.0 frames/s;
+  held on "Your agents" (marks drifting) 6.6%, 4.4%, 30.8 ms/s, 36.8 frames/s. FAQ with the agents
+  answer closed 10.5%, 14.7%, 53.7 ms/s; open 11.2%, 9.1%, 58.1 ms/s (the closing panel's water is
+  in view in both). A hidden tab with the marks in view requested 0 frames in 3 s.
+- The product images were regenerated with `product-images.mjs`; the settled chat shows no agent
+  mark (Claude Code, named in text), so they came out byte-identical.
+
+Checks on this branch: `pnpm lint` (26 warnings, all existing descending-specificity notes in
+desktop CSS; style guard and instruction check pass), `pnpm typecheck`, `pnpm test`: scripts 23,
+ui 260, desktop 10 node and 488 (19 skipped), design lab 352, web 4; the acceptance gate test (6).
+`pnpm --filter @auracode/web test:browser` passes in Chromium and WebKit (axe on all six views,
+CSP, no overflow at 390 and 320). `worker:build` and `worker:test` (5 of 5). In Chromium and
+WebKit: `check-setup`, `check-chat`, `check-plugin-library`, `check-instructions`,
+`check-new-chat-worktree`, `check-settings` (with the session fallback) and `check-layout` (170
+views per engine, 0 findings). Sheets are the ignored
+`target/design-research/sheets/agent-logos-*.png`.
+
+Not done: the hand walkthrough of the built app and site; real Safari; approval requests to
+Anthropic, Google and Nous Research and a hand download of xAI's kit, each of which would turn a
+code into a logo; confirming oh-my-pi's canonical mark with its maintainers. CI was not run.
