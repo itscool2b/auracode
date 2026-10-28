@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatSnapshot, HistoryPage, SessionLists } from "../../bindings";
 import { CommandError } from "../ipc";
-import { BLOB_PAGE, ChatStore, LISTS_DEBOUNCE_MS, STILL_WORKING_MS } from "./chatStore";
+import {
+  BLOB_PAGE,
+  ChatStore,
+  LISTS_DEBOUNCE_MS,
+  type PageVisibility,
+  STILL_WORKING_MS,
+} from "./chatStore";
 import {
   attachResult,
   autonomyState,
@@ -255,6 +261,95 @@ describe("the agent of each turn", () => {
     expect([...agents.keys()].sort()).toEqual(["t1", "t2"]);
     expect(agents.get("t1")?.agent_name).toBe("Claude Code");
     expect(agents.get("t2")?.agent_name).toBe("Codex");
+  });
+});
+
+describe("a hidden page", () => {
+  /** A page whose visibility the test flips, like a minimized window. */
+  function page() {
+    let hidden = false;
+    const listeners = new Set<() => void>();
+    return {
+      visibility: {
+        hidden: () => hidden,
+        onChange: (listener: () => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      } satisfies PageVisibility,
+      set(value: boolean) {
+        hidden = value;
+        for (const listener of listeners) listener();
+      },
+      watchers: () => listeners.size,
+    };
+  }
+
+  it("keeps every frame but renders once, in order, when the page shows again", async () => {
+    const fake = new FakeTransport();
+    const shown = page();
+    const store = new ChatStore(CHAT, fake, { visibility: shown.visibility });
+    let renders = 0;
+    const stop = store.subscribe(() => {
+      renders += 1;
+    });
+    expect(shown.watchers()).toBe(1);
+    const opening = store.open();
+    const attach = fake.lastAttach();
+    attach.resolve(
+      attachResult(CHAT, 2, historyPage(CHAT, items(numbered([["t1", ev.turnStarted("t1")]])))),
+    );
+    await opening;
+    await settled();
+    const before = renders;
+    expect(before).toBeGreaterThan(0);
+
+    shown.set(true);
+    for (const [seq, text] of [
+      [2, "one "],
+      [3, "two "],
+      [4, "three"],
+    ] as const)
+      attach.onFrame(frame(CHAT, seq, [ev.message("t1.m1", text)]));
+    attach.onFrame(frame(CHAT, 5, [ev.turnEnded("t1")]));
+    // Hidden: nothing rendered, but the state already holds every frame.
+    expect(renders).toBe(before);
+    expect(messageText(store, "t1.m1")).toBe("one two three");
+    expect(store.getSnapshot().openTurnId).toBeNull();
+
+    shown.set(false);
+    expect(renders).toBe(before + 1);
+    expect(messageText(store, "t1.m1")).toBe("one two three");
+    // Showing again with nothing new renders nothing more.
+    shown.set(true);
+    shown.set(false);
+    expect(renders).toBe(before + 1);
+
+    stop();
+    expect(shown.watchers()).toBe(0);
+    store.close();
+  });
+
+  it("renders every change at once while the page is visible", async () => {
+    const fake = new FakeTransport();
+    const shown = page();
+    const store = new ChatStore(CHAT, fake, { visibility: shown.visibility });
+    let renders = 0;
+    store.subscribe(() => {
+      renders += 1;
+    });
+    const opening = store.open();
+    const attach = fake.lastAttach();
+    attach.resolve(
+      attachResult(CHAT, 2, historyPage(CHAT, items(numbered([["t1", ev.turnStarted("t1")]])))),
+    );
+    await opening;
+    await settled();
+    const before = renders;
+    attach.onFrame(frame(CHAT, 2, [ev.message("t1.m1", "a")]));
+    attach.onFrame(frame(CHAT, 3, [ev.message("t1.m1", "b")]));
+    expect(renders).toBe(before + 2);
+    store.close();
   });
 });
 

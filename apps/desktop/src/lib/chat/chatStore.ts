@@ -123,7 +123,26 @@ export const STILL_WORKING_MS = 60_000;
 export interface ChatStoreOptions {
   /** Wall clock, for queued prompts' times and the still-working hint. */
   readonly now?: () => number;
+  /** Whether the page is hidden (minimized, or behind the tray), and when that changes. */
+  readonly visibility?: PageVisibility;
 }
+
+/** The page's visibility, as the store needs it. */
+export interface PageVisibility {
+  readonly hidden: () => boolean;
+  /** Calls `listener` whenever the page is hidden or shown again; returns how to stop. */
+  readonly onChange: (listener: () => void) => () => void;
+}
+
+/** `document.visibilityState`; always visible where there is no document (tests, servers). */
+export const documentVisibility: PageVisibility = {
+  hidden: () => typeof document !== "undefined" && document.visibilityState === "hidden",
+  onChange: (listener) => {
+    if (typeof document === "undefined") return () => {};
+    document.addEventListener("visibilitychange", listener);
+    return () => document.removeEventListener("visibilitychange", listener);
+  },
+};
 
 function initialState(chatId: string): ChatState {
   return {
@@ -215,6 +234,10 @@ export class ChatStore {
   readonly #now: () => number;
   readonly #listeners = new Set<() => void>();
   #state: ChatState;
+  readonly #visibility: PageVisibility;
+  #stopWatchingVisibility: (() => void) | null = null;
+  /** Changes made while the page was hidden that the view has not been told about yet. */
+  #unrendered = false;
 
   /** Every attach gets a number; frames, ends and answers of older ones are ignored. */
   #generation = 0;
@@ -265,13 +288,19 @@ export class ChatStore {
     this.chatId = chatId;
     this.#transport = transport;
     this.#now = options.now ?? (() => Date.now());
+    this.#visibility = options.visibility ?? documentVisibility;
     this.#state = initialState(chatId);
   }
 
   readonly subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
+    this.#stopWatchingVisibility ??= this.#visibility.onChange(this.#visibilityChanged);
     return () => {
       this.#listeners.delete(listener);
+      if (this.#listeners.size === 0) {
+        this.#stopWatchingVisibility?.();
+        this.#stopWatchingVisibility = null;
+      }
     };
   };
 
@@ -991,8 +1020,26 @@ export class ChatStore {
     this.#rejoinTimer = null;
   }
 
+  /**
+   * Every change updates the state at once, so nothing is lost and order is kept. While the page
+   * is hidden (minimized, or closed to the tray) the view is not told: a stream would otherwise
+   * render every frame nobody sees. It renders once, with everything, when the page shows again.
+   */
   #set(state: ChatState): void {
     this.#state = state;
+    if (this.#visibility.hidden()) {
+      this.#unrendered = true;
+      return;
+    }
+    this.#notify();
+  }
+
+  readonly #visibilityChanged = (): void => {
+    if (this.#unrendered && !this.#visibility.hidden()) this.#notify();
+  };
+
+  #notify(): void {
+    this.#unrendered = false;
     for (const listener of [...this.#listeners]) listener();
   }
 }
