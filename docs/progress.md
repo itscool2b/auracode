@@ -3812,3 +3812,51 @@ Not done: the hand walkthrough of the built app; the minimized and idle CPU with
 swimmers running was not measured natively; Agents and the Library stay full-window pages on
 black (the Library belongs to `plugin-library`); the dither engine stays in `packages/ui`, unused by
 the website and the app, for a follow-up to delete. CI was not run.
+
+### One entry per agent (2026-10-28, branch `one-agent-entry`)
+
+The owner asked why Claude Code and Codex each appeared twice ("Claude Code (ACP)", "Codex
+(ACP)"): too complex. Now every list shows one Claude Code and one Codex, and the same holds for
+Antigravity and Grok Build (their text fallbacks) and OpenCode (its 1.x and 2.x lines). The rule
+and the data mapping are in [plan.md](plan.md), "One entry per agent".
+
+- **Catalog and detection:** each catalog entry is a connection filed under its agent
+  (`AgentSpec::agent`, with a label such as Direct or ACP adapter). Detection reports one
+  `AgentEntry` per agent with its `connections`: Automatic uses the first connection that can run
+  (native when the CLI meets its floor, else the adapter), an explicit Connection setting picks
+  one, and when none can run the reason names what each lacks. Updates, sign-in checks,
+  executable choices and Plugin library listings act on the connection in use.
+- **Connection setting:** device-local `agent-connections.json` beside `agent-executables.json`
+  (a damaged file means Automatic and is replaced on the next choice; one from a newer build is
+  left unchanged), the `agent_set_connection` command, and a Connection row (the Graphite settings
+  row) in Claude Code's and Codex's details on the Agents page, which also states the adapter's
+  one-time download.
+- **Existing data, no migration:** chats, project defaults and the New chat default saved as
+  `claude-acp` or `codex-acp` (also from synced older devices) read as their agent. Native session
+  rows keep the connection that made them, so a chat that ran on the adapter keeps resuming that
+  session through the adapter, across handoffs to Codex and back; fresh sessions take the setting;
+  a native fork keeps its source's connection (saved in the continuation, cleared once it starts).
+  No stored id changes, so no schema version and no downgrade break.
+- **Lists:** New chat, the composer's picker, onboarding's "Found N agents", the Agents page and
+  the Plugin library read the same Rust list; onboarding no longer filters ids by suffix.
+  `aura-cli agents` prints one entry per agent with its connection line; `aura-cli probe` and
+  `smoke` still take connection ids, and a desktop smoke run given `claude-acp` sets Claude
+  Code's Connection in its own data folder first.
+
+Verified locally on Windows after merging `origin/main` (80f61bd): `pnpm lint` (28 existing
+warnings), `pnpm typecheck`, `pnpm test` (scripts 22, ui 296, desktop 5 node and 481 with 19
+skipped, design lab 352, web 4) and `.github/scripts/acceptance-gates.test.mjs` (6); `cargo fmt
+--all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and the account-sync
+Clippy; `cargo test` for aura-agents (106), aura-protocol (26), aura-config (156), aura-cli (77),
+aura-core lib (479, and 574 with account-sync) and its integration suites, and the desktop lib
+(210, bindings regenerated). `session_lifecycle::shutdown_all_bounded` fails, identically on
+`origin/main` (history read after the quit seal), so it is not from this branch. In Chromium and
+WebKit: `check-setup` (now also one row per agent and the Connection setting, axe clean),
+`check-settings`, `check-plugin-library`, `check-agent-installations`,
+`check-new-chat-worktree`, `check-chat`, and `check-layout` (all 328 views clean). Before and after sheets
+are the ignored `target/design-research/sheets/app-one-agent-{new-chat,agents}.png`.
+
+Not done: no real agent ran (the adapter-session resume is covered by store and session tests
+with fake drivers); the Agents page's opened details (the facts list's 33px rows) are off the 4px
+grid, which `check-layout` does not open, and the Connection row sits under them; the hand
+walkthrough of the built app; CI.
