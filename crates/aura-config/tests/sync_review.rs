@@ -143,6 +143,8 @@ fn fixture() -> (tempfile::TempDir, ConfigScanner, ConfigSnapshot) {
                 claude_state_only: false,
             },
             installed: true,
+            version: None,
+            paused: false,
         }],
         temp.path().join("home"),
         ConfigScope::Windows,

@@ -177,6 +177,8 @@ fn declaration_revision(plan: &VendorPlan) -> Result<String, SessionError> {
             vec![ConfigSource {
                 source: source.clone(),
                 installed: true,
+                version: None,
+                paused: false,
             }],
             plan.folder.clone(),
             platform,

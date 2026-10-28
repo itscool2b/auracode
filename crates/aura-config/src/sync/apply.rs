@@ -128,6 +128,29 @@ impl ConfigScanner {
         desired: ConfigSnapshot,
         expected: &LocalSnapshot,
     ) -> Result<ConfigApplyPreparation, ConfigPortError> {
+        self.prepare(desired, expected, false)
+    }
+
+    /// After a plugin or package installer failed: put its declaration back to the exact local value
+    /// the review saw before the command ran, through the same journaled transaction. This is the
+    /// only write auracode makes to a declaration; installing one stays with the agent.
+    pub fn prepare_vendor_restore(
+        &self,
+        previous: ConfigSnapshot,
+        expected: &LocalSnapshot,
+    ) -> Result<ConfigApplyPreparation, ConfigPortError> {
+        if !previous.identity.requires_vendor() {
+            return Err(ConfigPortError::Invalid);
+        }
+        self.prepare(previous, expected, true)
+    }
+
+    fn prepare(
+        &self,
+        desired: ConfigSnapshot,
+        expected: &LocalSnapshot,
+        vendor_restore: bool,
+    ) -> Result<ConfigApplyPreparation, ConfigPortError> {
         desired.encode()?;
         let id = &desired.identity;
         let skip = |reason: &str| {
@@ -140,7 +163,7 @@ impl ConfigScanner {
         if !id.applies_on(self.platform) {
             return skip("This configuration belongs to another operating system.");
         }
-        if id.requires_vendor() {
+        if id.requires_vendor() && !vendor_restore {
             return skip("Use the agent's reviewed installation workflow for this declaration.");
         }
         let Some(source) = self.source(id) else {
@@ -274,6 +297,7 @@ impl ConfigScanner {
             identity: id.clone(),
             state: State::Prepared,
             restores: None,
+            vendor_restore,
             files: mutations,
         };
         // Check the complete receipt limit before returning a review, including unselected local
@@ -336,7 +360,7 @@ impl ConfigScanner {
             .ok_or(ConfigPortError::Unavailable)?;
         if current.source != *source
             || !receipt.identity.applies_on(self.platform)
-            || receipt.identity.requires_vendor()
+            || receipt.identity.requires_vendor() && !receipt.vendor_restore
             || realm(source)? != receipt.realm
         {
             return Err(ConfigPortError::Stale);
@@ -529,6 +553,7 @@ impl ConfigScanner {
                 identity: original.identity.clone(),
                 state: State::Prepared,
                 restores: Some(id.into()),
+                vendor_restore: original.vendor_restore,
                 files: inverse,
             };
             if let result @ ConfigApplyResult::NeedsRecovery { .. } =

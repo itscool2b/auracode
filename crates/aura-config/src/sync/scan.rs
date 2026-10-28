@@ -24,6 +24,10 @@ pub struct ConfigSource {
     pub source: Source,
     /// Supplied by native agent discovery, never inferred from a leftover config folder.
     pub installed: bool,
+    /// The detected agent version, for feature floors. None: not known.
+    pub version: Option<String>,
+    /// The person turned sync off for this agent on this device. Its items wait, unchanged.
+    pub paused: bool,
 }
 
 pub struct ConfigScanner {
@@ -56,7 +60,10 @@ impl ConfigScanner {
                 .iter()
                 .zip(&other.sources)
                 .all(|(left, right)| {
-                    left.source == right.source && left.installed == right.installed
+                    left.source == right.source
+                        && left.installed == right.installed
+                        && left.version == right.version
+                        && left.paused == right.paused
                 })
     }
 
@@ -103,6 +110,15 @@ impl ConfigScanner {
                     provider,
                     None,
                     "Install this agent to apply its waiting configuration.",
+                );
+                continue;
+            }
+            if source.paused {
+                skip(
+                    &mut scan,
+                    provider,
+                    None,
+                    "Sync is off for this agent on this device. Its items stay here unchanged.",
                 );
                 continue;
             }
@@ -170,7 +186,7 @@ impl ConfigScanner {
         let Some(source) = self.source(identity) else {
             return Ok(LocalSnapshot::Unavailable);
         };
-        if !source.installed {
+        if !source.installed || source.paused {
             return Ok(LocalSnapshot::Unavailable);
         }
         let Ok(root) = inventory::open(&source.source) else {
@@ -203,6 +219,72 @@ impl ConfigScanner {
             return Ok(LocalSnapshot::Unavailable);
         }
         Ok(LocalSnapshot::Present(snapshot))
+    }
+
+    /// The installed source of one provider's main configuration folder, sync on or off.
+    pub(crate) fn provider_source(&self, provider: Provider) -> Option<&ConfigSource> {
+        self.sources
+            .iter()
+            .find(|entry| entry.source.provider == provider && !entry.source.claude_state_only)
+    }
+
+    pub(crate) fn platform(&self) -> ConfigScope {
+        self.platform
+    }
+
+    /// Whether a plugin marketplace is added here: Claude declares it in `settings.json`
+    /// (`extraKnownMarketplaces`) or records it in `plugins/known_marketplaces.json`; Codex keeps
+    /// it under `[marketplaces]` in `config.toml`. None: the folder could not be read.
+    pub(crate) fn has_marketplace(&self, provider: Provider, name: &str) -> Option<bool> {
+        let source = self.provider_source(provider)?;
+        let root = inventory::open(&source.source).ok()?;
+        let contains = |path: &str, format: ConfigFormat, keys: &[&str]| -> Option<bool> {
+            let Some(value) = read_document(&root, path, format).ok()? else {
+                return Some(false);
+            };
+            let mut selected = &value;
+            for key in keys {
+                match selected.get(*key) {
+                    Some(next) => selected = next,
+                    None => return Some(false),
+                }
+            }
+            Some(selected.get(name).is_some())
+        };
+        match provider {
+            Provider::Claude => Some(
+                contains(
+                    "settings.json",
+                    ConfigFormat::Json,
+                    &["extraKnownMarketplaces"],
+                )? || contains("plugins/known_marketplaces.json", ConfigFormat::Json, &[])?,
+            ),
+            Provider::Codex => contains("config.toml", ConfigFormat::Toml, &["marketplaces"]),
+            _ => None,
+        }
+    }
+
+    /// An MCP server whose command is a path (absolute or under the home folder) that does not
+    /// exist on this device. Bare program names are found on PATH by the agent and not checked.
+    pub(crate) fn missing_command(&self, value: &Value) -> Option<String> {
+        let command = value.get("command").and_then(|command| match command {
+            Value::String(text) => Some(text.as_str()),
+            // OpenCode-style arrays name the program first.
+            Value::Array(items) => items.first().and_then(Value::as_str),
+            _ => None,
+        })?;
+        let looks_like_path = command.starts_with('~')
+            || command.contains('/')
+            || command.contains('\\')
+            || command.as_bytes().get(1) == Some(&b':');
+        if !looks_like_path {
+            return None;
+        }
+        let expanded = match command.strip_prefix('~') {
+            Some(rest) => self.home.join(rest.trim_start_matches(['/', '\\'])),
+            None => PathBuf::from(command),
+        };
+        (!expanded.exists()).then(|| command.to_owned())
     }
 
     pub(crate) fn source(&self, identity: &ConfigIdentity) -> Option<&ConfigSource> {

@@ -3,6 +3,7 @@
 //! part of an inventory. Content is untrusted data, never executable instructions for this crate.
 
 mod copy;
+pub mod extensions;
 mod inventory;
 mod mcp;
 mod mcp_document;

@@ -57,7 +57,12 @@ impl SessionManager {
                                 aura_protocol::session::Availability::Ready { .. }
                             )
                     });
-                ConfigSource { source, installed }
+                ConfigSource {
+                    source,
+                    installed,
+                    version: None,
+                    paused: false,
+                }
             })
             .collect();
         let platform = if cfg!(windows) {

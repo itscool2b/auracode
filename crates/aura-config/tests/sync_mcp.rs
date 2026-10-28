@@ -109,6 +109,8 @@ fn unsupported_options_and_inline_secret_arguments_still_wait_without_export() {
     let scan = ConfigScanner::new(
         vec![ConfigSource {
             installed: true,
+            version: None,
+            paused: false,
             source: Source {
                 id: "fixture".into(),
                 provider: Provider::Pi,

@@ -24,9 +24,10 @@ pub use apply::{
 };
 pub use merge::{ConfigDecision, ConfigOperation, LocalSnapshot, merge};
 pub use review::{
-    ConfigChoice, ConfigReceiptStatus, ConfigSyncInventory, ConfigSyncItem, ConfigSyncOutcome,
-    ConfigSyncPreview, ConfigSyncReceipt, PreparedConfigReview, inventory, prepare_review,
-    set_device_only,
+    ConfigChoice, ConfigHold, ConfigReceiptStatus, ConfigSyncInventory, ConfigSyncItem,
+    ConfigSyncOutcome, ConfigSyncPreview, ConfigSyncReceipt, ConfigVendorKind, ConfigVendorStep,
+    PreparedConfigReview, feature_floor, hold_sentence, inventory, prepare_review, set_device_only,
+    version_at_least,
 };
 pub use scan::{ConfigScan, ConfigScanner, ConfigSkipped, ConfigSource};
 pub use snapshot::{ConfigContent, ConfigFile, ConfigFormat, ConfigIdentity, ConfigSnapshot};
