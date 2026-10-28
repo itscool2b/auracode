@@ -3447,3 +3447,73 @@ and `cargo clippy -p aura-core --features account-sync --lib --tests -- -D warni
 checkpoints, conversation and gitworkspaces (83); desktop Vitest (403, 19 skipped), `tsc` and Biome
 (37 warnings, none new). The browser `check-*` scripts, the full aura-core suite and CI were not
 run. Bindings were unchanged by the merge.
+
+### Windows native acceptance fixes (2026-10-28)
+
+Branch `native-fixes` (from local `app-integrated`: the redesigned app with the worktree flow, the
+M2b/M2c gaps, the M4 panel and the first acceptance fixes). The merge needed no bindings change.
+Each item is its own commit (the sidebar foot and the agent count share one).
+
+- **Lost writes on quit:** both drops came right as the store closed, after every chat had
+  answered its quit (`took_ms=1`): an answered actor still took messages and queued store work,
+  and a chat without a running actor could start one after the quit began. A quit's answer now
+  also waits for work in flight (page reads, an option's answer, a process winding down), bounded
+  by `shutdown_all`'s deadline; after it the actor is sealed and refuses store work with
+  `ShuttingDown`, and no actor starts once the quit began. If the store still closes with ops
+  waiting (a deadline ran out), each is named: lost writes at error level and counted, reads at
+  warn level.
+- **Verbatim paths:** a Windows verbatim path takes its plain spelling (`C:\...`,
+  `\\server\share`) when that names the same folder: it fits MAX_PATH (259 UTF-16 units) and no
+  part needs the prefix (`.`, `..`, a trailing dot or space, a DOS device name, a character Win32
+  rejects, an empty part); volume GUID paths and anything unsafe keep it. New folder locations are
+  saved that way, every `folder_locations.path` comparison binds the same spelling, worktree
+  previews show it, and the interface's folder comparison accepts both. Migration 14 rewrites saved
+  rows with the same Rust rule after the usual pre-migration backup.
+- **Each turn keeps its agent:** history pages name each turn's agent (`turn_agents`, by the rule
+  conversation and sync use), a live turn takes the chat's agent of that moment, and the transcript
+  labels each turn with its own agent, through reloads.
+- **Agent marks:** every `AgentMark` shows its two-letter code (CC, CX, OC, PI) at every size.
+- **Sidebar foot and one agent count (owner request 2026-10-28):** the sidebar ends with the logo
+  and one Settings button (Ctrl+,); the agent dock and the profile row are gone, and the band keeps
+  only the collapse toggle, so the logo shows once. Settings has Account and Agents, and the
+  palette gains Open agents. An account whose sync is paused or failing puts a small dot on the
+  Settings button and names it. One lineup (`lib/chat/agentLineup.ts`) feeds New chat's choices,
+  its "Other agents" count and the composer's picker. `check-profile-status` became
+  `check-sidebar-footer` (CI renamed with it); `check-layout` dropped the two dock menus.
+- **Status dots are circles (owner request 2026-10-28):** `StatusDot`, an `AgentMark`'s waiting and
+  failed states and every hand-drawn status mark in the app; pixels, loader cells, the pixel check,
+  diffstat squares, bullets and plan nodes stay square. The tray badge was already round.
+- **Quit question:** the window comes forward and asks in its own Graphite dialog, Keep auracode
+  open focused (Enter, Esc, the scrim and the close button keep it open), the red "Stop agents and
+  quit" as the explicit choice; it hides only once quitting goes ahead. If the page does not show
+  the question within 3 s, the system dialog asks, Keep open first and default.
+- **Account verification in the development build:** not a product bug. `/verify-device` lets
+  only the installed app's origins embed it (`frame-ancestors` and the parents it answers), and the
+  development build runs at `http://localhost:1420`. Such a build now says so at once and loads no
+  frame; the installed app keeps the frame and its 30 s "could not load" message.
+- **Hidden rendering:** the chat store applies every frame as it arrives but, while the page is
+  hidden, does not tell the view; it renders once, with everything, when the page shows again.
+
+Verified locally on Windows: `pnpm lint` (Biome 28 warnings, no errors), `pnpm typecheck`, `pnpm
+test` (root scripts 22, ui 278, desktop 5 node and 441 with 19 skipped, design lab 352, web 4);
+`cargo fmt --all --check`; `cargo clippy -p aura-protocol -p aura-core -p auracode-desktop
+--all-targets -- -D warnings` and the account-sync clippy; `cargo test -p aura-core --lib` (459),
+with `--features account-sync` (554), `-p aura-protocol --lib` (23) and `-p auracode-desktop --lib`
+(210, bindings regenerated with `turn_agents`), after cleaning the workspace crates in the shared
+target. In Chromium and WebKit every `apps/desktop/scripts/check-*.mjs` passed with its axe audits:
+`check-layout` (all 252 views clean, the quit dialog among them), `check-sidebar-footer`,
+`check-chat`, `check-settings` (with the fourteen checks it runs), `check-setup`,
+`check-setup-actions`, `check-library`, `check-new-chat-worktree`, `check-terminal-panel`,
+`check-chat-auth`, `check-agent-installations`, `check-config-recovery`,
+`check-folder-resolution`, `check-repository-publication`, `check-workspace-removal`,
+`check-account-reset` and `check-account-vault`. Sheets are the ignored
+`target/design-research/sheets/app-fixes-{sidebar,quit,marks,dots}.png`.
+
+Not done: the minimized CPU was not measured again (it needs the native debug build, whose exe in
+the shared target the owner may run, and Vite's port 1420 was held by another session), so the
+hidden-page change rests on Vitest; the quit question was seen in the browser preview, not the
+running app. Application Control (4551) blocked several freshly linked binaries; relinking let each
+run and nothing was bypassed. `.github/scripts/acceptance-gates.test.mjs` (outside `pnpm test`)
+already failed on `app-integrated`: `check-layout`, `check-new-chat-worktree` and
+`check-terminal-panel` are missing from the CI workflow. CI and the hand walkthrough of the built
+app were not run.
