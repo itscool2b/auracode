@@ -54,7 +54,11 @@ async function ready() {
   throw new Error(`Preview did not start: ${serverOutput}`);
 }
 
-const calls = (page) => page.evaluate(() => window.newChatFixture.calls());
+// The preview publishes its fixture from an effect after the first render, so wait for it.
+const calls = async (page) => {
+  await page.waitForFunction(() => Boolean(window.newChatFixture));
+  return page.evaluate(() => window.newChatFixture.calls());
+};
 
 async function audit(page, name, engine, scans) {
   await settled(page);
@@ -211,7 +215,7 @@ async function inspect(engine, launcher) {
     await page.evaluate(() => sessionStorage.setItem("new-chat-stale", "yes"));
     await page.getByTestId("new-chat-create").click();
     await page.getByRole("alert").filter({ hasText: "expired or was already used" }).waitFor();
-    await page.waitForFunction(() => window.newChatFixture.calls().length === 3);
+    await page.waitForFunction(() => window.newChatFixture?.calls().length === 3);
     await reviewed(page);
     await page.getByTestId("new-chat-create").click();
     await page.locator('[data-test-phase="live"]').waitFor();
@@ -232,7 +236,7 @@ async function inspect(engine, launcher) {
     await page.locator('[data-test-phase="live"]').waitFor();
     assert.equal((await calls(page)).at(-1), "create-local:folder-auracode");
     await open(page, "new-plain");
-    await page.waitForFunction(() => window.newChatFixture.calls().length === 1);
+    await page.waitForFunction(() => window.newChatFixture?.calls().length === 1);
     // "Checking Git" shows while the review runs, then nothing: the chat works in the folder.
     await page.getByTestId("new-chat-worktree").waitFor({ state: "detached" });
     await page.getByText("Create starts the session in this folder.", { exact: true }).waitFor();
