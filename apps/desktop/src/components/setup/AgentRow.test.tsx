@@ -65,9 +65,7 @@ describe("the Connection setting", () => {
     );
     expect(html).toContain('data-testid="agent-connection"');
     expect(html).toContain("<strong>Connection</strong>");
-    expect(html).toContain(
-      "Automatic uses the first that can run here. A chat keeps the one it started with.",
-    );
+    expect(html).toContain("Applies to new chats. Automatic uses the first that can run here.");
     expect(html).toContain('aria-label="Claude Code connection"');
     expect(options(html)).toEqual([
       ["", "Automatic (Direct)", false],
@@ -80,7 +78,7 @@ describe("the Connection setting", () => {
     const adapter = { ...connections, active: "claude-acp" };
     expect(automaticChoice(adapter)).toBe("Automatic (ACP adapter)");
     expect(connectionDetail(adapter)).toBe(
-      "Automatic uses the first that can run here. A chat keeps the one it started with. The ACP adapter downloads once, with its first chat.",
+      "Applies to new chats. The ACP adapter downloads once, with its first chat.",
     );
     const noNode: AgentConnections = {
       ...connections,

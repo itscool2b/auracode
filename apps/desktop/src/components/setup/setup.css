@@ -1068,10 +1068,10 @@
   border: 0;
 }
 
+/* The label 20 over its line 16, as a settings row stacks them (6.16), so the list starts on the grid. */
 .setup-installations legend {
   display: flex;
   flex-direction: column;
-  gap: var(--g-space-2);
   margin-bottom: var(--g-space-12);
   padding: 0;
   color: var(--g-fg-1);

@@ -340,8 +340,14 @@
 
 /* ---------------------------------------------------------------------- details */
 
+/*
+ * The details continue the row's text column (x 64, where the name starts) to the row's right edge
+ * (where the kebab ends), 12px under the name and version as the row is 12px inside its frame. Every
+ * block is a whole number of 4px steps: 20px lines, 36px facts, the 60px Connection row, a 28px
+ * ghost, 12px between blocks and 16px under the last.
+ */
 .agent-detail {
-  padding: 0 var(--g-space-16) var(--g-space-20) var(--g-space-64);
+  padding: 0 var(--g-space-16) var(--g-space-16) var(--g-space-64);
   background-color: var(--g-surface-1);
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
@@ -361,38 +367,64 @@
 }
 
 .agent-facts {
+  margin: 0;
+}
+
+/*
+ * A fact is a 36px row (4.7): a 12/16 fg-3 label and a 14/20 value, 8px inside a hairline drawn over
+ * the row's top edge (a ring, as the list draws its lines), so a row is 36px and not 37. The label
+ * sits on the value's first baseline; a value that wraps adds whole 20px lines.
+ */
+.agent-fact {
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr);
-  max-width: 640px;
+  align-items: baseline;
+  padding: var(--g-space-8) 0;
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+.agent-fact :is(dt, dd) {
   margin: 0;
 }
 
-.agent-facts :is(dt, dd) {
-  margin: 0;
-  padding: var(--g-space-6) 0;
-  border-top: 1px solid var(--g-line);
-  line-height: var(--g-leading-ui);
-}
-
-.agent-facts dt {
+.agent-fact dt {
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
 }
 
-.agent-facts dd {
+.agent-fact dd {
   min-width: 0;
   color: var(--g-fg-1);
+  line-height: var(--g-leading-ui);
   overflow-wrap: anywhere;
 }
 
-.agent-facts code {
+/* Mono at 13px on a 16px line, so it never lifts the value's 20px line box off the grid. */
+.agent-fact code {
   font-family: var(--g-mono);
   font-size: var(--g-text-code);
+  line-height: var(--g-leading-meta);
   font-variant-ligatures: none;
 }
 
+.agent-fact-line {
+  display: block;
+}
+
+.agent-fact-line[data-aside],
 .agent-facts-aside {
   color: var(--g-fg-3);
+}
+
+/*
+ * The Connection setting is Settings' row (6.16) in the details' column: the label 14/20 500 over
+ * its one 12/16 line, the 220px select at right ending where the row's kebab ends, on the facts'
+ * hairline. The details are its well, so the row drops the well's 16px inset.
+ */
+.agent-connection > .settings-row {
+  padding-inline: 0;
+  box-shadow: inset 0 1px var(--g-line);
 }
 
 .agent-detail-actions {
@@ -500,7 +532,7 @@
   background-color: var(--g-surface-3);
 }
 
-.agent-list[data-compact] .agent-facts {
+.agent-list[data-compact] .agent-fact {
   grid-template-columns: 96px minmax(0, 1fr);
 }
 
