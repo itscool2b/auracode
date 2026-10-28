@@ -21,4 +21,35 @@
 
   /* Over the OS window material (macOS vibrancy, Windows Mica) where a screen leaves it showing. */
   --ui-window-tint: rgb(7 7 10 / 0.42);
+
+  /*
+   * Shallows in the app (6.1): the main pane is a rounded inset panel on the black window. Its rim
+   * is lit from the top like the water's, brightest along the upper edge and settling to a calm
+   * hairline down the sides; the pane's fill stays surface-1 so every well keeps its step.
+   */
+  --ui-pane-radius: var(--g-radius-16);
+  --ui-pane-rim: var(--g-line-faint);
+  --ui-pane-rim-top: var(--g-line);
+  --ui-pane-light: rgb(255 255 255 / 0.02);
+
+  /* Setup's card over the water (6.17): opaque, a step under the water's deepest grey. */
+  --ui-card-radius: var(--g-shallows-radius-compact);
+  --ui-card-fill: var(--g-water-low);
+  --ui-card-shadow:
+    inset 0 0 0 1px var(--g-water-rim), inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 24px 64px -24px rgb(0 0 0 / 0.72), 0 8px 24px -12px rgb(0 0 0 / 0.5);
+
+  /*
+   * The first-launch intro's choreography (6.17), inside setup's 1800ms hold. A swimmer arrives
+   * already moving and slows evenly, so the glide is an ease-out with no hard front.
+   */
+  --ui-intro-light: 900ms;
+  --ui-intro-glide: 1200ms;
+  --ui-intro-glide-at: 100ms;
+  --ui-intro-form: 520ms;
+  --ui-intro-form-at: 900ms;
+  --ui-intro-word-at: 1220ms;
+  --ui-ease-glide: cubic-bezier(0.25, 0.5, 0.3, 1);
+  /* The card waits for the intro's mark to clear before it rises. */
+  --ui-card-in-at: 180ms;
 }

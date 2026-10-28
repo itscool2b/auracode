@@ -444,6 +444,31 @@
   border-radius: 0 0 var(--g-radius-8) var(--g-radius-8);
 }
 
+/*
+ * On setup's card (water-low), the row's hand and open fills step up one surface, so they still
+ * read against the card the way surface-1 reads against the black page.
+ */
+@media (hover: hover) {
+  .agent-list[data-compact] .agent-row-main:hover,
+  .agent-list[data-compact] .agent-list-more button:hover {
+    background-color: var(--g-surface-2);
+  }
+}
+
+.agent-list[data-compact] :is(.agent-row[data-open] .agent-row-main, .agent-detail),
+.agent-list[data-compact] .agent-row[data-open] .agent-row-note {
+  background-color: var(--g-surface-2);
+}
+
+.agent-list[data-compact]
+  :is(
+    .agent-row-main:has(.agent-row-toggle:active),
+    .agent-row-main:has(.agent-row-toggle:focus-visible),
+    .agent-list-more button:active
+  ) {
+  background-color: var(--g-surface-3);
+}
+
 .agent-list[data-compact] .agent-facts {
   grid-template-columns: 96px minmax(0, 1fr);
 }
