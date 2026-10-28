@@ -4076,3 +4076,78 @@ Chromium and WebKit; `worker:build` and `worker:test` (5 of 5); `check-setup`, `
 Sheets are the ignored `target/design-research/sheets/agent-logos-more-*.png`.
 
 Not done: the hand walkthrough; the vendor permissions (owner); CI.
+
+### Why a queued message waits (2026-10-28, branch `queue-unstuck`)
+
+The owner: "even if i sent a message to it through aura code and its not working it just queues".
+A queued prompt leaves the queue only when the session can dispatch, and nothing on screen said
+why it could not. What kept prompts there:
+
+- **Checkpoints.** The app saves a folder checkpoint before every prompt, and the prompt sits in
+  the queue meanwhile, so each send first showed "1 queued"; a large folder made that long.
+- **Starting.** A prompt sent while the agent starts (detection, adapter install, resume) waits
+  for `Ready`, shown only as "1 queued".
+- **No idle report.** Claude Code, Codex and Pi report their run state, and the queue waited for
+  `idle` after each result. Claude Code stays `running` while its Stop hooks or background agents
+  work, so the queue could wait without end; the Claude driver also refused any prompt before idle.
+- **Held prompts.** Prompts queued at a restart, a stop, an error or a sign-in come back held and
+  wait for Send queued, which released all of them at once; the queue did not say what held them.
+- **Failed starts.** A failed start or a missing folder left prompts queued with no word in the
+  queue (the error card was further up).
+- **Not a cause:** another chat or a terminal in the same folder. Chats and terminals share a
+  folder; only a revert, a Git action or the worktree setup reserve one, and those refuse a new
+  message with an error instead of queueing it. A test shows a second chat in a working chat's
+  folder sending at once.
+
+Fixes:
+
+- **The reason, typed in Rust.** `SessionInfo.queue_wait` (`QueueWait`): starting, working,
+  finishing its turn (with since and sends-at), needs an answer (permission or question), saving a
+  checkpoint, stopping, a chat change, start failed, sign-in, stopped, folder missing, workspace
+  removed, or held after a restart, a stop, an error, a sign-in or a removed workspace. The chat
+  actor recomputes it after every event and flushes a header when it changes; the attach snapshot
+  carries it. Bindings regenerated.
+- **Idle grace (15 s, `SessionTimings::idle_grace`).** An agent that reports work in progress with
+  no prompt of auracode's open and nothing waiting for an answer counts as idle for the queue after
+  15 s without its idle report; the log says so. Claude Code's own result-to-idle gap is
+  milliseconds and Stop hooks take seconds, so 15 s never cuts a normal turn short, while a missing
+  report costs only a moment. A late busy report after that cannot make the chat busy again or
+  hold the next prompt; a late idle report changes nothing. An open request is never waited out,
+  and an agent that only counts as idle is not idle-evicted. The native Claude driver now accepts a
+  prompt after its result while Claude Code still works (Claude Code queues input it receives,
+  `command_lifecycle: queued`) and still refuses one while its own prompt or a request is open; the
+  synthetic `result-before-idle` fixture and its golden assert exactly that.
+- **Send now (`chat_send_now`).** Moves the prompt to the front and releases it if held, then
+  interrupts the running turn when the agent can interrupt (without holding the other prompts, as
+  Esc would), skips the idle wait, or starts a stopped or failed agent. A starting agent, an open
+  request or a saving checkpoint still comes first. A Git reservation's release now also dispatches.
+- **UI.** The queue's head says why in plain words with a round dot (red only for a failure to
+  clear) and the count after it, and offers the one action that helps: Send now (working, finishing
+  its turn), Retry or Start, Recreate folder for a missing worktree, Send queued for held prompts,
+  and Send on each held row. A message typed while the agent starts says "Once started" beside the
+  send disc, and the placeholder says it goes once the agent has started. The still-working line
+  (no output for a minute) offers Send now beside Stop when a message waits; the head then does not
+  repeat it. `?preview=queue-*` shows eight cases.
+
+Tests: `session_queue_wait` (11, scripted drivers on paused time: starting, Send now interrupting
+and going next, the idle grace, an open request outlasting the grace, late reports after the
+grace, late notifications after a turn-based agent's end_turn, a held prompt sent alone, a
+restart-held prompt starting the agent, sign-in, failed start and missing folder, two chats in one
+folder), a checkpoint unit test, the replay fixture, and vitest for the words, the queue's
+actions, Send now in the chat store, the quiet line and the starting composer.
+
+Checks on this branch: `pnpm lint` (26 existing warnings), `pnpm typecheck`, `pnpm test` (scripts
+23, ui 261, desktop 10 node and 497 with 19 skipped, design lab 352, web 4); the acceptance gate and
+webdriver-smoke unit tests (14); `cargo fmt --check`; Clippy `-D warnings` on aura-protocol,
+aura-drivers (with replay), aura-core (with account-sync) and the auracode-desktop lib and tests;
+aura-core 587 lib and 94 integration tests; aura-drivers 448 lib (with replay) and replay 3;
+aura-protocol 23; auracode-desktop lib 219 (bindings regenerated, unchanged by the rerun).
+`check-chat` (32 axe scans each, the eight queue cases and their actions) and `check-steering` in
+Chromium and WebKit; `check-layout` 200 views in WebKit with 0 findings, and in Chromium 199 of 200
+clean: the quiet line's buttons sat 6px in, so it is now 36px tall, and the eight queue cases and
+steering then passed clean at both sizes. The sheet is the ignored
+`target/design-research/sheets/queue-reasons.png`.
+
+Not done: the hand walkthrough in the native app; aura-drivers' `conformance` and `codex_schema`
+test binaries (Windows Application Control blocks them, 4551); a real agent run (none was sent);
+CI.
