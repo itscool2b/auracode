@@ -225,7 +225,10 @@ export function CloneBody({
   }
 
   const remoteProblem = controller.problem("remote");
-  const placeProblem = controller.problem("parent") ?? controller.problem("name");
+  // No folder chosen yet is the next step, not a mistake: it reads as a calm hint until one is.
+  const awaitingParent = !view.parent && controller.problem("parent") !== null;
+  const parentProblem = awaitingParent ? null : controller.problem("parent");
+  const placeProblem = parentProblem ?? controller.problem("name");
   const gitProblem = controller.problem("git");
   const separator = view.parent?.includes("\\") ? "\\" : "/";
   return (
@@ -285,7 +288,8 @@ export function CloneBody({
             disabled={picking}
             title={view.parent ?? undefined}
             aria-label={view.parent ? `Folder ${view.parent}, change` : "Choose a folder"}
-            aria-invalid={controller.problem("parent") ? true : undefined}
+            aria-invalid={parentProblem ? true : undefined}
+            aria-describedby={awaitingParent ? `${ids}-place-hint` : undefined}
             onClick={choose}
           >
             <FolderOpen size={16} aria-hidden="true" />
@@ -310,6 +314,10 @@ export function CloneBody({
         {placeProblem ? (
           <p id={`${ids}-place-problem`} className="clone-problem">
             {placeProblem}
+          </p>
+        ) : awaitingParent ? (
+          <p id={`${ids}-place-hint`} className="clone-hint">
+            {controller.problem("parent")}
           </p>
         ) : null}
       </fieldset>

@@ -19,6 +19,7 @@ import type {
 } from "../../bindings";
 import type { Transport } from "../../lib/chat/transport";
 import { errorMessage } from "../../lib/errors";
+import { agentVersion } from "../../lib/format";
 import { harnessText } from "../../lib/plugins/format";
 import { Row } from "../settings/SettingsRow";
 import { TerminalSheet } from "../TerminalSheet";
@@ -187,6 +188,20 @@ export function verifiedDate(value: string): string {
     year: "numeric",
     timeZone: "UTC",
   });
+}
+
+/**
+ * The row's short word on how far auracode has tested this integration: the catalog's note is a
+ * sentence ("Codex 0.162.1 free controls and fixtures (Windows); ..."), which the details show in
+ * full. The row says "Tested on 0.162.1" (the last version the note names), "Untested" for an
+ * unverified integration, and nothing for a note without a version (the built-in demo).
+ */
+export function verifiedSummary(note: string): string {
+  if (/^unverified\b/i.test(note.trim())) return "Untested";
+  const date = verifiedDate(note);
+  if (date !== note) return `Tested ${date}`;
+  const versions = note.match(/\b\d+\.\d+(?:\.\d+)?\b/g);
+  return versions ? `Tested on ${versions[versions.length - 1]}` : "";
 }
 
 /** A newer release is known and the installed version does not mention it. */
@@ -499,7 +514,9 @@ export function AgentRow({
     ...links,
   ];
   const version = ready
-    ? ((agent.availability.state === "ready" ? agent.availability.version : null) ?? "Built in")
+    ? agent.availability.state === "ready" && agent.availability.version !== null
+      ? agentVersion(agent.name, agent.availability.version)
+      : "Built in"
     : null;
   // The Agents page says a newer release under the row; its details do not repeat the line.
   const updateLine = !compact && agent.harness?.state === "update_available";
@@ -561,8 +578,7 @@ export function AgentRow({
               className="agent-row-verified"
               title={`Last verified: ${verifiedDate(agent.last_verified)}`}
             >
-              <span className="sr-only">Verified </span>
-              {verifiedDate(agent.last_verified)}
+              {verifiedSummary(agent.last_verified)}
             </span>
           )}
         </button>

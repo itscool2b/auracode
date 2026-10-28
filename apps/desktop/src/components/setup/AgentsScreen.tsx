@@ -1,6 +1,7 @@
 import { ArrowLeft, ChevronDown, RefreshCw } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { AgentEntry } from "../../bindings";
+import { realAgents } from "../../lib/chat/agentLineup";
 import type { AppStore } from "../../lib/chat/appStore";
 import type { Transport } from "../../lib/chat/transport";
 import { AgentRow } from "./AgentRow";
@@ -26,7 +27,10 @@ export function AgentRoster({
   const folded = agents.some((agent) => agent.availability.state === "ready")
     ? agents.filter(absent)
     : [];
-  const shown = everyAgent ? agents : agents.filter((agent) => !folded.includes(agent));
+  // Unfolded, the absent agents follow the ones this computer has, so a found agent never moves
+  // down among them.
+  const present = agents.filter((agent) => !folded.includes(agent));
+  const shown = everyAgent ? [...present, ...folded] : present;
   return (
     <ul className="agent-list" data-compact="">
       {shown.map((agent, index) => (
@@ -73,8 +77,10 @@ export function AgentsScreen({
     return () => app.stop();
   }, [app]);
   const agents = state.agents;
-  const installed = agents?.filter((agent) => agent.availability.state === "ready").length ?? 0;
-  const looking = agents?.filter((agent) => agent.availability.state === "checking").length ?? 0;
+  // The counts are about this computer, as setup's are: the built-in demo is not installed here.
+  const counted = agents === null ? null : realAgents(agents);
+  const installed = counted?.filter((agent) => agent.availability.state === "ready").length ?? 0;
+  const looking = counted?.filter((agent) => agent.availability.state === "checking").length ?? 0;
   const refresh = () => void app.refreshAgents();
   return (
     <main className="setup-shell g-root agents-screen">
@@ -96,7 +102,7 @@ export function AgentsScreen({
                 ? "Looking for the agents on this computer."
                 : looking > 0
                   ? `${installed} found so far. Still looking for ${looking}.`
-                  : `${installed} of ${agents.length} installed on this computer.`}
+                  : `${installed} of ${counted?.length ?? 0} installed on this computer.`}
             </p>
           </div>
           <button
