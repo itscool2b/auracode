@@ -3812,3 +3812,75 @@ Not done: the hand walkthrough of the built app; the minimized and idle CPU with
 swimmers running was not measured natively; Agents and the Library stay full-window pages on
 black (the Library belongs to `plugin-library`); the dither engine stays in `packages/ui`, unused by
 the website and the app, for a follow-up to delete. CI was not run.
+
+### Uninstalling deletes all of auracode's data (2026-10-28, branch `uninstall-wipe`)
+
+The owner asked that uninstalling remove all app data, as if auracode had never been installed,
+and what that means for the agents already installed. The answer is in
+[uninstall.md](uninstall.md): the agents, their homes and the files auracode wrote there at the
+person's request stay, and so do their sessions, repositories and branches. auracode's own data
+goes.
+
+- **One cleanup in Rust** (`aura_core::uninstall`, behind `account-sync`):
+  - `plan` finds the data folder, the platform folders named after the bundle, the entries
+    auracode made in an `AURACODE_DATA_DIR` folder, the updater's leftovers in temp, and every
+    auracode worktree. Each worktree is checked with Git for uncommitted files and for commits no
+    other branch, tag or remote has.
+  - `execute` removes the secure-store index and the account keys it lists. In machine scope it
+    then sweeps auracode's own service: Windows asks Credential Manager for the
+    `auracode.sync.v1:` prefix only, macOS searches the keychain by service, and no other
+    credential is read.
+  - It then removes clean worktrees with Git's prune, and the folders. Links are removed as links
+    and read-only files are cleared. Locked files are retried for about ten seconds and then
+    listed.
+  - Unsaved worktrees stay in place, unlocked, unless chosen. Branches are never deleted. A second
+    run is a no-op.
+- **`auracode --uninstall-cleanup`** runs that before Tauri starts:
+  - A running copy is asked to quit through the single-instance hand-over
+    (`--quit-for-uninstall`). It stops only its own agents and terminals, and its quit flow skips
+    the question.
+  - Exit codes: 0 done, 3 still running (nothing deleted), 4 something left (listed).
+- **Windows uninstaller:** Tauri NSIS hooks run the cleanup before any file is removed.
+  - The confirm page's checkbox now reads "Keep my auracode data", so deleting is the default;
+    `/S` and `/P` delete quietly, and `/KEEPDATA` keeps everything.
+  - Updates, and the in-place uninstall a newer installer runs, keep everything.
+  - Tauri's own whole-folder step is off. The hooks clear the installer's registry records and
+    Windows' notification settings.
+  - If auracode will not quit, Tauri's check closes it and a copy of the program cleans up after
+    the files are removed.
+  - The bundle targets are now `app`, `dmg` and `nsis`, so no MSI ships without the cleanup.
+- **Settings, About, This device, Delete all auracode data** (Windows and macOS):
+  - Rust's one-use review lists every path with its size and where the keys are.
+  - Worktrees with work saved nowhere else are named in a red-edged well and kept unless ticked.
+  - It says what stays, offers the Trash on macOS (`NSFileManager`), and needs DELETE typed.
+  - Applying starts the cleanup detached and quits.
+  - A copy with its own `AURACODE_DATA_DIR` only ever touches that folder, and keeps account keys.
+
+Verified locally on Windows, merged with `origin/main` at 80f61bd (unchanged since):
+- **JavaScript:** `pnpm lint` (Biome, 28 existing warnings, style guard clean) and
+  `pnpm typecheck` pass. `pnpm test` passes:
+  - root scripts 22 and ui 296;
+  - desktop node 10 (5 new uninstaller-hooks tests against the pinned CLI's embedded template)
+    and Vitest 484 with 19 skipped (7 new);
+  - design lab 352 and web 4.
+- **Rust:** `cargo fmt --all --check` passes.
+  - `cargo clippy -p aura-sync -p aura-core -p auracode-desktop --all-targets -- -D warnings` and
+    the account-sync Clippy pass.
+  - `cargo test`: aura-core lib with account-sync 581 (12 new, on temporary data folders with
+    real Git and a fake secure store); aura-sync lib 56 with 2 ignored; desktop lib 219 (9 new;
+    bindings regenerated).
+  - The ignored Credential Manager test ran once against the real store, with a throwaway test
+    prefix, and passed.
+- **Browser checks** (Chromium and WebKit, against this checkout's own Vite, since other
+  checkouts held 1426 and 1489):
+  - `check-delete-data`: 12 axe audits, no violations;
+  - `check-settings`, with its sub-checks;
+  - `check-layout`: all 340 views clean.
+
+Not done:
+- Building and running the NSIS installer. makensis was not available, so the hooks were not
+  compiled; the node test pins them to the template instead.
+- The macOS Trash move, keychain sweep and dialogs: written but not compiled or run on this
+  machine.
+- The real uninstall and the in-app deletion were not run, by design.
+- The hand walkthrough of the built app, and CI.

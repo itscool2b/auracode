@@ -312,7 +312,7 @@ export function SettingsScreen({
                   />
                   <Row
                     title="Delete all auracode data"
-                    detail="Chats, settings, keys and worktrees, as if auracode was never installed. Your agents and repositories stay."
+                    detail="As if auracode was never installed. Your agents and repositories stay."
                   >
                     <button
                       className="g-button g-button-outline g-button-28"
