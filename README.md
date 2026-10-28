@@ -149,6 +149,8 @@ App data lives in a folder named `si.auracode.desktop` inside the local (never r
 | Linux | `$XDG_DATA_HOME/si.auracode.desktop`, or `~/.local/share/si.auracode.desktop` when `XDG_DATA_HOME` is unset |
 
 `AURACODE_DATA_DIR` moves it anywhere else (see [Environment switches](#environment-switches)).
+Uninstalling deletes it, with everything else auracode keeps, and Settings can do the same
+without uninstalling; [docs/uninstall.md](docs/uninstall.md) lists what goes and what stays.
 
 ### aura-cli
 

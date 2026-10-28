@@ -18,10 +18,11 @@
   overflow-wrap: anywhere;
 }
 
+/* Hairlines are inset shadows, so every row stays on the 4px grid. */
 .delete-data-rows {
   display: grid;
   margin: 0;
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-line);
 }
 
 .delete-data-rows > div {
@@ -29,7 +30,7 @@
   grid-template-columns: 160px minmax(0, 1fr);
   gap: var(--g-space-16);
   padding: var(--g-space-8) 0;
-  border-bottom: 1px solid var(--g-line);
+  box-shadow: inset 0 -1px 0 var(--g-line);
 }
 
 .delete-data-rows dt {
@@ -97,7 +98,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0 var(--g-space-16);
   padding: var(--g-space-8) 0;
-  border-top: 1px solid var(--g-line);
+  box-shadow: inset 0 1px 0 var(--g-line);
 }
 
 .delete-data-worktrees li .delete-data-branch {
