@@ -1949,7 +1949,8 @@ details.setup-install-review[open] > summary::before {
 
 .palette-results {
   flex: 1;
-  max-height: min(430px, 50vh);
+  /* Half the window at most, snapped down to the 4px grid like the palette's offset. */
+  max-height: min(432px, round(down, 50vh, var(--g-space-4)));
   padding: var(--g-space-4);
   overflow: auto;
   scrollbar-width: thin;
