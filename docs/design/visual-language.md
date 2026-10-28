@@ -1296,11 +1296,27 @@ over 300ms quint. Each is a 24px button that visits its step. No numerals, no ch
    list (6.17a) in its compact form: 48px rows on hairlines, what this computer has first and the
    rest folded into "Show 6 not installed"; a row opens its details and actions in place. Refresh
    (ghost) under it; with no agents, "Explore the local demo" (outline).
-3. **Account**: "Accounts are optional." / "auracode works without one." and one sentence saying sync
-   is invite-only and how to use an invitation, with "Open Account" (outline).
+3. **Account**: "Accounts are optional." / "And invite-only for now." and one sentence: auracode
+   needs no account and no network, everything stays on this computer, and an account with an
+   invitation adds sync between devices; "Open Account" (outline).
 4. **First project**: "Add a first project." / "Any folder works." a 96px dashed drop zone ("Choose a
    folder", "or drop it here"), the name field and "Add project" once a folder is chosen, then
-   "Clone from GitHub" (ghost) and, when projects exist, "Or choose a project".
+   "Clone a repository" (ghost) and, when projects exist, "Or choose a project".
+
+**Clone a repository** replaces the step's content in place (X Money's one question per screen):
+"Clone a repository." / "Git copies it into a new folder.", "Repository" (a 36px field, focused),
+"Clone into" (the parent folder as a field-like button with its folder icon and name, an fg-3
+separator, then the new folder's name as a field, joined like a path; Vercel's scope and name),
+the exact command in a well (mono 13/20, inset hairline) with one 12/16 fg-3 line naming the Git
+that runs it, then Clone (primary, Enter) and Back (ghost, Escape). A refused address or name says
+why in 12/16 red under its field and Clone waits. Running: "Cloning owner/repository." / "Cancel
+leaves nothing behind.", a status row (the pixel loader, Git's stage, the whole clone's figure in
+mono at right) over a 2px fg-1 bar on a line-strong track that only scales, a meta line (what has
+arrived, the destination in mono), the command dimmed, and Cancel clone (soft, Escape). Failed:
+"The clone stopped." / "Nothing was added.", the red-edged well with one plain reason and Git's own
+last lines in mono 12/16 fg-2, then Try again (primary, Enter) and Edit (ghost, Escape). A finished
+clone becomes the first project and the step returns with "orbit is ready.". New project opens the
+same form in a md dialog ("Clone a repository", one sentence, Cancel and Clone at right).
 
 Motion is not a step: Full already follows the system setting, and Settings changes it. A setup
 saved at the retired motion step resumes at First project. The one primary is "Get started",
@@ -1320,7 +1336,11 @@ opens its details on surface-1: the description, facts on hairlines (runs from, 
 latest release, updates, verified) and the executable picker. Detection: the mark shows the pixel
 loader while an agent is looked for (the row's one live indicator); when it is found the status and
 version settle once (2px rise, 340ms reveal) and the green square scales in (250ms). Rows enter
-with `.g-enter`. Reduced motion: everything in place, the loader still.
+with `.g-enter`. Reduced motion: everything in place, the loader still. Install appears only for
+the reviewed, version-pinned installers (Claude Code, Codex, Pi, OpenCode 1, Grok Build) and opens
+the TerminalSheet with the package, program, arguments and folder as rows before Start; Sign in
+appears only where the vendor's CLI has its own login (Claude Code, Codex, Cursor, Grok Build,
+OpenCode, Hermes). Every other agent keeps its Installation guide.
 
 ### 6.18 Library
 

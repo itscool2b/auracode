@@ -1,80 +1,134 @@
+//! Runs the reviewed `git clone` and settles its folder: kept when Git succeeds, removed when the
+//! clone is canceled or fails.
 use super::*;
 use aura_process::{LaunchSpec, ProcessCwd, ShutdownPlan, SpawnSpec, Spawner};
 use std::ffi::OsString;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
+/// A clone that has not finished in two hours is stopped; Cancel is the usual way out.
+const LIMIT: Duration = Duration::from_secs(2 * 60 * 60);
+
 pub(crate) async fn execute(prepared: Prepared, job: Arc<Job>, spawner: Arc<Spawner>) {
+    execute_within(prepared, job, spawner, LIMIT).await;
+}
+
+pub(super) async fn execute_within(
+    prepared: Prepared,
+    job: Arc<Job>,
+    spawner: Arc<Spawner>,
+    limit: Duration,
+) {
     if *job.canceled.borrow() {
-        job.finish(CloneState::Canceled, "Canceled before creating a folder.");
+        job.finish(CloneState::Canceled, "Clone canceled before it started.");
         return;
     }
-    let initial = job.snapshot();
-    let destination =
-        match tokio::task::spawn_blocking(move || files::begin(prepared, &initial)).await {
-            Ok(Ok(destination)) => destination,
-            Ok(Err(error)) => {
-                job.finish(CloneState::Failed, &error.to_string());
-                return;
-            }
-            Err(_) => {
-                job.finish(
-                    CloneState::Interrupted,
-                    "Clone preparation stopped unexpectedly. Any recovery files were retained.",
-                );
-                return;
-            }
-        };
-    let outcome = run(&destination, &job, &spawner, Duration::from_secs(600)).await;
-    let (state, detail) = match outcome {
-        Ok(value) => value,
-        Err(error) => (CloneState::Failed, error.to_string()),
+    let destination = match tokio::task::spawn_blocking(move || files::begin(prepared)).await {
+        Ok(Ok(destination)) => destination,
+        Ok(Err(error)) => {
+            job.finish(CloneState::Failed, &error.to_string());
+            return;
+        }
+        Err(_) => {
+            job.finish(CloneState::Failed, "The new folder could not be created.");
+            return;
+        }
     };
-    let mut record = job.snapshot();
-    record.state = state;
-    record.detail = detail.clone();
-    if !matches!(
-        tokio::task::spawn_blocking(move || files::finish(destination, &record)).await,
-        Ok(Ok(()))
-    ) {
-        job.finish(CloneState::Interrupted, "Git stopped, but its final recovery record could not be saved. Inspect the retained destination before using or retrying it.");
+    let outcome = run(&destination, &job, &spawner, limit).await;
+    let canceled = matches!(outcome, Outcome::Canceled);
+    let (state, mut detail, keep) = match outcome {
+        Outcome::Cloned => {
+            let checked = tokio::task::spawn_blocking(move || {
+                let result = files::verify(&destination);
+                (destination, result)
+            })
+            .await;
+            match checked {
+                Ok((destination, Ok(()))) => {
+                    let repository = destination.prepared.view.repository.clone();
+                    job.update(|record| {
+                        if let Some(progress) = &mut record.progress {
+                            progress.percent = 100;
+                        }
+                    });
+                    job.finish(CloneState::Ready, &format!("Cloned {repository}."));
+                    return;
+                }
+                // Git said it succeeded but the folder is not what it made: never remove it.
+                Ok((_, Err(error))) => {
+                    job.finish(
+                        CloneState::Failed,
+                        &format!("{error} The folder was kept as it is."),
+                    );
+                    return;
+                }
+                Err(_) => {
+                    job.finish(
+                        CloneState::Failed,
+                        "The cloned folder could not be checked.",
+                    );
+                    return;
+                }
+            }
+        }
+        Outcome::Canceled => (
+            CloneState::Canceled,
+            "Clone canceled.".to_owned(),
+            destination,
+        ),
+        Outcome::Failed(reason) => (CloneState::Failed, reason, destination),
+        Outcome::NotStarted(reason) => (CloneState::Failed, reason, destination),
+    };
+    let path = keep.prepared.view.destination.clone();
+    let removed = tokio::task::spawn_blocking(move || files::remove(keep))
+        .await
+        .unwrap_or(false);
+    if removed {
+        detail.push_str(" The unfinished folder was removed.");
     } else {
-        job.finish(state, &detail);
+        detail.push_str(&format!(
+            " The unfinished folder changed or could not be removed, so it was kept at {path}."
+        ));
     }
+    job.update(|record| {
+        record.removed = removed;
+        if canceled {
+            record.progress = None;
+        }
+    });
+    job.finish(state, &detail);
+}
+
+enum Outcome {
+    Cloned,
+    Canceled,
+    Failed(String),
+    NotStarted(String),
 }
 
 async fn run(
     destination: &files::Destination,
-    job: &Job,
+    job: &Arc<Job>,
     spawner: &Spawner,
-    timeout: Duration,
-) -> Result<(CloneState, String)> {
+    limit: Duration,
+) -> Outcome {
     if *job.canceled.borrow() {
-        return Ok((
-            CloneState::Canceled,
-            "Canceled before Git started. The empty destination and recovery record are retained."
-                .into(),
-        ));
+        return Outcome::Canceled;
     }
-    files::matches(
-        &destination.prepared.parent_handle,
-        &destination.prepared.parent,
-    )?;
-    files::matches(
-        &destination.directory,
-        std::path::Path::new(&destination.prepared.view.destination),
-    )?;
-    if destination.directory.entries()?.next().is_some() {
-        return Err(CloneError::message(
-            "The new destination changed before Git started. Its contents were left unchanged.",
-        ));
-    }
-    let spec = spec(destination);
-    let raw = tokio::time::timeout(Duration::from_secs(15), spawner.spawn_raw(spec)).await
-        .map_err(|_| CloneError::message("Git did not start within fifteen seconds. The destination and recovery record are retained."))?
-        .map_err(|_| CloneError::message("Git could not start. Install Git or check folder access, then retry into a new folder."))?;
+    let spec = spec(&destination.prepared);
+    let raw = match tokio::time::timeout(Duration::from_secs(15), spawner.spawn_raw(spec)).await {
+        Ok(Ok(raw)) => raw,
+        Ok(Err(_)) => {
+            return Outcome::NotStarted(
+                "Git could not start. Check that Git is installed and the folder can be written."
+                    .into(),
+            );
+        }
+        Err(_) => return Outcome::NotStarted("Git did not start within fifteen seconds.".into()),
+    };
     raw.stdin.close();
+    job.update(|record| record.detail = "Cloning.".into());
     let stdout = tokio::spawn(discard(raw.stdout));
-    let stderr = tokio::spawn(tail(raw.stderr));
+    let stderr = tokio::spawn(follow(raw.stderr, Arc::clone(job)));
     let mut canceled = job.canceled.subscribe();
     enum Stop {
         Exited(Option<i32>),
@@ -85,10 +139,10 @@ async fn run(
         biased;
         _ = canceled.wait_for(|value| *value) => Stop::Canceled,
         exit = raw.control.exited() => Stop::Exited(exit.code),
-        _ = tokio::time::sleep(timeout) => Stop::Timeout,
+        _ = tokio::time::sleep(limit) => Stop::Timeout,
     };
-    // Always clean up the owned tree, including helpers left after the Git leader exits. An
-    // unconfirmed stop retains both process ownership and the caller's folder reservation.
+    // Always stop the whole owned tree, including helpers left after Git exits. The folder is
+    // not touched until the stop is confirmed.
     loop {
         let report = raw
             .control
@@ -97,98 +151,39 @@ async fn run(
         if report.exit.is_some() && report.leftovers.is_empty() {
             break;
         }
-        job.finish(CloneState::CleanupPending, "Waiting to confirm that this owned Git process stopped. Its destination and recovery record remain reserved.");
+        job.finish(
+            CloneState::CleanupPending,
+            "Waiting for Git to stop before removing the unfinished folder.",
+        );
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
     let mut stderr = stderr;
-    let error_output = tokio::time::timeout(Duration::from_secs(2), &mut stderr)
+    let output = tokio::time::timeout(Duration::from_secs(2), &mut stderr)
         .await
         .ok()
         .and_then(|result| result.ok())
         .unwrap_or_default();
     stderr.abort();
     stdout.abort();
-    if matches!(stopped, Stop::Exited(Some(0))) {
-        files::matches(
-            &destination.prepared.parent_handle,
-            &destination.prepared.parent,
-        )?;
-        files::matches(
-            &destination.directory,
-            std::path::Path::new(&destination.prepared.view.destination),
-        )?;
-        use cap_fs_ext::DirExt;
-        destination.directory.open_dir_nofollow(".git")?;
+    match stopped {
+        Stop::Exited(Some(0)) => Outcome::Cloned,
+        Stop::Exited(_) => Outcome::Failed(failure(&output, &destination.prepared.view.parent)),
+        Stop::Canceled => Outcome::Canceled,
+        Stop::Timeout => Outcome::Failed("The clone was stopped after two hours.".into()),
     }
-    Ok(match stopped {
-        Stop::Exited(Some(0)) => (CloneState::Ready, "Repository cloned. Choose Use this folder to add it to your project.".into()),
-        Stop::Exited(_) => (CloneState::Failed, failure(&error_output).into()),
-        Stop::Canceled => (CloneState::Canceled, "Clone canceled. Its partial folder and recovery record were retained. Retry into another new folder.".into()),
-        Stop::Timeout => (CloneState::Failed, "The clone reached its ten-minute limit. Check the connection or repository size, then retry into a new folder. Partial files were retained.".into()),
-    })
 }
 
-fn spec(destination: &files::Destination) -> SpawnSpec {
-    let prepared = &destination.prepared;
-    let journal =
-        PathBuf::from(&prepared.view.parent).join(format!(".auracode-clone-{}", prepared.view.id));
-    let mut arguments: Vec<OsString> = vec!["--no-pager".into()];
-    for option in [
-        format!(
-            "core.hooksPath={}",
-            path_argument(&journal.join("empty-hooks")).display()
-        ),
-        format!(
-            "init.templateDir={}",
-            path_argument(&journal.join("empty-template")).display()
-        ),
-        "core.fsmonitor=false".into(),
-        "core.fsync=all".into(),
-        "credential.helper=".into(),
-        "credential.interactive=false".into(),
-        "protocol.allow=never".into(),
-        "protocol.https.allow=always".into(),
-        "protocol.ssh.allow=always".into(),
-        "http.followRedirects=false".into(),
-        "submodule.recurse=false".into(),
-    ] {
-        arguments.extend(["-c".into(), option.into()]);
-    }
-    arguments.extend([
-        "clone".into(),
-        "--no-recurse-submodules".into(),
-        "--no-local".into(),
-        "--".into(),
-        prepared.view.remote.clone().into(),
-        ".".into(),
-    ]);
-    let empty = path_argument(&journal.join("empty-config")).into_os_string();
-    let set_env = vec![
-        ("GIT_CONFIG_GLOBAL".into(), empty.clone()),
-        ("GIT_CONFIG_SYSTEM".into(), empty),
-        ("GIT_CONFIG_NOSYSTEM".into(), "1".into()),
-        ("GIT_ATTR_NOSYSTEM".into(), "1".into()),
-        (
-            "GIT_CEILING_DIRECTORIES".into(),
-            path_argument(&prepared.parent).into_os_string(),
-        ),
-        ("GIT_TERMINAL_PROMPT".into(), "0".into()),
-        ("GIT_ASKPASS".into(), OsString::new()),
-        ("GCM_INTERACTIVE".into(), "never".into()),
-        (
-            "GIT_SSH_COMMAND".into(),
-            "ssh -oBatchMode=yes -oStrictHostKeyChecking=yes -oConnectTimeout=20".into(),
-        ),
-        ("GIT_SSH_VARIANT".into(), "ssh".into()),
-    ];
-    let folder = PathBuf::from(&prepared.view.destination);
+fn spec(prepared: &Prepared) -> SpawnSpec {
+    let folder = prepared.parent.clone();
     SpawnSpec {
         launch: LaunchSpec {
-            label: "explicit GitHub clone".into(),
+            label: "git clone".into(),
             program: prepared.program.clone(),
-            args: arguments,
+            args: prepared.arguments.iter().map(OsString::from).collect(),
             cwd: ProcessCwd::Fixed(folder.clone()),
-            set_env,
+            // No terminal is attached, so Git must not wait for one. Credential helpers and
+            // SSH agents the person set up still answer, in their own windows if they have any.
+            set_env: vec![("GIT_TERMINAL_PROMPT".into(), "0".into())],
             daemons: vec![],
             startup_timeout: Duration::from_secs(15),
         },
@@ -202,108 +197,117 @@ async fn discard(mut reader: impl AsyncRead + Unpin) {
     let mut bytes = [0; 8192];
     while reader.read(&mut bytes).await.is_ok_and(|count| count > 0) {}
 }
-async fn tail(mut reader: impl AsyncRead + Unpin) -> Vec<u8> {
-    let mut result = Vec::new();
+
+/// Follows Git's stderr into the record and returns the kept lines for the failure reason.
+async fn follow(mut reader: impl AsyncRead + Unpin, job: Arc<Job>) -> Vec<String> {
+    let mut parser = progress::Parser::default();
     let mut bytes = [0; 8192];
     loop {
         let count = match reader.read(&mut bytes).await {
             Ok(0) | Err(_) => break,
             Ok(count) => count,
         };
-        result.extend_from_slice(&bytes[..count]);
-        if result.len() > 16 * 1024 {
-            result.drain(..result.len() - 16 * 1024);
+        if parser.feed(&bytes[..count]) {
+            publish(&job, &parser);
         }
     }
-    result
-}
-fn failure(bytes: &[u8]) -> &'static str {
-    let text = String::from_utf8_lossy(bytes).to_ascii_lowercase();
-    if [
-        "permission denied (publickey)",
-        "authentication failed",
-        "could not read username",
-        "repository not found",
-        "host key verification failed",
-    ]
-    .iter()
-    .any(|needle| text.contains(needle))
-    {
-        "GitHub access could not be verified. Use a public HTTPS repository or configure SSH access and trusted host verification in your own tools, then retry into a new folder. No login was changed."
-    } else if [
-        "no space left",
-        "disk full",
-        "filename too long",
-        "permission denied",
-        "unable to create",
-    ]
-    .iter()
-    .any(|needle| text.contains(needle))
-    {
-        "Git could not write the destination. Check free space, folder permissions and path length, then retry into a new folder. Partial files were retained."
-    } else if [
-        "could not resolve",
-        "failed to connect",
-        "connection",
-        "timed out",
-        "redirect",
-    ]
-    .iter()
-    .any(|needle| text.contains(needle))
-    {
-        "Git could not reach the repository. Check the connection and exact GitHub URL, then retry into a new folder. Partial files were retained."
-    } else {
-        "Git could not complete the clone. Check access, connection and available disk space in your own tools, then retry into a new folder. Partial files and the recovery record were retained."
+    if parser.finish() {
+        publish(&job, &parser);
     }
+    parser.output
 }
 
-fn path_argument(path: &std::path::Path) -> PathBuf {
-    #[cfg(windows)]
-    {
-        use std::path::{Component, Prefix};
-        let mut parts = path.components();
-        let base = match parts.next() {
-            Some(Component::Prefix(prefix)) => match prefix.kind() {
-                Prefix::VerbatimDisk(drive) => {
-                    Some(PathBuf::from(format!("{}:\\", char::from(drive))))
-                }
-                Prefix::VerbatimUNC(server, share) => {
-                    let mut base = OsString::from("\\\\");
-                    base.push(server);
-                    base.push("\\");
-                    base.push(share);
-                    Some(PathBuf::from(base))
-                }
-                _ => None,
-            },
-            _ => None,
-        };
-        if let Some(mut base) = base {
-            for part in parts {
-                if !matches!(part, Component::RootDir) {
-                    base.push(part.as_os_str());
-                }
-            }
-            return base;
-        }
+fn publish(job: &Job, parser: &progress::Parser) {
+    job.update(|record| {
+        record.progress.clone_from(&parser.progress);
+        record.output.clone_from(&parser.output);
+    });
+}
+
+/// One plain sentence for why Git stopped. Git's own lines are shown separately, never mixed in.
+fn failure(lines: &[String], parent: &str) -> String {
+    let text = lines.join("\n").to_ascii_lowercase();
+    let has = |needles: &[&str]| needles.iter().any(|needle| text.contains(needle));
+    if has(&["host key verification failed"]) {
+        "SSH does not trust this server yet. Connect to it once in your terminal to confirm its key, then try again.".into()
+    } else if has(&[
+        "authentication failed",
+        "could not read username",
+        "could not read password",
+        "permission denied (publickey",
+        "terminal prompts disabled",
+        "invalid username or password",
+        "access denied",
+    ]) {
+        "Git could not sign in. Set up your credential helper or SSH key in your terminal, then try again.".into()
+    } else if has(&[
+        "repository not found",
+        "not found",
+        "does not appear to be a git repository",
+        "does not exist",
+    ]) {
+        "Git could not find this repository. Check the address and that your account can see it."
+            .into()
+    } else if has(&["no space left", "disk full", "not enough space"]) {
+        "The disk is full. Free some space, then try again.".into()
+    } else if has(&["filename too long", "path too long"]) {
+        "A path in this repository is too long for this folder. Choose a folder nearer the drive, or turn on long paths in Git.".into()
+    } else if has(&[
+        "could not resolve",
+        "failed to connect",
+        "connection timed out",
+        "connection refused",
+        "connection reset",
+        "network is unreachable",
+        "operation timed out",
+        "unable to access",
+        "ssl",
+        "early eof",
+    ]) {
+        "Git could not reach the server. Check the connection and the address, then try again."
+            .into()
+    } else if has(&["permission denied", "unable to create", "could not create"]) {
+        format!("Git could not write to {parent}. Choose a folder you can write to.")
+    } else {
+        "Git stopped before the clone finished.".into()
     }
-    path.to_path_buf()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    fn diagnostic_classes_never_return_raw_git_output_or_tokens() {
-        for bytes in [
-            b"authentication failed secret=private".as_slice(),
-            b"connection reset private",
-            b"no space left private",
-            b"unknown private",
+    fn reasons_are_plain_sentences_that_never_repeat_gits_output() {
+        for (line, reason) in [
+            (
+                "fatal: Authentication failed for 'https://x' secret",
+                "sign in",
+            ),
+            (
+                "remote: Repository not found. private",
+                "find this repository",
+            ),
+            (
+                "Host key verification failed. private",
+                "SSH does not trust",
+            ),
+            (
+                "fatal: unable to access 'https://x/': Could not resolve host: x private",
+                "reach",
+            ),
+            (
+                "error: unable to write file: No space left on device private",
+                "disk is full",
+            ),
+            (
+                "fatal: cannot mkdir: Permission denied private",
+                "could not write to C:\\code",
+            ),
+            ("something unexpected private", "stopped before"),
         ] {
-            let message = failure(bytes);
-            assert!(!message.contains("private"));
-            assert!(!message.contains("secret="));
+            let message = failure(&[line.into()], "C:\\code");
+            assert!(message.contains(reason), "{line}: {message}");
+            assert!(!message.contains("private") && !message.contains("secret"));
         }
     }
 }

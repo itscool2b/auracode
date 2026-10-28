@@ -1,11 +1,11 @@
-//! Clone IPC carries reviewed identifiers, never an arbitrary executable or command string.
+//! Clone IPC carries the person's form and reviewed identifiers, never an executable or command.
 use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
 };
 use aura_core::cloning::Clones;
-use aura_protocol::setup_actions::{CloneInput, CloneRecord, CloneReview};
-use std::{path::PathBuf, sync::Arc};
+use aura_protocol::setup_actions::{CloneCheck, CloneInput, CloneRecord};
+use std::sync::Arc;
 use tauri::{State, Webview};
 
 fn error(value: aura_core::cloning::CloneError) -> AppError {
@@ -26,28 +26,31 @@ fn current(webview: &Webview, state: &AppState) -> Result<(), AppError> {
     }
     Ok(())
 }
+/// Reads the clone form. A complete form comes back with the exact command Start will run.
 #[tauri::command]
 #[specta::specta]
-pub async fn clone_review(
+pub async fn clone_check(
     webview: Webview,
     state: State<'_, AppState>,
     service: State<'_, Arc<Clones>>,
     input: CloneInput,
-) -> Result<CloneReview, AppError> {
+) -> Result<CloneCheck, AppError> {
     current(&webview, &state)?;
     let page = state.pages.for_view(webview.label());
-    let review = state
+    let check = state
         .sessions()?
-        .clone_review(&service, webview.label(), input)
+        .clone_check(&service, webview.label(), input)
         .await?;
     if !page.is_current() || state.quit.is_quitting() {
-        service.cancel_review(webview.label(), &review.id);
+        if let Some(review) = &check.review {
+            service.cancel_review(webview.label(), &review.id);
+        }
         return Err(AppError::new(
             AppErrorCode::SessionNotReady,
-            "This clone review was canceled.",
+            "This clone form was closed.",
         ));
     }
-    Ok(review)
+    Ok(check)
 }
 #[tauri::command]
 #[specta::specta]
@@ -84,22 +87,18 @@ pub fn clone_start(
 pub fn clone_cancel(webview: Webview, service: State<'_, Arc<Clones>>, id: String) {
     service.cancel(webview.label(), &id);
 }
+/// The clone's record; with `after`, the next revision once Git reports progress (or within ten
+/// seconds), so the window follows the clone without polling.
 #[tauri::command]
 #[specta::specta]
-pub fn clone_status(
+pub async fn clone_status(
     webview: Webview,
     service: State<'_, Arc<Clones>>,
     id: String,
+    after: Option<u32>,
 ) -> Result<CloneRecord, AppError> {
-    service.status(webview.label(), &id).map_err(error)
-}
-#[tauri::command]
-#[specta::specta]
-pub async fn clone_history(
-    state: State<'_, AppState>,
-    service: State<'_, Arc<Clones>>,
-    parent: String,
-) -> Result<Vec<CloneRecord>, AppError> {
-    let _admission = state.sessions()?;
-    service.history(PathBuf::from(parent)).await.map_err(error)
+    service
+        .status(webview.label(), &id, after)
+        .await
+        .map_err(error)
 }

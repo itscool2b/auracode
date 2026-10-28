@@ -76,7 +76,15 @@ if (container) {
       void import("./dev/settingsPreview").then(({ mountSettingsPreview }) =>
         mountSettingsPreview(container),
       );
-    else if (mode === "setup" || mode === "agents")
+    else if (
+      mode === "setup" ||
+      mode === "agents" ||
+      mode === "agents-installing" ||
+      mode === "new-project" ||
+      mode === "clone" ||
+      mode === "clone-running" ||
+      mode === "clone-error"
+    )
       void import("./dev/setupPreview").then(({ mountSetupPreview }) =>
         mountSetupPreview(container),
       );

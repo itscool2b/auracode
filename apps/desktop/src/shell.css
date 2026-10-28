@@ -1704,6 +1704,11 @@ details.setup-install-review[open] > summary::before {
   min-width: 0;
 }
 
+/* Clone a repository sits beside Choose folder: the other way to give a new project its folder. */
+.chat-project-clone {
+  margin-left: var(--g-space-8);
+}
+
 .chat-project-folders small {
   color: var(--g-fg-3);
   font-size: var(--g-text-meta);

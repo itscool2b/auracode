@@ -1,34 +1,405 @@
-import { FolderOpen, GitBranch } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Keycap, PixelLoader } from "@auracode/ui/graphite";
+import { ArrowUpRight, Check, FolderOpen, GitBranch } from "lucide-react";
+import {
+  Children,
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { createPortal } from "react-dom";
 import { type CloneApi, cloneApi } from "../../lib/setup-actions/api";
-import type { CloneRecord, CloneReview } from "../../lib/setup-actions/bindings";
+import {
+  type CloneController,
+  type CloneDraft,
+  type CloneView,
+  CloneController as Controller,
+  folderName,
+  progressLine,
+} from "../../lib/setup-actions/clone";
 import { DialogClose, dialogClassName } from "../chat/Modal";
 
+/** One clone form for its lifetime: checked by Rust as it changes, stopped when it closes. */
+export function useClone(api: CloneApi, draft?: CloneDraft) {
+  const [controller] = useState(() => new Controller(api, draft));
+  useEffect(() => {
+    controller.open();
+    return () => controller.close();
+  }, [controller]);
+  const view = useSyncExternalStore(
+    controller.subscribe,
+    controller.getSnapshot,
+    controller.getSnapshot,
+  );
+  return { controller, view };
+}
+
+/** The two-tone heading for the clone form in setup, following the clone. */
+export function cloneHeading(view: CloneView): [string, string] {
+  const repository = view.record?.repository ?? view.check?.repository ?? "the repository";
+  switch (view.phase) {
+    case "running":
+      return [`Cloning ${repository}.`, "Cancel leaves nothing behind."];
+    case "failed":
+      return ["The clone stopped.", "Nothing was added."];
+    case "done":
+      return [`Cloned ${repository}.`, "Adding it as a project."];
+    default:
+      return ["Clone a repository.", "Git copies it into a new folder."];
+  }
+}
+
+const GIT_DOWNLOAD = "https://git-scm.com/downloads";
+
+/**
+ * The clone itself, in setup's column or in a dialog: the address, where it goes, the exact
+ * command, then Git's progress, and a failure with Git's own last words. The one primary is Clone
+ * (Enter); nothing runs before it.
+ */
+export function CloneBody({
+  controller,
+  view,
+  pickParent,
+  layout,
+  onBack,
+  onCloned,
+  fixedRemote = false,
+}: {
+  readonly controller: CloneController;
+  readonly view: CloneView;
+  readonly pickParent: () => Promise<string | null>;
+  readonly layout: "inline" | "dialog";
+  /** Leaves the form: Back in setup, Cancel in a dialog. */
+  readonly onBack: () => void;
+  /** Called once when Git finishes, with the new folder. */
+  readonly onCloned: (path: string, name: string) => void;
+  readonly fixedRemote?: boolean;
+}) {
+  const ids = useId();
+  const status = useRef<HTMLElement>(null);
+  const reported = useRef<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const record = view.record;
+  const review = view.check?.review ?? null;
+  useEffect(() => {
+    if (view.phase === "done" && record && reported.current !== record.id) {
+      reported.current = record.id;
+      onCloned(record.destination, folderName(record.destination));
+    }
+  }, [view.phase, record, onCloned]);
+  // Keyboard focus follows the clone: onto its progress, then onto the failure.
+  useEffect(() => {
+    if (view.phase === "running" || view.phase === "failed") status.current?.focus();
+  }, [view.phase]);
+  // Keys while Git runs or after it stopped: Escape cancels a running clone (a dialog's own
+  // Escape does the same) and goes back to the form after a failure; Enter tries again.
+  useEffect(() => {
+    if (view.phase !== "running" && view.phase !== "failed") return;
+    const key = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing) return;
+      if (event.target instanceof Element && event.target.closest("button, a, input")) return;
+      if (view.phase === "running" && event.key === "Escape" && layout === "inline")
+        controller.cancel();
+      else if (view.phase === "failed" && event.key === "Enter") {
+        event.preventDefault();
+        controller.retry();
+      } else if (view.phase === "failed" && event.key === "Escape" && layout === "inline")
+        controller.back();
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [layout, view.phase, controller]);
+  const choose = () => {
+    setPicking(true);
+    void pickParent()
+      .then((path) => {
+        if (path) controller.setParent(path);
+      })
+      .finally(() => setPicking(false));
+  };
+  const dialog = layout === "dialog";
+  const leave = (
+    <button
+      type="button"
+      className={dialog ? "g-button" : "g-button g-button-ghost g-button-36 clone-back"}
+      onClick={onBack}
+    >
+      {dialog ? "Cancel" : "Back"}
+    </button>
+  );
+
+  if (view.phase === "running" && record) {
+    const { stage, detail } = progressLine(record);
+    const percent = record.progress?.percent ?? 0;
+    const stopping = record.state === "cleanup_pending";
+    return (
+      <section
+        ref={status}
+        tabIndex={-1}
+        className="clone-running"
+        aria-label={`Cloning ${record.repository}`}
+      >
+        <div className="clone-progress">
+          <div className="clone-status" role="status">
+            <PixelLoader size={16} tempo="tool" />
+            <span className="clone-stage">{stopping ? record.detail : stage}</span>
+            <span className="clone-percent">{percent}%</span>
+          </div>
+          <div
+            className="clone-bar"
+            role="progressbar"
+            aria-label="Clone progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percent}
+          >
+            <span style={{ transform: `scaleX(${percent / 100})` }} />
+          </div>
+          <p className="clone-meta">
+            {detail ? <span>{detail} received</span> : null}
+            <span className="setup-path">{record.destination}</span>
+          </p>
+        </div>
+        {review ? <CommandWell command={review.command} dim /> : null}
+        <Actions dialog={dialog}>
+          <button
+            type="button"
+            className={dialog ? "g-button" : "g-button g-button-36"}
+            disabled={stopping}
+            onClick={() => controller.cancel()}
+          >
+            {stopping ? "Stopping…" : "Cancel clone"}
+            <span className="setup-enter" aria-hidden="true">
+              <Keycap>Esc</Keycap>
+            </span>
+          </button>
+        </Actions>
+      </section>
+    );
+  }
+
+  if (view.phase === "failed") {
+    return (
+      <section ref={status} tabIndex={-1} className="clone-failed" aria-label="Clone stopped">
+        <div className="setup-error clone-error" role="alert">
+          <p>{record?.detail ?? view.error}</p>
+          {record?.output.length ? (
+            <pre className="clone-output">{record.output.join("\n")}</pre>
+          ) : null}
+        </div>
+        {review ? <CommandWell command={review.command} dim /> : null}
+        <Actions dialog={dialog}>
+          <button
+            type="button"
+            className={dialog ? "g-button" : "g-button g-button-ghost g-button-36 clone-back"}
+            onClick={() => controller.back()}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            className={
+              dialog ? "g-button g-button-primary" : "g-button g-button-primary g-button-36"
+            }
+            onClick={() => controller.retry()}
+          >
+            Try again
+            <span className="setup-enter" aria-hidden="true">
+              <Keycap>↵</Keycap>
+            </span>
+          </button>
+        </Actions>
+      </section>
+    );
+  }
+
+  if (view.phase === "done" && record) {
+    return (
+      <p role="status" className="setup-project-saved">
+        <Check size={14} aria-hidden="true" /> Cloned {record.repository} into{" "}
+        <span className="setup-path">{record.destination}</span>
+      </p>
+    );
+  }
+
+  const remoteProblem = controller.problem("remote");
+  const placeProblem = controller.problem("parent") ?? controller.problem("name");
+  const gitProblem = controller.problem("git");
+  const separator = view.parent?.includes("\\") ? "\\" : "/";
+  return (
+    <form
+      className="clone-form"
+      data-layout={layout}
+      onSubmit={(event) => {
+        event.preventDefault();
+        // React carries events through portals: a form this dialog opened over (New project)
+        // must not submit too.
+        event.stopPropagation();
+        void controller.start();
+      }}
+      onKeyDown={(event) => {
+        if (!dialog && event.key === "Escape") {
+          event.preventDefault();
+          onBack();
+        }
+      }}
+    >
+      {view.notice ? (
+        <p role="status" className="clone-notice">
+          {view.notice}
+        </p>
+      ) : null}
+      <div className="setup-field">
+        <label htmlFor={`${ids}-remote`}>Repository</label>
+        <input
+          id={`${ids}-remote`}
+          className="g-input clone-remote"
+          value={view.remote}
+          placeholder="https://github.com/owner/repository"
+          spellCheck={false}
+          autoComplete="off"
+          autoCapitalize="off"
+          // Setup and the dialogs open on this field: pasting the address is the first step.
+          // biome-ignore lint/a11y/noAutofocus: The form opens on the person's request.
+          autoFocus={!fixedRemote}
+          readOnly={fixedRemote}
+          maxLength={2048}
+          aria-invalid={remoteProblem ? true : undefined}
+          aria-describedby={remoteProblem ? `${ids}-remote-problem` : undefined}
+          onChange={(event) => controller.setRemote(event.currentTarget.value)}
+        />
+        {remoteProblem ? (
+          <p id={`${ids}-remote-problem`} className="clone-problem">
+            {remoteProblem}
+          </p>
+        ) : null}
+      </div>
+      <fieldset className="setup-field clone-fieldset">
+        <legend>Clone into</legend>
+        <div className="clone-place">
+          <button
+            type="button"
+            className="clone-parent"
+            disabled={picking}
+            title={view.parent ?? undefined}
+            aria-label={view.parent ? `Folder ${view.parent}, change` : "Choose a folder"}
+            aria-invalid={controller.problem("parent") ? true : undefined}
+            onClick={choose}
+          >
+            <FolderOpen size={16} aria-hidden="true" />
+            <span>{view.parent ? folderName(view.parent) : "Choose a folder"}</span>
+          </button>
+          <span className="clone-separator" aria-hidden="true">
+            {separator}
+          </span>
+          <input
+            className="g-input clone-name"
+            aria-label="Folder name"
+            value={view.name}
+            placeholder={view.check?.name ?? "folder"}
+            spellCheck={false}
+            autoComplete="off"
+            maxLength={100}
+            aria-invalid={controller.problem("name") ? true : undefined}
+            aria-describedby={placeProblem ? `${ids}-place-problem` : undefined}
+            onChange={(event) => controller.setName(event.currentTarget.value)}
+          />
+        </div>
+        {placeProblem ? (
+          <p id={`${ids}-place-problem`} className="clone-problem">
+            {placeProblem}
+          </p>
+        ) : null}
+      </fieldset>
+      {review ? (
+        <div className="clone-review">
+          <CommandWell command={review.command} />
+          <p className="setup-footnote">
+            Runs <span className="setup-path">{review.program}</span> with your own Git settings and
+            sign-in. Cancel removes the unfinished folder.
+          </p>
+        </div>
+      ) : gitProblem ? (
+        <p className="clone-problem clone-git">
+          {gitProblem}{" "}
+          <a href={GIT_DOWNLOAD} target="_blank" rel="noreferrer">
+            Get Git <ArrowUpRight size={12} aria-hidden="true" />
+          </a>
+        </p>
+      ) : null}
+      {view.error ? (
+        <p role="alert" className="setup-alert">
+          {view.error}
+        </p>
+      ) : null}
+      <Actions dialog={dialog}>
+        {leave}
+        <button
+          type="submit"
+          className={dialog ? "g-button g-button-primary" : "g-button g-button-primary g-button-36"}
+          disabled={!controller.canStart}
+        >
+          {view.starting ? "Starting…" : "Clone"}
+          <span className="setup-enter" aria-hidden="true">
+            <Keycap>↵</Keycap>
+          </span>
+        </button>
+      </Actions>
+    </form>
+  );
+}
+
+/**
+ * A dialog's actions sit right with the primary last (4.6); setup's sit at the column's edge with
+ * the primary first, as every setup step's one pill does.
+ */
+function Actions({ dialog, children }: { dialog: boolean; children: ReactNode }) {
+  return dialog ? (
+    <div className="g-dialog-actions">{children}</div>
+  ) : (
+    <div className="setup-actions">{Children.toArray(children).reverse()}</div>
+  );
+}
+
+/** The exact command, as a person would type it, in a code well. */
+function CommandWell({ command, dim = false }: { command: string; dim?: boolean }) {
+  return (
+    <div className="clone-command">
+      <code className="clone-command-text" data-dim={dim || undefined}>
+        {command}
+      </code>
+    </div>
+  );
+}
+
+/**
+ * A button that opens the clone in a dialog, for New project and a folder missing on this device.
+ * The new folder goes to `onFolder` as soon as Git finishes.
+ */
 export function CloneProject({
   pickParent,
   onFolder,
   disabled = false,
   api = cloneApi,
   remote,
-  label = "Clone from GitHub",
+  label = "Clone a repository",
+  className = "g-button g-button-ghost g-button-28 setup-clone",
 }: {
   readonly pickParent: () => Promise<string | null>;
-  readonly onFolder: (path: string) => void;
+  readonly onFolder: (path: string, name: string) => void;
   readonly disabled?: boolean;
   readonly api?: CloneApi;
+  /** A fixed address: cloning a project's known repository. */
   readonly remote?: string;
   readonly label?: string;
+  readonly className?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button
-        type="button"
-        className="g-button g-button-ghost g-button-28 setup-clone"
-        disabled={disabled}
-        onClick={() => setOpen(true)}
-      >
+      <button type="button" className={className} disabled={disabled} onClick={() => setOpen(true)}>
         <GitBranch size={14} aria-hidden="true" />
         {label}
       </button>
@@ -36,348 +407,73 @@ export function CloneProject({
         <CloneDialog
           api={api}
           pickParent={pickParent}
+          remote={remote}
           onClose={() => setOpen(false)}
-          onFolder={onFolder}
-          fixedRemote={remote}
+          onFolder={(path, name) => {
+            setOpen(false);
+            onFolder(path, name);
+          }}
         />
       ) : null}
     </>
   );
 }
 
-/**
- * Clone in three states on one dialog (Vercel's transfer dialog): the form, the reviewed command
- * as rows, then the running or finished clone. Nothing starts before Start clone.
- */
 function CloneDialog({
   api,
   pickParent,
+  remote,
   onClose,
   onFolder,
-  fixedRemote,
 }: {
-  api: CloneApi;
-  pickParent: () => Promise<string | null>;
-  onClose: () => void;
-  onFolder: (path: string) => void;
-  fixedRemote?: string;
+  readonly api: CloneApi;
+  readonly pickParent: () => Promise<string | null>;
+  readonly remote?: string;
+  readonly onClose: () => void;
+  readonly onFolder: (path: string, name: string) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const mounted = useRef(false);
-  const prepared = useRef<string | null>(null);
-  const started = useRef<string | null>(null);
-  const pending = useRef(false);
   const title = useId();
-  const hint = useId();
-  const [remote, setRemote] = useState(fixedRemote ?? "");
-  const [parent, setParent] = useState("");
-  const [name, setName] = useState("");
-  const [review, setReview] = useState<CloneReview | null>(null);
-  const [record, setRecord] = useState<CloneRecord | null>(null);
-  const [history, setHistory] = useState<CloneRecord[]>([]);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const active = record?.state === "running" || record?.state === "cleanup_pending";
-  const jobId = record?.id;
-  const cancel = useCallback(() => {
-    const id = started.current ?? prepared.current;
-    if (id) void api.cancel(id).catch(() => {});
-    prepared.current = null;
-    started.current = null;
-  }, [api]);
+  const { controller, view } = useClone(api, remote === undefined ? undefined : { remote });
   useEffect(() => {
-    mounted.current = true;
-    dialog.current?.showModal();
-    return () => {
-      mounted.current = false;
-      cancel();
-      dialog.current?.close();
-    };
-  }, [cancel]);
-
-  useEffect(() => {
-    if (!jobId || !active) return;
-    let live = true;
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
-      try {
-        const next = await api.status(jobId);
-        if (!live) return;
-        setRecord(next);
-        if (next.state === "running" || next.state === "cleanup_pending")
-          timer = setTimeout(poll, 500);
-      } catch (reason) {
-        if (live) {
-          setError(message(reason));
-          void api.cancel(jobId).catch(() => {});
-          timer = setTimeout(poll, 2000);
-        }
-      }
-    };
-    timer = setTimeout(poll, 100);
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [api, jobId, active]);
-
-  const run = async (operation: () => Promise<void>) => {
-    if (pending.current) return;
-    pending.current = true;
-    setBusy(true);
-    setError("");
-    try {
-      await operation();
-    } catch (reason) {
-      if (mounted.current) setError(message(reason));
-    } finally {
-      pending.current = false;
-      if (mounted.current) setBusy(false);
-    }
-  };
-  const close = () => {
-    cancel();
-    onClose();
-  };
-  const choose = () =>
-    void run(async () => {
-      const path = await pickParent();
-      if (!mounted.current || !path) return;
-      setParent(path);
-      setHistory([]);
-      const previous = await api.history(path);
-      if (mounted.current) setHistory(previous);
-    });
-  const prepare = () =>
-    void run(async () => {
-      const value = await api.review({ remote, parent, name });
-      if (!mounted.current) {
-        await api.cancelReview(value.id);
-        return;
-      }
-      prepared.current = value.id;
-      setReview(value);
-    });
-  const start = () =>
-    void run(async () => {
-      if (!review) return;
-      started.current = review.id;
-      const value = await api.start(review.id);
-      if (!mounted.current) {
-        await api.cancel(review.id);
-        return;
-      }
-      prepared.current = null;
-      setReview(null);
-      setRecord(value);
-    });
-  const back = () => {
-    if (prepared.current) void api.cancelReview(prepared.current).catch(() => {});
-    prepared.current = null;
-    started.current = null;
-    setReview(null);
-    setRecord(null);
-    setError("");
-  };
-  const chooseFolder = (path: string) => {
-    onFolder(path);
-    close();
-  };
-  const content = (
+    const element = dialog.current;
+    element?.showModal();
+    return () => element?.close();
+  }, []);
+  const running = view.phase === "running";
+  return createPortal(
     <dialog
       ref={dialog}
       className={dialogClassName("md", "setup-dialog setup-clone-dialog")}
       aria-labelledby={title}
       onCancel={(event) => {
         event.preventDefault();
-        close();
+        // Only this dialog: React would carry the cancel on to a dialog it was opened over.
+        event.stopPropagation();
+        // Escape while Git runs stops the clone first; the dialog stays to show it.
+        if (running) controller.cancel();
+        else onClose();
       }}
     >
       <header className="g-dialog-header">
         <h2 id={title} className="g-dialog-title">
-          Clone from GitHub
+          {running && view.record ? `Cloning ${view.record.repository}` : "Clone a repository"}
         </h2>
-        <DialogClose label="Close clone" onClick={close} />
+        <DialogClose label="Close clone" onClick={onClose} />
       </header>
-      {!review && !record ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            prepare();
-          }}
-        >
-          <p className="setup-dialog-lead">
-            Copy a repository into a new folder. Use a public HTTPS address or SSH access you
-            already set up; no sign-in runs here.
-          </p>
-          <label className="setup-field">
-            GitHub repository
-            <input
-              className="g-input"
-              required
-              maxLength={256}
-              value={remote}
-              disabled={busy || fixedRemote !== undefined}
-              placeholder="https://github.com/owner/repository"
-              onChange={(event) => setRemote(event.currentTarget.value)}
-            />
-          </label>
-          <div className="setup-field">
-            <span aria-hidden="true">Location</span>
-            <button type="button" className="setup-picker" disabled={busy} onClick={choose}>
-              <FolderOpen size={16} aria-hidden="true" />
-              <span>
-                <strong>Choose parent folder</strong>
-                {parent ? <small className="setup-path">{parent}</small> : null}
-              </span>
-            </button>
-          </div>
-          <div className="setup-field">
-            <label htmlFor={`${hint}-name`}>New folder name</label>
-            <input
-              id={`${hint}-name`}
-              className="g-input"
-              required
-              maxLength={100}
-              value={name}
-              disabled={busy}
-              placeholder="my-project"
-              aria-describedby={hint}
-              onChange={(event) => setName(event.currentTarget.value)}
-            />
-            <small id={hint} className="setup-hint">
-              Existing folders are never reused. A canceled clone keeps its partial files.
-            </small>
-          </div>
-          {error ? (
-            <p role="alert" className="setup-alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="g-dialog-actions setup-dialog-actions">
-            <button type="button" className="g-button" disabled={busy} onClick={close}>
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="g-button g-button-primary"
-              disabled={busy || !parent || !remote || !name}
-            >
-              {busy ? "Preparing…" : "Review clone"}
-            </button>
-          </div>
-        </form>
+      {view.phase === "form" ? (
+        <p className="setup-dialog-lead">Git copies the repository into a new folder.</p>
       ) : null}
-      {review ? (
-        <section className="setup-clone-review" aria-label="Clone review">
-          <p className="setup-dialog-lead">Check where the repository will be cloned.</p>
-          <dl className="setup-rows">
-            <dt>Repository</dt>
-            <dd>{review.remote}</dd>
-            <dt>Destination</dt>
-            <dd>{review.destination}</dd>
-          </dl>
-          <ul className="setup-notices">
-            {review.notices.map((notice) => (
-              <li key={notice}>{notice}</li>
-            ))}
-          </ul>
-          {error ? (
-            <p role="alert" className="setup-alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="g-dialog-actions setup-dialog-actions">
-            <button type="button" className="g-button" disabled={busy} onClick={back}>
-              Back
-            </button>
-            <button
-              type="button"
-              className="g-button g-button-primary"
-              disabled={busy}
-              onClick={start}
-            >
-              {busy ? "Starting…" : "Start clone"}
-            </button>
-          </div>
-        </section>
-      ) : null}
-      {record ? (
-        <section className="setup-clone-result" aria-label="Clone progress">
-          <p role="status" className="setup-clone-status" data-state={record.state}>
-            {record.detail}
-          </p>
-          <dl className="setup-rows">
-            <dt>Folder</dt>
-            <dd>{record.destination}</dd>
-            <dt>Recovery record</dt>
-            <dd>{record.journal}</dd>
-          </dl>
-          {error ? (
-            <p role="alert" className="setup-alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="g-dialog-actions setup-dialog-actions">
-            {active ? (
-              <button
-                type="button"
-                className="g-button"
-                disabled={busy}
-                onClick={() => void run(() => api.cancel(record.id))}
-              >
-                Cancel clone
-              </button>
-            ) : (
-              <>
-                <button type="button" className="g-button" onClick={back}>
-                  Review another clone
-                </button>
-                {record.state === "ready" ? (
-                  <button
-                    type="button"
-                    className="g-button g-button-primary"
-                    onClick={() => chooseFolder(record.destination)}
-                  >
-                    Use this folder
-                  </button>
-                ) : null}
-              </>
-            )}
-          </div>
-        </section>
-      ) : null}
-      {!review && !record && history.length > 0 ? (
-        <section className="setup-clone-history" aria-label="Previous clones">
-          <h3>Previous clones here</h3>
-          <ul>
-            {history.map((item) => (
-              <li key={item.id}>
-                <div>
-                  <strong>{item.state === "ready" ? "Ready" : "Kept for review"}</strong>
-                  <span className="setup-path">{item.destination}</span>
-                  <small>{item.detail}</small>
-                </div>
-                {item.state === "ready" ? (
-                  <button
-                    type="button"
-                    className="g-button g-button-outline g-button-28"
-                    onClick={() => chooseFolder(item.destination)}
-                  >
-                    Use folder
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-    </dialog>
+      <CloneBody
+        controller={controller}
+        view={view}
+        pickParent={pickParent}
+        layout="dialog"
+        onBack={onClose}
+        onCloned={onFolder}
+        fixedRemote={remote !== undefined}
+      />
+    </dialog>,
+    document.body,
   );
-  return createPortal(content, document.body);
-}
-function message(reason: unknown): string {
-  return reason instanceof Error
-    ? reason.message
-    : "The clone action could not continue. Existing files were retained.";
 }

@@ -5,6 +5,7 @@ fn export_setup_action_bindings() {
     let types = specta::Types::default()
         .register::<aura_protocol::setup_actions::AgentInstallReview>()
         .register::<aura_protocol::setup_actions::CloneInput>()
+        .register::<aura_protocol::setup_actions::CloneCheck>()
         .register::<aura_protocol::setup_actions::CloneReview>()
         .register::<aura_protocol::setup_actions::CloneRecord>();
     let generated = specta_typescript::Typescript::default()

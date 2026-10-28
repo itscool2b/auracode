@@ -8,6 +8,14 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
 
+// Dialogs fade in and controls settle their colours; audit only once every finite animation ends.
+const settled = (page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const out = resolve(app, "../../target/setup-actions-browser");
 const url = "http://127.0.0.1:1467/setup-actions.html";
@@ -90,48 +98,105 @@ try {
         .getByText("The installer changed. Review the installation again.", { exact: true })
         .waitFor();
       assert.deepEqual(await calls(), ["review", "reserve", "start", "close"]);
-      const cloneReview = async (query = "") => {
+      // Clone: the form shows Rust's exact command before anything runs; Clone starts it, Cancel
+      // stops it and removes the unfinished folder, and a failure keeps Git's own last lines.
+      const command =
+        "git clone --progress -- https://github.com/auracode/orbit C:\\Users\\fixture\\code\\orbit";
+      const cloneForm = async (query = "") => {
         await page.goto(`${url}${query}`);
         assert.deepEqual(await calls(), []);
-        await page.getByRole("button", { name: "Clone from GitHub", exact: true }).click();
+        await page.getByRole("button", { name: "Clone a repository", exact: true }).click();
         assert.deepEqual(await calls(), [], "Opening clone never starts native work");
         await page
-          .getByRole("textbox", { name: "GitHub repository" })
-          .fill("https://github.com/owner/repo");
-        await page.getByRole("button", { name: /Choose parent folder/ }).click();
-        await page.getByRole("textbox", { name: "New folder name" }).fill("repo");
-        await page.getByRole("button", { name: "Review clone", exact: true }).click();
+          .getByRole("textbox", { name: "Repository" })
+          .fill("https://github.com/auracode/orbit");
+        await page.getByRole("button", { name: "Choose a folder" }).click();
       };
-      await cloneReview();
-      await page.getByRole("button", { name: "Start clone", exact: true }).waitFor();
-      assert.deepEqual(await calls(), ["clone-history", "clone-review"]);
+      const started = async () => (await calls()).filter((call) => call === "clone-start").length;
+      await cloneForm();
+      await page.getByText(command, { exact: true }).waitFor();
+      assert.equal(await started(), 0, "Showing the command runs nothing");
+      assert.equal(await page.getByRole("textbox", { name: "Folder name" }).inputValue(), "orbit");
+      await settled(page);
       assert.deepEqual(
         (await new AxeBuilder({ page }).analyze()).violations,
         [],
-        `${engine} clone review accessibility`,
+        `${engine} clone form accessibility`,
       );
-      await page.screenshot({ path: resolve(out, `${engine}-clone-review.png`) });
-      await page.getByRole("button", { name: "Close clone", exact: true }).click();
-      assert.deepEqual(await calls(), ["clone-history", "clone-review", "clone-cancel"]);
-      await cloneReview();
-      await page.getByRole("button", { name: "Start clone", exact: true }).click();
-      await page.getByRole("button", { name: "Cancel clone", exact: true }).click();
+      await page.screenshot({ path: resolve(out, `${engine}-clone-form.png`) });
+      // A refused address says why under its field, and Clone waits.
+      await page.getByRole("textbox", { name: "Repository" }).fill("http://github.com/o/r");
       await page
-        .getByText("Clone canceled. Its partial folder and recovery record were retained.", {
-          exact: true,
-        })
+        .getByText("Plain http:// sends the repository unencrypted.", { exact: false })
         .waitFor();
-      assert.equal((await calls()).filter((call) => call === "clone-start").length, 1);
-      await cloneReview("?ready");
-      await page.getByRole("button", { name: "Start clone", exact: true }).click();
-      await page.getByRole("button", { name: "Use this folder", exact: true }).click();
-      assert.ok((await calls()).includes("clone-use-folder"));
-      await cloneReview("?existing");
-      await page.getByRole("alert").waitFor();
-      assert.ok(!(await calls()).includes("clone-start"));
+      assert.equal(
+        await page.getByRole("textbox", { name: "Repository" }).getAttribute("aria-invalid"),
+        "true",
+      );
+      assert.equal(
+        await page.getByRole("button", { name: "Clone", exact: true }).isDisabled(),
+        true,
+      );
+      await page.getByRole("button", { name: "Close clone", exact: true }).click();
+      assert.equal(await started(), 0);
+      assert.ok((await calls()).includes("clone-cancel-review"), "Closing releases the review");
+      // Start, then cancel.
+      await cloneForm();
+      await page.getByText(command, { exact: true }).waitFor();
+      await page.getByRole("button", { name: "Clone", exact: true }).click();
+      await page.getByRole("progressbar", { name: "Clone progress" }).waitFor();
+      await page.getByText("7.36 MiB received").waitFor();
+      await settled(page);
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).analyze()).violations,
+        [],
+        `${engine} cloning accessibility`,
+      );
+      await page.screenshot({ path: resolve(out, `${engine}-cloning.png`) });
+      await page.getByRole("button", { name: "Cancel clone" }).click();
+      await page
+        .getByText("Clone canceled. The unfinished folder was removed.", { exact: true })
+        .waitFor();
+      assert.equal(await started(), 1);
+      // A finished clone hands its folder over once.
+      await cloneForm("?ready");
+      await page.getByRole("button", { name: "Clone", exact: true }).click();
+      await page.waitForFunction(() =>
+        window.setupActionsFixture.calls().includes("clone-use-folder"),
+      );
+      // The dialog closes with the folder.
+      await page.waitForFunction(() => document.querySelector("dialog") === null);
+      // A failure keeps Git's lines; Try again starts a fresh review.
+      await cloneForm("?error");
+      await page.getByRole("button", { name: "Clone", exact: true }).click();
+      await page
+        .getByRole("alert")
+        .filter({ hasText: "Git could not find this repository" })
+        .waitFor();
+      await page.getByText("remote: Repository not found.", { exact: false }).waitFor();
+      await settled(page);
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).analyze()).violations,
+        [],
+        `${engine} clone failure accessibility`,
+      );
+      await page.screenshot({ path: resolve(out, `${engine}-clone-error.png`) });
+      await page.getByRole("button", { name: "Try again" }).click();
+      await page.waitForFunction(
+        () =>
+          window.setupActionsFixture.calls().filter((call) => call === "clone-start").length === 2,
+      );
+      // A taken folder name is refused beside the name, before anything runs.
+      await cloneForm("?existing");
+      await page.getByText("already has a orbit folder", { exact: false }).waitFor();
+      assert.equal(
+        await page.getByRole("button", { name: "Clone", exact: true }).isDisabled(),
+        true,
+      );
+      assert.equal(await started(), 0);
       assert.deepEqual(errors, []);
       console.log(
-        `${engine}: passive mount/review, explicit start, close cancellation, stale review rejection and accessibility passed`,
+        `${engine}: passive install review, explicit start, close cancellation, stale review rejection, clone command before start, refused address, cancel, finish, failure, retry, taken name and accessibility passed`,
       );
     } finally {
       await browser.close();

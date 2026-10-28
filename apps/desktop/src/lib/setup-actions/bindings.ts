@@ -12,28 +12,78 @@ export type AgentInstallReview = {
 	notices: string[],
 };
 
+/**
+ *  The answer to a clone form: what was understood, and either a startable review or the first
+ *  problem in the form. Checking never creates a folder or runs Git.
+ */
+export type CloneCheck = {
+	/**  "owner/repository", once the address is understood. */
+	repository: string | null,
+	/**  The new folder's name: the one typed, or the repository's own. */
+	name: string | null,
+	review: CloneReview | null,
+	problem: CloneProblem | null,
+};
+
+/**  The part of the clone form a problem belongs to, so it can be shown beside that field. */
+export type CloneField = "remote" | "parent" | "name" | "git";
+
+/**  What the person typed into the clone form. Rust checks every part; nothing here is trusted. */
 export type CloneInput = {
+	/**  The repository address as pasted: an https:// or SSH address. */
 	remote: string,
-	parent: string,
-	name: string,
+	/**  The folder the new folder goes into, once chosen. */
+	parent: string | null,
+	/**  The new folder's name. Absent or empty means the repository's own name. */
+	name: string | null,
+};
+
+export type CloneProblem = {
+	field: CloneField,
+	message: string,
+};
+
+/**  Git's own progress report, parsed from `git clone --progress`. */
+export type CloneProgress = {
+	/**  Git's stage, as Git names it: "Receiving objects", "Resolving deltas". */
+	stage: string,
+	stage_percent: number,
+	/**  The whole clone, weighting Git's stages. */
+	percent: number,
+	/**  How much has arrived, as Git prints it: "12.40 MiB". */
+	received: string | null,
 };
 
 export type CloneRecord = {
 	id: string,
+	/**  Grows with every change, so a watcher can wait for the next one. */
+	revision: number,
 	remote: string,
-	parent: string,
+	repository: string,
 	destination: string,
-	journal: string,
 	state: CloneState,
 	detail: string,
+	progress: CloneProgress | null,
+	/**  Git's last lines that are not progress, kept for a failed clone. Never logged. */
+	output: string[],
+	/**  auracode removed the unfinished folder it created. */
+	removed: boolean,
 };
 
+/**  One startable clone: the exact Git program and arguments that Start runs, and where. */
 export type CloneReview = {
 	id: string,
 	remote: string,
+	repository: string,
 	parent: string,
 	destination: string,
-	notices: string[],
+	/**  The Git executable found on this computer. */
+	program: string,
+	arguments: string[],
+	/**  The command as a person would type it: `git clone --progress -- <address> <folder>`. */
+	command: string,
 };
 
-export type CloneState = "running" | "ready" | "canceled" | "failed" | "interrupted" | "cleanup_pending";
+export type CloneState = "running" | "ready" | "canceled" | "failed" | 
+/**  Git is being stopped; the unfinished folder waits until the stop is confirmed. */
+"cleanup_pending";

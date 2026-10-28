@@ -1,5 +1,62 @@
 # Auracode implementation progress
 
+## 2026-10-28: M3 setup, clone and agents
+
+Branch `m3-onboarding` (from `app-integrated`).
+
+- **Setup:** the account step says it plainly ("Accounts are optional." / "And invite-only for
+  now."): auracode needs no account and no network, everything stays on this computer, and an
+  account with an invitation only adds sync. Welcome says the same in one line. Every step stays
+  skippable, the step is saved on every move, motion stays out of the steps and the intro (the
+  dither field forming the seal and turtle) keeps its skip rules.
+- **Clone a repository** (Rust, `aura-core::cloning`, replacing the isolated GitHub-only clone):
+  the form is read by Rust on every change (typing waits 200ms) and answers with the first
+  problem beside its field or the exact `git clone --progress -- <address> <folder>`. Only
+  https:// and SSH addresses are accepted; everything else is refused with its reason. Git runs
+  with the person's own configuration, credential helpers and SSH setup (only variables that
+  point Git at another repository are removed, and `GIT_TERMINAL_PROMPT=0` since no terminal is
+  attached); auracode never reads or stores credentials. Start creates the destination
+  atomically; Cancel, a failure, closing the form or quitting stops Git's process tree and then
+  removes only that folder, while it is still the one created. Progress streams from Git's own
+  lines through a long poll (`clone_status` with `after`). Setup opens the clone in place on the
+  first-project step (X Money's one question per screen) and a finished clone becomes the first
+  project; New project offers the same clone in a dialog beside Choose folder. The journal
+  folders beside clones and the history view are gone. Decision: the owner's brief (the
+  person's own Git and helpers, Cancel removes the partial folder) replaces the earlier isolated
+  design; an app crash mid-clone leaves the unfinished folder, and the next clone with that name
+  says it exists.
+- **Agents:** a reviewed one-click install for Grok Build (`@xai-official/grok@1.0.70`, xAI's
+  documented npm distribution, published and signed by xAI's npm account). Sign in now runs the
+  vendor's own login for Cursor (`cursor-agent login`), Grok Build (`grok login`), OpenCode
+  (`opencode auth login`) and Hermes (`hermes auth`), beside Claude Code and Codex. Cursor,
+  Hermes, oh-my-pi, OpenCode 2 and Antigravity keep their guides, each with its reason in
+  `docs/setup-actions.md`; Pi, oh-my-pi and Antigravity sign in inside their own interface.
+- **Fixtures and checks:** `?preview=clone`, `clone-running`, `clone-error`, `new-project` and
+  `agents-installing`; `check-layout.mjs` probes them and the clone dialog; `check-setup.mjs`
+  adds a keyboard clone into a first project and the account copy; `check-setup-actions.mjs`
+  covers the clone dialog (command before start, refused address, cancel, finish, failure and
+  retry, taken name). The install review's rows now sit on the 4px grid.
+
+Verified locally on Windows: `pnpm lint` (37 warnings, all pre-existing CSS specificity),
+`pnpm typecheck`, `pnpm test` (root scripts 22, ui 276, desktop 5 node and 441 with 19 skipped,
+design lab 352, web 4; 15 new desktop tests for the clone controller and its markup). Rust in
+the shared target after cleaning the workspace crates: `aura-core` cloning 11 passed (real Git:
+a clone from a local bare repository through a file URL, a failed clone, a cancel against a
+server that never answers, removal of read-only pack files), `aura-agents` lib 51 passed,
+`aura-protocol` 23 plus its export tests; the desktop `export_bindings` (no change from the
+committed bindings); Clippy with `-D warnings` on aura-protocol, aura-core and aura-agents (all
+targets) and auracode-desktop (lib and tests); `cargo fmt --check`. Chromium and WebKit:
+`check-setup`, `check-setup-actions`, `check-folder-resolution`, `check-agent-installations` and
+`check-layout`, 280 of 280 views clean. One real install, as the brief allows for an agent not
+already on this PC: the reviewed argv (`node npm-cli.js install --global
+@xai-official/grok@1.0.70`) installed Grok Build into npm's user prefix, and `grok --version`
+reports 1.0.70; it stays installed. No login was started and Claude Code, Codex, Pi and OpenCode
+were not touched. Sheets beside their references, at 1440x900 and 1024x700 (ignored):
+`target/design-research/sheets/app-m3-*.png`. Not run: a real remote clone or sign-in through the
+built app, the WebDriver smoke, macOS, the hand walkthrough and CI. Hermes cannot start on this PC
+(Application Control blocks its bundled `_sqlite3`), so its `hermes auth` was checked in its
+source, not run.
+
 ## 2026-10-27: M4 parallel work: terminal panel, merge conflicts, more editors, missing folders
 
 Branch `m4-panel` (from `m4-worktree-ui`).

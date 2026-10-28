@@ -105,6 +105,14 @@ export const MODES = [
   // A chat whose worktree folder was deleted: its start error, and Recreate folder from it.
   "missing-worktree",
   "missing-worktree#recreate",
+  // Setup's clone: the form with its exact command, Git running, and a failed clone; the same
+  // clone from New project's dialog; and an agent's reviewed install with npm running.
+  "clone",
+  "clone-running",
+  "clone-error",
+  "new-project",
+  "new-project#clone-dialog",
+  "agents-installing",
 ];
 
 /** Waits until the panel's shell has drawn its prompt. */
@@ -197,6 +205,15 @@ const OPENERS = {
   conflict: async (page) => {
     await page.getByRole("button", { name: "Review merge", exact: true }).click();
     await page.getByRole("button", { name: "Open in Cursor", exact: true }).waitFor();
+  },
+  "clone-dialog": async (page) => {
+    await page.getByRole("button", { name: "Clone a repository", exact: true }).click();
+    await page
+      .getByRole("textbox", { name: "Repository" })
+      .fill("https://github.com/auracode/orbit");
+    // The folder button reads "Choose a folder", or names the folder a clone used last.
+    await page.locator(".clone-parent").click();
+    await page.locator(".clone-command-text").waitFor();
   },
   resized: async (page) => {
     await terminalReady(page);

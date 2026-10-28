@@ -74,12 +74,24 @@ pub fn auth_command(
 
 /// The terminal sheet may launch this command when the user asks to sign in. It cannot run as a
 /// background status probe: login owns the vendor's browser/terminal flow and may change auth state.
+///
+/// Only commands the vendor documents as its CLI's sign-in (checked 2026-10-27, sources in
+/// docs/setup-actions.md). Pi, oh-my-pi and Antigravity sign in inside their own interface, so
+/// they have none here.
 pub fn login_command(
     installation: &AgentInstallation,
 ) -> Result<MaintenanceCommand, MaintenanceError> {
     match native(installation)? {
         "claude" => Ok(vendor(installation, &["auth", "login"])),
         "codex" => Ok(vendor(installation, &["login"])),
+        // `cursor-agent login` opens the browser (Cursor CLI authentication reference).
+        "cursor" => Ok(vendor(installation, &["login"])),
+        // `grok login` signs in to Grok Build (xAI CLI reference).
+        "grok" => Ok(vendor(installation, &["login"])),
+        // `opencode auth login` chooses a provider and signs in or takes its key.
+        "opencode" => Ok(vendor(installation, &["auth", "login"])),
+        // `hermes auth` is Hermes' interactive sign-in for its providers.
+        "hermes" => Ok(vendor(installation, &["auth"])),
         _ => Err(MaintenanceError::Unsupported),
     }
 }
@@ -320,6 +332,46 @@ mod tests {
             update_command(&wsl, &EnvMap::new()),
             Err(MaintenanceError::Unsupported)
         );
+    }
+
+    #[test]
+    fn sign_in_runs_only_the_vendors_documented_login_of_the_detected_executable() {
+        for (agent, args) in [
+            ("claude", &["auth", "login"][..]),
+            ("codex", &["login"]),
+            ("cursor", &["login"]),
+            ("grok", &["login"]),
+            ("grok-stream", &["login"]),
+            ("opencode", &["auth", "login"]),
+            ("opencode-v2", &["auth", "login"]),
+            ("hermes", &["auth"]),
+        ] {
+            let mut installed = installation(InstallChannel::Unknown);
+            installed.agent_id = agent.into();
+            installed.launch_path = format!("/opt/bin/{agent}");
+            let command = login_command(&installed).unwrap();
+            assert_eq!(command.program, PathBuf::from(format!("/opt/bin/{agent}")));
+            assert_eq!(
+                command.args,
+                args.iter().map(OsString::from).collect::<Vec<_>>()
+            );
+        }
+        // These sign in inside their own interface; no command is guessed for them.
+        for agent in ["pi", "omp", "antigravity", "agy-stream", "mock"] {
+            let mut installed = installation(InstallChannel::Unknown);
+            installed.agent_id = agent.into();
+            assert_eq!(
+                login_command(&installed),
+                Err(MaintenanceError::Unsupported),
+                "{agent}"
+            );
+        }
+        let mut wsl = installation(InstallChannel::Unknown);
+        wsl.agent_id = "cursor".into();
+        wsl.host = AgentHost::Wsl {
+            distro: "Ubuntu".into(),
+        };
+        assert_eq!(login_command(&wsl), Err(MaintenanceError::Unsupported));
     }
 
     #[test]

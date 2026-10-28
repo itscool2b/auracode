@@ -37,10 +37,16 @@ fn package(agent: &str) -> Result<(&'static str, &'static str), InstallError> {
         "codex" => Ok(("@openai/codex", "0.162.1")),
         "pi" => Ok(("@earendil-works/pi-coding-agent", "1.0.2")),
         // The official package (published by OpenCode's author). Its postinstall links the
-        // platform binary, so scripts stay on like Claude's and Codex's. OpenCode 2.x is not on
-        // npm at the catalog's version, and oh-my-pi needs the Bun runtime, so both keep their
-        // official guides.
+        // platform binary, so scripts stay on like Claude's and Codex's.
         "opencode" => Ok(("opencode-ai", "1.19.4")),
+        // xAI documents `npm install -g @xai-official/grok` for Grok Build; the package is
+        // published and signed by xAI's own npm account. 1.0.70 is its `latest` tag and the
+        // catalog's minimum. Scripts stay on as for the other vendor packages.
+        "grok" => Ok(("@xai-official/grok", "1.0.70")),
+        // Guides only, each for a stated reason (docs/setup-actions.md): OpenCode 2 ships as
+        // @opencode/cli, whose `opencode` command would collide with OpenCode 1's, and its
+        // Windows install is a download; oh-my-pi runs on Bun, not Node; Cursor, Hermes and
+        // Antigravity publish install scripts or apps that fetch the latest build unpinned.
         _ => Err(InstallError::Unsupported),
     }
 }
@@ -201,7 +207,13 @@ mod tests {
             &opencode.review.arguments[1..],
             &["install", "--global", "opencode-ai@1.19.4"]
         );
-        for agent in ["opencode-v2", "omp", "cursor", "grok"] {
+        let grok = plan("grok", &node, &shim, temp.path()).unwrap();
+        assert_eq!(
+            &grok.review.arguments[1..],
+            &["install", "--global", "@xai-official/grok@1.0.70"]
+        );
+        assert_eq!(grok.review.package, "@xai-official/grok");
+        for agent in ["opencode-v2", "omp", "cursor", "hermes", "antigravity"] {
             assert!(
                 matches!(
                     plan(agent, &node, &shim, temp.path()),
