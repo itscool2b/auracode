@@ -66,7 +66,7 @@ if (container) {
       void import("./dev/accountPreservationPreview").then(({ mountAccountPreservationPreview }) =>
         mountAccountPreservationPreview(container),
       );
-    else if (mode === "git")
+    else if (mode === "git" || mode === "git-missing")
       void import("./dev/gitPreview").then(({ mountGitPreview }) => mountGitPreview(container));
     else if (mode === "settings")
       void import("./dev/settingsPreview").then(({ mountSettingsPreview }) =>

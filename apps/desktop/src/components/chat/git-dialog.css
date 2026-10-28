@@ -306,3 +306,68 @@
   text-decoration-color: var(--g-fg-4);
   text-underline-offset: 3px;
 }
+
+/*
+ * Recreate a deleted worktree folder (6.19, Vercel's transfer dialog): the question, one sentence
+ * on what is lost and what is kept, the branch, commit and folder as rows on hairlines, then
+ * Cancel and the one primary.
+ */
+.git-recreate-lead {
+  margin: calc(var(--g-space-8) * -1) 0 var(--g-space-20);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+/* The hairlines are inset shadows, so each 36px row stays on the grid. */
+.git-recreate-rows {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  margin: 0;
+  box-shadow: inset 0 1px var(--g-line);
+}
+
+.git-recreate-rows > :is(dt, dd) {
+  margin: 0;
+  padding: var(--g-space-8) 0;
+  box-shadow: inset 0 -1px var(--g-line);
+}
+
+.git-recreate-rows > dt {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-ui);
+}
+
+.git-recreate-rows > dd {
+  min-width: 0;
+}
+
+/* A block line, so the mono run cannot stretch its 20px line box past the row's grid. */
+.git-recreate-rows code {
+  display: block;
+  color: var(--g-fg-1);
+  font-family: var(--g-mono);
+  font-size: var(--g-text-code);
+  line-height: var(--g-leading-ui);
+  font-variant-ligatures: none;
+  overflow-wrap: anywhere;
+}
+
+.git-recreate-note,
+.git-recreate-error {
+  margin: var(--g-space-12) 0 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  overflow-wrap: anywhere;
+}
+
+.git-recreate-error {
+  color: var(--g-red);
+}
+
+.git-recreate-actions {
+  margin-top: var(--g-space-24);
+}

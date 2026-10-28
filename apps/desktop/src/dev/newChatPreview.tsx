@@ -9,6 +9,7 @@ import type { AgentEntry, AgentInstallation } from "../bindings";
 import { NewChat } from "../components/chat/NewChat";
 import { NewChatDraft } from "../lib/chat/appStore";
 import { FakeTransport } from "../lib/chat/testing";
+import { FIXTURE_FOLDER, type NewChatScenario, newChatFixture } from "./newChatWorktreeFixture";
 
 const mode = new URLSearchParams(location.search).get("agents");
 
@@ -81,24 +82,27 @@ function agents(base: AgentEntry, stage: number): readonly AgentEntry[] | null {
 export function NewChatPreview({
   base,
   onCreated,
+  scenario = null,
 }: {
   readonly base: AgentEntry;
   readonly onCreated: () => void;
+  /** A project folder already chosen, with Rust's worktree review imitated (newChatWorktreeFixture). */
+  readonly scenario?: NewChatScenario | null;
 }) {
-  const [stage, setStage] = useState(0);
+  const [stage, setStage] = useState(scenario ? 2 : 0);
   const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
-    if (mode !== null) return;
+    if (mode !== null || scenario) return;
     const timers = [setTimeout(() => setStage(1), 900), setTimeout(() => setStage(2), 2400)];
     return () => {
       for (const timer of timers) clearTimeout(timer);
     };
-  }, []);
+  }, [scenario]);
   const draft = useMemo(
     () =>
       new NewChatDraft(
         new FakeTransport({
-          pickFolder: async () => "/workspace/auracode",
+          pickFolder: async () => FIXTURE_FOLDER,
           agentMaintenance: async (id) => ({
             auth_status: true,
             login_available: false,
@@ -110,6 +114,14 @@ export function NewChatPreview({
       ),
     [],
   );
+  const fixture = useMemo(() => (scenario ? newChatFixture(scenario) : null), [scenario]);
+  useEffect(() => {
+    if (!fixture) return;
+    Object.assign(window, { newChatFixture: { calls: () => [...fixture.calls] } });
+    void fixture.workspace.refresh();
+    draft.chooseAgent(base.id);
+    void draft.chooseFolder();
+  }, [fixture, draft, base.id]);
   return (
     <NewChat
       agents={agents(base, stage)}
@@ -120,6 +132,8 @@ export function NewChatPreview({
         setTimeout(() => setRefreshing(false), 1200);
       }}
       onCreated={onCreated}
+      workspace={fixture?.workspace}
+      worktreeApi={fixture?.api}
     />
   );
 }

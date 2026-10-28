@@ -1175,10 +1175,28 @@ code once found (the mark settles in once over 250ms `--g-ease-out`; never on fi
 reduced motion), the volt square once a sign-in check says it needs you; the selected pill is
 surface-4 with an fg-3 ring. Refresh is a ghost icon at the row's end. The second row holds the
 folder icon in the marks' column, the path in mono, the project folders, "Choose folder" (outline)
-and "Create" (the one primary). Under the card, on one 16px axis: the busy-folder well (one volt
-square and an explicit consent), the download note, errors, the selected agent's version and path
-opening its details in place, and "Other agents" with each one's reason. A later worktree chip row
-goes directly under the card.
+and "Create" (the one primary). Under the card, on one 16px axis: the worktree chip row, the
+busy-folder well (Local only; one volt square and an explicit consent), the download note, errors,
+the selected agent's version and path opening its details in place, and "Other agents" with each
+one's reason.
+
+**Worktree chip** (the Codex app's per-thread Local or Worktree, drawn as Grok's composer chip):
+in a Git project folder the chat gets its own worktree by default, and one 32px ghost pill sits
+16px under the card with its 16px icon on the axis: "**Worktree** from `main` on `aura/7f3a9c2e`"
+(the mode 14/20 500 fg-1, the connectives fg-3, the branches mono 13/20 fg-2, a 12px chevron), or
+"**Local** on `main`". While the folder is first reviewed it reads "Checking Git" beside the 12px
+loader in the icon's slot; a later review shows the loader after the chip; a refused change adds a
+6px red square. Its popover is the picker's shell (6.10) at 400 wide, under the chip while the
+window has room and over it otherwise, parts on hairlines: the strong segmented control (Worktree,
+Local) with one 12/16 fg-3 line on what it means; Start from (a mono select of local branches, the
+current one marked) and New branch (a mono field, its generated name as the placeholder, Apply)
+as compact fields with their help or refusal under the control in 12/16 (red for a refusal, with
+the field's red border); Bring uncommitted changes and Run saved setup as switch rows with one
+line each; then the new folder in mono and each consequence Rust names. Local shows only the
+segmented control and its line. A plain folder shows no chip; a folder that cannot have a
+worktree shows "Local" with the reason in 12/16 fg-3 under it. After Create, a saved setup command
+waits in the terminal sheet (6.19) with "Setting up `branch`" and the loader in the chip's place,
+and a chat with notes to read shows them in a calm well while Create becomes "Open chat".
 
 ### 6.14 Right panel
 
@@ -1315,6 +1333,11 @@ the large dialog: its sentence says closing stops the process and output is not 
 reviewed command as rows, a status line led by its mark (a still green square while running, the
 white check or red square after), the terminal well at 144px until Start and full height after,
 and Copy selection beside the one Start.
+
+**Recreate the deleted folder?** (the Git workspace dialog's missing worktree, sm width): Rust's
+sentence that uncommitted files from the deleted folder are gone and everything committed is kept,
+then Branch, Commit (12 characters) and Folder as 36px rows on inset hairlines with their values in
+mono fg-1, Rust's other notes in 12/16 fg-3, a refusal in red, and Cancel beside Recreate folder.
 
 ### 6.20 Notifications
 

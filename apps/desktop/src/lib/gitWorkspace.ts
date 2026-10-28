@@ -35,5 +35,10 @@ export const gitWorkspaceApi = {
     settle(commands.worktreePrPreview(chatId, worktreeId, input)),
   pullRequestApply: (chatId: string, token: string) =>
     settle(commands.worktreePrApply(chatId, token)),
+  /** A worktree whose folder was deleted by hand comes back from its branch; commits are kept. */
+  recreatePreview: (chatId: string, worktreeId: string) =>
+    settle(commands.worktreeRecreatePreview(chatId, worktreeId)),
+  recreateApply: (chatId: string, worktreeId: string, token: string) =>
+    settle(commands.worktreeRecreateApply(chatId, worktreeId, token)),
 };
 export type GitWorkspaceApi = typeof gitWorkspaceApi;

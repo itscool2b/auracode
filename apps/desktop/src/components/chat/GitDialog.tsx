@@ -12,12 +12,14 @@ import type {
   WorktreeDestination,
   WorktreeRecoveryAction,
   WorktreeRecoveryPreview,
+  WorktreeRecreatePreview,
   WorktreeRelocationPreview,
 } from "../../bindings";
 import { errorMessage } from "../../lib/errors";
 import type { GitWorkspaceApi } from "../../lib/gitWorkspace";
 import type { WorktreeSetupApi } from "../../lib/worktreeSetup";
 import { Modal } from "./Modal";
+import { RecreateWorktreeDialog } from "./RecreateWorktreeDialog";
 import { WorktreeSetupPanel } from "./WorktreeSetupPanel";
 import "./git-dialog.css";
 
@@ -114,6 +116,7 @@ export function GitDialog({
   const [pullRequest, setPullRequest] = useState<PullRequestResult | null>(null);
   const [prDraft, setPrDraft] = useState<ManagedWorktree | null>(null);
   const [setupTree, setSetupTree] = useState<ManagedWorktree | null>(null);
+  const [recreate, setRecreate] = useState<WorktreeRecreatePreview | null>(null);
   const [prTitle, setPrTitle] = useState(title);
   const [prBody, setPrBody] = useState("");
   const [prBase, setPrBase] = useState("");
@@ -263,6 +266,14 @@ export function GitDialog({
       const value = await api.recoveryPreview(chatId, tree.id, action);
       if (alive.current) {
         setPreview({ type: "recovery", value });
+        setResult(null);
+      }
+    });
+  const reviewRecreate = (tree: ManagedWorktree) =>
+    run(async () => {
+      const value = await api.recreatePreview(chatId, tree.id);
+      if (alive.current) {
+        setRecreate(value);
         setResult(null);
       }
     });
@@ -687,6 +698,18 @@ export function GitDialog({
                         "missing",
                       ].includes(tree.state) ? (
                         <div className="git-actions">
+                          {tree.state === "missing" ? (
+                            // Only the two owned paths are reserved, so a running chat elsewhere
+                            // does not block bringing the deleted folder back.
+                            <button
+                              type="button"
+                              className="g-button"
+                              disabled={busy || loading}
+                              onClick={() => void reviewRecreate(tree)}
+                            >
+                              Recreate folder
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="g-button"
@@ -806,6 +829,28 @@ export function GitDialog({
           <RefreshCw size={13} /> Refresh
         </button>
       </footer>
+      {recreate ? (
+        <RecreateWorktreeDialog
+          chatId={chatId}
+          review={recreate}
+          api={api}
+          onClose={() => setRecreate(null)}
+          onDone={(value) => {
+            setRecreate(null);
+            if (!alive.current) return;
+            setResult(
+              value.error
+                ? value
+                : {
+                    ...value,
+                    recovery: `The folder is back on ${value.worktree.branch} at its last commit. Uncommitted files from the deleted folder could not be restored.`,
+                  },
+            );
+            onChanged();
+            setRevision((current) => current + 1);
+          }}
+        />
+      ) : null}
     </Modal>
   );
 }
