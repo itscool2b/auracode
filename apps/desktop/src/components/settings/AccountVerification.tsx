@@ -2,18 +2,60 @@ import { PixelLoader } from "@auracode/ui/graphite";
 import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
+  canEmbedVerification,
+  VERIFICATION_LOAD_MS,
   VERIFICATION_ORIGIN,
   type VerificationOrigin,
   verificationMessage,
 } from "../../lib/accountVerification";
 
-/** Remote verification has no native capabilities. Only a bounded proof crosses this boundary. */
+/**
+ * Remote verification has no native capabilities. Only a bounded proof crosses this boundary.
+ *
+ * The site lets only the installed app's origins embed its check, so a build served from anywhere
+ * else (the development build at http://localhost:1420) says so at once instead of loading a frame
+ * the site refuses; nothing is requested from the site there.
+ */
 export function AccountVerification({
   onToken,
   origin = VERIFICATION_ORIGIN,
+  host = typeof location === "undefined" ? "" : location.origin,
 }: {
   readonly onToken: (token: string) => void;
   readonly origin?: VerificationOrigin;
+  /** This page's origin; the site embeds its check only in the installed app's. */
+  readonly host?: string;
+}) {
+  if (!canEmbedVerification(host)) return <VerificationUnavailable host={host} origin={origin} />;
+  return <VerificationFrame onToken={onToken} origin={origin} />;
+}
+
+/** The development build: the reason in one sentence, and no frame. */
+function VerificationUnavailable({
+  host,
+  origin,
+}: {
+  readonly host: string;
+  readonly origin: VerificationOrigin;
+}) {
+  return (
+    <div className="account-verification" data-phase="unavailable">
+      <div className="account-verification-status">
+        <span className="account-verification-square" aria-hidden="true" />
+        <p role="status">
+          {`Sign-in verification runs only in the installed app. ${new URL(origin).host} does not let this build (${host || "no origin"}) show its check, so no code can be requested here.`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function VerificationFrame({
+  onToken,
+  origin,
+}: {
+  readonly onToken: (token: string) => void;
+  readonly origin: VerificationOrigin;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const callback = useRef(onToken);
@@ -28,7 +70,7 @@ export function AccountVerification({
     callback.current("");
     setPhase("loading");
     let expires: ReturnType<typeof setTimeout> | undefined;
-    const deadline = setTimeout(() => setPhase("failed"), 30_000);
+    const deadline = setTimeout(() => setPhase("failed"), VERIFICATION_LOAD_MS);
     const receive = (event: MessageEvent) => {
       if (event.origin !== origin || event.source !== frame.current?.contentWindow) return;
       if (event.data?.type === "auracode:verification-ready") {
